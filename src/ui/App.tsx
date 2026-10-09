@@ -8,7 +8,7 @@ import {
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
-import { componentPins, moveWireAnchors, projectPinLocations, wireNetAt } from '../domain/geometry'
+import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
@@ -312,7 +312,7 @@ function InitialConditionEditor({ conditions, nodes, skipOp, onAdd, onChange, on
 
 function Schematic({ project, selection, setSelection, setProject, tool, setTool, setNotice, beginEdit, endEdit, onProbe, simulationResult, sampleIndex, onSampleChange }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setProject: (fn: (current: Project) => Project) => void; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
   const svg = useRef<SVGSVGElement>(null)
-  const drag = useRef<{ kind: 'part' | 'wire' | 'label'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][] } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'segment' | 'label'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; segmentIndex?: number } | null>(null)
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
@@ -338,7 +338,7 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     const current = resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`)
     return { voltage: positive !== undefined && negative !== undefined ? positive - negative : undefined, current }
   }
-  const pointFromEvent = (event: PointerEvent<SVGSVGElement | SVGGElement> | MouseEvent<SVGSVGElement>) => {
+  const pointFromEvent = (event: PointerEvent<SVGElement> | MouseEvent<SVGSVGElement>) => {
     const rect = svg.current!.getBoundingClientRect()
     const view = svg.current!.viewBox.baseVal
     const scale = Math.min(rect.width / view.width, rect.height / view.height)
@@ -405,14 +405,30 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, points: wire?.points.map(([x,y]) => [x,y]) }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
+  const beginSegmentDrag = (event: PointerEvent<SVGPolylineElement>, wireId: string, segmentIndex: number) => {
+    if (tool !== 'select') return
+    const wire = project.wires.find((item) => item.id === wireId)
+    if (!wire || !canMoveWireSegment(project, wire, segmentIndex)) return
+    event.stopPropagation()
+    setSelection({ kind: 'wire', id: wireId })
+    beginEdit()
+    const point = pointFromEvent(event)
+    drag.current = { kind: 'segment', id: wireId, segmentIndex, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, points: wire.points.map(([x, y]) => [x, y]) }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
   const moveDrag = (event: PointerEvent<SVGSVGElement>) => {
     if (!drag.current) return
     const point = pointFromEvent(event)
     const deltaX = Math.round((point.x - drag.current.x) / 10) * 10
     const deltaY = Math.round((point.y - drag.current.y) / 10) * 10
     if (deltaX !== 0 || deltaY !== 0) suppressCanvasClick.current = true
-    const { id, kind, originX, originY, points } = drag.current
+    const { id, kind, originX, originY, points, segmentIndex } = drag.current
     setProject((current) => {
+      if (kind === 'segment') {
+        const base = points ? { ...current, wires: current.wires.map((wire) => wire.id === id ? { ...wire, points } : wire) } : current
+        const wires = moveWireSegment(base, id, segmentIndex ?? -1, deltaX, deltaY)
+        return wires === base.wires ? current : { ...current, wires }
+      }
       if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: points.map(([x, y]) => [x + deltaX, y + deltaY]) } : wire) }
       if (kind === 'label') return { ...current, netLabels: current.netLabels.map((label) => label.id === id ? { ...label, x: originX + deltaX, y: originY + deltaY } : label) }
       const moving = current.parts.find((part) => part.id === id)
@@ -443,7 +459,7 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
       <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.max(.6, p.view.zoom - .1) } }))}><Minus size={15}/></IconButton><span className="zoom-label">{Math.round(project.view.zoom * 100)}%</span><IconButton title="Zoom in" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.min(1.5, p.view.zoom + .1) } }))}><Plus size={15}/></IconButton></div>
-      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : 'Ready'} <span className="status-separator">·</span> Grid 10 px</div>
+      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : 'Drag a wire segment to reroute it'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
     <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} viewBox={viewBox} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
@@ -458,6 +474,7 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
         return <g key={wire.id} className={`wire-line${selection?.kind === 'wire' && selection.id === wire.id ? ' selected' : ''}`} onPointerDown={(event) => { if (tool === 'probe') { event.stopPropagation(); probeWire(wire.id) } else beginDrag(event, 'wire', wire.id) }} onClick={(event) => { if (tool === 'probe') event.stopPropagation(); else if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'wire', id: wire.id }) } }}>
           <polyline points={points} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/>
           <polyline points={points} fill="none" stroke={selection?.kind === 'wire' && selection.id === wire.id ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          {tool === 'select' && wire.points.slice(0, -1).map((point, index) => canMoveWireSegment(project, wire, index) && <polyline key={`segment-hit-${index}`} points={`${point[0]},${point[1]} ${wire.points[index + 1][0]},${wire.points[index + 1][1]}`} fill="none" stroke="transparent" strokeWidth="12" strokeLinecap="round" style={{ pointerEvents: 'stroke', cursor: 'move' }} onPointerDown={(event) => beginSegmentDrag(event, wire.id, index)}><title>Drag to reroute this wire segment</title></polyline>)}
           {flow && <polyline className={`wire-current-flow${flow.forward ? '' : ' reverse'}`} points={points} fill="none" stroke="#f0c674" strokeWidth="3.5" strokeLinecap="round" strokeDasharray="3 15" strokeDashoffset="0" opacity={glow} style={{ animationDuration: `${duration}s` }}><title>Conventional current {flow.forward ? 'from the first to last wire endpoint' : 'from the last to first wire endpoint'} · {flow.magnitude.toPrecision(4)} A</title></polyline>}
           <circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/>
         </g>

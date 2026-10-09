@@ -85,3 +85,52 @@ export function moveWireAnchors(wires: Wire[], oldPins: PinLocation[], newPins: 
     return { ...wire, points: compact.length >= 2 ? compact : points }
   })
 }
+
+function sameXY(point: [number, number], other: Point): boolean {
+  return Math.hypot(point[0] - other.x, point[1] - other.y) < 0.01
+}
+
+function protectedWireVertex(project: Project, wire: Wire, point: [number, number]): boolean {
+  const target = { x: point[0], y: point[1] }
+  return project.parts.some((part) => componentPins(part).some((pin) => sameXY(point, pin)))
+    || project.netLabels.some((label) => sameXY(point, label))
+    || project.junctions.some((junction) => sameXY(point, junction))
+    || project.wires.some((other) => other.id !== wire.id && other.points.some(([x, y]) => Math.hypot(x - target.x, y - target.y) < 0.01))
+}
+
+/** A segment with an electrical branch through its interior cannot be moved
+ * without changing connectivity. Endpoint connections are preserved by
+ * inserting doglegs when both ends are pinned. */
+export function canMoveWireSegment(project: Project, wire: Wire, segmentIndex: number): boolean {
+  if (segmentIndex < 0 || segmentIndex >= wire.points.length - 1) return false
+  const a = wire.points[segmentIndex], b = wire.points[segmentIndex + 1]
+  if (Math.abs(a[0] - b[0]) > 0.01 && Math.abs(a[1] - b[1]) > 0.01) return false
+  const interior = (point: Point) => pointOnSegment(point, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }, 0.01)
+    && Math.hypot(point.x - a[0], point.y - a[1]) > 0.01
+    && Math.hypot(point.x - b[0], point.y - b[1]) > 0.01
+  if (project.parts.some((part) => componentPins(part).some(interior))
+    || project.netLabels.some(interior)
+    || project.junctions.some(interior)
+    || project.wires.some((other) => other.id !== wire.id && other.points.some(([x, y]) => interior({ x, y })))) return false
+  return true
+}
+
+export function moveWireSegment(project: Project, wireId: string, segmentIndex: number, deltaX: number, deltaY: number): Wire[] {
+  const wire = project.wires.find((item) => item.id === wireId)
+  if (!wire || !canMoveWireSegment(project, wire, segmentIndex)) return project.wires
+  const a = wire.points[segmentIndex], b = wire.points[segmentIndex + 1]
+  const offset: [number, number] = Math.abs(a[0] - b[0]) > 0.01 ? [0, deltaY] : [deltaX, 0]
+  if (Math.hypot(offset[0], offset[1]) < 0.01) return project.wires
+  const fixedA = protectedWireVertex(project, wire, a)
+  const fixedB = protectedWireVertex(project, wire, b)
+  const shift = (point: [number, number]): [number, number] => [point[0] + offset[0], point[1] + offset[1]]
+  let replacement: [number, number][]
+  if (fixedA && fixedB) replacement = [a, shift(a), shift(b), b]
+  else if (fixedA) replacement = [a, shift(a), shift(b)]
+  else if (fixedB) replacement = [shift(a), shift(b), b]
+  else replacement = [shift(a), shift(b)]
+  const points = [...wire.points.slice(0, segmentIndex), ...replacement, ...wire.points.slice(segmentIndex + 2)]
+  const compact = points.filter((point, index) => index === 0 || Math.hypot(point[0] - points[index - 1][0], point[1] - points[index - 1][1]) > 0.01)
+  if (compact.length < 2) return project.wires
+  return project.wires.map((item) => item.id === wireId ? { ...item, points: compact } : item)
+}
