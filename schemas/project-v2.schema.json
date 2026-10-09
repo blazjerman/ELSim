@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsim.dev/schemas/project-v2.schema.json",
+  "title": "ELSim project v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "name", "updatedAt", "parts", "wires", "junctions", "netLabels", "view", "simulation"],
+  "properties": {
+    "format": { "const": "elsim-project" },
+    "version": { "const": 2 },
+    "name": { "type": "string", "minLength": 1 },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "parts": { "type": "array", "items": { "$ref": "#/$defs/part" } },
+    "wires": { "type": "array", "items": { "$ref": "#/$defs/wire" } },
+    "junctions": { "type": "array", "items": { "$ref": "#/$defs/point" } },
+    "netLabels": { "type": "array", "items": { "$ref": "#/$defs/netLabel" } },
+    "view": { "$ref": "#/$defs/view" },
+    "simulation": { "$ref": "#/$defs/simulation" }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+    },
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "ref", "value", "x", "y", "rotation"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["source", "resistor", "capacitor", "ground", "inductor", "diode", "switch"] },
+        "ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+        "value": { "type": "string" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "rotation": { "enum": [0, 90, 180, 270] }
+      }
+    },
+    "wire": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "points"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "array", "prefixItems": [{ "type": "number" }, { "type": "number" }], "minItems": 2, "maxItems": 2 }
+        }
+      }
+    },
+    "netLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "x", "y"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "pattern": "^(0|[A-Za-z_][A-Za-z0-9_.$]*)$" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "visible": { "type": "boolean", "default": true }
+      }
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zoom", "panX", "panY"],
+      "properties": {
+        "zoom": { "type": "number", "exclusiveMinimum": 0 },
+        "panX": { "type": "number" },
+        "panY": { "type": "number" }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analysis", "stopTime", "maxStep"],
+      "properties": {
+        "analysis": { "const": "tran" },
+        "stopTime": { "type": "string", "minLength": 1 },
+        "maxStep": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
