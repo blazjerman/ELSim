@@ -108,9 +108,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## ngspice
+## ngspice WebAssembly runtime — redistribution review incomplete
 
-ngspice is not bundled yet. The ngspice project describes most source as modified BSD, with exceptions including LGPL-2.0-covered `tclspice` and `numparam`, and public-domain XSPICE. The precise source files and build flags determine obligations. Preserve upstream notices and provide source and license materials required for any distributed binary. ELSim’s MIT license does not change ngspice’s terms.
+The reproducible build script writes ngspice files into the Git-ignored `public/engine/` directory. Vite copies those files into `dist/engine/`, so a production build made after the engine has been generated **does contain and distribute** the WASM runtime and JavaScript loader. The build script also copies the pinned source tree's `COPYING` file, this notice, and a build-info record beside the runtime. These files are provenance and notices; they do not by themselves satisfy every binary-distribution obligation.
+
+ELSim pins ngspice commit `a80f6e3e95d51534905b1f23410a951802666656` from the [ngspice source repository](https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/) and relies on its upstream [`COPYING` inventory](https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/COPYING). The upstream inventory and manual state that most ngspice source is under a modified 3-clause BSD license, while `src/frontend/numparam` is LGPL-2.0-or-later, `src/xspice/icm/table` is GPL-2.0-or-later, and other sections carry separate terms including public-domain code. The build uses static linking, enables XSPICE, and does not explicitly disable `numparam`; it also removes the optional Verilog and VHDL subdirectories. **The exact object and code-model composition of the generated WASM has not been audited.** In particular, whether the GPL table model is linked into the delivered runtime is unresolved.
+
+Do not publish a production bundle containing this runtime until the exact compiled source/object set has been inventoried, the LGPL and any other applicable terms have been satisfied (including source and relinking materials where required), the relevant notices are shipped, and a qualified reviewer has checked the distribution. ELSim's MIT license applies only to ELSim-authored source; it does not relicense ngspice or settle the compatibility of this combined distribution. See [`engine/wasm/README.md`](engine/wasm/README.md) and the M0.2 gate in [`ROADMAP.md`](ROADMAP.md).
 
 ## User-provided models
 

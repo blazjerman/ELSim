@@ -20,6 +20,10 @@ if [[ -n "$(git -C "$NGSPICE_SOURCE" status --porcelain)" ]]; then
   echo "NGSPICE_SOURCE must be clean; local source changes make the binary unreviewable" >&2
   exit 2
 fi
+if [[ ! -f "$NGSPICE_SOURCE/COPYING" ]]; then
+  echo "Pinned ngspice source must include its COPYING file" >&2
+  exit 2
+fi
 if ! emcc --version | head -n 1 | grep -q '5\.0\.7'; then
   echo "This tested build recipe requires Emscripten 5.0.7 on PATH" >&2
   exit 2
@@ -70,5 +74,14 @@ make -j"$JOBS"
 mkdir -p "$ROOT_DIR/public/engine"
 cp "$BUILD_DIR/src/ngspice.js" "$ROOT_DIR/public/engine/ngspice.mjs"
 cp "$BUILD_DIR/src/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice.wasm"
+cp "$NGSPICE_SOURCE/COPYING" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"
+cp "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$ROOT_DIR/public/engine/THIRD_PARTY_NOTICES.md"
+{
+  printf 'ngspice source commit: %s\n' "$PINNED_COMMIT"
+  printf 'Emscripten: %s\n' "$(emcc --version | head -n 1)"
+  printf 'Build flags: --disable-shared --enable-static --enable-xspice --disable-cider --disable-osdi --disable-openmp --disable-klu --with-readline=no --with-editline=no --without-x\n'
+  printf 'License review: incomplete; generated browser artifacts are not cleared for redistribution.\n'
+  printf 'See ELSim THIRD_PARTY_NOTICES.md and the adjacent ngspice-COPYING.txt.\n'
+} > "$ROOT_DIR/public/engine/ngspice-build-info.txt"
 sha256sum "$ROOT_DIR/public/engine/ngspice.wasm"
-du -h "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm"
+du -h "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"
