@@ -1,0 +1,83 @@
+/// <reference lib="webworker" />
+import { parseAsciiRawFile } from './raw'
+import type { EngineRequest, EngineResponse, NetlistArtifact, NetlistSource, RunMetadata, SimulationDiagnostic, Trace } from './contract'
+
+const worker = self as DedicatedWorkerGlobalScope
+type NgspiceModule = { FS: { writeFile(path: string, data: string): void; readFile(path: string, options: { encoding: 'utf8' }): string }; callMain(args: string[]): number }
+type NgspiceFactory = (options: { noInitialRun: boolean; locateFile: (path: string) => string; print: (...parts: string[]) => void; printErr: (...parts: string[]) => void }) => Promise<NgspiceModule>
+
+function diagnosticForLine(message: string, artifact: NetlistArtifact): SimulationDiagnostic {
+  const line = message.match(/(?:line|card)\s*[:#]?\s*(\d+)/i)?.[1]
+  const source = line ? artifact.sourceMap.find((entry: NetlistSource) => entry.line === Number(line)) : undefined
+  return { severity: 'error', message: message.slice(0, 500), ...(line ? { line: Number(line) } : {}), ...(source ? { sourceId: source.sourceId } : {}) }
+}
+
+function addResultControl(netlist: string): string {
+  const rows = netlist.trimEnd().split(/\r?\n/)
+  const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
+  if (endLine === -1) throw new Error('Generated netlist is missing its .end directive.')
+  rows.splice(endLine, 1, '.control', 'set filetype=ascii', 'run', 'write /result.raw all', 'quit', '.endc', '.end')
+  return rows.join('\n') + '\n'
+}
+
+function makeTraces(rawText: string): Trace[] {
+  const parsed = parseAsciiRawFile(rawText)
+  const axis = parsed.axis
+  return parsed.variables.filter((variable) => /^(?:v\(|i\()/i.test(variable.name)).map((variable) => {
+    const lowercaseName = variable.name.toLowerCase()
+    const current = lowercaseName.startsWith('i(')
+    const inner = variable.name.match(/^[vi]\((.*)\)$/i)![1]
+    return {
+      id: lowercaseName,
+      label: `${current ? 'I' : 'V'}(${inner})`,
+      unit: current ? 'A' : 'V',
+      axis: new Float64Array(axis),
+      values: variable.values,
+    }
+  })
+}
+
+async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>): Promise<void> {
+  const stdout: string[] = []
+  const stderr: string[] = []
+  try {
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.05, message: 'Loading ngspice WebAssembly' } satisfies EngineResponse)
+    const loaded = await import(/* @vite-ignore */ new URL('/engine/ngspice.mjs', worker.location.origin).href) as { default: NgspiceFactory }
+    const module = await loaded.default({
+      noInitialRun: true,
+      locateFile: (file) => new URL(`/engine/${file}`, worker.location.origin).href,
+      print: (...parts) => stdout.push(parts.join(' ')),
+      printErr: (...parts) => stderr.push(parts.join(' ')),
+    })
+    const runDeck = addResultControl(artifact.text)
+    module.FS.writeFile('/project.cir', runDeck)
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: 'Running transient analysis' } satisfies EngineResponse)
+    const status = module.callMain(['-b', '/project.cir'])
+    const output = stdout.join('\n')
+    const errors = output.split(/\r?\n/).filter((line) => /^\s*(?:Error|Fatal):/i.test(line))
+    if (status !== 0 || errors.length) {
+      const message = errors[0] ?? stderr.find((line) => /RuntimeError|out of bounds|stack overflow|Aborted\(/i.test(line)) ?? `ngspice exited with status ${status}.`
+      worker.postMessage({ type: 'error', requestId, error: diagnosticForLine(message, artifact) } satisfies EngineResponse)
+      return
+    }
+    const traces = makeTraces(module.FS.readFile('/result.raw', { encoding: 'utf8' }))
+    if (!traces.length) throw new Error('ngspice completed but produced no voltage or current vectors.')
+    const result = {
+      metadata: { ...metadata, completedAt: new Date().toISOString() },
+      netlist: artifact.text,
+      sourceMap: artifact.sourceMap,
+      traces,
+      diagnostics: artifact.diagnostics,
+    }
+    worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    worker.postMessage({ type: 'error', requestId, error: diagnosticForLine(message, artifact) } satisfies EngineResponse)
+  }
+}
+
+worker.addEventListener('message', (event: MessageEvent<EngineRequest>) => {
+  const request = event.data
+  if (request.type === 'run') void run(request.requestId, request.artifact, request.metadata)
+  else if (request.type === 'dispose') worker.close()
+})

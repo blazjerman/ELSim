@@ -1,5 +1,7 @@
 node_modules/
 dist/
+build/
+public/engine/
 coverage/
 .vite/
 *.log

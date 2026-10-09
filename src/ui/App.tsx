@@ -10,7 +10,8 @@ import {
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { componentPins, moveWireAnchors, projectPinLocations, wireNetAt } from '../domain/geometry'
 import { createStarterProject, kindNames, kindPrefix, validateProject, type Part, type PartKind, type Project } from '../domain/project'
-import { createNetlist, nextRef } from '../engine/netlist'
+import { createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
+import { isEngineResponse, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
@@ -42,6 +43,47 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool }: { part: 
     <text className="part-ref" x="0" y={part.kind === 'ground' ? 34 : -29}>{part.ref}</text>
     {part.value && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : 43}>{part.value}</text>}
   </g>
+}
+
+function WaveformPlot({ traces, stale }: { traces: Trace[]; stale: boolean }) {
+  const voltages = traces.filter((trace) => trace.unit === 'V')
+  const currents = traces.filter((trace) => trace.unit === 'A')
+  const [unit, setUnit] = useState<'V' | 'A'>('V')
+  const [visible, setVisible] = useState<string[]>(() => voltages.map((trace) => trace.id))
+  const series = unit === 'V' ? voltages : currents
+  useEffect(() => setVisible(series.map((trace) => trace.id)), [traces, unit])
+  const shown = series.filter((trace) => visible.includes(trace.id))
+  const width = 760, height = 112, left = 42, right = 748, top = 8, bottom = 91
+  let minValue = Infinity, maxValue = -Infinity
+  for (const trace of shown) for (const value of trace.values) { minValue = Math.min(minValue, value); maxValue = Math.max(maxValue, value) }
+  if (!Number.isFinite(minValue) || !Number.isFinite(maxValue)) { minValue = -1; maxValue = 1 }
+  if (maxValue === minValue) { minValue -= 1; maxValue += 1 }
+  const range = maxValue - minValue
+  const axis = shown[0]?.axis ?? traces[0]?.axis
+  const minTime = axis?.[0] ?? 0, maxTime = axis?.[axis.length - 1] ?? 1
+  const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
+  const pathFor = (trace: Trace) => {
+    const stride = Math.max(1, Math.ceil(trace.values.length / 900))
+    const points: string[] = []
+    for (let index = 0; index < trace.values.length; index += stride) {
+      const x = left + ((trace.axis[index] - minTime) / (maxTime - minTime || 1)) * (right - left)
+      const y = bottom - ((trace.values[index] - minValue) / range) * (bottom - top)
+      points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
+    }
+    return points.join(' ')
+  }
+  const toggle = (id: string) => setVisible((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id])
+  return <div className="waveform-view">
+    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'Transient results'}</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><div className="plot-unit-tabs"><button className={unit === 'V' ? 'selected' : ''} onClick={() => setUnit('V')}>Voltage · {voltages.length}</button><button className={unit === 'A' ? 'selected' : ''} onClick={() => setUnit('A')}>Current · {currents.length}</button></div></div>
+    <svg className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Transient ${unit === 'V' ? 'voltage' : 'current'} waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds`}>
+      {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const value = maxValue - (line / 3) * range; return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/><text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} {unit}</text></g> })}
+      <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
+      {shown.map((trace) => <polyline key={trace.id} points={pathFor(trace)} fill="none" stroke={colors[series.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
+      <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
+    </svg>
+    <div className="trace-toggles" aria-label={`Visible ${unit === 'V' ? 'voltage' : 'current'} traces`}>{series.map((trace, index) => <button key={trace.id} className={visible.includes(trace.id) ? 'selected' : ''} onClick={() => toggle(trace.id)}><span style={{ background: colors[index % colors.length] }}/>{trace.label}</button>)}</div>
+    {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh the plot.</div>}
+  </div>
 }
 
 function Schematic({ project, selection, setSelection, setProject, tool, setTool, setNotice, beginEdit, endEdit }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setProject: (fn: (current: Project) => Project) => void; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void }) {
@@ -170,11 +212,14 @@ export default function App() {
   const [netlistOpen, setNetlistOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const [analysisTab, setAnalysisTab] = useState<'waveforms' | 'netlist'>('waveforms')
-  const [runState, setRunState] = useState<'idle' | 'blocked'>('idle')
+  const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
+  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
+  const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
   const [componentQuery, setComponentQuery] = useState('')
   const [tourStep, setTourStep] = useState<number | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const componentSearchRef = useRef<HTMLInputElement>(null)
+  const activeWorkerRef = useRef<Worker | null>(null)
   const projectRef = useRef(project)
   projectRef.current = project
   const connectivity = analyzeConnectivity(project)
@@ -185,6 +230,11 @@ export default function App() {
     }
     catch { setNotice('This browser could not save the project locally. Use Save to download a copy.') }
   }, [project])
+  useEffect(() => {
+    let mounted = true
+    fetch('/engine/ngspice.mjs', { method: 'HEAD' }).then((response) => { if (mounted) setEngineAssetAvailable(response.ok) }).catch(() => { if (mounted) setEngineAssetAvailable(false) })
+    return () => { mounted = false; activeWorkerRef.current?.terminate(); activeWorkerRef.current = null }
+  }, [])
   const setProject = (fn: (current: Project) => Project) => setProjectState((current) => {
     const next = fn(current)
     if (next === current) return current
@@ -321,10 +371,76 @@ export default function App() {
     catch { setNotice('Netlist opened below. Select and copy it.') }
     setNetlistOpen(true)
   }
-  const startSimulation = () => {
-    setRunState('blocked')
-    setNotice('Simulation is waiting for the ngspice WebAssembly engine integration.')
+  const startSimulation = async () => {
+    if (engineAssetAvailable === false) {
+      setRunState('error')
+      setNotice('ngspice WASM is not built. Follow engine/wasm/README.md to build the local engine.')
+      return
+    }
+    activeWorkerRef.current?.terminate()
+    const snapshot = structuredClone(projectRef.current)
+    const artifact = createNetlistArtifact(snapshot)
+    const invalid = artifact.diagnostics.find((diagnostic) => diagnostic.severity === 'error')
+    if (invalid) { setRunState('error'); setNotice(invalid.message); return }
     setAnalysisTab('waveforms')
+    setRunState('loading')
+    setNotice('Loading ngspice WebAssembly')
+    const requestId = crypto.randomUUID()
+    const runId = crypto.randomUUID()
+    const worker = new Worker(new URL('../engine/ngspice.worker.ts', import.meta.url), { type: 'module' })
+    activeWorkerRef.current = worker
+    worker.onmessage = (event: MessageEvent<unknown>) => {
+      if (!isEngineResponse(event.data) || event.data.requestId !== requestId) return
+      const response = event.data
+      if (response.type === 'progress') {
+        setRunState(response.fraction < 0.2 ? 'loading' : 'running')
+        if (response.message) setNotice(response.message)
+      } else if (response.type === 'result') {
+        setSimulationResult(response.result)
+        setRunState('idle')
+        setNotice(`Simulation complete · ${response.result.traces.length} waveform vectors`)
+        setAnalysisTab('waveforms')
+        worker.terminate()
+        if (activeWorkerRef.current === worker) activeWorkerRef.current = null
+      } else if (response.type === 'error') {
+        setRunState('error')
+        setNotice(response.error.message)
+        worker.terminate()
+        if (activeWorkerRef.current === worker) activeWorkerRef.current = null
+      }
+    }
+    worker.onerror = (event) => {
+      setRunState('error')
+      setNotice(`ngspice worker failed: ${event.message}`)
+      worker.terminate()
+      if (activeWorkerRef.current === worker) activeWorkerRef.current = null
+    }
+    try {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(artifact.text))
+      if (activeWorkerRef.current !== worker) return
+      const netlistHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+      worker.postMessage({
+        type: 'run', requestId, artifact,
+        metadata: {
+          runId, startedAt: new Date().toISOString(), engine: 'ngspice-wasm', engineVersion: '47',
+          projectVersion: snapshot.version, netlistHash,
+          settings: { analysis: 'tran', stopTime: snapshot.simulation.stopTime, maxStep: snapshot.simulation.maxStep, projectUpdatedAt: snapshot.updatedAt },
+        },
+      })
+    } catch (error) {
+      worker.terminate()
+      if (activeWorkerRef.current === worker) activeWorkerRef.current = null
+      setRunState('error')
+      setNotice(error instanceof Error ? error.message : 'Could not prepare the ngspice run.')
+    }
+  }
+  const stopSimulation = () => {
+    const worker = activeWorkerRef.current
+    if (!worker) { setNotice('No simulation is running.'); return }
+    worker.terminate()
+    activeWorkerRef.current = null
+    setRunState('idle')
+    setNotice('Simulation stopped. Any previous result is unchanged.')
   }
   const resetProject = () => {
     if (!window.confirm('Start a new circuit? Unsaved changes in this tab will be lost.')) return
@@ -351,8 +467,8 @@ export default function App() {
       <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={15}/></IconButton><IconButton title="Wire tool" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <button className="analysis-select" title="Transient analysis is the current preview mode" disabled><Activity size={15}/> Transient <ChevronDown size={13}/></button>
-      <button className="run-button" onClick={startSimulation}><Play size={15} fill="currentColor"/> Run simulation</button>
-      <button className="stop-button" title="Stop simulation" onClick={() => setNotice('No simulation is running.')}><Square size={12} fill="currentColor"/></button>
+      <button className="run-button" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={15} fill="currentColor"/> Run simulation</button>
+      <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
     </div>
 
     <div className="workspace">
@@ -370,9 +486,9 @@ export default function App() {
         <div className="sheet-tabs"><button className="sheet-tab active"><span className="sheet-dot"/> Main circuit <MoreHorizontal size={15}/></button><button className="add-sheet" onClick={() => setNotice('Hierarchical sheets are planned for a later milestone.')}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet settings"><SlidersHorizontal size={15}/></button></div>
         <Schematic project={project} selection={selection} setSelection={setSelection} setProject={setProject} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit}/>
         <section className="analysis-panel">
-          <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'blocked' ? 'needs-engine' : ''}`}><span className="engine-dot"/> ngspice WASM · not connected</span><button className="subtle-icon" title="Panel options"><MoreHorizontal size={17}/></button></div></div>
+          <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span><button className="subtle-icon" title="Panel options"><MoreHorizontal size={17}/></button></div></div>
           <div className="analysis-content">
-            {analysisTab === 'waveforms' ? <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'blocked' ? 'Engine integration is the next milestone' : 'Your waveforms will appear here'}</strong><p>Run a simulation to inspect voltage and current over time. This preview does not generate placeholder data.</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
+            {analysisTab === 'waveforms' ? simulationResult ? <WaveformPlot traces={simulationResult.traces} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? 'Running transient analysis' : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your waveforms will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the pinned ngspice WebAssembly engine.' : 'Run a simulation to inspect calculated voltage waveforms. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
           </div>
           <div className="analysis-footer"><span><Gauge size={13}/> {project.simulation.stopTime} total time</span><span><span className="shortcut">⌘</span> + Enter to run</span><span>Results are generated locally</span></div>
         </section>
@@ -397,18 +513,18 @@ export default function App() {
         </> : <>
           <div className="project-summary"><div className="summary-row"><span>Project</span><strong>{project.name}</strong></div><div className="summary-row"><span>Format</span><strong>ELSim JSON · v2</strong></div><div className="summary-row"><span>Sheets</span><strong>1</strong></div><div className="summary-row"><span>Components</span><strong>{project.parts.length}</strong></div></div>
           <div className="form-section"><div className="form-section-title">SIMULATION</div><label className="field-label">Analysis type<select value="tran"><option value="tran">Transient</option><option disabled>DC operating point · soon</option><option disabled>AC analysis · soon</option></select></label><label className="field-label">Stop time<input value={project.simulation.stopTime} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, stopTime: event.target.value } }))}/></label><label className="field-label">Maximum step<input value={project.simulation.maxStep} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, maxStep: event.target.value } }))}/></label></div>
-          <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>The editor and project format are taking shape. The ngspice WASM engine is the next integration gate.</p><button onClick={() => setNotice('M0.3 requires an Emscripten build and cross-browser numeric comparison.')}>Engine status <ArrowUp size={13}/></button></div>
+          <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : 'Transient analysis runs locally in a Web Worker. Results are tied to the circuit revision.'}</p><button onClick={() => setNotice(engineAssetAvailable === false ? 'Build the pinned engine with tools/build-ngspice-wasm.sh; see engine/wasm/README.md.' : 'ngspice 47 · Emscripten WebAssembly · transient analysis')}>Engine status <ArrowUp size={13}/></button></div>
         </>}
         <div className="inspector-links"><button onClick={startTour}><CircleHelp size={14}/> Help</button><button onClick={() => setNotice('Component library is original ELSim data.')}><Bookmark size={14}/> Library notes</button></div>
       </aside>
     </div>
     {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14}/></button></div>}
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={() => setNetlistOpen(false)}><div className="netlist-modal" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2>Generated SPICE netlist</h2></div><button className="subtle-icon" onClick={() => setNetlistOpen(false)}><X size={17}/></button></div><pre>{createNetlist(project)}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div></div></div>}
-    {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 4</span><h2 id="tour-title">{['Start with a working example', 'Change a component value', 'Inspect the generated netlist', 'Simulation status'][tourStep]}</h2></div><button className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p className="tour-copy">{[
+    {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 4</span><h2 id="tour-title">{['Start with a working example', 'Change a component value', 'Inspect the generated netlist', 'Run and see results'][tourStep]}</h2></div><button className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p className="tour-copy">{[
       'This starter circuit is already wired. The schematic is in the center, the component library is on the left, and properties appear on the right.',
       'R1 is selected in the inspector. Try changing its resistance value; edits are saved locally as you work.',
       'The Netlist tab shows the SPICE input generated from the schematic. You can inspect or copy it without writing SPICE yourself.',
-      'Waveform plotting and component animations will use real ngspice results. The WebAssembly engine is still being debugged, so this preview does not invent simulation data.',
+      'Run uses the local ngspice engine to calculate waveform vectors. Stop ends an active run, and editing the circuit marks its previous result as stale.',
     ][tourStep]}</p><div className="tour-progress" aria-label={`Step ${tourStep + 1} of 4`}>{[0, 1, 2, 3].map((step) => <span key={step} className={step <= tourStep ? 'current' : ''}/>)}</div><div className="tour-actions"><button className="tour-skip" onClick={() => setTourStep(null)}>Skip tour</button><span/>{tourStep > 0 && <button className="tour-secondary" onClick={() => setTourPage(tourStep - 1)}>Back</button>}<button className="primary-small" onClick={() => tourStep === 3 ? setTourStep(null) : setTourPage(tourStep + 1)}>{tourStep === 3 ? 'Finish' : 'Next'} <ArrowUp size={13}/></button></div></section></div>}
     <footer className="app-status"><span><span className="status-dot"/> All changes saved locally</span><span>Original ELSim component symbols</span><span><Sparkles size={13}/> Built for curious minds</span></footer>
   </div>

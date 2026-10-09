@@ -1,0 +1,10 @@
+ELSim ngspice WebAssembly subcircuit operating point
+V1 in 0 5
+XDIV in out DIVIDER
+.subckt DIVIDER IN OUT
+R1 IN OUT 1k
+R2 OUT 0 1k
+.ends DIVIDER
+.op
+.print op v(out)
+.end

@@ -17,11 +17,12 @@ try {
     '--noEmit', 'false',
     '--skipLibCheck',
     path.join(root, 'src/engine/netlist.ts'),
+    path.join(root, 'src/engine/raw.ts'),
   ], { cwd: root, stdio: 'inherit' })
   if (compile.status !== 0) {
     process.exitCode = compile.status ?? 1
   } else {
-    const tests = spawnSync(process.execPath, [path.join(__dirname, 'netlist.test.cjs')], {
+    const tests = spawnSync(process.execPath, ['--test', path.join(__dirname, 'netlist.test.cjs'), path.join(__dirname, 'raw.test.cjs')], {
       cwd: root,
       env: { ...process.env, ELSIM_TEST_BUILD: output },
       stdio: 'inherit',
