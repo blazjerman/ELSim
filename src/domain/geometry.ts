@@ -3,8 +3,27 @@ import type { Part, Project, Wire } from './project'
 export type Point = { x: number; y: number }
 export type PinLocation = Point & { partId: string; index: number }
 
-export function subcircuitPinOffsets(count: number): [number, number][] {
+export function subcircuitPinOffsets(count: number, layout?: Part['sheetPortLayout']): [number, number][] {
   if (!Number.isInteger(count) || count < 1 || count > 64) return []
+  if (layout?.length === count && layout.some((port) => port.side !== 'auto')) {
+    const result = new Array<[number, number]>(count)
+    const sides = ['left', 'right', 'top', 'bottom'] as const
+    for (const side of sides) {
+      const indexes = layout.flatMap((port, index) => port.side === side ? [index] : [])
+      indexes.forEach((index, order) => {
+        const centered = (order - (indexes.length - 1) / 2) * 24
+        result[index] = side === 'left' ? [-80, centered] : side === 'right' ? [80, centered] : side === 'top' ? [centered, -60] : [centered, 60]
+      })
+    }
+    layout.forEach((port, index) => {
+      if (port.side !== 'auto') return
+      const perSide = Math.ceil(count / 2)
+      const spacing = 24
+      const height = (perSide - 1) * spacing
+      result[index] = [index % 2 === 0 ? -80 : 80, -height / 2 + Math.floor(index / 2) * spacing]
+    })
+    return result
+  }
   const perSide = Math.ceil(count / 2)
   const spacing = 24
   const height = (perSide - 1) * spacing
@@ -12,7 +31,7 @@ export function subcircuitPinOffsets(count: number): [number, number][] {
 }
 
 export function componentPins(part: Part): PinLocation[] {
-  const local: [number, number][] = part.kind === 'subcircuit' ? part.symbolPinOffsets ?? subcircuitPinOffsets(part.modelPins?.length ?? 0)
+  const local: [number, number][] = part.kind === 'subcircuit' ? part.symbolPinOffsets ?? subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout)
     : part.kind === 'vcvs' || part.kind === 'vccs'
     ? [[-52, 0], [52, 0], [0, -52], [0, 52]]
     : part.kind === 'npn' || part.kind === 'pnp'

@@ -155,3 +155,46 @@ test('hierarchy probes map internal nodes through an instance path and ports to 
   assert.match(repeatedDeck, /^\.save v\(XLOAD2\.MID\)$/mi)
   assert.match(repeatedDeck, /^\.save @r\.xload2\.rload1\[i\]$/mi)
 })
+
+
+test('sheet port side and direction metadata controls ordered block pin geometry', () => {
+  const project = createBlockProject()
+  const child = project.sheets[1]
+  child.ports = [
+    { id: 'port-in', name: 'IN', side: 'left', direction: 'input' },
+    { id: 'port-out', name: 'OUT', side: 'right', direction: 'output' },
+  ]
+  project.parts[1].sheetPortLayout = child.ports.map(({ side, direction }) => ({ side, direction }))
+  project.sheets[0].parts = project.parts
+  const checked = validateProject(project)
+  assert.deepEqual(componentPins(checked.parts[1]).map(({ x, y }) => [x - checked.parts[1].x, y - checked.parts[1].y]), [[-80, 0], [80, 0]])
+  assert.deepEqual(checked.sheets[1].ports.map(({ side, direction }) => [side, direction]), [['left', 'input'], ['right', 'output']])
+
+  const topBottom = structuredClone(checked)
+  topBottom.sheets[1].ports = [
+    { id: 'port-in', name: 'IN', side: 'top', direction: 'input' },
+    { id: 'port-out', name: 'OUT', side: 'bottom', direction: 'output' },
+  ]
+  topBottom.parts[1].sheetPortLayout = topBottom.sheets[1].ports.map(({ side, direction }) => ({ side, direction }))
+  topBottom.sheets[0].parts = topBottom.parts
+  const vertical = validateProject(topBottom)
+  assert.deepEqual(componentPins(vertical.parts[1]).map(({ x, y }) => [x - vertical.parts[1].x, y - vertical.parts[1].y]), [[0, -60], [0, 60]])
+
+  const stale = structuredClone(vertical)
+  stale.parts[1].sheetPortLayout[0].side = 'left'
+  stale.sheets[0].parts = stale.parts
+  assert.throws(() => validateProject(stale), /block port layout does not match/)
+})
+
+test('v6 sheet blocks migrate to automatic bidirectional ports without changing pin coordinates', () => {
+  const legacy = createBlockProject()
+  const before = componentPins(legacy.parts[1]).map(({ x, y }) => [x, y])
+  legacy.version = 6
+  delete legacy.parts[1].sheetPortLayout
+  legacy.sheets[0].parts = legacy.parts
+  legacy.sheets[1].ports = legacy.sheets[1].ports.map(({ id, name }) => ({ id, name }))
+  const migrated = validateProject(legacy)
+  assert.equal(migrated.version, 7)
+  assert.deepEqual(migrated.sheets[1].ports.map(({ side, direction }) => [side, direction]), [['auto', 'inout'], ['auto', 'inout']])
+  assert.deepEqual(componentPins(migrated.parts[1]).map(({ x, y }) => [x, y]), before)
+})
