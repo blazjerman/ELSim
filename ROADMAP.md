@@ -166,7 +166,7 @@ The local environment does not have Emscripten or ngspice, so the complete M0.3 
 
 | Area | Status | Evidence / next step |
 | --- | --- | --- |
-| App shell | In progress | React/Vite workspace with component tray, canvas, inspector, analysis panel, and status area. `npm run build` (TypeScript check plus Vite production bundle) passes. Browser preview inspected at desktop viewport; narrow-width layout still clips and needs responsive work. |
+| App shell | In progress | React/Vite workspace with component tray, canvas, inspector, analysis panel, and status area. `npm run build` (TypeScript check plus Vite production bundle) passes. Browser preview inspected at a 949 px viewport; all three workspace panels fit after reducing the desktop minimum width. Narrower layouts still need review. |
 | Document model | Initial v2 | Geometry-first versioned JSON project model, v1 migration, localStorage/download-open flow, and JSON Schema; `.elsim` ZIP container and versioned migration pipeline remain. |
 | Editor | Early implementation | Select/move, rotate, add/delete/duplicate parts, geometry-based pin/wire connectivity, labels, zoom, properties. Undo/redo, wire deletion, label editing, robust routing/junction UI, ERC, and exhaustive connectivity verification remain. |
 | Netlister | Early implementation | Generated netlist reads derived connectivity, sanitizes values/references, emits starter R/C/L/source/diode devices, and now returns line-to-schematic source mappings plus diagnostics. Switch control and broad model/hierarchy semantics remain. |
