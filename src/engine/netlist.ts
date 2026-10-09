@@ -196,7 +196,17 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : project.simulation.analysis === 'dc' ? `DC ${value}` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`}`, part.id, 'component')
     }
-    else if (part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor') append(`${part.ref} ${positive} ${negative} ${value}`, part.id, 'component')
+    else if (part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor') {
+      const currentCondition = part.kind === 'inductor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined
+      const initialCurrent = currentCondition && 'current' in currentCondition ? spiceScalar(currentCondition.current.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/a$/i, ''), '') : null
+      if (currentCondition && !initialCurrent) {
+        const message = `Initial current for ${part.ref} must be a valid ampere value.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      append(`${part.ref} ${positive} ${negative} ${value}${initialCurrent ? ` IC=${initialCurrent}` : ''}`, part.id, 'component')
+    }
     else if (part.kind === 'diode' || part.kind === 'led') {
       const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
       if (part.deviceModel && importedModel?.type.toLowerCase() !== 'd') {
@@ -311,7 +321,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   } else {
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)
-    if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}${project.simulation.skipInitialOperatingPoint ? ' uic' : ''}`, 'analysis:tran', 'analysis')
+    const hasElementCurrentInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition) ?? false
+    if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}${project.simulation.skipInitialOperatingPoint || hasElementCurrentInitial ? ' uic' : ''}`, 'analysis:tran', 'analysis')
     else {
       const message = 'Transient stop time and maximum step must be valid SPICE time values.'
       append(`* ERROR: ${message}`, 'analysis:tran', 'analysis')
@@ -319,6 +330,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   }
   for (const condition of project.simulation.initialConditions ?? []) {
+    if ('element' in condition) {
+      const knownInductor = project.parts.some((part) => part.kind === 'inductor' && part.ref.toLowerCase() === condition.element.toLowerCase())
+      const value = spiceScalar(condition.current.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/a$/i, ''), '')
+      if (project.simulation.analysis !== 'tran' || !knownInductor || !value) {
+        const message = `Initial current for ${cleanComment(condition.element)} must reference an inductor and a valid current.`
+        diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
+      }
+      continue
+    }
     if (project.simulation.analysis !== 'tran') {
       const message = 'Node-voltage initial conditions require transient analysis.'
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })

@@ -58,7 +58,20 @@ test('node-voltage initial conditions require labeled nodes and emit optional UI
   assert.match(deck, /\.tran .* uic/)
   assert.match(deck, /\.ic v\(vout\)=2/)
   validated.simulation.initialConditions = [{ node: 'missing', voltage: '2 V' }]
-  assert.throws(() => validateProject(validated), /labeled non-ground nodes/)
+  assert.throws(() => validateProject(validated), /labeled nodes or inductor elements/)
   project.simulation.initialConditions = [{ node: 'vout', voltage: 'not volts' }]
+  assert.throws(() => validateProject(project), /malformed/)
+})
+
+test('inductor current initial conditions validate and enable UIC on the inductor card', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 700, y: 300, rotation: 0 })
+  project.simulation.initialConditions = [{ element: 'L1', current: '2 mA' }]
+  const deck = createNetlistArtifact(validateProject(structuredClone(project))).text
+  assert.match(deck, /^L1 n\d+ n\d+ 10m IC=2m$/m)
+  assert.match(deck, /^\.tran .* uic$/m)
+  project.simulation.initialConditions = [{ element: 'R1', current: '2 mA' }]
+  assert.throws(() => validateProject(project), /inductor elements/)
+  project.simulation.initialConditions = [{ element: 'L1', current: 'bad' }]
   assert.throws(() => validateProject(project), /malformed/)
 })

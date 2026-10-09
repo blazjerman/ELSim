@@ -230,6 +230,14 @@ assert.ok(Math.abs(initialVoltage[0] - 2) < 5e-5, `initial output voltage should
 assert.ok(initialVoltage.at(-1) < 0.75, 'output should discharge toward ground after the transient starts')
 process.stdout.write('PASS transient-initial-condition\n')
 
+const initialCurrentPath = path.join(root, 'engine/wasm/fixtures', 'initial-current-transient.cir')
+const initialCurrentResult = await runInWorker(initialCurrentPath, true)
+assert.equal(initialCurrentResult.status, 0, `initial-current-transient: ngspice exited with a nonzero status: ${initialCurrentResult.stderr}`)
+const inductorCurrent = realRawVector(initialCurrentResult.raw, 'i(@l1[i])')
+assert.ok(inductorCurrent[0] > 1.9e-3 && inductorCurrent[0] <= 2e-3, `inductor current should start near the specified 2 mA, got ${inductorCurrent[0]}`)
+assert.ok(Math.abs(inductorCurrent.at(-1)) < 1e-7, `inductor current should decay through the parallel resistor, got ${inductorCurrent.at(-1)}`)
+process.stdout.write('PASS transient-inductor-current-initial-condition\n')
+
 const controlledPath = path.join(root, 'engine/wasm/fixtures', 'controlled-sources.cir')
 const controlledResult = await runInWorker(controlledPath, true)
 assert.equal(controlledResult.status, 0, `controlled-sources: ngspice exited with a nonzero status: ${controlledResult.stderr}`)

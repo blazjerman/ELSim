@@ -1,0 +1,12 @@
+ELSim inductor current initial condition regression
+R1 in 0 1k
+L1 in 0 10m IC=2m
+.tran 10u 1m uic
+.save all @L1[i]
+.control
+set filetype=ascii
+run
+write /result.raw all
+quit
+.endc
+.end

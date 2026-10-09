@@ -346,17 +346,17 @@ function TransientMeasurementEditor({ measurements, onAdd, onChange, onRemove }:
   </div>
 }
 
-function InitialConditionEditor({ conditions, nodes, skipOp, onAdd, onChange, onRemove, onSkipOpChange }: { conditions: InitialCondition[]; nodes: string[]; skipOp: boolean; onAdd: () => void; onChange: (index: number, patch: Partial<InitialCondition>) => void; onRemove: (index: number) => void; onSkipOpChange: (value: boolean) => void }) {
+function InitialConditionEditor({ conditions, nodes, inductors, skipOp, onAdd, onAddCurrent, onChange, onRemove, onSkipOpChange }: { conditions: InitialCondition[]; nodes: string[]; inductors: string[]; skipOp: boolean; onAdd: () => void; onAddCurrent: () => void; onChange: (index: number, value: InitialCondition) => void; onRemove: (index: number) => void; onSkipOpChange: (value: boolean) => void }) {
   return <div className="form-section measurement-editor">
     <div className="form-section-title">INITIAL CONDITIONS</div>
-    <p className="field-hint">Set starting voltages on labeled nodes for transient analysis.</p>
-    {conditions.map((condition, index) => <div className="measurement-card" key={`${condition.node}-${index}`}>
-      <div className="parameter-sweep-heading"><strong>Node voltage {index + 1}</strong><button type="button" aria-label={`Remove initial condition ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
-      <label className="field-label">Node<select value={condition.node} onChange={(event) => onChange(index, { node: event.target.value })}>{nodes.map((node) => <option key={node} value={node}>{node}</option>)}</select></label>
-      <label className="field-label">Starting voltage<input value={condition.voltage} onChange={(event) => onChange(index, { voltage: event.target.value })}/></label>
+    <p className="field-hint">Set starting voltages on labeled nodes or starting current in inductors. Inductor current initialization runs transient analysis with UIC.</p>
+    {conditions.map((condition, index) => <div className="measurement-card" key={`${'element' in condition ? condition.element : condition.node}-${index}`}>
+      <div className="parameter-sweep-heading"><strong>{'element' in condition ? `Inductor current ${index + 1}` : `Node voltage ${index + 1}`}</strong><button type="button" aria-label={`Remove initial condition ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
+      {'element' in condition ? <><label className="field-label">Inductor<select value={condition.element} onChange={(event) => onChange(index, { element: event.target.value, current: condition.current })}>{inductors.map((element) => <option key={element} value={element}>{element}</option>)}</select></label><label className="field-label">Starting current<input value={condition.current} onChange={(event) => onChange(index, { element: condition.element, current: event.target.value })}/></label></> : <><label className="field-label">Node<select value={condition.node} onChange={(event) => onChange(index, { node: event.target.value, voltage: condition.voltage })}>{nodes.map((node) => <option key={node} value={node}>{node}</option>)}</select></label><label className="field-label">Starting voltage<input value={condition.voltage} onChange={(event) => onChange(index, { node: condition.node, voltage: event.target.value })}/></label></>}
     </div>)}
-    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={conditions.length >= 8 || nodes.length <= conditions.length}>Add node voltage</button>
-    <label className="checkbox-field"><input type="checkbox" checked={skipOp} onChange={(event) => onSkipOpChange(event.target.checked)}/><span><strong>Skip initial operating point (UIC)</strong><small>Starts from the values above instead of solving a DC operating point first.</small></span></label>
+    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={conditions.length >= 8 || nodes.every((node) => conditions.some((condition) => !('element' in condition) && condition.node.toLowerCase() === node.toLowerCase()))}>Add node voltage</button>
+    <button type="button" className="add-parameter-sweep" onClick={onAddCurrent} disabled={conditions.length >= 8 || inductors.every((element) => conditions.some((condition) => 'element' in condition && condition.element.toLowerCase() === element.toLowerCase()))}>Add inductor current</button>
+    <label className="checkbox-field"><input type="checkbox" checked={skipOp || conditions.some((condition) => 'element' in condition)} disabled={conditions.some((condition) => 'element' in condition)} onChange={(event) => onSkipOpChange(event.target.checked)}/><span><strong>Skip initial operating point (UIC)</strong><small>Starts directly from specified initial values. Inductor current conditions require UIC and enable it automatically.</small></span></label>
   </div>
 }
 
@@ -1255,13 +1255,20 @@ export default function App() {
     delete simulation.transientMeasurements
     return { ...current, simulation: measurements.length ? { ...simulation, transientMeasurements: measurements } : simulation }
   })
-  const updateInitialCondition = (index: number, patch: Partial<InitialCondition>) => setProject((current) => ({ ...current, simulation: { ...current.simulation, initialConditions: (current.simulation.initialConditions ?? []).map((condition, item) => item === index ? { ...condition, ...patch } : condition) } }))
+  const updateInitialCondition = (index: number, value: InitialCondition) => setProject((current) => ({ ...current, simulation: { ...current.simulation, initialConditions: (current.simulation.initialConditions ?? []).map((condition, item) => item === index ? value : condition) } }))
   const addInitialCondition = () => setProject((current) => {
     const conditions = current.simulation.initialConditions ?? []
     const nodes = [...new Set(current.netLabels.map((label) => label.name).filter((node) => node !== '0'))]
-    const node = nodes.find((candidate) => !conditions.some((condition) => condition.node.toLowerCase() === candidate.toLowerCase()))
+    const node = nodes.find((candidate) => !conditions.some((condition) => !('element' in condition) && condition.node.toLowerCase() === candidate.toLowerCase()))
     if (!node || conditions.length >= 8) return current
     return { ...current, simulation: { ...current.simulation, initialConditions: [...conditions, { node, voltage: '0 V' }] } }
+  })
+  const addInductorInitialCondition = () => setProject((current) => {
+    const conditions = current.simulation.initialConditions ?? []
+    const inductors = current.parts.filter((part) => part.kind === 'inductor')
+    const element = inductors.find((part) => !conditions.some((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()))?.ref
+    if (!element || conditions.length >= 8) return current
+    return { ...current, simulation: { ...current.simulation, initialConditions: [...conditions, { element, current: '0 A' }] } }
   })
   const removeInitialCondition = (index: number) => setProject((current) => {
     const conditions = current.simulation.initialConditions?.filter((_, item) => item !== index) ?? []
@@ -1388,7 +1395,7 @@ export default function App() {
     <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
     {project.simulation.analysis === 'tran' && <>
       <TransientMeasurementEditor measurements={project.simulation.transientMeasurements ?? []} onAdd={addMeasurement} onChange={updateMeasurement} onRemove={removeMeasurement}/>
-      <InitialConditionEditor conditions={project.simulation.initialConditions ?? []} nodes={[...new Set(project.netLabels.map((label) => label.name).filter((node) => node !== '0'))]} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAdd={addInitialCondition} onChange={updateInitialCondition} onRemove={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/>
+      <InitialConditionEditor conditions={project.simulation.initialConditions ?? []} nodes={[...new Set(project.netLabels.map((label) => label.name).filter((node) => node !== '0'))]} inductors={project.parts.filter((part) => part.kind === 'inductor').map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAdd={addInitialCondition} onAddCurrent={addInductorInitialCondition} onChange={updateInitialCondition} onRemove={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/>
     </>}
           <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : `${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'ac' ? 'AC frequency-domain' : 'Transient'} analysis runs locally in a Web Worker. Results are tied to the circuit revision.`}</p><button onClick={() => setNotice(engineAssetAvailable === false ? 'Build the pinned engine with tools/build-ngspice-wasm.sh; see engine/wasm/README.md.' : 'ngspice 47 · Emscripten WebAssembly · transient, DC operating-point, and AC analyses')}>Engine status <ArrowUp size={13}/></button>{engineAssetAvailable && <a className="engine-notice-link" href="/engine/THIRD_PARTY_NOTICES.md" target="_blank" rel="noreferrer">Third-party notices</a>}</div>
         </>}
