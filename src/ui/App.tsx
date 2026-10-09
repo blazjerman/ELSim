@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
-  Activity, AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, CircleHelp,
+  Activity, AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleDot, CircleHelp,
   Command, Copy, FilePlus2, FlipHorizontal2, FolderOpen, Gauge, GitBranch, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
   Save, Search, Settings2, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
@@ -73,13 +73,35 @@ function usePlotWindow(traces: Trace[], savedRange: PlotRange | undefined, onRan
   return { window, zoom, pan, reset }
 }
 
-function PlotNavigation({ zoom, pan, reset, disabled = false }: { window: PlotWindow; zoom: (factor: number) => void; pan: (direction: -1 | 1) => void; reset: () => void; disabled?: boolean }) {
+type ValueWindow = { min: number; max: number }
+function useValueWindow(autoRange: [number, number]) {
+  const [saved, setSaved] = useState<ValueWindow | null>(null)
+  const range = saved ?? { min: autoRange[0], max: autoRange[1] }
+  const zoom = (factor: number) => {
+    const span = Math.max(Number.EPSILON, range.max - range.min) * factor
+    const bounded = Math.max(span, Number.EPSILON * Math.max(1, Math.abs(range.min), Math.abs(range.max)))
+    const center = (range.min + range.max) / 2
+    setSaved({ min: center - bounded / 2, max: center + bounded / 2 })
+  }
+  const pan = (direction: -1 | 1) => {
+    const shift = (range.max - range.min) * 0.22 * direction
+    setSaved({ min: range.min + shift, max: range.max + shift })
+  }
+  return { range, zoom, pan, reset: () => setSaved(null) }
+}
+
+function PlotNavigation({ zoom, pan, reset, valueZoom, valuePan, disabled = false }: { window: PlotWindow; zoom: (factor: number) => void; pan: (direction: -1 | 1) => void; reset: () => void; valueZoom: (factor: number) => void; valuePan: (direction: -1 | 1) => void; disabled?: boolean }) {
   return <div className="plot-navigation" aria-label="Plot navigation">
     <button title="Pan left" aria-label="Pan left" onClick={() => pan(-1)} disabled={disabled}><ChevronLeft size={11}/></button>
     <button title="Zoom out" aria-label="Zoom out" onClick={() => zoom(1.5)} disabled={disabled}>−</button>
     <button title="Reset plot view" aria-label="Reset plot view" onClick={reset} disabled={disabled}>Reset</button>
     <button title="Zoom in" aria-label="Zoom in" onClick={() => zoom(0.67)} disabled={disabled}>+</button>
     <button title="Pan right" aria-label="Pan right" onClick={() => pan(1)} disabled={disabled}><ChevronRight size={11}/></button>
+    <span className="plot-navigation-separator" aria-hidden="true"/>
+    <button title="Pan vertical axis up" aria-label="Pan vertical axis up" onClick={() => valuePan(1)} disabled={disabled}><ChevronUp size={11}/></button>
+    <button title="Zoom vertical axis out" aria-label="Zoom vertical axis out" onClick={() => valueZoom(1.5)} disabled={disabled}>−</button>
+    <button title="Zoom vertical axis in" aria-label="Zoom vertical axis in" onClick={() => valueZoom(0.67)} disabled={disabled}>+</button>
+    <button title="Pan vertical axis down" aria-label="Pan vertical axis down" onClick={() => valuePan(-1)} disabled={disabled}><ChevronDown size={11}/></button>
   </div>
 }
 
@@ -151,22 +173,29 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
   const shown = traces.filter((trace) => selectedIds.includes(trace.id))
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const width = 760, height = 112, left = 42, right = 748, top = 8, bottom = 91
+  const axis = shown[0]?.axis ?? traces[0]?.axis
+  const first = Math.floor(navigation.window.start * Math.max(0, (axis?.length ?? 1) - 1))
+  const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, (axis?.length ?? 1) - 1)))
+  const minTime = axis?.[first] ?? 0, maxTime = axis?.[Math.min(last, (axis?.length ?? 1) - 1)] ?? 1
   const rangeFor = (unit: string) => {
     let min = Infinity, max = -Infinity
     for (const trace of shown) if (trace.unit === unit) {
-      const range = valueRange(trace.values, 0, trace.values.length - 1)
+      const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
+      const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
+      const range = valueRange(trace.values, traceFirst, traceLast)
       if (range) { min = Math.min(min, range[0]); max = Math.max(max, range[1]) }
     }
     if (!Number.isFinite(min) || !Number.isFinite(max)) return [-1, 1] as [number, number]
     if (min === max) { min -= 1; max += 1 }
     return [min, max] as [number, number]
   }
-  const voltageRange = rangeFor('V'), currentRange = rangeFor('A')
+  const voltageAxis = useValueWindow(rangeFor('V')), currentAxis = useValueWindow(rangeFor('A'))
+  const voltageRange: [number, number] = [voltageAxis.range.min, voltageAxis.range.max]
+  const currentRange: [number, number] = [currentAxis.range.min, currentAxis.range.max]
   const hasVoltage = shown.some((trace) => trace.unit === 'V'), hasCurrent = shown.some((trace) => trace.unit === 'A')
-  const axis = shown[0]?.axis ?? traces[0]?.axis
-  const first = Math.floor(navigation.window.start * Math.max(0, (axis?.length ?? 1) - 1))
-  const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, (axis?.length ?? 1) - 1)))
-  const minTime = axis?.[first] ?? 0, maxTime = axis?.[Math.min(last, (axis?.length ?? 1) - 1)] ?? 1
+  const resetView = () => { navigation.reset(); voltageAxis.reset(); currentAxis.reset() }
+  const zoomValue = (factor: number) => { voltageAxis.zoom(factor); currentAxis.zoom(factor) }
+  const panValue = (direction: -1 | 1) => { voltageAxis.pan(direction); currentAxis.pan(direction) }
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
   const [cursorIndex, setCursorIndex] = useState<number | null>(sampleIndex)
   useEffect(() => setCursorIndex(sampleIndex), [traces, sampleIndex])
@@ -194,7 +223,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
   }
   const cursorTime = cursorIndex === null || !axis ? null : axis[cursorIndex]
   return <div className="waveform-view">
-    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'Transient results'}</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><span>{cursorTime === null ? 'Click plot for cursor values' : `t = ${cursorTime.toPrecision(5)} s`}</span><PlotNavigation {...navigation} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'Transient results'}</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><span>{cursorTime === null ? 'Click plot for cursor values' : `t = ${cursorTime.toPrecision(5)} s`}</span><PlotNavigation {...navigation} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <svg className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds`} onClick={handleCursor}>
       {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const v = voltageRange[1] - (line / 3) * (voltageRange[1] - voltageRange[0]); const a = currentRange[1] - (line / 3) * (currentRange[1] - currentRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{v.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{a.toPrecision(3)} A</text>}</g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
@@ -247,10 +276,15 @@ function AcPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRange
   }
   if (minValue === Infinity) { minValue = mode === 'magnitude' ? -60 : -180; maxValue = mode === 'magnitude' ? 20 : 180 }
   if (minValue === maxValue) { minValue -= 1; maxValue += 1 }
+  const valueAxis = useValueWindow([minValue, maxValue])
+  useEffect(() => valueAxis.reset(), [mode])
+  minValue = valueAxis.range.min
+  maxValue = valueAxis.range.max
+  const resetView = () => { navigation.reset(); valueAxis.reset() }
   const xFor = (frequency: number) => left + ((Math.log10(frequency) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left)
   const yFor = (value: number) => bottom - (value - minValue) / (maxValue - minValue) * (bottom - top)
   return <div className="waveform-view ac-view">
-    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${frequencies[cursorIndex].toPrecision(5)} Hz`}</span><PlotNavigation {...navigation} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${frequencies[cursorIndex].toPrecision(5)} Hz`}</span><PlotNavigation {...navigation} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <div className="ac-mode"><button className={mode === 'magnitude' ? 'active' : ''} onClick={() => setMode('magnitude')}>Magnitude (dB)</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setMode('phase')}>Phase (°)</button></div>
     <svg className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`AC ${mode} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz`} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); setCursorIndex(nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1))) }}>
       {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} {mode === 'magnitude' ? 'dB' : '°'}</text></g> })}
@@ -280,12 +314,17 @@ function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, on
     const range = valueRange(trace.values, first, Math.min(last, trace.values.length - 1))
     if (range) { min = Math.min(min, range[0]); max = Math.max(max, range[1]) }
   }
+  if (max === min) { min -= 1; max += 1 }
+  const valueAxis = useValueWindow([min, max])
+  min = valueAxis.range.min
+  max = valueAxis.range.max
+  const resetView = () => { navigation.reset(); valueAxis.reset() }
   const span = max - min || 1
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
   const xFor = (value: number) => left + (value - x0) / (x1 - x0 || 1) * (right - left)
   const yFor = (value: number) => bottom - (value - min) / span * (bottom - top)
   return <div className="waveform-view">
-    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'DC sweep results'}</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${axis[cursorIndex].toPrecision(5)} ${traces[0]?.axisUnit}`}</span><PlotNavigation {...navigation} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'DC sweep results'}</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${axis[cursorIndex].toPrecision(5)} ${traces[0]?.axisUnit}`}</span><PlotNavigation {...navigation} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <svg className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}`} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); setCursorIndex(nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1))) }}>
       {[0, 1, 2, 3].map((line) => { const value = max - line / 3 * span; return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)}</text></g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
