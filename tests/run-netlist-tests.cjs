@@ -19,11 +19,12 @@ try {
     path.join(root, 'src/engine/netlist.ts'),
     path.join(root, 'src/engine/raw.ts'),
     path.join(root, 'src/engine/csv.ts'),
+    path.join(root, 'src/domain/probe.ts'),
   ], { cwd: root, stdio: 'inherit' })
   if (compile.status !== 0) {
     process.exitCode = compile.status ?? 1
   } else {
-    const tests = spawnSync(process.execPath, ['--test', path.join(__dirname, 'netlist.test.cjs'), path.join(__dirname, 'raw.test.cjs')], {
+    const tests = spawnSync(process.execPath, ['--test', path.join(__dirname, 'netlist.test.cjs'), path.join(__dirname, 'raw.test.cjs'), path.join(__dirname, 'probe.test.cjs')], {
       cwd: root,
       env: { ...process.env, ELSIM_TEST_BUILD: output },
       stdio: 'inherit',

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { componentPins, moveWireAnchors, projectPinLocations, wireNetAt } from '../domain/geometry'
+import { resolveProbeTarget } from '../domain/probe'
 import { createStarterProject, kindNames, kindPrefix, validateProject, type Part, type PartKind, type Project } from '../domain/project'
 import { createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -123,7 +124,13 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     return wire ? { ...wire.point, distance: wire.distance } : null
   }
   const canvasClick = (event: MouseEvent<SVGSVGElement>) => {
-    if (tool === 'probe') { setNotice('Click a wire to probe its voltage, or a two-terminal component to probe its current.'); return }
+    if (tool === 'probe') {
+      const point = pointFromEvent(event)
+      const target = resolveProbeTarget(project, point)
+      if (target) onProbe(target)
+      else setNotice('Click near a wire or two-terminal component to add a voltage or current trace.')
+      return
+    }
     if (tool === 'label') {
       const point = pointFromEvent(event)
       const target = resolveNode(point)
@@ -147,8 +154,10 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     setNotice('Wire added. Connectivity is derived from the pin and wire geometry.')
   }
   const probeWire = (wireId: string) => {
-    const node = analyzeConnectivity(project).wireNets.get(wireId)
-    if (node) onProbe({ kind: 'node', name: node })
+    const wire = project.wires.find((candidate) => candidate.id === wireId)
+    const point = wire?.points[0]
+    const target = point ? resolveProbeTarget(project, { x: point[0], y: point[1] }) : null
+    if (target?.kind === 'node') onProbe(target)
     else setNotice('This wire is not connected to a net yet.')
   }
   const beginDrag = (event: PointerEvent<SVGGElement>, kind: 'part' | 'wire' | 'label', id: string) => {

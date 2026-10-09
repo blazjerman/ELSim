@@ -1,0 +1,22 @@
+import { analyzeConnectivity } from './connectivity'
+import { wireNetAt, type Point } from './geometry'
+import type { Project } from './project'
+
+export type ProbeTarget = { kind: 'node'; name: string } | { kind: 'part'; id: string }
+
+export function resolveProbeTarget(project: Project, point: Point, tolerance = 12): ProbeTarget | null {
+  const wire = wireNetAt(project, point, tolerance)
+  if (wire) {
+    const name = analyzeConnectivity(project).wireNets.get(wire.wireId)
+    return name ? { kind: 'node', name } : null
+  }
+  const part = project.parts.find((candidate) => {
+    if (candidate.kind === 'ground') return false
+    const angle = -candidate.rotation * Math.PI / 180
+    const dx = point.x - candidate.x, dy = point.y - candidate.y
+    const localX = dx * Math.cos(angle) - dy * Math.sin(angle)
+    const localY = dx * Math.sin(angle) + dy * Math.cos(angle)
+    return Math.abs(localX) <= 40 && Math.abs(localY) <= 38
+  })
+  return part ? { kind: 'part', id: part.id } : null
+}
