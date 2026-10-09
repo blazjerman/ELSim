@@ -75,6 +75,20 @@ test('AC analysis emits small-signal source and validated logarithmic sweep', ()
   assert.match(createNetlistArtifact(project).diagnostics[0].message, /positive increasing/)
 })
 
+test('CCCS and CCVS netlist records name a voltage source for current control', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'p-f1', kind: 'cccs', ref: 'F1', value: '2', controlSource: 'V1', x: 700, y: 300, rotation: 0 },
+    { id: 'p-h1', kind: 'ccvs', ref: 'H1', value: '1 kΩ', controlSource: 'V1', x: 700, y: 420, rotation: 0 },
+  )
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^F1 n\d+ n\d+ V1 2$/m)
+  assert.match(artifact.text, /^H1 n\d+ n\d+ V1 1k$/m)
+  project.parts.find((part) => part.ref === 'F1').controlSource = 'R1'
+  assert.throws(() => validateProject(project), /existing voltage source/)
+})
+
 test('DC sweep emits a steady source and a validated voltage-source sweep', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'dc'

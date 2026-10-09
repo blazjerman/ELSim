@@ -2,7 +2,7 @@ import { componentPins } from './geometry'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 
-export type PartKind = 'source' | 'resistor' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'npn' | 'pnp' | 'subcircuit'
+export type PartKind = 'source' | 'resistor' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'npn' | 'pnp' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
 
 export type Part = {
@@ -19,6 +19,7 @@ export type Part = {
   modelParameters?: Record<string, string>
   sheetParameters?: Record<string, string>
   deviceModel?: string
+  controlSource?: string
   symbolAssetId?: string
   symbolPinOffsets?: [number, number][]
   sheetId?: string
@@ -294,7 +295,7 @@ export function validateProject(input: unknown): Project {
   if (data.version !== 7 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
     throw new Error('This project format is not supported. Expected ELSim project version 7.')
   }
-  const allowed = new Set<PartKind>(['source', 'resistor', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'npn', 'pnp', 'subcircuit'])
+  const allowed = new Set<PartKind>(['source', 'resistor', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'npn', 'pnp', 'subcircuit'])
   const refs = new Set<string>()
   const partIds = new Set<string>()
   for (const candidate of data.parts as Part[]) {
@@ -302,10 +303,11 @@ export function validateProject(input: unknown): Project {
       throw new Error('Project contains a malformed component.')
     }
     partIds.add(candidate.id)
-    const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[candidate.kind]
+    const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[candidate.kind]
     if (!candidate.ref.startsWith(prefix) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(candidate.ref)) throw new Error(`The reference designator ${candidate.ref} is invalid for ${candidate.kind}.`)
     if (refs.has(candidate.ref.toLowerCase())) throw new Error(`The reference designator ${candidate.ref} is used more than once.`)
     refs.add(candidate.ref.toLowerCase())
+    if ((candidate.kind === 'cccs' || candidate.kind === 'ccvs') && (typeof candidate.controlSource !== 'string' || !/^V[A-Za-z0-9_]*$/i.test(candidate.controlSource) || !(data.parts as Part[]).some((part) => part.kind === 'source' && part.ref.toLowerCase() === candidate.controlSource?.toLowerCase()))) throw new Error(`${candidate.ref} must reference an existing voltage source that senses its controlling current.`)
     if ((candidate.kind === 'npn' || candidate.kind === 'pnp') && (!/^[1-9]\d{0,3}$/.test(candidate.value) || Number(candidate.value) > 1000)) throw new Error(`${candidate.ref} forward beta must be an integer from 1 to 1000.`)
     if (candidate.kind === 'subcircuit' && (typeof candidate.modelName !== 'string' || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(candidate.modelName) || !Array.isArray(candidate.modelPins) || candidate.modelPins.length < 1 || candidate.modelPins.length > 64 || candidate.modelPins.some((pin) => typeof pin !== 'string' || !/^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(pin)))) throw new Error(`${candidate.ref} has malformed subcircuit model or ordered pins.`)
     if (candidate.sheetId !== undefined && (candidate.kind !== 'subcircuit' || typeof candidate.sheetId !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(candidate.sheetId))) throw new Error(`${candidate.ref} has a malformed sheet block reference.`)
@@ -375,7 +377,7 @@ export function validateProject(input: unknown): Project {
       const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
       if (!symbolAsset) throw new Error(`${part.ref} refers to a missing imported symbol.`)
       const symbol = parseLtspiceSymbol(symbolAsset.content, symbolAsset.filename)
-      const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, resistor: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, npn: 3, pnp: 3 } as const)[part.kind]
+      const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, resistor: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, npn: 3, pnp: 3 } as const)[part.kind]
       if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
     }
     if (part.kind === 'subcircuit' && !part.sheetId) {
@@ -440,7 +442,7 @@ export function validateProject(input: unknown): Project {
     if (simulation.analysis !== 'tran') throw new Error('Transient measurements require transient analysis.')
     const measurementIds = new Set<string>()
     for (const measurement of simulation.transientMeasurements) {
-      const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGQ][A-Za-z0-9_]*\))$/i
+      const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQ][A-Za-z0-9_]*\))$/i
       const validDelay = measurement?.operation === 'delay' && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && typeof measurement.targetVector === 'string' && vectorPattern.test(measurement.targetVector.trim()) && typeof measurement.threshold === 'string' && Number.isFinite(Number(measurement.threshold)) && typeof measurement.targetThreshold === 'string' && Number.isFinite(Number(measurement.targetThreshold)) && ['rise', 'fall', 'either'].includes(measurement.edge) && ['rise', 'fall', 'either'].includes(measurement.targetEdge)
       const validScalar = measurement && ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim())
       if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !(validDelay || validScalar)) throw new Error('Transient measurements require a unique name, supported operation, and valid voltage or device-current vectors and thresholds.')
@@ -541,9 +543,9 @@ export function validateProject(input: unknown): Project {
 
 export const kindNames: Record<PartKind, string> = {
   source: 'Voltage source', resistor: 'Resistor', capacitor: 'Capacitor',
-  ground: 'Ground', inductor: 'Inductor', diode: 'Diode', led: 'LED', switch: 'Switch', vcvs: 'Voltage-controlled voltage source', vccs: 'Voltage-controlled current source', npn: 'NPN transistor', pnp: 'PNP transistor', subcircuit: 'Imported subcircuit',
+  ground: 'Ground', inductor: 'Inductor', diode: 'Diode', led: 'LED', switch: 'Switch', vcvs: 'Voltage-controlled voltage source', vccs: 'Voltage-controlled current source', cccs: 'Current-controlled current source', ccvs: 'Current-controlled voltage source', npn: 'NPN transistor', pnp: 'PNP transistor', subcircuit: 'Imported subcircuit',
 }
 
 export const kindPrefix: Record<PartKind, string> = {
-  source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+  source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }

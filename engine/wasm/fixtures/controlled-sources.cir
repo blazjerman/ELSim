@@ -4,7 +4,13 @@ E1 out-v 0 control 0 2
 R1 out-v 0 1k
 G1 out-i 0 control 0 1m
 R2 out-i 0 1k
-.save all @E1[i] @G1[i]
+RCTRL control ctrl 1k
+VSENSE ctrl 0 0
+F1 out-f 0 VSENSE 2
+RLOADF out-f 0 1k
+H1 out-h 0 VSENSE 2k
+RLOADH out-h 0 1k
+.save all @E1[i] @G1[i] @F1[i] @H1[i]
 .tran 100n 10u
 .control
 set filetype=ascii

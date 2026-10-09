@@ -204,7 +204,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     if (!mapped.kind) { warnings.push(`Line ${symbol.line}: ${symbol.name} (${identity}) is unsupported or refers to missing subcircuit model ${value}; it was skipped.`); continue }
     const pins = sidecar.parsed.pins
     const expectedPinNames = mapped.kind === 'subcircuit' ? subcircuits.get(mapped.modelName!.toLowerCase()) ?? [] : null
-    const expectedPinCount = expectedPinNames?.length ?? ({ source: 2, resistor: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, npn: 3, pnp: 3, subcircuit: 0 } satisfies Record<PartKind, number>)[mapped.kind]
+    const expectedPinCount = expectedPinNames?.length ?? ({ source: 2, resistor: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, npn: 3, pnp: 3, subcircuit: 0 } satisfies Record<PartKind, number>)[mapped.kind]
     if (pins.length !== expectedPinCount) { warnings.push(`Line ${symbol.line}: ${symbol.name} has ${pins.length} pins but ${identity} requires ${expectedPinCount}; it was skipped.`); continue }
     if (expectedPinNames && pins.some((pin, index) => pin.name.toLowerCase() !== expectedPinNames[index]?.toLowerCase())) { warnings.push(`Line ${symbol.line}: ${symbol.name} SpiceOrder pin names do not match ${mapped.modelName}; it was skipped.`); continue }
     const kind = mapped.kind
