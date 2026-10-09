@@ -1,5 +1,5 @@
 import { componentPins } from './geometry'
-import { parseSubcircuitLibrary } from './subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcircuitLibrary'
 
 export type PartKind = 'source' | 'resistor' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'npn' | 'pnp' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
@@ -15,6 +15,7 @@ export type Part = {
   flipX?: boolean
   modelName?: string
   modelPins?: string[]
+  modelParameters?: Record<string, string>
 }
 
 export type Wire = { id: string; points: [number, number][] }
@@ -165,6 +166,12 @@ export function validateProject(input: unknown): Project {
     const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
     if (!definition) throw new Error(`${part.ref} refers to missing imported subcircuit ${part.modelName}.`)
     if (!part.modelPins || part.modelPins.length !== definition.pins.length || part.modelPins.some((pin, index) => pin.toLowerCase() !== definition.pins[index].toLowerCase())) throw new Error(`${part.ref} pin order does not match imported subcircuit ${definition.name}.`)
+    if (part.modelParameters !== undefined) {
+      if (!part.modelParameters || typeof part.modelParameters !== 'object' || Array.isArray(part.modelParameters) || Object.keys(part.modelParameters).length > 32) throw new Error(`${part.ref} subcircuit parameter overrides are malformed.`)
+      for (const [name, value] of Object.entries(part.modelParameters)) {
+        if (!definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value)) throw new Error(`${part.ref} has an unsupported override for subcircuit parameter ${name}.`)
+      }
+    }
   }
   const simulation = data.simulation as Project['simulation'] | undefined
   const view = data.view as Project['view'] | undefined

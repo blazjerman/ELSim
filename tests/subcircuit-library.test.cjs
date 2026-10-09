@@ -9,14 +9,15 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { parseSubcircuitLibrary, sha256Text, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('parses ordered subcircuit pins, parameters, continuations, shared models, and multiple definitions', () => {
-  const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10\n+ R1 INP OUT 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
+  const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10 R=20k\nR1 INP OUT\n+ 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
   const parsed = parseSubcircuitLibrary(source)
   assert.deepEqual(parsed.subcircuits.map(({ name, pins }) => ({ name, pins })), [
     { name: 'amp', pins: ['INP', 'INM', 'VCC', 'VEE', 'OUT'] },
     { name: 'buffer', pins: ['IN', 'OUT'] },
   ])
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: '10' }, { name: 'R', defaultValue: '20k' }])
   assert.match(parsed.modelText, /\.model DFAST D/)
-  assert.match(parsed.modelText, /\+ R1 INP OUT 10k/)
+  assert.match(parsed.modelText, /\+ 10k/)
   assert.match(parsed.modelText, /\.ends/)
 })
 
@@ -47,6 +48,9 @@ test('rejects malformed pin declarations, block endings, duplicate definitions, 
     '.SUBCKT x A\n.SUBCKT y B\n.ENDS y\n.ENDS x',
     '.SUBCKT x A\nR1 A 0 1k',
     '.SUBCKT x A\n.ENDS x\n.subckt X B\n.ends X',
+    '.SUBCKT x A PARAMS: GAIN',
+    '.SUBCKT x A PARAMS: GAIN=1 gain=2\n.ENDS',
+    '.SUBCKT x A PARAMS: __proto__=1\n.ENDS',
   ]) assert.throws(() => parseSubcircuitLibrary(source))
 })
 

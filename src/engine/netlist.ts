@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import type { Part, PartKind, Project } from '../domain/project'
-import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import type { NetlistArtifact, NetlistSource } from './contract'
 
 function cleanComment(value: string): string {
@@ -126,8 +126,19 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
+      const invalidParameter = Object.entries(part.modelParameters ?? {}).find(([name, value]) => !definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value))
+      if (invalidParameter) {
+        const message = `${part.ref} has an invalid value for subcircuit parameter ${cleanComment(invalidParameter[0])}. Enter a numeric SPICE value such as 10k or 2.5.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
       const nodes = part.modelPins.map((_, index) => pinNet(connectivity, part, index))
-      append(`${part.ref} ${nodes.join(' ')} ${definition.name}`, part.id, 'component')
+      const parameters = definition.parameters.flatMap((parameter) => {
+        const override = Object.entries(part.modelParameters ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1]
+        return override === undefined ? [] : [`${parameter.name}=${override}`]
+      })
+      append(`${part.ref} ${nodes.join(' ')} ${definition.name}${parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'switch') {
       const state = part.value.trim().toLowerCase()

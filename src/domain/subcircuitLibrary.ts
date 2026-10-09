@@ -1,4 +1,5 @@
-export type SubcircuitDefinition = { name: string; pins: string[]; startLine: number; endLine: number }
+export type SubcircuitParameter = { name: string; defaultValue: string }
+export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; startLine: number; endLine: number }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; modelText: string }
 
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
@@ -29,6 +30,29 @@ function withoutInlineComment(line: string): string {
   return (comment < 0 ? line : line.slice(0, comment)).trim()
 }
 
+function parseParameterDefaults(source: string, line: number): SubcircuitParameter[] {
+  const result: SubcircuitParameter[] = []
+  let offset = 0
+  const assignment = /\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|[^\s]+)\s*/gy
+  while (offset < source.length) {
+    assignment.lastIndex = offset
+    const match = assignment.exec(source)
+    if (!match) throw new Error(`Line ${line}: malformed .SUBCKT PARAMS: declaration.`)
+    if (['__proto__', 'constructor', 'prototype'].includes(match[1].toLowerCase())) throw new Error(`Line ${line}: parameter name ${match[1]} is reserved.`)
+    if (result.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) throw new Error(`Line ${line}: parameter ${match[1]} is declared more than once.`)
+    result.push({ name: match[1], defaultValue: match[2] })
+    offset = assignment.lastIndex
+  }
+  if (result.length > 32) throw new Error(`Line ${line}: a subcircuit may declare at most 32 parameters.`)
+  return result
+}
+
+export function isSafeSubcircuitParameterValue(value: string): boolean {
+  if (typeof value !== 'string' || value.length > 64) return false
+  const scalar = value.trim().replace(/^\{(.*)\}$/, '$1')
+  return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i.test(scalar)
+}
+
 /** Parse self-contained SPICE model libraries without executing file directives. */
 export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary {
   if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
@@ -39,7 +63,7 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
   const subcircuits: SubcircuitDefinition[] = []
   const seenNames = new Set<string>()
   const modelLines: LogicalLine[] = []
-  let active: { name: string; pins: string[]; start: number } | null = null
+  let active: { name: string; pins: string[]; parameters: SubcircuitParameter[]; start: number } | null = null
   let sawTopLevelRecord = false
 
   for (const line of lines) {
@@ -54,7 +78,7 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
       if (directive === '.ends') {
         const closingName = tokens[1]
         if (closingName && closingName.toLowerCase() !== active.name.toLowerCase()) throw new Error(`Line ${line.start}: .ENDS ${closingName} does not match .SUBCKT ${active.name}.`)
-        subcircuits.push({ name: active.name, pins: active.pins, startLine: active.start, endLine: line.end })
+        subcircuits.push({ name: active.name, pins: active.pins, parameters: active.parameters, startLine: active.start, endLine: line.end })
         active = null
       }
       continue
@@ -70,10 +94,11 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
       const header = tokens.slice(2)
       const paramsAt = header.findIndex((token) => /^params?:$/i.test(token))
       const pins = (paramsAt < 0 ? header : header.slice(0, paramsAt)).filter(Boolean)
+      const parameterSource = paramsAt < 0 ? '' : text.slice(text.toLowerCase().indexOf(header[paramsAt].toLowerCase()) + header[paramsAt].length).trim()
       if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !pinName.test(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
         throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
       }
-      active = { name, pins, start: line.start }
+      active = { name, pins, parameters: paramsAt < 0 ? [] : parseParameterDefaults(parameterSource, line.start), start: line.start }
       modelLines.push(line)
       continue
     }

@@ -152,9 +152,9 @@ test('NPN and PNP parts create separate educational BJT models in C-B-E pin orde
 
 test('imported subcircuits place ordered pins and generate X-device netlists with model source mapping', () => {
   const project = createStarterProject()
-  const content = '.SUBCKT gain IN OUT VCC VEE\nE1 OUT 0 IN 0 2\n.ENDS gain\n'
-  project.modelAssets = [{ id: 'model-gain', filename: 'gain.lib', content, sha256: 'ade3c59ef6855f47ee33e70d52889bf1e1770b167e7617f43c6cd20ba848c80b', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'gain', modelName: 'gain', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], x: 760, y: 350, rotation: 0 })
+  const content = '.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN=2\nE1 OUT 0 IN 0 {GAIN}\n.ENDS gain\n'
+  project.modelAssets = [{ id: 'model-gain', filename: 'gain.lib', content, sha256: '204a70330fd3a6eaa3a42e469e18b6c73596a9ace6d5c6fad84939961f516d5b', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'gain', modelName: 'gain', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], modelParameters: { GAIN: '3' }, x: 760, y: 350, rotation: 0 })
   project.netLabels.push(
     { id: 'x-in', name: 'xinput', x: 680, y: 338, visible: false },
     { id: 'x-out', name: 'xoutput', x: 840, y: 338, visible: false },
@@ -165,11 +165,16 @@ test('imported subcircuits place ordered pins and generate X-device netlists wit
   assert.deepEqual(componentPins(validated.parts.at(-1)).map(({ x, y }) => [x - 760, y - 350]), [[-80, -12], [80, -12], [-80, 12], [80, 12]])
   const artifact = createNetlistArtifact(validated)
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^X1 xinput xoutput xvcc xvee gain$/m)
-  assert.match(artifact.text, /^\.SUBCKT gain IN OUT VCC VEE$/m)
-  assert.match(artifact.text, /^E1 OUT 0 IN 0 2$/m)
+  assert.match(artifact.text, /^X1 xinput xoutput xvcc xvee gain PARAMS: GAIN=3$/m)
+  assert.match(artifact.text, /^\.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN=2$/m)
+  assert.match(artifact.text, /^E1 OUT 0 IN 0 \{GAIN\}$/m)
   assert.equal(artifact.sourceMap.find((entry) => entry.sourceId === 'p-x1')?.role, 'component')
   assert.equal(artifact.sourceMap.filter((entry) => entry.sourceId === 'model-file:model-gain').length, 3)
   assert.throws(() => validateProject({ ...validated, parts: validated.parts.map((part) => part.id === 'p-x1' ? { ...part, modelPins: ['OUT', 'IN', 'VCC', 'VEE'] } : part) }), /pin order does not match/)
+  const unsafe = { ...validated, parts: validated.parts.map((part) => part.id === 'p-x1' ? { ...part, modelParameters: { GAIN: '2\n.end' } } : part) }
+  assert.throws(() => validateProject(unsafe), /unsupported override/)
+  const unsafeNetlist = createNetlistArtifact(unsafe)
+  assert.equal(unsafeNetlist.diagnostics[0].sourceId, 'p-x1')
+  assert.doesNotMatch(unsafeNetlist.text, /^X1 .*\.end/m)
 })
 

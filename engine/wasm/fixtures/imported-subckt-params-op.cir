@@ -1,0 +1,9 @@
+ELSim imported subcircuit parameter override operating point
+V1 IN 0 5
+XAMP IN OUT AMP2 PARAMS: GAIN=3
+.SUBCKT AMP2 IN OUT PARAMS: GAIN=2
+EGAIN OUT 0 IN 0 {GAIN}
+.ENDS AMP2
+.op
+.print op v(out)
+.end
