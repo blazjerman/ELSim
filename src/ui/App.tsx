@@ -202,7 +202,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
     {shown.some((trace) => trace.unit === 'A') && <div className="current-sign-note">{shown.some((trace) => /^I\(Q/i.test(trace.label)) ? 'Transistor collector current is positive into the collector terminal.' : 'Positive component current is from pin 1 to pin 2.'}</div>}
     {shown.length === 0 && <div className="stale-note">Choose a trace above or use Probe in the schematic.</div>}
     {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh the plot.</div>}
-    {measurements.length > 0 && <div className="measurement-results"><div className="form-section-title">MEASUREMENTS</div><table className="op-table"><thead><tr><th>Name</th><th>Operation</th><th>Value</th></tr></thead><tbody>{measurements.map((measurement) => <tr key={`${measurement.sweep?.index ?? 0}-${measurement.id}`}><td>{measurement.id}{measurement.sweep ? ` · ${measurement.sweep.label}` : ''}</td><td>{measurement.operation.toUpperCase()} {measurement.vector}</td><td>{measurement.value.toPrecision(7)} {measurement.unit}</td></tr>)}</tbody></table></div>}
+    {measurements.length > 0 && <div className="measurement-results"><div className="form-section-title">MEASUREMENTS</div><table className="op-table"><thead><tr><th>Name</th><th>Operation</th><th>Value</th></tr></thead><tbody>{measurements.map((measurement) => <tr key={`${measurement.sweep?.index ?? 0}-${measurement.id}`}><td>{measurement.id}{measurement.sweep ? ` · ${measurement.sweep.label}` : ''}</td><td>{measurement.operation === 'delay' ? `DELAY ${measurement.vector} → ${measurement.targetVector ?? 'target'}` : `${measurement.operation.toUpperCase()} ${measurement.vector}`}</td><td>{measurement.value.toPrecision(7)} {measurement.unit}</td></tr>)}</tbody></table></div>}
   </div>
 }
 
@@ -321,18 +321,25 @@ function ParameterSweepEditor({ parts, sweeps, onAdd, onChange, onRemove }: { pa
   </div>
 }
 
+function patchMeasurement(current: TransientMeasurement, patch: Partial<TransientMeasurement>): TransientMeasurement {
+  if (patch.operation === 'delay') return { id: current.id, operation: 'delay', vector: current.vector, threshold: '2.5', targetVector: 'V(vout)', targetThreshold: '2.5', edge: 'rise', targetEdge: 'rise' }
+  if ((current as { operation: string }).operation === 'delay' && patch.operation) return { id: current.id, operation: patch.operation as 'max' | 'min' | 'avg' | 'rms', vector: current.vector }
+  return { ...current, ...patch } as TransientMeasurement
+}
+
 function TransientMeasurementEditor({ measurements, onAdd, onChange, onRemove }: { measurements: TransientMeasurement[]; onAdd: () => void; onChange: (index: number, patch: Partial<TransientMeasurement>) => void; onRemove: (index: number) => void }) {
   return <div className="form-section measurement-editor">
     <div className="form-section-title">TRANSIENT MEASUREMENTS</div>
-    <p className="field-hint">Calculate peak, minimum, average, or RMS values from a voltage or component current.</p>
+    <p className="field-hint">Calculate peak, minimum, average, or RMS values, or measure delay between two voltage/current threshold crossings.</p>
     {measurements.map((measurement, index) => <div className="measurement-card" key={`${measurement.id}-${index}`}>
       <div className="parameter-sweep-heading"><strong>Measurement {index + 1}</strong><button type="button" aria-label={`Remove measurement ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
       <label className="field-label">Name<input maxLength={24} value={measurement.id} onChange={(event) => onChange(index, { id: event.target.value })}/></label>
-      <label className="field-label">Calculate<select value={measurement.operation} onChange={(event) => onChange(index, { operation: event.target.value as TransientMeasurement['operation'] })}><option value="max">Maximum</option><option value="min">Minimum</option><option value="avg">Average</option><option value="rms">RMS</option></select></label>
+      <label className="field-label">Calculate<select value={measurement.operation} onChange={(event) => onChange(index, event.target.value === 'delay' ? { operation: 'delay', vector: measurement.vector, threshold: '2.5', targetVector: 'V(vout)', targetThreshold: '2.5', edge: 'rise', targetEdge: 'rise' } : { operation: event.target.value as 'max' | 'min' | 'avg' | 'rms', vector: measurement.vector })}><option value="max">Maximum</option><option value="min">Minimum</option><option value="avg">Average</option><option value="rms">RMS</option><option value="delay">Propagation delay</option></select></label>
       <label className="field-label">Vector<input placeholder="V(out) or I(R1)" value={measurement.vector} onChange={(event) => onChange(index, { vector: event.target.value })}/></label>
+      {measurement.operation === 'delay' && <><label className="field-label">Trigger threshold<input value={measurement.threshold} onChange={(event) => onChange(index, { threshold: event.target.value })}/></label><label className="field-label">Trigger edge<select value={measurement.edge} onChange={(event) => onChange(index, { edge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either</option></select></label><label className="field-label">Target vector<input placeholder="V(out)" value={measurement.targetVector} onChange={(event) => onChange(index, { targetVector: event.target.value })}/></label><label className="field-label">Target threshold<input value={measurement.targetThreshold} onChange={(event) => onChange(index, { targetThreshold: event.target.value })}/></label><label className="field-label">Target edge<select value={measurement.targetEdge} onChange={(event) => onChange(index, { targetEdge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either</option></select></label></>}
     </div>)}
     <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={measurements.length >= 12}>Add measurement</button>
-    {measurements.length > 0 && <div className="field-hint">Measurements are calculated for each parameter sweep case.</div>}
+    {measurements.length > 0 && <div className="field-hint">Measurements are calculated for each parameter sweep case. Delay values are reported in seconds.</div>}
   </div>
 }
 
@@ -1231,7 +1238,7 @@ export default function App() {
     delete simulation.parameterSweeps
     return { ...current, simulation: next.length ? { ...simulation, parameterSweeps: next } : simulation }
   })
-  const updateMeasurement = (index: number, patch: Partial<TransientMeasurement>) => setProject((current) => ({ ...current, simulation: { ...current.simulation, transientMeasurements: (current.simulation.transientMeasurements ?? []).map((measurement, item) => item === index ? { ...measurement, ...patch } : measurement) } }))
+  const updateMeasurement = (index: number, patch: Partial<TransientMeasurement>) => setProject((current) => ({ ...current, simulation: { ...current.simulation, transientMeasurements: (current.simulation.transientMeasurements ?? []).map((measurement, item) => item === index ? patchMeasurement(measurement, patch) : measurement) } }))
   const addMeasurement = () => setProject((current) => {
     const measurements = current.simulation.transientMeasurements ?? []
     if (measurements.length >= 12) return current

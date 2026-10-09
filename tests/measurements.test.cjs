@@ -42,3 +42,12 @@ test('project measurements validate, persist in project JSON, and enter the gene
   reloaded.simulation.analysis = 'ac'
   assert.throws(() => validateProject(reloaded), /require transient analysis/)
 })
+
+test('delay measurements validate and generate trigger/target clauses', () => {
+  const project = createStarterProject()
+  project.simulation.transientMeasurements = [{ id: 'RiseDelay', operation: 'delay', vector: 'V(vin)', threshold: '2.5', edge: 'rise', targetVector: 'V(vout)', targetThreshold: '2.5', targetEdge: 'rise' }]
+  const deck = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project)))).text
+  assert.match(deck, /\.meas tran ELSIM_RiseDelay TRIG V\(vin\) VAL=2\.5 RISE=1 TARG V\(vout\) VAL=2\.5 RISE=1/i)
+  project.simulation.transientMeasurements[0].edge = 'sideways'
+  assert.throws(() => validateProject(project), /Transient measurements/)
+})

@@ -20,7 +20,7 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
         continue
       }
       const isCurrent = measurement.vector.trim().toLowerCase().startsWith('i(')
-      results.push({ id: measurement.id, operation: measurement.operation, vector: measurement.vector, value, unit: isCurrent ? 'A' : 'V', ...(caseCount ? { sweep: { label: sweepLabels[index], index } } : {}) })
+      results.push({ id: measurement.id, operation: measurement.operation, vector: measurement.vector, ...(measurement.operation === 'delay' ? { targetVector: measurement.targetVector } : {}), value, unit: measurement.operation === 'delay' ? 's' : isCurrent ? 'A' : 'V', ...(caseCount ? { sweep: { label: sweepLabels[index], index } } : {}) })
     }
   }
   return { results, diagnostics }

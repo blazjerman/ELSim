@@ -614,13 +614,19 @@
                   "max",
                   "min",
                   "avg",
-                  "rms"
+                  "rms",
+                  "delay"
                 ]
               },
               "vector": {
                 "type": "string",
                 "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$"
-              }
+              },
+              "threshold": { "type": "string" },
+              "targetVector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" },
+              "targetThreshold": { "type": "string" },
+              "edge": { "enum": ["rise", "fall", "either"] },
+              "targetEdge": { "enum": ["rise", "fall", "either"] }
             }
           }
         },

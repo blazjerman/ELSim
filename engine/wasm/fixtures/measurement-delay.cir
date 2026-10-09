@@ -1,0 +1,12 @@
+ELSim transient delay measurement regression
+V1 in 0 PULSE(0 5 0 1u 1u 100m 200m)
+R1 in out 1k
+C1 out 0 10u
+.tran 10u 100m
+.control
+set filetype=ascii
+run
+meas tran ELSIM_risedelay_0 TRIG v(in) VAL=2.5 RISE=1 TARG v(out) VAL=2.5 RISE=1
+quit
+.endc
+.end

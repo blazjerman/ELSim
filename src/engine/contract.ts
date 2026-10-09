@@ -48,7 +48,7 @@ export type Trace = {
   sweep?: { label: string; index: number }
 }
 
-export type MeasurementResult = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string; value: number; unit: 'V' | 'A'; sweep?: { label: string; index: number } }
+export type MeasurementResult = { id: string; operation: 'max' | 'min' | 'avg' | 'rms' | 'delay'; vector: string; targetVector?: string; value: number; unit: 'V' | 'A' | 's'; sweep?: { label: string; index: number } }
 
 export type SimulationResult = {
   metadata: RunMetadata

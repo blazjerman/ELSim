@@ -33,7 +33,7 @@ export type PlotSettings = {
   ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>>
 }
 export type ParameterSweep = { component: string; start: string; stop: string; points: number }
-export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string }
+export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
 export type InitialCondition = { node: string; voltage: string }
 export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
 export type SymbolAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
@@ -440,7 +440,10 @@ export function validateProject(input: unknown): Project {
     if (simulation.analysis !== 'tran') throw new Error('Transient measurements require transient analysis.')
     const measurementIds = new Set<string>()
     for (const measurement of simulation.transientMeasurements) {
-      if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !['max', 'min', 'avg', 'rms'].includes(measurement.operation) || typeof measurement.vector !== 'string' || !measurement.vector.trim() || !/^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGQ][A-Za-z0-9_]*\))$/i.test(measurement.vector.trim())) throw new Error('Transient measurements require a unique name, a supported operation, and a voltage or device-current vector such as V(out) or I(R1).')
+      const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGQ][A-Za-z0-9_]*\))$/i
+      const validDelay = measurement?.operation === 'delay' && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && typeof measurement.targetVector === 'string' && vectorPattern.test(measurement.targetVector.trim()) && typeof measurement.threshold === 'string' && Number.isFinite(Number(measurement.threshold)) && typeof measurement.targetThreshold === 'string' && Number.isFinite(Number(measurement.targetThreshold)) && ['rise', 'fall', 'either'].includes(measurement.edge) && ['rise', 'fall', 'either'].includes(measurement.targetEdge)
+      const validScalar = measurement && ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim())
+      if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !(validDelay || validScalar)) throw new Error('Transient measurements require a unique name, supported operation, and valid voltage or device-current vectors and thresholds.')
       measurementIds.add(measurement.id.toLowerCase())
     }
   }

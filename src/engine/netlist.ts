@@ -330,12 +330,18 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       break
     }
-    if (!/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || !['max', 'min', 'avg', 'rms'].includes(measurement.operation) || !/^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGQ][A-Za-z0-9_]*\))$/i.test(measurement.vector.trim())) {
+    const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGQ][A-Za-z0-9_]*\))$/i
+    const delay = measurement.operation === 'delay' ? measurement : undefined
+    const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (delay
+      ? vectorPattern.test(measurement.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && Number.isFinite(Number(delay.threshold)) && Number.isFinite(Number(delay.targetThreshold)) && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
+      : ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()))
+    if (!valid) {
       const message = `Transient measurement ${cleanComment(measurement.id)} has an unsupported name, operation, or vector.`
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       continue
     }
-    append(`.meas tran ELSIM_${measurement.id} ${measurement.operation} ${measurement.vector.trim()}`, 'analysis:tran', 'analysis')
+    if (delay) append(`.meas tran ELSIM_${delay.id} TRIG ${delay.vector.trim()} VAL=${delay.threshold} ${delay.edge.toUpperCase()}=1 TARG ${delay.targetVector.trim()} VAL=${delay.targetThreshold} ${delay.targetEdge.toUpperCase()}=1`, 'analysis:tran', 'analysis')
+    else append(`.meas tran ELSIM_${measurement.id} ${measurement.operation} ${measurement.vector.trim()}`, 'analysis:tran', 'analysis')
   }
   rows.push('.end')
   return { text: rows.join('\n'), sourceMap, diagnostics }
