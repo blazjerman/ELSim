@@ -38,6 +38,7 @@ export type Trace = {
   axisUnit: string
   axis: Float64Array
   values: Float64Array
+  imaginaryValues?: Float64Array
 }
 
 export type SimulationResult = {
@@ -46,6 +47,7 @@ export type SimulationResult = {
   sourceMap: NetlistSource[]
   traces: Trace[]
   diagnostics: SimulationDiagnostic[]
+  analysis: 'tran' | 'op' | 'ac'
 }
 
 // Keep the editor independent of a specific ngspice-WASM build. Only this

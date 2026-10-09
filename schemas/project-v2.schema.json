@@ -78,9 +78,21 @@
       "additionalProperties": false,
       "required": ["analysis", "stopTime", "maxStep"],
       "properties": {
-        "analysis": { "enum": ["tran", "op"] },
+        "analysis": { "enum": ["tran", "op", "ac"] },
         "stopTime": { "type": "string", "minLength": 1 },
-        "maxStep": { "type": "string", "minLength": 1 }
+        "maxStep": { "type": "string", "minLength": 1 },
+        "sourceAcMagnitude": { "type": "string", "minLength": 1 },
+        "acSweep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scale", "points", "startFrequency", "stopFrequency"],
+          "properties": {
+            "scale": { "enum": ["dec", "oct", "lin"] },
+            "points": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "startFrequency": { "type": "string", "minLength": 1 },
+            "stopFrequency": { "type": "string", "minLength": 1 }
+          }
+        }
       }
     }
   }

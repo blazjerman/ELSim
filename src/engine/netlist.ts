@@ -27,6 +27,12 @@ function spiceTime(value: string): string | null {
   return spiceScalar(result, '')
 }
 
+function spiceFrequency(value: string): string | null {
+  let result = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
+  if (result.toLowerCase().endsWith('hz')) result = result.slice(0, -2)
+  return spiceScalar(result, '')
+}
+
 function validReference(part: Part): boolean {
   const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', switch: 'S' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
@@ -75,7 +81,16 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
       continue
     }
-    if (part.kind === 'source') append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`}`, part.id, 'component')
+    if (part.kind === 'source') {
+      const acMagnitude = spiceNumber(project.simulation.sourceAcMagnitude ?? '1 V', 'source')
+      if (project.simulation.analysis === 'ac' && !acMagnitude) {
+        const message = 'AC source magnitude must be a valid voltage value.'
+        append(`* ERROR: ${message}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`}`, part.id, 'component')
+    }
     else if (part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor') append(`${part.ref} ${positive} ${negative} ${value}`, part.id, 'component')
     else if (part.kind === 'diode') { append(`${part.ref} ${positive} ${negative} DDEFAULT`, part.id, 'component'); usesDiode = true }
     else if (part.kind === 'switch') {
@@ -98,6 +113,15 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
   if (usesSwitch) append('.model ELSIM_INTERNAL_SW SW(Ron=1m Roff=1T Vt=2.5 Vh=0)', 'model:ELSIM_INTERNAL_SW', 'model')
   if (project.simulation.analysis === 'op') {
     append('.op', 'analysis:op', 'analysis')
+  } else if (project.simulation.analysis === 'ac') {
+    const sweep = project.simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
+    const start = spiceFrequency(sweep.startFrequency)
+    const stop = spiceFrequency(sweep.stopFrequency)
+    if (!['dec', 'oct', 'lin'].includes(sweep.scale) || !Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000 || !start || !stop || Number(start) <= 0 || Number(stop) <= Number(start)) {
+      const message = 'AC sweep needs a supported scale, 1–10,000 points, and positive increasing start/stop frequencies.'
+      append(`* ERROR: ${message}`, 'analysis:ac', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:ac', line: rows.length })
+    } else append(`.ac ${sweep.scale} ${sweep.points} ${start} ${stop}`, 'analysis:ac', 'analysis')
   } else {
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)

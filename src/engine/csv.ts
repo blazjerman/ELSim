@@ -11,9 +11,12 @@ export function serializeWaveformCsv(traces: Trace[]): string {
     throw new Error('Selected traces do not share the same analysis axis.')
   }
   const axisName = traces[0].axisUnit ? `${traces[0].axisLabel} (${traces[0].axisUnit})` : traces[0].axisLabel
-  const rows = [`${quote(axisName)},${traces.map((trace) => quote(`${trace.label} (${trace.unit})`)).join(',')}`]
+  const columns = traces.flatMap((trace) => trace.imaginaryValues
+    ? [quote(`${trace.label} real (${trace.unit})`), quote(`${trace.label} imaginary (${trace.unit})`)]
+    : [quote(`${trace.label} (${trace.unit})`)])
+  const rows = [`${quote(axisName)},${columns.join(',')}`]
   for (let index = 0; index < axis.length; index++) {
-    rows.push([axis[index], ...traces.map((trace) => trace.values[index])].join(','))
+    rows.push([axis[index], ...traces.flatMap((trace) => trace.imaginaryValues ? [trace.values[index], trace.imaginaryValues[index]] : [trace.values[index]])].join(','))
   }
   return rows.join('\n')
 }

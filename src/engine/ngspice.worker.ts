@@ -16,16 +16,7 @@ function addResultControl(netlist: string): string {
   const rows = netlist.trimEnd().split(/\r?\n/)
   const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
   if (endLine === -1) throw new Error('Generated netlist is missing its .end directive.')
-  const currentSaves = rows.filter((line) => /^[RCLDVS]\S*\s+/i.test(line) && !/^V\S*\s+/i.test(line)).map((line) => {
-    const reference = line.trim().split(/\s+/)[0]
-    return `@${reference}[i]`
-  })
-  const sourceSaves = rows.filter((line) => /^V\S*\s+/i.test(line)).map((line) => `@${line.trim().split(/\s+/)[0]}[i]`)
-  const savedVectors = [...currentSaves, ...sourceSaves]
-  for (let index = savedVectors.length; index > 0; index -= 40) {
-    const chunk = savedVectors.slice(Math.max(0, index - 40), index)
-    rows.splice(endLine, 0, `.save all ${chunk.join(' ')}`)
-  }
+  rows.splice(endLine, 0, '.save all')
   rows.splice(endLine + 1, 1, '.control', 'set filetype=ascii', 'run', 'write /result.raw all', 'quit', '.endc', '.end')
   return rows.join('\n') + '\n'
 }
@@ -47,6 +38,7 @@ function makeTraces(rawText: string): Trace[] {
       axisUnit: parsed.axisUnit,
       axis: new Float64Array(axis),
       values: variable.values,
+      ...(variable.imaginaryValues ? { imaginaryValues: variable.imaginaryValues } : {}),
     }
   })
 }
@@ -65,12 +57,12 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     })
     const runDeck = addResultControl(artifact.text)
     module.FS.writeFile('/project.cir', runDeck)
-    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : 'transient'} analysis` } satisfies EngineResponse)
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : 'transient'} analysis` } satisfies EngineResponse)
     const status = module.callMain(['-b', '/project.cir'])
     const output = stdout.join('\n')
     const errors = output.split(/\r?\n/).filter((line) => /^\s*(?:Error|Fatal):/i.test(line))
     if (status !== 0 || errors.length) {
-      const message = errors[0] ?? stderr.find((line) => /RuntimeError|out of bounds|stack overflow|Aborted\(/i.test(line)) ?? `ngspice exited with status ${status}.`
+      const message = errors[0] ?? output.split(/\r?\n/).find((line) => /no writable vector|not available or has zero length|Error during/i.test(line)) ?? stderr.find((line) => /RuntimeError|out of bounds|stack overflow|Aborted\(/i.test(line)) ?? `ngspice exited with status ${status}.`
       worker.postMessage({ type: 'error', requestId, error: diagnosticForLine(message, artifact) } satisfies EngineResponse)
       return
     }
@@ -82,6 +74,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       sourceMap: artifact.sourceMap,
       traces,
       diagnostics: artifact.diagnostics,
+      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac',
     }
     worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse)
   } catch (error) {

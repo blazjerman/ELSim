@@ -21,7 +21,7 @@ function runInWorker(deckPath, readRaw = false) {
     }, 60_000)
     worker.once('message', (message) => {
       clearTimeout(timeout)
-      if (message.error) reject(new Error(message.error))
+      if (message.error) reject(new Error(typeof message.error === 'string' ? message.error : `${message.error.name}: ${message.error.message}\n${message.error.stack ?? ''}`))
       else resolve(message)
     })
     worker.once('error', (error) => {
@@ -81,5 +81,15 @@ assert.match(opResult.raw, /^\s*\d+\s+v\(out\)\s+voltage$/mi)
 assert.match(opResult.raw, /2\.500000000000000e-03/)
 assert.match(opResult.raw, /2\.500000000000000e\+00/)
 process.stdout.write('PASS op-raw-vectors\n')
+
+const acPath = path.join(root, 'engine/wasm/fixtures', 'ac-raw.cir')
+const acResult = await runInWorker(acPath, true)
+assert.equal(acResult.status, 0, `ac-raw: ngspice exited with a nonzero status: ${acResult.stderr}`)
+assert.match(acResult.raw, /^Plotname:\s*AC Analysis$/mi)
+assert.match(acResult.raw, /^Flags:\s*complex$/mi)
+assert.match(acResult.raw, /^No\. Points:\s*13$/mi)
+assert.match(acResult.raw, /^\s*\d+\s+frequency\s+frequency/m)
+assert.match(acResult.raw, /\d\.\d+e[+-]\d+,[-\d.]+e[+-]\d+/i)
+process.stdout.write('PASS ac-raw-vectors\n')
 
 if (!nativeNgspice) process.stdout.write('Native parity comparison skipped; pass the pinned native ngspice executable as argument 2.\n')

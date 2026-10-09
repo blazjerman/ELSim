@@ -2,6 +2,7 @@ export type RawVariable = {
   name: string
   type: string
   values: Float64Array
+  imaginaryValues?: Float64Array
 }
 
 export type ParsedRawFile = {
@@ -9,6 +10,7 @@ export type ParsedRawFile = {
   plotName: string
   axisLabel: string
   axisUnit: string
+  isComplex: boolean
   axis: Float64Array
   variables: RawVariable[]
 }
@@ -34,7 +36,8 @@ export function parseAsciiRawFile(text: string): ParsedRawFile {
   const title = header.match(/^Title:\s*(.*)$/im)?.[1]?.trim() ?? 'ngspice results'
   const plotName = header.match(/^Plotname:\s*(.*)$/im)?.[1]?.trim() ?? 'Analysis'
   const flags = header.match(/^Flags:\s*(.*)$/im)?.[1]?.trim().toLowerCase().split(/\s+/) ?? []
-  if (!flags.includes('real') || flags.includes('complex')) throw new Error(`Unsupported ngspice raw data flags: ${flags.join(', ') || 'missing'}.`)
+  const isComplex = flags.includes('complex')
+  if (!isComplex && !flags.includes('real')) throw new Error(`Unsupported ngspice raw data flags: ${flags.join(', ') || 'missing'}.`)
   const pointCount = Number(header.match(/^No\. Points:\s*(\d+)$/im)?.[1])
   const variableCount = Number(header.match(/^No\. Variables:\s*(\d+)$/im)?.[1])
   if (!Number.isSafeInteger(pointCount) || pointCount < 1 || !Number.isSafeInteger(variableCount) || variableCount < 2) {
@@ -44,30 +47,36 @@ export function parseAsciiRawFile(text: string): ParsedRawFile {
   if (!variableBlock) throw new Error('ngspice raw data is missing its Variables section.')
   const variables = variableBlock.split(/\r?\n/).map((line) => {
     const match = line.match(/^\s*\d+\s+(\S+)\s+(\S+)/)
-    return match ? { name: match[1], type: match[2], values: new Float64Array(pointCount) } : null
+    return match ? { name: match[1], type: match[2], values: new Float64Array(pointCount), ...(isComplex ? { imaginaryValues: new Float64Array(pointCount) } : {}) } : null
   }).filter((variable): variable is RawVariable => variable !== null)
   if (variables.length !== variableCount) throw new Error('ngspice raw data variables do not match its declared result data.')
   const hasTimeAxis = variables[0]?.name.toLowerCase() === 'time'
   const isOperatingPoint = /operating point/i.test(plotName)
-  if (!hasTimeAxis && !isOperatingPoint) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
+  const isFrequency = /ac analysis/i.test(plotName)
+  if (!hasTimeAxis && !isOperatingPoint && !isFrequency) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
+  if (isComplex && !isFrequency) throw new Error(`Complex ngspice raw data is unsupported for ${plotName}.`)
+  if (isFrequency && !isComplex) throw new Error('ngspice AC analysis must contain complex frequency-domain vectors.')
   if (isOperatingPoint && pointCount !== 1) throw new Error('ngspice operating-point raw data must contain exactly one sample.')
   if (data.length < pointCount * variableCount) throw new Error('ngspice raw data ended before all numeric points were read.')
   const axis = new Float64Array(pointCount)
-  const firstVariableIndex = 1
   for (let point = 0, lineIndex = 0; point < pointCount; point++) {
-    if (hasTimeAxis) {
+    if (hasTimeAxis || isFrequency) {
       const axisTokens = data[lineIndex++].trim().split(/\s+/)
-      if (Number(axisTokens[0]) !== point || axisTokens.length < 2) throw new Error(`Malformed ngspice raw point index ${point}.`)
-      axis[point] = finiteNumber(axisTokens[1], `point ${point}, time`)
+      const pair = axisTokens[1]?.match(/^([^,]+),([^,]+)$/)
+      if (Number(axisTokens[0]) !== point || (!pair && axisTokens.length < 2)) throw new Error(`Malformed ngspice ${isFrequency ? 'frequency' : 'time'} sample index ${point}.`)
+      axis[point] = finiteNumber(pair?.[1] ?? axisTokens[1], `point ${point}, ${isFrequency ? 'frequency' : 'time'}`)
+      if (isFrequency) finiteNumber(pair?.[2] ?? '0', `point ${point}, frequency imaginary part`)
     } else {
       const tokens = data[lineIndex++].trim().split(/\s+/)
       if (Number(tokens[0]) !== point || tokens.length < 2) throw new Error(`Malformed ngspice operating-point sample index ${point}.`)
       variables[0].values[point] = finiteNumber(tokens.at(-1)!, `point ${point}, ${variables[0].name}`)
     }
-    for (let variable = firstVariableIndex; variable < variableCount; variable++) {
+    for (let variable = 1; variable < variableCount; variable++) {
       const tokens = data[lineIndex++].trim().split(/\s+/)
-      variables[variable].values[point] = finiteNumber(tokens.at(-1)!, `point ${point}, ${variables[variable].name}`)
+      const pair = tokens.at(-1)?.match(/^([^,]+),([^,]+)$/)
+      variables[variable].values[point] = finiteNumber(pair?.[1] ?? tokens.at(-1)!, `point ${point}, ${variables[variable].name}`)
+      if (isComplex) variables[variable].imaginaryValues![point] = finiteNumber(pair?.[2] ?? '', `point ${point}, ${variables[variable].name} imaginary part`)
     }
   }
-  return { title, plotName, axisLabel: hasTimeAxis ? 'Time' : 'Operating point', axisUnit: hasTimeAxis ? 's' : '', axis, variables: variables.slice(hasTimeAxis ? 1 : 0) }
+  return { title, plotName, axisLabel: hasTimeAxis ? 'Time' : isFrequency ? 'Frequency' : 'Operating point', axisUnit: hasTimeAxis ? 's' : isFrequency ? 'Hz' : '', isComplex, axis, variables: variables.slice(hasTimeAxis || isFrequency ? 1 : 0) }
 }
