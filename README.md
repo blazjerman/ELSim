@@ -17,7 +17,7 @@ npm install
 npm run dev
 ```
 
-The current project file is a versioned JSON document. Use Save to download a copy, or Open to restore one. A copy is also kept in this browser's local storage.
+Use Save to download a portable `.elsim` archive, or Open to restore one. Existing `.elsim.json` documents can still be opened. The archive format and safety limits are documented in [PROJECT_FORMAT.md](PROJECT_FORMAT.md). A working copy is also kept in this browser's local storage.
 
 ## Engine and licensing
 

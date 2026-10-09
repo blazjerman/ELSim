@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsim.dev/schemas/archive-v1.schema.json",
+  "title": "ELSim archive manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "project", "assets"],
+  "properties": {
+    "format": { "const": "elsim-archive" },
+    "version": { "const": 1 },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "crc32", "size"],
+      "properties": {
+        "path": { "const": "project.json" },
+        "crc32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "size": { "type": "integer", "minimum": 1, "maximum": 20971520 }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "maxItems": 62,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "crc32", "size", "mediaType"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^assets/[A-Za-z0-9._/-]+$" },
+          "crc32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+          "size": { "type": "integer", "minimum": 1, "maximum": 20971520 },
+          "mediaType": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    }
+  }
+}

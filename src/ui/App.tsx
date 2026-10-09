@@ -10,6 +10,7 @@ import {
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { componentPins, moveWireAnchors, projectPinLocations, wireNetAt } from '../domain/geometry'
 import { resolveProbeTarget } from '../domain/probe'
+import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import { createStarterProject, kindNames, kindPrefix, validateProject, type Part, type PartKind, type Project } from '../domain/project'
 import { createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -370,19 +371,25 @@ export default function App() {
   }
 
   const saveProject = () => {
-    const blob = new Blob([JSON.stringify(projectRef.current, null, 2)], { type: 'application/json' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `${projectRef.current.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.elsim.json`
-    link.click()
-    window.setTimeout(() => URL.revokeObjectURL(link.href), 1000)
-    setNotice('Project saved to your device')
+    try {
+      const bytes = createProjectArchive(projectRef.current)
+      const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/vnd.elsim.project+zip' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${projectRef.current.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.elsim`
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+      setNotice('Project saved as a portable .elsim file')
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not save this project archive.') }
   }
   const loadProject = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
     try {
-      const parsed = validateProject(JSON.parse(await file.text()))
+      if (file.size > 50 * 1024 * 1024) throw new Error('Project file exceeds the 50 MiB size limit.')
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const projectData = isProjectArchive(bytes) ? readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
+      const parsed = validateProject(projectData)
       setProjectState(parsed)
       history.current = { past: [], future: [] }
       setSelection(null)
@@ -579,7 +586,7 @@ export default function App() {
     </header>
 
     <div className="main-toolbar">
-      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={saveProject}><Save size={15}/> Save</button><input ref={fileInput} type="file" accept=".json,.elsim.json,application/json" hidden onChange={loadProject}/></div>
+      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={saveProject}><Save size={15}/> Save</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/></div>
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
