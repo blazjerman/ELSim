@@ -58,3 +58,9 @@ test('BJT models save collector current using the device-specific ngspice vector
   const control = addResultControl('Q1 c b e ELSIM_MODEL_Q1\n.model ELSIM_MODEL_Q1 NPN(BF=100)\n.tran 1u 1m\n.end')
   assert.match(control, /^\.save all @Q1\[ic\]$/m)
 })
+
+test('result control does not emit unscoped current saves for subcircuit definitions', () => {
+  const control = addResultControl('XLOAD in out LOAD\n.SUBCKT LOAD IN OUT\nRIN IN MID 1k\nC1 MID OUT 1u\n.ENDS LOAD\n.tran 1u 1m\n.end')
+  assert.match(control, /^\.save all$/m)
+  assert.doesNotMatch(control, /@RIN\[i\]|@C1\[i\]/)
+})

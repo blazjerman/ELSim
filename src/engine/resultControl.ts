@@ -6,7 +6,11 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
   if (endLine === -1) throw new Error('Generated netlist is missing its .end directive.')
   for (let index = endLine - 1; index >= 0; index--) if (/^\s*\.meas\s+tran\s+ELSIM_/i.test(rows[index])) rows.splice(index, 1)
+  let insideSubcircuit = false
   const deviceCurrents = rows.flatMap((line) => {
+    if (/^\s*\.subckt\b/i.test(line)) { insideSubcircuit = true; return [] }
+    if (/^\s*\.ends\b/i.test(line)) { insideSubcircuit = false; return [] }
+    if (insideSubcircuit) return []
     const ref = line.match(/^\s*([RCLDSEGQ][A-Za-z0-9_]+)\s+/i)?.[1]
     if (!ref) return []
     const current = ref[0].toUpperCase() === 'D' ? 'id' : ref[0].toUpperCase() === 'Q' ? 'ic' : 'i'

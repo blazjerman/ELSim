@@ -7,6 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { createStarterProject, validateProject, sheetModelName } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
+const { hierarchyNodeVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
 
 function createBlockProject() {
   const project = createStarterProject()
@@ -61,4 +62,32 @@ test('hierarchy validation rejects stale port pin maps and recursive block insta
   const recursive = createBlockProject()
   recursive.sheets[1].parts.push({ id: 'recursive-instance', kind: 'subcircuit', ref: 'XSELF', value: 'Load', modelName: sheetModelName('sheet-load'), modelPins: ['IN', 'OUT'], sheetId: 'sheet-load', x: 500, y: 300, rotation: 0 })
   assert.throws(() => validateProject(recursive), /contain a cycle/)
+})
+
+test('hierarchy probes map internal nodes through an instance path and ports to parent nets', () => {
+  const project = createBlockProject()
+  const child = project.sheets[1]
+  child.parts = [
+    { id: 'child-r1', kind: 'resistor', ref: 'RLOAD1', value: '500 Ω', x: 300, y: 200, rotation: 0 },
+    { id: 'child-r2', kind: 'resistor', ref: 'RLOAD2', value: '500 Ω', x: 404, y: 200, rotation: 0 },
+  ]
+  child.netLabels = [
+    { id: 'child-in', name: 'IN', x: 248, y: 200, visible: true },
+    { id: 'child-mid', name: 'MID', x: 352, y: 200, visible: true },
+    { id: 'child-out', name: 'OUT', x: 456, y: 200, visible: true },
+  ]
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels }
+  const checked = validateProject(project)
+  assert.equal(hierarchyNodeVector(checked, child.id, ['root-block'], 'MID'), 'v(xload.mid)')
+  assert.equal(hierarchyNodeVector(checked, child.id, ['root-block'], 'IN'), 'v(vin)')
+  assert.equal(hierarchyNodeVector(checked, child.id, [], 'MID', child.id), 'v(mid)')
+  assert.equal(hierarchyNodeVector(checked, child.id, [], 'MID'), null)
+  assert.match(createNetlistArtifact(checked).text, /^\.save v\(XLOAD\.MID\)$/mi)
+
+  const repeated = structuredClone(checked)
+  repeated.parts.push({ ...repeated.parts[1], id: 'root-block-2', ref: 'XLOAD2', x: 600, y: 400 })
+  repeated.sheets[0] = { ...repeated.sheets[0], parts: repeated.parts }
+  const repeatedChecked = validateProject(repeated)
+  assert.equal(hierarchyNodeVector(repeatedChecked, child.id, ['root-block-2'], 'MID'), 'v(xload2.mid)')
+  assert.match(createNetlistArtifact(repeatedChecked).text, /^\.save v\(XLOAD2\.MID\)$/mi)
 })

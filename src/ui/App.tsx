@@ -14,6 +14,7 @@ import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
 import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
+import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import { createLedExampleProject, createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
@@ -589,6 +590,7 @@ export default function App() {
   const [examplesOpen, setExamplesOpen] = useState(false)
   const [pendingExample, setPendingExample] = useState<'rc' | 'led' | null>(null)
   const [sheetSettingsOpen, setSheetSettingsOpen] = useState(false)
+  const [sheetInstancePath, setSheetInstancePath] = useState<string[]>([])
   const [portSelection, setPortSelection] = useState('')
   const [waveformDetached, setWaveformDetached] = useState(false)
   const [plotPosition, setPlotPosition] = useState({ x: 24, y: 24 })
@@ -704,16 +706,28 @@ export default function App() {
     if (current?.start === range.start && current?.end === range.end) return settings
     return { ...settings, ranges: { ...settings.ranges, [analysis]: range } }
   })
-  const openSheet = (sheetId: string) => {
+  const findSheetInstancePath = (targetSheetId: string, sheetId = projectRef.current.rootSheetId, path: string[] = [], visited = new Set<string>(), sourceProject = projectRef.current): string[] | null => {
+    if (sheetId === targetSheetId) return path
+    if (visited.has(sheetId)) return null
+    const nextVisited = new Set(visited).add(sheetId)
+    const sheet = sourceProject.sheets.find((candidate) => candidate.id === sheetId)
+    for (const part of sheet?.parts ?? []) if (part.sheetId) {
+      const match = findSheetInstancePath(targetSheetId, part.sheetId, [...path, part.id], nextVisited, sourceProject)
+      if (match) return match
+    }
+    return null
+  }
+  const openSheet = (sheetId: string, viaPartId?: string) => {
     if (sheetId === project.activeSheetId) return
     const sheet = project.sheets.find((candidate) => candidate.id === sheetId)
     if (!sheet) return
-    setProjectState((current) => ({ ...current, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, updatedAt: new Date().toISOString() }))
+    const viaPart = viaPartId ? project.parts.find((part) => part.id === viaPartId && part.sheetId === sheetId) : undefined
+    const path = sheet.id === project.rootSheetId ? [] : viaPart ? [...sheetInstancePath, viaPart.id] : findSheetInstancePath(sheet.id) ?? []
+    setSheetInstancePath(path)
+    setProjectState((current) => ({ ...current, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view }))
     history.current = { past: [], future: [] }
     setSelection(null)
-    setSimulationResult(null)
-    setSampleIndex(null)
-    setNotice(`Opened sheet ${sheet.name}. Each sheet is currently simulated as its own circuit.`)
+    setNotice(simulationResult ? `Opened ${sheet.name}. Probe labeled internal nodes to inspect this block instance in the current simulation.` : `Opened sheet ${sheet.name}. Run the root circuit to probe this block in context.`)
   }
   const addSheet = () => {
     const parent = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
@@ -808,6 +822,7 @@ export default function App() {
       const projectData = isProjectArchive(bytes) ? readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
       const parsed = validateProject(projectData)
       await verifyModelAssetHashes([...(parsed.modelAssets ?? []), ...(parsed.symbolAssets ?? [])])
+      setSheetInstancePath(findSheetInstancePath(parsed.activeSheetId, parsed.rootSheetId, [], new Set(), parsed) ?? [])
       setProjectState(parsed)
       setImportWarnings([])
       setCompatibilityDiagnostic(null)
@@ -1015,9 +1030,15 @@ export default function App() {
   }
   const addProbe = (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => {
     if (target.kind === 'part' && projectRef.current.parts.find((item) => item.id === target.id)?.kind === 'subcircuit') { setNotice('Probe a connected pin wire to inspect this subcircuit’s node voltage. Port-current vectors are not exposed for imported subcircuits yet.'); return }
+    const scopeSheetId = typeof simulationResult?.metadata.settings.scopeSheetId === 'string' ? simulationResult.metadata.settings.scopeSheetId : projectRef.current.rootSheetId
+    const scopePath = (() => { try { const value = JSON.parse(String(simulationResult?.metadata.settings.scopeInstancePath ?? '[]')); return Array.isArray(value) && value.every((partId) => typeof partId === 'string') ? value as string[] : [] } catch { return [] } })()
+    const activePath = sheetInstancePath.slice(0, scopePath.length).every((partId, index) => partId === scopePath[index])
+      ? sheetInstancePath.slice(scopePath.length)
+      : findSheetInstancePath(projectRef.current.activeSheetId, scopeSheetId) ?? []
     const rawName = target.kind === 'node'
-      ? `v(${target.name})`
+      ? hierarchyNodeVector(projectRef.current, projectRef.current.activeSheetId, activePath, target.name, scopeSheetId)
       : (() => { const part = projectRef.current.parts.find((item) => item.id === target.id); return part ? componentCurrentVector(part) : '' })()
+    if (!rawName) { setNotice('This sheet is not open through a block instance. Open it from the parent block to cross-probe its internal nodes.'); return }
     const traceId = rawName.toLowerCase()
     if (!simulationResult) { setNotice('Run the circuit first, then add voltage and current probes.'); return }
     const trace = simulationResult.traces.find((item) => item.id === traceId || item.baseId === traceId)
@@ -1133,7 +1154,7 @@ export default function App() {
         metadata: {
           runId, startedAt: new Date().toISOString(), engine: 'ngspice-wasm', engineVersion: '47',
           projectVersion: snapshot.version, netlistHash,
-          settings: { analysis: snapshot.simulation.analysis, stopTime: snapshot.simulation.stopTime, maxStep: snapshot.simulation.maxStep, acSweep: snapshot.simulation.acSweep ?? {}, sourceAcMagnitude: snapshot.simulation.sourceAcMagnitude ?? '1 V', parameterSweep: parameterSweep.map((sweep) => sweep.label).join(' | '), projectUpdatedAt: snapshot.updatedAt },
+          settings: { analysis: snapshot.simulation.analysis, stopTime: snapshot.simulation.stopTime, maxStep: snapshot.simulation.maxStep, acSweep: snapshot.simulation.acSweep ?? {}, sourceAcMagnitude: snapshot.simulation.sourceAcMagnitude ?? '1 V', parameterSweep: parameterSweep.map((sweep) => sweep.label).join(' | '), projectUpdatedAt: snapshot.updatedAt, scopeSheetId: snapshot.activeSheetId, scopeInstancePath: JSON.stringify(sheetInstancePath) },
         },
         ...(parameterSweep.length ? { parameterSweep } : {}),
         ...(measurements.length ? { measurements } : {}),
@@ -1208,6 +1229,7 @@ export default function App() {
   const resetProject = () => {
     if (!window.confirm('Start a new circuit? Unsaved changes in this tab will be lost.')) return
     const starter = createStarterProject()
+    setSheetInstancePath([])
     setProjectState(starter)
     setImportWarnings([])
     setCompatibilityDiagnostic(null)
@@ -1223,6 +1245,7 @@ export default function App() {
     setSimulationResult(null)
     setPlaybackRunning(false)
     setSampleIndex(null)
+    setSheetInstancePath([])
     setProjectState(next)
     setSelectedTraceIds(next.plotSettings?.selectedTraceIds ?? [])
     setImportWarnings([])
@@ -1301,7 +1324,7 @@ export default function App() {
         {importWarnings.length > 0 && <section className="import-diagnostics" aria-label="LTspice import diagnostics"><div><strong>Import needs review</strong><button onClick={() => setImportWarnings([])} aria-label="Dismiss import diagnostics"><X size={13}/></button></div><p>{importWarnings.length} item{importWarnings.length === 1 ? '' : 's'} could not be fully translated.</p><ul>{importWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul></section>}
         {selected ? <>
           <div className="selected-part-card"><span className={`selected-part-icon icon-${selected.kind}`}>{selected.kind === 'resistor' ? <Minus size={19}/> : selected.kind === 'capacitor' ? <Activity size={18}/> : selected.kind === 'source' ? <Zap size={18}/> : <Grid2X2 size={18}/>}</span><div><strong>{kindNames[selected.kind]}</strong><span>{componentPins(selected).length} pins · SPICE {kindPrefix[selected.kind]}</span></div></div>
-          <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Reference designator<input value={selected.ref} onChange={(event) => updateSelected({ ref: event.target.value })}/></label>{selected.kind === 'subcircuit' ? selected.sheetId ? <><label className="field-label">Block sheet<input value={selected.value} readOnly/></label><button className="place-model" onClick={() => openSheet(selected.sheetId!)}>Open sheet definition</button><div className="field-hint">This project block uses the ordered ports defined on its child sheet.</div></> : <><label className="field-label">Model name<input value={selected.modelName ?? ''} readOnly/></label>{(importedModels.find((model) => model.name.toLowerCase() === selected.modelName?.toLowerCase())?.parameters ?? []).map((parameter) => { const currentValue = selected.modelParameters?.[parameter.name] ?? parameter.defaultValue; return <label className="field-label" key={parameter.name}>{parameter.name}<input value={currentValue} onChange={(event) => { const modelParameters = { ...(selected.modelParameters ?? {}) }; if (!event.target.value || event.target.value === parameter.defaultValue) delete modelParameters[parameter.name]; else modelParameters[parameter.name] = event.target.value; updateSelected({ modelParameters }) }}/><small className="field-hint">Model default: {parameter.defaultValue} · numeric overrides only</small></label> })}<div className="field-hint">Pin order and default values come from the imported model. Override a numeric parameter when this instance needs a different value.</div></> : selected.kind === 'switch' ? <label className="field-label">State<select value={selected.value.toLowerCase()} onChange={(event) => updateSelected({ value: event.target.value === 'on' ? 'On' : 'Off' })}><option value="off">Off</option><option value="on">On</option></select></label> : ['diode', 'led', 'npn', 'pnp'].includes(selected.kind) ? <><label className="field-label">Device model<select value={selected.deviceModel ?? ''} onChange={(event) => updateSelected({ deviceModel: event.target.value || undefined })}><option value="">{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Educational default' : 'Generic diode'}</option>{compatibleDeviceModels(selected.kind).map((model) => <option key={`${model.assetId}:${model.name}`} value={model.name}>{model.name} ({model.type})</option>)}</select></label><div className="field-hint">Imported model files stay with this project. Verify you have rights to use or redistribute their contents.</div>{(selected.kind === 'npn' || selected.kind === 'pnp') && !selected.deviceModel && <><label className="field-label">Approximate forward beta (β)<input value={selected.value} onChange={(event) => updateSelected({ value: event.target.value })}/></label><div className="field-hint">Beta controls the educational transistor model; a selected imported card supplies its own device parameters.</div></>}</> : <label className="field-label">{selected.kind === 'vcvs' ? 'Voltage gain (V/V)' : selected.kind === 'vccs' ? 'Transconductance (S)' : 'Value'}<input value={selected.value} onChange={(event) => updateSelected({ value: event.target.value })} placeholder="Enter a value"/></label>}{(selected.kind === 'npn' || selected.kind === 'pnp') && selected.deviceModel && <div className="field-hint">The imported .MODEL card replaces the educational beta approximation.</div>}</div>
+          <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Reference designator<input value={selected.ref} onChange={(event) => updateSelected({ ref: event.target.value })}/></label>{selected.kind === 'subcircuit' ? selected.sheetId ? <><label className="field-label">Block sheet<input value={selected.value} readOnly/></label><button className="place-model" onClick={() => openSheet(selected.sheetId!, selected.id)}>Open sheet definition</button><div className="field-hint">This project block uses the ordered ports defined on its child sheet. Opening this instance keeps it linked to waveform probes.</div></> : <><label className="field-label">Model name<input value={selected.modelName ?? ''} readOnly/></label>{(importedModels.find((model) => model.name.toLowerCase() === selected.modelName?.toLowerCase())?.parameters ?? []).map((parameter) => { const currentValue = selected.modelParameters?.[parameter.name] ?? parameter.defaultValue; return <label className="field-label" key={parameter.name}>{parameter.name}<input value={currentValue} onChange={(event) => { const modelParameters = { ...(selected.modelParameters ?? {}) }; if (!event.target.value || event.target.value === parameter.defaultValue) delete modelParameters[parameter.name]; else modelParameters[parameter.name] = event.target.value; updateSelected({ modelParameters }) }}/><small className="field-hint">Model default: {parameter.defaultValue} · numeric overrides only</small></label> })}<div className="field-hint">Pin order and default values come from the imported model. Override a numeric parameter when this instance needs a different value.</div></> : selected.kind === 'switch' ? <label className="field-label">State<select value={selected.value.toLowerCase()} onChange={(event) => updateSelected({ value: event.target.value === 'on' ? 'On' : 'Off' })}><option value="off">Off</option><option value="on">On</option></select></label> : ['diode', 'led', 'npn', 'pnp'].includes(selected.kind) ? <><label className="field-label">Device model<select value={selected.deviceModel ?? ''} onChange={(event) => updateSelected({ deviceModel: event.target.value || undefined })}><option value="">{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Educational default' : 'Generic diode'}</option>{compatibleDeviceModels(selected.kind).map((model) => <option key={`${model.assetId}:${model.name}`} value={model.name}>{model.name} ({model.type})</option>)}</select></label><div className="field-hint">Imported model files stay with this project. Verify you have rights to use or redistribute their contents.</div>{(selected.kind === 'npn' || selected.kind === 'pnp') && !selected.deviceModel && <><label className="field-label">Approximate forward beta (β)<input value={selected.value} onChange={(event) => updateSelected({ value: event.target.value })}/></label><div className="field-hint">Beta controls the educational transistor model; a selected imported card supplies its own device parameters.</div></>}</> : <label className="field-label">{selected.kind === 'vcvs' ? 'Voltage gain (V/V)' : selected.kind === 'vccs' ? 'Transconductance (S)' : 'Value'}<input value={selected.value} onChange={(event) => updateSelected({ value: event.target.value })} placeholder="Enter a value"/></label>}{(selected.kind === 'npn' || selected.kind === 'pnp') && selected.deviceModel && <div className="field-hint">The imported .MODEL card replaces the educational beta approximation.</div>}</div>
           <div className="form-section"><div className="form-section-title">CONNECTIONS</div>{selected.kind === 'subcircuit' ? (selected.modelPins ?? []).map((name, index) => <div className="pin-row" key={`${name}-${index}`}><span className="pin-index">{index + 1}</span><span>{name}</span><strong>{pinNet(connectivity, selected, index)}</strong></div>) : <><div className="pin-row"><span className="pin-index">1</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Collector / pin 1' : 'Positive / pin 1'}</span><strong>{pinNet(connectivity, selected, 0)}</strong></div>{selected.kind !== 'ground' && <div className="pin-row"><span className="pin-index">2</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Base / pin 2' : 'Negative / pin 2'}</span><strong>{pinNet(connectivity, selected, 1)}</strong></div>}{(selected.kind === 'npn' || selected.kind === 'pnp') && <><div className="pin-row"><span className="pin-index">3</span><span>Emitter / pin 3</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="field-hint">The arrow distinguishes NPN and PNP. Collector current is positive into the collector.</div></>}{(selected.kind === 'vcvs' || selected.kind === 'vccs') && <><div className="pin-row"><span className="pin-index">3</span><span>Control +</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="pin-row"><span className="pin-index">4</span><span>Control −</span><strong>{pinNet(connectivity, selected, 3)}</strong></div><div className="field-hint">Output is pins 1–2; control voltage is pin 3 relative to pin 4. Pin 1 current is positive toward pin 2.</div></>}</>}<div className="field-hint">Node names are derived from wires, pin positions, ground symbols, and labels.</div></div>
           <div className="form-section"><div className="form-section-title">APPEARANCE</div><button className="wide-select" onClick={rotateSelected}>Orientation <span>{selected.rotation}° <RotateCw size={13}/></span></button><button className="wide-select flip-control" onClick={flipSelected}>Flip horizontally <span>{selected.flipX ? 'Flipped' : 'Normal'} <FlipHorizontal2 size={13}/></span></button><div className="field-hint">Orientation keeps electrical pin indexes stable. If moving attached wires would change connectivity, reroute them before applying the change.</div></div>
           <div className="inspector-bottom"><button onClick={duplicateSelected}><Copy size={14}/> Duplicate</button><button className="delete-action" onClick={deleteSelected}><Trash2 size={14}/> Delete part</button></div>

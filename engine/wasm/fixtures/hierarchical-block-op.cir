@@ -2,8 +2,16 @@
 V1 vin 0 DC 5
 XLOAD vin 0 ELSIM_SHEET_sheet_load
 .SUBCKT ELSIM_SHEET_sheet_load IN OUT
-RLOAD IN OUT 1k
+RLOAD1 IN MID 500
+RLOAD2 MID OUT 500
 .ENDS ELSIM_SHEET_sheet_load
+.save v(XLOAD.MID)
 .op
+.print op v(vin) v(XLOAD.MID)
+.control
+set filetype=ascii
+op
+print v(XLOAD.MID)
+write /result.raw all
+.endc
 .end
-.print op v(vin)
