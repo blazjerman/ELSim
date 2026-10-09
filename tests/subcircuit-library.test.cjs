@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { parseSubcircuitLibrary, sha256Text, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeModelDependencies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('parses ordered subcircuit pins, parameters, continuations, shared models, and multiple definitions', () => {
   const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10 R=20k\nR1 INP OUT\n+ 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
@@ -22,6 +22,9 @@ test('parses ordered subcircuit pins, parameters, continuations, shared models, 
   assert.deepEqual(parsed.models.map(({ name, type }) => ({ name, type })), [{ name: 'DFAST', type: 'D' }])
   assert.deepEqual(parsed.modelRecords[0], { sourceLine: 2, text: '.model DFAST D(Is=1n)' })
   assert.ok(parsed.modelRecords.some((record) => record.sourceLine === 6 && record.text.trim() === 'D1 OUT VEE DFAST'))
+  assert.deepEqual(parsed.dependencies.map(({ owner, reference, modelName, kind }) => ({ owner, reference, modelName, kind })), [
+    { owner: 'amp', reference: 'D1', modelName: 'DFAST', kind: 'device' },
+  ])
 })
 
 test('imports .MODEL-only libraries, including numeric-leading model names and continuations', () => {
@@ -73,4 +76,54 @@ test('checks SHA-256 and rejects edited model content', async () => {
   const valid = { filename: 'amp.lib', content: '.SUBCKT amp IN OUT\nR1 IN OUT 1k\n.ENDS', sha256: await sha256Text('.SUBCKT amp IN OUT\nR1 IN OUT 1k\n.ENDS') }
   await verifyModelAssetHashes([valid])
   await assert.rejects(verifyModelAssetHashes([{ ...valid, content: `${valid.content}\n* edited` }]), /does not match/)
+})
+
+test('resolves cross-library device and nested-subcircuit dependencies', () => {
+  const report = analyzeModelDependencies([
+    { id: 'amp', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE m=2\nXCORE2 IN OUT CORE PARAMS: GAIN=3\nD1 OUT 0 DFAST\n.ENDS AMP' },
+    { id: 'core', filename: 'core.lib', content: '.SUBCKT CORE A B\nR1 A B 1k\n.ENDS CORE\n.MODEL DFAST D(Is=1n)' },
+  ])
+  assert.deepEqual(report.missing, [])
+  assert.deepEqual(report.recursiveChains, [])
+  assert.deepEqual(report.resolved.map(({ owner, modelName, kind, targetAssetId }) => ({ owner, modelName, kind, targetAssetId })), [
+    { owner: 'AMP', modelName: 'CORE', kind: 'subcircuit', targetAssetId: 'core' },
+    { owner: 'AMP', modelName: 'CORE', kind: 'subcircuit', targetAssetId: 'core' },
+    { owner: 'AMP', modelName: 'DFAST', kind: 'device', targetAssetId: 'core' },
+  ])
+  assert.deepEqual([...requiredModelAssetIds(report, [{ kind: 'subcircuit', modelName: 'AMP' }])].sort(), ['amp', 'core'])
+  assert.deepEqual([...requiredModelAssetIds(report, [{ kind: 'diode', deviceModel: 'DFAST' }])], ['core'])
+})
+
+test('tracks ordered model references for common diode, transistor, JFET, MOSFET, and switch cards', () => {
+  const parsed = parseSubcircuitLibrary(`.SUBCKT DEVICES A B C D
+D1 A B DFAST
+Q1 A B C QFAST
+J1 A B C JFAST
+M1 A B C D MFAST
+S1 A B C D SWFAST
+W1 A B V1 CSWFAST ON
+Z1 A B C ZFAST OFF
+.ENDS DEVICES
+.MODEL DFAST D()
+.MODEL QFAST NPN()
+.MODEL JFAST NJF()
+.MODEL MFAST NMOS()
+.MODEL SWFAST SW()
+.MODEL CSWFAST CSW()
+.MODEL ZFAST NMF()`)
+  assert.deepEqual(parsed.dependencies.map(({ reference, modelName }) => [reference, modelName]), [
+    ['D1', 'DFAST'], ['Q1', 'QFAST'], ['J1', 'JFAST'], ['M1', 'MFAST'], ['S1', 'SWFAST'], ['W1', 'CSWFAST'], ['Z1', 'ZFAST'],
+  ])
+  assert.deepEqual(analyzeModelDependencies([{ id: 'devices', filename: 'devices.lib', content: parsed.modelText }]).missing, [])
+})
+
+test('reports missing model dependencies and recursive subcircuit chains', () => {
+  const report = analyzeModelDependencies([
+    { id: 'amp', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\nD1 OUT 0 DFAST\n.ENDS AMP' },
+    { id: 'cycle', filename: 'cycle.lib', content: '.SUBCKT CORE A B\nXBACK A B AMP\n.ENDS CORE\n.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP' },
+  ])
+  assert.deepEqual(report.missing.map(({ owner, reference, modelName, kind }) => ({ owner, reference, modelName, kind })), [
+    { owner: 'AMP', reference: 'D1', modelName: 'DFAST', kind: 'device' },
+  ])
+  assert.deepEqual(report.recursiveChains, [['AMP', 'CORE', 'AMP']])
 })
