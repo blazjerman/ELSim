@@ -574,7 +574,7 @@ function Schematic({ project, selection, setSelection, setProject, setView, spac
 export default function App() {
   const [project, setProjectState] = useState(() => {
     try {
-      const saved = localStorage.getItem('elsim:project:v3') ?? localStorage.getItem('elsim:project:v2') ?? localStorage.getItem('elsim:project:v1')
+      const saved = localStorage.getItem('elsim:project:v4') ?? localStorage.getItem('elsim:project:v3') ?? localStorage.getItem('elsim:project:v2') ?? localStorage.getItem('elsim:project:v1')
       return saved ? validateProject(JSON.parse(saved)) : createStarterProject()
     } catch { return createStarterProject() }
   })
@@ -623,7 +623,10 @@ export default function App() {
     window.addEventListener('pointerup', up)
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
   }, [waveformDetached])
-  const setView = (fn: (current: Project['view']) => Project['view']) => setProjectState((current) => ({ ...current, view: fn(current.view) }))
+  const setView = (fn: (current: Project['view']) => Project['view']) => setProjectState((current) => {
+    const view = fn(current.view)
+    return { ...current, view, sheets: current.sheets.map((sheet) => sheet.id === current.activeSheetId ? { ...sheet, view } : sheet) }
+  })
   const transientAxis = simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && simulationResult?.metadata.settings.projectUpdatedAt === project.updatedAt)
   useEffect(() => {
@@ -654,7 +657,8 @@ export default function App() {
   }
   useEffect(() => {
     try {
-      localStorage.setItem('elsim:project:v3', JSON.stringify(project))
+      localStorage.setItem('elsim:project:v4', JSON.stringify(project))
+      localStorage.removeItem('elsim:project:v3')
       localStorage.removeItem('elsim:project:v2')
       localStorage.removeItem('elsim:project:v1')
     }
@@ -678,7 +682,8 @@ export default function App() {
     if (next === current) return current
     const snapshot = { ...current, parts: current.parts.map((part) => ({ ...part })), wires: current.wires.map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x, y] as [number, number]) })), netLabels: current.netLabels.map((label) => ({ ...label })) }
     if (!editGroup.current) history.current = { past: [...history.current.past, snapshot].slice(-100), future: [] }
-    return { ...next, updatedAt: new Date().toISOString() }
+    const scene = { parts: next.parts, wires: next.wires, junctions: next.junctions, netLabels: next.netLabels, view: next.view }
+    return { ...next, sheets: next.sheets.map((sheet) => sheet.id === next.activeSheetId ? { ...sheet, ...scene } : sheet), updatedAt: new Date().toISOString() }
   })
   const savePlotSettings = (update: (current: NonNullable<Project['plotSettings']>) => NonNullable<Project['plotSettings']>) => setProjectState((current) => {
     const before = current.plotSettings ?? { selectedTraceIds: [], ranges: {} }
@@ -696,6 +701,29 @@ export default function App() {
     if (current?.start === range.start && current?.end === range.end) return settings
     return { ...settings, ranges: { ...settings.ranges, [analysis]: range } }
   })
+  const openSheet = (sheetId: string) => {
+    if (sheetId === project.activeSheetId) return
+    const sheet = project.sheets.find((candidate) => candidate.id === sheetId)
+    if (!sheet) return
+    setProjectState((current) => ({ ...current, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, updatedAt: new Date().toISOString() }))
+    history.current = { past: [], future: [] }
+    setSelection(null)
+    setSimulationResult(null)
+    setSampleIndex(null)
+    setNotice(`Opened sheet ${sheet.name}. Each sheet is currently simulated as its own circuit.`)
+  }
+  const addSheet = () => {
+    const parent = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
+    const siblings = project.sheets.filter((sheet) => sheet.parentSheetId === parent?.id)
+    const name = `Block ${siblings.length + 1}`
+    const sheet = { id: `sheet-${crypto.randomUUID()}`, name, parentSheetId: parent?.id ?? null, parts: [] as Part[], wires: [] as Project['wires'], junctions: [] as Project['junctions'], netLabels: [] as Project['netLabels'], view: { zoom: 1, panX: 0, panY: 0 } }
+    setProjectState((current) => ({ ...current, sheets: [...current.sheets, sheet], activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, updatedAt: new Date().toISOString() }))
+    history.current = { past: [], future: [] }
+    setSelection(null)
+    setSimulationResult(null)
+    setSampleIndex(null)
+    setNotice(`Created ${name} inside ${parent?.name ?? 'the project'}.`)
+  }
   const history = useRef<{ past: Project[]; future: Project[] }>({ past: [], future: [] })
   const editGroup = useRef(false)
   const beginEdit = () => {
@@ -1219,7 +1247,7 @@ export default function App() {
       </aside>
 
       <main className="editor-column">
-        <div className="sheet-tabs"><button className="sheet-tab active"><span className="sheet-dot"/> Main circuit <MoreHorizontal size={15}/></button><button className="add-sheet" onClick={() => setNotice('The project format now supports hierarchical sheet metadata. Child-sheet editing and simulation are the next hierarchy milestone.')}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet settings"><SlidersHorizontal size={15}/></button></div>
+        <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet settings"><SlidersHorizontal size={15}/></button></div>
         <Schematic project={project} selection={selection} setSelection={setSelection} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button>}</div></div>
@@ -1254,7 +1282,7 @@ export default function App() {
           <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Net name<input value={selectedLabel.name} onChange={(event) => renameSelectedLabel(event.target.value)}/></label><div className="field-hint">Labels with the same name connect electrically across this sheet.</div></div>
           <div className="inspector-bottom"><button className="delete-action" onClick={deleteSelection}><Trash2 size={14}/> Delete label</button></div>
         </> : <>
-          <div className="project-summary"><div className="summary-row"><span>Project</span><strong>{project.name}</strong></div><div className="summary-row"><span>Format</span><strong>ELSim JSON · v2</strong></div><div className="summary-row"><span>Sheets</span><strong>1</strong></div><div className="summary-row"><span>Components</span><strong>{project.parts.length}</strong></div></div>
+        <div className="project-summary"><div className="summary-row"><span>Project</span><strong>{project.name}</strong></div><div className="summary-row"><span>Format</span><strong>ELSim JSON · v4</strong></div><div className="summary-row"><span>Sheets</span><strong>{project.sheets.length}</strong></div><div className="summary-row"><span>Components</span><strong>{project.parts.length}</strong></div></div>
           <div className="form-section"><div className="form-section-title">SIMULATION</div><label className="field-label">Analysis type<select value={project.simulation.analysis} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select></label>{project.simulation.analysis === 'tran' && <><label className="field-label">Stop time<input value={project.simulation.stopTime} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, stopTime: event.target.value } }))}/></label><label className="field-label">Maximum step<input value={project.simulation.maxStep} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, maxStep: event.target.value } }))}/></label></>}{project.simulation.analysis === 'ac' && <><label className="field-label">AC source magnitude<input value={project.simulation.sourceAcMagnitude ?? '1 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, sourceAcMagnitude: event.target.value } }))}/></label><label className="field-label">Sweep scale<select value={project.simulation.acSweep?.scale ?? 'dec'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), scale: event.target.value as 'dec' | 'oct' | 'lin' } } }))}><option value="dec">Log per decade</option><option value="oct">Log per octave</option><option value="lin">Linear</option></select></label><label className="field-label">Points per scale<input type="number" min="1" max="10000" value={project.simulation.acSweep?.points ?? 20} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), points: Number(event.target.value) } } }))}/></label><label className="field-label">Start frequency<input value={project.simulation.acSweep?.startFrequency ?? '10 Hz'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), startFrequency: event.target.value } } }))}/></label><label className="field-label">Stop frequency<input value={project.simulation.acSweep?.stopFrequency ?? '1 MHz'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), stopFrequency: event.target.value } } }))}/></label></>}{project.simulation.analysis === 'dc' && <><label className="field-label">Voltage source<select value={project.simulation.dcSweep?.source ?? 'V1'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), source: event.target.value } } }))}>{project.parts.filter((part) => part.kind === 'source').map((part) => <option key={part.id} value={part.ref}>{part.ref}</option>)}</select></label><label className="field-label">Start value<input value={project.simulation.dcSweep?.start ?? '0 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), start: event.target.value } } }))}/></label><label className="field-label">Stop value<input value={project.simulation.dcSweep?.stop ?? '5 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), stop: event.target.value } } }))}/></label><label className="field-label">Step<input value={project.simulation.dcSweep?.step ?? '0.1 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), step: event.target.value } } }))}/></label></>}</div>
     <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
     {project.simulation.analysis === 'tran' && <>

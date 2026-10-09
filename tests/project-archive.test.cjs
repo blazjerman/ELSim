@@ -11,7 +11,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 const { verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
-test('project ZIP archive is deterministic and round-trips the complete v3 project', () => {
+test('project ZIP archive is deterministic and round-trips the complete v4 project', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'
   project.parts[1].flipX = true
@@ -31,7 +31,7 @@ test('v2 projects migrate to a root sheet and validate nested sheet ownership', 
   delete old.rootSheetId
   delete old.sheets
   const migrated = validateProject(old)
-  assert.equal(migrated.version, 3)
+  assert.equal(migrated.version, 4)
   assert.equal(migrated.rootSheetId, 'sheet-main')
   assert.equal(migrated.sheets.length, 1)
   assert.deepEqual(migrated.sheets[0].parts, migrated.parts)
@@ -48,6 +48,27 @@ test('v2 projects migrate to a root sheet and validate nested sheet ownership', 
   const duplicateName = structuredClone(nested)
   duplicateName.sheets.push({ ...duplicateName.sheets[1], id: 'sheet-driver2' })
   assert.throws(() => validateProject(duplicateName), /already used in this hierarchy/)
+})
+
+test('v3 migration and active child-sheet scene round-trip', () => {
+  const current = createStarterProject()
+  const v3 = structuredClone(current)
+  v3.version = 3
+  delete v3.activeSheetId
+  const migrated = validateProject(v3)
+  assert.equal(migrated.version, 4)
+  assert.equal(migrated.activeSheetId, migrated.rootSheetId)
+
+  const child = { id: 'sheet-driver', name: 'Driver', parentSheetId: 'sheet-main', parts: [{ id: 'p-child-r', kind: 'resistor', ref: 'Rchild', value: '2k', x: 200, y: 200, rotation: 0 }], wires: [], junctions: [], netLabels: [], view: { zoom: 1.2, panX: 10, panY: 20 } }
+  const activeChild = structuredClone(current)
+  activeChild.sheets.push(child)
+  activeChild.activeSheetId = child.id
+  Object.assign(activeChild, { parts: child.parts, wires: child.wires, junctions: child.junctions, netLabels: child.netLabels, view: child.view })
+  const restored = validateProject(readProjectArchive(createProjectArchive(activeChild)))
+  assert.equal(restored.activeSheetId, child.id)
+  assert.deepEqual(restored.parts, child.parts)
+  assert.deepEqual(restored.sheets[0].parts, current.parts)
+  assert.deepEqual(restored.sheets[1], child)
 })
 
 test('user model libraries round-trip inside project data with digest and license provenance', async () => {
@@ -99,7 +120,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const mismatch = structuredClone(restored)
   mismatch.parts.at(-1).symbolPinOffsets[0] = [0, 0]
   assert.throws(() => validateProject(mismatch), /symbol pin order or coordinates do not match/)
-  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v3.schema.json'), 'utf8'))
+  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v4.schema.json'), 'utf8'))
   assert.equal(schema.properties.symbolAssets.maxItems, 32)
   assert.ok(schema.$defs.part.properties.symbolPinOffsets)
 })
