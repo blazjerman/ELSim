@@ -26,6 +26,12 @@ test('accepts a SPICE title line and CRLF source', () => {
   assert.match(parsed.modelText, /\.SUBCKT amp/)
 })
 
+test('rejects oversized or empty model libraries and orphan continuation lines', () => {
+  assert.throws(() => parseSubcircuitLibrary('   '), /empty/)
+  assert.throws(() => parseSubcircuitLibrary('x'.repeat(4 * 1024 * 1024 + 1)), /4 MiB/)
+  assert.throws(() => parseSubcircuitLibrary('+ orphan\n.SUBCKT x A\n.ENDS'), /continuation has no preceding line/)
+})
+
 test('rejects executable, external-file, and whole-circuit directives', () => {
   for (const directive of ['.include evil.lib', '.lib "evil.lib" tt', '.control', '.endc', '.end', '.exec command', '.shell command', '.cm plugin']) {
     assert.throws(() => parseSubcircuitLibrary(`.SUBCKT x A\nR1 A 0 1k\n${directive}\n.ENDS`), /not allowed/)

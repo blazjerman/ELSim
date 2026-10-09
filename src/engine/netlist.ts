@@ -1,5 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import type { Part, PartKind, Project } from '../domain/project'
+import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import type { NetlistArtifact, NetlistSource } from './contract'
 
 function cleanComment(value: string): string {
@@ -50,7 +51,7 @@ function spiceSweepValue(value: string): string | null {
 }
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q' } as const)[part.kind]
+  const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
@@ -92,7 +93,7 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
     const value = part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : spiceNumber(part.value, part.kind)
-    if (part.kind !== 'diode' && part.kind !== 'led' && part.kind !== 'switch' && value === null) {
+    if (part.kind !== 'diode' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'subcircuit' && value === null) {
       const message = `${part.ref} has an invalid numeric value.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -117,6 +118,17 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
       append(`${part.ref} ${positive} ${base} ${emitter} ${model}`, part.id, 'component')
       transistorModels.push({ part, name: model })
     }
+    else if (part.kind === 'subcircuit') {
+      const definition = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits).find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
+      if (!definition || !part.modelPins || definition.pins.length !== part.modelPins.length || definition.pins.some((pin, index) => pin.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) {
+        const message = `${part.ref} refers to a missing or pin-incompatible imported subcircuit ${part.modelName ?? ''}.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const nodes = part.modelPins.map((_, index) => pinNet(connectivity, part, index))
+      append(`${part.ref} ${nodes.join(' ')} ${definition.name}`, part.id, 'component')
+    }
     else if (part.kind === 'switch') {
       const state = part.value.trim().toLowerCase()
       if (state !== 'on' && state !== 'off') {
@@ -138,6 +150,10 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
     }
   }
 
+  for (const asset of project.modelAssets ?? []) {
+    const modelText = parseSubcircuitLibrary(asset.content).modelText
+    for (const line of modelText.split(/\r?\n/)) if (line.trim()) append(line, `model-file:${asset.id}`, 'model')
+  }
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
   if (usesSwitch) append('.model ELSIM_INTERNAL_SW SW(Ron=1m Roff=1T Vt=2.5 Vh=0)', 'model:ELSIM_INTERNAL_SW', 'model')
   for (const { part, name } of transistorModels) append(`.model ${name} ${part.kind === 'npn' ? 'NPN' : 'PNP'}(IS=1e-14 BF=${part.value} VAF=100 CJE=10p CJC=5p TF=300p TR=10n)`, `model:${name}`, 'model')
@@ -205,7 +221,7 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
 }
 
 export function nextRef(parts: Part[], kind: Part['kind']): string {
-  const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q' } as const)[kind]
+  const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[kind]
   const used = new Set(parts.map((part) => part.ref.toLowerCase()))
   let index = 1
   while (used.has(`${prefix}${index}`.toLowerCase())) index += 1

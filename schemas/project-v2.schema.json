@@ -32,14 +32,17 @@
       "required": ["id", "kind", "ref", "value", "x", "y", "rotation"],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["source", "resistor", "capacitor", "ground", "inductor", "diode", "led", "switch", "vcvs", "vccs", "npn", "pnp"] },
+        "kind": { "enum": ["source", "resistor", "capacitor", "ground", "inductor", "diode", "led", "switch", "vcvs", "vccs", "npn", "pnp", "subcircuit"] },
         "ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
         "value": { "type": "string" },
         "x": { "type": "number" },
         "y": { "type": "number" },
         "rotation": { "enum": [0, 90, 180, 270] },
-        "flipX": { "type": "boolean", "default": false }
-      }
+        "flipX": { "type": "boolean", "default": false },
+        "modelName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.$]*$" },
+        "modelPins": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^(?:[0-9]+|[A-Za-z_][A-Za-z0-9_.$]*)$" } }
+      },
+      "allOf": [{ "if": { "properties": { "kind": { "const": "subcircuit" } }, "required": ["kind"] }, "then": { "required": ["modelName", "modelPins"] } }]
     },
     "modelAsset": {
       "type": "object",

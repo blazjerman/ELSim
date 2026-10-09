@@ -1,0 +1,11 @@
+ELSim imported four-pin subcircuit operating point
+V1 IN 0 5
+VCC VP 0 5
+VEE VN 0 -5
+XAMP IN OUT VP VN AMP2
+.SUBCKT AMP2 IN OUT VP VN
+EGAIN OUT 0 IN 0 2
+.ENDS AMP2
+.op
+.print op v(out)
+.end

@@ -18,6 +18,8 @@ Project version 2 optionally stores `plotSettings` with selected trace IDs and i
 
 Parts may optionally store `flipX` (`true` for a horizontal symbol flip). It is presentation state: the electrical pin indexes remain stable, and connected wire endpoints move with their indexed pins. Older version 2 files without this property are interpreted as unflipped.
 
+An imported subcircuit instance uses `kind: "subcircuit"`, an `X` reference designator, `modelName`, and `modelPins` in declared SPICE order. Pin locations derive from the stored ordered names, and project validation requires an exact match with a subcircuit definition in `modelAssets`. The netlister emits an `X` instance and its project-owned library text. Removing a library used by instances is blocked in the editor. This does not guarantee every vendor model dialect is supported; ngspice remains the compatibility authority.
+
 Project version 2 may include up to 16 `modelAssets`. Each records the user-selected filename, original UTF-8 text, SHA-256 digest, import time, and `licenseStatus: "unknown"`. Libraries must contain at least one complete `.SUBCKT`, may define shared `.MODEL`, `.PARAM`, `.FUNC`, and `.GLOBAL` records, and may not contain external includes or control/end directives. Current limit is 4 MiB per library and 10 MiB total. Importing does not grant redistribution rights; imported text stays local to the project archive and is not uploaded by ELSim.
 
 ## Reader limits

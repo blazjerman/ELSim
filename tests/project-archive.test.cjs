@@ -28,8 +28,10 @@ test('user model libraries round-trip inside project data with digest and licens
   const content = '.SUBCKT user_amp IN OUT VCC VEE\nR1 IN OUT 1k\n.ENDS user_amp\n'
   const digest = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(content)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
   project.modelAssets = [{ id: 'model-1', filename: 'user-amp.lib', sha256: digest, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'user_amp', modelName: 'user_amp', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], x: 700, y: 400, rotation: 0 })
   const restored = validateProject(readProjectArchive(createProjectArchive(project)))
   assert.deepEqual(restored.modelAssets, project.modelAssets)
+  assert.deepEqual(restored.parts.at(-1), project.parts.at(-1))
   await verifyModelAssetHashes(restored.modelAssets)
   await assert.rejects(verifyModelAssetHashes([{ ...restored.modelAssets[0], content: `${content}* changed` }]), /does not match/)
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], filename: '../user-amp.lib' }] }), /malformed imported model library/)

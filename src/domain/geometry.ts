@@ -3,8 +3,17 @@ import type { Part, Project, Wire } from './project'
 export type Point = { x: number; y: number }
 export type PinLocation = Point & { partId: string; index: number }
 
+export function subcircuitPinOffsets(count: number): [number, number][] {
+  if (!Number.isInteger(count) || count < 1 || count > 64) return []
+  const perSide = Math.ceil(count / 2)
+  const spacing = 24
+  const height = (perSide - 1) * spacing
+  return Array.from({ length: count }, (_, index) => [index % 2 === 0 ? -80 : 80, -height / 2 + Math.floor(index / 2) * spacing])
+}
+
 export function componentPins(part: Part): PinLocation[] {
-  const local: [number, number][] = part.kind === 'vcvs' || part.kind === 'vccs'
+  const local: [number, number][] = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0)
+    : part.kind === 'vcvs' || part.kind === 'vccs'
     ? [[-52, 0], [52, 0], [0, -52], [0, 52]]
     : part.kind === 'npn' || part.kind === 'pnp'
       ? [[35, -52], [-52, 0], [35, 52]]

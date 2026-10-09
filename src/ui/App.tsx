@@ -10,7 +10,7 @@ import {
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
 import { checkCircuit } from '../domain/electricalCheck'
 import { parseSubcircuitLibrary, sha256Text, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
-import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
@@ -97,9 +97,11 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, v
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
   const currentGlow = Math.min(1, Math.abs(current ?? 0) / 0.02)
   const voltageGlow = Math.min(1, Math.abs(voltage ?? 0) / 5)
+  const customOffsets = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0) : []
+  const customHeight = Math.max(76, (Math.ceil(customOffsets.length / 2) - 1) * 24 + 48)
   return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); onSelect(part.id) } }}>
     {(voltage !== undefined || current !== undefined) && <title>{`${part.ref}: ${part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'capacitor' ? 'illustrative plate charge follows voltage; ' : part.kind === 'inductor' ? 'illustrative coil glow follows current; ' : ''}${voltage === undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${part.kind === 'npn' || part.kind === 'pnp' ? 'positive into the collector terminal' : 'positive from pin 1 to pin 2'}`}`}</title>}
-    <rect x="-40" y="-38" width="80" height="76" rx="9" className="part-hit" />
+    <rect x={part.kind === 'subcircuit' ? -100 : -40} y={part.kind === 'subcircuit' ? -customHeight / 2 - 22 : -38} width={part.kind === 'subcircuit' ? 200 : 80} height={part.kind === 'subcircuit' ? customHeight + 44 : 76} rx="9" className="part-hit" />
     <g transform={part.flipX ? 'scale(-1 1)' : undefined}>
     {part.kind === 'resistor' && <><line x1="-52" y1="0" x2="-23" y2="0" {...common}/><rect x="-23" y="-12" width="46" height="24" rx="3" {...common}/><line x1="23" y1="0" x2="52" y2="0" {...common}/></>}
     {part.kind === 'capacitor' && <><line x1="-50" y1="0" x2="-8" y2="0" {...common}/><line x1="-8" y1="-16" x2="-8" y2="16" {...common}/><line x1="8" y1="-16" x2="8" y2="16" {...common}/><line x1="8" y1="0" x2="50" y2="0" {...common}/><line x1="-8" y1="-15" x2="-8" y2="15" stroke={voltage !== undefined && voltage < 0 ? '#74bdf2' : '#f18484'} strokeWidth="5" opacity={voltageGlow * .5} pointerEvents="none"/><line x1="8" y1="-15" x2="8" y2="15" stroke={voltage !== undefined && voltage < 0 ? '#f18484' : '#74bdf2'} strokeWidth="5" opacity={voltageGlow * .5} pointerEvents="none"/></>}
@@ -110,10 +112,11 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, v
     {part.kind === 'switch' && <><line x1="-52" y1="0" x2="-14" y2="0" {...common}/><line x1="14" y1="0" x2="52" y2="0" {...common}/><circle cx="-14" cy="0" r="3" fill="#c6cec7"/><circle cx="14" cy="0" r="3" fill="#c6cec7"/><line x1="-12" y1="-2" x2={part.value.toLowerCase() === 'on' ? 12 : 10} y2={part.value.toLowerCase() === 'on' ? 1 : -15} {...common}/></>}
     {(part.kind === 'vcvs' || part.kind === 'vccs') && <><line x1="-52" y1="0" x2="-24" y2="0" {...common}/><line x1="24" y1="0" x2="52" y2="0" {...common}/><line x1="0" y1="-52" x2="0" y2="-24" {...common}/><line x1="0" y1="24" x2="0" y2="52" {...common}/><path d="M0 -24L24 0L0 24L-24 0Z" {...common}/>{part.kind === 'vcvs' ? <><line x1="-6" y1="-7" x2="6" y2="-7" {...common}/><line x1="0" y1="-13" x2="0" y2="-1" {...common}/><line x1="-6" y1="8" x2="6" y2="8" {...common}/></> : <><line x1="-10" y1="0" x2="10" y2="0" {...common}/><path d="M10 0L3 -5V5Z" fill={common.stroke} stroke={common.stroke}/></>}<text className="control-pin-label" x="7" y="-46">+</text><text className="control-pin-label" x="7" y="58">−</text></>}
     {(part.kind === 'npn' || part.kind === 'pnp') && <><line x1="-52" y1="0" x2="-10" y2="0" {...common}/><line x1="-10" y1="-22" x2="-10" y2="22" {...common}/><line x1="-10" y1="-10" x2="18" y2="-29" {...common}/><line x1="18" y1="-29" x2="35" y2="-52" {...common}/><line x1="-10" y1="10" x2="18" y2="29" {...common}/><line x1="18" y1="29" x2="35" y2="52" {...common}/>{part.kind === 'npn' ? <path d="M11 24L22 38M22 38L21 30M22 38L14 37" {...common}/> : <path d="M22 38L11 24M11 24L19 26M11 24L13 32" {...common}/>}</>}
+    {part.kind === 'subcircuit' && <><rect x="-60" y={-customHeight / 2} width="120" height={customHeight} rx="4" {...common}/>{customOffsets.map(([x, y], index) => <g key={index}><line x1={x < 0 ? x + 20 : x - 20} y1={y} x2={x} y2={y} {...common}/><text x={x < 0 ? -42 : 42} y={y + 4} textAnchor={x < 0 ? 'end' : 'start'} className="subcircuit-pin-label">{part.modelPins?.[index]}</text></g>)}</>}
     {part.kind === 'ground' && <><line x1="0" y1="-22" x2="0" y2="0" {...common}/><line x1="-18" y1="0" x2="18" y2="0" {...common}/><line x1="-12" y1="7" x2="12" y2="7" {...common}/><line x1="-6" y1="14" x2="6" y2="14" {...common}/></>}
     </g>
-    <text className="part-ref" x="0" y={part.kind === 'ground' ? 34 : part.kind === 'vcvs' || part.kind === 'vccs' || part.kind === 'npn' || part.kind === 'pnp' ? -68 : -29}>{part.ref}</text>
-    {part.value && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : part.kind === 'vcvs' || part.kind === 'vccs' || part.kind === 'npn' || part.kind === 'pnp' ? 76 : 43}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.value}</text>}
+    <text className="part-ref" x="0" y={part.kind === 'subcircuit' ? -customHeight / 2 - 9 : part.kind === 'ground' ? 34 : part.kind === 'vcvs' || part.kind === 'vccs' || part.kind === 'npn' || part.kind === 'pnp' ? -68 : -29}>{part.kind === 'subcircuit' ? `${part.ref} · ${part.modelName}` : part.ref}</text>
+    {part.value && part.kind !== 'subcircuit' && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : part.kind === 'vcvs' || part.kind === 'vccs' || part.kind === 'npn' || part.kind === 'pnp' ? 76 : 43}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.value}</text>}
   </g>
 }
 
@@ -347,7 +350,7 @@ function Schematic({ project, selection, setSelection, setProject, setView, spac
   }
   const voltageAtNode = (name: string): number | undefined => name === '0' ? 0 : resultValue(`v(${name})`)
   const componentSample = (part: Part) => {
-    if (!resultIsCurrent) return {}
+    if (!resultIsCurrent || part.kind === 'subcircuit') return {}
     const positive = voltageAtNode(pinNet(resultConnectivity!, part, 0))
     const negative = voltageAtNode(pinNet(resultConnectivity!, part, 1))
     const current = resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`)
@@ -573,6 +576,7 @@ export default function App() {
   const [spacePan, setSpacePan] = useState(false)
   const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>(() => project.plotSettings?.selectedTraceIds ?? [])
   const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
+  const [modelAssetsVerified, setModelAssetsVerified] = useState<boolean | null>(null)
   const [componentQuery, setComponentQuery] = useState('')
   const [tourStep, setTourStep] = useState<number | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -605,7 +609,10 @@ export default function App() {
   }, [project])
   useEffect(() => {
     let active = true
-    verifyModelAssetHashes(project.modelAssets ?? []).catch((error) => { if (active) setNotice(error instanceof Error ? error.message : 'An imported model hash could not be verified.') })
+    const assets = project.modelAssets ?? []
+    if (!assets.length) { setModelAssetsVerified(true); return () => { active = false } }
+    setModelAssetsVerified(null)
+    verifyModelAssetHashes(assets).then(() => { if (active) setModelAssetsVerified(true) }).catch((error) => { if (active) { setModelAssetsVerified(false); setNotice(error instanceof Error ? error.message : 'An imported model hash could not be verified.') } })
     return () => { active = false }
   }, [project.modelAssets])
   useEffect(() => {
@@ -704,6 +711,9 @@ export default function App() {
       if (file.size > 4 * 1024 * 1024) throw new Error('Model libraries are limited to 4 MiB per file.')
       const content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
       const parsed = parseSubcircuitLibrary(content)
+      if ((projectRef.current.modelAssets?.length ?? 0) >= 16) throw new Error('A project can store up to 16 imported model libraries.')
+      const currentModelBytes = (projectRef.current.modelAssets ?? []).reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0)
+      if (currentModelBytes + file.size > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
       const existingNames = new Set(importedModels.map((model) => model.name.toLowerCase()))
       const duplicate = parsed.subcircuits.find((model) => existingNames.has(model.name.toLowerCase()))
       if (duplicate) throw new Error(`${duplicate.name} is already present in this project. Rename or remove the existing model before importing.`)
@@ -714,7 +724,7 @@ export default function App() {
     event.target.value = ''
   }
   const addPart = (kind: PartKind) => {
-    const defaults: Record<PartKind, string> = { source: '5 V', resistor: '1 kΩ', capacitor: '1 µF', ground: '', inductor: '10 mH', diode: 'Default diode', led: 'Default LED', switch: 'Off', vcvs: '2', vccs: '1 mS', npn: '100', pnp: '100' }
+    const defaults: Record<PartKind, string> = { source: '5 V', resistor: '1 kΩ', capacitor: '1 µF', ground: '', inductor: '10 mH', diode: 'Default diode', led: 'Default LED', switch: 'Off', vcvs: '2', vccs: '1 mS', npn: '100', pnp: '100', subcircuit: '' }
     const id = `p-${crypto.randomUUID()}`
     const placeX = Math.max(190, Math.min(620, 260 + (project.parts.length % 4) * 90))
     const placeY = 375 + (Math.floor(project.parts.length / 4) % 2) * 90
@@ -722,6 +732,14 @@ export default function App() {
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
     setSelection({ kind: 'part', id })
     setNotice(`${kindNames[kind]} added. Connect its pins before simulation.`)
+  }
+  const addSubcircuit = (model: { name: string; pins: string[] }) => {
+    const id = `p-${crypto.randomUUID()}`
+    const position = [{ x: 720, y: 520 }, { x: 880, y: 520 }, { x: 720, y: 700 }, { x: 880, y: 700 }].find(({ x, y }) => project.parts.every((part) => Math.hypot(part.x - x, part.y - y) > 150)) ?? { x: 900 + (project.parts.length % 3) * 170, y: 520 + Math.floor(project.parts.length / 3) * 170 }
+    const part: Part = { id, kind: 'subcircuit', ref: nextRef(project.parts, 'subcircuit'), value: model.name, modelName: model.name, modelPins: [...model.pins], x: position.x, y: position.y, rotation: 0 }
+    setProject((current) => ({ ...current, parts: [...current.parts, part] }))
+    setSelection({ kind: 'part', id })
+    setNotice(`${model.name} added with ${model.pins.length} pins in the library’s declared order.`)
   }
   const updateSelected = (patch: Partial<Part>) => {
     if (!selected) return
@@ -813,6 +831,7 @@ export default function App() {
     setNetlistOpen(true)
   }
   const addProbe = (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => {
+    if (target.kind === 'part' && projectRef.current.parts.find((item) => item.id === target.id)?.kind === 'subcircuit') { setNotice('Probe a connected pin wire to inspect this subcircuit’s node voltage. Port-current vectors are not exposed for imported subcircuits yet.'); return }
     const rawName = target.kind === 'node'
       ? `v(${target.name})`
       : (() => { const part = projectRef.current.parts.find((item) => item.id === target.id); return part ? componentCurrentVector(part) : '' })()
@@ -839,6 +858,11 @@ export default function App() {
   }
   const startSimulation = async () => {
     setPlaybackRunning(false)
+    if ((projectRef.current.modelAssets?.length ?? 0) > 0 && modelAssetsVerified !== true) {
+      setRunState('error')
+      setNotice(modelAssetsVerified === false ? 'An imported model library failed its SHA-256 check. Reimport a trusted copy before simulating.' : 'Checking imported model fingerprints. Try Run again in a moment.')
+      return
+    }
     if (engineAssetAvailable === false) {
       setRunState('error')
       setNotice('ngspice WASM is not built. Follow engine/wasm/README.md to build the local engine.')
@@ -1036,7 +1060,7 @@ export default function App() {
         <div className="library-categories"><button className="category active"><Zap size={14}/> Basics</button><button className="category"><Activity size={14}/> Semiconductors <span className="soon-tag">SOON</span></button><button className="category"><Waypoints size={14}/> Integrated circuits <span className="soon-tag">SOON</span></button><button className="category"><Grid2X2 size={14}/> Connectors <span className="soon-tag">SOON</span></button></div>
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} MATCHING COMPONENT${filteredPalette.length === 1 ? '' : 'S'}` : 'BASIC COMPONENTS'}</div>
         {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, label, Icon, subtitle }) => <button key={kind} className="component-card" onClick={() => addPart(kind)} title={`Add ${label}`}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span></button>)}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
-        {importedModels.length > 0 && <div className="imported-models"><div className="component-list-label">IMPORTED SUBCIRCUITS</div>{importedModels.map((model) => <div className="imported-model" key={`${model.assetId}:${model.name}`}><div><strong>{model.name}</strong><span>{model.pins.length} ordered pins · {model.pins.join(', ')}</span><small>{model.filename} · redistribution unknown</small></div><button aria-label={`Remove model library ${model.filename}`} title="Remove imported library" onClick={() => setProject((current) => ({ ...current, modelAssets: (current.modelAssets ?? []).filter((asset) => asset.id !== model.assetId) }))}><X size={13}/></button></div>)}</div>}
+        {importedModels.length > 0 && <div className="imported-models"><div className="component-list-label">IMPORTED SUBCIRCUITS</div>{importedModels.map((model) => { const used = project.parts.some((part) => part.kind === 'subcircuit' && part.modelName?.toLowerCase() === model.name.toLowerCase()); return <div className="imported-model" key={`${model.assetId}:${model.name}`}><div><strong>{model.name}</strong><span>{model.pins.length} ordered pins · {model.pins.join(', ')}</span><small>{model.filename} · redistribution unknown</small><button className="place-model" onClick={() => addSubcircuit(model)}>Add to schematic</button></div><button aria-label={`Remove model library ${model.filename}`} title={used ? 'Delete instances before removing this library' : 'Remove imported library'} disabled={used} onClick={() => setProject((current) => ({ ...current, modelAssets: (current.modelAssets ?? []).filter((asset) => asset.id !== model.assetId) }))}><X size={13}/></button></div>})}</div>}
         <input ref={modelFileInput} type="file" accept=".lib,.sub,.cir,.spice,.txt,text/plain" hidden onChange={importModelLibrary}/>
         <button className="library-import" onClick={() => modelFileInput.current?.click()}><Plus size={15}/> Import .SUBCKT library</button>
         <div className="model-import-note">Model text stays in this project. Import only files you are authorized to use; ELSim does not grant redistribution rights.</div>
@@ -1059,8 +1083,8 @@ export default function App() {
         <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : 'Circuit settings'}</h2></div><button className="subtle-icon" title="More properties"><MoreHorizontal size={17}/></button></div>
         {selected ? <>
           <div className="selected-part-card"><span className={`selected-part-icon icon-${selected.kind}`}>{selected.kind === 'resistor' ? <Minus size={19}/> : selected.kind === 'capacitor' ? <Activity size={18}/> : selected.kind === 'source' ? <Zap size={18}/> : <Grid2X2 size={18}/>}</span><div><strong>{kindNames[selected.kind]}</strong><span>{componentPins(selected).length} pins · SPICE {kindPrefix[selected.kind]}</span></div></div>
-          <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Reference designator<input value={selected.ref} onChange={(event) => updateSelected({ ref: event.target.value })}/></label>{selected.kind === 'switch' ? <label className="field-label">State<select value={selected.value.toLowerCase()} onChange={(event) => updateSelected({ value: event.target.value === 'on' ? 'On' : 'Off' })}><option value="off">Off</option><option value="on">On</option></select></label> : <label className="field-label">{selected.kind === 'vcvs' ? 'Voltage gain (V/V)' : selected.kind === 'vccs' ? 'Transconductance (S)' : selected.kind === 'npn' || selected.kind === 'pnp' ? 'Approximate forward beta (β)' : 'Value'}<input value={selected.value} onChange={(event) => updateSelected({ value: event.target.value })} placeholder="Enter a value"/></label>}{(selected.kind === 'npn' || selected.kind === 'pnp') && <div className="field-hint">Beta controls a simple educational transistor model; real gain varies with current and temperature.</div>}</div>
-          <div className="form-section"><div className="form-section-title">CONNECTIONS</div><div className="pin-row"><span className="pin-index">1</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Collector / pin 1' : 'Positive / pin 1'}</span><strong>{pinNet(connectivity, selected, 0)}</strong></div>{selected.kind !== 'ground' && <div className="pin-row"><span className="pin-index">2</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Base / pin 2' : 'Negative / pin 2'}</span><strong>{pinNet(connectivity, selected, 1)}</strong></div>}{(selected.kind === 'npn' || selected.kind === 'pnp') && <><div className="pin-row"><span className="pin-index">3</span><span>Emitter / pin 3</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="field-hint">The arrow distinguishes NPN and PNP. Collector current is positive into the collector.</div></>}{(selected.kind === 'vcvs' || selected.kind === 'vccs') && <><div className="pin-row"><span className="pin-index">3</span><span>Control +</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="pin-row"><span className="pin-index">4</span><span>Control −</span><strong>{pinNet(connectivity, selected, 3)}</strong></div><div className="field-hint">Output is pins 1–2; control voltage is pin 3 relative to pin 4. Pin 1 current is positive toward pin 2.</div></>}<div className="field-hint">Node names are derived from wires, pin positions, ground symbols, and labels.</div></div>
+          <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Reference designator<input value={selected.ref} onChange={(event) => updateSelected({ ref: event.target.value })}/></label>{selected.kind === 'subcircuit' ? <><div className="field-label">Model name<input value={selected.modelName ?? ''} readOnly/></div><div className="field-hint">This instance uses the imported model’s declared pin order. Update the library to change its interface.</div></> : selected.kind === 'switch' ? <label className="field-label">State<select value={selected.value.toLowerCase()} onChange={(event) => updateSelected({ value: event.target.value === 'on' ? 'On' : 'Off' })}><option value="off">Off</option><option value="on">On</option></select></label> : <label className="field-label">{selected.kind === 'vcvs' ? 'Voltage gain (V/V)' : selected.kind === 'vccs' ? 'Transconductance (S)' : selected.kind === 'npn' || selected.kind === 'pnp' ? 'Approximate forward beta (β)' : 'Value'}<input value={selected.value} onChange={(event) => updateSelected({ value: event.target.value })} placeholder="Enter a value"/></label>}{(selected.kind === 'npn' || selected.kind === 'pnp') && <div className="field-hint">Beta controls a simple educational transistor model; real gain varies with current and temperature.</div>}</div>
+          <div className="form-section"><div className="form-section-title">CONNECTIONS</div>{selected.kind === 'subcircuit' ? (selected.modelPins ?? []).map((name, index) => <div className="pin-row" key={`${name}-${index}`}><span className="pin-index">{index + 1}</span><span>{name}</span><strong>{pinNet(connectivity, selected, index)}</strong></div>) : <><div className="pin-row"><span className="pin-index">1</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Collector / pin 1' : 'Positive / pin 1'}</span><strong>{pinNet(connectivity, selected, 0)}</strong></div>{selected.kind !== 'ground' && <div className="pin-row"><span className="pin-index">2</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Base / pin 2' : 'Negative / pin 2'}</span><strong>{pinNet(connectivity, selected, 1)}</strong></div>}{(selected.kind === 'npn' || selected.kind === 'pnp') && <><div className="pin-row"><span className="pin-index">3</span><span>Emitter / pin 3</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="field-hint">The arrow distinguishes NPN and PNP. Collector current is positive into the collector.</div></>}{(selected.kind === 'vcvs' || selected.kind === 'vccs') && <><div className="pin-row"><span className="pin-index">3</span><span>Control +</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="pin-row"><span className="pin-index">4</span><span>Control −</span><strong>{pinNet(connectivity, selected, 3)}</strong></div><div className="field-hint">Output is pins 1–2; control voltage is pin 3 relative to pin 4. Pin 1 current is positive toward pin 2.</div></>}</>}<div className="field-hint">Node names are derived from wires, pin positions, ground symbols, and labels.</div></div>
           <div className="form-section"><div className="form-section-title">APPEARANCE</div><button className="wide-select" onClick={rotateSelected}>Orientation <span>{selected.rotation}° <RotateCw size={13}/></span></button><button className="wide-select flip-control" onClick={flipSelected}>Flip horizontally <span>{selected.flipX ? 'Flipped' : 'Normal'} <FlipHorizontal2 size={13}/></span></button><div className="field-hint">Orientation keeps electrical pin indexes stable. If moving attached wires would change connectivity, reroute them before applying the change.</div></div>
           <div className="inspector-bottom"><button onClick={duplicateSelected}><Copy size={14}/> Duplicate</button><button className="delete-action" onClick={deleteSelected}><Trash2 size={14}/> Delete part</button></div>
         </> : selectedWire ? <>

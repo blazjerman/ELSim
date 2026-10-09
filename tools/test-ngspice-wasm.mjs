@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op']
+const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op']
 
 function runInWorker(deckPath, readRaw = false, rawPaths) {
   return new Promise((resolve, reject) => {
@@ -58,6 +58,7 @@ for (const fixture of fixtures) {
 
   if (fixture.endsWith('-op')) {
     assert.match(wasmResult.stdout, /Voltage|v\(out\)/i, `${fixture}: no operating-point result was printed`)
+    if (fixture === 'imported-subckt-op') assert.match(wasmResult.stdout, /out\s+1\.000000e\+01/i, 'imported-subckt-op: four-pin model did not produce the expected 10 V output')
   } else {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)
   }
