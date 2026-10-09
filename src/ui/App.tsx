@@ -17,6 +17,7 @@ import { createStarterProject, kindNames, kindPrefix, validateProject, type Init
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
+import { extremaIndices, valueRange } from '../engine/plot'
 import { isEngineResponse, type MeasurementResult, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
@@ -119,7 +120,10 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
   const width = 760, height = 112, left = 42, right = 748, top = 8, bottom = 91
   const rangeFor = (unit: string) => {
     let min = Infinity, max = -Infinity
-    for (const trace of shown) if (trace.unit === unit) for (const value of trace.values) { min = Math.min(min, value); max = Math.max(max, value) }
+    for (const trace of shown) if (trace.unit === unit) {
+      const range = valueRange(trace.values, 0, trace.values.length - 1)
+      if (range) { min = Math.min(min, range[0]); max = Math.max(max, range[1]) }
+    }
     if (!Number.isFinite(min) || !Number.isFinite(max)) return [-1, 1] as [number, number]
     if (min === max) { min -= 1; max += 1 }
     return [min, max] as [number, number]
@@ -136,11 +140,11 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
   const pathFor = (trace: Trace) => {
     const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
     const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
-    const stride = Math.max(1, Math.ceil((traceLast - traceFirst + 1) / 900))
+    const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
     const [minValue, maxValue] = trace.unit === 'V' ? voltageRange : currentRange
     const range = maxValue - minValue
     const points: string[] = []
-    for (let index = traceFirst; index <= Math.min(traceLast, trace.values.length - 1); index += stride) {
+    for (const index of indices) {
       const x = left + ((trace.axis[index] - minTime) / (maxTime - minTime || 1)) * (right - left)
       const y = bottom - ((trace.values[index] - minValue) / range) * (bottom - top)
       points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
@@ -198,13 +202,17 @@ function AcPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRange
   const first = Math.floor(navigation.window.start * Math.max(0, frequencies.length - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, frequencies.length - 1)))
   const minFrequency = frequencies[first] || 1, maxFrequency = frequencies[Math.min(last, frequencies.length - 1)] || 10
-  const valuesFor = (trace: Trace) => Array.from(trace.values, (real, index) => {
+  const valueFor = (trace: Trace, index: number) => {
+    const real = trace.values[index]
     const imaginary = trace.imaginaryValues?.[index] ?? 0
     return mode === 'magnitude' ? 20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE) : Math.atan2(imaginary, real) * 180 / Math.PI
-  })
-  const allValues = shown.flatMap((trace) => valuesFor(trace).slice(first, Math.min(last + 1, trace.values.length)))
-  let minValue = allValues.length ? Math.min(...allValues) : (mode === 'magnitude' ? -60 : -180)
-  let maxValue = allValues.length ? Math.max(...allValues) : (mode === 'magnitude' ? 20 : 180)
+  }
+  let minValue = Infinity, maxValue = -Infinity
+  for (const trace of shown) {
+    const range = valueRange(trace.values, first, Math.min(last, trace.values.length - 1), (_value, index) => valueFor(trace, index))
+    if (range) { minValue = Math.min(minValue, range[0]); maxValue = Math.max(maxValue, range[1]) }
+  }
+  if (minValue === Infinity) { minValue = mode === 'magnitude' ? -60 : -180; maxValue = mode === 'magnitude' ? 20 : 180 }
   if (minValue === maxValue) { minValue -= 1; maxValue += 1 }
   const xFor = (frequency: number) => left + ((Math.log10(frequency) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left)
   const yFor = (value: number) => bottom - (value - minValue) / (maxValue - minValue) * (bottom - top)
@@ -214,7 +222,7 @@ function AcPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRange
     <svg className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`AC ${mode} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz`} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); setCursorIndex(nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1))) }}>
       {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} {mode === 'magnitude' ? 'dB' : '°'}</text></g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
-      {shown.map((trace) => <polyline key={trace.id} points={valuesFor(trace).slice(first, Math.min(last + 1, trace.values.length)).map((value, offset) => { const index = first + offset; return `${xFor(trace.axis[index]).toFixed(2)},${yFor(value).toFixed(2)}` }).join(' ')} fill="none" stroke={colors[traces.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
+      {shown.map((trace) => <polyline key={trace.id} points={extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, index) => valueFor(trace, index)).map((index) => `${xFor(trace.axis[index]).toFixed(2)},${yFor(valueFor(trace, index)).toFixed(2)}`).join(' ')} fill="none" stroke={colors[traces.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(frequencies[cursorIndex])} x2={xFor(frequencies[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 5} className="plot-tick">{minFrequency.toPrecision(3)} Hz</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{maxFrequency.toPrecision(3)} Hz</text>
     </svg>
@@ -234,8 +242,11 @@ function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, on
   const first = Math.floor(navigation.window.start * Math.max(0, axis.length - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, axis.length - 1)))
   const x0 = axis[first] ?? 0, x1 = axis[Math.min(last, axis.length - 1)] ?? 1
-  const visibleValues = shown.flatMap((trace) => Array.from(trace.values.slice(first, Math.min(last + 1, trace.values.length))))
-  const min = Math.min(0, ...visibleValues), max = Math.max(0, ...visibleValues)
+  let min = 0, max = 0
+  for (const trace of shown) {
+    const range = valueRange(trace.values, first, Math.min(last, trace.values.length - 1))
+    if (range) { min = Math.min(min, range[0]); max = Math.max(max, range[1]) }
+  }
   const span = max - min || 1
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
   const xFor = (value: number) => left + (value - x0) / (x1 - x0 || 1) * (right - left)
@@ -245,7 +256,7 @@ function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, on
     <svg className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}`} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); setCursorIndex(nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1))) }}>
       {[0, 1, 2, 3].map((line) => { const value = max - line / 3 * span; return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)}</text></g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
-      {shown.map((trace) => <polyline key={trace.id} points={Array.from(trace.values.slice(first, Math.min(last + 1, trace.values.length)), (value, offset) => { const index = first + offset; return `${xFor(trace.axis[index]).toFixed(2)},${yFor(value).toFixed(2)}` }).join(' ')} fill="none" stroke={colors[traces.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
+      {shown.map((trace) => <polyline key={trace.id} points={extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900).map((index) => `${xFor(trace.axis[index]).toFixed(2)},${yFor(trace.values[index]).toFixed(2)}`).join(' ')} fill="none" stroke={colors[traces.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(axis[cursorIndex])} x2={xFor(axis[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 5} className="plot-tick">{x0.toPrecision(3)} {traces[0]?.axisUnit}</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{x1.toPrecision(3)} {traces[0]?.axisUnit}</text>
     </svg>
