@@ -1,0 +1,11 @@
+ELSim ngspice WebAssembly DC sweep raw output
+V1 in 0 DC 0
+R1 in out 1k
+R2 out 0 1k
+.control
+set filetype=ascii
+dc V1 0 5 1
+write /result.raw all
+quit
+.endc
+.end

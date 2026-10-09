@@ -47,7 +47,7 @@ export type SimulationResult = {
   sourceMap: NetlistSource[]
   traces: Trace[]
   diagnostics: SimulationDiagnostic[]
-  analysis: 'tran' | 'op' | 'ac'
+  analysis: 'tran' | 'op' | 'ac' | 'dc'
 }
 
 // Keep the editor independent of a specific ngspice-WASM build. Only this

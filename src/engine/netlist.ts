@@ -33,6 +33,12 @@ function spiceFrequency(value: string): string | null {
   return spiceScalar(result, '')
 }
 
+function spiceSweepValue(value: string): string | null {
+  let result = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
+  result = result.replace(/[vV]$/, '')
+  return spiceScalar(result, '')
+}
+
 function validReference(part: Part): boolean {
   const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', switch: 'S' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
@@ -89,7 +95,7 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : project.simulation.analysis === 'dc' ? `DC ${value}` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor') append(`${part.ref} ${positive} ${negative} ${value}`, part.id, 'component')
     else if (part.kind === 'diode') { append(`${part.ref} ${positive} ${negative} DDEFAULT`, part.id, 'component'); usesDiode = true }
@@ -122,6 +128,15 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
       append(`* ERROR: ${message}`, 'analysis:ac', 'analysis')
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:ac', line: rows.length })
     } else append(`.ac ${sweep.scale} ${sweep.points} ${start} ${stop}`, 'analysis:ac', 'analysis')
+  } else if (project.simulation.analysis === 'dc') {
+    const sweep = project.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
+    const start = spiceSweepValue(sweep.start), stop = spiceSweepValue(sweep.stop), step = spiceSweepValue(sweep.step)
+    const source = project.parts.find((part) => part.kind === 'source' && part.ref.toLowerCase() === sweep.source.toLowerCase())
+    if (!source || !start || !stop || !step || Number(step) === 0 || (Number(stop) - Number(start)) * Number(step) < 0) {
+      const message = 'DC sweep needs an existing voltage source and valid start, stop, and nonzero step values in the same direction.'
+      rows.push(`* ERROR: ${message}`)
+      diagnostics.push({ severity: 'error', message, sourceId: source?.id ?? 'analysis:dc', line: rows.length })
+    } else append(`.dc ${source.ref} ${start} ${stop} ${step}`, 'analysis:dc', 'analysis')
   } else {
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)

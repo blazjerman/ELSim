@@ -78,10 +78,21 @@
       "additionalProperties": false,
       "required": ["analysis", "stopTime", "maxStep"],
       "properties": {
-        "analysis": { "enum": ["tran", "op", "ac"] },
+        "analysis": { "enum": ["tran", "op", "ac", "dc"] },
         "stopTime": { "type": "string", "minLength": 1 },
         "maxStep": { "type": "string", "minLength": 1 },
         "sourceAcMagnitude": { "type": "string", "minLength": 1 },
+        "dcSweep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "start", "stop", "step"],
+          "properties": {
+            "source": { "type": "string", "minLength": 1 },
+            "start": { "type": "string", "minLength": 1 },
+            "stop": { "type": "string", "minLength": 1 },
+            "step": { "type": "string", "minLength": 1 }
+          }
+        },
         "acSweep": {
           "type": "object",
           "additionalProperties": false,

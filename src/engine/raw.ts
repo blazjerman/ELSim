@@ -10,7 +10,9 @@ export type ParsedRawFile = {
   plotName: string
   axisLabel: string
   axisUnit: string
+  axisVector: string
   isComplex: boolean
+  analysis: 'tran' | 'op' | 'ac' | 'dc'
   axis: Float64Array
   variables: RawVariable[]
 }
@@ -53,18 +55,19 @@ export function parseAsciiRawFile(text: string): ParsedRawFile {
   const hasTimeAxis = variables[0]?.name.toLowerCase() === 'time'
   const isOperatingPoint = /operating point/i.test(plotName)
   const isFrequency = /ac analysis/i.test(plotName)
-  if (!hasTimeAxis && !isOperatingPoint && !isFrequency) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
+  const isDcSweep = /dc transfer characteristic/i.test(plotName)
+  if (!hasTimeAxis && !isOperatingPoint && !isFrequency && !isDcSweep) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
   if (isComplex && !isFrequency) throw new Error(`Complex ngspice raw data is unsupported for ${plotName}.`)
   if (isFrequency && !isComplex) throw new Error('ngspice AC analysis must contain complex frequency-domain vectors.')
   if (isOperatingPoint && pointCount !== 1) throw new Error('ngspice operating-point raw data must contain exactly one sample.')
   if (data.length < pointCount * variableCount) throw new Error('ngspice raw data ended before all numeric points were read.')
   const axis = new Float64Array(pointCount)
   for (let point = 0, lineIndex = 0; point < pointCount; point++) {
-    if (hasTimeAxis || isFrequency) {
+    if (hasTimeAxis || isFrequency || isDcSweep) {
       const axisTokens = data[lineIndex++].trim().split(/\s+/)
       const pair = axisTokens[1]?.match(/^([^,]+),([^,]+)$/)
-      if (Number(axisTokens[0]) !== point || (!pair && axisTokens.length < 2)) throw new Error(`Malformed ngspice ${isFrequency ? 'frequency' : 'time'} sample index ${point}.`)
-      axis[point] = finiteNumber(pair?.[1] ?? axisTokens[1], `point ${point}, ${isFrequency ? 'frequency' : 'time'}`)
+      if (Number(axisTokens[0]) !== point || (!pair && axisTokens.length < 2)) throw new Error(`Malformed ngspice ${isFrequency ? 'frequency' : isDcSweep ? 'DC sweep' : 'time'} sample index ${point}.`)
+      axis[point] = finiteNumber(pair?.[1] ?? axisTokens[1], `point ${point}, ${isFrequency ? 'frequency' : isDcSweep ? 'DC sweep' : 'time'}`)
       if (isFrequency) finiteNumber(pair?.[2] ?? '0', `point ${point}, frequency imaginary part`)
     } else {
       const tokens = data[lineIndex++].trim().split(/\s+/)
@@ -78,5 +81,9 @@ export function parseAsciiRawFile(text: string): ParsedRawFile {
       if (isComplex) variables[variable].imaginaryValues![point] = finiteNumber(pair?.[2] ?? '', `point ${point}, ${variables[variable].name} imaginary part`)
     }
   }
-  return { title, plotName, axisLabel: hasTimeAxis ? 'Time' : isFrequency ? 'Frequency' : 'Operating point', axisUnit: hasTimeAxis ? 's' : isFrequency ? 'Hz' : '', isComplex, axis, variables: variables.slice(hasTimeAxis || isFrequency ? 1 : 0) }
+  const axisVector = isDcSweep ? variables[0].name : ''
+  const axisLabel = hasTimeAxis ? 'Time' : isFrequency ? 'Frequency' : isDcSweep ? axisVector : 'Operating point'
+  const axisUnit = hasTimeAxis ? 's' : isFrequency ? 'Hz' : isDcSweep && variables[0].type.toLowerCase() === 'voltage' ? 'V' : ''
+  if (isDcSweep) variables[0].values.set(axis)
+  return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : 'op', axis, variables: variables.slice(hasTimeAxis || isFrequency || isDcSweep ? 1 : 0) }
 }

@@ -62,6 +62,27 @@ Values:
 \t2.000000e-03,-3.000000e-03
 `
 
+const validDcRaw = `Title: DC sweep
+Plotname: DC transfer characteristic
+Flags: real
+No. Variables: 3
+No. Points: 3
+Variables:
+  0 v(v-sweep) voltage
+  1 v(out) voltage
+  2 i(v1) current
+Values:
+ 0 0.000000e+00
+ 0.000000e+00
+ 0.000000e+00
+ 1 1.000000e+00
+ 5.000000e-01
+ -5.000000e-04
+ 2 2.000000e+00
+ 1.000000e+00
+ -1.000000e-03
+`
+
 test('ASCII raw parser preserves ngspice time, voltage, and current vectors', () => {
   const parsed = parseAsciiRawFile(validRaw)
   assert.equal(parsed.title, 'RC fixture')
@@ -94,6 +115,16 @@ test('ASCII raw parser preserves AC frequencies and complex voltage/current vect
   assert.deepEqual([...parsed.variables[0].values], [1, 0.5])
   assert.deepEqual([...parsed.variables[0].imaginaryValues], [0, -0.5])
   assert.deepEqual([...parsed.variables[1].imaginaryValues], [-0.002, -0.003])
+})
+
+test('ASCII raw parser exposes DC sweep source values as the analysis axis', () => {
+  const parsed = parseAsciiRawFile(validDcRaw)
+  assert.equal(parsed.analysis, 'dc')
+  assert.equal(parsed.axisLabel, 'v(v-sweep)')
+  assert.equal(parsed.axisUnit, 'V')
+  assert.deepEqual([...parsed.axis], [0, 1, 2])
+  assert.deepEqual([...parsed.variables[0].values], [0, 0.5, 1])
+  assert.deepEqual([...parsed.variables[1].values], [0, -0.0005, -0.001])
 })
 
 test('transient plotting accepts only voltage and current variable names', () => {

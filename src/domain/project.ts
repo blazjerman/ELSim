@@ -26,7 +26,7 @@ export type Project = {
   junctions: { x: number; y: number }[]
   netLabels: NetLabel[]
   view: { zoom: number; panX: number; panY: number }
-  simulation: { analysis: 'tran' | 'op' | 'ac'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string }
+  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string } }
 }
 
 const starter: Project = {
@@ -51,7 +51,7 @@ const starter: Project = {
     { id: 'label-vout', name: 'vout', x: 475, y: 290, visible: true },
   ],
   view: { zoom: 1, panX: 0, panY: 0 },
-  simulation: { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V' },
+  simulation: { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
 }
 
 export function createStarterProject(): Project {
@@ -80,7 +80,7 @@ function migrateV1(input: Record<string, unknown>): Project {
     wires: oldWires.map(({ node: _node, ...wire }) => wire),
     junctions: [], netLabels,
     view: input.view as Project['view'] ?? { zoom: 1, panX: 0, panY: 0 },
-    simulation: input.simulation as Project['simulation'] ?? { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V' },
+    simulation: input.simulation as Project['simulation'] ?? { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
   }
 }
 
@@ -124,10 +124,12 @@ export function validateProject(input: unknown): Project {
   }
   const simulation = data.simulation as Project['simulation'] | undefined
   const view = data.view as Project['view'] | undefined
-  if (typeof data.name !== 'string' || !data.name.trim() || typeof data.updatedAt !== 'string' || !Number.isFinite(Date.parse(data.updatedAt)) || !simulation || !['tran', 'op', 'ac'].includes(simulation.analysis) || typeof simulation.stopTime !== 'string' || !simulation.stopTime.trim() || typeof simulation.maxStep !== 'string' || !simulation.maxStep.trim() || !view || !Number.isFinite(view.zoom) || view.zoom <= 0 || !Number.isFinite(view.panX) || !Number.isFinite(view.panY)) throw new Error('Project settings are missing or malformed.')
+  if (typeof data.name !== 'string' || !data.name.trim() || typeof data.updatedAt !== 'string' || !Number.isFinite(Date.parse(data.updatedAt)) || !simulation || !['tran', 'op', 'ac', 'dc'].includes(simulation.analysis) || typeof simulation.stopTime !== 'string' || !simulation.stopTime.trim() || typeof simulation.maxStep !== 'string' || !simulation.maxStep.trim() || !view || !Number.isFinite(view.zoom) || view.zoom <= 0 || !Number.isFinite(view.panX) || !Number.isFinite(view.panY)) throw new Error('Project settings are missing or malformed.')
   if (simulation.analysis === 'ac' && !simulation.acSweep) simulation.acSweep = { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
   if (simulation.sourceAcMagnitude === undefined) simulation.sourceAcMagnitude = '1 V'
   if (typeof simulation.sourceAcMagnitude !== 'string' || !simulation.sourceAcMagnitude.trim()) throw new Error('AC source magnitude is malformed.')
+  if (simulation.analysis === 'dc' && !simulation.dcSweep) simulation.dcSweep = { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
+  if (simulation.dcSweep && (typeof simulation.dcSweep.source !== 'string' || !simulation.dcSweep.source.trim() || typeof simulation.dcSweep.start !== 'string' || !simulation.dcSweep.start.trim() || typeof simulation.dcSweep.stop !== 'string' || !simulation.dcSweep.stop.trim() || typeof simulation.dcSweep.step !== 'string' || !simulation.dcSweep.step.trim())) throw new Error('DC sweep settings are malformed.')
   if (simulation.acSweep && (!['dec', 'oct', 'lin'].includes(simulation.acSweep.scale) || !Number.isInteger(simulation.acSweep.points) || simulation.acSweep.points < 1 || simulation.acSweep.points > 10000 || typeof simulation.acSweep.startFrequency !== 'string' || !simulation.acSweep.startFrequency.trim() || typeof simulation.acSweep.stopFrequency !== 'string' || !simulation.acSweep.stopFrequency.trim())) throw new Error('AC sweep settings are malformed.')
   return data as unknown as Project
 }

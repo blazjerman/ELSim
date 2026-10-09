@@ -42,6 +42,19 @@ test('AC analysis emits small-signal source and validated logarithmic sweep', ()
   assert.match(createNetlistArtifact(project).diagnostics[0].message, /positive increasing/)
 })
 
+test('DC sweep emits a steady source and a validated voltage-source sweep', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'dc'
+  project.simulation.dcSweep = { source: 'V1', start: '0 V', stop: '5 V', step: '250 mV' }
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 DC 5$/m)
+  assert.match(artifact.text, /^\.dc V1 0 5 250m$/m)
+  assert.doesNotMatch(artifact.text, /^\.tran\b|^\.op$/m)
+  project.simulation.dcSweep.step = '-1 V'
+  assert.match(createNetlistArtifact(project).diagnostics[0].message, /same direction/)
+})
+
 test('switch Off state creates an open voltage-controlled SPICE switch', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'p-s1', kind: 'switch', ref: 'S1', value: 'Off', x: 280, y: 360, rotation: 0 })

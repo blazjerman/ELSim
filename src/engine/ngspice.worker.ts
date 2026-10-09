@@ -57,7 +57,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     })
     const runDeck = addResultControl(artifact.text)
     module.FS.writeFile('/project.cir', runDeck)
-    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : 'transient'} analysis` } satisfies EngineResponse)
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` } satisfies EngineResponse)
     const status = module.callMain(['-b', '/project.cir'])
     const output = stdout.join('\n')
     const errors = output.split(/\r?\n/).filter((line) => /^\s*(?:Error|Fatal):/i.test(line))
@@ -74,7 +74,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       sourceMap: artifact.sourceMap,
       traces,
       diagnostics: artifact.diagnostics,
-      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac',
+      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc',
     }
     worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse)
   } catch (error) {
