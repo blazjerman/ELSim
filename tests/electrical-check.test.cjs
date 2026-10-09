@@ -20,6 +20,22 @@ test('reports floating terminals on the component a beginner needs to wire', () 
   assert.match(issue.title, /2 unconnected terminals/)
 })
 
+test('still warns when one component terminal is attached only to a dangling wire', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'loose-r', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 700, y: 600, rotation: 0 })
+  project.wires.push({ id: 'dangling-lead', points: [[648, 600], [678, 600]] })
+  const issue = checkCircuit(project).find((item) => item.id === 'floating:loose-r')
+  assert.match(issue.title, /2 unconnected terminals/)
+})
+
+test('flags a two-terminal part whose pins are electrically shorted', () => {
+  const project = createStarterProject()
+  project.wires.push({ id: 'short-r1', points: [[313, 290], [417, 290]] })
+  const issue = checkCircuit(project).find((item) => item.id === 'shorted:p-r1')
+  assert.equal(issue.severity, 'warning')
+  assert.equal(issue.partId, 'p-r1')
+})
+
 test('reports missing ground and conflicting labels without stopping simulation', () => {
   const project = createStarterProject()
   project.parts = project.parts.filter((part) => part.kind !== 'ground')

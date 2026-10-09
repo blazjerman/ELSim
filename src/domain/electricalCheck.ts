@@ -28,10 +28,10 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
   }
 
-  const connectedWires = new Set(connectivity.wireNets.values())
   const floatingByPart = new Map<string, number[]>()
   for (const [net, pins] of pinsByNet) {
-    if (pins.length !== 1 || connectedWires.has(net)) continue
+    const hasNamedConnection = project.netLabels.some((label) => label.name.trim() === net)
+    if (pins.length !== 1 || hasNamedConnection) continue
     const pin = pins[0]
     floatingByPart.set(pin.partId, [...(floatingByPart.get(pin.partId) ?? []), pin.index])
   }
@@ -44,6 +44,13 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       detail: 'Connect each open terminal to a wire, another component, or an intentional net label.',
       partId,
     })
+  }
+
+  const twoTerminalKinds = new Set(['source', 'resistor', 'capacitor', 'inductor', 'diode', 'led', 'switch'])
+  for (const part of project.parts) {
+    if (!twoTerminalKinds.has(part.kind)) continue
+    const first = connectivity.pinNets.get(`${part.id}:0`), second = connectivity.pinNets.get(`${part.id}:1`)
+    if (first && first === second) issues.push({ id: `shorted:${part.id}`, severity: 'warning', title: `${part.ref} has both terminals on the same net`, detail: 'Check whether this component is intentionally bypassed or shorted.', partId: part.id })
   }
 
   const hasGround = project.parts.some((part) => part.kind === 'ground') || project.netLabels.some((label) => label.name.trim() === '0')
