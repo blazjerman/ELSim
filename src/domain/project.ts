@@ -20,6 +20,8 @@ export type PlotSettings = {
   selectedTraceIds: string[]
   ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>>
 }
+export type ParameterSweep = { component: string; start: string; stop: string; points: number }
+export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string }
 
 export type Project = {
   format: 'elsim-project'
@@ -32,7 +34,7 @@ export type Project = {
   netLabels: NetLabel[]
   view: { zoom: number; panX: number; panY: number }
   plotSettings?: PlotSettings
-  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string } }
+  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[] }
 }
 
 const starter: Project = {
@@ -138,6 +140,40 @@ export function validateProject(input: unknown): Project {
   if (simulation.analysis === 'dc' && !simulation.dcSweep) simulation.dcSweep = { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
   if (simulation.dcSweep && (typeof simulation.dcSweep.source !== 'string' || !simulation.dcSweep.source.trim() || typeof simulation.dcSweep.start !== 'string' || !simulation.dcSweep.start.trim() || typeof simulation.dcSweep.stop !== 'string' || !simulation.dcSweep.stop.trim() || typeof simulation.dcSweep.step !== 'string' || !simulation.dcSweep.step.trim())) throw new Error('DC sweep settings are malformed.')
   if (simulation.acSweep && (!['dec', 'oct', 'lin'].includes(simulation.acSweep.scale) || !Number.isInteger(simulation.acSweep.points) || simulation.acSweep.points < 1 || simulation.acSweep.points > 10000 || typeof simulation.acSweep.startFrequency !== 'string' || !simulation.acSweep.startFrequency.trim() || typeof simulation.acSweep.stopFrequency !== 'string' || !simulation.acSweep.stopFrequency.trim())) throw new Error('AC sweep settings are malformed.')
+  if (simulation.parameterSweeps !== undefined) {
+    if (!Array.isArray(simulation.parameterSweeps) || simulation.parameterSweeps.length < 1 || simulation.parameterSweeps.length > 2) throw new Error('Parameter stepping supports one or two component values.')
+    if (simulation.analysis !== 'tran') throw new Error('Parameter stepping currently supports transient analysis only.')
+    const sweepRefs = new Set<string>()
+    let combinations = 1
+    for (const sweep of simulation.parameterSweeps) {
+      if (!sweep || typeof sweep.component !== 'string' || !sweep.component.trim()) throw new Error('Parameter stepping settings are malformed.')
+      const component = data.parts.find((part) => (part as Part).ref.toLowerCase() === sweep.component.toLowerCase()) as Part | undefined
+      if (!component || !['resistor', 'capacitor', 'inductor'].includes(component.kind) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct resistors, capacitors, or inductors and 2–10 steps.')
+      const parseComponentValue = (value: string): number | null => {
+        const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/[ΩΩ]|ohms?|[fFhH]$/gi, '')
+        const match = normalized.match(/^([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+        if (!match) return null
+        const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
+        const parsed = Number(match[1]) * scale
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+      }
+      const start = parseComponentValue(sweep.start)
+      const stop = parseComponentValue(sweep.stop)
+      if (start === null || stop === null || start === stop) throw new Error(`${component.ref} needs valid, positive, different parameter start and stop values.`)
+      sweepRefs.add(sweep.component.toLowerCase())
+      combinations *= sweep.points
+    }
+    if (combinations > 10) throw new Error('Parameter stepping is limited to 10 total combinations.')
+  }
+  if (simulation.transientMeasurements !== undefined) {
+    if (!Array.isArray(simulation.transientMeasurements) || simulation.transientMeasurements.length > 12) throw new Error('A project can have up to 12 transient measurements.')
+    if (simulation.analysis !== 'tran') throw new Error('Transient measurements require transient analysis.')
+    const measurementIds = new Set<string>()
+    for (const measurement of simulation.transientMeasurements) {
+      if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !['max', 'min', 'avg', 'rms'].includes(measurement.operation) || typeof measurement.vector !== 'string' || !measurement.vector.trim() || !/^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDS][A-Za-z0-9_]*\))$/i.test(measurement.vector.trim())) throw new Error('Transient measurements require a unique name, a supported operation, and a voltage or device-current vector such as V(out) or I(R1).')
+      measurementIds.add(measurement.id.toLowerCase())
+    }
+  }
   const plotSettings = data.plotSettings as PlotSettings | undefined
   if (plotSettings !== undefined) {
     if (!plotSettings || !Array.isArray(plotSettings.selectedTraceIds) || plotSettings.selectedTraceIds.some((id) => typeof id !== 'string') || !plotSettings.ranges || typeof plotSettings.ranges !== 'object' || Array.isArray(plotSettings.ranges)) throw new Error('Plot settings are malformed.')

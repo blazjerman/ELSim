@@ -120,6 +120,36 @@
             "step": { "type": "string", "minLength": 1 }
           }
         },
+        "parameterSweeps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["component", "start", "stop", "points"],
+            "properties": {
+              "component": { "type": "string", "minLength": 1 },
+              "start": { "type": "string", "minLength": 1 },
+              "stop": { "type": "string", "minLength": 1 },
+              "points": { "type": "integer", "minimum": 2, "maximum": 10 }
+            }
+          }
+        },
+        "transientMeasurements": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "operation", "vector"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$" },
+              "operation": { "enum": ["max", "min", "avg", "rms"] },
+              "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" }
+            }
+          }
+        },
         "acSweep": {
           "type": "object",
           "additionalProperties": false,

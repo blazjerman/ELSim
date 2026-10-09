@@ -56,19 +56,71 @@
     "trace": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "unit", "axis", "values"],
+      "required": ["id", "label", "unit", "axisLabel", "axisUnit", "axis", "values"],
       "properties": {
         "id": { "type": "string" },
         "label": { "type": "string" },
         "unit": { "type": "string" },
         "axis": { "type": "array", "items": { "type": "number" } },
-        "values": { "type": "array", "items": { "type": "number" } }
+        "values": { "type": "array", "items": { "type": "number" } },
+        "axisLabel": { "type": "string" },
+        "axisUnit": { "type": "string" },
+        "imaginaryValues": { "type": "array", "items": { "type": "number" } },
+        "baseId": { "type": "string" },
+        "sweep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["label", "index"],
+          "properties": { "label": { "type": "string" }, "index": { "type": "integer", "minimum": 0 } }
+        }
+      }
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "operation", "vector", "value", "unit"],
+      "properties": {
+        "id": { "type": "string" },
+        "operation": { "enum": ["max", "min", "avg", "rms"] },
+        "vector": { "type": "string" },
+        "value": { "type": "number" },
+        "unit": { "enum": ["V", "A"] },
+        "sweep": { "type": "object", "additionalProperties": false, "required": ["label", "index"], "properties": { "label": { "type": "string" }, "index": { "type": "integer", "minimum": 0 } } }
+      }
+    },
+    "parameterSweepRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["values", "label"],
+      "properties": {
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["component", "value"],
+            "properties": { "component": { "type": "string" }, "value": { "type": "string" } }
+          }
+        },
+        "label": { "type": "string" }
+      }
+    },
+    "transientMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "operation", "vector"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$" },
+        "operation": { "enum": ["max", "min", "avg", "rms"] },
+        "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" }
       }
     },
     "request": {
       "oneOf": [
         { "type": "object", "additionalProperties": false, "required": ["type", "requestId"], "properties": { "type": { "const": "initialize" }, "requestId": { "type": "string" } } },
-        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "artifact", "metadata"], "properties": { "type": { "const": "run" }, "requestId": { "type": "string" }, "artifact": { "$ref": "#/$defs/artifact" }, "metadata": { "$ref": "#/$defs/metadata" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "artifact", "metadata"], "properties": { "type": { "const": "run" }, "requestId": { "type": "string" }, "artifact": { "$ref": "#/$defs/artifact" }, "metadata": { "$ref": "#/$defs/metadata" }, "parameterSweep": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/parameterSweepRun" } }, "measurements": { "type": "array", "maxItems": 12, "items": { "$ref": "#/$defs/transientMeasurement" } } } },
         { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "runId"], "properties": { "type": { "const": "cancel" }, "requestId": { "type": "string" }, "runId": { "type": "string" } } },
         { "type": "object", "additionalProperties": false, "required": ["type", "requestId"], "properties": { "type": { "const": "dispose" }, "requestId": { "type": "string" } } }
       ]
@@ -77,7 +129,7 @@
       "oneOf": [
         { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "engine", "engineVersion"], "properties": { "type": { "const": "ready" }, "requestId": { "type": "string" }, "engine": { "type": "string" }, "engineVersion": { "type": "string" } } },
         { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "runId", "fraction"], "properties": { "type": { "const": "progress" }, "requestId": { "type": "string" }, "runId": { "type": "string" }, "fraction": { "type": "number", "minimum": 0, "maximum": 1 }, "message": { "type": "string" } } },
-        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "result"], "properties": { "type": { "const": "result" }, "requestId": { "type": "string" }, "result": { "type": "object", "additionalProperties": false, "required": ["metadata", "netlist", "sourceMap", "traces", "diagnostics"], "properties": { "metadata": { "$ref": "#/$defs/metadata" }, "netlist": { "type": "string" }, "sourceMap": { "type": "array", "items": { "$ref": "#/$defs/source" } }, "traces": { "type": "array", "items": { "$ref": "#/$defs/trace" } }, "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } } } } } },
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "result"], "properties": { "type": { "const": "result" }, "requestId": { "type": "string" }, "result": { "type": "object", "additionalProperties": false, "required": ["metadata", "netlist", "sourceMap", "traces", "diagnostics", "analysis", "measurements"], "properties": { "metadata": { "$ref": "#/$defs/metadata" }, "netlist": { "type": "string" }, "sourceMap": { "type": "array", "items": { "$ref": "#/$defs/source" } }, "traces": { "type": "array", "items": { "$ref": "#/$defs/trace" } }, "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } }, "analysis": { "enum": ["tran", "op", "ac", "dc"] }, "measurements": { "type": "array", "items": { "$ref": "#/$defs/measurement" } } } } } },
         { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "runId"], "properties": { "type": { "const": "cancelled" }, "requestId": { "type": "string" }, "runId": { "type": "string" } } },
         { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "error"], "properties": { "type": { "const": "error" }, "requestId": { "type": "string" }, "error": { "$ref": "#/$defs/diagnostic" } } }
       ]

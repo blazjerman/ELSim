@@ -27,3 +27,24 @@ test('result control saves device currents needed for probes and visualizations'
 test('result control rejects netlists with no end directive', () => {
   assert.throws(() => addResultControl('R1 in 0 1k'), /missing its \.end directive/)
 })
+
+test('result control alters each parameter combination and writes separate raw datasets', () => {
+  const netlist = 'V1 in 0 1\nR1 in out 1k\nC1 out 0 1u\n.tran 1u 1m\n.end'
+  const control = addResultControl(netlist, [
+    { values: [{ component: 'R1', value: '1.0e3' }], label: 'R1=1000 Ω' },
+    { values: [{ component: 'R1', value: '2.0e3' }, { component: 'C1', value: '2.0e-6' }], label: 'R1=2000 Ω, C1=2 µF' },
+  ])
+  assert.match(control, /alter R1 1\.0e3\nrun\nwrite \/result-0\.raw all/)
+  assert.match(control, /alter R1 2\.0e3\nalter C1 2\.0e-6\nrun\nwrite \/result-1\.raw all/)
+  assert.doesNotMatch(control, /write \/result\.raw all/)
+})
+
+test('result control runs uniquely named measurements in each parameter case', () => {
+  const netlist = 'V1 in 0 1\nR1 in out 1k\nC1 out 0 1u\n.tran 1u 1m\n.meas tran ELSIM_peak MAX V(out)\n.end'
+  const measurement = { id: 'peak', operation: 'max', vector: 'V(out)' }
+  const single = addResultControl(netlist, [], [measurement])
+  assert.match(single, /\.meas tran ELSIM_peak max V\(out\)/)
+  const stepped = addResultControl(netlist, [{ values: [{ component: 'R1', value: '1e3' }], label: 'R1=1kΩ' }], [measurement])
+  assert.match(stepped, /meas tran ELSIM_peak_0 max V\(out\)\nwrite \/result-0\.raw all/)
+  assert.doesNotMatch(stepped, /^\.meas tran ELSIM_peak /m)
+})

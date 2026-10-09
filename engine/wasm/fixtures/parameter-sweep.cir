@@ -1,0 +1,20 @@
+ELSim ngspice transient parameter stepping
+V1 in 0 PULSE(0 5 0 1u 1u 5m 10m)
+R1 in out 1k
+C1 out 0 10u
+.tran 100u 10m
+.save all @r1[i]
+.control
+set filetype=ascii
+alter R1 1.00000000e+3
+run
+write /result-0.raw all
+alter R1 2.00000000e+3
+run
+write /result-1.raw all
+alter R1 3.00000000e+3
+run
+write /result-2.raw all
+quit
+.endc
+.end

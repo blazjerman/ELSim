@@ -1,7 +1,9 @@
 /// <reference lib="webworker" />
 import { isTraceVariable, parseAsciiRawFile } from './raw'
 import { addResultControl } from './resultControl'
+import { parseMeasurementOutput } from './measurements'
 import type { EngineRequest, EngineResponse, NetlistArtifact, NetlistSource, RunMetadata, SimulationDiagnostic, Trace } from './contract'
+import type { TransientMeasurement } from '../domain/project'
 
 const worker = self as DedicatedWorkerGlobalScope
 type NgspiceModule = { FS: { writeFile(path: string, data: string): void; readFile(path: string, options: { encoding: 'utf8' }): string }; callMain(args: string[]): number }
@@ -35,7 +37,7 @@ function makeTraces(rawText: string): Trace[] {
   })
 }
 
-async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>): Promise<void> {
+async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = []): Promise<void> {
   const stdout: string[] = []
   const stderr: string[] = []
   try {
@@ -47,7 +49,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       print: (...parts) => stdout.push(parts.join(' ')),
       printErr: (...parts) => stderr.push(parts.join(' ')),
     })
-    const runDeck = addResultControl(artifact.text)
+    const runDeck = addResultControl(artifact.text, parameterSweep, measurements)
     module.FS.writeFile('/project.cir', runDeck)
     worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` } satisfies EngineResponse)
     const status = module.callMain(['-b', '/project.cir'])
@@ -58,15 +60,25 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       worker.postMessage({ type: 'error', requestId, error: diagnosticForLine(message, artifact) } satisfies EngineResponse)
       return
     }
-    const traces = makeTraces(module.FS.readFile('/result.raw', { encoding: 'utf8' }))
+    const traces = parameterSweep?.length
+      ? parameterSweep.flatMap((sweep, index) => makeTraces(module.FS.readFile(`/result-${index}.raw`, { encoding: 'utf8' })).map((trace) => ({
+        ...trace,
+        id: `${trace.id}::sweep-${index}`,
+        baseId: trace.id,
+        label: `${trace.label} · ${sweep.label}`,
+        sweep: { label: sweep.label, index },
+      })))
+      : makeTraces(module.FS.readFile('/result.raw', { encoding: 'utf8' }))
     if (!traces.length) throw new Error('ngspice completed but produced no voltage or current vectors.')
+    const measurementOutput = parseMeasurementOutput(output, measurements, parameterSweep?.map((sweep) => sweep.label) ?? [])
     const result = {
       metadata: { ...metadata, completedAt: new Date().toISOString() },
       netlist: artifact.text,
       sourceMap: artifact.sourceMap,
       traces,
-      diagnostics: artifact.diagnostics,
+      diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics],
       analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc',
+      measurements: measurementOutput.results,
     }
     worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse)
   } catch (error) {
@@ -77,6 +89,6 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
 
 worker.addEventListener('message', (event: MessageEvent<EngineRequest>) => {
   const request = event.data
-  if (request.type === 'run') void run(request.requestId, request.artifact, request.metadata)
+  if (request.type === 'run') void run(request.requestId, request.artifact, request.metadata, request.parameterSweep, request.measurements)
   else if (request.type === 'dispose') worker.close()
 })

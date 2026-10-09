@@ -151,8 +151,8 @@ test('waveform CSV includes units, quoted labels, and synchronized mixed-unit sa
     { label: 'I(R"1)', unit: 'A', axisLabel: 'Time', axisUnit: 's', axis: Float64Array.of(0, 0.1), values: Float64Array.of(0.01, 0.02) },
   ]
   assert.equal(serializeWaveformCsv(traces), '"Time (s)","V(out) (V)","I(R""1) (A)"\n0,0,0.01\n0.1,5,0.02')
-  assert.throws(() => serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0) }]), /do not share the same analysis axis/)
-  assert.throws(() => serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0, 0.2) }]), /do not share the same analysis axis/)
+  assert.equal(serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0, 0.2) }]), '"V(out) Time (s)","V(out) (V)","I(R""1) Time (s)","I(R""1) (A)"\n0,0,0,0.01\n0.1,5,0.2,0.02')
+  assert.throws(() => serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0) }]), /mismatched axis and value lengths/)
   assert.equal(serializeWaveformCsv([{ ...traces[0], axisLabel: 'Operating point', axisUnit: '', axis: Float64Array.of(0), values: Float64Array.of(5) }]), '"Operating point","V(out) (V)"\n0,5')
 })
 

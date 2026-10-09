@@ -11,10 +11,11 @@ import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { componentPins, moveWireAnchors, projectPinLocations, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
-import { createStarterProject, kindNames, kindPrefix, validateProject, type Part, type PartKind, type PlotRange, type Project } from '../domain/project'
-import { createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
+import { createStarterProject, kindNames, kindPrefix, validateProject, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
+import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
+import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
-import { isEngineResponse, type SimulationResult, type Trace } from '../engine/contract'
+import { isEngineResponse, type MeasurementResult, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
@@ -78,6 +79,12 @@ function nearestAxisIndex(axis: Float64Array, value: number, start: number, end:
   return Math.abs(axis[low] - value) < Math.abs(axis[low - 1] - value) ? low : low - 1
 }
 
+function defaultSweepStop(part: Part): string {
+  const magnitude = componentMagnitude(part.value, part.kind)
+  const unit = part.kind === 'resistor' ? 'Ω' : part.kind === 'capacitor' ? 'F' : 'H'
+  return magnitude === null ? part.value : `${(magnitude * 2).toExponential(5)} ${unit}`
+}
+
 function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, voltage, current }: { part: Part; selected: boolean; onSelect: (id: string) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; tool: ToolMode; onProbe: (id: string) => void; voltage?: number; current?: number }) {
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
   const currentGlow = Math.min(1, Math.abs(current ?? 0) / 0.02)
@@ -98,7 +105,7 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, v
   </g>
 }
 
-function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange, sampleIndex, onSampleChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
+function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange, sampleIndex, onSampleChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; sampleIndex: number | null; onSampleChange: (index: number | null) => void; measurements: MeasurementResult[] }) {
   const shown = traces.filter((trace) => selectedIds.includes(trace.id))
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const width = 760, height = 112, left = 42, right = 748, top = 8, bottom = 91
@@ -119,11 +126,13 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
   const [cursorIndex, setCursorIndex] = useState<number | null>(sampleIndex)
   useEffect(() => setCursorIndex(sampleIndex), [traces, sampleIndex])
   const pathFor = (trace: Trace) => {
-    const stride = Math.max(1, Math.ceil((last - first + 1) / 900))
+    const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
+    const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
+    const stride = Math.max(1, Math.ceil((traceLast - traceFirst + 1) / 900))
     const [minValue, maxValue] = trace.unit === 'V' ? voltageRange : currentRange
     const range = maxValue - minValue
     const points: string[] = []
-    for (let index = first; index <= Math.min(last, trace.values.length - 1); index += stride) {
+    for (let index = traceFirst; index <= Math.min(traceLast, trace.values.length - 1); index += stride) {
       const x = left + ((trace.axis[index] - minTime) / (maxTime - minTime || 1)) * (right - left)
       const y = bottom - ((trace.values[index] - minValue) / range) * (bottom - top)
       points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
@@ -149,10 +158,11 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
       <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
     </svg>
     <div className="trace-toggles" aria-label="Available waveform traces">{traces.filter((trace) => selectedIds.includes(trace.id) || /^(?:v\(|i\()/i.test(trace.id)).map((trace, index) => <button key={trace.id} className={selectedIds.includes(trace.id) ? 'selected' : ''} onClick={() => onToggle(trace.id)}><span style={{ background: colors[index % colors.length] }}/>{trace.label}</button>)}</div>
-    {cursorIndex !== null && <div className="cursor-readout">{shown.map((trace) => <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</div>}
+    {cursorIndex !== null && <div className="cursor-readout">{shown.map((trace) => { const index = nearestAxisIndex(trace.axis, axis?.[cursorIndex] ?? 0, 0, Math.max(0, trace.axis.length - 1)); return <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span> })}</div>}
     {shown.some((trace) => trace.unit === 'A') && <div className="current-sign-note">Positive component current is from pin 1 to pin 2.</div>}
     {shown.length === 0 && <div className="stale-note">Choose a trace above or use Probe in the schematic.</div>}
     {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh the plot.</div>}
+    {measurements.length > 0 && <div className="measurement-results"><div className="form-section-title">MEASUREMENTS</div><table className="op-table"><thead><tr><th>Name</th><th>Operation</th><th>Value</th></tr></thead><tbody>{measurements.map((measurement) => <tr key={`${measurement.sweep?.index ?? 0}-${measurement.id}`}><td>{measurement.id}{measurement.sweep ? ` · ${measurement.sweep.label}` : ''}</td><td>{measurement.operation.toUpperCase()} {measurement.vector}</td><td>{measurement.value.toPrecision(7)} {measurement.unit}</td></tr>)}</tbody></table></div>}
   </div>
 }
 
@@ -237,6 +247,48 @@ function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, on
   </div>
 }
 
+function ParameterSweepEditor({ parts, sweeps, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
+  const eligible = parts.filter((part) => ['resistor', 'capacitor', 'inductor'].includes(part.kind))
+  const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
+  return <div className="form-section parameter-sweep-section">
+    <div className="form-section-title">PARAMETER STEPPING</div>
+    <p className="field-hint">Compare circuit results while changing one or two component values.</p>
+    {sweeps.map((sweep, index) => {
+      const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
+      const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
+      return <div className="parameter-sweep-card" key={`${sweep.component}-${index}`}>
+        <div className="parameter-sweep-heading"><strong>Parameter {index + 1}</strong><button type="button" aria-label={`Remove parameter ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
+        <label className="field-label">Component<select aria-label={`Parameter ${index + 1} component`} value={sweep.component} onChange={(event) => {
+          const nextPart = eligible.find((item) => item.ref === event.target.value)
+          if (!nextPart) return
+          const magnitude = componentMagnitude(nextPart.value, nextPart.kind)
+          const unit = nextPart.kind === 'resistor' ? 'Ω' : nextPart.kind === 'capacitor' ? 'F' : 'H'
+          onChange(index, { component: nextPart.ref, start: nextPart.value, stop: magnitude === null ? nextPart.value : `${(magnitude * 2).toExponential(5)} ${unit}` })
+        }}>{eligible.map((item) => <option key={item.id} value={item.ref} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && other.component.toLowerCase() === item.ref.toLowerCase())}>{item.ref} · {kindNames[item.kind]}</option>)}</select></label>
+        <div className="parameter-sweep-inputs"><label className="field-label">Start<input aria-label={`Parameter ${index + 1} start value`} value={sweep.start} onChange={(event) => onChange(index, { start: event.target.value })}/></label><label className="field-label">Stop<input aria-label={`Parameter ${index + 1} stop value`} value={sweep.stop} onChange={(event) => onChange(index, { stop: event.target.value })}/></label></div>
+        <label className="field-label">Number of values<input aria-label={`Parameter ${index + 1} number of values`} type="number" min="2" max={maxPoints} value={sweep.points} onChange={(event) => onChange(index, { points: Number(event.target.value) })}/></label>
+      </div>
+    })}
+    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= 2 || eligible.length <= sweeps.length || combinations * 2 > 10}>{sweeps.length ? 'Add a second parameter' : 'Add parameter stepping'}</button>
+    <div className="field-hint">{combinations} simulation case{combinations === 1 ? '' : 's'} selected · maximum 10 · each result is plotted as a separate trace.</div>
+  </div>
+}
+
+function TransientMeasurementEditor({ measurements, onAdd, onChange, onRemove }: { measurements: TransientMeasurement[]; onAdd: () => void; onChange: (index: number, patch: Partial<TransientMeasurement>) => void; onRemove: (index: number) => void }) {
+  return <div className="form-section measurement-editor">
+    <div className="form-section-title">TRANSIENT MEASUREMENTS</div>
+    <p className="field-hint">Calculate peak, minimum, average, or RMS values from a voltage or component current.</p>
+    {measurements.map((measurement, index) => <div className="measurement-card" key={`${measurement.id}-${index}`}>
+      <div className="parameter-sweep-heading"><strong>Measurement {index + 1}</strong><button type="button" aria-label={`Remove measurement ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
+      <label className="field-label">Name<input maxLength={24} value={measurement.id} onChange={(event) => onChange(index, { id: event.target.value })}/></label>
+      <label className="field-label">Calculate<select value={measurement.operation} onChange={(event) => onChange(index, { operation: event.target.value as TransientMeasurement['operation'] })}><option value="max">Maximum</option><option value="min">Minimum</option><option value="avg">Average</option><option value="rms">RMS</option></select></label>
+      <label className="field-label">Vector<input placeholder="V(out) or I(R1)" value={measurement.vector} onChange={(event) => onChange(index, { vector: event.target.value })}/></label>
+    </div>)}
+    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={measurements.length >= 12}>Add measurement</button>
+    {measurements.length > 0 && <div className="field-hint">Measurements are calculated for each parameter sweep case.</div>}
+  </div>
+}
+
 function Schematic({ project, selection, setSelection, setProject, tool, setTool, setNotice, beginEdit, endEdit, onProbe, simulationResult, sampleIndex, onSampleChange }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setProject: (fn: (current: Project) => Project) => void; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
   const svg = useRef<SVGSVGElement>(null)
   const drag = useRef<{ kind: 'part' | 'wire' | 'label'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][] } | null>(null)
@@ -250,8 +302,12 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
   const activeSample = transientAxis?.length ? Math.max(0, Math.min(transientAxis.length - 1, scrubIndex ?? transientAxis.length - 1)) : 0
   useEffect(() => { setScrubIndex(sampleIndex ?? (resultIsCurrent && transientAxis?.length ? transientAxis.length - 1 : null)) }, [simulationResult, sampleIndex])
   const resultValue = (id: string): number | undefined => {
-    const trace = simulationResult?.traces.find((item) => item.id.toLowerCase() === id.toLowerCase())
-    return trace?.values[activeSample]
+    const trace = simulationResult?.traces.find((item) => item.id.toLowerCase() === id.toLowerCase() || item.baseId?.toLowerCase() === id.toLowerCase())
+    if (!trace) return undefined
+    const primaryAxis = simulationResult?.traces[0]?.axis
+    const time = primaryAxis?.[activeSample] ?? trace.axis[activeSample] ?? 0
+    const index = trace.axis === primaryAxis ? activeSample : nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
+    return trace.values[index]
   }
   const voltageAtNode = (name: string): number | undefined => name === '0' ? 0 : resultValue(`v(${name})`)
   const componentSample = (part: Part) => {
@@ -586,9 +642,12 @@ export default function App() {
       : (() => { const part = projectRef.current.parts.find((item) => item.id === target.id); return part ? componentCurrentVector(part) : '' })()
     const traceId = rawName.toLowerCase()
     if (!simulationResult) { setNotice('Run the circuit first, then add voltage and current probes.'); return }
-    const trace = simulationResult.traces.find((item) => item.id === traceId)
+    const trace = simulationResult.traces.find((item) => item.id === traceId || item.baseId === traceId)
     if (!trace) { setNotice(`No ${target.kind === 'node' ? 'voltage' : 'current'} vector is available for ${target.kind === 'node' ? target.name : projectRef.current.parts.find((item) => item.id === target.id)?.ref ?? 'that component'}. Run again to refresh results.`); return }
-    setSelectedTraceIds((current) => current.includes(trace.id) ? current : [...current, trace.id])
+    const relatedIds = simulationResult.traces.filter((item) => item.id === traceId || item.baseId === traceId).map((item) => item.id)
+    const nextSelection = [...new Set([...selectedTraceIds, ...relatedIds])]
+    setSelectedTraceIds(nextSelection)
+    savePlotSettings((settings) => ({ ...settings, selectedTraceIds: nextSelection }))
     setAnalysisTab('waveforms')
     setNotice(target.kind === 'part' ? `Added ${trace.label} to the waveform plot. Positive current flows from pin 1 to pin 2.` : `Added ${trace.label} to the waveform plot.`)
   }
@@ -613,9 +672,13 @@ export default function App() {
     const artifact = createNetlistArtifact(snapshot)
     const invalid = artifact.diagnostics.find((diagnostic) => diagnostic.severity === 'error')
     if (invalid) { setRunState('error'); setNotice(invalid.message); return }
+    let parameterSweep
+    try { parameterSweep = prepareParameterSweep(snapshot) }
+    catch (error) { setRunState('error'); setNotice(error instanceof Error ? error.message : 'Could not prepare parameter sweep.'); return }
     setAnalysisTab('waveforms')
     setRunState('loading')
     setNotice('Loading ngspice WebAssembly')
+    const measurements = snapshot.simulation.transientMeasurements ?? []
     const requestId = crypto.randomUUID()
     const runId = crypto.randomUUID()
     const worker = new Worker(new URL('../engine/ngspice.worker.ts', import.meta.url), { type: 'module' })
@@ -631,11 +694,27 @@ export default function App() {
         setSampleIndex(response.result.analysis === 'tran' ? (response.result.traces[0]?.axis.length ?? 1) - 1 : null)
         const savedTraceIds = projectRef.current.plotSettings?.selectedTraceIds ?? []
         const restoredTraces = savedTraceIds.filter((id) => response.result.traces.some((trace) => trace.id === id))
-        const initialTraces = restoredTraces.length ? restoredTraces : response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.id)).slice(0, response.result.analysis === 'op' ? undefined : response.result.analysis === 'dc' ? undefined : 2).map((trace) => trace.id)
+        let initialTraces = restoredTraces
+        if (!initialTraces.length && parameterSweep.length) {
+          const groups = new Map<string, Trace[]>()
+          for (const trace of response.result.traces.filter((item) => item.unit === 'V' && /^v\(/i.test(item.baseId ?? item.id))) {
+            const key = trace.baseId ?? trace.id
+            groups.set(key, [...(groups.get(key) ?? []), trace])
+          }
+          const varying = [...groups.values()].sort((left, right) => {
+            const span = (traces: Trace[]) => {
+              const values = traces.map((trace) => trace.values.at(-1) ?? 0)
+              return Math.max(...values) - Math.min(...values)
+            }
+            return span(right) - span(left)
+          })[0]
+          initialTraces = varying?.map((trace) => trace.id) ?? []
+        }
+        if (!initialTraces.length) initialTraces = response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.baseId ?? trace.id)).slice(0, response.result.analysis === 'op' ? undefined : response.result.analysis === 'dc' ? undefined : 2).map((trace) => trace.id)
         setSelectedTraceIds(initialTraces)
         savePlotSettings((settings) => ({ ...settings, selectedTraceIds: initialTraces }))
         setRunState('idle')
-        setNotice(`Analysis complete · ${response.result.traces.length} result vectors`)
+        setNotice(parameterSweep.length ? `Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors` : `Analysis complete · ${response.result.traces.length} result vectors`)
         setAnalysisTab('waveforms')
         worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
@@ -653,7 +732,7 @@ export default function App() {
       if (activeWorkerRef.current === worker) activeWorkerRef.current = null
     }
     try {
-      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(artifact.text))
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${artifact.text}\n${JSON.stringify(parameterSweep)}`))
       if (activeWorkerRef.current !== worker) return
       const netlistHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
       worker.postMessage({
@@ -661,8 +740,10 @@ export default function App() {
         metadata: {
           runId, startedAt: new Date().toISOString(), engine: 'ngspice-wasm', engineVersion: '47',
           projectVersion: snapshot.version, netlistHash,
-          settings: { analysis: snapshot.simulation.analysis, stopTime: snapshot.simulation.stopTime, maxStep: snapshot.simulation.maxStep, acSweep: snapshot.simulation.acSweep ?? {}, sourceAcMagnitude: snapshot.simulation.sourceAcMagnitude ?? '1 V', projectUpdatedAt: snapshot.updatedAt },
+          settings: { analysis: snapshot.simulation.analysis, stopTime: snapshot.simulation.stopTime, maxStep: snapshot.simulation.maxStep, acSweep: snapshot.simulation.acSweep ?? {}, sourceAcMagnitude: snapshot.simulation.sourceAcMagnitude ?? '1 V', parameterSweep: parameterSweep.map((sweep) => sweep.label).join(' | '), projectUpdatedAt: snapshot.updatedAt },
         },
+        ...(parameterSweep.length ? { parameterSweep } : {}),
+        ...(measurements.length ? { measurements } : {}),
       })
     } catch (error) {
       worker.terminate()
@@ -679,6 +760,43 @@ export default function App() {
     setRunState('idle')
     setNotice('Simulation stopped. Any previous result is unchanged.')
   }
+  const updateParameterSweep = (index: number, patch: Partial<ParameterSweep>) => setProject((current) => {
+    const sweeps = current.simulation.parameterSweeps ?? []
+    const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, sweep) => total * sweep.points, 1)
+    const updated = sweeps.map((sweep, item) => item === index
+      ? { ...sweep, ...patch, ...(patch.points !== undefined ? { points: Math.max(2, Math.min(patch.points, Math.floor(10 / otherPoints))) } : {}) }
+      : sweep)
+    return { ...current, simulation: { ...current.simulation, parameterSweeps: updated } }
+  })
+  const addParameterSweep = () => {
+    const configured = project.simulation.parameterSweeps ?? []
+    if (configured.reduce((total, sweep) => total * sweep.points, 1) * 2 > 10) { setNotice('Reduce the number of values before adding another parameter. A sweep can run at most 10 cases.'); return }
+    const parts = project.parts.filter((part) => ['resistor', 'capacitor', 'inductor'].includes(part.kind) && !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase()))
+    const part = parts[0]
+    if (!part || configured.length >= 2) { setNotice('Parameter stepping supports up to two distinct resistors, capacitors, or inductors.'); return }
+    const sweep: ParameterSweep = { component: part.ref, start: part.value, stop: defaultSweepStop(part), points: 3 }
+    setProject((current) => ({ ...current, simulation: { ...current.simulation, parameterSweeps: [...(current.simulation.parameterSweeps ?? []), sweep] } }))
+  }
+  const removeParameterSweep = (index: number) => setProject((current) => {
+    const next = current.simulation.parameterSweeps?.filter((_, item) => item !== index) ?? []
+    const simulation = { ...current.simulation }
+    delete simulation.parameterSweeps
+    return { ...current, simulation: next.length ? { ...simulation, parameterSweeps: next } : simulation }
+  })
+  const updateMeasurement = (index: number, patch: Partial<TransientMeasurement>) => setProject((current) => ({ ...current, simulation: { ...current.simulation, transientMeasurements: (current.simulation.transientMeasurements ?? []).map((measurement, item) => item === index ? { ...measurement, ...patch } : measurement) } }))
+  const addMeasurement = () => setProject((current) => {
+    const measurements = current.simulation.transientMeasurements ?? []
+    if (measurements.length >= 12) return current
+    let suffix = measurements.length + 1
+    while (measurements.some((measurement) => measurement.id.toLowerCase() === `measure${suffix}`)) suffix++
+    return { ...current, simulation: { ...current.simulation, transientMeasurements: [...measurements, { id: `measure${suffix}`, operation: 'max', vector: 'V(vout)' }] } }
+  })
+  const removeMeasurement = (index: number) => setProject((current) => {
+    const measurements = current.simulation.transientMeasurements?.filter((_, item) => item !== index) ?? []
+    const simulation = { ...current.simulation }
+    delete simulation.transientMeasurements
+    return { ...current, simulation: measurements.length ? { ...simulation, transientMeasurements: measurements } : simulation }
+  })
   const resetProject = () => {
     if (!window.confirm('Start a new circuit? Unsaved changes in this tab will be lost.')) return
     const starter = createStarterProject()
@@ -727,7 +845,7 @@ export default function App() {
         <section className="analysis-panel">
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span><button className="subtle-icon" title="Panel options"><MoreHorizontal size={17}/></button></div></div>
           <div className="analysis-content">
-            {analysisTab === 'waveforms' ? simulationResult ? simulationResult.analysis === 'op' ? <OperatingPointView traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'ac' ? <AcPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.ac} onRangeChange={(range) => changePlotRange('ac', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'dc' ? <DcSweepPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.dc} onRangeChange={(range) => changePlotRange('dc', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.tran} onRangeChange={(range) => changePlotRange('tran', range)} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? `Running ${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'ac' ? 'AC sweep' : project.simulation.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your results will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the local ngspice WebAssembly engine.' : project.simulation.analysis === 'op' ? 'Run DC operating point to inspect solved node voltages and component currents.' : project.simulation.analysis === 'ac' ? 'Run an AC sweep to inspect frequency response magnitude and phase.' : project.simulation.analysis === 'dc' ? 'Sweep a voltage source to inspect how node voltages and currents change.' : 'Run transient analysis to inspect calculated voltages and currents. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
+            {analysisTab === 'waveforms' ? simulationResult ? simulationResult.analysis === 'op' ? <OperatingPointView traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'ac' ? <AcPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.ac} onRangeChange={(range) => changePlotRange('ac', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'dc' ? <DcSweepPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.dc} onRangeChange={(range) => changePlotRange('dc', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.tran} onRangeChange={(range) => changePlotRange('tran', range)} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt} measurements={simulationResult.measurements}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? `Running ${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'ac' ? 'AC sweep' : project.simulation.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your results will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the local ngspice WebAssembly engine.' : project.simulation.analysis === 'op' ? 'Run DC operating point to inspect solved node voltages and component currents.' : project.simulation.analysis === 'ac' ? 'Run an AC sweep to inspect frequency response magnitude and phase.' : project.simulation.analysis === 'dc' ? 'Sweep a voltage source to inspect how node voltages and currents change.' : 'Run transient analysis to inspect calculated voltages and currents. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
           </div>
           <div className="analysis-footer"><span><Gauge size={13}/> {project.simulation.analysis === 'op' ? 'DC operating point' : project.simulation.analysis === 'ac' ? `AC ${project.simulation.acSweep?.scale ?? 'dec'} sweep` : project.simulation.analysis === 'dc' ? `DC sweep ${project.simulation.dcSweep?.source ?? 'V1'}` : `${project.simulation.stopTime} total time`}</span><span><span className="shortcut">⌘</span> + Enter to run</span><span>Results are generated locally</span></div>
         </section>
@@ -752,6 +870,8 @@ export default function App() {
         </> : <>
           <div className="project-summary"><div className="summary-row"><span>Project</span><strong>{project.name}</strong></div><div className="summary-row"><span>Format</span><strong>ELSim JSON · v2</strong></div><div className="summary-row"><span>Sheets</span><strong>1</strong></div><div className="summary-row"><span>Components</span><strong>{project.parts.length}</strong></div></div>
           <div className="form-section"><div className="form-section-title">SIMULATION</div><label className="field-label">Analysis type<select value={project.simulation.analysis} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select></label>{project.simulation.analysis === 'tran' && <><label className="field-label">Stop time<input value={project.simulation.stopTime} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, stopTime: event.target.value } }))}/></label><label className="field-label">Maximum step<input value={project.simulation.maxStep} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, maxStep: event.target.value } }))}/></label></>}{project.simulation.analysis === 'ac' && <><label className="field-label">AC source magnitude<input value={project.simulation.sourceAcMagnitude ?? '1 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, sourceAcMagnitude: event.target.value } }))}/></label><label className="field-label">Sweep scale<select value={project.simulation.acSweep?.scale ?? 'dec'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), scale: event.target.value as 'dec' | 'oct' | 'lin' } } }))}><option value="dec">Log per decade</option><option value="oct">Log per octave</option><option value="lin">Linear</option></select></label><label className="field-label">Points per scale<input type="number" min="1" max="10000" value={project.simulation.acSweep?.points ?? 20} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), points: Number(event.target.value) } } }))}/></label><label className="field-label">Start frequency<input value={project.simulation.acSweep?.startFrequency ?? '10 Hz'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), startFrequency: event.target.value } } }))}/></label><label className="field-label">Stop frequency<input value={project.simulation.acSweep?.stopFrequency ?? '1 MHz'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), stopFrequency: event.target.value } } }))}/></label></>}{project.simulation.analysis === 'dc' && <><label className="field-label">Voltage source<select value={project.simulation.dcSweep?.source ?? 'V1'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), source: event.target.value } } }))}>{project.parts.filter((part) => part.kind === 'source').map((part) => <option key={part.id} value={part.ref}>{part.ref}</option>)}</select></label><label className="field-label">Start value<input value={project.simulation.dcSweep?.start ?? '0 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), start: event.target.value } } }))}/></label><label className="field-label">Stop value<input value={project.simulation.dcSweep?.stop ?? '5 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), stop: event.target.value } } }))}/></label><label className="field-label">Step<input value={project.simulation.dcSweep?.step ?? '0.1 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), step: event.target.value } } }))}/></label></>}</div>
+    <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
+    {project.simulation.analysis === 'tran' && <TransientMeasurementEditor measurements={project.simulation.transientMeasurements ?? []} onAdd={addMeasurement} onChange={updateMeasurement} onRemove={removeMeasurement}/>}
           <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : `${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'ac' ? 'AC frequency-domain' : 'Transient'} analysis runs locally in a Web Worker. Results are tied to the circuit revision.`}</p><button onClick={() => setNotice(engineAssetAvailable === false ? 'Build the pinned engine with tools/build-ngspice-wasm.sh; see engine/wasm/README.md.' : 'ngspice 47 · Emscripten WebAssembly · transient, DC operating-point, and AC analyses')}>Engine status <ArrowUp size={13}/></button></div>
         </>}
         <div className="inspector-links"><button onClick={startTour}><CircleHelp size={14}/> Help</button><button onClick={() => setNotice('Component library is original ELSim data.')}><Bookmark size={14}/> Library notes</button></div>

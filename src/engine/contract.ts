@@ -39,7 +39,11 @@ export type Trace = {
   axis: Float64Array
   values: Float64Array
   imaginaryValues?: Float64Array
+  baseId?: string
+  sweep?: { label: string; index: number }
 }
+
+export type MeasurementResult = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string; value: number; unit: 'V' | 'A'; sweep?: { label: string; index: number } }
 
 export type SimulationResult = {
   metadata: RunMetadata
@@ -48,6 +52,7 @@ export type SimulationResult = {
   traces: Trace[]
   diagnostics: SimulationDiagnostic[]
   analysis: 'tran' | 'op' | 'ac' | 'dc'
+  measurements: MeasurementResult[]
 }
 
 // Keep the editor independent of a specific ngspice-WASM build. Only this
@@ -60,7 +65,7 @@ export interface SimulationEngine {
 
 export type EngineRequest =
   | { type: 'initialize'; requestId: string }
-  | { type: 'run'; requestId: string; artifact: NetlistArtifact; metadata: Omit<RunMetadata, 'completedAt'> }
+  | { type: 'run'; requestId: string; artifact: NetlistArtifact; metadata: Omit<RunMetadata, 'completedAt'>; parameterSweep?: import('./sweep').ParameterSweepRun[]; measurements?: import('../domain/project').TransientMeasurement[] }
   | { type: 'cancel'; requestId: string; runId: string }
   | { type: 'dispose'; requestId: string }
 

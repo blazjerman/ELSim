@@ -1,0 +1,16 @@
+ELSim transient measurement regression
+V1 in 0 PULSE(0 5 0 1u 1u 5m 10m)
+R1 in out 1k
+C1 out 0 10u
+.tran 100u 10m
+.control
+set filetype=ascii
+run
+meas tran ELSIM_peak_0 MAX v(out)
+meas tran ELSIM_min_0 MIN v(out)
+meas tran ELSIM_average_0 AVG v(out)
+meas tran ELSIM_rms_0 RMS v(out)
+write /result.raw all
+quit
+.endc
+.end

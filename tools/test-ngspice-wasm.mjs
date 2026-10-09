@@ -10,10 +10,10 @@ const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
 const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op']
 
-function runInWorker(deckPath, readRaw = false) {
+function runInWorker(deckPath, readRaw = false, rawPaths) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('../tests/wasm/ngspice-case-worker.mjs', import.meta.url), {
-      workerData: { moduleUrl, deckPath, readRaw },
+      workerData: { moduleUrl, deckPath, readRaw, rawPaths },
     })
     const timeout = setTimeout(() => {
       worker.terminate()
@@ -33,6 +33,18 @@ function runInWorker(deckPath, readRaw = false) {
 
 function numericRows(output) {
   return output.split(/\r?\n/).filter((line) => /^\s*\d+(?:\s+[-+\d.eE]+)+\s*$/.test(line))
+}
+
+function realRawVector(raw, name) {
+  const variableSection = raw.split(/^Variables:\s*$/mi)[1]?.split(/^Values:\s*$/mi)[0] ?? ''
+  const variables = [...variableSection.matchAll(/^\s*(\d+)\s+(\S+)\s+(\S+)/gm)]
+  const variableIndex = variables.findIndex(([, , variable]) => variable.toLowerCase() === name.toLowerCase())
+  assert.notEqual(variableIndex, -1, `raw data is missing ${name}`)
+  const variableCount = variables.length
+  const pointCount = Number(raw.match(/^No\. Points:\s*(\d+)/mi)?.[1])
+  const valuesSection = raw.split(/^Values:\s*$/mi)[1] ?? ''
+  const rows = valuesSection.split(/\r?\n/).filter((line) => line.trim())
+  return Array.from({ length: pointCount }, (_, point) => Number(rows[point * variableCount + variableIndex].trim().split(/\s+/).at(-1)))
 }
 
 for (const fixture of fixtures) {
@@ -110,5 +122,28 @@ assert.match(ledResult.raw, /^\s*\d+\s+i\(@d1\[id\]\)\s+current$/mi)
 assert.match(ledResult.raw, /^\s*\d+\s+v\(led\)\s+voltage$/mi)
 assert.match(ledResult.raw, /1\.9400\d+e-02/i, 'LED transient should reach a forward current above 10 mA')
 process.stdout.write('PASS led-transient-vectors\n')
+
+const parameterSweepPath = path.join(root, 'engine/wasm/fixtures', 'parameter-sweep.cir')
+const parameterSweepResult = await runInWorker(parameterSweepPath, false, ['/result-0.raw', '/result-1.raw', '/result-2.raw'])
+assert.equal(parameterSweepResult.status, 0, `parameter-sweep: ngspice exited with a nonzero status: ${parameterSweepResult.stderr}`)
+assert.equal(parameterSweepResult.rawFiles.length, 3)
+for (const raw of parameterSweepResult.rawFiles) {
+  assert.match(raw, /^Plotname:\s*Transient Analysis$/mi)
+  assert.match(raw, /^\s*\d+\s+v\(out\)\s+voltage$/mi)
+  assert.match(raw, /^\s*\d+\s+i\(@r1\[i\]\)\s+current$/mi)
+}
+assert.notEqual(parameterSweepResult.rawFiles[0], parameterSweepResult.rawFiles[1], 'each stepped value must produce its own distinct dataset')
+const outputMaxima = parameterSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(out)')))
+assert.ok(outputMaxima[0] > outputMaxima[1] && outputMaxima[1] > outputMaxima[2], 'increasing R must reduce the RC output peak')
+process.stdout.write('PASS parameter-sweep-transient-vectors\n')
+
+const measurementPath = path.join(root, 'engine/wasm/fixtures', 'measurement-transient.cir')
+const measurementResult = await runInWorker(measurementPath)
+assert.equal(measurementResult.status, 0, `measurement-transient: ngspice exited with a nonzero status: ${measurementResult.stderr}`)
+for (const name of ['peak_0', 'min_0', 'average_0', 'rms_0']) assert.match(measurementResult.stdout, new RegExp(`elsim_${name}\\s*=\\s*[-+\\d.eE]+`, 'i'), `missing transient measurement ${name}`)
+const measured = Object.fromEntries([...measurementResult.stdout.matchAll(/elsim_(peak|min|average|rms)_0\s*=\s*([-+\d.eE]+)/gi)].map((match) => [match[1].toLowerCase(), Number(match[2])]))
+assert.ok(measured.peak > measured.average && measured.average > measured.min)
+assert.ok(measured.rms > 0 && measured.rms < measured.peak)
+process.stdout.write('PASS transient-measurements\n')
 
 if (!nativeNgspice) process.stdout.write('Native parity comparison skipped; pass the pinned native ngspice executable as argument 2.\n')
