@@ -1,0 +1,12 @@
+ELSim default LED transient regression
+V1 anode 0 PULSE(0 5 0 1u 1u 5m 10m)
+R1 anode led 220
+D1 led 0 DDEFAULT
+.model DDEFAULT D
+.save all @d1[id] @r1[i]
+.control
+set filetype=ascii
+tran 100u 10m
+write /result.raw all
+.endc
+.end

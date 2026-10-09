@@ -102,4 +102,13 @@ assert.match(dcResult.raw, /^\s*\d+\s+v\(v-sweep\)\s+voltage$/mi)
 assert.match(dcResult.raw, /5\.000000000000000e-01/)
 process.stdout.write('PASS dc-sweep-raw-vectors\n')
 
+const ledPath = path.join(root, 'engine/wasm/fixtures', 'led-transient.cir')
+const ledResult = await runInWorker(ledPath, true)
+assert.equal(ledResult.status, 0, `led-transient: ngspice exited with a nonzero status: ${ledResult.stderr}`)
+assert.match(ledResult.raw, /^Plotname:\s*Transient Analysis$/mi)
+assert.match(ledResult.raw, /^\s*\d+\s+i\(@d1\[id\]\)\s+current$/mi)
+assert.match(ledResult.raw, /^\s*\d+\s+v\(led\)\s+voltage$/mi)
+assert.match(ledResult.raw, /1\.9400\d+e-02/i, 'LED transient should reach a forward current above 10 mA')
+process.stdout.write('PASS led-transient-vectors\n')
+
 if (!nativeNgspice) process.stdout.write('Native parity comparison skipped; pass the pinned native ngspice executable as argument 2.\n')

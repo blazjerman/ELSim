@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { isTraceVariable, parseAsciiRawFile } from './raw'
+import { addResultControl } from './resultControl'
 import type { EngineRequest, EngineResponse, NetlistArtifact, NetlistSource, RunMetadata, SimulationDiagnostic, Trace } from './contract'
 
 const worker = self as DedicatedWorkerGlobalScope
@@ -12,15 +13,6 @@ function diagnosticForLine(message: string, artifact: NetlistArtifact): Simulati
   return { severity: 'error', message: message.slice(0, 500), ...(line ? { line: Number(line) } : {}), ...(source ? { sourceId: source.sourceId } : {}) }
 }
 
-function addResultControl(netlist: string): string {
-  const rows = netlist.trimEnd().split(/\r?\n/)
-  const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
-  if (endLine === -1) throw new Error('Generated netlist is missing its .end directive.')
-  rows.splice(endLine, 0, '.save all')
-  rows.splice(endLine + 1, 1, '.control', 'set filetype=ascii', 'run', 'write /result.raw all', 'quit', '.endc', '.end')
-  return rows.join('\n') + '\n'
-}
-
 function makeTraces(rawText: string): Trace[] {
   const parsed = parseAsciiRawFile(rawText)
   const axis = parsed.axis
@@ -29,7 +21,7 @@ function makeTraces(rawText: string): Trace[] {
     const lowercaseName = variable.name.toLowerCase()
     const current = lowercaseName.startsWith('i(')
     const inner = variable.name.match(/^[vi]\((.*)\)$/i)![1]
-    const component = inner.match(/^@(.*)\[i\]$/i)?.[1]
+    const component = inner.match(/^@(.*)\[(?:i|id)\]$/i)?.[1]
     return {
       id: lowercaseName,
       label: `${current ? 'I' : 'V'}(${component ?? inner})`,

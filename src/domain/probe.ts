@@ -1,8 +1,13 @@
 import { analyzeConnectivity } from './connectivity'
 import { wireNetAt, type Point } from './geometry'
-import type { Project } from './project'
+import type { Part, Project } from './project'
 
 export type ProbeTarget = { kind: 'node'; name: string } | { kind: 'part'; id: string }
+
+export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref'>): string {
+  const currentName = part.kind === 'diode' || part.kind === 'led' ? 'id' : 'i'
+  return `i(@${part.ref}[${currentName}])`
+}
 
 export function resolveProbeTarget(project: Project, point: Point, tolerance = 12): ProbeTarget | null {
   const wire = wireNetAt(project, point, tolerance)

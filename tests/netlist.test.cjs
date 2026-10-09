@@ -17,6 +17,16 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
 })
 
+test('LED instances netlist as diode devices and retain D reference designators', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-led1', kind: 'led', ref: 'D1', value: 'Default LED', x: 700, y: 400, rotation: 0 })
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^D1 n\d+ n\d+ DDEFAULT$/m)
+  assert.match(artifact.text, /^\.model DDEFAULT D$/m)
+  assert.equal(artifact.sourceMap.find((item) => item.sourceId === 'p-led1')?.role, 'component')
+})
+
 test('DC operating point emits steady DC source values and no transient directive', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'op'
