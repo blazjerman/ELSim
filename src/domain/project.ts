@@ -34,10 +34,21 @@ export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg
 export type InitialCondition = { node: string; voltage: string }
 export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
 export type SymbolAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
+export type ProjectSheet = {
+  id: string
+  name: string
+  parentSheetId: string | null
+  /** Snapshot of the sheet scene. The root sheet mirrors the legacy top-level fields. */
+  parts: Part[]
+  wires: Wire[]
+  junctions: { x: number; y: number }[]
+  netLabels: NetLabel[]
+  view: { zoom: number; panX: number; panY: number }
+}
 
 export type Project = {
   format: 'elsim-project'
-  version: 2
+  version: 3
   name: string
   updatedAt: string
   parts: Part[]
@@ -49,11 +60,13 @@ export type Project = {
   modelAssets?: ModelLibraryAsset[]
   symbolAssets?: SymbolAsset[]
   simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
+  rootSheetId: string
+  sheets: ProjectSheet[]
 }
 
 const starter: Project = {
   format: 'elsim-project',
-  version: 2,
+  version: 3,
   name: 'RC step response',
   updatedAt: new Date().toISOString(),
   parts: [
@@ -75,10 +88,29 @@ const starter: Project = {
   view: { zoom: 1, panX: 0, panY: 0 },
   plotSettings: { selectedTraceIds: [], ranges: {} },
   simulation: { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
+  rootSheetId: 'sheet-main',
+  sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: [], wires: [], junctions: [], netLabels: [], view: { zoom: 1, panX: 0, panY: 0 } }],
+}
+
+function syncRootSheet(project: Project): Project {
+  const sheets = project.sheets ?? []
+  const root = sheets.find((sheet) => sheet.id === project.rootSheetId)
+  const scene = { parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view }
+  if (!root) return { ...project, rootSheetId: 'sheet-main', sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, ...scene }] }
+  return { ...project, sheets: sheets.map((sheet) => sheet.id === root.id ? { ...sheet, ...scene } : sheet) }
+}
+
+function migrateV2(input: Record<string, unknown>): Project {
+  const project = { ...input, version: 3 } as unknown as Project
+  project.rootSheetId = 'sheet-main'
+  project.sheets = [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view }]
+  return project
 }
 
 export function createStarterProject(): Project {
-  return structuredClone(starter)
+  const project = structuredClone(starter)
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view }
+  return project
 }
 
 export function createLedExampleProject(): Project {
@@ -105,7 +137,7 @@ function migrateV1(input: Record<string, unknown>): Project {
     })
   }
   return {
-    format: 'elsim-project', version: 2,
+    format: 'elsim-project', version: 3,
     name: typeof input.name === 'string' ? input.name : 'Imported project',
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
     parts: oldParts.map(({ nodes: _nodes, ...part }) => part),
@@ -113,6 +145,7 @@ function migrateV1(input: Record<string, unknown>): Project {
     junctions: [], netLabels,
     view: input.view as Project['view'] ?? { zoom: 1, panX: 0, panY: 0 },
     simulation: input.simulation as Project['simulation'] ?? { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
+    rootSheetId: 'sheet-main', sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: [], wires: [], junctions: [], netLabels: [], view: { zoom: 1, panX: 0, panY: 0 } }],
   }
 }
 
@@ -121,8 +154,9 @@ export function validateProject(input: unknown): Project {
   const data = input as Record<string, unknown>
   if (data.format !== 'elsim-project') throw new Error('This file is not an ELSim project.')
   if (data.version === 1 && Array.isArray(data.parts) && Array.isArray(data.wires)) return validateProject(migrateV1(data))
-  if (data.version !== 2 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
-    throw new Error('This project format is not supported. Expected ELSim project version 2.')
+  if (data.version === 2 && Array.isArray(data.parts) && Array.isArray(data.wires)) return validateProject(migrateV2(data))
+  if (data.version !== 3 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
+    throw new Error('This project format is not supported. Expected ELSim project version 3.')
   }
   const allowed = new Set<PartKind>(['source', 'resistor', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'npn', 'pnp', 'subcircuit'])
   const refs = new Set<string>()
@@ -297,7 +331,39 @@ export function validateProject(input: unknown): Project {
   } else {
     data.plotSettings = { selectedTraceIds: [], ranges: {} }
   }
-  return data as unknown as Project
+  if (typeof data.rootSheetId !== 'string' || !data.rootSheetId || !Array.isArray(data.sheets) || data.sheets.length < 1 || data.sheets.length > 64) throw new Error('Project sheets are missing or malformed.')
+  const sheets = data.sheets as ProjectSheet[]
+  const sheetIds = new Set<string>()
+  const sheetPartIds = new Set<string>()
+  const siblingNames = new Map<string, Set<string>>()
+  for (const sheet of sheets) {
+    if (!sheet || typeof sheet.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(sheet.id) || sheetIds.has(sheet.id) || typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 80 || (sheet.parentSheetId !== null && typeof sheet.parentSheetId !== 'string') || !Array.isArray(sheet.parts) || !Array.isArray(sheet.wires) || !Array.isArray(sheet.junctions) || !Array.isArray(sheet.netLabels) || !sheet.view || !Number.isFinite(sheet.view.zoom) || sheet.view.zoom <= 0 || !Number.isFinite(sheet.view.panX) || !Number.isFinite(sheet.view.panY)) throw new Error('Project contains a malformed sheet.')
+    sheetIds.add(sheet.id)
+    for (const part of sheet.parts) {
+      if (!part || typeof part.id !== 'string' || !part.id || sheetPartIds.has(part.id)) throw new Error('Project sheet component IDs must be unique across the hierarchy.')
+      sheetPartIds.add(part.id)
+    }
+    const siblings = siblingNames.get(sheet.parentSheetId ?? '') ?? new Set<string>()
+    const key = sheet.name.trim().toLowerCase()
+    if (siblings.has(key)) throw new Error(`Sheet name ${sheet.name.trim()} is already used in this hierarchy.`)
+    siblings.add(key)
+    siblingNames.set(sheet.parentSheetId ?? '', siblings)
+    if (sheet.parts.length > 10000 || sheet.wires.length > 20000 || sheet.netLabels.length > 20000 || sheet.junctions.length > 20000) throw new Error(`Sheet ${sheet.name} exceeds the document size limit.`)
+  }
+  const root = sheets.find((sheet) => sheet.id === data.rootSheetId)
+  if (!root || root.parentSheetId !== null) throw new Error('Project root sheet is missing or has a parent.')
+  if (root.parts.length !== (data.parts as Part[]).length || root.parts.some((part, index) => part.id !== (data.parts as Part[])[index].id) || JSON.stringify(root.wires) !== JSON.stringify(data.wires) || JSON.stringify(root.junctions) !== JSON.stringify(data.junctions) || JSON.stringify(root.netLabels) !== JSON.stringify(data.netLabels)) throw new Error('The root sheet does not match the active circuit scene.')
+  for (const sheet of sheets) if (sheet.parentSheetId !== null && !sheetIds.has(sheet.parentSheetId)) throw new Error(`Sheet ${sheet.name} refers to a missing parent sheet.`)
+  for (const sheet of sheets) {
+    const visited = new Set<string>([sheet.id])
+    let parentId = sheet.parentSheetId
+    while (parentId !== null) {
+      if (visited.has(parentId)) throw new Error('Project sheet hierarchy contains a cycle.')
+      visited.add(parentId)
+      parentId = sheets.find((candidate) => candidate.id === parentId)?.parentSheetId ?? null
+    }
+  }
+  return syncRootSheet(data as unknown as Project)
 }
 
 export const kindNames: Record<PartKind, string> = {

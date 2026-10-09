@@ -574,7 +574,7 @@ function Schematic({ project, selection, setSelection, setProject, setView, spac
 export default function App() {
   const [project, setProjectState] = useState(() => {
     try {
-      const saved = localStorage.getItem('elsim:project:v2') ?? localStorage.getItem('elsim:project:v1')
+      const saved = localStorage.getItem('elsim:project:v3') ?? localStorage.getItem('elsim:project:v2') ?? localStorage.getItem('elsim:project:v1')
       return saved ? validateProject(JSON.parse(saved)) : createStarterProject()
     } catch { return createStarterProject() }
   })
@@ -654,7 +654,8 @@ export default function App() {
   }
   useEffect(() => {
     try {
-      localStorage.setItem('elsim:project:v2', JSON.stringify(project))
+      localStorage.setItem('elsim:project:v3', JSON.stringify(project))
+      localStorage.removeItem('elsim:project:v2')
       localStorage.removeItem('elsim:project:v1')
     }
     catch { setNotice('This browser could not save the project locally. Use Save to download a copy.') }
@@ -1218,7 +1219,7 @@ export default function App() {
       </aside>
 
       <main className="editor-column">
-        <div className="sheet-tabs"><button className="sheet-tab active"><span className="sheet-dot"/> Main circuit <MoreHorizontal size={15}/></button><button className="add-sheet" onClick={() => setNotice('Hierarchical sheets are planned for a later milestone.')}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet settings"><SlidersHorizontal size={15}/></button></div>
+        <div className="sheet-tabs"><button className="sheet-tab active"><span className="sheet-dot"/> Main circuit <MoreHorizontal size={15}/></button><button className="add-sheet" onClick={() => setNotice('The project format now supports hierarchical sheet metadata. Child-sheet editing and simulation are the next hierarchy milestone.')}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet settings"><SlidersHorizontal size={15}/></button></div>
         <Schematic project={project} selection={selection} setSelection={setSelection} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button>}</div></div>

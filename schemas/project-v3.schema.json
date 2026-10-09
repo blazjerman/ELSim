@@ -1,0 +1,721 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsim.dev/schemas/project-v3.schema.json",
+  "title": "ELSim project v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "name",
+    "updatedAt",
+    "parts",
+    "wires",
+    "junctions",
+    "netLabels",
+    "view",
+    "simulation",
+    "rootSheetId",
+    "sheets"
+  ],
+  "properties": {
+    "format": {
+      "const": "elsim-project"
+    },
+    "version": {
+      "const": 3
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "parts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/part"
+      }
+    },
+    "wires": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/wire"
+      }
+    },
+    "junctions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/point"
+      }
+    },
+    "netLabels": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/netLabel"
+      }
+    },
+    "view": {
+      "$ref": "#/$defs/view"
+    },
+    "simulation": {
+      "$ref": "#/$defs/simulation"
+    },
+    "plotSettings": {
+      "$ref": "#/$defs/plotSettings"
+    },
+    "modelAssets": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/modelAsset"
+      }
+    },
+    "symbolAssets": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/symbolAsset"
+      }
+    },
+    "rootSheetId": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    },
+    "sheets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/sheet"
+      }
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "ref",
+        "value",
+        "x",
+        "y",
+        "rotation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "source",
+            "resistor",
+            "capacitor",
+            "ground",
+            "inductor",
+            "diode",
+            "led",
+            "switch",
+            "vcvs",
+            "vccs",
+            "npn",
+            "pnp",
+            "subcircuit"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "value": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "rotation": {
+          "enum": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "flipX": {
+          "type": "boolean",
+          "default": false
+        },
+        "modelName": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.$]*$"
+        },
+        "modelPins": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[0-9]+|[A-Za-z_][A-Za-z0-9_.$]*)$"
+          }
+        },
+        "modelParameters": {
+          "type": "object",
+          "maxProperties": 32,
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^\\{?[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:meg|[tgkmunpf])?\\}?$"
+          }
+        },
+        "deviceModel": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*$"
+        },
+        "symbolAssetId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "symbolPinOffsets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "subcircuit"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "modelName",
+              "modelPins"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "symbolAssetId"
+            ]
+          },
+          "then": {
+            "required": [
+              "symbolPinOffsets"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "symbolPinOffsets"
+            ]
+          },
+          "then": {
+            "required": [
+              "symbolAssetId"
+            ]
+          }
+        }
+      ]
+    },
+    "modelAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "filename",
+        "sha256",
+        "content",
+        "licenseStatus",
+        "importedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\\\\\u0000-\\u001f]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 4194304
+        },
+        "licenseStatus": {
+          "const": "unknown"
+        },
+        "importedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "symbolAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "filename",
+        "sha256",
+        "content",
+        "licenseStatus",
+        "importedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\\\\\u0000-\\u001f]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 1048576
+        },
+        "licenseStatus": {
+          "const": "unknown"
+        },
+        "importedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "wire": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "points"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    "netLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "x",
+        "y"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^(0|[A-Za-z_][A-Za-z0-9_.$]*)$"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "visible": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zoom",
+        "panX",
+        "panY"
+      ],
+      "properties": {
+        "zoom": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "panX": {
+          "type": "number"
+        },
+        "panY": {
+          "type": "number"
+        }
+      }
+    },
+    "plotSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectedTraceIds",
+        "ranges"
+      ],
+      "properties": {
+        "selectedTraceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ranges": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tran": {
+              "$ref": "#/$defs/plotRange"
+            },
+            "ac": {
+              "$ref": "#/$defs/plotRange"
+            },
+            "dc": {
+              "$ref": "#/$defs/plotRange"
+            }
+          }
+        }
+      }
+    },
+    "plotRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "maximum": 1
+        }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analysis",
+        "stopTime",
+        "maxStep"
+      ],
+      "properties": {
+        "analysis": {
+          "enum": [
+            "tran",
+            "op",
+            "ac",
+            "dc"
+          ]
+        },
+        "stopTime": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxStep": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceAcMagnitude": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dcSweep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "start",
+            "stop",
+            "step"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "minLength": 1
+            },
+            "start": {
+              "type": "string",
+              "minLength": 1
+            },
+            "stop": {
+              "type": "string",
+              "minLength": 1
+            },
+            "step": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "parameterSweeps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "component",
+              "start",
+              "stop",
+              "points"
+            ],
+            "properties": {
+              "component": {
+                "type": "string",
+                "minLength": 1
+              },
+              "start": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stop": {
+                "type": "string",
+                "minLength": 1
+              },
+              "points": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 10
+              }
+            }
+          }
+        },
+        "transientMeasurements": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "operation",
+              "vector"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$"
+              },
+              "operation": {
+                "enum": [
+                  "max",
+                  "min",
+                  "avg",
+                  "rms"
+                ]
+              },
+              "vector": {
+                "type": "string",
+                "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$"
+              }
+            }
+          }
+        },
+        "initialConditions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "node",
+              "voltage"
+            ],
+            "properties": {
+              "node": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.$]*$"
+              },
+              "voltage": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "skipInitialOperatingPoint": {
+          "type": "boolean"
+        },
+        "acSweep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scale",
+            "points",
+            "startFrequency",
+            "stopFrequency"
+          ],
+          "properties": {
+            "scale": {
+              "enum": [
+                "dec",
+                "oct",
+                "lin"
+              ]
+            },
+            "points": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "startFrequency": {
+              "type": "string",
+              "minLength": 1
+            },
+            "stopFrequency": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "sheet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "parentSheetId",
+        "parts",
+        "wires",
+        "junctions",
+        "netLabels",
+        "view"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "parentSheetId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parts": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/part"
+          }
+        },
+        "wires": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {
+            "$ref": "#/$defs/wire"
+          }
+        },
+        "junctions": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {
+            "$ref": "#/$defs/point"
+          }
+        },
+        "netLabels": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {
+            "$ref": "#/$defs/netLabel"
+          }
+        },
+        "view": {
+          "$ref": "#/$defs/view"
+        }
+      }
+    }
+  }
+}

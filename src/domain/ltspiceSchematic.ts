@@ -177,9 +177,13 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   const project = createStarterProject()
   project.name = filename.replace(/\\/g, '/').split('/').pop()?.replace(/\.asc$/i, '') || 'Imported LTspice schematic'
   project.parts = []
+  project.sheets[0].parts = project.parts
   project.wires = wires
+  project.sheets[0].wires = project.wires
   project.junctions = []
+  project.sheets[0].junctions = project.junctions
   project.netLabels = []
+  project.sheets[0].netLabels = project.netLabels
   project.modelAssets = [...(modelAssets ?? [])]
   project.simulation.parameterSweeps = undefined
   project.simulation.transientMeasurements = undefined
@@ -239,6 +243,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     project.parts = project.parts.map((part) => ({ ...part, x: part.x + dx, y: part.y + dy }))
     project.wires = project.wires.map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) }))
     project.netLabels = project.netLabels.map((label) => ({ ...label, x: label.x + dx, y: label.y + dy }))
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view }
     const width = maxX - minX, height = maxY - minY
     project.view = { zoom: Math.max(0.25, Math.min(1, 700 / Math.max(width, 1), 540 / Math.max(height, 1))), panX: 0, panY: 0 }
   }
