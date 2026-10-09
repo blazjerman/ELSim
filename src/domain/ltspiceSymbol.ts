@@ -14,6 +14,7 @@ export type ImportedSymbol = {
   prefix?: string
   value?: string
   description?: string
+  attributes: Record<string, string>
   primitives: SymbolPrimitive[]
   pins: SymbolPin[]
   warnings: string[]
@@ -34,7 +35,7 @@ export function parseLtspiceSymbol(text: string, filename = 'Imported symbol.asy
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/)
   if (lines.length > MAX_RECORDS) throw new Error(`${filename} contains too many records.`)
   const name = filename.replace(/\\/g, '/').split('/').pop()?.replace(/\.asy$/i, '').trim() || 'Imported symbol'
-  const result: ImportedSymbol = { name, primitives: [], pins: [], warnings: [] }
+  const result: ImportedSymbol = { name, attributes: {}, primitives: [], pins: [], warnings: [] }
   let pin: Partial<SymbolPin> | undefined
   const seenOrders = new Set<number>()
   const finishPin = (line: number) => {
@@ -60,6 +61,7 @@ export function parseLtspiceSymbol(text: string, filename = 'Imported symbol.asy
         if (!pin || tokens.length < 2) throw new Error('PINATTR must follow a PIN and include a value.')
         const attribute = tokens[0].toLowerCase()
         const value = tokens.slice(1).join(' ')
+        result.attributes[attribute] = value
         if (attribute === 'pinname') pin.name = value
         else if (attribute === 'spiceorder') {
           const order = Number(value)
@@ -83,7 +85,7 @@ export function parseLtspiceSymbol(text: string, filename = 'Imported symbol.asy
         else if (attribute === 'value') result.value = value
         else if (attribute === 'description') result.description = value
       } else if (upper === 'symboltype') result.symbolType = tokens.join(' ')
-      else if (upper !== 'version') result.warnings.push(`Line ${lineNo}: unsupported .asy record ${command} was skipped.`)
+      else if (upper !== 'VERSION') result.warnings.push(`Line ${lineNo}: unsupported .asy record ${command} was skipped.`)
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'invalid record'
       throw reason.startsWith('.asy line') ? error : new Error(`.asy line ${lineNo}: ${reason}`)

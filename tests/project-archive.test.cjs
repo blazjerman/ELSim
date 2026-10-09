@@ -72,7 +72,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   await assert.rejects(verifyModelAssetHashes([{ ...restored.symbolAssets[0], content: `${symbolContent}\\n` }]), /does not match/)
   const mismatch = structuredClone(restored)
   mismatch.parts.at(-1).symbolPinOffsets[0] = [0, 0]
-  assert.throws(() => validateProject(mismatch), /symbol pin order does not match/)
+  assert.throws(() => validateProject(mismatch), /symbol pin order or coordinates do not match/)
   const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v2.schema.json'), 'utf8'))
   assert.equal(schema.properties.symbolAssets.maxItems, 32)
   assert.ok(schema.$defs.part.properties.symbolPinOffsets)

@@ -129,8 +129,8 @@ export function validateProject(input: unknown): Project {
     refs.add(candidate.ref.toLowerCase())
     if ((candidate.kind === 'npn' || candidate.kind === 'pnp') && (!/^[1-9]\d{0,3}$/.test(candidate.value) || Number(candidate.value) > 1000)) throw new Error(`${candidate.ref} forward beta must be an integer from 1 to 1000.`)
     if (candidate.kind === 'subcircuit' && (typeof candidate.modelName !== 'string' || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(candidate.modelName) || !Array.isArray(candidate.modelPins) || candidate.modelPins.length < 1 || candidate.modelPins.length > 64 || candidate.modelPins.some((pin) => typeof pin !== 'string' || !/^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(pin)))) throw new Error(`${candidate.ref} has malformed subcircuit model or ordered pins.`)
-    if (candidate.symbolAssetId !== undefined && (candidate.kind !== 'subcircuit' || typeof candidate.symbolAssetId !== 'string' || !candidate.symbolAssetId)) throw new Error(`${candidate.ref} has a malformed imported symbol reference.`)
-    if (candidate.symbolPinOffsets !== undefined && (candidate.kind !== 'subcircuit' || !candidate.symbolAssetId || !Array.isArray(candidate.symbolPinOffsets) || candidate.symbolPinOffsets.length < 1 || candidate.symbolPinOffsets.length > 64 || candidate.symbolPinOffsets.some((point) => !Array.isArray(point) || point.length !== 2 || !point.every((coordinate) => Number.isFinite(coordinate) && Math.abs(coordinate) <= 100000)))) throw new Error(`${candidate.ref} has malformed imported symbol pin coordinates.`)
+    if (candidate.symbolAssetId !== undefined && (typeof candidate.symbolAssetId !== 'string' || !candidate.symbolAssetId)) throw new Error(`${candidate.ref} has a malformed imported symbol reference.`)
+    if (candidate.symbolPinOffsets !== undefined && (!candidate.symbolAssetId || !Array.isArray(candidate.symbolPinOffsets) || candidate.symbolPinOffsets.length < 1 || candidate.symbolPinOffsets.length > 64 || candidate.symbolPinOffsets.some((point) => !Array.isArray(point) || point.length !== 2 || !point.every((coordinate) => Number.isFinite(coordinate) && Math.abs(coordinate) <= 100000)))) throw new Error(`${candidate.ref} has malformed imported symbol pin coordinates.`)
   }
   const wireIds = new Set<string>()
   for (const wire of data.wires as Wire[]) {
@@ -190,6 +190,13 @@ export function validateProject(input: unknown): Project {
   const importedDefinitions = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits) ?? []
   const importedDeviceModels = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).models) ?? []
   for (const part of data.parts as Part[]) {
+    if (part.symbolAssetId) {
+      const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
+      if (!symbolAsset) throw new Error(`${part.ref} refers to a missing imported symbol.`)
+      const symbol = parseLtspiceSymbol(symbolAsset.content, symbolAsset.filename)
+      const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, resistor: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, npn: 3, pnp: 3 } as const)[part.kind]
+      if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
+    }
     if (part.kind === 'subcircuit') {
       const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
       if (!definition) throw new Error(`${part.ref} refers to missing imported subcircuit ${part.modelName}.`)
@@ -201,10 +208,9 @@ export function validateProject(input: unknown): Project {
         }
       }
       if (part.symbolAssetId) {
-        const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
-        if (!symbolAsset) throw new Error(`${part.ref} refers to a missing imported symbol.`)
+        const symbolAsset = (data.symbolAssets as SymbolAsset[]).find((asset) => asset.id === part.symbolAssetId)!
         const symbol = parseLtspiceSymbol(symbolAsset.content, symbolAsset.filename)
-        if (!part.symbolPinOffsets || part.symbolPinOffsets.length !== definition.pins.length || symbol.pins.length !== definition.pins.length || symbol.pins.some((pin, index) => pin.name.toLowerCase() !== definition.pins[index].toLowerCase()) || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order does not match imported subcircuit ${definition.name}.`)
+        if (symbol.pins.some((pin, index) => pin.name.toLowerCase() !== definition.pins[index].toLowerCase())) throw new Error(`${part.ref} symbol pin order does not match imported subcircuit ${definition.name}.`)
       }
       continue
     }

@@ -11,6 +11,7 @@ import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../d
 import { checkCircuit } from '../domain/electricalCheck'
 import { parseSubcircuitLibrary, sha256Text, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
+import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
 import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { wireCurrentFlow } from '../domain/wireFlow'
@@ -100,9 +101,11 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, v
   const voltageGlow = Math.min(1, Math.abs(voltage ?? 0) / 5)
   const customOffsets = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0) : []
   const customHeight = Math.max(76, (Math.ceil(customOffsets.length / 2) - 1) * 24 + 48)
+  const symbolCoordinates = symbol ? [...symbol.primitives.flatMap((primitive) => primitive.kind === 'circle' ? [[primitive.x1, primitive.y1], [primitive.x2, primitive.y2]] : [[primitive.x1, primitive.y1], [primitive.x2, primitive.y2]]), ...symbol.pins.map(({ x, y }) => [x, y])] : []
+  const symbolBounds = symbolCoordinates.length ? { minX: Math.min(...symbolCoordinates.map(([x]) => x)), minY: Math.min(...symbolCoordinates.map(([, y]) => y)), maxX: Math.max(...symbolCoordinates.map(([x]) => x)), maxY: Math.max(...symbolCoordinates.map(([, y]) => y)) } : null
   return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); onSelect(part.id) } }}>
     {(voltage !== undefined || current !== undefined) && <title>{`${part.ref}: ${part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'capacitor' ? 'illustrative plate charge follows voltage; ' : part.kind === 'inductor' ? 'illustrative coil glow follows current; ' : ''}${voltage === undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${part.kind === 'npn' || part.kind === 'pnp' ? 'positive into the collector terminal' : 'positive from pin 1 to pin 2'}`}`}</title>}
-    <rect x={part.kind === 'subcircuit' ? -100 : -40} y={part.kind === 'subcircuit' ? -customHeight / 2 - 22 : -38} width={part.kind === 'subcircuit' ? 200 : 80} height={part.kind === 'subcircuit' ? customHeight + 44 : 76} rx="9" className="part-hit" />
+    <rect x={symbolBounds ? symbolBounds.minX - 14 : part.kind === 'subcircuit' ? -100 : -40} y={symbolBounds ? symbolBounds.minY - 24 : part.kind === 'subcircuit' ? -customHeight / 2 - 22 : -38} width={symbolBounds ? Math.max(80, symbolBounds.maxX - symbolBounds.minX + 28) : part.kind === 'subcircuit' ? 200 : 80} height={symbolBounds ? Math.max(76, symbolBounds.maxY - symbolBounds.minY + 48) : part.kind === 'subcircuit' ? customHeight + 44 : 76} rx="9" className="part-hit" />
     <g transform={part.flipX ? 'scale(-1 1)' : undefined}>
     {part.kind === 'resistor' && <><line x1="-52" y1="0" x2="-23" y2="0" {...common}/><rect x="-23" y="-12" width="46" height="24" rx="3" {...common}/><line x1="23" y1="0" x2="52" y2="0" {...common}/></>}
     {part.kind === 'capacitor' && <><line x1="-50" y1="0" x2="-8" y2="0" {...common}/><line x1="-8" y1="-16" x2="-8" y2="16" {...common}/><line x1="8" y1="-16" x2="8" y2="16" {...common}/><line x1="8" y1="0" x2="50" y2="0" {...common}/><line x1="-8" y1="-15" x2="-8" y2="15" stroke={voltage !== undefined && voltage < 0 ? '#74bdf2' : '#f18484'} strokeWidth="5" opacity={voltageGlow * .5} pointerEvents="none"/><line x1="8" y1="-15" x2="8" y2="15" stroke={voltage !== undefined && voltage < 0 ? '#f18484' : '#74bdf2'} strokeWidth="5" opacity={voltageGlow * .5} pointerEvents="none"/></>}
@@ -113,7 +116,7 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, v
     {part.kind === 'switch' && <><line x1="-52" y1="0" x2="-14" y2="0" {...common}/><line x1="14" y1="0" x2="52" y2="0" {...common}/><circle cx="-14" cy="0" r="3" fill="#c6cec7"/><circle cx="14" cy="0" r="3" fill="#c6cec7"/><line x1="-12" y1="-2" x2={part.value.toLowerCase() === 'on' ? 12 : 10} y2={part.value.toLowerCase() === 'on' ? 1 : -15} {...common}/></>}
     {(part.kind === 'vcvs' || part.kind === 'vccs') && <><line x1="-52" y1="0" x2="-24" y2="0" {...common}/><line x1="24" y1="0" x2="52" y2="0" {...common}/><line x1="0" y1="-52" x2="0" y2="-24" {...common}/><line x1="0" y1="24" x2="0" y2="52" {...common}/><path d="M0 -24L24 0L0 24L-24 0Z" {...common}/>{part.kind === 'vcvs' ? <><line x1="-6" y1="-7" x2="6" y2="-7" {...common}/><line x1="0" y1="-13" x2="0" y2="-1" {...common}/><line x1="-6" y1="8" x2="6" y2="8" {...common}/></> : <><line x1="-10" y1="0" x2="10" y2="0" {...common}/><path d="M10 0L3 -5V5Z" fill={common.stroke} stroke={common.stroke}/></>}<text className="control-pin-label" x="7" y="-46">+</text><text className="control-pin-label" x="7" y="58">−</text></>}
     {(part.kind === 'npn' || part.kind === 'pnp') && <><line x1="-52" y1="0" x2="-10" y2="0" {...common}/><line x1="-10" y1="-22" x2="-10" y2="22" {...common}/><line x1="-10" y1="-10" x2="18" y2="-29" {...common}/><line x1="18" y1="-29" x2="35" y2="-52" {...common}/><line x1="-10" y1="10" x2="18" y2="29" {...common}/><line x1="18" y1="29" x2="35" y2="52" {...common}/>{part.kind === 'npn' ? <path d="M11 24L22 38M22 38L21 30M22 38L14 37" {...common}/> : <path d="M22 38L11 24M11 24L19 26M11 24L13 32" {...common}/>}</>}
-    {part.kind === 'subcircuit' && symbol ? <g className="imported-symbol-art" aria-label={`${symbol.name} imported symbol`}>{symbol.primitives.map((primitive, index) => primitive.kind === 'line' ? <line key={index} x1={primitive.x1} y1={primitive.y1} x2={primitive.x2} y2={primitive.y2} {...common}/> : primitive.kind === 'rectangle' ? <rect key={index} x={Math.min(primitive.x1, primitive.x2)} y={Math.min(primitive.y1, primitive.y2)} width={Math.abs(primitive.x2 - primitive.x1)} height={Math.abs(primitive.y2 - primitive.y1)} {...common}/> : <ellipse key={index} cx={(primitive.x1 + primitive.x2) / 2} cy={(primitive.y1 + primitive.y2) / 2} rx={Math.abs(primitive.x2 - primitive.x1) / 2} ry={Math.abs(primitive.y2 - primitive.y1) / 2} {...common}/>)}{symbol.pins.map((pin, index) => <g key={index}><circle cx={pin.x} cy={pin.y} r="3" fill="#86e3b7"/><text x={pin.x + (pin.orientation === 'R' ? -6 : 6)} y={pin.y - 6} textAnchor={pin.orientation === 'R' ? 'end' : 'start'} className="subcircuit-pin-label">{pin.name}</text></g>)}</g> : part.kind === 'subcircuit' && <><rect x="-60" y={-customHeight / 2} width="120" height={customHeight} rx="4" {...common}/>{customOffsets.map(([x, y], index) => <g key={index}><line x1={x < 0 ? x + 20 : x - 20} y1={y} x2={x} y2={y} {...common}/><text x={x < 0 ? -42 : 42} y={y + 4} textAnchor={x < 0 ? 'end' : 'start'} className="subcircuit-pin-label">{part.modelPins?.[index]}</text></g>)}</>}
+    {symbol ? <g className="imported-symbol-art" aria-label={`${symbol.name} imported symbol`}>{symbol.primitives.map((primitive, index) => primitive.kind === 'line' ? <line key={index} x1={primitive.x1} y1={primitive.y1} x2={primitive.x2} y2={primitive.y2} {...common}/> : primitive.kind === 'rectangle' ? <rect key={index} x={Math.min(primitive.x1, primitive.x2)} y={Math.min(primitive.y1, primitive.y2)} width={Math.abs(primitive.x2 - primitive.x1)} height={Math.abs(primitive.y2 - primitive.y1)} {...common}/> : <ellipse key={index} cx={(primitive.x1 + primitive.x2) / 2} cy={(primitive.y1 + primitive.y2) / 2} rx={Math.abs(primitive.x2 - primitive.x1) / 2} ry={Math.abs(primitive.y2 - primitive.y1) / 2} {...common}/>)}{symbol.pins.map((pin, index) => <g key={index}><circle cx={pin.x} cy={pin.y} r="3" fill="#86e3b7"/><text x={pin.x + (pin.orientation === 'R' ? -6 : 6)} y={pin.y - 6} textAnchor={pin.orientation === 'R' ? 'end' : 'start'} className="subcircuit-pin-label">{pin.name}</text></g>)}</g> : part.kind === 'subcircuit' && <><rect x="-60" y={-customHeight / 2} width="120" height={customHeight} rx="4" {...common}/>{customOffsets.map(([x, y], index) => <g key={index}><line x1={x < 0 ? x + 20 : x - 20} y1={y} x2={x} y2={y} {...common}/><text x={x < 0 ? -42 : 42} y={y + 4} textAnchor={x < 0 ? 'end' : 'start'} className="subcircuit-pin-label">{part.modelPins?.[index]}</text></g>)}</>}
     {part.kind === 'ground' && <><line x1="0" y1="-22" x2="0" y2="0" {...common}/><line x1="-18" y1="0" x2="18" y2="0" {...common}/><line x1="-12" y1="7" x2="12" y2="7" {...common}/><line x1="-6" y1="14" x2="6" y2="14" {...common}/></>}
     </g>
     <text className="part-ref" x="0" y={part.kind === 'subcircuit' ? -customHeight / 2 - 9 : part.kind === 'ground' ? 34 : part.kind === 'vcvs' || part.kind === 'vccs' || part.kind === 'npn' || part.kind === 'pnp' ? -68 : -29}>{part.kind === 'subcircuit' ? `${part.ref} · ${part.modelName}` : part.ref}</text>
@@ -569,6 +572,7 @@ export default function App() {
   const [tool, setTool] = useState<ToolMode>('select')
   const [netlistOpen, setNetlistOpen] = useState(false)
   const [notice, setNotice] = useState('')
+  const [importWarnings, setImportWarnings] = useState<string[]>([])
   const [analysisTab, setAnalysisTab] = useState<'waveforms' | 'netlist'>('waveforms')
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
@@ -582,6 +586,7 @@ export default function App() {
   const [componentQuery, setComponentQuery] = useState('')
   const [tourStep, setTourStep] = useState<number | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  const ascFileInput = useRef<HTMLInputElement>(null)
   const modelFileInput = useRef<HTMLInputElement>(null)
   const symbolFileInput = useRef<HTMLInputElement>(null)
   const componentSearchRef = useRef<HTMLInputElement>(null)
@@ -714,6 +719,7 @@ export default function App() {
       const parsed = validateProject(projectData)
       await verifyModelAssetHashes([...(parsed.modelAssets ?? []), ...(parsed.symbolAssets ?? [])])
       setProjectState(parsed)
+      setImportWarnings([])
       setSelectedTraceIds(parsed.plotSettings?.selectedTraceIds ?? [])
       history.current = { past: [], future: [] }
       setSelection(null)
@@ -760,6 +766,41 @@ export default function App() {
       setProject((project) => ({ ...project, symbolAssets: [...(project.symbolAssets ?? []), asset] }))
       setNotice(`Imported ${parsed.name} with ${parsed.pins.length} ordered pins${parsed.warnings.length ? ` and ${parsed.warnings.length} unsupported drawing records` : ''}. Redistribution rights remain unknown.`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this symbol.') }
+    event.target.value = ''
+  }
+  const importLtspiceSchematic = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = [...(event.target.files ?? [])]
+    const ascFile = files.find((file) => /\.asc$/i.test(file.name))
+    if (!ascFile) { setNotice('Choose one LTspice .asc schematic and, when available, its .asy symbol files.'); event.target.value = ''; return }
+    try {
+      if (files.length > 128) throw new Error('Import up to 128 schematic and symbol files at a time.')
+      if (ascFile.size > 10 * 1024 * 1024) throw new Error('LTspice schematics are limited to 10 MiB.')
+      const currentSymbols = projectRef.current.symbolAssets ?? []
+      const newSymbols = [] as NonNullable<Project['symbolAssets']>
+      for (const file of files.filter((candidate) => /\.asy$/i.test(candidate.name))) {
+        if (file.size > 1024 * 1024) throw new Error(`${file.name} exceeds the 1 MiB symbol limit.`)
+        const content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
+        parseLtspiceSymbol(content, file.name)
+        const existing = [...currentSymbols, ...newSymbols].find((asset) => asset.filename.toLowerCase() === file.name.toLowerCase())
+        if (existing) {
+          if (existing.content !== content) throw new Error(`A different ${file.name} is already in this project. Remove or rename it before importing this schematic.`)
+          continue
+        }
+        newSymbols.push({ id: `symbol-${crypto.randomUUID()}`, filename: file.name, content, sha256: await sha256Text(content), licenseStatus: 'unknown', importedAt: new Date().toISOString() })
+      }
+      const symbols = [...currentSymbols, ...newSymbols]
+      if (symbols.length > 32 || symbols.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0) > 5 * 1024 * 1024) throw new Error('Imported symbols exceed the project limits of 32 files and 5 MiB total.')
+      const source = new TextDecoder('utf-8', { fatal: true }).decode(await ascFile.arrayBuffer())
+      const imported = parseLtspiceSchematic(source, ascFile.name, symbols, projectRef.current.modelAssets)
+      setProjectState(imported.project)
+      setImportWarnings(imported.warnings)
+      setSelectedTraceIds([])
+      setSimulationResult(null)
+      setSampleIndex(null)
+      history.current = { past: [], future: [] }
+      setSelection(null)
+      setNotice(imported.warnings.length ? `Imported ${imported.project.name} with ${imported.project.parts.length} parts and ${imported.project.wires.length} wires. ${imported.warnings.length} item(s) need attention: ${imported.warnings.slice(0, 3).join(' ')}` : `Imported ${imported.project.name} with ${imported.project.parts.length} parts and ${imported.project.wires.length} wires.`)
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this LTspice schematic.') }
     event.target.value = ''
   }
   const addPart = (kind: PartKind) => {
@@ -1067,6 +1108,7 @@ export default function App() {
     if (!window.confirm('Start a new circuit? Unsaved changes in this tab will be lost.')) return
     const starter = createStarterProject()
     setProjectState(starter)
+    setImportWarnings([])
     setSelectedTraceIds(starter.plotSettings?.selectedTraceIds ?? [])
     history.current = { past: [], future: [] }
     setSelection(null)
@@ -1083,7 +1125,7 @@ export default function App() {
     </header>
 
     <div className="main-toolbar">
-      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={saveProject}><Save size={15}/> Save</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/></div>
+      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Import an LTspice .asc file with its .asy symbols"><FolderOpen size={15}/> Import LTspice</button><button onClick={saveProject}><Save size={15}/> Save</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple hidden onChange={importLtspiceSchematic}/></div>
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
@@ -1128,6 +1170,7 @@ export default function App() {
 
       <aside className="inspector-panel">
         <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : 'Circuit settings'}</h2></div><button className="subtle-icon" title="More properties"><MoreHorizontal size={17}/></button></div>
+        {importWarnings.length > 0 && <section className="import-diagnostics" aria-label="LTspice import diagnostics"><div><strong>Import needs review</strong><button onClick={() => setImportWarnings([])} aria-label="Dismiss import diagnostics"><X size={13}/></button></div><p>{importWarnings.length} item{importWarnings.length === 1 ? '' : 's'} could not be fully translated.</p><ul>{importWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul></section>}
         {selected ? <>
           <div className="selected-part-card"><span className={`selected-part-icon icon-${selected.kind}`}>{selected.kind === 'resistor' ? <Minus size={19}/> : selected.kind === 'capacitor' ? <Activity size={18}/> : selected.kind === 'source' ? <Zap size={18}/> : <Grid2X2 size={18}/>}</span><div><strong>{kindNames[selected.kind]}</strong><span>{componentPins(selected).length} pins · SPICE {kindPrefix[selected.kind]}</span></div></div>
           <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Reference designator<input value={selected.ref} onChange={(event) => updateSelected({ ref: event.target.value })}/></label>{selected.kind === 'subcircuit' ? <><label className="field-label">Model name<input value={selected.modelName ?? ''} readOnly/></label>{(importedModels.find((model) => model.name.toLowerCase() === selected.modelName?.toLowerCase())?.parameters ?? []).map((parameter) => { const currentValue = selected.modelParameters?.[parameter.name] ?? parameter.defaultValue; return <label className="field-label" key={parameter.name}>{parameter.name}<input value={currentValue} onChange={(event) => { const modelParameters = { ...(selected.modelParameters ?? {}) }; if (!event.target.value || event.target.value === parameter.defaultValue) delete modelParameters[parameter.name]; else modelParameters[parameter.name] = event.target.value; updateSelected({ modelParameters }) }}/><small className="field-hint">Model default: {parameter.defaultValue} · numeric overrides only</small></label> })}<div className="field-hint">Pin order and default values come from the imported model. Override a numeric parameter when this instance needs a different value.</div></> : selected.kind === 'switch' ? <label className="field-label">State<select value={selected.value.toLowerCase()} onChange={(event) => updateSelected({ value: event.target.value === 'on' ? 'On' : 'Off' })}><option value="off">Off</option><option value="on">On</option></select></label> : ['diode', 'led', 'npn', 'pnp'].includes(selected.kind) ? <><label className="field-label">Device model<select value={selected.deviceModel ?? ''} onChange={(event) => updateSelected({ deviceModel: event.target.value || undefined })}><option value="">{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Educational default' : 'Generic diode'}</option>{compatibleDeviceModels(selected.kind).map((model) => <option key={`${model.assetId}:${model.name}`} value={model.name}>{model.name} ({model.type})</option>)}</select></label><div className="field-hint">Imported model files stay with this project. Verify you have rights to use or redistribute their contents.</div>{(selected.kind === 'npn' || selected.kind === 'pnp') && !selected.deviceModel && <><label className="field-label">Approximate forward beta (β)<input value={selected.value} onChange={(event) => updateSelected({ value: event.target.value })}/></label><div className="field-hint">Beta controls the educational transistor model; a selected imported card supplies its own device parameters.</div></>}</> : <label className="field-label">{selected.kind === 'vcvs' ? 'Voltage gain (V/V)' : selected.kind === 'vccs' ? 'Transconductance (S)' : 'Value'}<input value={selected.value} onChange={(event) => updateSelected({ value: event.target.value })} placeholder="Enter a value"/></label>}{(selected.kind === 'npn' || selected.kind === 'pnp') && selected.deviceModel && <div className="field-hint">The imported .MODEL card replaces the educational beta approximation.</div>}</div>

@@ -49,8 +49,8 @@
       },
       "allOf": [
         { "if": { "properties": { "kind": { "const": "subcircuit" } }, "required": ["kind"] }, "then": { "required": ["modelName", "modelPins"] } },
-        { "if": { "required": ["symbolAssetId"] }, "then": { "required": ["symbolPinOffsets", "modelName", "modelPins"], "properties": { "kind": { "const": "subcircuit" } } } },
-        { "if": { "required": ["symbolPinOffsets"] }, "then": { "required": ["symbolAssetId"], "properties": { "kind": { "const": "subcircuit" } } } }
+        { "if": { "required": ["symbolAssetId"] }, "then": { "required": ["symbolPinOffsets"] } },
+        { "if": { "required": ["symbolPinOffsets"] }, "then": { "required": ["symbolAssetId"] } }
       ]
     },
     "modelAsset": {
