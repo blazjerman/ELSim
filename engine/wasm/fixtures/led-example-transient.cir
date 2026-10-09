@@ -1,0 +1,12 @@
+ELSim LED pulse response example
+V1 vin 0 PULSE(0 5 0 1u 1u 50m 100m)
+R1 vin vout 330
+D1 vout 0 DDEFAULT
+.model DDEFAULT D
+.save all @d1[id] @r1[i]
+.control
+set filetype=ascii
+tran 100u 200m
+write /result.raw all
+.endc
+.end

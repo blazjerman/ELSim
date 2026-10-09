@@ -6,7 +6,7 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
-const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
+const { createLedExampleProject, createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
@@ -16,6 +16,17 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^R1 vin vout 1k$/m)
   assert.match(artifact.text, /^C1 vout 0 10u$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
+})
+
+test('LED pulse example is a runnable transient circuit with a diode-current trace selected', () => {
+  const project = createLedExampleProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'LED pulse response')
+  assert.match(artifact.text, /^D1 vout 0 DDEFAULT$/m)
+  assert.match(artifact.text, /^\.tran 100u 200m$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(vout)', 'I(D1)'])
+  assert.equal(project.parts.some((part) => part.kind === 'capacitor'), false)
 })
 
 test('imported model cards keep source filename and original line in the netlist source map', () => {

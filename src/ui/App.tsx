@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
-  Activity, AlertTriangle, ArrowDown, ArrowUp, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, CircleHelp,
+  Activity, AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, CircleHelp,
   Command, Copy, FilePlus2, FlipHorizontal2, FolderOpen, Gauge, GitBranch, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
   Save, Search, Settings2, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
@@ -16,7 +16,7 @@ import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, pr
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
-import { createStarterProject, kindNames, kindPrefix, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
+import { createLedExampleProject, createStarterProject, kindNames, kindPrefix, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -586,6 +586,8 @@ export default function App() {
   const [compatibilityDiagnostic, setCompatibilityDiagnostic] = useState<SimulationDiagnostic | null>(null)
   const [replacementModelAssetId, setReplacementModelAssetId] = useState<string | null>(null)
   const [analysisTab, setAnalysisTab] = useState<'waveforms' | 'netlist'>('waveforms')
+  const [examplesOpen, setExamplesOpen] = useState(false)
+  const [pendingExample, setPendingExample] = useState<'rc' | 'led' | null>(null)
   const [waveformDetached, setWaveformDetached] = useState(false)
   const [plotPosition, setPlotPosition] = useState({ x: 24, y: 24 })
   const plotDrag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
@@ -1153,6 +1155,25 @@ export default function App() {
     history.current = { past: [], future: [] }
     setSelection(null)
   }
+  const loadExample = (example: 'rc' | 'led') => {
+    const next = example === 'led' ? createLedExampleProject() : createStarterProject()
+    activeWorkerRef.current?.terminate()
+    activeWorkerRef.current = null
+    setRunState('idle')
+    setSimulationResult(null)
+    setPlaybackRunning(false)
+    setSampleIndex(null)
+    setProjectState(next)
+    setSelectedTraceIds(next.plotSettings?.selectedTraceIds ?? [])
+    setImportWarnings([])
+    setCompatibilityDiagnostic(null)
+    history.current = { past: [], future: [] }
+    setSelection({ kind: 'part', id: example === 'led' ? 'p-c1' : 'p-r1' })
+    setAnalysisTab('waveforms')
+    setExamplesOpen(false)
+    setPendingExample(null)
+    setNotice(`Opened ${next.name}. Press Run simulation to see the results.`)
+  }
 
   return <div className="app-shell">
     <header className="topbar">
@@ -1161,7 +1182,7 @@ export default function App() {
       <button className="project-title" onClick={() => { const name = window.prompt('Project name', project.name); if (name?.trim()) setProject((p) => ({ ...p, name: name.trim() })) }}>{project.name}<ChevronDown size={14}/></button>
       <span className="saved-indicator"><Check size={13}/> Local project</span>
       <div className="topbar-spacer"/>
-      <div className="topbar-actions"><button className="quiet-button" onClick={() => setNotice('Project sharing links are planned. Use Save to download a project file.')}><Share2 size={15}/> Share</button><button className="quiet-button" aria-label="Open quick tour" title="Quick tour" onClick={startTour}><CircleHelp size={16}/></button><button className="avatar">B</button></div>
+      <div className="topbar-actions"><button className="quiet-button" onClick={() => setExamplesOpen(true)}><BookOpen size={15}/> Examples</button><button className="quiet-button" onClick={() => setNotice('Project sharing links are planned. Use Save to download a project file.')}><Share2 size={15}/> Share</button><button className="quiet-button" aria-label="Open quick tour" title="Quick tour" onClick={startTour}><CircleHelp size={16}/></button><button className="avatar">B</button></div>
     </header>
 
     <div className="main-toolbar">
@@ -1247,6 +1268,7 @@ export default function App() {
     {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14}/></button></div>}
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={() => setNetlistOpen(false)}><div className="netlist-modal" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2>Generated SPICE netlist</h2></div><button className="subtle-icon" onClick={() => setNetlistOpen(false)}><X size={17}/></button></div><pre>{createNetlist(project)}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div></div></div>}
     {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => setElectricalCheckOpen(false)}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button className="subtle-icon" aria-label="Close circuit checks" onClick={() => setElectricalCheckOpen(false)}><X size={17}/></button></div><p className="erc-intro">These checks look for common wiring mistakes. They do not decide whether ngspice can solve your circuit.</p>{electricalIssues.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={`erc-severity ${issue.severity}`}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => { setSelection({ kind: 'part', id: issue.partId! }); setElectricalCheckOpen(false) }}>Select affected component</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalIssues.length} finding{electricalIssues.length === 1 ? '' : 's'}</span><button className="primary-small" onClick={() => setElectricalCheckOpen(false)}>Done</button></div></section></div>}
+    {examplesOpen && <div className="tour-backdrop" onClick={() => { setExamplesOpen(false); setPendingExample(null) }}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="examples-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">LEARN BY EXAMPLE</span><h2 id="examples-title">Open a working circuit</h2></div><button className="subtle-icon" aria-label="Close examples" onClick={() => { setExamplesOpen(false); setPendingExample(null) }}><X size={17}/></button></div><p className="tour-copy">Each example is a complete circuit you can inspect, edit, and simulate locally.</p>{pendingExample ? <div className="example-confirm" role="alert"><strong>Replace the current circuit?</strong><p>{pendingExample === 'led' ? 'LED pulse response' : 'RC step response'} will replace the circuit open in this tab. Save your current circuit first if you want to keep it.</p><div><button className="tour-secondary" onClick={() => setPendingExample(null)}>Cancel</button><button className="primary-small" onClick={() => loadExample(pendingExample)}>Replace and open</button></div></div> : <div className="example-list"><article><div><strong>RC step response</strong><p>Watch a capacitor charge through a resistor and explore the time constant.</p></div><button className="primary-small" onClick={() => setPendingExample('rc')}>Open example</button></article><article><div><strong>LED pulse response</strong><p>See ngspice current drive the LED brightness as a pulse source switches.</p></div><button className="primary-small" onClick={() => setPendingExample('led')}>Open example</button></article></div>}</section></div>}
     {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 4</span><h2 id="tour-title">{['Start with a working example', 'Change a component value', 'Inspect the generated netlist', 'Run and see results'][tourStep]}</h2></div><button className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p className="tour-copy">{[
       'This starter circuit is already wired. The schematic is in the center, the component library is on the left, and properties appear on the right.',
       'R1 is selected in the inspector. Try changing its resistance value; edits are saved locally as you work.',

@@ -81,6 +81,15 @@ export function createStarterProject(): Project {
   return structuredClone(starter)
 }
 
+export function createLedExampleProject(): Project {
+  const project = createStarterProject()
+  project.name = 'LED pulse response'
+  project.parts = project.parts.map((part) => part.id === 'p-r1' ? { ...part, value: '330 Ω' } : part.id === 'p-c1' ? { ...part, kind: 'led', ref: 'D1', value: 'Default LED' } : part)
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '200 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(vout)', 'I(D1)'], ranges: {} }
+  return project
+}
+
 function migrateV1(input: Record<string, unknown>): Project {
   const oldParts = input.parts as (Part & { nodes: string[] })[]
   const oldWires = input.wires as (Wire & { node: string })[]
