@@ -36,7 +36,8 @@
         "value": { "type": "string" },
         "x": { "type": "number" },
         "y": { "type": "number" },
-        "rotation": { "enum": [0, 90, 180, 270] }
+        "rotation": { "enum": [0, 90, 180, 270] },
+        "flipX": { "type": "boolean", "default": false }
       }
     },
     "wire": {

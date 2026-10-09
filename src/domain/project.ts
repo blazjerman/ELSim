@@ -11,6 +11,7 @@ export type Part = {
   x: number
   y: number
   rotation: Rotation
+  flipX?: boolean
 }
 
 export type Wire = { id: string; points: [number, number][] }
@@ -106,7 +107,7 @@ export function validateProject(input: unknown): Project {
   const refs = new Set<string>()
   const partIds = new Set<string>()
   for (const candidate of data.parts as Part[]) {
-    if (!candidate || typeof candidate.id !== 'string' || !candidate.id || partIds.has(candidate.id) || !allowed.has(candidate.kind) || typeof candidate.ref !== 'string' || typeof candidate.value !== 'string' || !Number.isFinite(candidate.x) || !Number.isFinite(candidate.y) || ![0, 90, 180, 270].includes(candidate.rotation)) {
+    if (!candidate || typeof candidate.id !== 'string' || !candidate.id || partIds.has(candidate.id) || !allowed.has(candidate.kind) || typeof candidate.ref !== 'string' || typeof candidate.value !== 'string' || !Number.isFinite(candidate.x) || !Number.isFinite(candidate.y) || ![0, 90, 180, 270].includes(candidate.rotation) || (candidate.flipX !== undefined && typeof candidate.flipX !== 'boolean')) {
       throw new Error('Project contains a malformed component.')
     }
     partIds.add(candidate.id)

@@ -10,6 +10,7 @@ const { createProjectArchive, isProjectArchive, readProjectArchive, crc32 } = re
 test('project ZIP archive is deterministic and round-trips the complete v2 project', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'
+  project.parts[1].flipX = true
   const first = createProjectArchive(project)
   const second = createProjectArchive(project)
   assert.deepEqual(first, second)

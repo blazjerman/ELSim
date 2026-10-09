@@ -4,9 +4,48 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { canMoveWireSegment, moveWireSegment, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
+const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
+const { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
+
+test('horizontal flip geometry updates indexed pin anchors and detects crossed starter wires', () => {
+  const project = createStarterProject()
+  const part = project.parts.find((item) => item.id === 'p-r1')
+  const before = analyzeConnectivity(project)
+  const flipped = { ...part, flipX: true }
+  assert.deepEqual(componentPins(part).map(({ x, y }) => [x, y]), [[313, 290], [417, 290]])
+  assert.deepEqual(componentPins(flipped).map(({ x, y }) => [x, y]), [[417, 290], [313, 290]])
+  const candidate = structuredClone(project)
+  candidate.wires = moveWireAnchors(candidate.wires, componentPins(part), componentPins(flipped))
+  candidate.parts = candidate.parts.map((item) => item.id === part.id ? flipped : item)
+  assert.equal(hasSameElectricalConnectivity(project, candidate), false)
+  const rotated = { ...part, rotation: 90 }
+  const rotatedCandidate = structuredClone(project)
+  rotatedCandidate.wires = moveWireAnchors(rotatedCandidate.wires, componentPins(part), componentPins(rotated))
+  rotatedCandidate.parts = rotatedCandidate.parts.map((item) => item.id === part.id ? rotated : item)
+  assert.equal(hasSameElectricalConnectivity(project, rotatedCandidate), false)
+  const loose = createStarterProject()
+  loose.parts.push({ id: 'loose-r', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 700, y: 600, rotation: 0 })
+  const looseBefore = analyzeConnectivity(loose)
+  const loosePart = loose.parts.find((item) => item.id === 'loose-r')
+  const looseAfter = { ...loosePart, flipX: true }
+  const looseCandidate = structuredClone(loose)
+  looseCandidate.wires = moveWireAnchors(looseCandidate.wires, componentPins(loosePart), componentPins(looseAfter))
+  looseCandidate.parts = looseCandidate.parts.map((item) => item.id === loosePart.id ? looseAfter : item)
+  assert.equal(hasSameElectricalConnectivity(loose, looseCandidate), true)
+  assert.equal(analyzeConnectivity(looseCandidate).pinNets.get('loose-r:0'), looseBefore.pinNets.get('loose-r:0'))
+})
+
+test('flip state validates while older project records remain valid', () => {
+  const project = createStarterProject()
+  const valid = structuredClone(project)
+  valid.parts[1].flipX = true
+  assert.equal(validateProject(valid).parts[1].flipX, true)
+  const invalid = structuredClone(valid)
+  invalid.parts[1].flipX = 'yes'
+  assert.throws(() => validateProject(invalid), /malformed component/)
+  assert.equal(validateProject(project).parts[1].flipX, undefined)
+})
 
 test('dragging a free orthogonal segment moves it while preserving adjacent orthogonality', () => {
   const project = createStarterProject()

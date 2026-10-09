@@ -16,6 +16,8 @@ assets/                 # reserved; currently no project assets are supported
 
 Project version 2 optionally stores `plotSettings` with selected trace IDs and independent normalized horizontal view ranges for transient, AC, and DC sweep plots. Readers add empty plot settings when opening older version 2 projects. Plot preferences do not change the electrical revision timestamp. Simulation samples themselves are not embedded; saved trace IDs are restored when a compatible simulation result is produced again.
 
+Parts may optionally store `flipX` (`true` for a horizontal symbol flip). It is presentation state: the electrical pin indexes remain stable, and connected wire endpoints move with their indexed pins. Older version 2 files without this property are interpreted as unflipped.
+
 ## Reader limits
 
 The browser reader accepts only ZIP stored entries with UTF-8 names, a single disk, no encryption, and no ZIP64. It rejects absolute paths, drive paths, backslashes, `.`/`..` path segments, duplicate names, mismatched local/central headers, overlapping entries, CRC failures, and unknown archive contents. Archives are limited to 50 MiB total, 20 MiB per entry, and 64 entries. These limits apply before project JSON is parsed. The writer uses fixed ZIP timestamps and stable entry ordering for deterministic output.

@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
   Activity, AlertTriangle, ArrowDown, ArrowUp, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, CircleHelp,
-  Command, Copy, FilePlus2, FolderOpen, Gauge, GitBranch, Grid2X2,
+  Command, Copy, FilePlus2, FlipHorizontal2, FolderOpen, Gauge, GitBranch, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
   Save, Search, Settings2, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
-import { analyzeConnectivity, pinNet } from '../domain/connectivity'
+import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
 import { checkCircuit } from '../domain/electricalCheck'
 import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
@@ -99,6 +99,7 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, v
   return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); onSelect(part.id) } }}>
     {(voltage !== undefined || current !== undefined) && <title>{`${part.ref}: ${part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'capacitor' ? 'illustrative plate charge follows voltage; ' : part.kind === 'inductor' ? 'illustrative coil glow follows current; ' : ''}${voltage === undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${part.kind === 'npn' || part.kind === 'pnp' ? 'positive into the collector terminal' : 'positive from pin 1 to pin 2'}`}`}</title>}
     <rect x="-40" y="-38" width="80" height="76" rx="9" className="part-hit" />
+    <g transform={part.flipX ? 'scale(-1 1)' : undefined}>
     {part.kind === 'resistor' && <><line x1="-52" y1="0" x2="-23" y2="0" {...common}/><rect x="-23" y="-12" width="46" height="24" rx="3" {...common}/><line x1="23" y1="0" x2="52" y2="0" {...common}/></>}
     {part.kind === 'capacitor' && <><line x1="-50" y1="0" x2="-8" y2="0" {...common}/><line x1="-8" y1="-16" x2="-8" y2="16" {...common}/><line x1="8" y1="-16" x2="8" y2="16" {...common}/><line x1="8" y1="0" x2="50" y2="0" {...common}/><line x1="-8" y1="-15" x2="-8" y2="15" stroke={voltage !== undefined && voltage < 0 ? '#74bdf2' : '#f18484'} strokeWidth="5" opacity={voltageGlow * .5} pointerEvents="none"/><line x1="8" y1="-15" x2="8" y2="15" stroke={voltage !== undefined && voltage < 0 ? '#f18484' : '#74bdf2'} strokeWidth="5" opacity={voltageGlow * .5} pointerEvents="none"/></>}
     {part.kind === 'inductor' && <><line x1="-52" y1="0" x2="-34" y2="0" {...common}/><path d="M-34 0a9 9 0 0 1 18 0a9 9 0 0 1 18 0a9 9 0 0 1 18 0a9 9 0 0 1 18 0" {...common} style={{ filter: currentGlow > 0 ? `drop-shadow(0 0 ${currentGlow * 7}px #e9bc70)` : undefined }}/><line x1="38" y1="0" x2="52" y2="0" {...common}/></>}
@@ -109,6 +110,7 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, v
     {(part.kind === 'vcvs' || part.kind === 'vccs') && <><line x1="-52" y1="0" x2="-24" y2="0" {...common}/><line x1="24" y1="0" x2="52" y2="0" {...common}/><line x1="0" y1="-52" x2="0" y2="-24" {...common}/><line x1="0" y1="24" x2="0" y2="52" {...common}/><path d="M0 -24L24 0L0 24L-24 0Z" {...common}/>{part.kind === 'vcvs' ? <><line x1="-6" y1="-7" x2="6" y2="-7" {...common}/><line x1="0" y1="-13" x2="0" y2="-1" {...common}/><line x1="-6" y1="8" x2="6" y2="8" {...common}/></> : <><line x1="-10" y1="0" x2="10" y2="0" {...common}/><path d="M10 0L3 -5V5Z" fill={common.stroke} stroke={common.stroke}/></>}<text className="control-pin-label" x="7" y="-46">+</text><text className="control-pin-label" x="7" y="58">−</text></>}
     {(part.kind === 'npn' || part.kind === 'pnp') && <><line x1="-52" y1="0" x2="-10" y2="0" {...common}/><line x1="-10" y1="-22" x2="-10" y2="22" {...common}/><line x1="-10" y1="-10" x2="18" y2="-29" {...common}/><line x1="18" y1="-29" x2="35" y2="-52" {...common}/><line x1="-10" y1="10" x2="18" y2="29" {...common}/><line x1="18" y1="29" x2="35" y2="52" {...common}/>{part.kind === 'npn' ? <path d="M11 24L22 38M22 38L21 30M22 38L14 37" {...common}/> : <path d="M22 38L11 24M11 24L19 26M11 24L13 32" {...common}/>}</>}
     {part.kind === 'ground' && <><line x1="0" y1="-22" x2="0" y2="0" {...common}/><line x1="-18" y1="0" x2="18" y2="0" {...common}/><line x1="-12" y1="7" x2="12" y2="7" {...common}/><line x1="-6" y1="14" x2="6" y2="14" {...common}/></>}
+    </g>
     <text className="part-ref" x="0" y={part.kind === 'ground' ? 34 : part.kind === 'vcvs' || part.kind === 'vccs' || part.kind === 'npn' || part.kind === 'pnp' ? -68 : -29}>{part.ref}</text>
     {part.value && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : part.kind === 'vcvs' || part.kind === 'vccs' || part.kind === 'npn' || part.kind === 'pnp' ? 76 : 43}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.value}</text>}
   </g>
@@ -698,6 +700,18 @@ export default function App() {
   }
   const updateSelected = (patch: Partial<Part>) => {
     if (!selected) return
+    if (patch.rotation !== undefined || patch.flipX !== undefined) {
+      const transformed = { ...selected, ...patch }
+      const candidate: Project = {
+        ...project,
+        parts: project.parts.map((part) => part.id === selected.id ? transformed : part),
+        wires: moveWireAnchors(project.wires, componentPins(selected), componentPins(transformed)),
+      }
+      if (!hasSameElectricalConnectivity(project, candidate)) {
+        setNotice('This orientation change would change circuit connectivity. Reroute the attached wires first, then try again.')
+        return
+      }
+    }
     setProject((current) => {
       const before = current.parts.find((part) => part.id === selected.id)
       if (!before) return current
@@ -710,6 +724,7 @@ export default function App() {
     })
   }
   const rotateSelected = () => selected && updateSelected({ rotation: ((selected.rotation + 90) % 360) as Part['rotation'] })
+  const flipSelected = () => selected && updateSelected({ flipX: !selected.flipX })
   const duplicateSelected = () => {
     if (!selected) return
     const clone = { ...selected, id: `p-${crypto.randomUUID()}`, ref: `${selected.ref}_copy`, x: selected.x + 80, y: selected.y + 60 }
@@ -755,6 +770,7 @@ export default function App() {
       else if (key === 'p') setTool('probe')
       else if (key === 'j') setTool('junction')
       else if (key === 'r' && selected) rotateSelected()
+      else if (key === 'f' && selected) flipSelected()
       else if ((key === 'delete' || key === 'backspace') && selection) { event.preventDefault(); deleteSelection() }
       else if (key === 'escape') setSelection(null)
     }
@@ -979,7 +995,7 @@ export default function App() {
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
-      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={15}/></IconButton><IconButton title="Wire tool" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
+      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={15}/></IconButton><IconButton title="Wire tool" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (F)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select><ChevronDown size={13}/></label>
       {simulationResult?.analysis === 'tran' && <div className="menu-group playback-controls" aria-label="Result playback"><IconButton title={playbackRunning ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!playbackRunning && (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1) setSampleIndex(0); setPlaybackRunning((running) => !running) }} active={playbackRunning} disabled={!playbackAvailable}>{playbackRunning ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton><IconButton title="Rewind result playback to the first solved sample" onClick={() => { setPlaybackRunning(false); setSampleIndex(0) }} disabled={!playbackAvailable}><RotateCcw size={14}/></IconButton></div>}
@@ -1017,7 +1033,7 @@ export default function App() {
           <div className="selected-part-card"><span className={`selected-part-icon icon-${selected.kind}`}>{selected.kind === 'resistor' ? <Minus size={19}/> : selected.kind === 'capacitor' ? <Activity size={18}/> : selected.kind === 'source' ? <Zap size={18}/> : <Grid2X2 size={18}/>}</span><div><strong>{kindNames[selected.kind]}</strong><span>{componentPins(selected).length} pins · SPICE {kindPrefix[selected.kind]}</span></div></div>
           <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Reference designator<input value={selected.ref} onChange={(event) => updateSelected({ ref: event.target.value })}/></label>{selected.kind === 'switch' ? <label className="field-label">State<select value={selected.value.toLowerCase()} onChange={(event) => updateSelected({ value: event.target.value === 'on' ? 'On' : 'Off' })}><option value="off">Off</option><option value="on">On</option></select></label> : <label className="field-label">{selected.kind === 'vcvs' ? 'Voltage gain (V/V)' : selected.kind === 'vccs' ? 'Transconductance (S)' : selected.kind === 'npn' || selected.kind === 'pnp' ? 'Approximate forward beta (β)' : 'Value'}<input value={selected.value} onChange={(event) => updateSelected({ value: event.target.value })} placeholder="Enter a value"/></label>}{(selected.kind === 'npn' || selected.kind === 'pnp') && <div className="field-hint">Beta controls a simple educational transistor model; real gain varies with current and temperature.</div>}</div>
           <div className="form-section"><div className="form-section-title">CONNECTIONS</div><div className="pin-row"><span className="pin-index">1</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Collector / pin 1' : 'Positive / pin 1'}</span><strong>{pinNet(connectivity, selected, 0)}</strong></div>{selected.kind !== 'ground' && <div className="pin-row"><span className="pin-index">2</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Base / pin 2' : 'Negative / pin 2'}</span><strong>{pinNet(connectivity, selected, 1)}</strong></div>}{(selected.kind === 'npn' || selected.kind === 'pnp') && <><div className="pin-row"><span className="pin-index">3</span><span>Emitter / pin 3</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="field-hint">The arrow distinguishes NPN and PNP. Collector current is positive into the collector.</div></>}{(selected.kind === 'vcvs' || selected.kind === 'vccs') && <><div className="pin-row"><span className="pin-index">3</span><span>Control +</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="pin-row"><span className="pin-index">4</span><span>Control −</span><strong>{pinNet(connectivity, selected, 3)}</strong></div><div className="field-hint">Output is pins 1–2; control voltage is pin 3 relative to pin 4. Pin 1 current is positive toward pin 2.</div></>}<div className="field-hint">Node names are derived from wires, pin positions, ground symbols, and labels.</div></div>
-          <div className="form-section"><div className="form-section-title">APPEARANCE</div><button className="wide-select" onClick={rotateSelected}>Orientation <span>{selected.rotation}° <RotateCw size={13}/></span></button><div className="field-hint">Symbol appearance stays separate from electrical behavior.</div></div>
+          <div className="form-section"><div className="form-section-title">APPEARANCE</div><button className="wide-select" onClick={rotateSelected}>Orientation <span>{selected.rotation}° <RotateCw size={13}/></span></button><button className="wide-select flip-control" onClick={flipSelected}>Flip horizontally <span>{selected.flipX ? 'Flipped' : 'Normal'} <FlipHorizontal2 size={13}/></span></button><div className="field-hint">Orientation keeps electrical pin indexes stable. If moving attached wires would change connectivity, reroute them before applying the change.</div></div>
           <div className="inspector-bottom"><button onClick={duplicateSelected}><Copy size={14}/> Duplicate</button><button className="delete-action" onClick={deleteSelected}><Trash2 size={14}/> Delete part</button></div>
         </> : selectedWire ? <>
           <div className="selected-part-card"><span className="selected-part-icon icon-wire"><Cable size={18}/></span><div><strong>Wire segment</strong><span>{selectedWire.points.length} routing points · electrical connection</span></div></div>

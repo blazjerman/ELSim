@@ -16,8 +16,8 @@ export function componentPins(part: Part): PinLocation[] {
   return local.map(([x, y], index) => ({
     partId: part.id,
     index,
-    x: clean(part.x + x * Math.cos(angle) - y * Math.sin(angle)),
-    y: clean(part.y + x * Math.sin(angle) + y * Math.cos(angle)),
+    x: clean(part.x + (part.flipX ? -x : x) * Math.cos(angle) - y * Math.sin(angle)),
+    y: clean(part.y + (part.flipX ? -x : x) * Math.sin(angle) + y * Math.cos(angle)),
   }))
 }
 

@@ -1,4 +1,4 @@
-import { componentPins, pointOnSegment } from './geometry'
+import { componentPins, pointOnSegment, wireNetAt } from './geometry'
 import type { Part, Project } from './project'
 
 export type Connectivity = {
@@ -176,4 +176,31 @@ export function analyzeConnectivity(project: Project): Connectivity {
 
 export function pinNet(connectivity: Connectivity, part: Part, pinIndex: number): string {
   return connectivity.pinNets.get(`${part.id}:${pinIndex}`) ?? 'unconnected'
+}
+
+/** Compare conductor membership, ignoring generated auto-net names. */
+export function hasSameElectricalConnectivity(before: Project, after: Project): boolean {
+  const signature = (project: Project) => {
+    const connectivity = analyzeConnectivity(project)
+    const groups = new Map<string, string[]>()
+    const add = (net: string | undefined, token: string) => {
+      if (!net) return
+      const tokens = groups.get(net) ?? []
+      tokens.push(token)
+      groups.set(net, tokens)
+    }
+    const pins = project.parts.flatMap((part) => componentPins(part))
+    for (const pin of pins) add(connectivity.pinNets.get(`${pin.partId}:${pin.index}`), `pin:${pin.partId}:${pin.index}`)
+    for (const wire of project.wires) add(connectivity.wireNets.get(wire.id), `wire:${wire.id}`)
+    for (const label of project.netLabels) {
+      const attachedPin = pins.find((pin) => Math.hypot(pin.x - label.x, pin.y - label.y) <= 8)
+      const attachedWire = wireNetAt(project, { x: label.x, y: label.y }, 1e-3)
+      const attachedNet = attachedPin ? connectivity.pinNets.get(`${attachedPin.partId}:${attachedPin.index}`)
+        : attachedWire ? connectivity.wireNets.get(attachedWire.wireId)
+          : label.name.trim().toLowerCase() === '0' ? '0' : label.name.trim().toLowerCase()
+      add(attachedNet, `label:${label.id}`)
+    }
+    return [...groups.values()].map((tokens) => tokens.sort()).sort((a, b) => a[0].localeCompare(b[0]))
+  }
+  return JSON.stringify(signature(before)) === JSON.stringify(signature(after))
 }
