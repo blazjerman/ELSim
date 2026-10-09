@@ -6,12 +6,16 @@ export type SimulationDiagnostic = {
   hint?: string
   sourceId?: string
   line?: number
+  assetId?: string
+  assetLine?: number
 }
 
 export type NetlistSource = {
   line: number
   sourceId: string
   role: 'component' | 'model' | 'analysis' | 'generated'
+  assetId?: string
+  assetLine?: number
 }
 
 export type NetlistArtifact = {

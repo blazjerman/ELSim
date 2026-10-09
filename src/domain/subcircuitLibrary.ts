@@ -1,7 +1,7 @@
 export type SubcircuitParameter = { name: string; defaultValue: string }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; startLine: number; endLine: number }
 export type SpiceModelDefinition = { name: string; type: string; startLine: number; endLine: number }
-export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; modelText: string }
+export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
@@ -131,8 +131,9 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
   const ranges = [...modelLines.map(({ start, end }) => [start, end] as const), ...subcircuits.map(({ startLine, endLine }) => [startLine, endLine] as const)]
   const retained = new Set<number>()
   for (const [start, end] of ranges) for (let line = start; line <= end; line += 1) retained.add(line)
-  const modelText = [...retained].sort((a, b) => a - b).map((line) => physical[line - 1]).join('\n')
-  return { subcircuits, models, modelText }
+  const modelRecords = [...retained].sort((a, b) => a - b).map((sourceLine) => ({ sourceLine, text: physical[sourceLine - 1] }))
+  const modelText = modelRecords.map(({ text }) => text).join('\n')
+  return { subcircuits, models, modelText, modelRecords }
 }
 
 export async function sha256Text(value: string): Promise<string> {

@@ -21,7 +21,7 @@ import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef } fro
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
 import { extremaIndices, valueRange } from '../engine/plot'
-import { isEngineResponse, type MeasurementResult, type SimulationResult, type Trace } from '../engine/contract'
+import { isEngineResponse, type MeasurementResult, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
@@ -573,6 +573,8 @@ export default function App() {
   const [netlistOpen, setNetlistOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const [importWarnings, setImportWarnings] = useState<string[]>([])
+  const [compatibilityDiagnostic, setCompatibilityDiagnostic] = useState<SimulationDiagnostic | null>(null)
+  const [replacementModelAssetId, setReplacementModelAssetId] = useState<string | null>(null)
   const [analysisTab, setAnalysisTab] = useState<'waveforms' | 'netlist'>('waveforms')
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
@@ -720,6 +722,7 @@ export default function App() {
       await verifyModelAssetHashes([...(parsed.modelAssets ?? []), ...(parsed.symbolAssets ?? [])])
       setProjectState(parsed)
       setImportWarnings([])
+      setCompatibilityDiagnostic(null)
       setSelectedTraceIds(parsed.plotSettings?.selectedTraceIds ?? [])
       history.current = { past: [], future: [] }
       setSelection(null)
@@ -729,24 +732,32 @@ export default function App() {
   }
   const importModelLibrary = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
+    const replaceId = replacementModelAssetId
+    setReplacementModelAssetId(null)
     if (!file) return
     try {
       if (file.size > 4 * 1024 * 1024) throw new Error('Model libraries are limited to 4 MiB per file.')
       const content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
       const parsed = parseSubcircuitLibrary(content)
-      if ((projectRef.current.modelAssets?.length ?? 0) >= 16) throw new Error('A project can store up to 16 imported model libraries.')
-      const currentModelBytes = (projectRef.current.modelAssets ?? []).reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0)
+      const currentAssets = projectRef.current.modelAssets ?? []
+      if (replaceId && !currentAssets.some((asset) => asset.id === replaceId)) throw new Error('The model library selected for replacement is no longer in this project.')
+      const otherAssets = currentAssets.filter((asset) => asset.id !== replaceId)
+      if (otherAssets.length >= 16) throw new Error('A project can store up to 16 imported model libraries.')
+      const currentModelBytes = otherAssets.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0)
       if (currentModelBytes + file.size > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
-      const existingSubcircuits = new Set(importedModels.map((model) => model.name.toLowerCase()))
+      const existingSubcircuits = new Set(otherAssets.flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits.map((model) => model.name.toLowerCase())))
       const duplicateSubcircuit = parsed.subcircuits.find((model) => existingSubcircuits.has(model.name.toLowerCase()))
-      if (duplicateSubcircuit) throw new Error(`${duplicateSubcircuit.name} is already present in this project. Rename or remove the existing model before importing.`)
-      const existingDeviceModels = new Set(importedDeviceModels.map((model) => model.name.toLowerCase()))
+      if (duplicateSubcircuit) throw new Error(`${duplicateSubcircuit.name} is already present outside the library being replaced.`)
+      const existingDeviceModels = new Set(otherAssets.flatMap((asset) => parseSubcircuitLibrary(asset.content).models.map((model) => model.name.toLowerCase())))
       const duplicateDeviceModel = parsed.models.find((model) => existingDeviceModels.has(model.name.toLowerCase()))
-      if (duplicateDeviceModel) throw new Error(`${duplicateDeviceModel.name} is already present in this project. Rename or remove the existing model before importing.`)
-      const asset = { id: `model-${crypto.randomUUID()}`, filename: file.name, content, sha256: await sha256Text(content), licenseStatus: 'unknown' as const, importedAt: new Date().toISOString() }
-      setProject((current) => ({ ...current, modelAssets: [...(current.modelAssets ?? []), asset] }))
+      if (duplicateDeviceModel) throw new Error(`${duplicateDeviceModel.name} is already present outside the library being replaced.`)
+      const asset = { id: replaceId ?? `model-${crypto.randomUUID()}`, filename: file.name, content, sha256: await sha256Text(content), licenseStatus: 'unknown' as const, importedAt: new Date().toISOString() }
+      const nextAssets = replaceId ? currentAssets.map((current) => current.id === replaceId ? asset : current) : [...currentAssets, asset]
+      const validated = validateProject({ ...projectRef.current, modelAssets: nextAssets })
+      setProject(() => validated)
+      setCompatibilityDiagnostic(null)
       const subcircuitCount = parsed.subcircuits.length, deviceModelCount = parsed.models.length
-      setNotice(`Imported ${subcircuitCount} subcircuit${subcircuitCount === 1 ? '' : 's'} and ${deviceModelCount} device model${deviceModelCount === 1 ? '' : 's'} from ${file.name}. Redistribution rights remain unknown.`)
+      setNotice(`${replaceId ? 'Replaced' : 'Imported'} ${subcircuitCount} subcircuit${subcircuitCount === 1 ? '' : 's'} and ${deviceModelCount} device model${deviceModelCount === 1 ? '' : 's'} from ${file.name}. Redistribution rights remain unknown.`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this model library.') }
     event.target.value = ''
   }
@@ -978,6 +989,7 @@ export default function App() {
         setRunState(response.fraction < 0.2 ? 'loading' : 'running')
         if (response.message) setNotice(response.message)
       } else if (response.type === 'result') {
+        setCompatibilityDiagnostic(null)
         setPlaybackRunning(false)
         setSimulationResult(response.result)
         setSampleIndex(response.result.analysis === 'tran' ? (response.result.traces[0]?.axis.length ?? 1) - 1 : null)
@@ -1011,6 +1023,7 @@ export default function App() {
         setRunState('error')
         const message = typeof response.error?.message === 'string' ? response.error.message : 'ngspice returned an invalid error response.'
         const sourceId = response.error?.sourceId
+        if (response.error?.assetId) setCompatibilityDiagnostic(response.error)
         if (sourceId && projectRef.current.parts.some((part) => part.id === sourceId)) setSelection({ kind: 'part', id: sourceId })
         setNotice(response.error?.hint ? `${message} Tip: ${response.error.hint}` : message)
         worker.terminate()
@@ -1109,6 +1122,7 @@ export default function App() {
     const starter = createStarterProject()
     setProjectState(starter)
     setImportWarnings([])
+    setCompatibilityDiagnostic(null)
     setSelectedTraceIds(starter.plotSettings?.selectedTraceIds ?? [])
     history.current = { past: [], future: [] }
     setSelection(null)
@@ -1170,6 +1184,7 @@ export default function App() {
 
       <aside className="inspector-panel">
         <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : 'Circuit settings'}</h2></div><button className="subtle-icon" title="More properties"><MoreHorizontal size={17}/></button></div>
+        {compatibilityDiagnostic?.assetId && project.modelAssets?.some((asset) => asset.id === compatibilityDiagnostic.assetId) && (() => { const asset = project.modelAssets.find((item) => item.id === compatibilityDiagnostic.assetId)!; return <section className="import-diagnostics engine-model-diagnostic" aria-label="ngspice model compatibility diagnostic"><div><strong>ngspice rejected an imported model card</strong><button onClick={() => setCompatibilityDiagnostic(null)} aria-label="Dismiss model diagnostic"><X size={13}/></button></div><p>{asset.filename}{compatibilityDiagnostic.assetLine ? ` · source line ${compatibilityDiagnostic.assetLine}` : ''}</p><code>{compatibilityDiagnostic.message}</code><p>{compatibilityDiagnostic.hint ?? 'Check the model against ngspice syntax and replace it with a compatible version if needed.'}</p><button className="replace-model" onClick={() => { setReplacementModelAssetId(asset.id); if (modelFileInput.current) { modelFileInput.current.value = ''; modelFileInput.current.click() } }}><FolderOpen size={13}/> Replace model library</button></section> })()}
         {importWarnings.length > 0 && <section className="import-diagnostics" aria-label="LTspice import diagnostics"><div><strong>Import needs review</strong><button onClick={() => setImportWarnings([])} aria-label="Dismiss import diagnostics"><X size={13}/></button></div><p>{importWarnings.length} item{importWarnings.length === 1 ? '' : 's'} could not be fully translated.</p><ul>{importWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul></section>}
         {selected ? <>
           <div className="selected-part-card"><span className={`selected-part-icon icon-${selected.kind}`}>{selected.kind === 'resistor' ? <Minus size={19}/> : selected.kind === 'capacitor' ? <Activity size={18}/> : selected.kind === 'source' ? <Zap size={18}/> : <Grid2X2 size={18}/>}</span><div><strong>{kindNames[selected.kind]}</strong><span>{componentPins(selected).length} pins · SPICE {kindPrefix[selected.kind]}</span></div></div>

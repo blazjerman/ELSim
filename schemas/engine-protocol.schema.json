@@ -16,7 +16,9 @@
         "message": { "type": "string" },
         "hint": { "type": "string" },
         "sourceId": { "type": "string" },
-        "line": { "type": "integer", "minimum": 1 }
+        "line": { "type": "integer", "minimum": 1 },
+        "assetId": { "type": "string", "minLength": 1 },
+        "assetLine": { "type": "integer", "minimum": 1 }
       }
     },
     "source": {
@@ -26,7 +28,9 @@
       "properties": {
         "line": { "type": "integer", "minimum": 1 },
         "sourceId": { "type": "string", "minLength": 1 },
-        "role": { "enum": ["component", "model", "analysis", "generated"] }
+        "role": { "enum": ["component", "model", "analysis", "generated"] },
+        "assetId": { "type": "string", "minLength": 1 },
+        "assetLine": { "type": "integer", "minimum": 1 }
       }
     },
     "artifact": {

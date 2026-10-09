@@ -8,7 +8,9 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact)
   const source = line === undefined ? undefined : artifact.sourceMap.find((entry) => entry.line === line)
   const lower = message.toLowerCase()
   let hint: string | undefined
-  if (/singular matrix|no ground|missing ground|no reference node/.test(lower)) {
+  if (source?.assetId) {
+    hint = `ngspice points to line ${source.assetLine ?? '?'} in an imported model library. Check that card against ngspice syntax, or replace the library with an ngspice-compatible version.`
+  } else if (/singular matrix|no ground|missing ground|no reference node/.test(lower)) {
     hint = 'Add a ground symbol and check for floating nodes or open connections.'
   } else if (/timestep too small|convergence problem|gmin stepping failed|source stepping failed/.test(lower)) {
     hint = 'Check component values and switch states. Try a smaller maximum time step or a small series resistance.'
@@ -22,6 +24,7 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact)
     message: message.slice(0, 500),
     ...(line !== undefined ? { line } : {}),
     ...(source ? { sourceId: source.sourceId } : {}),
+    ...(source?.assetId ? { assetId: source.assetId, ...(source.assetLine !== undefined ? { assetLine: source.assetLine } : {}) } : {}),
     ...(hint ? { hint } : {}),
   }
 }

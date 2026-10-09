@@ -18,6 +18,17 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
 })
 
+test('imported model cards keep source filename and original line in the netlist source map', () => {
+  const project = createStarterProject()
+  const content = '* User library\n\n.MODEL DFAST D(Is=1n)\n.SUBCKT amp IN OUT\nR1 IN OUT 1k\n.ENDS amp\n'
+  project.modelAssets = [{ id: 'model-user-lib', filename: 'user.lib', sha256: 'a'.repeat(64), content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  const artifact = createNetlistArtifact(project)
+  const source = artifact.sourceMap.find((item) => item.sourceId === 'model-file:model-user-lib' && item.assetLine === 5)
+  assert.ok(source)
+  assert.equal(source.assetId, 'model-user-lib')
+  assert.match(artifact.text.split('\n')[source.line - 1], /^R1 IN OUT 1k$/)
+})
+
 test('LED instances netlist as diode devices and retain D reference designators', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'p-led1', kind: 'led', ref: 'D1', value: 'Default LED', x: 700, y: 400, rotation: 0 })

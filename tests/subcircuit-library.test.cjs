@@ -20,6 +20,8 @@ test('parses ordered subcircuit pins, parameters, continuations, shared models, 
   assert.match(parsed.modelText, /\+ 10k/)
   assert.match(parsed.modelText, /\.ends/)
   assert.deepEqual(parsed.models.map(({ name, type }) => ({ name, type })), [{ name: 'DFAST', type: 'D' }])
+  assert.deepEqual(parsed.modelRecords[0], { sourceLine: 2, text: '.model DFAST D(Is=1n)' })
+  assert.ok(parsed.modelRecords.some((record) => record.sourceLine === 6 && record.text.trim() === 'D1 OUT VEE DFAST'))
 })
 
 test('imports .MODEL-only libraries, including numeric-leading model names and continuations', () => {

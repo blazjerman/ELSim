@@ -31,3 +31,12 @@ test('model errors retain raw message and suggest checking model name and pin or
   assert.equal(diagnostic.message, 'unknown subckt MODEL_X')
   assert.match(diagnostic.hint, /model is available.*pin order/i)
 })
+
+test('ngspice model-card errors identify the imported file and original source line', () => {
+  const modelArtifact = { text: '.model D1 D(Is=1n)', sourceMap: [{ line: 1, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 14 }], diagnostics: [] }
+  const diagnostic = diagnosticForNgspice('Error on line 1 or its substitute:', modelArtifact)
+  assert.equal(diagnostic.sourceId, 'model-file:asset-7')
+  assert.equal(diagnostic.assetId, 'asset-7')
+  assert.equal(diagnostic.assetLine, 14)
+  assert.match(diagnostic.hint, /line 14.*replace the library/i)
+})
