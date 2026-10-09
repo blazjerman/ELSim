@@ -53,6 +53,30 @@ test('hierarchical sheet instance emits a native ngspice subcircuit with ordered
   assert.match(artifact.text, /\.op/)
 })
 
+test('sheet block parameters provide defaults, per-instance overrides, and safe component expressions', () => {
+  const project = createBlockProject()
+  const child = project.sheets[1]
+  child.parameters = [{ id: 'param-load', name: 'RLOAD', defaultValue: '1k' }]
+  child.parts[0].value = '{RLOAD}'
+  project.parts.push({ ...project.parts[1], id: 'root-block-2', ref: 'XLOAD2', x: 600, sheetParameters: { RLOAD: '2k' } })
+  project.sheets[0].parts = project.parts
+  const checked = validateProject(project)
+  const artifact = createNetlistArtifact(checked)
+  assert.deepEqual(artifact.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+  assert.match(artifact.text, /^\.SUBCKT ELSIM_SHEET_sheet_load IN OUT PARAMS: RLOAD=1k$/m)
+  assert.match(artifact.text, /^RLOAD IN OUT \{RLOAD\}$/m)
+  assert.match(artifact.text, /^XLOAD\s+\S+\s+\S+\s+ELSIM_SHEET_sheet_load$/m)
+  assert.match(artifact.text, /^XLOAD2\s+\S+\s+\S+\s+ELSIM_SHEET_sheet_load PARAMS: RLOAD=2k$/m)
+
+  const stale = structuredClone(checked)
+  stale.parts[1].sheetParameters = { MISSING: '3k' }
+  stale.sheets[0].parts = stale.parts
+  assert.throws(() => validateProject(stale), /unsupported block parameter override/)
+  const unsafeExpression = structuredClone(checked)
+  unsafeExpression.sheets[1].parts[0].value = '{RLOAD}\n.end'
+  assert.match(createNetlistArtifact(unsafeExpression).diagnostics.find((item) => item.severity === 'error')?.message ?? '', /invalid numeric value/)
+})
+
 test('hierarchy validation rejects stale port pin maps and recursive block instances', () => {
   const stalePins = createBlockProject()
   stalePins.parts[1].modelPins = ['OUT', 'IN']

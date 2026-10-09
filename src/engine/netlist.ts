@@ -22,6 +22,14 @@ function spiceNumber(value: string, kind: PartKind): string | null {
   return spiceScalar(value, unit)
 }
 
+function spiceSheetValue(value: string, kind: PartKind, parameters: Project['sheets'][number]['parameters'] = []): string | null {
+  const scalar = spiceNumber(value, kind)
+  if (scalar) return scalar
+  const expression = value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
+  if (!expression || !parameters?.some((parameter) => parameter.name.toLowerCase() === expression[1].toLowerCase())) return null
+  return `{${expression[1]}}`
+}
+
 export function componentMagnitude(value: string, kind: PartKind): number | null {
   if (!['resistor', 'capacitor', 'inductor'].includes(kind)) return null
   const normalized = spiceNumber(value, kind)
@@ -94,7 +102,7 @@ function generateSheetLibrary(project: Project, parentSheetId: string): { text: 
       if (!child || child.ports.length === 0) diagnostics.push({ severity: 'error', message: `${part.ref} refers to a sheet block with no ports. Expose at least one labeled node as a port.`, sourceId: part.id, line: 1 })
       else if (part.modelPins?.length !== child.ports.length || child.ports.some((port, index) => port.name.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) diagnostics.push({ severity: 'error', message: `${part.ref} port mapping no longer matches sheet ${child.name}.`, sourceId: part.id, line: 1 })
     }
-    const local: Project = { ...project, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, sheets: project.sheets }
+    const local: Project = { ...project, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, sheets: project.sheets, _netlistSheetParameters: sheet.parameters ?? [] } as Project
     const artifact = createBaseNetlistArtifact(local, childLibrary, false)
     const rows = artifact.text.split('\n')
     const body = artifact.sourceMap.filter((source) => source.role === 'component' || source.role === 'generated').map((source) => rows[source.line - 1])
@@ -103,7 +111,8 @@ function generateSheetLibrary(project: Project, parentSheetId: string): { text: 
     if (sheet.ports.length && diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length === errorsBeforeSheet) {
       const name = sheetModelName(sheet.id)
       const ports = sheet.ports.map((port) => port.name).join(' ')
-      definitions.set(sheet.id, `.SUBCKT ${name} ${ports}${body.length ? `\n${body.join('\n')}` : ''}\n.ENDS ${name}`)
+      const parameters = (sheet.parameters ?? []).map((parameter) => `${parameter.name}=${parameter.defaultValue}`)
+      definitions.set(sheet.id, `.SUBCKT ${name} ${ports}${parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}${body.length ? `\n${body.join('\n')}` : ''}\n.ENDS ${name}`)
     }
     visiting.delete(sheetId)
     completed.add(sheetId)
@@ -169,7 +178,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
-    const value = part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : spiceNumber(part.value, part.kind)
+    const sheetParameters = (project as Project & { _netlistSheetParameters?: Project['sheets'][number]['parameters'] })._netlistSheetParameters ?? []
+    const value = part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
     if (part.kind !== 'diode' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'subcircuit' && value === null) {
       const message = `${part.ref} has an invalid numeric value.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -231,8 +241,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const nodes = part.modelPins.map((_, index) => pinNet(connectivity, part, index))
+      const overrides = part.sheetId ? part.sheetParameters : part.modelParameters
       const parameters = definition.parameters.flatMap((parameter) => {
-        const override = Object.entries(part.modelParameters ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1]
+        const override = Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1]
         return override === undefined ? [] : [`${parameter.name}=${override}`]
       })
       append(`${part.ref} ${nodes.join(' ')} ${definition.name}${parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}`, part.id, 'component')

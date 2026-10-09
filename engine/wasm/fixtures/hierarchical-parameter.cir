@@ -1,0 +1,11 @@
+ELSim sheet block parameter operating point
+V1 in 0 5
+V2 in2 0 10
+X1 in 0 ELSIM_SHEET_load
+X2 in2 0 ELSIM_SHEET_load PARAMS: RLOAD=2k
+.SUBCKT ELSIM_SHEET_load IN OUT PARAMS: RLOAD=1k
+RLOAD IN OUT {RLOAD}
+.ENDS ELSIM_SHEET_load
+.op
+.print op v(in) v(in2) i(v1) i(v2)
+.end

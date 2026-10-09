@@ -17,6 +17,7 @@ export type Part = {
   modelName?: string
   modelPins?: string[]
   modelParameters?: Record<string, string>
+  sheetParameters?: Record<string, string>
   deviceModel?: string
   symbolAssetId?: string
   symbolPinOffsets?: [number, number][]
@@ -46,6 +47,7 @@ export type ProjectSheet = {
   netLabels: NetLabel[]
   view: { zoom: number; panX: number; panY: number }
   ports: { id: string; name: string }[]
+  parameters?: { id: string; name: string; defaultValue: string }[]
 }
 
 export function sheetModelName(sheetId: string): string {
@@ -54,7 +56,7 @@ export function sheetModelName(sheetId: string): string {
 
 export type Project = {
   format: 'elsim-project'
-  version: 5
+  version: 6
   name: string
   updatedAt: string
   parts: Part[]
@@ -73,7 +75,7 @@ export type Project = {
 
 const starter: Project = {
   format: 'elsim-project',
-  version: 5,
+  version: 6,
   name: 'RC step response',
   updatedAt: new Date().toISOString(),
   parts: [
@@ -115,13 +117,19 @@ function migrateV3(input: Record<string, unknown>): Project {
 }
 
 function migrateV4(input: Record<string, unknown>): Project {
-  const project = { ...input, version: 5 } as unknown as Project
-  project.sheets = (project.sheets ?? []).map((sheet) => ({ ...sheet, ports: sheet.ports ?? [] }))
+  const project = { ...input, version: 6 } as unknown as Project
+  project.sheets = (project.sheets ?? []).map((sheet) => ({ ...sheet, ports: sheet.ports ?? [], parameters: [] }))
+  return project
+}
+
+function migrateV5(input: Record<string, unknown>): Project {
+  const project = { ...input, version: 6 } as unknown as Project
+  project.sheets = (project.sheets ?? []).map((sheet) => ({ ...sheet, parameters: sheet.parameters ?? [] }))
   return project
 }
 
 function migrateV2(input: Record<string, unknown>): Project {
-  const project = { ...input, version: 5 } as unknown as Project
+  const project = { ...input, version: 6 } as unknown as Project
   project.rootSheetId = 'sheet-main'
   project.activeSheetId = 'sheet-main'
   project.sheets = [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view, ports: [] }]
@@ -158,7 +166,7 @@ function migrateV1(input: Record<string, unknown>): Project {
     })
   }
   return {
-    format: 'elsim-project', version: 5,
+    format: 'elsim-project', version: 6,
     name: typeof input.name === 'string' ? input.name : 'Imported project',
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
     parts: oldParts.map(({ nodes: _nodes, ...part }) => part),
@@ -178,8 +186,9 @@ export function validateProject(input: unknown): Project {
   if (data.version === 2 && Array.isArray(data.parts) && Array.isArray(data.wires)) return validateProject(migrateV2(data))
   if (data.version === 3 && Array.isArray(data.sheets)) return validateProject(migrateV3(data))
   if (data.version === 4 && Array.isArray(data.sheets)) return validateProject(migrateV4(data))
-  if (data.version !== 5 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
-    throw new Error('This project format is not supported. Expected ELSim project version 5.')
+  if (data.version === 5 && Array.isArray(data.sheets)) return validateProject(migrateV5(data))
+  if (data.version !== 6 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
+    throw new Error('This project format is not supported. Expected ELSim project version 6.')
   }
   const allowed = new Set<PartKind>(['source', 'resistor', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'npn', 'pnp', 'subcircuit'])
   const refs = new Set<string>()
@@ -361,7 +370,7 @@ export function validateProject(input: unknown): Project {
   const sheetPartIds = new Set<string>()
   const siblingNames = new Map<string, Set<string>>()
   for (const sheet of sheets) {
-    if (!sheet || typeof sheet.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(sheet.id) || sheetIds.has(sheet.id) || typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 80 || (sheet.parentSheetId !== null && typeof sheet.parentSheetId !== 'string') || !Array.isArray(sheet.parts) || !Array.isArray(sheet.wires) || !Array.isArray(sheet.junctions) || !Array.isArray(sheet.netLabels) || !Array.isArray(sheet.ports) || sheet.ports.length > 64 || !sheet.view || !Number.isFinite(sheet.view.zoom) || sheet.view.zoom <= 0 || !Number.isFinite(sheet.view.panX) || !Number.isFinite(sheet.view.panY)) throw new Error('Project contains a malformed sheet.')
+    if (!sheet || typeof sheet.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(sheet.id) || sheetIds.has(sheet.id) || typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 80 || (sheet.parentSheetId !== null && typeof sheet.parentSheetId !== 'string') || !Array.isArray(sheet.parts) || !Array.isArray(sheet.wires) || !Array.isArray(sheet.junctions) || !Array.isArray(sheet.netLabels) || !Array.isArray(sheet.ports) || sheet.ports.length > 64 || !Array.isArray(sheet.parameters ?? []) || (sheet.parameters ?? []).length > 32 || !sheet.view || !Number.isFinite(sheet.view.zoom) || sheet.view.zoom <= 0 || !Number.isFinite(sheet.view.panX) || !Number.isFinite(sheet.view.panY)) throw new Error('Project contains a malformed sheet.')
     sheetIds.add(sheet.id)
     for (const part of sheet.parts) {
       if (!part || typeof part.id !== 'string' || !part.id || sheetPartIds.has(part.id)) throw new Error('Project sheet component IDs must be unique across the hierarchy.')
@@ -379,6 +388,11 @@ export function validateProject(input: unknown): Project {
       if (!port || typeof port.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(port.id) || portIds.has(port.id) || typeof port.name !== 'string' || !/^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(port.name) || ports.has(port.name.toLowerCase()) || !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase())) throw new Error(`Sheet ${sheet.name} has a malformed port. Ports must expose unique labeled nodes.`)
       ports.add(port.name.toLowerCase())
       portIds.add(port.id)
+    }
+    const parameterNames = new Set<string>(), parameterIds = new Set<string>()
+    for (const parameter of sheet.parameters ?? []) {
+      if (!parameter || typeof parameter.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(parameter.id) || parameterIds.has(parameter.id) || typeof parameter.name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(parameter.name) || ['__proto__', 'constructor', 'prototype'].includes(parameter.name.toLowerCase()) || parameterNames.has(parameter.name.toLowerCase()) || typeof parameter.defaultValue !== 'string' || !isSafeSubcircuitParameterValue(parameter.defaultValue)) throw new Error(`Sheet ${sheet.name} has a malformed block parameter.`)
+      parameterIds.add(parameter.id); parameterNames.add(parameter.name.toLowerCase())
     }
   }
   const root = sheets.find((sheet) => sheet.id === data.rootSheetId)
@@ -406,6 +420,10 @@ export function validateProject(input: unknown): Project {
   for (const sheet of sheets) for (const part of sheet.parts as Part[]) if (part.sheetId) {
     const definition = sheets.find((candidate) => candidate.id === part.sheetId)!
     if (part.modelName !== sheetModelName(definition.id) || part.modelPins?.length !== definition.ports.length || definition.ports.some((port, index) => port.name.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) throw new Error(`${part.ref} block pins do not match sheet ${definition.name}.`)
+    if (part.sheetParameters !== undefined) {
+      if (!part.sheetParameters || typeof part.sheetParameters !== 'object' || Array.isArray(part.sheetParameters) || Object.keys(part.sheetParameters).length > 32) throw new Error(`${part.ref} block parameter overrides are malformed.`)
+      for (const [name, value] of Object.entries(part.sheetParameters)) if (!(definition.parameters ?? []).some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value)) throw new Error(`${part.ref} has an unsupported block parameter override for ${name}.`)
+    }
   }
   return syncActiveSheet(data as unknown as Project)
 }
