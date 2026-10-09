@@ -1,4 +1,5 @@
 import { componentPins } from './geometry'
+import { parseSubcircuitLibrary } from './subcircuitLibrary'
 
 export type PartKind = 'source' | 'resistor' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'npn' | 'pnp'
 export type Rotation = 0 | 90 | 180 | 270
@@ -24,6 +25,7 @@ export type PlotSettings = {
 export type ParameterSweep = { component: string; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string }
 export type InitialCondition = { node: string; voltage: string }
+export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
 
 export type Project = {
   format: 'elsim-project'
@@ -36,6 +38,7 @@ export type Project = {
   netLabels: NetLabel[]
   view: { zoom: number; panX: number; panY: number }
   plotSettings?: PlotSettings
+  modelAssets?: ModelLibraryAsset[]
   simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
 }
 
@@ -133,6 +136,25 @@ export function validateProject(input: unknown): Project {
   }
   for (const junction of data.junctions as Project['junctions']) {
     if (!junction || !Number.isFinite(junction.x) || !Number.isFinite(junction.y)) throw new Error('Project contains a malformed junction.')
+  }
+  if (data.modelAssets !== undefined) {
+    if (!Array.isArray(data.modelAssets) || data.modelAssets.length > 16) throw new Error('A project can store up to 16 imported model libraries.')
+    const assetIds = new Set<string>(), modelNames = new Set<string>()
+    let totalBytes = 0
+    for (const candidate of data.modelAssets as ModelLibraryAsset[]) {
+      if (!candidate || typeof candidate.id !== 'string' || !candidate.id || assetIds.has(candidate.id) || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.content !== 'string' || !/^[a-f\d]{64}$/i.test(candidate.sha256) || candidate.licenseStatus !== 'unknown' || typeof candidate.importedAt !== 'string' || !Number.isFinite(Date.parse(candidate.importedAt))) throw new Error('Project contains a malformed imported model library.')
+      const size = new TextEncoder().encode(candidate.content).length
+      if (size > 4 * 1024 * 1024) throw new Error(`${candidate.filename} exceeds the 4 MiB model library limit.`)
+      totalBytes += size
+      if (totalBytes > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
+      const parsed = parseSubcircuitLibrary(candidate.content)
+      for (const subcircuit of parsed.subcircuits) {
+        const key = subcircuit.name.toLowerCase()
+        if (modelNames.has(key)) throw new Error(`Imported subcircuit ${subcircuit.name} is declared more than once in this project.`)
+        modelNames.add(key)
+      }
+      assetIds.add(candidate.id)
+    }
   }
   const simulation = data.simulation as Project['simulation'] | undefined
   const view = data.view as Project['view'] | undefined

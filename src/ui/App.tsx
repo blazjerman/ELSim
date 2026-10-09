@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
   Activity, AlertTriangle, ArrowDown, ArrowUp, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, CircleHelp,
@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
 import { checkCircuit } from '../domain/electricalCheck'
+import { parseSubcircuitLibrary, sha256Text, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { wireCurrentFlow } from '../domain/wireFlow'
@@ -575,6 +576,7 @@ export default function App() {
   const [componentQuery, setComponentQuery] = useState('')
   const [tourStep, setTourStep] = useState<number | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  const modelFileInput = useRef<HTMLInputElement>(null)
   const componentSearchRef = useRef<HTMLInputElement>(null)
   const activeWorkerRef = useRef<Worker | null>(null)
   const projectRef = useRef(project)
@@ -593,6 +595,7 @@ export default function App() {
   }, [playbackRunning, playbackAvailable, sampleIndex, transientAxis])
   const connectivity = analyzeConnectivity(project)
   const electricalIssues = checkCircuit(project, connectivity)
+  const importedModels = useMemo(() => (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits.map((subcircuit) => ({ ...subcircuit, assetId: asset.id, filename: asset.filename }))), [project.modelAssets])
   useEffect(() => {
     try {
       localStorage.setItem('elsim:project:v2', JSON.stringify(project))
@@ -600,6 +603,11 @@ export default function App() {
     }
     catch { setNotice('This browser could not save the project locally. Use Save to download a copy.') }
   }, [project])
+  useEffect(() => {
+    let active = true
+    verifyModelAssetHashes(project.modelAssets ?? []).catch((error) => { if (active) setNotice(error instanceof Error ? error.message : 'An imported model hash could not be verified.') })
+    return () => { active = false }
+  }, [project.modelAssets])
   useEffect(() => {
     let mounted = true
     fetch('/engine/ngspice.mjs', { method: 'HEAD' }).then((response) => { if (mounted) setEngineAssetAvailable(response.ok) }).catch(() => { if (mounted) setEngineAssetAvailable(false) })
@@ -680,12 +688,29 @@ export default function App() {
       const bytes = new Uint8Array(await file.arrayBuffer())
       const projectData = isProjectArchive(bytes) ? readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
       const parsed = validateProject(projectData)
+      await verifyModelAssetHashes(parsed.modelAssets ?? [])
       setProjectState(parsed)
       setSelectedTraceIds(parsed.plotSettings?.selectedTraceIds ?? [])
       history.current = { past: [], future: [] }
       setSelection(null)
       setNotice(`Opened ${parsed.name}`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not open this project') }
+    event.target.value = ''
+  }
+  const importModelLibrary = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      if (file.size > 4 * 1024 * 1024) throw new Error('Model libraries are limited to 4 MiB per file.')
+      const content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
+      const parsed = parseSubcircuitLibrary(content)
+      const existingNames = new Set(importedModels.map((model) => model.name.toLowerCase()))
+      const duplicate = parsed.subcircuits.find((model) => existingNames.has(model.name.toLowerCase()))
+      if (duplicate) throw new Error(`${duplicate.name} is already present in this project. Rename or remove the existing model before importing.`)
+      const asset = { id: `model-${crypto.randomUUID()}`, filename: file.name, content, sha256: await sha256Text(content), licenseStatus: 'unknown' as const, importedAt: new Date().toISOString() }
+      setProject((current) => ({ ...current, modelAssets: [...(current.modelAssets ?? []), asset] }))
+      setNotice(`Imported ${parsed.subcircuits.length} subcircuit${parsed.subcircuits.length === 1 ? '' : 's'} from ${file.name}. Redistribution rights remain unknown.`)
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this model library.') }
     event.target.value = ''
   }
   const addPart = (kind: PartKind) => {
@@ -1011,7 +1036,10 @@ export default function App() {
         <div className="library-categories"><button className="category active"><Zap size={14}/> Basics</button><button className="category"><Activity size={14}/> Semiconductors <span className="soon-tag">SOON</span></button><button className="category"><Waypoints size={14}/> Integrated circuits <span className="soon-tag">SOON</span></button><button className="category"><Grid2X2 size={14}/> Connectors <span className="soon-tag">SOON</span></button></div>
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} MATCHING COMPONENT${filteredPalette.length === 1 ? '' : 'S'}` : 'BASIC COMPONENTS'}</div>
         {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, label, Icon, subtitle }) => <button key={kind} className="component-card" onClick={() => addPart(kind)} title={`Add ${label}`}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span></button>)}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
-        <button className="library-import" onClick={() => setNotice('Model import is planned after the ngspice engine and project format are stable.')}><Plus size={15}/> Import a model</button>
+        {importedModels.length > 0 && <div className="imported-models"><div className="component-list-label">IMPORTED SUBCIRCUITS</div>{importedModels.map((model) => <div className="imported-model" key={`${model.assetId}:${model.name}`}><div><strong>{model.name}</strong><span>{model.pins.length} ordered pins · {model.pins.join(', ')}</span><small>{model.filename} · redistribution unknown</small></div><button aria-label={`Remove model library ${model.filename}`} title="Remove imported library" onClick={() => setProject((current) => ({ ...current, modelAssets: (current.modelAssets ?? []).filter((asset) => asset.id !== model.assetId) }))}><X size={13}/></button></div>)}</div>}
+        <input ref={modelFileInput} type="file" accept=".lib,.sub,.cir,.spice,.txt,text/plain" hidden onChange={importModelLibrary}/>
+        <button className="library-import" onClick={() => modelFileInput.current?.click()}><Plus size={15}/> Import .SUBCKT library</button>
+        <div className="model-import-note">Model text stays in this project. Import only files you are authorized to use; ELSim does not grant redistribution rights.</div>
         <div className="library-bottom"><div className="tip-card"><span className="tip-icon"><Lightbulb size={17}/></span><div><strong>New to circuits?</strong><p>Start with a resistor, capacitor, and a voltage source.</p><button onClick={startTour}>Take a quick tour <ArrowUp size={12}/></button></div></div><div className="library-version">ELSim Preview <span>·</span> v0.1</div></div>
       </aside>
 

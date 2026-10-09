@@ -16,7 +16,8 @@
     "netLabels": { "type": "array", "items": { "$ref": "#/$defs/netLabel" } },
     "view": { "$ref": "#/$defs/view" },
     "simulation": { "$ref": "#/$defs/simulation" },
-    "plotSettings": { "$ref": "#/$defs/plotSettings" }
+    "plotSettings": { "$ref": "#/$defs/plotSettings" },
+    "modelAssets": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/modelAsset" } }
   },
   "$defs": {
     "point": {
@@ -38,6 +39,19 @@
         "y": { "type": "number" },
         "rotation": { "enum": [0, 90, 180, 270] },
         "flipX": { "type": "boolean", "default": false }
+      }
+    },
+    "modelAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "filename", "sha256", "content", "licenseStatus", "importedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "filename": { "type": "string", "minLength": 1, "pattern": "^[^/\\\\\\u0000-\\u001f]+$" },
+        "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "content": { "type": "string", "maxLength": 4194304 },
+        "licenseStatus": { "const": "unknown" },
+        "importedAt": { "type": "string", "format": "date-time" }
       }
     },
     "wire": {

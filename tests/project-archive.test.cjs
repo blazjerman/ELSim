@@ -6,6 +6,9 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createProjectArchive, isProjectArchive, readProjectArchive, crc32 } = require(path.join(build, 'domain/projectArchive.js'))
+const { webcrypto } = require('node:crypto')
+if (!globalThis.crypto) globalThis.crypto = webcrypto
+const { verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('project ZIP archive is deterministic and round-trips the complete v2 project', () => {
   const project = createStarterProject()
@@ -18,6 +21,18 @@ test('project ZIP archive is deterministic and round-trips the complete v2 proje
   const restored = validateProject(readProjectArchive(first))
   assert.deepEqual(restored, project)
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926)
+})
+
+test('user model libraries round-trip inside project data with digest and license provenance', async () => {
+  const project = createStarterProject()
+  const content = '.SUBCKT user_amp IN OUT VCC VEE\nR1 IN OUT 1k\n.ENDS user_amp\n'
+  const digest = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(content)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  project.modelAssets = [{ id: 'model-1', filename: 'user-amp.lib', sha256: digest, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  assert.deepEqual(restored.modelAssets, project.modelAssets)
+  await verifyModelAssetHashes(restored.modelAssets)
+  await assert.rejects(verifyModelAssetHashes([{ ...restored.modelAssets[0], content: `${content}* changed` }]), /does not match/)
+  assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], filename: '../user-amp.lib' }] }), /malformed imported model library/)
 })
 
 test('plot preferences survive project validation and old projects receive defaults', () => {
