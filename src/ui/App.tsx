@@ -54,6 +54,11 @@ function usePlotWindow(traces: Trace[], savedRange: PlotRange | undefined, onRan
   const [window, setWindow] = useState<PlotWindow>(savedRange ?? { start: 0, end: 1 })
   useEffect(() => setWindow(savedRange ?? { start: 0, end: 1 }), [traces])
   const update = (next: PlotRange) => { setWindow(next); onRangeChange(next) }
+  const panBy = (delta: number) => {
+    const span = window.end - window.start
+    const start = Math.max(0, Math.min(1 - span, window.start + delta))
+    update({ start, end: start + span })
+  }
   const zoom = (factor: number) => {
     const span = window.end - window.start
     const next = Math.min(1, Math.max(0.03, span * factor))
@@ -64,13 +69,10 @@ function usePlotWindow(traces: Trace[], savedRange: PlotRange | undefined, onRan
   }
   const pan = (direction: -1 | 1) => {
     const span = window.end - window.start
-    const start = Math.max(0, Math.min(1 - span, window.start + direction * span * 0.22))
-    const range = { start, end: start + span }
-    setWindow(range)
-    onRangeChange(range)
+    panBy(direction * span * 0.22)
   }
   const reset = () => update({ start: 0, end: 1 })
-  return { window, zoom, pan, reset }
+  return { window, zoom, pan, panBy, reset }
 }
 
 type ValueWindow = { min: number; max: number }
@@ -87,7 +89,11 @@ function useValueWindow(autoRange: [number, number]) {
     const shift = (range.max - range.min) * 0.22 * direction
     setSaved({ min: range.min + shift, max: range.max + shift })
   }
-  return { range, zoom, pan, reset: () => setSaved(null) }
+  const panBy = (fraction: number) => {
+    const shift = (range.max - range.min) * fraction
+    setSaved({ min: range.min + shift, max: range.max + shift })
+  }
+  return { range, zoom, pan, panBy, reset: () => setSaved(null) }
 }
 
 function PlotNavigation({ zoom, pan, reset, valueZoom, valuePan, disabled = false }: { window: PlotWindow; zoom: (factor: number) => void; pan: (direction: -1 | 1) => void; reset: () => void; valueZoom: (factor: number) => void; valuePan: (direction: -1 | 1) => void; disabled?: boolean }) {
@@ -103,6 +109,44 @@ function PlotNavigation({ zoom, pan, reset, valueZoom, valuePan, disabled = fals
     <button title="Zoom vertical axis in" aria-label="Zoom vertical axis in" onClick={() => valueZoom(0.67)} disabled={disabled}>+</button>
     <button title="Pan vertical axis down" aria-label="Pan vertical axis down" onClick={() => valuePan(-1)} disabled={disabled}><ChevronDown size={11}/></button>
   </div>
+}
+
+function usePlotDragPan(onHorizontalPan: (delta: number) => void, onVerticalPan: (delta: number) => void) {
+  const drag = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null)
+  const suppressClick = useRef(false)
+  const start = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const move = (event: PointerEvent<SVGSVGElement>, viewWidth: number, viewHeight: number, plotWidth: number, plotHeight: number) => {
+    const active = drag.current
+    if (!active || active.pointerId !== event.pointerId) return
+    const dx = event.clientX - active.x, dy = event.clientY - active.y
+    if (Math.abs(dx) + Math.abs(dy) < 2) return
+    active.moved = true
+    active.x = event.clientX
+    active.y = event.clientY
+    const rect = event.currentTarget.getBoundingClientRect()
+    onHorizontalPan(-dx / Math.max(rect.width, 1) * viewWidth / plotWidth)
+    onVerticalPan(dy / Math.max(rect.height, 1) * viewHeight / plotHeight)
+  }
+  const end = (event: PointerEvent<SVGSVGElement>) => {
+    if (drag.current?.pointerId === event.pointerId) {
+      suppressClick.current = drag.current.moved
+      drag.current = null
+    }
+  }
+  const cancel = (event: PointerEvent<SVGSVGElement>) => {
+    if (drag.current?.pointerId === event.pointerId) drag.current = null
+    suppressClick.current = false
+  }
+  const shouldSuppressClick = () => {
+    const shouldSuppress = suppressClick.current
+    suppressClick.current = false
+    return shouldSuppress
+  }
+  return { start, move, end, cancel, shouldSuppressClick }
 }
 
 function nearestAxisIndex(axis: Float64Array, value: number, start: number, end: number): number {
@@ -196,6 +240,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
   const resetView = () => { navigation.reset(); voltageAxis.reset(); currentAxis.reset() }
   const zoomValue = (factor: number) => { voltageAxis.zoom(factor); currentAxis.zoom(factor) }
   const panValue = (direction: -1 | 1) => { voltageAxis.pan(direction); currentAxis.pan(direction) }
+  const plotDrag = usePlotDragPan(navigation.panBy, (delta) => { voltageAxis.panBy(delta); currentAxis.panBy(delta) })
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
   const [cursorIndex, setCursorIndex] = useState<number | null>(sampleIndex)
   useEffect(() => setCursorIndex(sampleIndex), [traces, sampleIndex])
@@ -224,7 +269,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
   const cursorTime = cursorIndex === null || !axis ? null : axis[cursorIndex]
   return <div className="waveform-view">
     <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'Transient results'}</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><span>{cursorTime === null ? 'Click plot for cursor values' : `t = ${cursorTime.toPrecision(5)} s`}</span><PlotNavigation {...navigation} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <svg className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds`} onClick={handleCursor}>
+    <svg className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds`} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, width, height, right - left, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
       {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const v = voltageRange[1] - (line / 3) * (voltageRange[1] - voltageRange[0]); const a = currentRange[1] - (line / 3) * (currentRange[1] - currentRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{v.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{a.toPrecision(3)} A</text>}</g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       {shown.map((trace) => <polyline key={trace.id} points={pathFor(trace)} fill="none" stroke={colors[traces.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
@@ -281,12 +326,13 @@ function AcPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRange
   minValue = valueAxis.range.min
   maxValue = valueAxis.range.max
   const resetView = () => { navigation.reset(); valueAxis.reset() }
+  const plotDrag = usePlotDragPan(navigation.panBy, (delta) => valueAxis.panBy(delta))
   const xFor = (frequency: number) => left + ((Math.log10(frequency) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left)
   const yFor = (value: number) => bottom - (value - minValue) / (maxValue - minValue) * (bottom - top)
   return <div className="waveform-view ac-view">
     <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${frequencies[cursorIndex].toPrecision(5)} Hz`}</span><PlotNavigation {...navigation} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <div className="ac-mode"><button className={mode === 'magnitude' ? 'active' : ''} onClick={() => setMode('magnitude')}>Magnitude (dB)</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setMode('phase')}>Phase (°)</button></div>
-    <svg className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`AC ${mode} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz`} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); setCursorIndex(nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1))) }}>
+    <svg className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`AC ${mode} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz`} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, width, height, right - left, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); setCursorIndex(nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1))) }}>
       {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} {mode === 'magnitude' ? 'dB' : '°'}</text></g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       {shown.map((trace) => <polyline key={trace.id} points={extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, index) => valueFor(trace, index)).map((index) => `${xFor(trace.axis[index]).toFixed(2)},${yFor(valueFor(trace, index)).toFixed(2)}`).join(' ')} fill="none" stroke={colors[traces.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
@@ -319,13 +365,14 @@ function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, on
   min = valueAxis.range.min
   max = valueAxis.range.max
   const resetView = () => { navigation.reset(); valueAxis.reset() }
+  const plotDrag = usePlotDragPan(navigation.panBy, (delta) => valueAxis.panBy(delta))
   const span = max - min || 1
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
   const xFor = (value: number) => left + (value - x0) / (x1 - x0 || 1) * (right - left)
   const yFor = (value: number) => bottom - (value - min) / span * (bottom - top)
   return <div className="waveform-view">
     <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'DC sweep results'}</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${axis[cursorIndex].toPrecision(5)} ${traces[0]?.axisUnit}`}</span><PlotNavigation {...navigation} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <svg className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}`} onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); setCursorIndex(nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1))) }}>
+    <svg className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}`} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, width, height, right - left, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); setCursorIndex(nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1))) }}>
       {[0, 1, 2, 3].map((line) => { const value = max - line / 3 * span; return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)}</text></g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       {shown.map((trace) => <polyline key={trace.id} points={extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900).map((index) => `${xFor(trace.axis[index]).toFixed(2)},${yFor(trace.values[index]).toFixed(2)}`).join(' ')} fill="none" stroke={colors[traces.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
