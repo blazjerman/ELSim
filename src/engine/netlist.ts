@@ -6,18 +6,25 @@ function cleanComment(value: string): string {
   return value.replace(/[\r\n\u0000-\u001f]/g, ' ').trim()
 }
 
-function spiceNumber(value: string, kind: PartKind): string | null {
-  let result = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll('Ω', '').replaceAll(' ', '')
-  const unit = kind === 'source' ? 'v' : kind === 'capacitor' ? 'f' : kind === 'inductor' ? 'h' : ''
+function spiceScalar(value: string, unit: string): string | null {
+  let result = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
   if (unit && result.toLowerCase().endsWith(unit)) result = result.slice(0, -unit.length)
-  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:meg|[tgkmunpf])?$/i.test(result)) return null
-  return result
+  result = result.replace(/[ΩΩ]|ohms?$/gi, '')
+  const match = result.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+  if (!match) return null
+  const prefix = match[2] === 'M' ? 'meg' : (match[2]?.toLowerCase() ?? '')
+  return `${match[1]}${prefix}`
+}
+
+function spiceNumber(value: string, kind: PartKind): string | null {
+  const unit = kind === 'source' ? 'v' : kind === 'capacitor' ? 'f' : kind === 'inductor' ? 'h' : ''
+  return spiceScalar(value, unit)
 }
 
 function spiceTime(value: string): string | null {
   let result = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
   if (result.toLowerCase().endsWith('s')) result = result.slice(0, -1)
-  return /^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:meg|[tgkmunpf])?$/i.test(result) ? result : null
+  return spiceScalar(result, '')
 }
 
 function validReference(part: Part): boolean {
