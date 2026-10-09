@@ -1,0 +1,15 @@
+ELSim controlled source regression
+VCTRL control 0 1
+E1 out-v 0 control 0 2
+R1 out-v 0 1k
+G1 out-i 0 control 0 1m
+R2 out-i 0 1k
+.save all @E1[i] @G1[i]
+.tran 100n 10u
+.control
+set filetype=ascii
+run
+write /result.raw all
+quit
+.endc
+.end

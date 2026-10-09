@@ -1,6 +1,6 @@
 import { componentPins } from './geometry'
 
-export type PartKind = 'source' | 'resistor' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch'
+export type PartKind = 'source' | 'resistor' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs'
 export type Rotation = 0 | 90 | 180 | 270
 
 export type Part = {
@@ -102,7 +102,7 @@ export function validateProject(input: unknown): Project {
   if (data.version !== 2 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
     throw new Error('This project format is not supported. Expected ELSim project version 2.')
   }
-  const allowed = new Set<PartKind>(['source', 'resistor', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch'])
+  const allowed = new Set<PartKind>(['source', 'resistor', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs'])
   const refs = new Set<string>()
   const partIds = new Set<string>()
   for (const candidate of data.parts as Part[]) {
@@ -110,7 +110,7 @@ export function validateProject(input: unknown): Project {
       throw new Error('Project contains a malformed component.')
     }
     partIds.add(candidate.id)
-    const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S' } as const)[candidate.kind]
+    const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G' } as const)[candidate.kind]
     if (!candidate.ref.startsWith(prefix) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(candidate.ref)) throw new Error(`The reference designator ${candidate.ref} is invalid for ${candidate.kind}.`)
     if (refs.has(candidate.ref.toLowerCase())) throw new Error(`The reference designator ${candidate.ref} is used more than once.`)
     refs.add(candidate.ref.toLowerCase())
@@ -171,7 +171,7 @@ export function validateProject(input: unknown): Project {
     if (simulation.analysis !== 'tran') throw new Error('Transient measurements require transient analysis.')
     const measurementIds = new Set<string>()
     for (const measurement of simulation.transientMeasurements) {
-      if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !['max', 'min', 'avg', 'rms'].includes(measurement.operation) || typeof measurement.vector !== 'string' || !measurement.vector.trim() || !/^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDS][A-Za-z0-9_]*\))$/i.test(measurement.vector.trim())) throw new Error('Transient measurements require a unique name, a supported operation, and a voltage or device-current vector such as V(out) or I(R1).')
+      if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !['max', 'min', 'avg', 'rms'].includes(measurement.operation) || typeof measurement.vector !== 'string' || !measurement.vector.trim() || !/^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEG][A-Za-z0-9_]*\))$/i.test(measurement.vector.trim())) throw new Error('Transient measurements require a unique name, a supported operation, and a voltage or device-current vector such as V(out) or I(R1).')
       measurementIds.add(measurement.id.toLowerCase())
     }
   }
@@ -205,9 +205,9 @@ export function validateProject(input: unknown): Project {
 
 export const kindNames: Record<PartKind, string> = {
   source: 'Voltage source', resistor: 'Resistor', capacitor: 'Capacitor',
-  ground: 'Ground', inductor: 'Inductor', diode: 'Diode', led: 'LED', switch: 'Switch',
+  ground: 'Ground', inductor: 'Inductor', diode: 'Diode', led: 'LED', switch: 'Switch', vcvs: 'Voltage-controlled voltage source', vccs: 'Voltage-controlled current source',
 }
 
 export const kindPrefix: Record<PartKind, string> = {
-  source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S',
+  source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G',
 }

@@ -7,6 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject } = require(path.join(build, 'domain/project.js'))
+const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
   const artifact = createNetlistArtifact(createStarterProject())
@@ -108,5 +109,19 @@ test('invalid switch states produce an actionable component error instead of a p
   assert.match(artifact.text, /^\* ERROR: S1 state must be On or Off\.$/m)
   assert.doesNotMatch(artifact.text, /^S1 /m)
   assert.doesNotMatch(artifact.text, /^\.model ELSIM_INTERNAL_SW/m)
+})
+
+test('four-terminal voltage-controlled sources keep SPICE output and control pin order', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'p-e1', kind: 'vcvs', ref: 'E1', value: '2', x: 720, y: 280, rotation: 0 },
+    { id: 'p-g1', kind: 'vccs', ref: 'G1', value: '1 mS', x: 840, y: 380, rotation: 0 },
+  )
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^E1 n\d+ n\d+ n\d+ n\d+ 2$/m)
+  assert.match(artifact.text, /^G1 n\d+ n\d+ n\d+ n\d+ 1m$/m)
+  assert.equal(artifact.sourceMap.filter((entry) => ['p-e1', 'p-g1'].includes(entry.sourceId)).length, 2)
+  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'E1')).map(({ x, y }) => [x - 720, y - 280]), [[-52, 0], [52, 0], [0, -52], [0, 52]])
 })
 

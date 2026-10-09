@@ -50,7 +50,7 @@ function spiceSweepValue(value: string): string | null {
 }
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S' } as const)[part.kind]
+  const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
@@ -90,7 +90,7 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
     }
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
-    const value = spiceNumber(part.value, part.kind)
+    const value = part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : spiceNumber(part.value, part.kind)
     if (part.kind !== 'diode' && part.kind !== 'led' && part.kind !== 'switch' && value === null) {
       const message = `${part.ref} has an invalid numeric value.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -122,6 +122,11 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
       append(`${controlSource} ${controlNode} 0 ${state === 'on' ? '5' : '0'}`, part.id, 'generated')
       append(`${part.ref} ${positive} ${negative} ${controlNode} 0 ELSIM_INTERNAL_SW`, part.id, 'component')
       usesSwitch = true
+    }
+    else if (part.kind === 'vcvs' || part.kind === 'vccs') {
+      const controlPositive = pinNet(connectivity, part, 2)
+      const controlNegative = pinNet(connectivity, part, 3)
+      append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${value}`, part.id, 'component')
     }
   }
 
@@ -179,7 +184,7 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       break
     }
-    if (!/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || !['max', 'min', 'avg', 'rms'].includes(measurement.operation) || !/^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDS][A-Za-z0-9_]*\))$/i.test(measurement.vector.trim())) {
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || !['max', 'min', 'avg', 'rms'].includes(measurement.operation) || !/^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEG][A-Za-z0-9_]*\))$/i.test(measurement.vector.trim())) {
       const message = `Transient measurement ${cleanComment(measurement.id)} has an unsupported name, operation, or vector.`
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       continue
@@ -191,7 +196,7 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
 }
 
 export function nextRef(parts: Part[], kind: Part['kind']): string {
-  const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S' } as const)[kind]
+  const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G' } as const)[kind]
   const used = new Set(parts.map((part) => part.ref.toLowerCase()))
   let index = 1
   while (used.has(`${prefix}${index}`.toLowerCase())) index += 1

@@ -31,7 +31,7 @@
       "required": ["id", "kind", "ref", "value", "x", "y", "rotation"],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["source", "resistor", "capacitor", "ground", "inductor", "diode", "led", "switch"] },
+        "kind": { "enum": ["source", "resistor", "capacitor", "ground", "inductor", "diode", "led", "switch", "vcvs", "vccs"] },
         "ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
         "value": { "type": "string" },
         "x": { "type": "number" },

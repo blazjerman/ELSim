@@ -155,4 +155,18 @@ assert.ok(Math.abs(initialVoltage[0] - 2) < 5e-5, `initial output voltage should
 assert.ok(initialVoltage.at(-1) < 0.75, 'output should discharge toward ground after the transient starts')
 process.stdout.write('PASS transient-initial-condition\n')
 
+const controlledPath = path.join(root, 'engine/wasm/fixtures', 'controlled-sources.cir')
+const controlledResult = await runInWorker(controlledPath, true)
+assert.equal(controlledResult.status, 0, `controlled-sources: ngspice exited with a nonzero status: ${controlledResult.stderr}`)
+assert.match(controlledResult.raw, /^Plotname:\s*Transient Analysis$/mi)
+assert.match(controlledResult.raw, /^\s*\d+\s+i\(@e1\[i\]\)\s+current$/mi)
+assert.match(controlledResult.raw, /^\s*\d+\s+i\(@g1\[i\]\)\s+current$/mi)
+assert.match(controlledResult.raw, /^\s*\d+\s+v\(out-v\)\s+voltage$/mi)
+assert.match(controlledResult.raw, /^\s*\d+\s+v\(out-i\)\s+voltage$/mi)
+const vcvOutput = realRawVector(controlledResult.raw, 'v(out-v)')
+const vccOutput = realRawVector(controlledResult.raw, 'v(out-i)')
+assert.ok(Math.abs(vcvOutput.at(-1) - 2) < 1e-6, `VCVS output should be 2 V, got ${vcvOutput.at(-1)}`)
+assert.ok(Math.abs(vccOutput.at(-1) + 1) < 1e-6, `positive VCCS current from N+ to N- should produce -1 V across this load, got ${vccOutput.at(-1)}`)
+process.stdout.write('PASS controlled-source-transient\n')
+
 if (!nativeNgspice) process.stdout.write('Native parity comparison skipped; pass the pinned native ngspice executable as argument 2.\n')

@@ -48,3 +48,8 @@ test('result control runs uniquely named measurements in each parameter case', (
   assert.match(stepped, /meas tran ELSIM_peak_0 max V\(out\)\nwrite \/result-0\.raw all/)
   assert.doesNotMatch(stepped, /^\.meas tran ELSIM_peak /m)
 })
+
+test('controlled sources have their branch currents saved for probing', () => {
+  const control = addResultControl('E1 out 0 cp cn 2\nG1 g 0 cp cn 1m\n.tran 1u 1m\n.end')
+  assert.match(control, /^\.save all @E1\[i\] @G1\[i\]$/m)
+})
