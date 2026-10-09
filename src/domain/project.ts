@@ -16,6 +16,7 @@ export type Part = {
   modelName?: string
   modelPins?: string[]
   modelParameters?: Record<string, string>
+  deviceModel?: string
 }
 
 export type Wire = { id: string; points: [number, number][] }
@@ -143,7 +144,7 @@ export function validateProject(input: unknown): Project {
   }
   if (data.modelAssets !== undefined) {
     if (!Array.isArray(data.modelAssets) || data.modelAssets.length > 16) throw new Error('A project can store up to 16 imported model libraries.')
-    const assetIds = new Set<string>(), modelNames = new Set<string>()
+    const assetIds = new Set<string>(), modelNames = new Set<string>(), deviceModelNames = new Set<string>()
     let totalBytes = 0
     for (const candidate of data.modelAssets as ModelLibraryAsset[]) {
       if (!candidate || typeof candidate.id !== 'string' || !candidate.id || assetIds.has(candidate.id) || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.content !== 'string' || !/^[a-f\d]{64}$/i.test(candidate.sha256) || candidate.licenseStatus !== 'unknown' || typeof candidate.importedAt !== 'string' || !Number.isFinite(Date.parse(candidate.importedAt))) throw new Error('Project contains a malformed imported model library.')
@@ -157,20 +158,33 @@ export function validateProject(input: unknown): Project {
         if (modelNames.has(key)) throw new Error(`Imported subcircuit ${subcircuit.name} is declared more than once in this project.`)
         modelNames.add(key)
       }
+      for (const model of parsed.models) {
+        const key = model.name.toLowerCase()
+        if (deviceModelNames.has(key)) throw new Error(`Imported device model ${model.name} is declared more than once in this project.`)
+        deviceModelNames.add(key)
+      }
       assetIds.add(candidate.id)
     }
   }
   const importedDefinitions = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits) ?? []
+  const importedDeviceModels = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).models) ?? []
   for (const part of data.parts as Part[]) {
-    if (part.kind !== 'subcircuit') continue
-    const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
-    if (!definition) throw new Error(`${part.ref} refers to missing imported subcircuit ${part.modelName}.`)
-    if (!part.modelPins || part.modelPins.length !== definition.pins.length || part.modelPins.some((pin, index) => pin.toLowerCase() !== definition.pins[index].toLowerCase())) throw new Error(`${part.ref} pin order does not match imported subcircuit ${definition.name}.`)
-    if (part.modelParameters !== undefined) {
-      if (!part.modelParameters || typeof part.modelParameters !== 'object' || Array.isArray(part.modelParameters) || Object.keys(part.modelParameters).length > 32) throw new Error(`${part.ref} subcircuit parameter overrides are malformed.`)
-      for (const [name, value] of Object.entries(part.modelParameters)) {
-        if (!definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value)) throw new Error(`${part.ref} has an unsupported override for subcircuit parameter ${name}.`)
+    if (part.kind === 'subcircuit') {
+      const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
+      if (!definition) throw new Error(`${part.ref} refers to missing imported subcircuit ${part.modelName}.`)
+      if (!part.modelPins || part.modelPins.length !== definition.pins.length || part.modelPins.some((pin, index) => pin.toLowerCase() !== definition.pins[index].toLowerCase())) throw new Error(`${part.ref} pin order does not match imported subcircuit ${definition.name}.`)
+      if (part.modelParameters !== undefined) {
+        if (!part.modelParameters || typeof part.modelParameters !== 'object' || Array.isArray(part.modelParameters) || Object.keys(part.modelParameters).length > 32) throw new Error(`${part.ref} subcircuit parameter overrides are malformed.`)
+        for (const [name, value] of Object.entries(part.modelParameters)) {
+          if (!definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value)) throw new Error(`${part.ref} has an unsupported override for subcircuit parameter ${name}.`)
+        }
       }
+      continue
+    }
+    if (part.deviceModel !== undefined) {
+      const model = importedDeviceModels.find((candidate) => candidate.name.toLowerCase() === part.deviceModel?.toLowerCase())
+      const expectedType = part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' ? 'npn' : part.kind === 'pnp' ? 'pnp' : null
+      if (!model || !expectedType || model.type.toLowerCase() !== expectedType) throw new Error(`${part.ref} has a missing or incompatible imported device model ${part.deviceModel}.`)
     }
   }
   const simulation = data.simulation as Project['simulation'] | undefined

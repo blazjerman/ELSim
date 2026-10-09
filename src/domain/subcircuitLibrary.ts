@@ -1,6 +1,7 @@
 export type SubcircuitParameter = { name: string; defaultValue: string }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; startLine: number; endLine: number }
-export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; modelText: string }
+export type SpiceModelDefinition = { name: string; type: string; startLine: number; endLine: number }
+export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; modelText: string }
 
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
@@ -61,7 +62,9 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
   if (lines.length > MAX_LIBRARY_LINES) throw new Error('Model libraries are limited to 100,000 lines.')
 
   const subcircuits: SubcircuitDefinition[] = []
+  const models: SpiceModelDefinition[] = []
   const seenNames = new Set<string>()
+  const seenModelNames = new Set<string>()
   const modelLines: LogicalLine[] = []
   let active: { name: string; pins: string[]; parameters: SubcircuitParameter[]; start: number } | null = null
   let sawTopLevelRecord = false
@@ -106,6 +109,14 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
     if (directive.startsWith('.')) {
       if (!safeTopLevel.has(directive)) throw new Error(`Line ${line.start}: top-level directive ${tokens[0]} is unsupported in imported model libraries.`)
       modelLines.push(line)
+      if (directive === '.model') {
+        const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+        const name = modelHeader?.[1], type = modelHeader?.[2]
+        if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
+        if (seenModelNames.has(name.toLowerCase())) throw new Error(`Line ${line.start}: model card ${name} is declared more than once.`)
+        seenModelNames.add(name.toLowerCase())
+        models.push({ name, type, startLine: line.start, endLine: line.end })
+      }
       sawTopLevelRecord = true
       continue
     }
@@ -113,7 +124,7 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
     throw new Error(`Line ${line.start}: top-level circuit element found outside a .SUBCKT definition.`)
   }
   if (active) throw new Error(`.SUBCKT ${active.name} opened on line ${active.start} has no matching .ENDS.`)
-  if (!subcircuits.length) throw new Error('No .SUBCKT definitions were found in this file.')
+  if (!subcircuits.length && !models.length) throw new Error('No .SUBCKT definitions or .MODEL cards were found in this file.')
 
   // Include full physical lines for retained directives and model blocks.
   const physical = source.replace(/^\uFEFF/, '').split(/\r?\n/)
@@ -121,7 +132,7 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
   const retained = new Set<number>()
   for (const [start, end] of ranges) for (let line = start; line <= end; line += 1) retained.add(line)
   const modelText = [...retained].sort((a, b) => a - b).map((line) => physical[line - 1]).join('\n')
-  return { subcircuits, modelText }
+  return { subcircuits, models, modelText }
 }
 
 export async function sha256Text(value: string): Promise<string> {

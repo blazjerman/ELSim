@@ -37,6 +37,16 @@ test('user model libraries round-trip inside project data with digest and licens
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], filename: '../user-amp.lib' }] }), /malformed imported model library/)
 })
 
+test('.MODEL-only libraries and device model assignments round-trip in project archives', async () => {
+  const project = createStarterProject()
+  const content = 'Vendor diode model\n.MODEL 1N4148 D(Is=2n N=1.8)\n'
+  const digest = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(content)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  project.modelAssets = [{ id: 'model-diode', filename: '1n4148.model', sha256: digest, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'p-d1', kind: 'diode', ref: 'D1', value: 'Default diode', deviceModel: '1N4148', x: 700, y: 400, rotation: 0 })
+  const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  assert.deepEqual(restored, project)
+})
+
 test('plot preferences survive project validation and old projects receive defaults', () => {
   const project = createStarterProject()
   project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } } }

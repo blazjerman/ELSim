@@ -79,6 +79,7 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
   let usesDiode = false
   let usesSwitch = false
   const transistorModels: { part: Part; name: string }[] = []
+  const importedDeviceModels = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).models)
   const usedReferences = new Set(project.parts.map((part) => part.ref.toLowerCase()))
   const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.map((label) => label.name)].map((name) => name.toLowerCase()))
 
@@ -110,13 +111,32 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
       append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : project.simulation.analysis === 'dc' ? `DC ${value}` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor') append(`${part.ref} ${positive} ${negative} ${value}`, part.id, 'component')
-    else if (part.kind === 'diode' || part.kind === 'led') { append(`${part.ref} ${positive} ${negative} DDEFAULT`, part.id, 'component'); usesDiode = true }
+    else if (part.kind === 'diode' || part.kind === 'led') {
+      const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
+      if (part.deviceModel && importedModel?.type.toLowerCase() !== 'd') {
+        const message = `${part.ref} device model ${part.deviceModel} is missing or is not a diode model.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const model = importedModel?.name ?? 'DDEFAULT'
+      append(`${part.ref} ${positive} ${negative} ${model}`, part.id, 'component')
+      if (!part.deviceModel) usesDiode = true
+    }
     else if (part.kind === 'npn' || part.kind === 'pnp') {
       const base = pinNet(connectivity, part, 1)
       const emitter = pinNet(connectivity, part, 2)
-      const model = `ELSIM_MODEL_${part.ref}`
+      const expectedModelType = part.kind === 'npn' ? 'npn' : 'pnp'
+      const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
+      if (part.deviceModel && importedModel?.type.toLowerCase() !== expectedModelType) {
+        const message = `${part.ref} device model ${part.deviceModel} is missing or is not a ${part.kind.toUpperCase()} model.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
       append(`${part.ref} ${positive} ${base} ${emitter} ${model}`, part.id, 'component')
-      transistorModels.push({ part, name: model })
+      if (!part.deviceModel) transistorModels.push({ part, name: model })
     }
     else if (part.kind === 'subcircuit') {
       const definition = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits).find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())

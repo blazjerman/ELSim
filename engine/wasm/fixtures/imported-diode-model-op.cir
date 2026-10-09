@@ -1,0 +1,8 @@
+ELSim imported user diode model operating point
+V1 IN 0 5
+R1 IN OUT 1k
+D1 OUT 0 1N4148
+.MODEL 1N4148 D(Is=2n N=1.8)
+.op
+.print op v(out)
+.end

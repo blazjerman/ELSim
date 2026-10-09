@@ -19,6 +19,15 @@ test('parses ordered subcircuit pins, parameters, continuations, shared models, 
   assert.match(parsed.modelText, /\.model DFAST D/)
   assert.match(parsed.modelText, /\+ 10k/)
   assert.match(parsed.modelText, /\.ends/)
+  assert.deepEqual(parsed.models.map(({ name, type }) => ({ name, type })), [{ name: 'DFAST', type: 'D' }])
+})
+
+test('imports .MODEL-only libraries, including numeric-leading model names and continuations', () => {
+  const parsed = parseSubcircuitLibrary('Vendor device cards\n.MODEL 1N4148 D(Is=2n N=1.8)\n+ Rs=1\n')
+  assert.deepEqual(parsed.subcircuits, [])
+  assert.deepEqual(parsed.models, [{ name: '1N4148', type: 'D', startLine: 2, endLine: 3 }])
+  assert.match(parsed.modelText, /\.MODEL 1N4148 D/)
+  assert.match(parsed.modelText, /\+ Rs=1/)
 })
 
 test('accepts a SPICE title line and CRLF source', () => {
@@ -51,6 +60,9 @@ test('rejects malformed pin declarations, block endings, duplicate definitions, 
     '.SUBCKT x A PARAMS: GAIN',
     '.SUBCKT x A PARAMS: GAIN=1 gain=2\n.ENDS',
     '.SUBCKT x A PARAMS: __proto__=1\n.ENDS',
+    '.MODEL',
+    '.MODEL broken',
+    '.MODEL D1 D(Is=1)\n.MODEL d1 D(Is=2)',
   ]) assert.throws(() => parseSubcircuitLibrary(source))
 })
 
