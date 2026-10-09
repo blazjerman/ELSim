@@ -8,7 +8,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op']
+const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op']
+const hierarchyRepeatRaws = new Map()
 
 function runInWorker(deckPath, readRaw = false, rawPaths) {
   return new Promise((resolve, reject) => {
@@ -49,7 +50,7 @@ function realRawVector(raw, name) {
 
 for (const fixture of fixtures) {
   const deckPath = path.join(root, 'engine/wasm/fixtures', `${fixture}.cir`)
-  const wasmResult = await runInWorker(deckPath, fixture === 'hierarchical-block-op')
+  const wasmResult = await runInWorker(deckPath, fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-'))
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
@@ -68,6 +69,7 @@ for (const fixture of fixtures) {
       assert.match(wasmResult.raw, /^\s*\d+\s+i\(@r\.xload\.rload1\[i\]\)\s+current$/mi, 'hierarchical-block-op: scoped resistor current was not present in the result vectors')
       assert.ok(Math.abs(realRawVector(wasmResult.raw, 'i(@r.xload.rload1[i])')[0] - 0.005) < 1e-9, 'hierarchical-block-op: block resistor current should be 5 mA')
     }
+    if (fixture.startsWith('hierarchical-repeat-')) hierarchyRepeatRaws.set(fixture, wasmResult.raw)
   } else {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)
   }
@@ -91,6 +93,24 @@ for (const fixture of fixtures) {
   }
   process.stdout.write(`PASS ${fixture}\n`)
 }
+
+const repeatedVectors = [
+  ['v(xload1.mid)', 'v(mid1)', 2.5],
+  ['v(xload2.mid)', 'v(mid2)', 5],
+  ['i(@r.xload1.rload1[i])', 'i(@rload1_1[i])', 0.005],
+  ['i(@r.xload2.rload1[i])', 'i(@rload1_2[i])', 0.01],
+  ['i(@r.xload1.rload2[i])', 'i(@rload2_1[i])', 0.005],
+  ['i(@r.xload2.rload2[i])', 'i(@rload2_2[i])', 0.01],
+]
+for (const [hierarchicalVector, flattenedVector, expected] of repeatedVectors) {
+  const hierarchicalValues = realRawVector(hierarchyRepeatRaws.get('hierarchical-repeat-op'), hierarchicalVector)
+  const flattenedValues = realRawVector(hierarchyRepeatRaws.get('hierarchical-repeat-flat-op'), flattenedVector)
+  assert.equal(hierarchicalValues.length, 1, `${hierarchicalVector}: expected one operating-point sample`)
+  assert.equal(flattenedValues.length, 1, `${flattenedVector}: expected one operating-point sample`)
+  assert.ok(Math.abs(hierarchicalValues[0] - expected) < 1e-9, `${hierarchicalVector}: unexpected hierarchical result ${hierarchicalValues[0]}`)
+  assert.ok(Math.abs(hierarchicalValues[0] - flattenedValues[0]) < 1e-9, `${hierarchicalVector}: differs from flattened reference ${flattenedValues[0]}`)
+}
+process.stdout.write('PASS repeated-hierarchy-flattened-parity (6 voltage/current vectors)\n')
 
 const opPath = path.join(root, 'engine/wasm/fixtures', 'op-raw.cir')
 const opResult = await runInWorker(opPath, true)

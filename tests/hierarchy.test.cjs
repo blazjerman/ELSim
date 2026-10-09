@@ -93,6 +93,9 @@ test('hierarchy probes map internal nodes through an instance path and ports to 
   const repeatedChecked = validateProject(repeated)
   assert.equal(hierarchyNodeVector(repeatedChecked, child.id, ['root-block-2'], 'MID'), 'v(xload2.mid)')
   assert.equal(hierarchyComponentCurrentVector(repeatedChecked, child.id, ['root-block-2'], 'child-r1'), 'i(@r.xload2.rload1[i])')
-  assert.match(createNetlistArtifact(repeatedChecked).text, /^\.save v\(XLOAD2\.MID\)$/mi)
-  assert.match(createNetlistArtifact(repeatedChecked).text, /^\.save @r\.xload2\.rload1\[i\]$/mi)
+  const repeatedDeck = createNetlistArtifact(repeatedChecked).text
+  assert.match(repeatedDeck, /^XLOAD\s+vin\s+0\s+ELSIM_SHEET_sheet_load$/mi)
+  assert.match(repeatedDeck, /^XLOAD2\s+\S+\s+\S+\s+ELSIM_SHEET_sheet_load$/mi)
+  assert.match(repeatedDeck, /^\.save v\(XLOAD2\.MID\)$/mi)
+  assert.match(repeatedDeck, /^\.save @r\.xload2\.rload1\[i\]$/mi)
 })

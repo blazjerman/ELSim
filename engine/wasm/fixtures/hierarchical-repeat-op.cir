@@ -1,0 +1,19 @@
+* Two instances of one divider block at different input voltages
+V1 vin1 0 DC 5
+V2 vin2 0 DC 10
+XLOAD1 vin1 0 ELSIM_SHEET_divider
+XLOAD2 vin2 0 ELSIM_SHEET_divider
+.SUBCKT ELSIM_SHEET_divider IN OUT
+RLOAD1 IN MID 500
+RLOAD2 MID OUT 500
+.ENDS ELSIM_SHEET_divider
+.save v(XLOAD1.MID) @r.xload1.rload1[i] @r.xload1.rload2[i]
+.save v(XLOAD2.MID) @r.xload2.rload1[i] @r.xload2.rload2[i]
+.op
+.print op v(vin1) v(xload1.mid) v(vin2) v(xload2.mid)
+.control
+set filetype=ascii
+op
+write /result.raw all
+.endc
+.end
