@@ -12,7 +12,7 @@ export function subcircuitPinOffsets(count: number): [number, number][] {
 }
 
 export function componentPins(part: Part): PinLocation[] {
-  const local: [number, number][] = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0)
+  const local: [number, number][] = part.kind === 'subcircuit' ? part.symbolPinOffsets ?? subcircuitPinOffsets(part.modelPins?.length ?? 0)
     : part.kind === 'vcvs' || part.kind === 'vccs'
     ? [[-52, 0], [52, 0], [0, -52], [0, 52]]
     : part.kind === 'npn' || part.kind === 'pnp'

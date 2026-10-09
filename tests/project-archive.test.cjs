@@ -9,6 +9,7 @@ const { createProjectArchive, isProjectArchive, readProjectArchive, crc32 } = re
 const { webcrypto } = require('node:crypto')
 if (!globalThis.crypto) globalThis.crypto = webcrypto
 const { verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('project ZIP archive is deterministic and round-trips the complete v2 project', () => {
   const project = createStarterProject()
@@ -45,6 +46,36 @@ test('.MODEL-only libraries and device model assignments round-trip in project a
   project.parts.push({ id: 'p-d1', kind: 'diode', ref: 'D1', value: 'Default diode', deviceModel: '1N4148', x: 700, y: 400, rotation: 0 })
   const restored = validateProject(readProjectArchive(createProjectArchive(project)))
   assert.deepEqual(restored, project)
+})
+
+test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates round-trip', async () => {
+  const project = createStarterProject()
+  const modelContent = '.SUBCKT user_amp IN OUT VCC VEE\nR1 IN OUT 1k\n.ENDS user_amp\n'
+  const symbolContent = [
+    'Version 4', 'SymbolType CELL', 'RECTANGLE Normal -48 -32 48 32',
+    'PIN -48 0 R', 'PINATTR PinName IN', 'PINATTR SpiceOrder 1',
+    'PIN 48 0 L', 'PINATTR PinName OUT', 'PINATTR SpiceOrder 2',
+    'PIN 0 -32 D', 'PINATTR PinName VCC', 'PINATTR SpiceOrder 3',
+    'PIN 0 32 U', 'PINATTR PinName VEE', 'PINATTR SpiceOrder 4',
+  ].join('\n')
+  const digest = async (content) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(content)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  project.modelAssets = [{ id: 'model-amp', filename: 'amp.lib', sha256: await digest(modelContent), content: modelContent, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.symbolAssets = [{ id: 'symbol-amp', filename: 'amp.asy', sha256: await digest(symbolContent), content: symbolContent, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  const pinOffsets = [[-48, 0], [48, 0], [0, -32], [0, 32]]
+  const instance = { id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'user_amp', modelName: 'user_amp', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], symbolAssetId: 'symbol-amp', symbolPinOffsets: pinOffsets, x: 700, y: 400, rotation: 0 }
+  project.parts.push(instance)
+  const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  assert.deepEqual(restored.symbolAssets, project.symbolAssets)
+  assert.deepEqual(restored.parts.at(-1), instance)
+  assert.deepEqual(componentPins(restored.parts.at(-1)).map(({ x, y }) => [x, y]), [[652, 400], [748, 400], [700, 368], [700, 432]])
+  await verifyModelAssetHashes(restored.symbolAssets)
+  await assert.rejects(verifyModelAssetHashes([{ ...restored.symbolAssets[0], content: `${symbolContent}\\n` }]), /does not match/)
+  const mismatch = structuredClone(restored)
+  mismatch.parts.at(-1).symbolPinOffsets[0] = [0, 0]
+  assert.throws(() => validateProject(mismatch), /symbol pin order does not match/)
+  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v2.schema.json'), 'utf8'))
+  assert.equal(schema.properties.symbolAssets.maxItems, 32)
+  assert.ok(schema.$defs.part.properties.symbolPinOffsets)
 })
 
 test('plot preferences survive project validation and old projects receive defaults', () => {

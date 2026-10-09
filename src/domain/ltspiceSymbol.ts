@@ -24,7 +24,7 @@ const MAX_RECORDS = 10000
 
 function numberToken(value: string, line: number): number {
   const parsed = Number(value)
-  if (!Number.isFinite(parsed) || Math.abs(parsed) > 1_000_000) throw new Error(`.asy line ${line}: coordinate is invalid or out of range.`)
+  if (!Number.isFinite(parsed) || Math.abs(parsed) > 100_000) throw new Error(`.asy line ${line}: coordinate is invalid or out of range.`)
   return parsed
 }
 
@@ -83,7 +83,7 @@ export function parseLtspiceSymbol(text: string, filename = 'Imported symbol.asy
         else if (attribute === 'value') result.value = value
         else if (attribute === 'description') result.description = value
       } else if (upper === 'symboltype') result.symbolType = tokens.join(' ')
-      else if (!['version', 'window', 'text', 'arc'].includes(upper)) result.warnings.push(`Line ${lineNo}: unsupported .asy record ${command} was skipped.`)
+      else if (upper !== 'version') result.warnings.push(`Line ${lineNo}: unsupported .asy record ${command} was skipped.`)
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'invalid record'
       throw reason.startsWith('.asy line') ? error : new Error(`.asy line ${lineNo}: ${reason}`)
