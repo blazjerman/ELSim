@@ -11,7 +11,7 @@ import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { componentPins, moveWireAnchors, projectPinLocations, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
-import { createStarterProject, kindNames, kindPrefix, validateProject, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
+import { createStarterProject, kindNames, kindPrefix, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -286,6 +286,20 @@ function TransientMeasurementEditor({ measurements, onAdd, onChange, onRemove }:
     </div>)}
     <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={measurements.length >= 12}>Add measurement</button>
     {measurements.length > 0 && <div className="field-hint">Measurements are calculated for each parameter sweep case.</div>}
+  </div>
+}
+
+function InitialConditionEditor({ conditions, nodes, skipOp, onAdd, onChange, onRemove, onSkipOpChange }: { conditions: InitialCondition[]; nodes: string[]; skipOp: boolean; onAdd: () => void; onChange: (index: number, patch: Partial<InitialCondition>) => void; onRemove: (index: number) => void; onSkipOpChange: (value: boolean) => void }) {
+  return <div className="form-section measurement-editor">
+    <div className="form-section-title">INITIAL CONDITIONS</div>
+    <p className="field-hint">Set starting voltages on labeled nodes for transient analysis.</p>
+    {conditions.map((condition, index) => <div className="measurement-card" key={`${condition.node}-${index}`}>
+      <div className="parameter-sweep-heading"><strong>Node voltage {index + 1}</strong><button type="button" aria-label={`Remove initial condition ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
+      <label className="field-label">Node<select value={condition.node} onChange={(event) => onChange(index, { node: event.target.value })}>{nodes.map((node) => <option key={node} value={node}>{node}</option>)}</select></label>
+      <label className="field-label">Starting voltage<input value={condition.voltage} onChange={(event) => onChange(index, { voltage: event.target.value })}/></label>
+    </div>)}
+    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={conditions.length >= 8 || nodes.length <= conditions.length}>Add node voltage</button>
+    <label className="checkbox-field"><input type="checkbox" checked={skipOp} onChange={(event) => onSkipOpChange(event.target.checked)}/><span><strong>Skip initial operating point (UIC)</strong><small>Starts from the values above instead of solving a DC operating point first.</small></span></label>
   </div>
 }
 
@@ -797,6 +811,20 @@ export default function App() {
     delete simulation.transientMeasurements
     return { ...current, simulation: measurements.length ? { ...simulation, transientMeasurements: measurements } : simulation }
   })
+  const updateInitialCondition = (index: number, patch: Partial<InitialCondition>) => setProject((current) => ({ ...current, simulation: { ...current.simulation, initialConditions: (current.simulation.initialConditions ?? []).map((condition, item) => item === index ? { ...condition, ...patch } : condition) } }))
+  const addInitialCondition = () => setProject((current) => {
+    const conditions = current.simulation.initialConditions ?? []
+    const nodes = [...new Set(current.netLabels.map((label) => label.name).filter((node) => node !== '0'))]
+    const node = nodes.find((candidate) => !conditions.some((condition) => condition.node.toLowerCase() === candidate.toLowerCase()))
+    if (!node || conditions.length >= 8) return current
+    return { ...current, simulation: { ...current.simulation, initialConditions: [...conditions, { node, voltage: '0 V' }] } }
+  })
+  const removeInitialCondition = (index: number) => setProject((current) => {
+    const conditions = current.simulation.initialConditions?.filter((_, item) => item !== index) ?? []
+    const simulation = { ...current.simulation }
+    delete simulation.initialConditions
+    return { ...current, simulation: conditions.length ? { ...simulation, initialConditions: conditions } : simulation }
+  })
   const resetProject = () => {
     if (!window.confirm('Start a new circuit? Unsaved changes in this tab will be lost.')) return
     const starter = createStarterProject()
@@ -871,7 +899,10 @@ export default function App() {
           <div className="project-summary"><div className="summary-row"><span>Project</span><strong>{project.name}</strong></div><div className="summary-row"><span>Format</span><strong>ELSim JSON · v2</strong></div><div className="summary-row"><span>Sheets</span><strong>1</strong></div><div className="summary-row"><span>Components</span><strong>{project.parts.length}</strong></div></div>
           <div className="form-section"><div className="form-section-title">SIMULATION</div><label className="field-label">Analysis type<select value={project.simulation.analysis} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select></label>{project.simulation.analysis === 'tran' && <><label className="field-label">Stop time<input value={project.simulation.stopTime} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, stopTime: event.target.value } }))}/></label><label className="field-label">Maximum step<input value={project.simulation.maxStep} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, maxStep: event.target.value } }))}/></label></>}{project.simulation.analysis === 'ac' && <><label className="field-label">AC source magnitude<input value={project.simulation.sourceAcMagnitude ?? '1 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, sourceAcMagnitude: event.target.value } }))}/></label><label className="field-label">Sweep scale<select value={project.simulation.acSweep?.scale ?? 'dec'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), scale: event.target.value as 'dec' | 'oct' | 'lin' } } }))}><option value="dec">Log per decade</option><option value="oct">Log per octave</option><option value="lin">Linear</option></select></label><label className="field-label">Points per scale<input type="number" min="1" max="10000" value={project.simulation.acSweep?.points ?? 20} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), points: Number(event.target.value) } } }))}/></label><label className="field-label">Start frequency<input value={project.simulation.acSweep?.startFrequency ?? '10 Hz'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), startFrequency: event.target.value } } }))}/></label><label className="field-label">Stop frequency<input value={project.simulation.acSweep?.stopFrequency ?? '1 MHz'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, acSweep: { ...(p.simulation.acSweep ?? { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }), stopFrequency: event.target.value } } }))}/></label></>}{project.simulation.analysis === 'dc' && <><label className="field-label">Voltage source<select value={project.simulation.dcSweep?.source ?? 'V1'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), source: event.target.value } } }))}>{project.parts.filter((part) => part.kind === 'source').map((part) => <option key={part.id} value={part.ref}>{part.ref}</option>)}</select></label><label className="field-label">Start value<input value={project.simulation.dcSweep?.start ?? '0 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), start: event.target.value } } }))}/></label><label className="field-label">Stop value<input value={project.simulation.dcSweep?.stop ?? '5 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), stop: event.target.value } } }))}/></label><label className="field-label">Step<input value={project.simulation.dcSweep?.step ?? '0.1 V'} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, dcSweep: { ...(p.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), step: event.target.value } } }))}/></label></>}</div>
     <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
-    {project.simulation.analysis === 'tran' && <TransientMeasurementEditor measurements={project.simulation.transientMeasurements ?? []} onAdd={addMeasurement} onChange={updateMeasurement} onRemove={removeMeasurement}/>}
+    {project.simulation.analysis === 'tran' && <>
+      <TransientMeasurementEditor measurements={project.simulation.transientMeasurements ?? []} onAdd={addMeasurement} onChange={updateMeasurement} onRemove={removeMeasurement}/>
+      <InitialConditionEditor conditions={project.simulation.initialConditions ?? []} nodes={[...new Set(project.netLabels.map((label) => label.name).filter((node) => node !== '0'))]} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAdd={addInitialCondition} onChange={updateInitialCondition} onRemove={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/>
+    </>}
           <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : `${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'ac' ? 'AC frequency-domain' : 'Transient'} analysis runs locally in a Web Worker. Results are tied to the circuit revision.`}</p><button onClick={() => setNotice(engineAssetAvailable === false ? 'Build the pinned engine with tools/build-ngspice-wasm.sh; see engine/wasm/README.md.' : 'ngspice 47 · Emscripten WebAssembly · transient, DC operating-point, and AC analyses')}>Engine status <ArrowUp size={13}/></button></div>
         </>}
         <div className="inspector-links"><button onClick={startTour}><CircleHelp size={14}/> Help</button><button onClick={() => setNotice('Component library is original ELSim data.')}><Bookmark size={14}/> Library notes</button></div>

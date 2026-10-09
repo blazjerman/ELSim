@@ -146,4 +146,13 @@ assert.ok(measured.peak > measured.average && measured.average > measured.min)
 assert.ok(measured.rms > 0 && measured.rms < measured.peak)
 process.stdout.write('PASS transient-measurements\n')
 
+const initialConditionPath = path.join(root, 'engine/wasm/fixtures', 'initial-condition-transient.cir')
+const initialConditionResult = await runInWorker(initialConditionPath, true)
+assert.equal(initialConditionResult.status, 0, `initial-condition-transient: ngspice exited with a nonzero status: ${initialConditionResult.stderr}`)
+assert.match(initialConditionResult.raw, /^Plotname:\s*Transient Analysis$/mi)
+const initialVoltage = realRawVector(initialConditionResult.raw, 'v(out)')
+assert.ok(Math.abs(initialVoltage[0] - 2) < 5e-5, `initial output voltage should be 2 V at the first transient point, got ${initialVoltage[0]}`)
+assert.ok(initialVoltage.at(-1) < 0.75, 'output should discharge toward ground after the transient starts')
+process.stdout.write('PASS transient-initial-condition\n')
+
 if (!nativeNgspice) process.stdout.write('Native parity comparison skipped; pass the pinned native ngspice executable as argument 2.\n')

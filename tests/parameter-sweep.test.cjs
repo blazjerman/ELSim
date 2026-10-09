@@ -48,3 +48,17 @@ test('parameter sweep rejects duplicate parts, equal endpoints, and more than te
   project.simulation.parameterSweeps = [{ component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 3 }]
   assert.throws(() => validateProject(project), /transient analysis only/)
 })
+
+test('node-voltage initial conditions require labeled nodes and emit optional UIC', () => {
+  const project = createStarterProject()
+  project.simulation.initialConditions = [{ node: 'vout', voltage: '2 V' }]
+  project.simulation.skipInitialOperatingPoint = true
+  const validated = validateProject(structuredClone(project))
+  const deck = createNetlistArtifact(validated).text
+  assert.match(deck, /\.tran .* uic/)
+  assert.match(deck, /\.ic v\(vout\)=2/)
+  validated.simulation.initialConditions = [{ node: 'missing', voltage: '2 V' }]
+  assert.throws(() => validateProject(validated), /labeled non-ground nodes/)
+  project.simulation.initialConditions = [{ node: 'vout', voltage: 'not volts' }]
+  assert.throws(() => validateProject(project), /malformed/)
+})

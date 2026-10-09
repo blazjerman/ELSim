@@ -22,6 +22,7 @@ export type PlotSettings = {
 }
 export type ParameterSweep = { component: string; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string }
+export type InitialCondition = { node: string; voltage: string }
 
 export type Project = {
   format: 'elsim-project'
@@ -34,7 +35,7 @@ export type Project = {
   netLabels: NetLabel[]
   view: { zoom: number; panX: number; panY: number }
   plotSettings?: PlotSettings
-  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[] }
+  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
 }
 
 const starter: Project = {
@@ -172,6 +173,21 @@ export function validateProject(input: unknown): Project {
     for (const measurement of simulation.transientMeasurements) {
       if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !['max', 'min', 'avg', 'rms'].includes(measurement.operation) || typeof measurement.vector !== 'string' || !measurement.vector.trim() || !/^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDS][A-Za-z0-9_]*\))$/i.test(measurement.vector.trim())) throw new Error('Transient measurements require a unique name, a supported operation, and a voltage or device-current vector such as V(out) or I(R1).')
       measurementIds.add(measurement.id.toLowerCase())
+    }
+  }
+  if (simulation.skipInitialOperatingPoint !== undefined && typeof simulation.skipInitialOperatingPoint !== 'boolean') throw new Error('Skip initial operating point must be on or off.')
+  if (simulation.initialConditions !== undefined) {
+    if (!Array.isArray(simulation.initialConditions) || simulation.initialConditions.length > 8) throw new Error('A project can have up to eight node-voltage initial conditions.')
+    if (simulation.analysis !== 'tran') throw new Error('Initial conditions require transient analysis.')
+    const initialNodes = new Set<string>()
+    for (const condition of simulation.initialConditions) {
+      if (!condition || typeof condition.node !== 'string' || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(condition.node) || !data.netLabels.some((label) => label.name.toLowerCase() === condition.node.toLowerCase()) || initialNodes.has(condition.node.toLowerCase()) || typeof condition.voltage !== 'string' || !condition.voltage.trim()) throw new Error('Initial conditions need unique, labeled non-ground nodes and valid voltage values.')
+      const normalized = condition.voltage.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/v$/i, '')
+      const match = normalized.match(/^([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?)(meg|[tgkmunpf])?$/i)
+      if (!match) throw new Error(`Initial voltage for ${condition.node} is malformed.`)
+      const multiplier = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
+      if (!Number.isFinite(Number(match[1]) * multiplier)) throw new Error(`Initial voltage for ${condition.node} must be finite.`)
+      initialNodes.add(condition.node.toLowerCase())
     }
   }
   const plotSettings = data.plotSettings as PlotSettings | undefined

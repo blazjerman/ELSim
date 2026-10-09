@@ -150,12 +150,28 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
   } else {
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)
-    if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}`, 'analysis:tran', 'analysis')
+    if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}${project.simulation.skipInitialOperatingPoint ? ' uic' : ''}`, 'analysis:tran', 'analysis')
     else {
       const message = 'Transient stop time and maximum step must be valid SPICE time values.'
       append(`* ERROR: ${message}`, 'analysis:tran', 'analysis')
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
     }
+  }
+  for (const condition of project.simulation.initialConditions ?? []) {
+    if (project.simulation.analysis !== 'tran') {
+      const message = 'Node-voltage initial conditions require transient analysis.'
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
+      break
+    }
+    const normalized = condition.voltage.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/v$/i, '')
+    const value = spiceScalar(normalized, '')
+    const knownNode = project.netLabels.some((label) => label.name.toLowerCase() === condition.node.toLowerCase())
+    if (!knownNode || !value || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(condition.node)) {
+      const message = `Initial voltage for ${cleanComment(condition.node)} must reference a labeled node and a valid voltage.`
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
+      continue
+    }
+    append(`.ic v(${condition.node})=${value}`, 'analysis:tran', 'analysis')
   }
   for (const measurement of project.simulation.transientMeasurements ?? []) {
     if (project.simulation.analysis !== 'tran') {
