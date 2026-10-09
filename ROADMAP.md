@@ -52,7 +52,22 @@ Every issue must include owner, dependencies, acceptance criteria, test evidence
 
 ### M0 — Foundations and legality (release gate)
 
-**M0.1 Product specification.** Write user journeys for first circuit, probing, editing while paused, importing an IC, reopening a project, and hierarchical navigation. Define MVP component/analysis matrix and explicit out-of-scope items. Acceptance: each journey has a working-example circuit and measurable completion criteria.
+**M0.1 Product specification.** Specify the first-release journeys and support matrix below before declaring the browser MVP complete.
+
+#### User journeys and acceptance targets
+
+| Journey | Example circuit / action | Completion criteria |
+| --- | --- | --- |
+| Build and run a first circuit | Open the RC step-response starter, change R or C, run transient analysis, and inspect `V(vout)`. | A first-time user can reach a non-empty result in under 5 minutes with no netlist editing; invalid settings point to the relevant field; the plot reports units and time range. |
+| Probe and inspect | Click a wire for node voltage and a two-terminal component for branch current; add both traces to a plot. | Probe names and sign convention are explicit; two traces can be shown together; cursor readout reports value and time; CSV export preserves units/header. |
+| Edit and rerun | During or after a run, move/rotate a part or change its value, then rerun. | Edits update connectivity; old results are visibly marked stale and never shown as current; cancel/stop leaves the UI responsive; rerun corresponds to the edited project revision. |
+| Import an IC model | Import a user-owned, unencrypted `.SUBCKT` plus a compatible symbol or map its ordered pins in the import dialog. | Pin order follows declared SPICE order; source/provenance and license status are stored; a runnable example reports actionable errors for missing models or unsupported syntax; no vendor model is silently bundled. |
+| Save and reopen | Save the example with a custom model and two plot traces, close/reload, then open on a fresh browser profile. | Project, assets, plot setup, and connectivity survive a round trip; the project opens without account/network access; missing external resources are identified by name and hash. |
+| Navigate hierarchy | Create a reusable two-level block with named ports, instantiate it twice, and cross-probe into one instance. | Instance parameters and scoped nets remain distinct; the hierarchical circuit simulates equivalently to its flattened reference; navigation returns to the parent without losing selection or view. |
+
+The first browser MVP supports transient analysis for DC sources, resistors, capacitors, inductors, ground, pulse sources, diodes/LEDs, and ideal switches; wire and node-voltage probes; generated netlist preview; local project save/open; and CSV waveform export. AC and DC operating point, parameter sweeps, arbitrary behavioral sources, transistor/op-amp libraries, full model-library management, import/export, hierarchy, cloud collaboration, and native desktop packaging are explicitly outside the first MVP, but remain planned milestones. A component only counts as supported when its ordered electrical pins, editable properties/units, netlist behavior, original symbol, and numeric reference circuit are present.
+
+Acceptance: all six journeys have runnable example projects and automated measurable completion criteria; each MVP matrix item has an owner and is represented in the compatibility matrix.
 
 **M0.2 License decision and provenance.** Choose ELSim's license (MIT is a candidate, subject to exact bundled dependencies), add `LICENSE`, `THIRD_PARTY_NOTICES`, contribution rules, and a dependency inventory. Pin an ngspice release/commit and audit every compiled source file and linked library, including build-generated artifacts. Acceptance: reviewed inventory identifies license, copyright notice, source location, inclusion method, and obligations for every shipped binary/asset; no unresolved redistribution status.
 
