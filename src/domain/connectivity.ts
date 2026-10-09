@@ -1,4 +1,4 @@
-import { closestPoint, componentPins, pointOnSegment } from './geometry'
+import { componentPins, pointOnSegment } from './geometry'
 import type { Part, Project } from './project'
 
 export type Connectivity = {

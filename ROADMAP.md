@@ -151,7 +151,7 @@ Suggested agent ownership once M0 contracts are agreed: engine/WASM; document/ne
 
 | Decision | Current position | Evidence needed to finalize |
 | --- | --- | --- |
-| ELSim license | MIT candidate; do not add license file until owner selects it | Owner preference; exact dependency compatibility review |
+| ELSim license | MIT selected by project owner on 2026-10-09 and applied to original source | Before release: review contribution policy and verify bundled licenses/notices; this does not relicense ngspice or imported assets |
 | Browser engine | Single-thread ngspice WASM in Web Worker | M0.3 benchmarks and API viability |
 | Server backend | No required server for MVP | Revisit only if measured workloads require it |
 | Desktop wrapper | Defer choice | M4.2 platform prototype |
@@ -160,13 +160,13 @@ Suggested agent ownership once M0 contracts are agreed: engine/WASM; document/ne
 
 ### Implementation evidence update (2026-10-09)
 
-The local environment does not have Emscripten or ngspice, and its package index is not reachable from the shell, so the complete M0.3 build and numeric parity checks cannot run here. A public ngspice-WASM build project documents an ngspice 46 build with an ES module interface and no dynamic library loading; its public docs have described `web,node` execution, so it remains unverified for the dedicated-worker runtime. A newer EasyEDA build note reports ngspice 46, Emscripten 5.0.7, XSPICE enabled, and `web,worker,node`; that is a promising spike candidate, not independently reproduced evidence or a vetted dependency. Wokwi also publishes an ngspice-WASM build, but its exact worker interface, feature configuration, and license inventory still need review. Emscripten documents a separate-worker API that does not require SharedArrayBuffer or COOP/COEP, which is the first candidate architecture for a single-threaded engine. These are leads, not passed gates. Keep actual Run/simulation results unavailable until a pinned build is integrated in a dedicated worker and M0.3 native parity checks pass. Re-evaluate support for XSPICE and user `.SUBCKT` models against the selected configuration.
+The local environment does not have Emscripten or ngspice, so the complete M0.3 build and numeric parity checks cannot run here. npm dependencies were installed with a lockfile, and the current production build/typecheck succeeds. A public ngspice-WASM build project documents ngspice 46, an ES module interface, single-thread execution, and no dynamic library loading; it is not yet independently verified for ELSim's worker interface. A newer EasyEDA build note reports ngspice 46, Emscripten 5.0.7, XSPICE enabled, and `web,worker,node`; that is a promising spike candidate, not independently reproduced evidence or a vetted dependency. Wokwi also publishes an ngspice-WASM build, but its exact worker interface, feature configuration, and license inventory still need review. Emscripten documents a separate-worker API that does not require SharedArrayBuffer or COOP/COEP, which is the first candidate architecture for a single-threaded engine. These are leads, not passed gates. Keep actual Run/simulation results unavailable until a pinned build is integrated in a dedicated worker and M0.3 native parity checks pass. Re-evaluate support for XSPICE and user `.SUBCKT` models against the selected configuration.
 
 ### Current implementation status (2026-10-09)
 
 | Area | Status | Evidence / next step |
 | --- | --- | --- |
-| App shell | In progress | React/Vite workspace with component tray, canvas, inspector, analysis panel, and status area. |
+| App shell | In progress | React/Vite workspace with component tray, canvas, inspector, analysis panel, and status area. `npm run build` (TypeScript check plus Vite production bundle) passes. Browser preview inspected at desktop viewport; narrow-width layout still clips and needs responsive work. |
 | Document model | Initial v2 | Geometry-first versioned JSON project model, v1 migration, localStorage/download-open flow, and JSON Schema; `.elsim` ZIP container and versioned migration pipeline remain. |
 | Editor | Early implementation | Select/move, rotate, add/delete/duplicate parts, geometry-based pin/wire connectivity, labels, zoom, properties. Undo/redo, wire deletion, label editing, robust routing/junction UI, ERC, and exhaustive connectivity verification remain. |
 | Netlister | Early implementation | Generated netlist reads derived connectivity, sanitizes values/references, emits starter R/C/L/source/diode devices, and now returns line-to-schematic source mappings plus diagnostics. Switch control and broad model/hierarchy semantics remain. |
@@ -174,7 +174,7 @@ The local environment does not have Emscripten or ngspice, and its package index
 | Simulation engine | Not integrated | Run is explicitly unavailable; no generated waveform data is fabricated. M0.3 must pass before this changes. |
 | Analysis / animations | Not implemented | Empty-state explains engine gate; plot panels, animations, and electrical result bindings remain. |
 | Interoperability | Not implemented | No LTspice parser or model bundle is present. |
-| Legal release review | Not complete | ELSim license is undecided; no engine binary or vendor assets bundled. |
+| Legal release review | Partial | Owner selected MIT for ELSim source; exact npm dependency inventory and runtime notices are included. ngspice source-file audit, final binary notices, and imported model provenance UI remain. No engine binary or vendor assets are bundled. |
 
 ## 7. Primary references checked
 
