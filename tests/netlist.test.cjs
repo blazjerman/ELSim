@@ -6,7 +6,7 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
-const { createStarterProject } = require(path.join(build, 'domain/project.js'))
+const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
@@ -123,5 +123,30 @@ test('four-terminal voltage-controlled sources keep SPICE output and control pin
   assert.match(artifact.text, /^G1 n\d+ n\d+ n\d+ n\d+ 1m$/m)
   assert.equal(artifact.sourceMap.filter((entry) => ['p-e1', 'p-g1'].includes(entry.sourceId)).length, 2)
   assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'E1')).map(({ x, y }) => [x - 720, y - 280]), [[-52, 0], [52, 0], [0, -52], [0, 52]])
+})
+
+test('NPN and PNP parts create separate educational BJT models in C-B-E pin order', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'p-q1', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 300, rotation: 0 },
+    { id: 'p-q2', kind: 'pnp', ref: 'Q2', value: '60', x: 820, y: 400, rotation: 0 },
+  )
+  project.netLabels.push(
+    { id: 'q1-c', name: 'q1collector', x: 735, y: 248, visible: false },
+    { id: 'q1-b', name: 'q1base', x: 648, y: 300, visible: false },
+    { id: 'q1-e', name: 'q1emitter', x: 735, y: 352, visible: false },
+    { id: 'q2-c', name: 'q2collector', x: 855, y: 348, visible: false },
+    { id: 'q2-b', name: 'q2base', x: 768, y: 400, visible: false },
+    { id: 'q2-e', name: 'q2emitter', x: 855, y: 452, visible: false },
+  )
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^Q1 q1collector q1base q1emitter ELSIM_MODEL_Q1$/m)
+  assert.match(artifact.text, /^\.model ELSIM_MODEL_Q1 NPN\(IS=1e-14 BF=100/m)
+  assert.match(artifact.text, /^Q2 q2collector q2base q2emitter ELSIM_MODEL_Q2$/m)
+  assert.match(artifact.text, /^\.model ELSIM_MODEL_Q2 PNP\(IS=1e-14 BF=60/m)
+  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'Q1')).map(({ x, y }) => [x - 700, y - 300]), [[35, -52], [-52, 0], [35, 52]])
+  project.parts.find((part) => part.ref === 'Q1').value = '0'
+  assert.throws(() => validateProject(project), /integer from 1 to 1000/)
 })
 

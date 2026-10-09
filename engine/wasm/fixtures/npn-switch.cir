@@ -1,0 +1,16 @@
+ELSim educational NPN low-side switch regression
+VCC supply 0 5
+RLOAD supply out 1k
+VBASE drive 0 PULSE(0 5 1m 1u 1u 5m 10m)
+RBASE drive base 1k
+Q1 out base 0 ELSIM_MODEL_Q1
+.model ELSIM_MODEL_Q1 NPN(IS=1e-14 BF=100 VAF=100 CJE=10p CJC=5p TF=300p TR=10n)
+.save all @Q1[ic]
+.tran 10u 10m
+.control
+set filetype=ascii
+run
+write /result.raw all
+quit
+.endc
+.end

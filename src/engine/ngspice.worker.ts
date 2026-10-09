@@ -23,7 +23,7 @@ function makeTraces(rawText: string): Trace[] {
     const lowercaseName = variable.name.toLowerCase()
     const current = lowercaseName.startsWith('i(')
     const inner = variable.name.match(/^[vi]\((.*)\)$/i)![1]
-    const component = inner.match(/^@(.*)\[(?:i|id)\]$/i)?.[1]
+    const component = inner.match(/^@(.*)\[(?:i|id|ic)\]$/i)?.[1]
     return {
       id: lowercaseName,
       label: `${current ? 'I' : 'V'}(${component ?? inner})`,

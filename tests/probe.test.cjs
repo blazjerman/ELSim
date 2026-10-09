@@ -27,4 +27,6 @@ test('component current vectors use ngspice device-specific names', () => {
   assert.equal(componentCurrentVector({ kind: 'diode', ref: 'D2' }), 'i(@D2[id])')
   assert.equal(componentCurrentVector({ kind: 'vcvs', ref: 'E1' }), 'i(@E1[i])')
   assert.equal(componentCurrentVector({ kind: 'vccs', ref: 'G1' }), 'i(@G1[i])')
+  assert.equal(componentCurrentVector({ kind: 'npn', ref: 'Q1' }), 'i(@Q1[ic])')
+  assert.equal(componentCurrentVector({ kind: 'pnp', ref: 'Q2' }), 'i(@Q2[ic])')
 })

@@ -53,3 +53,8 @@ test('controlled sources have their branch currents saved for probing', () => {
   const control = addResultControl('E1 out 0 cp cn 2\nG1 g 0 cp cn 1m\n.tran 1u 1m\n.end')
   assert.match(control, /^\.save all @E1\[i\] @G1\[i\]$/m)
 })
+
+test('BJT models save collector current using the device-specific ngspice vector', () => {
+  const control = addResultControl('Q1 c b e ELSIM_MODEL_Q1\n.model ELSIM_MODEL_Q1 NPN(BF=100)\n.tran 1u 1m\n.end')
+  assert.match(control, /^\.save all @Q1\[ic\]$/m)
+})

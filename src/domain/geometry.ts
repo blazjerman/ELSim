@@ -6,6 +6,8 @@ export type PinLocation = Point & { partId: string; index: number }
 export function componentPins(part: Part): PinLocation[] {
   const local: [number, number][] = part.kind === 'vcvs' || part.kind === 'vccs'
     ? [[-52, 0], [52, 0], [0, -52], [0, 52]]
+    : part.kind === 'npn' || part.kind === 'pnp'
+      ? [[35, -52], [-52, 0], [35, 52]]
     : part.kind === 'ground' ? [[0, -22]]
       : part.kind === 'source' ? [[0, -52], [0, 52]]
         : part.kind === 'capacitor' ? [[-50, 0], [50, 0]]
