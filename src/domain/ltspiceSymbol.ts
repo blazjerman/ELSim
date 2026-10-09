@@ -6,6 +6,7 @@ export type SymbolPrimitive =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'rectangle'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'circle'; x1: number; y1: number; x2: number; y2: number }
+  | { kind: 'arc'; x1: number; y1: number; x2: number; y2: number; startX: number; startY: number; endX: number; endY: number }
 
 export type SymbolPin = { x: number; y: number; orientation: string; name: string; spiceOrder: number }
 export type ImportedSymbol = {
@@ -77,6 +78,14 @@ export function parseLtspiceSymbol(text: string, filename = 'Imported symbol.asy
       } else if (upper === 'CIRCLE') {
         if (tokens.length < 5) throw new Error('CIRCLE expects style and two coordinate pairs.')
         result.primitives.push({ kind: 'circle', x1: numberToken(tokens[1], lineNo), y1: numberToken(tokens[2], lineNo), x2: numberToken(tokens[3], lineNo), y2: numberToken(tokens[4], lineNo) })
+      } else if (upper === 'ARC') {
+        if (tokens.length < 9) throw new Error('ARC expects style, a bounding rectangle, and start/end coordinate pairs.')
+        const [x1, y1, x2, y2, startX, startY, endX, endY] = tokens.slice(1, 9).map((token) => numberToken(token, lineNo))
+        const rx = Math.abs(x2 - x1) / 2, ry = Math.abs(y2 - y1) / 2
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2
+        const onEllipse = (x: number, y: number) => rx > 0 && ry > 0 && Math.abs(((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 - 1) <= 0.03
+        if (!onEllipse(startX, startY) || !onEllipse(endX, endY)) throw new Error('ARC start and end points must lie on its bounding ellipse.')
+        result.primitives.push({ kind: 'arc', x1, y1, x2, y2, startX, startY, endX, endY })
       } else if (upper === 'SYMATTR') {
         if (tokens.length < 2) throw new Error('SYMATTR requires a name and value.')
         const attribute = tokens[0].toLowerCase()
