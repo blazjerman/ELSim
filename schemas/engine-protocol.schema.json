@@ -14,6 +14,7 @@
       "properties": {
         "severity": { "enum": ["info", "warning", "error"] },
         "message": { "type": "string" },
+        "hint": { "type": "string" },
         "sourceId": { "type": "string" },
         "line": { "type": "integer", "minimum": 1 }
       }

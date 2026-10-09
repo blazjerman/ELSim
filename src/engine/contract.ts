@@ -3,6 +3,7 @@ export type EngineState = 'not-integrated' | 'loading' | 'ready' | 'running' | '
 export type SimulationDiagnostic = {
   severity: 'info' | 'warning' | 'error'
   message: string
+  hint?: string
   sourceId?: string
   line?: number
 }

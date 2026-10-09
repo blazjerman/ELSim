@@ -2,18 +2,13 @@
 import { isTraceVariable, parseAsciiRawFile } from './raw'
 import { addResultControl } from './resultControl'
 import { parseMeasurementOutput } from './measurements'
-import type { EngineRequest, EngineResponse, NetlistArtifact, NetlistSource, RunMetadata, SimulationDiagnostic, Trace } from './contract'
+import { diagnosticForNgspice } from './diagnostics'
+import type { EngineRequest, EngineResponse, NetlistArtifact, RunMetadata, Trace } from './contract'
 import type { TransientMeasurement } from '../domain/project'
 
 const worker = self as DedicatedWorkerGlobalScope
 type NgspiceModule = { FS: { writeFile(path: string, data: string): void; readFile(path: string, options: { encoding: 'utf8' }): string }; callMain(args: string[]): number }
 type NgspiceFactory = (options: { noInitialRun: boolean; locateFile: (path: string) => string; print: (...parts: string[]) => void; printErr: (...parts: string[]) => void }) => Promise<NgspiceModule>
-
-function diagnosticForLine(message: string, artifact: NetlistArtifact): SimulationDiagnostic {
-  const line = message.match(/(?:line|card)\s*[:#]?\s*(\d+)/i)?.[1]
-  const source = line ? artifact.sourceMap.find((entry: NetlistSource) => entry.line === Number(line)) : undefined
-  return { severity: 'error', message: message.slice(0, 500), ...(line ? { line: Number(line) } : {}), ...(source ? { sourceId: source.sourceId } : {}) }
-}
 
 function makeTraces(rawText: string): Trace[] {
   const parsed = parseAsciiRawFile(rawText)
@@ -57,7 +52,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     const errors = output.split(/\r?\n/).filter((line) => /^\s*(?:Error|Fatal):/i.test(line))
     if (status !== 0 || errors.length) {
       const message = errors[0] ?? output.split(/\r?\n/).find((line) => /no writable vector|not available or has zero length|Error during/i.test(line)) ?? stderr.find((line) => /RuntimeError|out of bounds|stack overflow|Aborted\(/i.test(line)) ?? `ngspice exited with status ${status}.`
-      worker.postMessage({ type: 'error', requestId, error: diagnosticForLine(message, artifact) } satisfies EngineResponse)
+      worker.postMessage({ type: 'error', requestId, error: diagnosticForNgspice(message, artifact) } satisfies EngineResponse)
       return
     }
     const traces = parameterSweep?.length
@@ -83,7 +78,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    worker.postMessage({ type: 'error', requestId, error: diagnosticForLine(message, artifact) } satisfies EngineResponse)
+    worker.postMessage({ type: 'error', requestId, error: diagnosticForNgspice(message, artifact) } satisfies EngineResponse)
   }
 }
 

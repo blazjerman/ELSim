@@ -691,7 +691,10 @@ export default function App() {
     const snapshot = structuredClone(projectRef.current)
     const artifact = createNetlistArtifact(snapshot)
     const invalid = artifact.diagnostics.find((diagnostic) => diagnostic.severity === 'error')
-    if (invalid) { setRunState('error'); setNotice(invalid.message); return }
+    if (invalid) {
+      if (invalid.sourceId && projectRef.current.parts.some((part) => part.id === invalid.sourceId)) setSelection({ kind: 'part', id: invalid.sourceId })
+      setRunState('error'); setNotice(invalid.message); return
+    }
     let parameterSweep
     try { parameterSweep = prepareParameterSweep(snapshot) }
     catch (error) { setRunState('error'); setNotice(error instanceof Error ? error.message : 'Could not prepare parameter sweep.'); return }
@@ -740,7 +743,10 @@ export default function App() {
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
       } else if (response.type === 'error') {
         setRunState('error')
-        setNotice(typeof response.error?.message === 'string' ? response.error.message : 'ngspice returned an invalid error response.')
+        const message = typeof response.error?.message === 'string' ? response.error.message : 'ngspice returned an invalid error response.'
+        const sourceId = response.error?.sourceId
+        if (sourceId && projectRef.current.parts.some((part) => part.id === sourceId)) setSelection({ kind: 'part', id: sourceId })
+        setNotice(response.error?.hint ? `${message} Tip: ${response.error.hint}` : message)
         worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
       }
