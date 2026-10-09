@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { createStarterProject, validateProject, sheetModelName } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
-const { hierarchyNodeVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
+const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
 
 function createBlockProject() {
   const project = createStarterProject()
@@ -81,13 +81,18 @@ test('hierarchy probes map internal nodes through an instance path and ports to 
   assert.equal(hierarchyNodeVector(checked, child.id, ['root-block'], 'MID'), 'v(xload.mid)')
   assert.equal(hierarchyNodeVector(checked, child.id, ['root-block'], 'IN'), 'v(vin)')
   assert.equal(hierarchyNodeVector(checked, child.id, [], 'MID', child.id), 'v(mid)')
+  assert.equal(hierarchyComponentCurrentVector(checked, child.id, ['root-block'], 'child-r1'), 'i(@r.xload.rload1[i])')
+  assert.equal(hierarchyComponentCurrentVector(checked, child.id, [], 'child-r1', child.id), 'i(@rload1[i])')
   assert.equal(hierarchyNodeVector(checked, child.id, [], 'MID'), null)
   assert.match(createNetlistArtifact(checked).text, /^\.save v\(XLOAD\.MID\)$/mi)
+  assert.match(createNetlistArtifact(checked).text, /^\.save @r\.xload\.rload1\[i\]$/mi)
 
   const repeated = structuredClone(checked)
   repeated.parts.push({ ...repeated.parts[1], id: 'root-block-2', ref: 'XLOAD2', x: 600, y: 400 })
   repeated.sheets[0] = { ...repeated.sheets[0], parts: repeated.parts }
   const repeatedChecked = validateProject(repeated)
   assert.equal(hierarchyNodeVector(repeatedChecked, child.id, ['root-block-2'], 'MID'), 'v(xload2.mid)')
+  assert.equal(hierarchyComponentCurrentVector(repeatedChecked, child.id, ['root-block-2'], 'child-r1'), 'i(@r.xload2.rload1[i])')
   assert.match(createNetlistArtifact(repeatedChecked).text, /^\.save v\(XLOAD2\.MID\)$/mi)
+  assert.match(createNetlistArtifact(repeatedChecked).text, /^\.save @r\.xload2\.rload1\[i\]$/mi)
 })

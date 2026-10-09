@@ -15,6 +15,7 @@ import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
 import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
+import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import { createLedExampleProject, createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
@@ -1037,7 +1038,7 @@ export default function App() {
       : findSheetInstancePath(projectRef.current.activeSheetId, scopeSheetId) ?? []
     const rawName = target.kind === 'node'
       ? hierarchyNodeVector(projectRef.current, projectRef.current.activeSheetId, activePath, target.name, scopeSheetId)
-      : (() => { const part = projectRef.current.parts.find((item) => item.id === target.id); return part ? componentCurrentVector(part) : '' })()
+      : (() => { const part = projectRef.current.parts.find((item) => item.id === target.id); return part ? activePath.length ? hierarchyComponentCurrentVector(projectRef.current, projectRef.current.activeSheetId, activePath, target.id, scopeSheetId) : componentCurrentVector(part) : '' })()
     if (!rawName) { setNotice('This sheet is not open through a block instance. Open it from the parent block to cross-probe its internal nodes.'); return }
     const traceId = rawName.toLowerCase()
     if (!simulationResult) { setNotice('Run the circuit first, then add voltage and current probes.'); return }

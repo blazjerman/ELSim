@@ -65,6 +65,8 @@ for (const fixture of fixtures) {
       assert.match(wasmResult.stdout, /vin\s+5\.000000e\+00/i, 'hierarchical-block-op: sheet resistor block did not preserve its ordered port connection')
       assert.match(wasmResult.raw, /^\s*\d+\s+v\(xload\.mid\)\s+voltage$/mi, 'hierarchical-block-op: scoped internal node was not present in the result vectors')
       assert.ok(Math.abs(realRawVector(wasmResult.raw, 'v(xload.mid)')[0] - 2.5) < 1e-9, 'hierarchical-block-op: internal midpoint should be 2.5 V')
+      assert.match(wasmResult.raw, /^\s*\d+\s+i\(@r\.xload\.rload1\[i\]\)\s+current$/mi, 'hierarchical-block-op: scoped resistor current was not present in the result vectors')
+      assert.ok(Math.abs(realRawVector(wasmResult.raw, 'i(@r.xload.rload1[i])')[0] - 0.005) < 1e-9, 'hierarchical-block-op: block resistor current should be 5 mA')
     }
   } else {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)

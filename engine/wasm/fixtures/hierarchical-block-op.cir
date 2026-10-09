@@ -6,6 +6,7 @@ RLOAD1 IN MID 500
 RLOAD2 MID OUT 500
 .ENDS ELSIM_SHEET_sheet_load
 .save v(XLOAD.MID)
+.save @r.xload.rload1[i] @r.xload.rload2[i]
 .op
 .print op v(vin) v(XLOAD.MID)
 .control

@@ -34,3 +34,25 @@ export function hierarchyNodeVector(project: Project, sheetId: string, instanceP
   }
   return `v(${node.toLowerCase()})`
 }
+
+/** Resolve a child component's branch-current vector using ngspice's flattened instance names. */
+export function hierarchyComponentCurrentVector(project: Project, sheetId: string, instancePath: string[], partId: string, scopeSheetId = project.rootSheetId): string | null {
+  let sheet: ProjectSheet | undefined = project.sheets.find((candidate) => candidate.id === scopeSheetId)
+  if (!sheet) return null
+  const refs: string[] = []
+  for (const instanceId of instancePath) {
+    const instance: Part | undefined = sheet.parts.find((candidate) => candidate.id === instanceId && candidate.sheetId)
+    if (!instance?.sheetId) return null
+    refs.push(instance.ref.toLowerCase())
+    sheet = project.sheets.find((candidate) => candidate.id === instance.sheetId)
+    if (!sheet) return null
+  }
+  if (sheet.id !== sheetId) return null
+  const part = sheet.parts.find((candidate) => candidate.id === partId)
+  if (!part || part.kind === 'ground' || part.kind === 'subcircuit') return null
+  const currentName = part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
+  if (!refs.length) return `i(@${part.ref.toLowerCase()}[${currentName}])`
+  const deviceType = part.kind === 'source' ? 'v' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : 'g'
+  const device = [...refs, part.ref.toLowerCase()]
+  return part.kind === 'source' ? `i(${deviceType}.${device.join('.')})` : `i(@${deviceType}.${device.join('.')}[${currentName}])`
+}

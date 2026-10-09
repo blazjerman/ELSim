@@ -127,6 +127,16 @@ function hierarchicalSaveVectors(project: Project): string[] {
       if (!name || name === '0' || ports.has(name.toLowerCase())) continue
       saves.add(`.save v(${[...path, name].join('.')})`)
     }
+    if (path.length) for (const part of sheet.parts) {
+      if (part.kind === 'ground' || part.kind === 'subcircuit') continue
+      const type = part.kind === 'source' ? 'v' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : 'g'
+      const device = [...path, part.ref].join('.').toLowerCase()
+      if (part.kind === 'source') saves.add(`.save i(${type}.${device})`)
+      else {
+        const current = part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
+        saves.add(`.save @${type}.${device}[${current}]`)
+      }
+    }
     for (const part of sheet.parts) if (part.sheetId) visit(part.sheetId, [...path, part.ref], nextAncestry)
   }
   visit(project.activeSheetId, [], new Set())
