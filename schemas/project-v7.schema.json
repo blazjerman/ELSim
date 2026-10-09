@@ -146,6 +146,7 @@
             "vccs",
             "cccs",
             "ccvs",
+            "behavioral",
             "npn",
             "pnp",
             "subcircuit"
@@ -210,6 +211,9 @@
         "controlSource": {
           "type": "string",
           "pattern": "^V[A-Za-z0-9_]*$"
+        },
+        "behavioralOutput": {
+          "enum": ["voltage", "current"]
         },
         "symbolAssetId": {
           "type": "string",

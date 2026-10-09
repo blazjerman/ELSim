@@ -1,6 +1,7 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type PartKind, type Project } from '../domain/project'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { parseBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import type { NetlistArtifact, NetlistSource } from './contract'
 
 function cleanComment(value: string): string {
@@ -59,7 +60,7 @@ function spiceSweepValue(value: string): string | null {
 }
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
@@ -138,7 +139,7 @@ function hierarchicalSaveVectors(project: Project): string[] {
     }
     if (path.length) for (const part of sheet.parts) {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-    const type = part.kind === 'source' ? 'v' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : 'g'
+    const type = part.kind === 'source' ? 'v' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
       if (part.kind === 'source') saves.add(`.save i(${type}.${device})`)
       else {
@@ -179,8 +180,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
     const sheetParameters = (project as Project & { _netlistSheetParameters?: Project['sheets'][number]['parameters'] })._netlistSheetParameters ?? []
-    const value = part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
-    if (part.kind !== 'diode' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'subcircuit' && value === null) {
+    const value = part.kind === 'behavioral' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
+    if (part.kind !== 'diode' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && value === null) {
       const message = `${part.ref} has an invalid numeric value.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -287,6 +288,17 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       append(`${part.ref} ${positive} ${negative} ${source.ref} ${value}`, part.id, 'component')
     }
+    else if (part.kind === 'behavioral') {
+      try {
+        const parsed = parseBehavioralExpression(part.value)
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref))
+        append(`${part.ref} ${positive} ${negative} ${part.behavioralOutput === 'current' ? 'I' : 'V'}={${part.value.replace(/[\r\n]/g, ' ')}}`, part.id, 'component')
+      } catch (error) {
+        const message = error instanceof Error ? `${part.ref}: ${error.message}` : `${part.ref} has an invalid behavioral expression.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+      }
+    }
   }
 
   for (const asset of project.modelAssets ?? []) {
@@ -360,7 +372,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       break
     }
-    const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQ][A-Za-z0-9_]*\))$/i
+    const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQB][A-Za-z0-9_]*\))$/i
     const delay = measurement.operation === 'delay' ? measurement : undefined
     const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (delay
       ? vectorPattern.test(measurement.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && Number.isFinite(Number(delay.threshold)) && Number.isFinite(Number(delay.targetThreshold)) && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
@@ -378,7 +390,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 }
 
 export function nextRef(parts: Part[], kind: Part['kind']): string {
-  const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[kind]
+  const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[kind]
   const used = new Set(parts.map((part) => part.ref.toLowerCase()))
   let index = 1
   while (used.has(`${prefix}${index}`.toLowerCase())) index += 1

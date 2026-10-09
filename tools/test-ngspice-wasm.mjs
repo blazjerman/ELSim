@@ -238,6 +238,17 @@ assert.ok(inductorCurrent[0] > 1.9e-3 && inductorCurrent[0] <= 2e-3, `inductor c
 assert.ok(Math.abs(inductorCurrent.at(-1)) < 1e-7, `inductor current should decay through the parallel resistor, got ${inductorCurrent.at(-1)}`)
 process.stdout.write('PASS transient-inductor-current-initial-condition\n')
 
+const behavioralPath = path.join(root, 'engine/wasm/fixtures', 'behavioral-sources.cir')
+const behavioralResult = await runInWorker(behavioralPath, true)
+assert.equal(behavioralResult.status, 0, `behavioral-sources: ngspice exited with a nonzero status: ${behavioralResult.stderr}`)
+const behavioralVoltage = realRawVector(behavioralResult.raw, 'v(out-v)')[0]
+const behavioralCurrentOutput = realRawVector(behavioralResult.raw, 'v(out-i)')[0]
+assert.ok(Math.abs(behavioralVoltage - 6) < 1e-8, `behavioral voltage source should produce 6 V, got ${behavioralVoltage}`)
+assert.ok(Math.abs(behavioralCurrentOutput + 3) < 1e-8, `behavioral current source should produce -3 V across the load, got ${behavioralCurrentOutput}`)
+assert.match(behavioralResult.raw, /^\s*\d+\s+i\(@b1\[i\]\)\s+current$/mi)
+assert.match(behavioralResult.raw, /^\s*\d+\s+i\(@b2\[i\]\)\s+current$/mi)
+process.stdout.write('PASS behavioral-sources-op\n')
+
 const controlledPath = path.join(root, 'engine/wasm/fixtures', 'controlled-sources.cir')
 const controlledResult = await runInWorker(controlledPath, true)
 assert.equal(controlledResult.status, 0, `controlled-sources: ngspice exited with a nonzero status: ${controlledResult.stderr}`)

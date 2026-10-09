@@ -17,12 +17,13 @@ test('result control saves device currents needed for probes and visualizations'
     'S1 n3 0 ctrl 0 ELSIM_INTERNAL_SW',
     'F1 n3 0 VSENSE 2',
     'H1 n3 0 VSENSE 1k',
+    'B1 n3 0 V={V(in)*2}',
     '.model DDEFAULT D',
     '.tran 1u 1m',
     '.end',
   ].join('\n')
   const instrumented = addResultControl(netlist)
-  assert.match(instrumented, /^\.save all @R1\[i\] @C1\[i\] @L1\[i\] @D1\[id\] @S1\[i\] @F1\[i\] @H1\[i\]$/m)
+  assert.match(instrumented, /^\.save all @R1\[i\] @C1\[i\] @L1\[i\] @D1\[id\] @S1\[i\] @F1\[i\] @H1\[i\] @B1\[i\]$/m)
   assert.match(instrumented, /\.control\nset filetype=ascii\nrun\nwrite \/result\.raw all\nquit\n\.endc\n\.end\n$/)
 })
 

@@ -89,6 +89,20 @@ test('CCCS and CCVS netlist records name a voltage source for current control', 
   assert.throws(() => validateProject(project), /existing voltage source/)
 })
 
+test('behavioral voltage and current sources emit validated B-source expressions', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'V(vin) > 2.5 ? 5 : 0', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 },
+    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: 'V(vout) / 1k', behavioralOutput: 'current', x: 700, y: 420, rotation: 0 },
+  )
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^B1 n\d+ n\d+ V=\{V\(vin\) > 2\.5 \? 5 : 0\}$/m)
+  assert.match(artifact.text, /^B2 n\d+ n\d+ I=\{V\(vout\) \/ 1k\}$/m)
+  project.parts.find((part) => part.ref === 'B1').value = 'V(unknown)'
+  assert.throws(() => validateProject(project), /unknown node/)
+})
+
 test('DC sweep emits a steady source and a validated voltage-source sweep', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'dc'
