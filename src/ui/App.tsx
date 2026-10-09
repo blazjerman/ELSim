@@ -18,7 +18,7 @@ import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
-import { createLedExampleProject, createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
+import { createHierarchicalExampleProject, createLedExampleProject, createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -595,7 +595,8 @@ export default function App() {
   const [replacementModelAssetId, setReplacementModelAssetId] = useState<string | null>(null)
   const [analysisTab, setAnalysisTab] = useState<'waveforms' | 'netlist'>('waveforms')
   const [examplesOpen, setExamplesOpen] = useState(false)
-  const [pendingExample, setPendingExample] = useState<'rc' | 'led' | null>(null)
+  const [pendingExample, setPendingExample] = useState<'rc' | 'led' | 'hierarchy' | null>(null)
+  const [hierarchyWalkthroughStep, setHierarchyWalkthroughStep] = useState<number | null>(null)
   const [sheetSettingsOpen, setSheetSettingsOpen] = useState(false)
   const [sheetInstancePath, setSheetInstancePath] = useState<string[]>([])
   const [portSelection, setPortSelection] = useState('')
@@ -728,6 +729,9 @@ export default function App() {
   }
   const openSheet = (sheetId: string, viaPartId?: string) => {
     if (sheetId === project.activeSheetId) return
+    if (hierarchyWalkthroughStep === 4 && sheetId === project.rootSheetId) setHierarchyWalkthroughStep(null)
+    if (hierarchyWalkthroughStep === 1 && viaPartId === 'example-x2') setHierarchyWalkthroughStep(2)
+    if (hierarchyWalkthroughStep === 2 && viaPartId === 'divider-core-instance') setHierarchyWalkthroughStep(3)
     const sheet = project.sheets.find((candidate) => candidate.id === sheetId)
     if (!sheet) return
     const viaPart = viaPartId ? project.parts.find((part) => part.id === viaPartId && part.sheetId === sheetId) : undefined
@@ -1076,6 +1080,7 @@ export default function App() {
     setSelectedTraceIds(nextSelection)
     savePlotSettings((settings) => ({ ...settings, selectedTraceIds: nextSelection }))
     setAnalysisTab('waveforms')
+    if (hierarchyWalkthroughStep === 3 && target.kind === 'part' && target.id === 'core-r1') setHierarchyWalkthroughStep(4)
     setNotice(target.kind === 'part' ? `Added ${trace.label} to the waveform plot. ${['npn', 'pnp'].includes(projectRef.current.parts.find((item) => item.id === target.id)?.kind ?? '') ? 'Positive collector current enters the collector terminal.' : 'Positive current flows from pin 1 to pin 2.'}` : `Added ${trace.label} to the waveform plot.`)
   }
   const exportWaveformCsv = () => {
@@ -1152,7 +1157,10 @@ export default function App() {
         setSelectedTraceIds(initialTraces)
         savePlotSettings((settings) => ({ ...settings, selectedTraceIds: initialTraces }))
         setRunState('idle')
-        setNotice(parameterSweep.length ? `Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors` : `Analysis complete · ${response.result.traces.length} result vectors`)
+        if (hierarchyWalkthroughStep === 0) {
+          setHierarchyWalkthroughStep(1)
+          setNotice('Simulation complete. Continue the nested-block walkthrough in the guide.')
+        } else setNotice(parameterSweep.length ? `Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors` : `Analysis complete · ${response.result.traces.length} result vectors`)
         setAnalysisTab('waveforms')
         worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
@@ -1264,9 +1272,10 @@ export default function App() {
     setSelectedTraceIds(starter.plotSettings?.selectedTraceIds ?? [])
     history.current = { past: [], future: [] }
     setSelection(null)
+    setHierarchyWalkthroughStep(null)
   }
-  const loadExample = (example: 'rc' | 'led') => {
-    const next = example === 'led' ? createLedExampleProject() : createStarterProject()
+  const loadExample = (example: 'rc' | 'led' | 'hierarchy') => {
+    const next = example === 'hierarchy' ? createHierarchicalExampleProject() : example === 'led' ? createLedExampleProject() : createStarterProject()
     activeWorkerRef.current?.terminate()
     activeWorkerRef.current = null
     setRunState('idle')
@@ -1279,11 +1288,12 @@ export default function App() {
     setImportWarnings([])
     setCompatibilityDiagnostic(null)
     history.current = { past: [], future: [] }
-    setSelection({ kind: 'part', id: example === 'led' ? 'p-c1' : 'p-r1' })
+    setSelection({ kind: 'part', id: example === 'hierarchy' ? 'example-x1' : example === 'led' ? 'p-c1' : 'p-r1' })
+    setHierarchyWalkthroughStep(example === 'hierarchy' ? 0 : null)
     setAnalysisTab('waveforms')
     setExamplesOpen(false)
     setPendingExample(null)
-    setNotice(`Opened ${next.name}. Press Run simulation to see the results.`)
+    setNotice(example === 'hierarchy' ? 'Opened a two-level reusable block example. Run it, open X2’s sheet definition, then open XCORE and probe RCORE.' : `Opened ${next.name}. Press Run simulation to see the results.`)
   }
 
   return <div className="app-shell">
@@ -1377,11 +1387,24 @@ export default function App() {
         <div className="inspector-links"><button onClick={startTour}><CircleHelp size={14}/> Help</button><button onClick={() => setNotice('Component library is original ELSim data.')}><Bookmark size={14}/> Library notes</button></div>
       </aside>
     </div>
+    {hierarchyWalkthroughStep !== null && <aside className="hierarchy-walkthrough" role="status" aria-live="polite"><div><span className="eyebrow">GUIDED EXAMPLE · STEP {hierarchyWalkthroughStep + 1} OF 5</span><strong>{[
+      'Run the circuit',
+      'Open the second divider instance',
+      'Open the nested core block',
+      'Probe the core resistor current',
+      'Return to the root sheet',
+    ][hierarchyWalkthroughStep]}</strong><p>{[
+      'Click Run simulation. The two divider instances use different RINPUT values.',
+      'Select X2 and choose “Open sheet definition” in the inspector. Its RINPUT override is 2k.',
+      'Select XCORE and open its sheet definition to inspect the nested reusable core.',
+      'Choose the probe tool and click RCORE. Its current appears as a waveform.',
+      'Click the Root sheet tab to finish. You can keep exploring the project afterward.',
+    ][hierarchyWalkthroughStep]}</p></div><button className="subtle-icon" onClick={() => setHierarchyWalkthroughStep(null)} aria-label="Close walkthrough"><X size={15}/></button></aside>}
     {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14}/></button></div>}
     {sheetSettingsOpen && <div className="tour-backdrop" onClick={() => setSheetSettingsOpen(false)}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="sheet-settings-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">REUSABLE BLOCK</span><h2 id="sheet-settings-title">{activeSheet?.name ?? 'Sheet'} ports and parameters</h2></div><button className="subtle-icon" aria-label="Close sheet settings" onClick={() => setSheetSettingsOpen(false)}><X size={17}/></button></div>{activeSheet?.parentSheetId === null ? <p className="tour-copy">The root circuit is the project entry point. Add a child sheet to define a reusable block and its ports.</p> : <><p className="tour-copy">Expose labeled nodes as ordered pins. Choose each pin’s side and direction. Parameters provide defaults you can override on each placed block.</p>{activeSheet?.ports.length ? <div className="example-list">{activeSheet.ports.map((port, index) => <article key={port.id}><div><strong>Pin {index + 1} · {port.name}</strong><p>Connected to the sheet net labeled {port.name}.</p><div className="port-metadata-controls"><label>Side<select aria-label={`Pin ${index + 1} placement`} value={port.side ?? 'auto'} disabled={activeSheetInUse} onChange={(event) => updateSheetPort(port.id, { side: event.target.value as NonNullable<typeof port.side> })}><option value="auto">Automatic</option><option value="left">Left</option><option value="right">Right</option><option value="top">Top</option><option value="bottom">Bottom</option></select></label><label>Direction<select aria-label={`Pin ${index + 1} direction`} value={port.direction ?? 'inout'} disabled={activeSheetInUse} onChange={(event) => updateSheetPort(port.id, { direction: event.target.value as NonNullable<typeof port.direction> })}><option value="input">Input</option><option value="output">Output</option><option value="inout">Bidirectional</option></select></label></div></div><button className="tour-secondary" disabled={activeSheetInUse} title={activeSheetInUse ? 'Remove block instances before changing ports' : 'Remove port'} onClick={() => removeSheetPort(port.id)}>Remove</button></article>)}</div> : <div className="example-confirm"><strong>No ports yet</strong><p>Add net labels to the circuit first, then expose those nodes here.</p></div>}<div className="field-label">Labeled node<select aria-label="Labeled node for new port" value={portSelection} onChange={(event) => setPortSelection(event.target.value)}><option value="">Choose a node</option>{[...new Set(activeSheet?.netLabels.map((label) => label.name).filter((name) => !activeSheet.ports.some((port) => port.name.toLowerCase() === name.toLowerCase())) ?? [])].map((name) => <option key={name} value={name}>{name}</option>)}</select></div><div className="modal-footer"><span>{activeSheetInUse ? 'Remove block instances before changing the port order.' : 'Port order follows the list above.'}</span><button className="primary-small" disabled={!portSelection || activeSheetInUse} onClick={() => { addSheetPort(portSelection); setPortSelection('') }}>Expose as port</button></div><h3>Block parameters</h3>{activeSheet?.parameters?.length ? <div className="example-list">{activeSheet.parameters.map((parameter) => <article key={parameter.id}><div><strong>{parameter.name} = {parameter.defaultValue}</strong><p>Use {'{'}{parameter.name}{'}'} as a component value inside this sheet.</p></div><button className="tour-secondary" disabled={activeSheetInUse} onClick={() => removeSheetParameter(parameter.id)}>Remove</button></article>)}</div> : <p className="field-hint">No parameters. Add one to let each block instance use a different value.</p>}<button className="tour-secondary" disabled={activeSheetInUse || (activeSheet?.parameters?.length ?? 0) >= 32} onClick={addSheetParameter}>Add block parameter</button></>}<div className="modal-footer"><span>{project.sheets.length} sheets in this project</span><button className="tour-secondary" onClick={() => setSheetSettingsOpen(false)}>Done</button></div></section></div>}
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={() => setNetlistOpen(false)}><div className="netlist-modal" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2>Generated SPICE netlist</h2></div><button className="subtle-icon" onClick={() => setNetlistOpen(false)}><X size={17}/></button></div><pre>{createNetlist(project)}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div></div></div>}
     {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => setElectricalCheckOpen(false)}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button className="subtle-icon" aria-label="Close circuit checks" onClick={() => setElectricalCheckOpen(false)}><X size={17}/></button></div><p className="erc-intro">These checks look for common wiring mistakes. They do not decide whether ngspice can solve your circuit.</p>{electricalIssues.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={`erc-severity ${issue.severity}`}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => { setSelection({ kind: 'part', id: issue.partId! }); setElectricalCheckOpen(false) }}>Select affected component</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalIssues.length} finding{electricalIssues.length === 1 ? '' : 's'}</span><button className="primary-small" onClick={() => setElectricalCheckOpen(false)}>Done</button></div></section></div>}
-    {examplesOpen && <div className="tour-backdrop" onClick={() => { setExamplesOpen(false); setPendingExample(null) }}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="examples-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">LEARN BY EXAMPLE</span><h2 id="examples-title">Open a working circuit</h2></div><button className="subtle-icon" aria-label="Close examples" onClick={() => { setExamplesOpen(false); setPendingExample(null) }}><X size={17}/></button></div><p className="tour-copy">Each example is a complete circuit you can inspect, edit, and simulate locally.</p>{pendingExample ? <div className="example-confirm" role="alert"><strong>Replace the current circuit?</strong><p>{pendingExample === 'led' ? 'LED pulse response' : 'RC step response'} will replace the circuit open in this tab. Save your current circuit first if you want to keep it.</p><div><button className="tour-secondary" onClick={() => setPendingExample(null)}>Cancel</button><button className="primary-small" onClick={() => loadExample(pendingExample)}>Replace and open</button></div></div> : <div className="example-list"><article><div><strong>RC step response</strong><p>Watch a capacitor charge through a resistor and explore the time constant.</p></div><button className="primary-small" onClick={() => setPendingExample('rc')}>Open example</button></article><article><div><strong>LED pulse response</strong><p>See ngspice current drive the LED brightness as a pulse source switches.</p></div><button className="primary-small" onClick={() => setPendingExample('led')}>Open example</button></article></div>}</section></div>}
+    {examplesOpen && <div className="tour-backdrop" onClick={() => { setExamplesOpen(false); setPendingExample(null) }}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="examples-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">LEARN BY EXAMPLE</span><h2 id="examples-title">Open a working circuit</h2></div><button className="subtle-icon" aria-label="Close examples" onClick={() => { setExamplesOpen(false); setPendingExample(null) }}><X size={17}/></button></div><p className="tour-copy">Each example is a complete circuit you can inspect, edit, and simulate locally.</p>{pendingExample ? <div className="example-confirm" role="alert"><strong>Replace the current circuit?</strong><p>{pendingExample === 'hierarchy' ? 'Nested reusable divider' : pendingExample === 'led' ? 'LED pulse response' : 'RC step response'} will replace the circuit open in this tab. Save your current circuit first if you want to keep it.</p><div><button className="tour-secondary" onClick={() => setPendingExample(null)}>Cancel</button><button className="primary-small" onClick={() => loadExample(pendingExample)}>Replace and open</button></div></div> : <div className="example-list"><article><div><strong>RC step response</strong><p>Watch a capacitor charge through a resistor and explore the time constant.</p></div><button className="primary-small" onClick={() => setPendingExample('rc')}>Open example</button></article><article><div><strong>LED pulse response</strong><p>See ngspice current drive the LED brightness as a pulse source switches.</p></div><button className="primary-small" onClick={() => setPendingExample('led')}>Open example</button></article><article><div><strong>Nested reusable divider</strong><p>Run two instances, inspect a two-level block, compare parameter overrides, and probe the inner resistor current.</p></div><button className="primary-small" onClick={() => setPendingExample('hierarchy')}>Open example</button></article></div>}</section></div>}
     {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 4</span><h2 id="tour-title">{['Start with a working example', 'Change a component value', 'Inspect the generated netlist', 'Run and see results'][tourStep]}</h2></div><button className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p className="tour-copy">{[
       'This starter circuit is already wired. The schematic is in the center, the component library is on the left, and properties appear on the right.',
       'R1 is selected in the inspector. Try changing its resistance value; edits are saved locally as you work.',

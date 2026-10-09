@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op']
+const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -51,7 +51,7 @@ function realRawVector(raw, name) {
 
 for (const fixture of fixtures) {
   const deckPath = path.join(root, 'engine/wasm/fixtures', `${fixture}.cir`)
-  const wasmResult = await runInWorker(deckPath, fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-'))
+  const wasmResult = await runInWorker(deckPath, fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op')
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
@@ -70,6 +70,11 @@ for (const fixture of fixtures) {
       assert.ok(Math.abs(realRawVector(wasmResult.raw, 'v(xload.mid)')[0] - 2.5) < 1e-9, 'hierarchical-block-op: internal midpoint should be 2.5 V')
       assert.match(wasmResult.raw, /^\s*\d+\s+i\(@r\.xload\.rload1\[i\]\)\s+current$/mi, 'hierarchical-block-op: scoped resistor current was not present in the result vectors')
       assert.ok(Math.abs(realRawVector(wasmResult.raw, 'i(@r.xload.rload1[i])')[0] - 0.005) < 1e-9, 'hierarchical-block-op: block resistor current should be 5 mA')
+    }
+    if (fixture === 'hierarchical-walkthrough-op') {
+      assert.ok(Math.abs(realRawVector(wasmResult.raw, 'v(out5)')[0] - 2.5) < 1e-9, 'hierarchical-walkthrough-op: default 1k/1k divider should produce 2.5 V')
+      assert.ok(Math.abs(realRawVector(wasmResult.raw, 'v(out10)')[0] - 10 / 3) < 1e-9, 'hierarchical-walkthrough-op: overridden 2k/1k divider should produce 3.333 V')
+      assert.ok(Math.abs(realRawVector(wasmResult.raw, 'i(@r.x2.xcore.rcore[i])')[0] - 10 / 3000) < 1e-9, 'hierarchical-walkthrough-op: nested core current should be 3.333 mA')
     }
     if (fixture.startsWith('hierarchical-repeat-')) hierarchyRepeatRaws.set(fixture, wasmResult.raw)
     if (fixture.startsWith('hierarchical-nested-')) hierarchyNestedRaws.set(fixture, wasmResult.raw)

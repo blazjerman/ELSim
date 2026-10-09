@@ -158,6 +158,102 @@ export function createLedExampleProject(): Project {
   return project
 }
 
+/** A two-level reusable block example with two differently parameterized instances. */
+export function createHierarchicalExampleProject(): Project {
+  const project = createStarterProject()
+  const rootId = project.rootSheetId
+  const outerId = 'sheet-divider'
+  const coreId = 'sheet-core'
+  const coreResistor: Part = { id: 'core-r1', kind: 'resistor', ref: 'RCORE', value: '{RCORE}', x: 300, y: 300, rotation: 0 }
+  const corePins = componentPins(coreResistor)
+  const core: ProjectSheet = {
+    id: coreId, name: 'Core resistor', parentSheetId: outerId,
+    parts: [coreResistor], wires: [], junctions: [],
+    netLabels: [
+      { id: 'core-label-a', name: 'A', x: corePins[0].x, y: corePins[0].y, visible: true },
+      { id: 'core-label-b', name: 'B', x: corePins[1].x, y: corePins[1].y, visible: true },
+    ], view: { zoom: 1, panX: 0, panY: 0 },
+    ports: [
+      { id: 'core-port-a', name: 'A', side: 'left', direction: 'input' },
+      { id: 'core-port-b', name: 'B', side: 'right', direction: 'output' },
+    ],
+    parameters: [{ id: 'core-param-r', name: 'RCORE', defaultValue: '1k' }],
+  }
+  const coreBlock: Part = {
+    id: 'divider-core-instance', kind: 'subcircuit', ref: 'XCORE', value: core.name,
+    modelName: sheetModelName(core.id), modelPins: ['A', 'B'], sheetId: core.id,
+    sheetPortLayout: core.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })),
+    x: 500, y: 300, rotation: 0,
+  }
+  const inputResistor: Part = { id: 'divider-rin', kind: 'resistor', ref: 'RMAIN', value: '{RINPUT}', x: 300, y: 300, rotation: 0 }
+  const inputPins = componentPins(inputResistor)
+  const coreBlockPins = componentPins(coreBlock)
+  const divider: ProjectSheet = {
+    id: outerId, name: 'Parameterized divider', parentSheetId: rootId,
+    parts: [inputResistor, coreBlock], wires: [], junctions: [],
+    netLabels: [
+      { id: 'divider-label-in', name: 'IN', x: inputPins[0].x, y: inputPins[0].y, visible: true },
+      { id: 'divider-label-out-r', name: 'OUT', x: inputPins[1].x, y: inputPins[1].y, visible: true },
+      { id: 'divider-label-out-core', name: 'OUT', x: coreBlockPins[0].x, y: coreBlockPins[0].y, visible: true },
+      { id: 'divider-label-gnd', name: 'GND', x: coreBlockPins[1].x, y: coreBlockPins[1].y, visible: true },
+    ], view: { zoom: 1, panX: 0, panY: 0 },
+    ports: [
+      { id: 'divider-port-in', name: 'IN', side: 'left', direction: 'input' },
+      { id: 'divider-port-out', name: 'OUT', side: 'right', direction: 'output' },
+      { id: 'divider-port-gnd', name: 'GND', side: 'bottom', direction: 'input' },
+    ],
+    parameters: [{ id: 'divider-param-r', name: 'RINPUT', defaultValue: '1k' }],
+  }
+  const source5: Part = { id: 'example-v1', kind: 'source', ref: 'V1', value: '5 V', x: 200, y: 300, rotation: 0 }
+  const source10: Part = { id: 'example-v2', kind: 'source', ref: 'V2', value: '10 V', x: 200, y: 600, rotation: 0 }
+  const ground5: Part = { id: 'example-gnd1', kind: 'ground', ref: 'GND1', value: '', x: 200, y: 374, rotation: 0 }
+  const ground10: Part = { id: 'example-gnd2', kind: 'ground', ref: 'GND2', value: '', x: 200, y: 674, rotation: 0 }
+  const block5: Part = {
+    id: 'example-x1', kind: 'subcircuit', ref: 'X1', value: divider.name,
+    modelName: sheetModelName(divider.id), modelPins: ['IN', 'OUT', 'GND'], sheetId: divider.id,
+    sheetParameters: { RINPUT: '1k' }, sheetPortLayout: divider.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })),
+    x: 500, y: 300, rotation: 0,
+  }
+  const block10: Part = {
+    id: 'example-x2', kind: 'subcircuit', ref: 'X2', value: divider.name,
+    modelName: sheetModelName(divider.id), modelPins: ['IN', 'OUT', 'GND'], sheetId: divider.id,
+    sheetParameters: { RINPUT: '2k' }, sheetPortLayout: divider.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })),
+    x: 500, y: 600, rotation: 0,
+  }
+  const rootParts = [source5, source10, ground5, ground10, block5, block10]
+  const v1Pins = componentPins(source5), v2Pins = componentPins(source10)
+  const g1Pin = componentPins(ground5)[0], g2Pin = componentPins(ground10)[0]
+  const x1Pins = componentPins(block5), x2Pins = componentPins(block10)
+  const root: ProjectSheet = {
+    ...project.sheets[0], parts: rootParts, wires: [], junctions: [],
+    netLabels: [
+      { id: 'root-in-5-source', name: 'IN5', x: v1Pins[0].x, y: v1Pins[0].y, visible: true },
+      { id: 'root-in-5-block', name: 'IN5', x: x1Pins[0].x, y: x1Pins[0].y, visible: true },
+      { id: 'root-out-5', name: 'OUT5', x: x1Pins[1].x, y: x1Pins[1].y, visible: true },
+      { id: 'root-gnd-5', name: '0', x: x1Pins[2].x, y: x1Pins[2].y, visible: true },
+      { id: 'root-source-gnd-5', name: '0', x: v1Pins[1].x, y: v1Pins[1].y, visible: true },
+      { id: 'root-in-10-source', name: 'IN10', x: v2Pins[0].x, y: v2Pins[0].y, visible: true },
+      { id: 'root-in-10-block', name: 'IN10', x: x2Pins[0].x, y: x2Pins[0].y, visible: true },
+      { id: 'root-out-10', name: 'OUT10', x: x2Pins[1].x, y: x2Pins[1].y, visible: true },
+      { id: 'root-gnd-10', name: '0', x: x2Pins[2].x, y: x2Pins[2].y, visible: true },
+      { id: 'root-source-gnd-10', name: '0', x: v2Pins[1].x, y: v2Pins[1].y, visible: true },
+    ],
+  }
+  // Ground symbols and source return pins share coordinates, so geometry joins them to node 0.
+  if (v1Pins[1].x !== g1Pin.x || v1Pins[1].y !== g1Pin.y || v2Pins[1].x !== g2Pin.x || v2Pins[1].y !== g2Pin.y) throw new Error('The hierarchy example ground pins do not align.')
+  project.name = 'Nested reusable divider'
+  project.parts = root.parts
+  project.wires = root.wires
+  project.junctions = root.junctions
+  project.netLabels = root.netLabels
+  project.view = root.view
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(OUT5)', 'V(OUT10)'], ranges: {} }
+  project.activeSheetId = rootId
+  project.sheets = [root, divider, core]
+  return project
+}
+
 function migrateV1(input: Record<string, unknown>): Project {
   const oldParts = input.parts as (Part & { nodes: string[] })[]
   const oldWires = input.wires as (Wire & { node: string })[]

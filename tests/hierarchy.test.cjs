@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { createStarterProject, validateProject, sheetModelName } = require(path.join(build, 'domain/project.js'))
+const { createHierarchicalExampleProject, createStarterProject, validateProject, sheetModelName } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
@@ -197,4 +197,18 @@ test('v6 sheet blocks migrate to automatic bidirectional ports without changing 
   assert.equal(migrated.version, 7)
   assert.deepEqual(migrated.sheets[1].ports.map(({ side, direction }) => [side, direction]), [['auto', 'inout'], ['auto', 'inout']])
   assert.deepEqual(componentPins(migrated.parts[1]).map(({ x, y }) => [x, y]), before)
+})
+
+test('nested divider walkthrough example validates, nets, and exposes deep probes', () => {
+  const project = validateProject(createHierarchicalExampleProject())
+  assert.equal(project.sheets.length, 3)
+  assert.equal(project.simulation.analysis, 'op')
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+  assert.match(artifact.text, /^X1\s+IN5\s+OUT5\s+0\s+ELSIM_SHEET_sheet_divider PARAMS: RINPUT=1k$/m)
+  assert.match(artifact.text, /^X2\s+IN10\s+OUT10\s+0\s+ELSIM_SHEET_sheet_divider PARAMS: RINPUT=2k$/m)
+  assert.match(artifact.text, /RMAIN IN OUT \{RINPUT\}/)
+  assert.match(artifact.text, /RCORE A B \{RCORE\}/)
+  assert.match(artifact.text, /^\.save @r\.x2\.xcore\.rcore\[i\]$/m)
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-core', ['example-x2', 'divider-core-instance'], 'core-r1'), 'i(@r.x2.xcore.rcore[i])')
 })
