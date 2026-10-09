@@ -11,7 +11,7 @@ import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { componentPins, moveWireAnchors, projectPinLocations, wireNetAt } from '../domain/geometry'
 import { resolveProbeTarget } from '../domain/probe'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
-import { createStarterProject, kindNames, kindPrefix, validateProject, type Part, type PartKind, type Project } from '../domain/project'
+import { createStarterProject, kindNames, kindPrefix, validateProject, type Part, type PartKind, type PlotRange, type Project } from '../domain/project'
 import { createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
 import { serializeWaveformCsv } from '../engine/csv'
 import { isEngineResponse, type SimulationResult, type Trace } from '../engine/contract'
@@ -33,21 +33,26 @@ function IconButton({ title, children, onClick, active = false, disabled = false
 }
 
 type PlotWindow = { start: number; end: number }
-function usePlotWindow(traces: Trace[]) {
-  const [window, setWindow] = useState<PlotWindow>({ start: 0, end: 1 })
-  useEffect(() => setWindow({ start: 0, end: 1 }), [traces])
-  const zoom = (factor: number) => setWindow((current) => {
-    const span = current.end - current.start
+function usePlotWindow(traces: Trace[], savedRange: PlotRange | undefined, onRangeChange: (range: PlotRange) => void) {
+  const [window, setWindow] = useState<PlotWindow>(savedRange ?? { start: 0, end: 1 })
+  useEffect(() => setWindow(savedRange ?? { start: 0, end: 1 }), [traces])
+  const update = (next: PlotRange) => { setWindow(next); onRangeChange(next) }
+  const zoom = (factor: number) => {
+    const span = window.end - window.start
     const next = Math.min(1, Math.max(0.03, span * factor))
-    const center = (current.start + current.end) / 2
-    return { start: Math.max(0, Math.min(1 - next, center - next / 2)), end: Math.max(next, Math.min(1, center + next / 2)) }
-  })
-  const pan = (direction: -1 | 1) => setWindow((current) => {
-    const span = current.end - current.start
-    const start = Math.max(0, Math.min(1 - span, current.start + direction * span * 0.22))
-    return { start, end: start + span }
-  })
-  const reset = () => setWindow({ start: 0, end: 1 })
+    const center = (window.start + window.end) / 2
+    const range = { start: Math.max(0, Math.min(1 - next, center - next / 2)), end: Math.max(next, Math.min(1, center + next / 2)) }
+    setWindow(range)
+    onRangeChange(range)
+  }
+  const pan = (direction: -1 | 1) => {
+    const span = window.end - window.start
+    const start = Math.max(0, Math.min(1 - span, window.start + direction * span * 0.22))
+    const range = { start, end: start + span }
+    setWindow(range)
+    onRangeChange(range)
+  }
+  const reset = () => update({ start: 0, end: 1 })
   return { window, zoom, pan, reset }
 }
 
@@ -88,9 +93,9 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe }:
   </g>
 }
 
-function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void }) {
+function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
   const shown = traces.filter((trace) => selectedIds.includes(trace.id))
-  const navigation = usePlotWindow(traces)
+  const navigation = usePlotWindow(traces, range, onRangeChange)
   const width = 760, height = 112, left = 42, right = 748, top = 8, bottom = 91
   const rangeFor = (unit: string) => {
     let min = Infinity, max = -Infinity
@@ -156,9 +161,9 @@ function OperatingPointView({ traces, selectedIds, onToggle, stale, onExport }: 
   </div>
 }
 
-function AcPlot({ traces, selectedIds, onToggle, stale, onExport }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void }) {
+function AcPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
   const shown = traces.filter((trace) => selectedIds.includes(trace.id))
-  const navigation = usePlotWindow(traces)
+  const navigation = usePlotWindow(traces, range, onRangeChange)
   const [mode, setMode] = useState<'magnitude' | 'phase'>('magnitude')
   const [cursorIndex, setCursorIndex] = useState<number | null>(null)
   useEffect(() => setCursorIndex(null), [traces])
@@ -194,9 +199,9 @@ function AcPlot({ traces, selectedIds, onToggle, stale, onExport }: { traces: Tr
   </div>
 }
 
-function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void }) {
+function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
   const shown = traces.filter((trace) => selectedIds.includes(trace.id))
-  const navigation = usePlotWindow(traces)
+  const navigation = usePlotWindow(traces, range, onRangeChange)
   const [cursorIndex, setCursorIndex] = useState<number | null>(null)
   useEffect(() => setCursorIndex(null), [traces])
   const width = 760, height = 160, left = 52, right = 748, top = 10, bottom = 130
@@ -367,7 +372,7 @@ export default function App() {
   const [analysisTab, setAnalysisTab] = useState<'waveforms' | 'netlist'>('waveforms')
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
-  const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>([])
+  const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>(() => project.plotSettings?.selectedTraceIds ?? [])
   const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
   const [componentQuery, setComponentQuery] = useState('')
   const [tourStep, setTourStep] = useState<number | null>(null)
@@ -395,6 +400,22 @@ export default function App() {
     const snapshot = { ...current, parts: current.parts.map((part) => ({ ...part })), wires: current.wires.map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x, y] as [number, number]) })), netLabels: current.netLabels.map((label) => ({ ...label })) }
     if (!editGroup.current) history.current = { past: [...history.current.past, snapshot].slice(-100), future: [] }
     return { ...next, updatedAt: new Date().toISOString() }
+  })
+  const savePlotSettings = (update: (current: NonNullable<Project['plotSettings']>) => NonNullable<Project['plotSettings']>) => setProjectState((current) => {
+    const before = current.plotSettings ?? { selectedTraceIds: [], ranges: {} }
+    const next = update(before)
+    if (next === before) return current
+    return { ...current, plotSettings: next }
+  })
+  const changeTraceSelection = (id: string) => {
+    const next = selectedTraceIds.includes(id) ? selectedTraceIds.filter((item) => item !== id) : [...selectedTraceIds, id]
+    setSelectedTraceIds(next)
+    savePlotSettings((settings) => ({ ...settings, selectedTraceIds: next }))
+  }
+  const changePlotRange = (analysis: 'tran' | 'ac' | 'dc', range: PlotRange) => savePlotSettings((settings) => {
+    const current = settings.ranges[analysis]
+    if (current?.start === range.start && current?.end === range.end) return settings
+    return { ...settings, ranges: { ...settings.ranges, [analysis]: range } }
   })
   const history = useRef<{ past: Project[]; future: Project[] }>({ past: [], future: [] })
   const editGroup = useRef(false)
@@ -449,6 +470,7 @@ export default function App() {
       const projectData = isProjectArchive(bytes) ? readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
       const parsed = validateProject(projectData)
       setProjectState(parsed)
+      setSelectedTraceIds(parsed.plotSettings?.selectedTraceIds ?? [])
       history.current = { past: [], future: [] }
       setSelection(null)
       setNotice(`Opened ${parsed.name}`)
@@ -580,7 +602,11 @@ export default function App() {
         if (response.message) setNotice(response.message)
       } else if (response.type === 'result') {
         setSimulationResult(response.result)
-        setSelectedTraceIds(response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.id)).slice(0, response.result.analysis === 'op' ? undefined : response.result.analysis === 'dc' ? undefined : 2).map((trace) => trace.id))
+        const savedTraceIds = projectRef.current.plotSettings?.selectedTraceIds ?? []
+        const restoredTraces = savedTraceIds.filter((id) => response.result.traces.some((trace) => trace.id === id))
+        const initialTraces = restoredTraces.length ? restoredTraces : response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.id)).slice(0, response.result.analysis === 'op' ? undefined : response.result.analysis === 'dc' ? undefined : 2).map((trace) => trace.id)
+        setSelectedTraceIds(initialTraces)
+        savePlotSettings((settings) => ({ ...settings, selectedTraceIds: initialTraces }))
         setRunState('idle')
         setNotice(`Analysis complete · ${response.result.traces.length} result vectors`)
         setAnalysisTab('waveforms')
@@ -628,7 +654,9 @@ export default function App() {
   }
   const resetProject = () => {
     if (!window.confirm('Start a new circuit? Unsaved changes in this tab will be lost.')) return
-    setProjectState(createStarterProject())
+    const starter = createStarterProject()
+    setProjectState(starter)
+    setSelectedTraceIds(starter.plotSettings?.selectedTraceIds ?? [])
     history.current = { past: [], future: [] }
     setSelection(null)
   }
@@ -672,7 +700,7 @@ export default function App() {
         <section className="analysis-panel">
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span><button className="subtle-icon" title="Panel options"><MoreHorizontal size={17}/></button></div></div>
           <div className="analysis-content">
-            {analysisTab === 'waveforms' ? simulationResult ? simulationResult.analysis === 'op' ? <OperatingPointView traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={(id) => setSelectedTraceIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'ac' ? <AcPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={(id) => setSelectedTraceIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'dc' ? <DcSweepPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={(id) => setSelectedTraceIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={(id) => setSelectedTraceIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? `Running ${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'ac' ? 'AC sweep' : project.simulation.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your results will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the local ngspice WebAssembly engine.' : project.simulation.analysis === 'op' ? 'Run DC operating point to inspect solved node voltages and component currents.' : project.simulation.analysis === 'ac' ? 'Run an AC sweep to inspect frequency response magnitude and phase.' : project.simulation.analysis === 'dc' ? 'Sweep a voltage source to inspect how node voltages and currents change.' : 'Run transient analysis to inspect calculated voltages and currents. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
+            {analysisTab === 'waveforms' ? simulationResult ? simulationResult.analysis === 'op' ? <OperatingPointView traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'ac' ? <AcPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.ac} onRangeChange={(range) => changePlotRange('ac', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'dc' ? <DcSweepPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.dc} onRangeChange={(range) => changePlotRange('dc', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.tran} onRangeChange={(range) => changePlotRange('tran', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? `Running ${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'ac' ? 'AC sweep' : project.simulation.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your results will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the local ngspice WebAssembly engine.' : project.simulation.analysis === 'op' ? 'Run DC operating point to inspect solved node voltages and component currents.' : project.simulation.analysis === 'ac' ? 'Run an AC sweep to inspect frequency response magnitude and phase.' : project.simulation.analysis === 'dc' ? 'Sweep a voltage source to inspect how node voltages and currents change.' : 'Run transient analysis to inspect calculated voltages and currents. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
           </div>
           <div className="analysis-footer"><span><Gauge size={13}/> {project.simulation.analysis === 'op' ? 'DC operating point' : project.simulation.analysis === 'ac' ? `AC ${project.simulation.acSweep?.scale ?? 'dec'} sweep` : project.simulation.analysis === 'dc' ? `DC sweep ${project.simulation.dcSweep?.source ?? 'V1'}` : `${project.simulation.stopTime} total time`}</span><span><span className="shortcut">⌘</span> + Enter to run</span><span>Results are generated locally</span></div>
         </section>

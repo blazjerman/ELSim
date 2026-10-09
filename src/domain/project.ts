@@ -15,6 +15,11 @@ export type Part = {
 
 export type Wire = { id: string; points: [number, number][] }
 export type NetLabel = { id: string; name: string; x: number; y: number; visible: boolean }
+export type PlotRange = { start: number; end: number }
+export type PlotSettings = {
+  selectedTraceIds: string[]
+  ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>>
+}
 
 export type Project = {
   format: 'elsim-project'
@@ -26,6 +31,7 @@ export type Project = {
   junctions: { x: number; y: number }[]
   netLabels: NetLabel[]
   view: { zoom: number; panX: number; panY: number }
+  plotSettings?: PlotSettings
   simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string } }
 }
 
@@ -51,6 +57,7 @@ const starter: Project = {
     { id: 'label-vout', name: 'vout', x: 475, y: 290, visible: true },
   ],
   view: { zoom: 1, panX: 0, panY: 0 },
+  plotSettings: { selectedTraceIds: [], ranges: {} },
   simulation: { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
 }
 
@@ -131,6 +138,16 @@ export function validateProject(input: unknown): Project {
   if (simulation.analysis === 'dc' && !simulation.dcSweep) simulation.dcSweep = { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
   if (simulation.dcSweep && (typeof simulation.dcSweep.source !== 'string' || !simulation.dcSweep.source.trim() || typeof simulation.dcSweep.start !== 'string' || !simulation.dcSweep.start.trim() || typeof simulation.dcSweep.stop !== 'string' || !simulation.dcSweep.stop.trim() || typeof simulation.dcSweep.step !== 'string' || !simulation.dcSweep.step.trim())) throw new Error('DC sweep settings are malformed.')
   if (simulation.acSweep && (!['dec', 'oct', 'lin'].includes(simulation.acSweep.scale) || !Number.isInteger(simulation.acSweep.points) || simulation.acSweep.points < 1 || simulation.acSweep.points > 10000 || typeof simulation.acSweep.startFrequency !== 'string' || !simulation.acSweep.startFrequency.trim() || typeof simulation.acSweep.stopFrequency !== 'string' || !simulation.acSweep.stopFrequency.trim())) throw new Error('AC sweep settings are malformed.')
+  const plotSettings = data.plotSettings as PlotSettings | undefined
+  if (plotSettings !== undefined) {
+    if (!plotSettings || !Array.isArray(plotSettings.selectedTraceIds) || plotSettings.selectedTraceIds.some((id) => typeof id !== 'string') || !plotSettings.ranges || typeof plotSettings.ranges !== 'object' || Array.isArray(plotSettings.ranges)) throw new Error('Plot settings are malformed.')
+    for (const analysis of ['tran', 'ac', 'dc'] as const) {
+      const range = plotSettings.ranges[analysis]
+      if (range !== undefined && (!range || !Number.isFinite(range.start) || !Number.isFinite(range.end) || range.start < 0 || range.end > 1 || range.end - range.start < 0.03)) throw new Error('Plot view range is malformed.')
+    }
+  } else {
+    data.plotSettings = { selectedTraceIds: [], ranges: {} }
+  }
   return data as unknown as Project
 }
 

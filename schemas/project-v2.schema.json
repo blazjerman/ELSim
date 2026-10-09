@@ -15,7 +15,8 @@
     "junctions": { "type": "array", "items": { "$ref": "#/$defs/point" } },
     "netLabels": { "type": "array", "items": { "$ref": "#/$defs/netLabel" } },
     "view": { "$ref": "#/$defs/view" },
-    "simulation": { "$ref": "#/$defs/simulation" }
+    "simulation": { "$ref": "#/$defs/simulation" },
+    "plotSettings": { "$ref": "#/$defs/plotSettings" }
   },
   "$defs": {
     "point": {
@@ -71,6 +72,32 @@
         "zoom": { "type": "number", "exclusiveMinimum": 0 },
         "panX": { "type": "number" },
         "panY": { "type": "number" }
+      }
+    },
+    "plotSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selectedTraceIds", "ranges"],
+      "properties": {
+        "selectedTraceIds": { "type": "array", "items": { "type": "string" } },
+        "ranges": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tran": { "$ref": "#/$defs/plotRange" },
+            "ac": { "$ref": "#/$defs/plotRange" },
+            "dc": { "$ref": "#/$defs/plotRange" }
+          }
+        }
+      }
+    },
+    "plotRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "number", "minimum": 0 },
+        "end": { "type": "number", "maximum": 1 }
       }
     },
     "simulation": {

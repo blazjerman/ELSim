@@ -19,6 +19,18 @@ test('project ZIP archive is deterministic and round-trips the complete v2 proje
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926)
 })
 
+test('plot preferences survive project validation and old projects receive defaults', () => {
+  const project = createStarterProject()
+  project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } } }
+  assert.deepEqual(validateProject(structuredClone(project)).plotSettings, project.plotSettings)
+  const oldProject = structuredClone(project)
+  delete oldProject.plotSettings
+  assert.deepEqual(validateProject(oldProject).plotSettings, { selectedTraceIds: [], ranges: {} })
+  const malformed = structuredClone(project)
+  malformed.plotSettings.ranges.tran = { start: 0.8, end: 0.2 }
+  assert.throws(() => validateProject(malformed), /Plot view range is malformed/)
+})
+
 test('project ZIP archive rejects corrupted project data and traversal paths', () => {
   const archive = createProjectArchive(createStarterProject())
   const corrupted = archive.slice()
