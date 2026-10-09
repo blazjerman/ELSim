@@ -34,6 +34,8 @@ export type Trace = {
   id: string
   label: string
   unit: string
+  axisLabel: string
+  axisUnit: string
   axis: Float64Array
   values: Float64Array
 }

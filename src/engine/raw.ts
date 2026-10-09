@@ -7,6 +7,8 @@ export type RawVariable = {
 export type ParsedRawFile = {
   title: string
   plotName: string
+  axisLabel: string
+  axisUnit: string
   axis: Float64Array
   variables: RawVariable[]
 }
@@ -44,18 +46,28 @@ export function parseAsciiRawFile(text: string): ParsedRawFile {
     const match = line.match(/^\s*\d+\s+(\S+)\s+(\S+)/)
     return match ? { name: match[1], type: match[2], values: new Float64Array(pointCount) } : null
   }).filter((variable): variable is RawVariable => variable !== null)
-  if (variables.length !== variableCount || variables[0].name.toLowerCase() !== 'time') {
-    throw new Error('ngspice raw data variables do not match its declared transient axes.')
-  }
+  if (variables.length !== variableCount) throw new Error('ngspice raw data variables do not match its declared result data.')
+  const hasTimeAxis = variables[0]?.name.toLowerCase() === 'time'
+  const isOperatingPoint = /operating point/i.test(plotName)
+  if (!hasTimeAxis && !isOperatingPoint) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
+  if (isOperatingPoint && pointCount !== 1) throw new Error('ngspice operating-point raw data must contain exactly one sample.')
   if (data.length < pointCount * variableCount) throw new Error('ngspice raw data ended before all numeric points were read.')
+  const axis = new Float64Array(pointCount)
+  const firstVariableIndex = 1
   for (let point = 0, lineIndex = 0; point < pointCount; point++) {
-    const axisTokens = data[lineIndex++].trim().split(/\s+/)
-    if (Number(axisTokens[0]) !== point || axisTokens.length < 2) throw new Error(`Malformed ngspice raw point index ${point}.`)
-    variables[0].values[point] = finiteNumber(axisTokens[1], `point ${point}, time`)
-    for (let variable = 1; variable < variableCount; variable++) {
+    if (hasTimeAxis) {
+      const axisTokens = data[lineIndex++].trim().split(/\s+/)
+      if (Number(axisTokens[0]) !== point || axisTokens.length < 2) throw new Error(`Malformed ngspice raw point index ${point}.`)
+      axis[point] = finiteNumber(axisTokens[1], `point ${point}, time`)
+    } else {
+      const tokens = data[lineIndex++].trim().split(/\s+/)
+      if (Number(tokens[0]) !== point || tokens.length < 2) throw new Error(`Malformed ngspice operating-point sample index ${point}.`)
+      variables[0].values[point] = finiteNumber(tokens.at(-1)!, `point ${point}, ${variables[0].name}`)
+    }
+    for (let variable = firstVariableIndex; variable < variableCount; variable++) {
       const tokens = data[lineIndex++].trim().split(/\s+/)
       variables[variable].values[point] = finiteNumber(tokens.at(-1)!, `point ${point}, ${variables[variable].name}`)
     }
   }
-  return { title, plotName, axis: variables[0].values, variables: variables.slice(1) }
+  return { title, plotName, axisLabel: hasTimeAxis ? 'Time' : 'Operating point', axisUnit: hasTimeAxis ? 's' : '', axis, variables: variables.slice(hasTimeAxis ? 1 : 0) }
 }

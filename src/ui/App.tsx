@@ -100,6 +100,18 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport }: { trac
   </div>
 }
 
+function OperatingPointView({ traces, selectedIds, onToggle, stale, onExport }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void }) {
+  const shown = traces.filter((trace) => selectedIds.includes(trace.id))
+  const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
+  return <div className="waveform-view op-view">
+    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'DC operating point'}</strong><span>{traces.length} vectors · one solved bias point</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="trace-toggles" aria-label="Available operating-point traces">{traces.map((trace, index) => <button key={trace.id} className={selectedIds.includes(trace.id) ? 'selected' : ''} onClick={() => onToggle(trace.id)}><span style={{ background: colors[index % colors.length] }}/>{trace.label}</button>)}</div>
+    {shown.length ? <div className="op-table-wrap"><table className="op-table"><thead><tr><th>Vector</th><th>Value</th><th>Unit</th></tr></thead><tbody>{shown.map((trace) => <tr key={trace.id}><td><span style={{ color: colors[traces.indexOf(trace) % colors.length] }}>●</span> {trace.label}</td><td>{trace.values[0].toPrecision(7)}</td><td>{trace.unit}</td></tr>)}</tbody></table></div> : <div className="op-empty">Select a voltage or current vector to inspect its DC value.</div>}
+    {shown.some((trace) => trace.unit === 'A') && <div className="current-sign-note">Positive component current flows from pin 1 to pin 2.</div>}
+    {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh these values.</div>}
+  </div>
+}
+
 function Schematic({ project, selection, setSelection, setProject, tool, setTool, setNotice, beginEdit, endEdit, onProbe }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setProject: (fn: (current: Project) => Project) => void; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void }) {
   const svg = useRef<SVGSVGElement>(null)
   const drag = useRef<{ kind: 'part' | 'wire' | 'label'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][] } | null>(null)
@@ -421,7 +433,7 @@ export default function App() {
     catch (error) { setNotice(error instanceof Error ? error.message : 'Could not export waveform data.'); return }
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a'); link.href = url; link.download = `${projectRef.current.name.replace(/[^A-Za-z0-9_-]+/g, '-')}-waveforms.csv`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-    setNotice(`Exported ${traces.length} waveform trace${traces.length === 1 ? '' : 's'} to CSV.`)
+    setNotice(`Exported ${traces.length} result vector${traces.length === 1 ? '' : 's'} to CSV.`)
   }
   const startSimulation = async () => {
     if (engineAssetAvailable === false) {
@@ -449,9 +461,9 @@ export default function App() {
         if (response.message) setNotice(response.message)
       } else if (response.type === 'result') {
         setSimulationResult(response.result)
-        setSelectedTraceIds(response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.id)).slice(0, 2).map((trace) => trace.id))
+        setSelectedTraceIds(response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.id)).slice(0, response.result.metadata.settings.analysis === 'op' ? undefined : 2).map((trace) => trace.id))
         setRunState('idle')
-        setNotice(`Simulation complete · ${response.result.traces.length} waveform vectors`)
+        setNotice(`Analysis complete · ${response.result.traces.length} result vectors`)
         setAnalysisTab('waveforms')
         worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
@@ -477,7 +489,7 @@ export default function App() {
         metadata: {
           runId, startedAt: new Date().toISOString(), engine: 'ngspice-wasm', engineVersion: '47',
           projectVersion: snapshot.version, netlistHash,
-          settings: { analysis: 'tran', stopTime: snapshot.simulation.stopTime, maxStep: snapshot.simulation.maxStep, projectUpdatedAt: snapshot.updatedAt },
+          settings: { analysis: snapshot.simulation.analysis, stopTime: snapshot.simulation.stopTime, maxStep: snapshot.simulation.maxStep, projectUpdatedAt: snapshot.updatedAt },
         },
       })
     } catch (error) {
@@ -519,7 +531,7 @@ export default function App() {
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={15}/></IconButton><IconButton title="Wire tool" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
-      <button className="analysis-select" title="Transient analysis is the current preview mode" disabled><Activity size={15}/> Transient <ChevronDown size={13}/></button>
+      <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option></select><ChevronDown size={13}/></label>
       <button className="run-button" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={15} fill="currentColor"/> Run simulation</button>
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
     </div>
@@ -541,9 +553,9 @@ export default function App() {
         <section className="analysis-panel">
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span><button className="subtle-icon" title="Panel options"><MoreHorizontal size={17}/></button></div></div>
           <div className="analysis-content">
-            {analysisTab === 'waveforms' ? simulationResult ? <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={(id) => setSelectedTraceIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? 'Running transient analysis' : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your waveforms will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the pinned ngspice WebAssembly engine.' : 'Run a simulation to inspect calculated voltage waveforms. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
+            {analysisTab === 'waveforms' ? simulationResult ? simulationResult.metadata.settings.analysis === 'op' ? <OperatingPointView traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={(id) => setSelectedTraceIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={(id) => setSelectedTraceIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? `Running ${project.simulation.analysis === 'op' ? 'DC operating-point' : 'transient'} analysis` : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your results will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the pinned ngspice WebAssembly engine.' : project.simulation.analysis === 'op' ? 'Run DC operating point to inspect solved node voltages and component currents.' : 'Run transient analysis to inspect calculated voltages and currents. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
           </div>
-          <div className="analysis-footer"><span><Gauge size={13}/> {project.simulation.stopTime} total time</span><span><span className="shortcut">⌘</span> + Enter to run</span><span>Results are generated locally</span></div>
+          <div className="analysis-footer"><span><Gauge size={13}/> {project.simulation.analysis === 'op' ? 'DC operating point' : `${project.simulation.stopTime} total time`}</span><span><span className="shortcut">⌘</span> + Enter to run</span><span>Results are generated locally</span></div>
         </section>
       </main>
 
@@ -565,8 +577,8 @@ export default function App() {
           <div className="inspector-bottom"><button className="delete-action" onClick={deleteSelection}><Trash2 size={14}/> Delete label</button></div>
         </> : <>
           <div className="project-summary"><div className="summary-row"><span>Project</span><strong>{project.name}</strong></div><div className="summary-row"><span>Format</span><strong>ELSim JSON · v2</strong></div><div className="summary-row"><span>Sheets</span><strong>1</strong></div><div className="summary-row"><span>Components</span><strong>{project.parts.length}</strong></div></div>
-          <div className="form-section"><div className="form-section-title">SIMULATION</div><label className="field-label">Analysis type<select value="tran"><option value="tran">Transient</option><option disabled>DC operating point · soon</option><option disabled>AC analysis · soon</option></select></label><label className="field-label">Stop time<input value={project.simulation.stopTime} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, stopTime: event.target.value } }))}/></label><label className="field-label">Maximum step<input value={project.simulation.maxStep} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, maxStep: event.target.value } }))}/></label></div>
-          <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : 'Transient analysis runs locally in a Web Worker. Results are tied to the circuit revision.'}</p><button onClick={() => setNotice(engineAssetAvailable === false ? 'Build the pinned engine with tools/build-ngspice-wasm.sh; see engine/wasm/README.md.' : 'ngspice 47 · Emscripten WebAssembly · transient analysis')}>Engine status <ArrowUp size={13}/></button></div>
+          <div className="form-section"><div className="form-section-title">SIMULATION</div><label className="field-label">Analysis type<select value={project.simulation.analysis} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option></select></label>{project.simulation.analysis === 'tran' && <><label className="field-label">Stop time<input value={project.simulation.stopTime} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, stopTime: event.target.value } }))}/></label><label className="field-label">Maximum step<input value={project.simulation.maxStep} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, maxStep: event.target.value } }))}/></label></>}</div>
+          <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : `${project.simulation.analysis === 'op' ? 'DC operating-point' : 'Transient'} analysis runs locally in a Web Worker. Results are tied to the circuit revision.`}</p><button onClick={() => setNotice(engineAssetAvailable === false ? 'Build the pinned engine with tools/build-ngspice-wasm.sh; see engine/wasm/README.md.' : 'ngspice 47 · Emscripten WebAssembly · transient and DC operating-point analyses')}>Engine status <ArrowUp size={13}/></button></div>
         </>}
         <div className="inspector-links"><button onClick={startTour}><CircleHelp size={14}/> Help</button><button onClick={() => setNotice('Component library is original ELSim data.')}><Bookmark size={14}/> Library notes</button></div>
       </aside>

@@ -75,7 +75,7 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
       continue
     }
-    if (part.kind === 'source') append(`${part.ref} ${positive} ${negative} PULSE(0 ${value} 0 1u 1u 50m 100m)`, part.id, 'component')
+    if (part.kind === 'source') append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`}`, part.id, 'component')
     else if (part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor') append(`${part.ref} ${positive} ${negative} ${value}`, part.id, 'component')
     else if (part.kind === 'diode') { append(`${part.ref} ${positive} ${negative} DDEFAULT`, part.id, 'component'); usesDiode = true }
     else if (part.kind === 'switch') {
@@ -96,13 +96,17 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
 
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
   if (usesSwitch) append('.model ELSIM_INTERNAL_SW SW(Ron=1m Roff=1T Vt=2.5 Vh=0)', 'model:ELSIM_INTERNAL_SW', 'model')
-  const maxStep = spiceTime(project.simulation.maxStep)
-  const stopTime = spiceTime(project.simulation.stopTime)
-  if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}`, 'analysis:tran', 'analysis')
-  else {
-    const message = 'Transient stop time and maximum step must be valid SPICE time values.'
-    append(`* ERROR: ${message}`, 'analysis:tran', 'analysis')
-    diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
+  if (project.simulation.analysis === 'op') {
+    append('.op', 'analysis:op', 'analysis')
+  } else {
+    const maxStep = spiceTime(project.simulation.maxStep)
+    const stopTime = spiceTime(project.simulation.stopTime)
+    if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}`, 'analysis:tran', 'analysis')
+    else {
+      const message = 'Transient stop time and maximum step must be valid SPICE time values.'
+      append(`* ERROR: ${message}`, 'analysis:tran', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
+    }
   }
   rows.push('.end')
   return { text: rows.join('\n'), sourceMap, diagnostics }

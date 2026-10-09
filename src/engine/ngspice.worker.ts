@@ -43,6 +43,8 @@ function makeTraces(rawText: string): Trace[] {
       id: lowercaseName,
       label: `${current ? 'I' : 'V'}(${component ?? inner})`,
       unit: current ? 'A' : 'V',
+      axisLabel: parsed.axisLabel,
+      axisUnit: parsed.axisUnit,
       axis: new Float64Array(axis),
       values: variable.values,
     }
@@ -63,7 +65,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     })
     const runDeck = addResultControl(artifact.text)
     module.FS.writeFile('/project.cir', runDeck)
-    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: 'Running transient analysis' } satisfies EngineResponse)
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : 'transient'} analysis` } satisfies EngineResponse)
     const status = module.callMain(['-b', '/project.cir'])
     const output = stdout.join('\n')
     const errors = output.split(/\r?\n/).filter((line) => /^\s*(?:Error|Fatal):/i.test(line))

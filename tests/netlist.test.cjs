@@ -17,6 +17,17 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
 })
 
+test('DC operating point emits steady DC source values and no transient directive', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'op'
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 DC 5$/m)
+  assert.match(artifact.text, /^\.op$/m)
+  assert.doesNotMatch(artifact.text, /^\.tran\b/m)
+  assert.deepEqual(artifact.sourceMap.find((entry) => entry.sourceId === 'analysis:op'), { line: artifact.text.split('\n').indexOf('.op') + 1, sourceId: 'analysis:op', role: 'analysis' })
+})
+
 test('switch Off state creates an open voltage-controlled SPICE switch', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'p-s1', kind: 'switch', ref: 'S1', value: 'Off', x: 280, y: 360, rotation: 0 })

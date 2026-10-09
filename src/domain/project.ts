@@ -26,7 +26,7 @@ export type Project = {
   junctions: { x: number; y: number }[]
   netLabels: NetLabel[]
   view: { zoom: number; panX: number; panY: number }
-  simulation: { analysis: 'tran'; stopTime: string; maxStep: string }
+  simulation: { analysis: 'tran' | 'op'; stopTime: string; maxStep: string }
 }
 
 const starter: Project = {
@@ -124,7 +124,7 @@ export function validateProject(input: unknown): Project {
   }
   const simulation = data.simulation as Project['simulation'] | undefined
   const view = data.view as Project['view'] | undefined
-  if (typeof data.name !== 'string' || !data.name.trim() || typeof data.updatedAt !== 'string' || !Number.isFinite(Date.parse(data.updatedAt)) || !simulation || simulation.analysis !== 'tran' || typeof simulation.stopTime !== 'string' || !simulation.stopTime.trim() || typeof simulation.maxStep !== 'string' || !simulation.maxStep.trim() || !view || !Number.isFinite(view.zoom) || view.zoom <= 0 || !Number.isFinite(view.panX) || !Number.isFinite(view.panY)) throw new Error('Project settings are missing or malformed.')
+  if (typeof data.name !== 'string' || !data.name.trim() || typeof data.updatedAt !== 'string' || !Number.isFinite(Date.parse(data.updatedAt)) || !simulation || !['tran', 'op'].includes(simulation.analysis) || typeof simulation.stopTime !== 'string' || !simulation.stopTime.trim() || typeof simulation.maxStep !== 'string' || !simulation.maxStep.trim() || !view || !Number.isFinite(view.zoom) || view.zoom <= 0 || !Number.isFinite(view.panX) || !Number.isFinite(view.panY)) throw new Error('Project settings are missing or malformed.')
   return data as unknown as Project
 }
 

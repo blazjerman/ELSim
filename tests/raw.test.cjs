@@ -27,14 +27,43 @@ Values:
  -2.000000e-03
 `
 
+const validOperatingPointRaw = `Title: Divider operating point
+Plotname: Operating Point
+Flags: real
+No. Variables: 4
+No. Points: 1
+Variables:
+  0 v(in) voltage
+  1 i(@r1[i]) current
+  2 v(out) voltage
+  3 i(v1) current
+Values:
+ 0 5.000000e+00
+ 2.500000e-03
+ 2.500000e+00
+ -2.500000e-03
+`
+
 test('ASCII raw parser preserves ngspice time, voltage, and current vectors', () => {
   const parsed = parseAsciiRawFile(validRaw)
   assert.equal(parsed.title, 'RC fixture')
   assert.equal(parsed.plotName, 'Transient Analysis')
+  assert.equal(parsed.axisLabel, 'Time')
+  assert.equal(parsed.axisUnit, 's')
   assert.deepEqual([...parsed.axis], [0, 0.001])
   assert.equal(parsed.variables[0].name, 'v(in)')
   assert.deepEqual([...parsed.variables[0].values], [5, 4])
   assert.deepEqual([...parsed.variables[1].values], [-0.001, -0.002])
+})
+
+test('ASCII raw parser reads one-point operating-point values without inventing a time vector', () => {
+  const parsed = parseAsciiRawFile(validOperatingPointRaw)
+  assert.equal(parsed.plotName, 'Operating Point')
+  assert.equal(parsed.axisLabel, 'Operating point')
+  assert.equal(parsed.axisUnit, '')
+  assert.deepEqual([...parsed.axis], [0])
+  assert.deepEqual(parsed.variables.map((variable) => variable.name), ['v(in)', 'i(@r1[i])', 'v(out)', 'i(v1)'])
+  assert.deepEqual(parsed.variables.map((variable) => variable.values[0]), [5, 0.0025, 2.5, -0.0025])
 })
 
 test('transient plotting accepts only voltage and current variable names', () => {
@@ -57,9 +86,11 @@ test('ASCII raw parser rejects truncated and mismatched point data', () => {
 
 test('waveform CSV includes units, quoted labels, and synchronized mixed-unit samples', () => {
   const traces = [
-    { label: 'V(out)', unit: 'V', axis: Float64Array.of(0, 0.1), values: Float64Array.of(0, 5) },
-    { label: 'I(R"1)', unit: 'A', axis: Float64Array.of(0, 0.1), values: Float64Array.of(0.01, 0.02) },
+    { label: 'V(out)', unit: 'V', axisLabel: 'Time', axisUnit: 's', axis: Float64Array.of(0, 0.1), values: Float64Array.of(0, 5) },
+    { label: 'I(R"1)', unit: 'A', axisLabel: 'Time', axisUnit: 's', axis: Float64Array.of(0, 0.1), values: Float64Array.of(0.01, 0.02) },
   ]
-  assert.equal(serializeWaveformCsv(traces), '"time (s)","V(out) (V)","I(R""1) (A)"\n0,0,0.01\n0.1,5,0.02')
-  assert.throws(() => serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0) }]), /do not share the same time axis/)
+  assert.equal(serializeWaveformCsv(traces), '"Time (s)","V(out) (V)","I(R""1) (A)"\n0,0,0.01\n0.1,5,0.02')
+  assert.throws(() => serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0) }]), /do not share the same analysis axis/)
+  assert.throws(() => serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0, 0.2) }]), /do not share the same analysis axis/)
+  assert.equal(serializeWaveformCsv([{ ...traces[0], axisLabel: 'Operating point', axisUnit: '', axis: Float64Array.of(0), values: Float64Array.of(5) }]), '"Operating point","V(out) (V)"\n0,5')
 })

@@ -10,10 +10,10 @@ const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
 const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op']
 
-function runInWorker(deckPath) {
+function runInWorker(deckPath, readRaw = false) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('../tests/wasm/ngspice-case-worker.mjs', import.meta.url), {
-      workerData: { moduleUrl, deckPath },
+      workerData: { moduleUrl, deckPath, readRaw },
     })
     const timeout = setTimeout(() => {
       worker.terminate()
@@ -69,5 +69,17 @@ for (const fixture of fixtures) {
   }
   process.stdout.write(`PASS ${fixture}\n`)
 }
+
+const opPath = path.join(root, 'engine/wasm/fixtures', 'op-raw.cir')
+const opResult = await runInWorker(opPath, true)
+assert.equal(opResult.status, 0, `op-raw: ngspice exited with a nonzero status: ${opResult.stderr}`)
+assert.match(opResult.raw, /^Plotname:\s*Operating Point$/mi)
+assert.match(opResult.raw, /^Flags:\s*real$/mi)
+assert.match(opResult.raw, /^No\. Points:\s*1$/mi)
+assert.match(opResult.raw, /^\s*\d+\s+i\(@r1\[i\]\)\s+current$/mi)
+assert.match(opResult.raw, /^\s*\d+\s+v\(out\)\s+voltage$/mi)
+assert.match(opResult.raw, /2\.500000000000000e-03/)
+assert.match(opResult.raw, /2\.500000000000000e\+00/)
+process.stdout.write('PASS op-raw-vectors\n')
 
 if (!nativeNgspice) process.stdout.write('Native parity comparison skipped; pass the pinned native ngspice executable as argument 2.\n')

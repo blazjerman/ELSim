@@ -78,7 +78,7 @@
       "additionalProperties": false,
       "required": ["analysis", "stopTime", "maxStep"],
       "properties": {
-        "analysis": { "const": "tran" },
+        "analysis": { "enum": ["tran", "op"] },
         "stopTime": { "type": "string", "minLength": 1 },
         "maxStep": { "type": "string", "minLength": 1 }
       }
