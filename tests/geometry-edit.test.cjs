@@ -5,8 +5,8 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { canMoveWireSegment, moveWireSegment } = require(path.join(build, 'domain/geometry.js'))
-const { createStarterProject } = require(path.join(build, 'domain/project.js'))
+const { canMoveWireSegment, moveWireSegment, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
+const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('dragging a free orthogonal segment moves it while preserving adjacent orthogonality', () => {
   const project = createStarterProject()
@@ -46,4 +46,34 @@ test('a segment with an interior pin branch cannot be dragged', () => {
   const wire = project.wires.find((item) => item.id === 'branched')
   assert.equal(canMoveWireSegment(project, wire, 0), false)
   assert.equal(moveWireSegment(project, wire.id, 0, 0, 20), project.wires)
+})
+
+test('interior wire crossings connect only when a junction is saved', () => {
+  const project = createStarterProject()
+  project.wires.push(
+    { id: 'cross-h', points: [[700, 700], [800, 700]] },
+    { id: 'cross-v', points: [[750, 650], [750, 750]] },
+  )
+  const crossing = wireCrossingAt(project, { x: 751, y: 700 })
+  assert.deepEqual(crossing, { x: 750, y: 700 })
+  let connectivity = analyzeConnectivity(project)
+  assert.notEqual(connectivity.wireNets.get('cross-h'), connectivity.wireNets.get('cross-v'))
+  project.junctions.push(crossing)
+  connectivity = analyzeConnectivity(project)
+  assert.equal(connectivity.wireNets.get('cross-h'), connectivity.wireNets.get('cross-v'))
+  assert.deepEqual(validateProject(structuredClone(project)).junctions, [{ x: 750, y: 700 }])
+  project.junctions = []
+  connectivity = analyzeConnectivity(project)
+  assert.notEqual(connectivity.wireNets.get('cross-h'), connectivity.wireNets.get('cross-v'))
+})
+
+test('endpoint T connections join automatically and are not junction-toggle targets', () => {
+  const project = createStarterProject()
+  project.wires.push(
+    { id: 'tee-h', points: [[700, 700], [800, 700]] },
+    { id: 'tee-v', points: [[750, 700], [750, 750]] },
+  )
+  assert.equal(wireCrossingAt(project, { x: 750, y: 700 }), null)
+  const connectivity = analyzeConnectivity(project)
+  assert.equal(connectivity.wireNets.get('tee-h'), connectivity.wireNets.get('tee-v'))
 })

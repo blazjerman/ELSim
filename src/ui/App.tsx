@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
-  Activity, ArrowDown, ArrowUp, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp,
+  Activity, ArrowDown, ArrowUp, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, CircleHelp,
   Command, Copy, FilePlus2, FolderOpen, Gauge, GitBranch, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
   Save, Search, Settings2, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
-import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, wireNetAt } from '../domain/geometry'
+import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
@@ -18,7 +18,7 @@ import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
 import { isEngineResponse, type MeasurementResult, type SimulationResult, type Trace } from '../engine/contract'
 
-type ToolMode = 'select' | 'wire' | 'label' | 'probe'
+type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
 const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: string }[] = [
   { kind: 'resistor', label: 'Resistor', Icon: Minus, subtitle: 'R' },
@@ -363,6 +363,17 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
       else setNotice('Click near a wire or two-terminal component to add a voltage or current trace.')
       return
     }
+    if (tool === 'junction') {
+      const point = pointFromEvent(event)
+      const crossing = wireCrossingAt(project, point)
+      if (!crossing) { setNotice('Click where two wire segments cross through their middles. Endpoints already connect automatically.'); return }
+      const existing = project.junctions.find((junction) => Math.hypot(junction.x - crossing.x, junction.y - crossing.y) < 1)
+      setProject((current) => ({ ...current, junctions: existing
+        ? current.junctions.filter((junction) => Math.hypot(junction.x - crossing.x, junction.y - crossing.y) >= 1)
+        : [...current.junctions, crossing] }))
+      setNotice(existing ? 'Junction removed. The crossing wires are now separate nets.' : 'Junction added. The crossing wires are now connected.')
+      return
+    }
     if (tool === 'label') {
       const point = pointFromEvent(event)
       const target = resolveNode(point)
@@ -458,8 +469,8 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
   const viewBox = `${(760 - viewWidth) / 2} ${(600 - viewHeight) / 2} ${viewWidth} ${viewHeight}`
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
-      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.max(.6, p.view.zoom - .1) } }))}><Minus size={15}/></IconButton><span className="zoom-label">{Math.round(project.view.zoom * 100)}%</span><IconButton title="Zoom in" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.min(1.5, p.view.zoom + .1) } }))}><Plus size={15}/></IconButton></div>
-      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : 'Drag a wire segment to reroute it'} <span className="status-separator">·</span> Grid 10 px</div>
+      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.max(.6, p.view.zoom - .1) } }))}><Minus size={15}/></IconButton><span className="zoom-label">{Math.round(project.view.zoom * 100)}%</span><IconButton title="Zoom in" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.min(1.5, p.view.zoom + .1) } }))}><Plus size={15}/></IconButton></div>
+      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Drag a wire segment to reroute it'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
     <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} viewBox={viewBox} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
@@ -480,7 +491,7 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
         </g>
       })}
       {project.netLabels.filter((label) => label.visible !== false).map((label) => <g key={label.id} className={`canvas-label${selection?.kind === 'label' && selection.id === label.id ? ' selected' : ''}`} onPointerDown={(event) => beginDrag(event, 'label', label.id)} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'label', id: label.id }) } }}><rect x={label.x - 3} y={label.y - 22} width={Math.max(34, label.name.length * 7 + 14)} height="26" fill="transparent"/><line x1={label.x} y1={label.y} x2={label.x + 7} y2={label.y - 8} stroke="#9cc4a8" strokeWidth="1"/><text x={label.x + 9} y={label.y - 9}>{label.name}</text></g>)}
-      {project.junctions.map((junction, index) => <circle key={`junction-${index}`} cx={junction.x} cy={junction.y} r="4" fill="#a9d8b7"/>)}
+      {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
       {project.parts.map((part) => <CircuitPart key={part.id} part={part} selected={selection?.kind === 'part' && part.id === selection.id} onSelect={(id) => setSelection({ kind: 'part', id })} onPointerDown={(event, id) => beginDrag(event, 'part', id)} tool={tool} onProbe={(id) => onProbe({ kind: 'part', id })} {...componentSample(part)}/>)}
       <g className="canvas-label"><text x="138" y="238">INPUT</text><text x="567" y="265">OUTPUT</text></g>
@@ -686,6 +697,7 @@ export default function App() {
       else if (key === 'w') setTool('wire')
       else if (key === 'n') setTool('label')
       else if (key === 'p') setTool('probe')
+      else if (key === 'j') setTool('junction')
       else if (key === 'r' && selected) rotateSelected()
       else if ((key === 'delete' || key === 'backspace') && selection) { event.preventDefault(); deleteSelection() }
       else if (key === 'escape') setSelection(null)

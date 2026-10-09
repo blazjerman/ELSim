@@ -56,6 +56,37 @@ export function pointOnSegment(point: Point, a: Point, b: Point, tolerance = 1e-
   return near.distance <= tolerance
 }
 
+/** Find the nearest proper crossing between different wire objects. Crossings
+ * that touch a segment endpoint are already electrical connections. */
+export function wireCrossingAt(project: Project, point: Point, tolerance = 12): Point | null {
+  let nearest: Point | null = null
+  let bestDistance = tolerance
+  for (let leftWire = 0; leftWire < project.wires.length; leftWire += 1) {
+    const left = project.wires[leftWire]
+    for (let rightWire = leftWire + 1; rightWire < project.wires.length; rightWire += 1) {
+      const right = project.wires[rightWire]
+      for (let leftSegment = 0; leftSegment < left.points.length - 1; leftSegment += 1) {
+        const a = left.points[leftSegment], b = left.points[leftSegment + 1]
+        for (let rightSegment = 0; rightSegment < right.points.length - 1; rightSegment += 1) {
+          const c = right.points[rightSegment], d = right.points[rightSegment + 1]
+          const rx = b[0] - a[0], ry = b[1] - a[1]
+          const sx = d[0] - c[0], sy = d[1] - c[1]
+          const denominator = rx * sy - ry * sx
+          if (Math.abs(denominator) < 1e-9) continue
+          const qx = c[0] - a[0], qy = c[1] - a[1]
+          const t = (qx * sy - qy * sx) / denominator
+          const u = (qx * ry - qy * rx) / denominator
+          if (t <= 1e-6 || t >= 1 - 1e-6 || u <= 1e-6 || u >= 1 - 1e-6) continue
+          const crossing = { x: a[0] + t * rx, y: a[1] + t * ry }
+          const distance = Math.hypot(point.x - crossing.x, point.y - crossing.y)
+          if (distance <= bestDistance) { nearest = crossing; bestDistance = distance }
+        }
+      }
+    }
+  }
+  return nearest
+}
+
 export function wireVertices(wire: Wire): Point[] {
   return wire.points.map(([x, y]) => ({ x, y }))
 }
