@@ -3,7 +3,7 @@ import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from
 import {
   Activity, ArrowDown, ArrowUp, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp,
   Command, Copy, FilePlus2, FolderOpen, Gauge, GitBranch, Grid2X2,
-  Lightbulb, Minus, MoreHorizontal, MousePointer2, Play, Plus, Redo2, RotateCw,
+  Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
   Save, Search, Settings2, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
@@ -474,6 +474,7 @@ export default function App() {
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   const [sampleIndex, setSampleIndex] = useState<number | null>(null)
+  const [playbackRunning, setPlaybackRunning] = useState(false)
   const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>(() => project.plotSettings?.selectedTraceIds ?? [])
   const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
   const [componentQuery, setComponentQuery] = useState('')
@@ -483,6 +484,17 @@ export default function App() {
   const activeWorkerRef = useRef<Worker | null>(null)
   const projectRef = useRef(project)
   projectRef.current = project
+  const transientAxis = simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
+  const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && simulationResult?.metadata.settings.projectUpdatedAt === project.updatedAt)
+  useEffect(() => {
+    if (!playbackRunning || !playbackAvailable || !transientAxis) return
+    const stride = Math.max(1, Math.ceil(transientAxis.length / 120))
+    const timer = window.setInterval(() => setSampleIndex((index) => Math.min((index ?? 0) + stride, transientAxis.length - 1)), 33)
+    return () => window.clearInterval(timer)
+  }, [playbackRunning, playbackAvailable, transientAxis])
+  useEffect(() => {
+    if (playbackRunning && (!playbackAvailable || (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1)) setPlaybackRunning(false)
+  }, [playbackRunning, playbackAvailable, sampleIndex, transientAxis])
   const connectivity = analyzeConnectivity(project)
   useEffect(() => {
     try {
@@ -682,6 +694,7 @@ export default function App() {
     setNotice(`Exported ${traces.length} result vector${traces.length === 1 ? '' : 's'} to CSV.`)
   }
   const startSimulation = async () => {
+    setPlaybackRunning(false)
     if (engineAssetAvailable === false) {
       setRunState('error')
       setNotice('ngspice WASM is not built. Follow engine/wasm/README.md to build the local engine.')
@@ -713,6 +726,7 @@ export default function App() {
         setRunState(response.fraction < 0.2 ? 'loading' : 'running')
         if (response.message) setNotice(response.message)
       } else if (response.type === 'result') {
+        setPlaybackRunning(false)
         setSimulationResult(response.result)
         setSampleIndex(response.result.analysis === 'tran' ? (response.result.traces[0]?.axis.length ?? 1) - 1 : null)
         const savedTraceIds = projectRef.current.plotSettings?.selectedTraceIds ?? []
@@ -783,6 +797,7 @@ export default function App() {
     if (!worker) { setNotice('No simulation is running.'); return }
     worker.terminate()
     activeWorkerRef.current = null
+    setPlaybackRunning(false)
     setRunState('idle')
     setNotice('Simulation stopped. Any previous result is unchanged.')
   }
@@ -864,6 +879,7 @@ export default function App() {
       <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={15}/></IconButton><IconButton title="Wire tool" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select><ChevronDown size={13}/></label>
+      {simulationResult?.analysis === 'tran' && <div className="menu-group playback-controls" aria-label="Result playback"><IconButton title={playbackRunning ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!playbackRunning && (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1) setSampleIndex(0); setPlaybackRunning((running) => !running) }} active={playbackRunning} disabled={!playbackAvailable}>{playbackRunning ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton><IconButton title="Rewind result playback to the first solved sample" onClick={() => { setPlaybackRunning(false); setSampleIndex(0) }} disabled={!playbackAvailable}><RotateCcw size={14}/></IconButton></div>}
       <button className="run-button" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={15} fill="currentColor"/> Run simulation</button>
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
     </div>
