@@ -1,0 +1,16 @@
+* Flattened reference for two repeated two-resistor dividers
+V1 vin1 0 DC 5
+V2 vin2 0 DC 10
+R1_1 vin1 mid1 1k
+R2_1 mid1 0 1k
+R1_2 vin2 mid2 1k
+R2_2 mid2 0 1k
+.save v(mid1) @r1_1[i] @r2_1[i]
+.save v(mid2) @r1_2[i] @r2_2[i]
+.op
+.control
+set filetype=ascii
+op
+write /result.raw all
+.endc
+.end

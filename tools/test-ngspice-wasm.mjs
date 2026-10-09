@@ -8,8 +8,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter']
+const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op']
 const hierarchyRepeatRaws = new Map()
+const hierarchyNestedRaws = new Map()
 
 function runInWorker(deckPath, readRaw = false, rawPaths) {
   return new Promise((resolve, reject) => {
@@ -50,13 +51,13 @@ function realRawVector(raw, name) {
 
 for (const fixture of fixtures) {
   const deckPath = path.join(root, 'engine/wasm/fixtures', `${fixture}.cir`)
-  const wasmResult = await runInWorker(deckPath, fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture === 'hierarchical-parameter')
+  const wasmResult = await runInWorker(deckPath, fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-'))
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
   const wasmRows = numericRows(wasmResult.stdout)
   if (fixture === 'hierarchical-parameter') { assert.match(wasmResult.stdout, /in\s+5\.000000e\+00/i); assert.match(wasmResult.stdout, /in2\s+1\.000000e\+01/i); assert.match(wasmResult.stdout, /resistance\s+2000\s+1000/i); assert.match(wasmResult.stdout, /\bi\s+0\.005\s+0\.005/i) }
-  if (fixture !== 'hierarchical-parameter') assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
+  if (fixture !== 'hierarchical-parameter' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
 
   if (fixture.endsWith('-op')) {
     assert.match(wasmResult.stdout, /Voltage|v\(out\)/i, `${fixture}: no operating-point result was printed`)
@@ -71,7 +72,8 @@ for (const fixture of fixtures) {
       assert.ok(Math.abs(realRawVector(wasmResult.raw, 'i(@r.xload.rload1[i])')[0] - 0.005) < 1e-9, 'hierarchical-block-op: block resistor current should be 5 mA')
     }
     if (fixture.startsWith('hierarchical-repeat-')) hierarchyRepeatRaws.set(fixture, wasmResult.raw)
-  } else if (fixture !== 'hierarchical-parameter') {
+    if (fixture.startsWith('hierarchical-nested-')) hierarchyNestedRaws.set(fixture, wasmResult.raw)
+  } else if (fixture !== 'hierarchical-parameter' && !fixture.startsWith('hierarchical-nested-')) {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)
   }
 
@@ -112,6 +114,24 @@ for (const [hierarchicalVector, flattenedVector, expected] of repeatedVectors) {
   assert.ok(Math.abs(hierarchicalValues[0] - flattenedValues[0]) < 1e-9, `${hierarchicalVector}: differs from flattened reference ${flattenedValues[0]}`)
 }
 process.stdout.write('PASS repeated-hierarchy-flattened-parity (6 voltage/current vectors)\n')
+
+const nestedVectors = [
+  ['v(xtop1.xin.mid)', 'v(mid1)', 2.5],
+  ['v(xtop2.xin.mid)', 'v(mid2)', 5],
+  ['i(@r.xtop1.xin.r1[i])', 'i(@r1_1[i])', 0.0025],
+  ['i(@r.xtop1.xin.r2[i])', 'i(@r2_1[i])', 0.0025],
+  ['i(@r.xtop2.xin.r1[i])', 'i(@r1_2[i])', 0.005],
+  ['i(@r.xtop2.xin.r2[i])', 'i(@r2_2[i])', 0.005],
+]
+for (const [hierarchicalVector, flattenedVector, expected] of nestedVectors) {
+  const hierarchicalValues = realRawVector(hierarchyNestedRaws.get('hierarchical-nested-op'), hierarchicalVector)
+  const flattenedValues = realRawVector(hierarchyNestedRaws.get('hierarchical-nested-flat-op'), flattenedVector)
+  assert.equal(hierarchicalValues.length, 1, `${hierarchicalVector}: expected one operating-point sample`)
+  assert.equal(flattenedValues.length, 1, `${flattenedVector}: expected one operating-point sample`)
+  assert.ok(Math.abs(hierarchicalValues[0] - expected) < 1e-9, `${hierarchicalVector}: unexpected nested result ${hierarchicalValues[0]}`)
+  assert.ok(Math.abs(hierarchicalValues[0] - flattenedValues[0]) < 1e-9, `${hierarchicalVector}: differs from flattened reference ${flattenedValues[0]}`)
+}
+process.stdout.write('PASS nested-two-level-flattened-parity (6 voltage/current vectors)\n')
 
 const opPath = path.join(root, 'engine/wasm/fixtures', 'op-raw.cir')
 const opResult = await runInWorker(opPath, true)

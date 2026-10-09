@@ -77,6 +77,38 @@ test('sheet block parameters provide defaults, per-instance overrides, and safe 
   assert.match(createNetlistArtifact(unsafeExpression).diagnostics.find((item) => item.severity === 'error')?.message ?? '', /invalid numeric value/)
 })
 
+test('nested sheet data generates inner definitions before outer reusable blocks', () => {
+  const project = createBlockProject()
+  const outer = project.sheets[1]
+  const inner = {
+    id: 'sheet-core', name: 'Core', parentSheetId: outer.id,
+    parts: [
+      { id: 'core-r1', kind: 'resistor', ref: 'R1', value: '1k', x: 300, y: 200, rotation: 0 },
+      { id: 'core-r2', kind: 'resistor', ref: 'R2', value: '1k', x: 404, y: 200, rotation: 0 },
+    ],
+    wires: [], junctions: [],
+    netLabels: [
+      { id: 'core-in', name: 'IN', x: 248, y: 200, visible: true },
+      { id: 'core-mid', name: 'MID', x: 352, y: 200, visible: true },
+      { id: 'core-out', name: 'OUT', x: 456, y: 200, visible: true },
+    ],
+    ports: [{ id: 'core-port-in', name: 'IN' }, { id: 'core-port-out', name: 'OUT' }],
+    view: { zoom: 1, panX: 0, panY: 0 },
+  }
+  const nested = { id: 'outer-xin', kind: 'subcircuit', ref: 'XIN', value: 'Core', modelName: sheetModelName(inner.id), modelPins: ['IN', 'OUT'], sheetId: inner.id, x: 300, y: 200, rotation: 0 }
+  outer.parts = [nested]
+  outer.netLabels = outer.netLabels.map((label) => label.name === 'IN' ? { ...label, x: 220 } : label.name === 'OUT' ? { ...label, x: 380 } : label)
+  project.sheets.push(inner)
+  const checked = validateProject(project)
+  const artifact = createNetlistArtifact(checked)
+  assert.deepEqual(artifact.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+  const innerDefinition = artifact.text.indexOf('.SUBCKT ELSIM_SHEET_sheet_core IN OUT')
+  const outerDefinition = artifact.text.indexOf('.SUBCKT ELSIM_SHEET_sheet_load IN OUT')
+  assert.ok(innerDefinition >= 0 && outerDefinition > innerDefinition)
+  assert.match(artifact.text, /XIN IN OUT ELSIM_SHEET_sheet_core/)
+  assert.match(artifact.text, /XLOAD\s+vin\s+0\s+ELSIM_SHEET_sheet_load/)
+})
+
 test('hierarchy validation rejects stale port pin maps and recursive block instances', () => {
   const stalePins = createBlockProject()
   stalePins.parts[1].modelPins = ['OUT', 'IN']

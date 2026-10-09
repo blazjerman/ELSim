@@ -1,0 +1,21 @@
+* Two-level nested blocks instantiated at two different input voltages
+V1 vin1 0 DC 5
+V2 vin2 0 DC 10
+XTOP1 vin1 0 ELSIM_SHEET_outer
+XTOP2 vin2 0 ELSIM_SHEET_outer
+.SUBCKT ELSIM_SHEET_inner IN OUT
+R1 IN MID 1k
+R2 MID OUT 1k
+.ENDS ELSIM_SHEET_inner
+.SUBCKT ELSIM_SHEET_outer IN OUT
+XIN IN OUT ELSIM_SHEET_inner
+.ENDS ELSIM_SHEET_outer
+.save v(XTOP1.XIN.MID) @r.xtop1.xin.r1[i] @r.xtop1.xin.r2[i]
+.save v(XTOP2.XIN.MID) @r.xtop2.xin.r1[i] @r.xtop2.xin.r2[i]
+.op
+.control
+set filetype=ascii
+op
+write /result.raw all
+.endc
+.end
