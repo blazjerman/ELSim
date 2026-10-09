@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsim.dev/schemas/engine-protocol.schema.json",
+  "title": "ELSim engine worker protocol v1",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" }
+  ],
+  "$defs": {
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "message"],
+      "properties": {
+        "severity": { "enum": ["info", "warning", "error"] },
+        "message": { "type": "string" },
+        "sourceId": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "sourceId", "role"],
+      "properties": {
+        "line": { "type": "integer", "minimum": 1 },
+        "sourceId": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["component", "model", "analysis", "generated"] }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "sourceMap", "diagnostics"],
+      "properties": {
+        "text": { "type": "string" },
+        "sourceMap": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "startedAt", "engine", "engineVersion", "projectVersion", "netlistHash", "settings"],
+      "properties": {
+        "runId": { "type": "string", "minLength": 1 },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "engine": { "type": "string" },
+        "engineVersion": { "type": "string" },
+        "projectVersion": { "type": "integer", "minimum": 1 },
+        "netlistHash": { "type": "string" },
+        "settings": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "unit", "axis", "values"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "unit": { "type": "string" },
+        "axis": { "type": "array", "items": { "type": "number" } },
+        "values": { "type": "array", "items": { "type": "number" } }
+      }
+    },
+    "request": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId"], "properties": { "type": { "const": "initialize" }, "requestId": { "type": "string" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "artifact", "metadata"], "properties": { "type": { "const": "run" }, "requestId": { "type": "string" }, "artifact": { "$ref": "#/$defs/artifact" }, "metadata": { "$ref": "#/$defs/metadata" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "runId"], "properties": { "type": { "const": "cancel" }, "requestId": { "type": "string" }, "runId": { "type": "string" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId"], "properties": { "type": { "const": "dispose" }, "requestId": { "type": "string" } } }
+      ]
+    },
+    "response": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "engine", "engineVersion"], "properties": { "type": { "const": "ready" }, "requestId": { "type": "string" }, "engine": { "type": "string" }, "engineVersion": { "type": "string" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "runId", "fraction"], "properties": { "type": { "const": "progress" }, "requestId": { "type": "string" }, "runId": { "type": "string" }, "fraction": { "type": "number", "minimum": 0, "maximum": 1 }, "message": { "type": "string" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "result"], "properties": { "type": { "const": "result" }, "requestId": { "type": "string" }, "result": { "type": "object", "additionalProperties": false, "required": ["metadata", "netlist", "sourceMap", "traces", "diagnostics"], "properties": { "metadata": { "$ref": "#/$defs/metadata" }, "netlist": { "type": "string" }, "sourceMap": { "type": "array", "items": { "$ref": "#/$defs/source" } }, "traces": { "type": "array", "items": { "$ref": "#/$defs/trace" } }, "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } } } } } },
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "runId"], "properties": { "type": { "const": "cancelled" }, "requestId": { "type": "string" }, "runId": { "type": "string" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type", "requestId", "error"], "properties": { "type": { "const": "error" }, "requestId": { "type": "string" }, "error": { "$ref": "#/$defs/diagnostic" } } }
+      ]
+    }
+  }
+}

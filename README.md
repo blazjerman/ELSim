@@ -6,7 +6,7 @@ An original, browser-based circuit workbench that aims to pair a beginner-friend
 
 The first UI foundation is under active development. It includes a starter RC schematic, component placement and selection, editable component values, schematic movement, pin-to-pin wire connections, connectivity derived from geometry, local project persistence, v1-to-v2 JSON project migration, and generated SPICE netlist preview. The current v2 structure is described in [the JSON Schema](schemas/project-v2.schema.json).
 
-The ngspice WebAssembly engine is not integrated yet. The Run button reports this directly; the preview does not invent simulation waveforms or animations. See [ROADMAP.md](ROADMAP.md) for the staged implementation plan and engine gate.
+The ngspice WebAssembly engine is not integrated yet. The Run button reports this directly; the preview does not invent simulation waveforms or animations. The worker message, diagnostic, run metadata, and netlist source-map contract is documented in [the engine protocol schema](schemas/engine-protocol.schema.json). See [ROADMAP.md](ROADMAP.md) for the staged implementation plan and engine gate.
 
 ## Run the web app
 
