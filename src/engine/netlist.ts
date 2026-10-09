@@ -32,6 +32,14 @@ function validReference(part: Part): boolean {
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
+function allocateName(base: string, used: Set<string>): string {
+  let candidate = base
+  let suffix = 1
+  while (used.has(candidate.toLowerCase())) candidate = `${base}_${suffix++}`
+  used.add(candidate.toLowerCase())
+  return candidate
+}
+
 export function createNetlist(project: Project): string {
   return createNetlistArtifact(project).text
 }
@@ -46,6 +54,9 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
     sourceMap.push({ line: rows.length, sourceId, role })
   }
   let usesDiode = false
+  let usesSwitch = false
+  const usedReferences = new Set(project.parts.map((part) => part.ref.toLowerCase()))
+  const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.map((label) => label.name)].map((name) => name.toLowerCase()))
 
   for (const part of project.parts) {
     if (part.kind === 'ground') continue
@@ -68,13 +79,23 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
     else if (part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor') append(`${part.ref} ${positive} ${negative} ${value}`, part.id, 'component')
     else if (part.kind === 'diode') { append(`${part.ref} ${positive} ${negative} DDEFAULT`, part.id, 'component'); usesDiode = true }
     else if (part.kind === 'switch') {
-      const message = `${part.ref} omitted: switch-control terminals are not implemented yet.`
-      append(`* ${cleanComment(message)}`, part.id, 'component')
-      diagnostics.push({ severity: 'warning', message, sourceId: part.id, line: rows.length })
+      const state = part.value.trim().toLowerCase()
+      if (state !== 'on' && state !== 'off') {
+        const message = `${part.ref} state must be On or Off.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const controlNode = allocateName(`ELSIM_${part.ref}_CTRL`, usedNodes)
+      const controlSource = allocateName(`V_ELSIM_${part.ref}_CTRL`, usedReferences)
+      append(`${controlSource} ${controlNode} 0 ${state === 'on' ? '5' : '0'}`, part.id, 'generated')
+      append(`${part.ref} ${positive} ${negative} ${controlNode} 0 ELSIM_INTERNAL_SW`, part.id, 'component')
+      usesSwitch = true
     }
   }
 
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
+  if (usesSwitch) append('.model ELSIM_INTERNAL_SW SW(Ron=1m Roff=1T Vt=2.5 Vh=0)', 'model:ELSIM_INTERNAL_SW', 'model')
   const maxStep = spiceTime(project.simulation.maxStep)
   const stopTime = spiceTime(project.simulation.stopTime)
   if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}`, 'analysis:tran', 'analysis')
