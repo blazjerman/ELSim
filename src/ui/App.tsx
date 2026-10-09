@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
-  Activity, ArrowDown, ArrowUp, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, CircleHelp,
+  Activity, AlertTriangle, ArrowDown, ArrowUp, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, CircleHelp,
   Command, Copy, FilePlus2, FolderOpen, Gauge, GitBranch, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
   Save, Search, Settings2, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
+import { checkCircuit } from '../domain/electricalCheck'
 import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { wireCurrentFlow } from '../domain/wireFlow'
@@ -554,6 +555,7 @@ export default function App() {
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   const [sampleIndex, setSampleIndex] = useState<number | null>(null)
   const [playbackRunning, setPlaybackRunning] = useState(false)
+  const [electricalCheckOpen, setElectricalCheckOpen] = useState(false)
   const [spacePan, setSpacePan] = useState(false)
   const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>(() => project.plotSettings?.selectedTraceIds ?? [])
   const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
@@ -577,6 +579,7 @@ export default function App() {
     if (playbackRunning && (!playbackAvailable || (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1)) setPlaybackRunning(false)
   }, [playbackRunning, playbackAvailable, sampleIndex, transientAxis])
   const connectivity = analyzeConnectivity(project)
+  const electricalIssues = checkCircuit(project, connectivity)
   useEffect(() => {
     try {
       localStorage.setItem('elsim:project:v2', JSON.stringify(project))
@@ -724,6 +727,7 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target
+      if (event.key === 'Escape' && electricalCheckOpen) { setElectricalCheckOpen(false); return }
       if (event.key === 'Escape' && tourStep !== null) { setTourStep(null); return }
       if (event.key === '/' && !(target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)))) { event.preventDefault(); componentSearchRef.current?.focus(); return }
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
@@ -749,7 +753,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, project, tourStep])
+  }, [tool, selection, selected, project, tourStep, electricalCheckOpen])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
     try { await navigator.clipboard.writeText(netlist); setNotice('Generated netlist copied') }
@@ -968,6 +972,7 @@ export default function App() {
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select><ChevronDown size={13}/></label>
       {simulationResult?.analysis === 'tran' && <div className="menu-group playback-controls" aria-label="Result playback"><IconButton title={playbackRunning ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!playbackRunning && (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1) setSampleIndex(0); setPlaybackRunning((running) => !running) }} active={playbackRunning} disabled={!playbackAvailable}>{playbackRunning ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton><IconButton title="Rewind result playback to the first solved sample" onClick={() => { setPlaybackRunning(false); setSampleIndex(0) }} disabled={!playbackAvailable}><RotateCcw size={14}/></IconButton></div>}
+      <button className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit <span>{electricalIssues.length}</span></button>
       <button className="run-button" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={15} fill="currentColor"/> Run simulation</button>
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
     </div>
@@ -1026,6 +1031,7 @@ export default function App() {
     </div>
     {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14}/></button></div>}
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={() => setNetlistOpen(false)}><div className="netlist-modal" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2>Generated SPICE netlist</h2></div><button className="subtle-icon" onClick={() => setNetlistOpen(false)}><X size={17}/></button></div><pre>{createNetlist(project)}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div></div></div>}
+    {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => setElectricalCheckOpen(false)}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button className="subtle-icon" aria-label="Close circuit checks" onClick={() => setElectricalCheckOpen(false)}><X size={17}/></button></div><p className="erc-intro">These checks look for common wiring mistakes. They do not decide whether ngspice can solve your circuit.</p>{electricalIssues.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={`erc-severity ${issue.severity}`}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => { setSelection({ kind: 'part', id: issue.partId! }); setElectricalCheckOpen(false) }}>Select affected component</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalIssues.length} finding{electricalIssues.length === 1 ? '' : 's'}</span><button className="primary-small" onClick={() => setElectricalCheckOpen(false)}>Done</button></div></section></div>}
     {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 4</span><h2 id="tour-title">{['Start with a working example', 'Change a component value', 'Inspect the generated netlist', 'Run and see results'][tourStep]}</h2></div><button className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p className="tour-copy">{[
       'This starter circuit is already wired. The schematic is in the center, the component library is on the left, and properties appear on the right.',
       'R1 is selected in the inspector. Try changing its resistance value; edits are saved locally as you work.',

@@ -24,6 +24,8 @@ try {
     path.join(root, 'src/engine/measurements.ts'),
     path.join(root, 'src/engine/diagnostics.ts'),
     path.join(root, 'src/domain/wireFlow.ts'),
+    path.join(root, 'src/domain/connectivity.ts'),
+    path.join(root, 'src/domain/electricalCheck.ts'),
     path.join(root, 'src/domain/probe.ts'),
     path.join(root, 'src/domain/project.ts'),
     path.join(root, 'src/domain/projectArchive.ts'),
@@ -31,7 +33,7 @@ try {
   if (compile.status !== 0) {
     process.exitCode = compile.status ?? 1
   } else {
-    const tests = spawnSync(process.execPath, ['--test', path.join(__dirname, 'netlist.test.cjs'), path.join(__dirname, 'raw.test.cjs'), path.join(__dirname, 'probe.test.cjs'), path.join(__dirname, 'project-archive.test.cjs'), path.join(__dirname, 'result-control.test.cjs'), path.join(__dirname, 'parameter-sweep.test.cjs'), path.join(__dirname, 'measurements.test.cjs'), path.join(__dirname, 'diagnostics.test.cjs'), path.join(__dirname, 'wire-flow.test.cjs'), path.join(__dirname, 'geometry-edit.test.cjs')], {
+    const tests = spawnSync(process.execPath, ['--test', path.join(__dirname, 'netlist.test.cjs'), path.join(__dirname, 'raw.test.cjs'), path.join(__dirname, 'probe.test.cjs'), path.join(__dirname, 'project-archive.test.cjs'), path.join(__dirname, 'result-control.test.cjs'), path.join(__dirname, 'parameter-sweep.test.cjs'), path.join(__dirname, 'measurements.test.cjs'), path.join(__dirname, 'diagnostics.test.cjs'), path.join(__dirname, 'wire-flow.test.cjs'), path.join(__dirname, 'geometry-edit.test.cjs'), path.join(__dirname, 'electrical-check.test.cjs')], {
       cwd: root,
       env: { ...process.env, ELSIM_TEST_BUILD: output },
       stdio: 'inherit',
