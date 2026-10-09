@@ -1,0 +1,9 @@
+* Generated ELSim sheet-block resistor example
+V1 vin 0 DC 5
+XLOAD vin 0 ELSIM_SHEET_sheet_load
+.SUBCKT ELSIM_SHEET_sheet_load IN OUT
+RLOAD IN OUT 1k
+.ENDS ELSIM_SHEET_sheet_load
+.op
+.end
+.print op v(vin)

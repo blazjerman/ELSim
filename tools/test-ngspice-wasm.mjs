@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op']
+const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op']
 
 function runInWorker(deckPath, readRaw = false, rawPaths) {
   return new Promise((resolve, reject) => {
@@ -61,6 +61,7 @@ for (const fixture of fixtures) {
     if (fixture === 'imported-subckt-op') assert.match(wasmResult.stdout, /out\s+1\.000000e\+01/i, 'imported-subckt-op: four-pin model did not produce the expected 10 V output')
     if (fixture === 'imported-subckt-params-op') assert.match(wasmResult.stdout, /out\s+1\.500000e\+01/i, 'imported-subckt-params-op: GAIN=3 override did not produce the expected 15 V output')
     if (fixture === 'imported-diode-model-op') assert.match(wasmResult.stdout, /out\s+6\.790709e-01/i, 'imported-diode-model-op: 1N4148 model did not produce the expected 0.679 V operating point')
+    if (fixture === 'hierarchical-block-op') assert.match(wasmResult.stdout, /vin\s+5\.000000e\+00/i, 'hierarchical-block-op: sheet resistor block did not preserve its ordered port connection')
   } else {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)
   }

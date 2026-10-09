@@ -20,6 +20,7 @@ export type Part = {
   deviceModel?: string
   symbolAssetId?: string
   symbolPinOffsets?: [number, number][]
+  sheetId?: string
 }
 
 export type Wire = { id: string; points: [number, number][] }
@@ -44,11 +45,16 @@ export type ProjectSheet = {
   junctions: { x: number; y: number }[]
   netLabels: NetLabel[]
   view: { zoom: number; panX: number; panY: number }
+  ports: { id: string; name: string }[]
+}
+
+export function sheetModelName(sheetId: string): string {
+  return `ELSIM_SHEET_${sheetId.replace(/[^A-Za-z0-9_]/g, '_')}`
 }
 
 export type Project = {
   format: 'elsim-project'
-  version: 4
+  version: 5
   name: string
   updatedAt: string
   parts: Part[]
@@ -67,7 +73,7 @@ export type Project = {
 
 const starter: Project = {
   format: 'elsim-project',
-  version: 4,
+  version: 5,
   name: 'RC step response',
   updatedAt: new Date().toISOString(),
   parts: [
@@ -91,28 +97,34 @@ const starter: Project = {
   simulation: { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
   rootSheetId: 'sheet-main',
   activeSheetId: 'sheet-main',
-  sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: [], wires: [], junctions: [], netLabels: [], view: { zoom: 1, panX: 0, panY: 0 } }],
+  sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: [], wires: [], junctions: [], netLabels: [], view: { zoom: 1, panX: 0, panY: 0 }, ports: [] }],
 }
 
 function syncActiveSheet(project: Project): Project {
   const sheets = project.sheets ?? []
   const active = sheets.find((sheet) => sheet.id === project.activeSheetId)
   const scene = { parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view }
-  if (!active) return { ...project, rootSheetId: 'sheet-main', activeSheetId: 'sheet-main', sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, ...scene }] }
+  if (!active) return { ...project, rootSheetId: 'sheet-main', activeSheetId: 'sheet-main', sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, ...scene, ports: [] }] }
   return { ...project, sheets: sheets.map((sheet) => sheet.id === active.id ? { ...sheet, ...scene } : sheet) }
 }
 
 function migrateV3(input: Record<string, unknown>): Project {
   const project = { ...input, version: 4 } as unknown as Project
   project.activeSheetId = project.rootSheetId
+  return migrateV4(project as unknown as Record<string, unknown>)
+}
+
+function migrateV4(input: Record<string, unknown>): Project {
+  const project = { ...input, version: 5 } as unknown as Project
+  project.sheets = (project.sheets ?? []).map((sheet) => ({ ...sheet, ports: sheet.ports ?? [] }))
   return project
 }
 
 function migrateV2(input: Record<string, unknown>): Project {
-  const project = { ...input, version: 4 } as unknown as Project
+  const project = { ...input, version: 5 } as unknown as Project
   project.rootSheetId = 'sheet-main'
   project.activeSheetId = 'sheet-main'
-  project.sheets = [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view }]
+  project.sheets = [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view, ports: [] }]
   return project
 }
 
@@ -146,7 +158,7 @@ function migrateV1(input: Record<string, unknown>): Project {
     })
   }
   return {
-    format: 'elsim-project', version: 4,
+    format: 'elsim-project', version: 5,
     name: typeof input.name === 'string' ? input.name : 'Imported project',
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
     parts: oldParts.map(({ nodes: _nodes, ...part }) => part),
@@ -154,7 +166,7 @@ function migrateV1(input: Record<string, unknown>): Project {
     junctions: [], netLabels,
     view: input.view as Project['view'] ?? { zoom: 1, panX: 0, panY: 0 },
     simulation: input.simulation as Project['simulation'] ?? { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
-    rootSheetId: 'sheet-main', activeSheetId: 'sheet-main', sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: oldParts.map(({ nodes: _nodes, ...part }) => part), wires: oldWires.map(({ node: _node, ...wire }) => wire), junctions: [], netLabels, view: input.view as Project['view'] ?? { zoom: 1, panX: 0, panY: 0 } }],
+    rootSheetId: 'sheet-main', activeSheetId: 'sheet-main', sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: oldParts.map(({ nodes: _nodes, ...part }) => part), wires: oldWires.map(({ node: _node, ...wire }) => wire), junctions: [], netLabels, view: input.view as Project['view'] ?? { zoom: 1, panX: 0, panY: 0 }, ports: [] }],
   }
 }
 
@@ -165,8 +177,9 @@ export function validateProject(input: unknown): Project {
   if (data.version === 1 && Array.isArray(data.parts) && Array.isArray(data.wires)) return validateProject(migrateV1(data))
   if (data.version === 2 && Array.isArray(data.parts) && Array.isArray(data.wires)) return validateProject(migrateV2(data))
   if (data.version === 3 && Array.isArray(data.sheets)) return validateProject(migrateV3(data))
-  if (data.version !== 4 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
-    throw new Error('This project format is not supported. Expected ELSim project version 4.')
+  if (data.version === 4 && Array.isArray(data.sheets)) return validateProject(migrateV4(data))
+  if (data.version !== 5 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
+    throw new Error('This project format is not supported. Expected ELSim project version 5.')
   }
   const allowed = new Set<PartKind>(['source', 'resistor', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'npn', 'pnp', 'subcircuit'])
   const refs = new Set<string>()
@@ -182,6 +195,7 @@ export function validateProject(input: unknown): Project {
     refs.add(candidate.ref.toLowerCase())
     if ((candidate.kind === 'npn' || candidate.kind === 'pnp') && (!/^[1-9]\d{0,3}$/.test(candidate.value) || Number(candidate.value) > 1000)) throw new Error(`${candidate.ref} forward beta must be an integer from 1 to 1000.`)
     if (candidate.kind === 'subcircuit' && (typeof candidate.modelName !== 'string' || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(candidate.modelName) || !Array.isArray(candidate.modelPins) || candidate.modelPins.length < 1 || candidate.modelPins.length > 64 || candidate.modelPins.some((pin) => typeof pin !== 'string' || !/^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(pin)))) throw new Error(`${candidate.ref} has malformed subcircuit model or ordered pins.`)
+    if (candidate.sheetId !== undefined && (candidate.kind !== 'subcircuit' || typeof candidate.sheetId !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(candidate.sheetId))) throw new Error(`${candidate.ref} has a malformed sheet block reference.`)
     if (candidate.symbolAssetId !== undefined && (typeof candidate.symbolAssetId !== 'string' || !candidate.symbolAssetId)) throw new Error(`${candidate.ref} has a malformed imported symbol reference.`)
     if (candidate.symbolPinOffsets !== undefined && (!candidate.symbolAssetId || !Array.isArray(candidate.symbolPinOffsets) || candidate.symbolPinOffsets.length < 1 || candidate.symbolPinOffsets.length > 64 || candidate.symbolPinOffsets.some((point) => !Array.isArray(point) || point.length !== 2 || !point.every((coordinate) => Number.isFinite(coordinate) && Math.abs(coordinate) <= 100000)))) throw new Error(`${candidate.ref} has malformed imported symbol pin coordinates.`)
   }
@@ -250,7 +264,7 @@ export function validateProject(input: unknown): Project {
       const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, resistor: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, npn: 3, pnp: 3 } as const)[part.kind]
       if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
     }
-    if (part.kind === 'subcircuit') {
+    if (part.kind === 'subcircuit' && !part.sheetId) {
       const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
       if (!definition) throw new Error(`${part.ref} refers to missing imported subcircuit ${part.modelName}.`)
       if (!part.modelPins || part.modelPins.length !== definition.pins.length || part.modelPins.some((pin, index) => pin.toLowerCase() !== definition.pins[index].toLowerCase())) throw new Error(`${part.ref} pin order does not match imported subcircuit ${definition.name}.`)
@@ -347,7 +361,7 @@ export function validateProject(input: unknown): Project {
   const sheetPartIds = new Set<string>()
   const siblingNames = new Map<string, Set<string>>()
   for (const sheet of sheets) {
-    if (!sheet || typeof sheet.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(sheet.id) || sheetIds.has(sheet.id) || typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 80 || (sheet.parentSheetId !== null && typeof sheet.parentSheetId !== 'string') || !Array.isArray(sheet.parts) || !Array.isArray(sheet.wires) || !Array.isArray(sheet.junctions) || !Array.isArray(sheet.netLabels) || !sheet.view || !Number.isFinite(sheet.view.zoom) || sheet.view.zoom <= 0 || !Number.isFinite(sheet.view.panX) || !Number.isFinite(sheet.view.panY)) throw new Error('Project contains a malformed sheet.')
+    if (!sheet || typeof sheet.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(sheet.id) || sheetIds.has(sheet.id) || typeof sheet.name !== 'string' || !sheet.name.trim() || sheet.name.length > 80 || (sheet.parentSheetId !== null && typeof sheet.parentSheetId !== 'string') || !Array.isArray(sheet.parts) || !Array.isArray(sheet.wires) || !Array.isArray(sheet.junctions) || !Array.isArray(sheet.netLabels) || !Array.isArray(sheet.ports) || sheet.ports.length > 64 || !sheet.view || !Number.isFinite(sheet.view.zoom) || sheet.view.zoom <= 0 || !Number.isFinite(sheet.view.panX) || !Number.isFinite(sheet.view.panY)) throw new Error('Project contains a malformed sheet.')
     sheetIds.add(sheet.id)
     for (const part of sheet.parts) {
       if (!part || typeof part.id !== 'string' || !part.id || sheetPartIds.has(part.id)) throw new Error('Project sheet component IDs must be unique across the hierarchy.')
@@ -359,6 +373,13 @@ export function validateProject(input: unknown): Project {
     siblings.add(key)
     siblingNames.set(sheet.parentSheetId ?? '', siblings)
     if (sheet.parts.length > 10000 || sheet.wires.length > 20000 || sheet.netLabels.length > 20000 || sheet.junctions.length > 20000) throw new Error(`Sheet ${sheet.name} exceeds the document size limit.`)
+    const ports = new Set<string>()
+    const portIds = new Set<string>()
+    for (const port of sheet.ports) {
+      if (!port || typeof port.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(port.id) || portIds.has(port.id) || typeof port.name !== 'string' || !/^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(port.name) || ports.has(port.name.toLowerCase()) || !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase())) throw new Error(`Sheet ${sheet.name} has a malformed port. Ports must expose unique labeled nodes.`)
+      ports.add(port.name.toLowerCase())
+      portIds.add(port.id)
+    }
   }
   const root = sheets.find((sheet) => sheet.id === data.rootSheetId)
   if (!root || root.parentSheetId !== null) throw new Error('Project root sheet is missing or has a parent.')
@@ -373,6 +394,18 @@ export function validateProject(input: unknown): Project {
       visited.add(parentId)
       parentId = sheets.find((candidate) => candidate.id === parentId)?.parentSheetId ?? null
     }
+  }
+  const blockGraph = new Map(sheets.map((sheet) => [sheet.id, (sheet.parts as Part[]).flatMap((part) => part.sheetId ? [part.sheetId] : [])]))
+  for (const [sheetId, targets] of blockGraph) for (const target of targets) if (!sheetIds.has(target)) throw new Error(`Sheet ${sheetId} contains a block with a missing sheet definition.`)
+  const visitBlock = (sheetId: string, path: Set<string>) => {
+    if (path.has(sheetId)) throw new Error('Project sheet block instances contain a cycle.')
+    const next = new Set(path).add(sheetId)
+    for (const target of blockGraph.get(sheetId) ?? []) visitBlock(target, next)
+  }
+  for (const sheet of sheets) visitBlock(sheet.id, new Set())
+  for (const sheet of sheets) for (const part of sheet.parts as Part[]) if (part.sheetId) {
+    const definition = sheets.find((candidate) => candidate.id === part.sheetId)!
+    if (part.modelName !== sheetModelName(definition.id) || part.modelPins?.length !== definition.ports.length || definition.ports.some((port, index) => port.name.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) throw new Error(`${part.ref} block pins do not match sheet ${definition.name}.`)
   }
   return syncActiveSheet(data as unknown as Project)
 }
