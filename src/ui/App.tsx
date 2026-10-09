@@ -310,9 +310,9 @@ function InitialConditionEditor({ conditions, nodes, skipOp, onAdd, onChange, on
   </div>
 }
 
-function Schematic({ project, selection, setSelection, setProject, tool, setTool, setNotice, beginEdit, endEdit, onProbe, simulationResult, sampleIndex, onSampleChange }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setProject: (fn: (current: Project) => Project) => void; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
+function Schematic({ project, selection, setSelection, setProject, setView, spacePan, tool, setTool, setNotice, beginEdit, endEdit, onProbe, simulationResult, sampleIndex, onSampleChange }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
   const svg = useRef<SVGSVGElement>(null)
-  const drag = useRef<{ kind: 'part' | 'wire' | 'segment' | 'label'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; segmentIndex?: number } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'segment' | 'label' | 'pan'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; segmentIndex?: number } | null>(null)
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
@@ -404,7 +404,7 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     else setNotice('This wire is not connected to a net yet.')
   }
   const beginDrag = (event: PointerEvent<SVGGElement>, kind: 'part' | 'wire' | 'label', id: string) => {
-    if (tool !== 'select') return
+    if (tool !== 'select' || event.button !== 0 || spacePan) return
     const part = kind === 'part' ? project.parts.find((item) => item.id === id) : undefined
     const wire = kind === 'wire' ? project.wires.find((item) => item.id === id) : undefined
     const label = kind === 'label' ? project.netLabels.find((item) => item.id === id) : undefined
@@ -417,7 +417,7 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const beginSegmentDrag = (event: PointerEvent<SVGPolylineElement>, wireId: string, segmentIndex: number) => {
-    if (tool !== 'select') return
+    if (tool !== 'select' || event.button !== 0 || spacePan) return
     const wire = project.wires.find((item) => item.id === wireId)
     if (!wire || !canMoveWireSegment(project, wire, segmentIndex)) return
     event.stopPropagation()
@@ -427,8 +427,27 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     drag.current = { kind: 'segment', id: wireId, segmentIndex, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, points: wire.points.map(([x, y]) => [x, y]) }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
+  const beginPan = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 1 && !(event.button === 0 && spacePan)) return
+    event.preventDefault()
+    event.stopPropagation()
+    suppressCanvasClick.current = event.button === 0
+    drag.current = { kind: 'pan', id: event.button === 1 ? 'middle' : 'space', pointer: event.pointerId, x: event.clientX, y: event.clientY, originX: project.view.panX, originY: project.view.panY }
+    event.currentTarget.style.cursor = 'grabbing'
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
   const moveDrag = (event: PointerEvent<SVGSVGElement>) => {
     if (!drag.current) return
+    if (drag.current.kind === 'pan') {
+      const rect = svg.current!.getBoundingClientRect()
+      const view = svg.current!.viewBox.baseVal
+      const scale = Math.min(rect.width / view.width, rect.height / view.height)
+      const deltaX = (event.clientX - drag.current.x) / scale
+      const deltaY = (event.clientY - drag.current.y) / scale
+      const panX = drag.current.originX + deltaX, panY = drag.current.originY + deltaY
+      setView((current) => ({ ...current, panX, panY }))
+      return
+    }
     const point = pointFromEvent(event)
     const deltaX = Math.round((point.x - drag.current.x) / 10) * 10
     const deltaY = Math.round((point.y - drag.current.y) / 10) * 10
@@ -452,7 +471,12 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
       }
     })
   }
-  const endDrag = () => { if (drag.current) endEdit(); drag.current = null }
+  const endDrag = () => {
+    if (drag.current?.kind === 'pan' && drag.current.id === 'middle') suppressCanvasClick.current = false
+    if (drag.current?.kind !== 'pan' && drag.current) endEdit()
+    drag.current = null
+    if (svg.current) svg.current.style.cursor = ''
+  }
   const saveLabel = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!labelDraft) return
@@ -466,13 +490,26 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     setLabelDraft(null)
   }
   const viewWidth = 760 / project.view.zoom, viewHeight = 600 / project.view.zoom
-  const viewBox = `${(760 - viewWidth) / 2} ${(600 - viewHeight) / 2} ${viewWidth} ${viewHeight}`
+  const viewBox = `${(760 - viewWidth) / 2 - project.view.panX} ${(600 - viewHeight) / 2 - project.view.panY} ${viewWidth} ${viewHeight}`
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
-      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.max(.6, p.view.zoom - .1) } }))}><Minus size={15}/></IconButton><span className="zoom-label">{Math.round(project.view.zoom * 100)}%</span><IconButton title="Zoom in" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.min(1.5, p.view.zoom + .1) } }))}><Plus size={15}/></IconButton></div>
-      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Drag a wire segment to reroute it'} <span className="status-separator">·</span> Grid 10 px</div>
+      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.6, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton></div>
+      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Drag wire segments to reroute · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
-    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} viewBox={viewBox} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }}>
+    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} viewBox={viewBox} onPointerDown={beginPan} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onWheel={(event) => {
+      if (!event.ctrlKey && !event.metaKey) return
+      event.preventDefault()
+      const rect = event.currentTarget.getBoundingClientRect(), view = event.currentTarget.viewBox.baseVal
+      const scale = Math.min(rect.width / view.width, rect.height / view.height)
+      const fractionX = Math.max(0, Math.min(1, (event.clientX - rect.left - (rect.width - view.width * scale) / 2) / (view.width * scale)))
+      const fractionY = Math.max(0, Math.min(1, (event.clientY - rect.top - (rect.height - view.height * scale) / 2) / (view.height * scale)))
+      const anchorX = view.x + fractionX * view.width, anchorY = view.y + fractionY * view.height
+      setView((current) => {
+        const zoom = Math.max(.6, Math.min(2.5, current.zoom * Math.exp(-event.deltaY * .002)))
+        const width = 760 / zoom, height = 600 / zoom
+        return { ...current, zoom, panX: (760 - width) / 2 - (anchorX - fractionX * width), panY: (600 - height) / 2 - (anchorY - fractionY * height) }
+      })
+    }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect width="100%" height="100%" fill="url(#large-grid)"/>
       {project.wires.map((wire) => {
@@ -482,7 +519,7 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
         const points = wire.points.map(([x, y]) => `${x},${y}`).join(' ')
         const glow = flow ? Math.min(0.82, 0.2 + Math.log10(1 + flow.magnitude * 1000) * 0.22) : 0
         const duration = flow ? Math.max(0.35, Math.min(2.5, 1.6 / (Math.log10(1 + flow.magnitude * 1000) + 0.5))) : 1
-        return <g key={wire.id} className={`wire-line${selection?.kind === 'wire' && selection.id === wire.id ? ' selected' : ''}`} onPointerDown={(event) => { if (tool === 'probe') { event.stopPropagation(); probeWire(wire.id) } else beginDrag(event, 'wire', wire.id) }} onClick={(event) => { if (tool === 'probe') event.stopPropagation(); else if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'wire', id: wire.id }) } }}>
+        return <g key={wire.id} className={`wire-line${selection?.kind === 'wire' && selection.id === wire.id ? ' selected' : ''}`} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); probeWire(wire.id) } else beginDrag(event, 'wire', wire.id) }} onClick={(event) => { if (tool === 'probe') event.stopPropagation(); else if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'wire', id: wire.id }) } }}>
           <polyline points={points} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/>
           <polyline points={points} fill="none" stroke={selection?.kind === 'wire' && selection.id === wire.id ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           {tool === 'select' && wire.points.slice(0, -1).map((point, index) => canMoveWireSegment(project, wire, index) && <polyline key={`segment-hit-${index}`} points={`${point[0]},${point[1]} ${wire.points[index + 1][0]},${wire.points[index + 1][1]}`} fill="none" stroke="transparent" strokeWidth="12" strokeLinecap="round" style={{ pointerEvents: 'stroke', cursor: 'move' }} onPointerDown={(event) => beginSegmentDrag(event, wire.id, index)}><title>Drag to reroute this wire segment</title></polyline>)}
@@ -497,7 +534,7 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
       <g className="canvas-label"><text x="138" y="238">INPUT</text><text x="567" y="265">OUTPUT</text></g>
     </svg>
     {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}
-    <div className="canvas-footer"><span><Grid2X2 size={13}/> Snap to grid</span>{transientAxis?.length ? <label className="simulation-scrubber"><span>Simulation time</span><input aria-label="Simulation time" type="range" min="0" max={transientAxis.length - 1} step="1" value={activeSample} onChange={(event) => { const index = Number(event.target.value); setScrubIndex(index); onSampleChange(index) }}/><output>{transientAxis[activeSample].toPrecision(4)} s</output></label> : <span><span className="shortcut">⌘</span> + scroll to zoom</span>}<span>{project.parts.length} components</span></div>
+    <div className="canvas-footer"><span><Grid2X2 size={13}/> Snap to grid</span>{transientAxis?.length ? <label className="simulation-scrubber"><span>Simulation time</span><input aria-label="Simulation time" type="range" min="0" max={transientAxis.length - 1} step="1" value={activeSample} onChange={(event) => { const index = Number(event.target.value); setScrubIndex(index); onSampleChange(index) }}/><output>{transientAxis[activeSample].toPrecision(4)} s</output></label> : <span>Ctrl/⌘ + scroll to zoom · Space/middle-drag to pan</span>}<span>{project.parts.length} components</span></div>
   </div>
 }
 
@@ -517,6 +554,7 @@ export default function App() {
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   const [sampleIndex, setSampleIndex] = useState<number | null>(null)
   const [playbackRunning, setPlaybackRunning] = useState(false)
+  const [spacePan, setSpacePan] = useState(false)
   const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>(() => project.plotSettings?.selectedTraceIds ?? [])
   const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
   const [componentQuery, setComponentQuery] = useState('')
@@ -526,6 +564,7 @@ export default function App() {
   const activeWorkerRef = useRef<Worker | null>(null)
   const projectRef = useRef(project)
   projectRef.current = project
+  const setView = (fn: (current: Project['view']) => Project['view']) => setProjectState((current) => ({ ...current, view: fn(current.view) }))
   const transientAxis = simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && simulationResult?.metadata.settings.projectUpdatedAt === project.updatedAt)
   useEffect(() => {
@@ -687,7 +726,9 @@ export default function App() {
       const target = event.target
       if (event.key === 'Escape' && tourStep !== null) { setTourStep(null); return }
       if (event.key === '/' && !(target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)))) { event.preventDefault(); componentSearchRef.current?.focus(); return }
-      if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
+      const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+      if (event.code === 'Space' && !editingText) { event.preventDefault(); setSpacePan(true); return }
+      if (editingText) return
       const key = event.key.toLowerCase()
       if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
       if ((event.ctrlKey || event.metaKey) && key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return }
@@ -702,8 +743,12 @@ export default function App() {
       else if ((key === 'delete' || key === 'backspace') && selection) { event.preventDefault(); deleteSelection() }
       else if (key === 'escape') setSelection(null)
     }
+    const onKeyUp = (event: KeyboardEvent) => { if (event.code === 'Space') setSpacePan(false) }
+    const onBlur = () => setSpacePan(false)
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
   }, [tool, selection, selected, project, tourStep])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
@@ -940,7 +985,7 @@ export default function App() {
 
       <main className="editor-column">
         <div className="sheet-tabs"><button className="sheet-tab active"><span className="sheet-dot"/> Main circuit <MoreHorizontal size={15}/></button><button className="add-sheet" onClick={() => setNotice('Hierarchical sheets are planned for a later milestone.')}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet settings"><SlidersHorizontal size={15}/></button></div>
-        <Schematic project={project} selection={selection} setSelection={setSelection} setProject={setProject} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
+        <Schematic project={project} selection={selection} setSelection={setSelection} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
         <section className="analysis-panel">
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span><button className="subtle-icon" title="Panel options"><MoreHorizontal size={17}/></button></div></div>
           <div className="analysis-content">
