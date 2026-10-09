@@ -11,6 +11,13 @@ export type ParsedRawFile = {
   variables: RawVariable[]
 }
 
+export function isTraceVariable(name: string, names: string[]): boolean {
+  if (/^v\(/i.test(name) || /^i\(@/i.test(name)) return true
+  const branch = name.match(/^i\((.*)\)$/i)?.[1].toLowerCase()
+  if (!branch) return false
+  return !names.some((candidate) => candidate.match(/^i\(@(.*)\[i\]\)$/i)?.[1].toLowerCase() === branch)
+}
+
 function finiteNumber(value: string, context: string): number {
   const number = Number(value)
   if (!Number.isFinite(number)) throw new Error(`Invalid numeric value in ngspice raw data (${context}).`)

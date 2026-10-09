@@ -11,7 +11,7 @@ NGSPICE_SOURCE=/path/to/ngspice JOBS=2 ./tools/build-ngspice-wasm.sh
 node tools/test-ngspice-wasm.mjs
 ```
 
-The build copies the ignored WASM runtime into `public/engine/` for the local browser worker. The browser currently supports transient analysis and plots parsed real-valued vectors; the Node test starts one ngspice instance per fixture and checks transient, diode operating-point, AC, and `.SUBCKT` output. Pass a native ngspice executable as the third argument to compare printed numeric rows:
+The build copies the ignored WASM runtime into `public/engine/` for the local browser worker. The browser currently supports transient analysis and plots parsed real-valued vectors; it saves node voltages plus component currents so the Probe tool can add wire voltages and two-terminal currents. Selected traces may be mixed on dual voltage/current axes, inspected with a shared time cursor, and exported as CSV. The Node test starts one ngspice instance per fixture and checks transient, diode operating-point, AC, and `.SUBCKT` output. Pass a native ngspice executable as the third argument to compare printed numeric rows:
 
 ```sh
 node tools/test-ngspice-wasm.mjs public/engine /path/to/native/ngspice

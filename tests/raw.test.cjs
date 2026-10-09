@@ -4,7 +4,8 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { parseAsciiRawFile } = require(path.join(build, 'engine/raw.js'))
+const { isTraceVariable, parseAsciiRawFile } = require(path.join(build, 'engine/raw.js'))
+const { serializeWaveformCsv } = require(path.join(build, 'engine/csv.js'))
 
 const validRaw = `Title: RC fixture
 Date: Thu Jan  1 00:00:00 1970
@@ -37,8 +38,12 @@ test('ASCII raw parser preserves ngspice time, voltage, and current vectors', ()
 })
 
 test('transient plotting accepts only voltage and current variable names', () => {
-  const workerSource = require('node:fs').readFileSync(path.join(__dirname, '../src/engine/ngspice.worker.ts'), 'utf8')
-  assert.match(workerSource, /variables\.filter\(\(variable\) => \/\^\(\?:v\\\(|i\\\(\)\)\//)
+  const names = ['time', 'v(vout)', 'i(@r1[i])', 'i(@v1[i])', 'i(v1)']
+  assert.equal(isTraceVariable('time', names), false)
+  assert.equal(isTraceVariable('v(vout)', names), true)
+  assert.equal(isTraceVariable('i(@r1[i])', names), true)
+  assert.equal(isTraceVariable('i(v1)', names), false)
+  assert.equal(isTraceVariable('i(v1)', ['i(v1)']), true)
 })
 
 test('ASCII raw parser rejects AC complex data until a complex result adapter is implemented', () => {
@@ -48,4 +53,13 @@ test('ASCII raw parser rejects AC complex data until a complex result adapter is
 test('ASCII raw parser rejects truncated and mismatched point data', () => {
   assert.throws(() => parseAsciiRawFile(validRaw.replace(/\n\s*-2\.000000e-03\n/, '\n')), /ended before all numeric points/)
   assert.throws(() => parseAsciiRawFile(validRaw.replace('No. Variables: 3', 'No. Variables: 4')), /variables do not match/)
+})
+
+test('waveform CSV includes units, quoted labels, and synchronized mixed-unit samples', () => {
+  const traces = [
+    { label: 'V(out)', unit: 'V', axis: Float64Array.of(0, 0.1), values: Float64Array.of(0, 5) },
+    { label: 'I(R"1)', unit: 'A', axis: Float64Array.of(0, 0.1), values: Float64Array.of(0.01, 0.02) },
+  ]
+  assert.equal(serializeWaveformCsv(traces), '"time (s)","V(out) (V)","I(R""1) (A)"\n0,0,0.01\n0.1,5,0.02')
+  assert.throws(() => serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0) }]), /do not share the same time axis/)
 })

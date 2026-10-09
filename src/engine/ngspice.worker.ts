@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { parseAsciiRawFile } from './raw'
+import { isTraceVariable, parseAsciiRawFile } from './raw'
 import type { EngineRequest, EngineResponse, NetlistArtifact, NetlistSource, RunMetadata, SimulationDiagnostic, Trace } from './contract'
 
 const worker = self as DedicatedWorkerGlobalScope
@@ -16,20 +16,32 @@ function addResultControl(netlist: string): string {
   const rows = netlist.trimEnd().split(/\r?\n/)
   const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
   if (endLine === -1) throw new Error('Generated netlist is missing its .end directive.')
-  rows.splice(endLine, 1, '.control', 'set filetype=ascii', 'run', 'write /result.raw all', 'quit', '.endc', '.end')
+  const currentSaves = rows.filter((line) => /^[RCLDVS]\S*\s+/i.test(line) && !/^V\S*\s+/i.test(line)).map((line) => {
+    const reference = line.trim().split(/\s+/)[0]
+    return `@${reference}[i]`
+  })
+  const sourceSaves = rows.filter((line) => /^V\S*\s+/i.test(line)).map((line) => `@${line.trim().split(/\s+/)[0]}[i]`)
+  const savedVectors = [...currentSaves, ...sourceSaves]
+  for (let index = savedVectors.length; index > 0; index -= 40) {
+    const chunk = savedVectors.slice(Math.max(0, index - 40), index)
+    rows.splice(endLine, 0, `.save all ${chunk.join(' ')}`)
+  }
+  rows.splice(endLine + 1, 1, '.control', 'set filetype=ascii', 'run', 'write /result.raw all', 'quit', '.endc', '.end')
   return rows.join('\n') + '\n'
 }
 
 function makeTraces(rawText: string): Trace[] {
   const parsed = parseAsciiRawFile(rawText)
   const axis = parsed.axis
-  return parsed.variables.filter((variable) => /^(?:v\(|i\()/i.test(variable.name)).map((variable) => {
+  const names = parsed.variables.map((variable) => variable.name)
+  return parsed.variables.filter((variable) => isTraceVariable(variable.name, names)).map((variable) => {
     const lowercaseName = variable.name.toLowerCase()
     const current = lowercaseName.startsWith('i(')
     const inner = variable.name.match(/^[vi]\((.*)\)$/i)![1]
+    const component = inner.match(/^@(.*)\[i\]$/i)?.[1]
     return {
       id: lowercaseName,
-      label: `${current ? 'I' : 'V'}(${inner})`,
+      label: `${current ? 'I' : 'V'}(${component ?? inner})`,
       unit: current ? 'A' : 'V',
       axis: new Float64Array(axis),
       values: variable.values,

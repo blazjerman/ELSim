@@ -18,6 +18,7 @@ try {
     '--skipLibCheck',
     path.join(root, 'src/engine/netlist.ts'),
     path.join(root, 'src/engine/raw.ts'),
+    path.join(root, 'src/engine/csv.ts'),
   ], { cwd: root, stdio: 'inherit' })
   if (compile.status !== 0) {
     process.exitCode = compile.status ?? 1

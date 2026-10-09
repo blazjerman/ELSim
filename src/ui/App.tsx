@@ -11,9 +11,10 @@ import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { componentPins, moveWireAnchors, projectPinLocations, wireNetAt } from '../domain/geometry'
 import { createStarterProject, kindNames, kindPrefix, validateProject, type Part, type PartKind, type Project } from '../domain/project'
 import { createNetlist, createNetlistArtifact, nextRef } from '../engine/netlist'
+import { serializeWaveformCsv } from '../engine/csv'
 import { isEngineResponse, type SimulationResult, type Trace } from '../engine/contract'
 
-type ToolMode = 'select' | 'wire' | 'label'
+type ToolMode = 'select' | 'wire' | 'label' | 'probe'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
 const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: string }[] = [
   { kind: 'resistor', label: 'Resistor', Icon: Minus, subtitle: 'R' },
@@ -29,9 +30,9 @@ function IconButton({ title, children, onClick, active = false, disabled = false
   return <button className={`icon-button${active ? ' active' : ''}`} title={title} aria-label={title} onClick={onClick} disabled={disabled}>{children}</button>
 }
 
-function CircuitPart({ part, selected, onSelect, onPointerDown, tool }: { part: Part; selected: boolean; onSelect: (id: string) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; tool: ToolMode }) {
+function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe }: { part: Part; selected: boolean; onSelect: (id: string) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; tool: ToolMode; onProbe: (id: string) => void }) {
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
-  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(part.id) } }}>
+  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); onSelect(part.id) } }}>
     <rect x="-40" y="-38" width="80" height="76" rx="9" className="part-hit" />
     {part.kind === 'resistor' && <><line x1="-52" y1="0" x2="-23" y2="0" {...common}/><rect x="-23" y="-12" width="46" height="24" rx="3" {...common}/><line x1="23" y1="0" x2="52" y2="0" {...common}/></>}
     {part.kind === 'capacitor' && <><line x1="-50" y1="0" x2="-8" y2="0" {...common}/><line x1="-8" y1="-16" x2="-8" y2="16" {...common}/><line x1="8" y1="-16" x2="8" y2="16" {...common}/><line x1="8" y1="0" x2="50" y2="0" {...common}/></>}
@@ -45,25 +46,27 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool }: { part: 
   </g>
 }
 
-function WaveformPlot({ traces, stale }: { traces: Trace[]; stale: boolean }) {
-  const voltages = traces.filter((trace) => trace.unit === 'V')
-  const currents = traces.filter((trace) => trace.unit === 'A')
-  const [unit, setUnit] = useState<'V' | 'A'>('V')
-  const [visible, setVisible] = useState<string[]>(() => voltages.map((trace) => trace.id))
-  const series = unit === 'V' ? voltages : currents
-  useEffect(() => setVisible(series.map((trace) => trace.id)), [traces, unit])
-  const shown = series.filter((trace) => visible.includes(trace.id))
+function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void }) {
+  const shown = traces.filter((trace) => selectedIds.includes(trace.id))
   const width = 760, height = 112, left = 42, right = 748, top = 8, bottom = 91
-  let minValue = Infinity, maxValue = -Infinity
-  for (const trace of shown) for (const value of trace.values) { minValue = Math.min(minValue, value); maxValue = Math.max(maxValue, value) }
-  if (!Number.isFinite(minValue) || !Number.isFinite(maxValue)) { minValue = -1; maxValue = 1 }
-  if (maxValue === minValue) { minValue -= 1; maxValue += 1 }
-  const range = maxValue - minValue
+  const rangeFor = (unit: string) => {
+    let min = Infinity, max = -Infinity
+    for (const trace of shown) if (trace.unit === unit) for (const value of trace.values) { min = Math.min(min, value); max = Math.max(max, value) }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return [-1, 1] as [number, number]
+    if (min === max) { min -= 1; max += 1 }
+    return [min, max] as [number, number]
+  }
+  const voltageRange = rangeFor('V'), currentRange = rangeFor('A')
+  const hasVoltage = shown.some((trace) => trace.unit === 'V'), hasCurrent = shown.some((trace) => trace.unit === 'A')
   const axis = shown[0]?.axis ?? traces[0]?.axis
   const minTime = axis?.[0] ?? 0, maxTime = axis?.[axis.length - 1] ?? 1
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
+  const [cursorIndex, setCursorIndex] = useState<number | null>(null)
+  useEffect(() => setCursorIndex(null), [traces])
   const pathFor = (trace: Trace) => {
     const stride = Math.max(1, Math.ceil(trace.values.length / 900))
+    const [minValue, maxValue] = trace.unit === 'V' ? voltageRange : currentRange
+    const range = maxValue - minValue
     const points: string[] = []
     for (let index = 0; index < trace.values.length; index += stride) {
       const x = left + ((trace.axis[index] - minTime) / (maxTime - minTime || 1)) * (right - left)
@@ -72,21 +75,31 @@ function WaveformPlot({ traces, stale }: { traces: Trace[]; stale: boolean }) {
     }
     return points.join(' ')
   }
-  const toggle = (id: string) => setVisible((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id])
+  const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
+    if (!axis?.length) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left)))
+    setCursorIndex(Math.round(fraction * (axis.length - 1)))
+  }
+  const cursorTime = cursorIndex === null || !axis ? null : axis[cursorIndex]
   return <div className="waveform-view">
-    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'Transient results'}</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><div className="plot-unit-tabs"><button className={unit === 'V' ? 'selected' : ''} onClick={() => setUnit('V')}>Voltage · {voltages.length}</button><button className={unit === 'A' ? 'selected' : ''} onClick={() => setUnit('A')}>Current · {currents.length}</button></div></div>
-    <svg className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Transient ${unit === 'V' ? 'voltage' : 'current'} waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds`}>
-      {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const value = maxValue - (line / 3) * range; return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/><text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} {unit}</text></g> })}
+    <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'Transient results'}</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><span>{cursorTime === null ? 'Click plot for cursor values' : `t = ${cursorTime.toPrecision(5)} s`}</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <svg className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds`} onClick={handleCursor}>
+      {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const v = voltageRange[1] - (line / 3) * (voltageRange[1] - voltageRange[0]); const a = currentRange[1] - (line / 3) * (currentRange[1] - currentRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{v.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{a.toPrecision(3)} A</text>}</g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
-      {shown.map((trace) => <polyline key={trace.id} points={pathFor(trace)} fill="none" stroke={colors[series.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
+      {shown.map((trace) => <polyline key={trace.id} points={pathFor(trace)} fill="none" stroke={colors[traces.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
+      {cursorIndex !== null && <line x1={left + (cursorIndex / Math.max(1, (axis?.length ?? 1) - 1)) * (right - left)} x2={left + (cursorIndex / Math.max(1, (axis?.length ?? 1) - 1)) * (right - left)} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
     </svg>
-    <div className="trace-toggles" aria-label={`Visible ${unit === 'V' ? 'voltage' : 'current'} traces`}>{series.map((trace, index) => <button key={trace.id} className={visible.includes(trace.id) ? 'selected' : ''} onClick={() => toggle(trace.id)}><span style={{ background: colors[index % colors.length] }}/>{trace.label}</button>)}</div>
+    <div className="trace-toggles" aria-label="Available waveform traces">{traces.filter((trace) => selectedIds.includes(trace.id) || /^(?:v\(|i\()/i.test(trace.id)).map((trace, index) => <button key={trace.id} className={selectedIds.includes(trace.id) ? 'selected' : ''} onClick={() => onToggle(trace.id)}><span style={{ background: colors[index % colors.length] }}/>{trace.label}</button>)}</div>
+    {cursorIndex !== null && <div className="cursor-readout">{shown.map((trace) => <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</div>}
+    {shown.some((trace) => trace.unit === 'A') && <div className="current-sign-note">Positive component current is from pin 1 to pin 2.</div>}
+    {shown.length === 0 && <div className="stale-note">Choose a trace above or use Probe in the schematic.</div>}
     {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh the plot.</div>}
   </div>
 }
 
-function Schematic({ project, selection, setSelection, setProject, tool, setTool, setNotice, beginEdit, endEdit }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setProject: (fn: (current: Project) => Project) => void; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void }) {
+function Schematic({ project, selection, setSelection, setProject, tool, setTool, setNotice, beginEdit, endEdit, onProbe }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setProject: (fn: (current: Project) => Project) => void; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void }) {
   const svg = useRef<SVGSVGElement>(null)
   const drag = useRef<{ kind: 'part' | 'wire' | 'label'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][] } | null>(null)
   const suppressCanvasClick = useRef(false)
@@ -110,6 +123,7 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     return wire ? { ...wire.point, distance: wire.distance } : null
   }
   const canvasClick = (event: MouseEvent<SVGSVGElement>) => {
+    if (tool === 'probe') { setNotice('Click a wire to probe its voltage, or a two-terminal component to probe its current.'); return }
     if (tool === 'label') {
       const point = pointFromEvent(event)
       const target = resolveNode(point)
@@ -131,6 +145,11 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
     setProject((current) => ({ ...current, wires: [...current.wires, { id: `w-${crypto.randomUUID()}`, points: compact }] }))
     setWireStart(null)
     setNotice('Wire added. Connectivity is derived from the pin and wire geometry.')
+  }
+  const probeWire = (wireId: string) => {
+    const node = analyzeConnectivity(project).wireNets.get(wireId)
+    if (node) onProbe({ kind: 'node', name: node })
+    else setNotice('This wire is not connected to a net yet.')
   }
   const beginDrag = (event: PointerEvent<SVGGElement>, kind: 'part' | 'wire' | 'label', id: string) => {
     if (tool !== 'select') return
@@ -182,17 +201,17 @@ function Schematic({ project, selection, setSelection, setProject, tool, setTool
   const viewBox = `${(760 - viewWidth) / 2} ${(600 - viewHeight) / 2} ${viewWidth} ${viewHeight}`
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
-      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.max(.6, p.view.zoom - .1) } }))}><Minus size={15}/></IconButton><span className="zoom-label">{Math.round(project.view.zoom * 100)}%</span><IconButton title="Zoom in" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.min(1.5, p.view.zoom + .1) } }))}><Plus size={15}/></IconButton></div>
-      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : 'Ready'} <span className="status-separator">·</span> Grid 10 px</div>
+      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.max(.6, p.view.zoom - .1) } }))}><Minus size={15}/></IconButton><span className="zoom-label">{Math.round(project.view.zoom * 100)}%</span><IconButton title="Zoom in" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.min(1.5, p.view.zoom + .1) } }))}><Plus size={15}/></IconButton></div>
+      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : 'Ready'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
     <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} viewBox={viewBox} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect width="100%" height="100%" fill="url(#large-grid)"/>
-      {project.wires.map((wire) => <g key={wire.id} className={`wire-line${selection?.kind === 'wire' && selection.id === wire.id ? ' selected' : ''}`} onPointerDown={(event) => beginDrag(event, 'wire', wire.id)} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'wire', id: wire.id }) } }}><polyline points={wire.points.map(([x,y]) => `${x},${y}`).join(' ')} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/><polyline points={wire.points.map(([x,y]) => `${x},${y}`).join(' ')} fill="none" stroke={selection?.kind === 'wire' && selection.id === wire.id ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/></g>)}
+      {project.wires.map((wire) => <g key={wire.id} className={`wire-line${selection?.kind === 'wire' && selection.id === wire.id ? ' selected' : ''}`} onPointerDown={(event) => { if (tool === 'probe') { event.stopPropagation(); probeWire(wire.id) } else beginDrag(event, 'wire', wire.id) }} onClick={(event) => { if (tool === 'probe') event.stopPropagation(); else if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'wire', id: wire.id }) } }}><polyline points={wire.points.map(([x,y]) => `${x},${y}`).join(' ')} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/><polyline points={wire.points.map(([x,y]) => `${x},${y}`).join(' ')} fill="none" stroke={selection?.kind === 'wire' && selection.id === wire.id ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/></g>)}
       {project.netLabels.filter((label) => label.visible !== false).map((label) => <g key={label.id} className={`canvas-label${selection?.kind === 'label' && selection.id === label.id ? ' selected' : ''}`} onPointerDown={(event) => beginDrag(event, 'label', label.id)} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'label', id: label.id }) } }}><rect x={label.x - 3} y={label.y - 22} width={Math.max(34, label.name.length * 7 + 14)} height="26" fill="transparent"/><line x1={label.x} y1={label.y} x2={label.x + 7} y2={label.y - 8} stroke="#9cc4a8" strokeWidth="1"/><text x={label.x + 9} y={label.y - 9}>{label.name}</text></g>)}
       {project.junctions.map((junction, index) => <circle key={`junction-${index}`} cx={junction.x} cy={junction.y} r="4" fill="#a9d8b7"/>)}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
-      {project.parts.map((part) => <CircuitPart key={part.id} part={part} selected={selection?.kind === 'part' && part.id === selection.id} onSelect={(id) => setSelection({ kind: 'part', id })} onPointerDown={(event, id) => beginDrag(event, 'part', id)} tool={tool}/>) }
+      {project.parts.map((part) => <CircuitPart key={part.id} part={part} selected={selection?.kind === 'part' && part.id === selection.id} onSelect={(id) => setSelection({ kind: 'part', id })} onPointerDown={(event, id) => beginDrag(event, 'part', id)} tool={tool} onProbe={(id) => onProbe({ kind: 'part', id })}/>) }
       <g className="canvas-label"><text x="138" y="238">INPUT</text><text x="567" y="265">OUTPUT</text></g>
     </svg>
     {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}
@@ -214,6 +233,7 @@ export default function App() {
   const [analysisTab, setAnalysisTab] = useState<'waveforms' | 'netlist'>('waveforms')
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
+  const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>([])
   const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
   const [componentQuery, setComponentQuery] = useState('')
   const [tourStep, setTourStep] = useState<number | null>(null)
@@ -358,6 +378,7 @@ export default function App() {
       if (key === 'v') setTool('select')
       else if (key === 'w') setTool('wire')
       else if (key === 'n') setTool('label')
+      else if (key === 'p') setTool('probe')
       else if (key === 'r' && selected) rotateSelected()
       else if ((key === 'delete' || key === 'backspace') && selection) { event.preventDefault(); deleteSelection() }
       else if (key === 'escape') setSelection(null)
@@ -370,6 +391,28 @@ export default function App() {
     try { await navigator.clipboard.writeText(netlist); setNotice('Generated netlist copied') }
     catch { setNotice('Netlist opened below. Select and copy it.') }
     setNetlistOpen(true)
+  }
+  const addProbe = (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => {
+    const rawName = target.kind === 'node'
+      ? `v(${target.name})`
+      : (() => { const part = projectRef.current.parts.find((item) => item.id === target.id); return part ? `i(@${part.ref}[i])` : '' })()
+    const traceId = rawName.toLowerCase()
+    if (!simulationResult) { setNotice('Run the circuit first, then add voltage and current probes.'); return }
+    const trace = simulationResult.traces.find((item) => item.id === traceId)
+    if (!trace) { setNotice(`No ${target.kind === 'node' ? 'voltage' : 'current'} vector is available for ${target.kind === 'node' ? target.name : projectRef.current.parts.find((item) => item.id === target.id)?.ref ?? 'that component'}. Run again to refresh results.`); return }
+    setSelectedTraceIds((current) => current.includes(trace.id) ? current : [...current, trace.id])
+    setAnalysisTab('waveforms')
+    setNotice(target.kind === 'part' ? `Added ${trace.label} to the waveform plot. Positive current flows from pin 1 to pin 2.` : `Added ${trace.label} to the waveform plot.`)
+  }
+  const exportWaveformCsv = () => {
+    if (!simulationResult) return
+    const traces = simulationResult.traces.filter((trace) => selectedTraceIds.includes(trace.id))
+    let csv: string
+    try { csv = serializeWaveformCsv(traces) }
+    catch (error) { setNotice(error instanceof Error ? error.message : 'Could not export waveform data.'); return }
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a'); link.href = url; link.download = `${projectRef.current.name.replace(/[^A-Za-z0-9_-]+/g, '-')}-waveforms.csv`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    setNotice(`Exported ${traces.length} waveform trace${traces.length === 1 ? '' : 's'} to CSV.`)
   }
   const startSimulation = async () => {
     if (engineAssetAvailable === false) {
@@ -397,6 +440,7 @@ export default function App() {
         if (response.message) setNotice(response.message)
       } else if (response.type === 'result') {
         setSimulationResult(response.result)
+        setSelectedTraceIds(response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.id)).slice(0, 2).map((trace) => trace.id))
         setRunState('idle')
         setNotice(`Simulation complete · ${response.result.traces.length} waveform vectors`)
         setAnalysisTab('waveforms')
@@ -484,11 +528,11 @@ export default function App() {
 
       <main className="editor-column">
         <div className="sheet-tabs"><button className="sheet-tab active"><span className="sheet-dot"/> Main circuit <MoreHorizontal size={15}/></button><button className="add-sheet" onClick={() => setNotice('Hierarchical sheets are planned for a later milestone.')}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet settings"><SlidersHorizontal size={15}/></button></div>
-        <Schematic project={project} selection={selection} setSelection={setSelection} setProject={setProject} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit}/>
+        <Schematic project={project} selection={selection} setSelection={setSelection} setProject={setProject} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe}/>
         <section className="analysis-panel">
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span><button className="subtle-icon" title="Panel options"><MoreHorizontal size={17}/></button></div></div>
           <div className="analysis-content">
-            {analysisTab === 'waveforms' ? simulationResult ? <WaveformPlot traces={simulationResult.traces} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? 'Running transient analysis' : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your waveforms will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the pinned ngspice WebAssembly engine.' : 'Run a simulation to inspect calculated voltage waveforms. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
+            {analysisTab === 'waveforms' ? simulationResult ? <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={(id) => setSelectedTraceIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? 'Running transient analysis' : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your waveforms will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the pinned ngspice WebAssembly engine.' : 'Run a simulation to inspect calculated voltage waveforms. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
           </div>
           <div className="analysis-footer"><span><Gauge size={13}/> {project.simulation.stopTime} total time</span><span><span className="shortcut">⌘</span> + Enter to run</span><span>Results are generated locally</span></div>
         </section>
