@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
+import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
   Activity, ArrowDown, ArrowUp, Bookmark, Cable, Check, ChevronDown, CircleHelp,
   Command, Copy, FilePlus2, FolderOpen, Gauge, GitBranch, Grid2X2,
@@ -12,7 +12,8 @@ import { componentPins, moveWireAnchors, projectPinLocations, wireNetAt } from '
 import { createStarterProject, kindNames, kindPrefix, validateProject, type Part, type PartKind, type Project } from '../domain/project'
 import { createNetlist, nextRef } from '../engine/netlist'
 
-type ToolMode = 'select' | 'wire'
+type ToolMode = 'select' | 'wire' | 'label'
+type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
 const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: string }[] = [
   { kind: 'resistor', label: 'Resistor', Icon: Minus, subtitle: 'R' },
   { kind: 'capacitor', label: 'Capacitor', Icon: Activity, subtitle: 'C' },
@@ -43,10 +44,12 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool }: { part: 
   </g>
 }
 
-function Schematic({ project, selectedId, setSelectedId, setProject, tool, setTool, setNotice }: { project: Project; selectedId: string | null; setSelectedId: (id: string | null) => void; setProject: (fn: (current: Project) => Project) => void; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void }) {
+function Schematic({ project, selection, setSelection, setProject, tool, setTool, setNotice, beginEdit, endEdit }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setProject: (fn: (current: Project) => Project) => void; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void }) {
   const svg = useRef<SVGSVGElement>(null)
-  const drag = useRef<{ id: string; pointer: number; x: number; y: number; originX: number; originY: number } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'label'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][] } | null>(null)
+  const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
+  const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
   const pointFromEvent = (event: PointerEvent<SVGSVGElement | SVGGElement> | MouseEvent<SVGSVGElement>) => {
     const rect = svg.current!.getBoundingClientRect()
     const view = svg.current!.viewBox.baseVal
@@ -65,7 +68,15 @@ function Schematic({ project, selectedId, setSelectedId, setProject, tool, setTo
     return wire ? { ...wire.point, distance: wire.distance } : null
   }
   const canvasClick = (event: MouseEvent<SVGSVGElement>) => {
-    if (tool !== 'wire') { setSelectedId(null); return }
+    if (tool === 'label') {
+      const point = pointFromEvent(event)
+      const target = resolveNode(point)
+      if (!target) { setNotice('Place a net label on a component pin or wire.'); return }
+      const existing = project.netLabels.find((label) => Math.hypot(label.x - target.x, label.y - target.y) < 1)
+      setLabelDraft({ x: target.x, y: target.y, id: existing?.id, name: existing?.name ?? 'net' })
+      return
+    }
+    if (tool !== 'wire') { setSelection(null); return }
     const point = pointFromEvent(event)
     const nearest = resolveNode(point)
     if (!nearest) { setNotice('Start and end wires on a component pin or an existing wire.'); return }
@@ -79,14 +90,17 @@ function Schematic({ project, selectedId, setSelectedId, setProject, tool, setTo
     setWireStart(null)
     setNotice('Wire added. Connectivity is derived from the pin and wire geometry.')
   }
-  const beginDrag = (event: PointerEvent<SVGGElement>, id: string) => {
+  const beginDrag = (event: PointerEvent<SVGGElement>, kind: 'part' | 'wire' | 'label', id: string) => {
     if (tool !== 'select') return
-    const part = project.parts.find((item) => item.id === id)
-    if (!part) return
+    const part = kind === 'part' ? project.parts.find((item) => item.id === id) : undefined
+    const wire = kind === 'wire' ? project.wires.find((item) => item.id === id) : undefined
+    const label = kind === 'label' ? project.netLabels.find((item) => item.id === id) : undefined
+    if (!part && !wire && !label) return
     event.stopPropagation()
-    setSelectedId(id)
+    setSelection({ kind, id })
+    beginEdit()
     const point = pointFromEvent(event)
-    drag.current = { id, pointer: event.pointerId, x: point.x, y: point.y, originX: part.x, originY: part.y }
+    drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, points: wire?.points.map(([x,y]) => [x,y]) }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const moveDrag = (event: PointerEvent<SVGSVGElement>) => {
@@ -94,12 +108,14 @@ function Schematic({ project, selectedId, setSelectedId, setProject, tool, setTo
     const point = pointFromEvent(event)
     const deltaX = Math.round((point.x - drag.current.x) / 10) * 10
     const deltaY = Math.round((point.y - drag.current.y) / 10) * 10
-    const { id, originX, originY } = drag.current
+    if (deltaX !== 0 || deltaY !== 0) suppressCanvasClick.current = true
+    const { id, kind, originX, originY, points } = drag.current
     setProject((current) => {
+      if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: points.map(([x, y]) => [x + deltaX, y + deltaY]) } : wire) }
+      if (kind === 'label') return { ...current, netLabels: current.netLabels.map((label) => label.id === id ? { ...label, x: originX + deltaX, y: originY + deltaY } : label) }
       const moving = current.parts.find((part) => part.id === id)
       if (!moving) return current
-      const nextX = originX + deltaX, nextY = originY + deltaY
-      const moved = { ...moving, x: nextX, y: nextY }
+      const moved = { ...moving, x: originX + deltaX, y: originY + deltaY }
       return {
         ...current,
         parts: current.parts.map((part) => part.id === id ? moved : part),
@@ -107,24 +123,37 @@ function Schematic({ project, selectedId, setSelectedId, setProject, tool, setTo
       }
     })
   }
-  const endDrag = () => { drag.current = null }
+  const endDrag = () => { if (drag.current) endEdit(); drag.current = null }
+  const saveLabel = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!labelDraft) return
+    const name = labelDraft.name.trim()
+    if (!/^(0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(name)) { setNotice('Use a SPICE net name: start with a letter or underscore.'); return }
+    setProject((current) => ({ ...current, netLabels: labelDraft.id
+      ? current.netLabels.map((label) => label.id === labelDraft.id ? { ...label, name } : label)
+      : [...current.netLabels, { id: `label-${crypto.randomUUID()}`, name, x: labelDraft.x, y: labelDraft.y, visible: true }] }))
+    setSelection(labelDraft.id ? { kind: 'label', id: labelDraft.id } : null)
+    setNotice(labelDraft.id ? `Net label renamed to ${name}.` : `Net label ${name} added.`)
+    setLabelDraft(null)
+  }
   const viewWidth = 760 / project.view.zoom, viewHeight = 600 / project.view.zoom
   const viewBox = `${(760 - viewWidth) / 2} ${(600 - viewHeight) / 2} ${viewWidth} ${viewHeight}`
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
-      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.max(.6, p.view.zoom - .1) } }))}><Minus size={15}/></IconButton><span className="zoom-label">{Math.round(project.view.zoom * 100)}%</span><IconButton title="Zoom in" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.min(1.5, p.view.zoom + .1) } }))}><Plus size={15}/></IconButton></div>
+      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.max(.6, p.view.zoom - .1) } }))}><Minus size={15}/></IconButton><span className="zoom-label">{Math.round(project.view.zoom * 100)}%</span><IconButton title="Zoom in" onClick={() => setProject((p) => ({ ...p, view: { ...p.view, zoom: Math.min(1.5, p.view.zoom + .1) } }))}><Plus size={15}/></IconButton></div>
       <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : 'Ready'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
-    <svg ref={svg} className={`schematic${tool === 'wire' ? ' wire-mode' : ''}`} viewBox={viewBox} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (drag.current) { drag.current = null; return } canvasClick(event) }}>
+    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} viewBox={viewBox} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect width="100%" height="100%" fill="url(#large-grid)"/>
-      {project.wires.map((wire) => <g key={wire.id}><polyline points={wire.points.map(([x,y]) => `${x},${y}`).join(' ')} fill="none" stroke="#7f9b88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/></g>)}
-      {project.netLabels.filter((label) => label.visible !== false).map((label) => <g key={label.id} className="canvas-label"><line x1={label.x} y1={label.y} x2={label.x + 7} y2={label.y - 8} stroke="#9cc4a8" strokeWidth="1"/><text x={label.x + 9} y={label.y - 9}>{label.name}</text></g>)}
+      {project.wires.map((wire) => <g key={wire.id} className={`wire-line${selection?.kind === 'wire' && selection.id === wire.id ? ' selected' : ''}`} onPointerDown={(event) => beginDrag(event, 'wire', wire.id)} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'wire', id: wire.id }) } }}><polyline points={wire.points.map(([x,y]) => `${x},${y}`).join(' ')} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/><polyline points={wire.points.map(([x,y]) => `${x},${y}`).join(' ')} fill="none" stroke={selection?.kind === 'wire' && selection.id === wire.id ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/></g>)}
+      {project.netLabels.filter((label) => label.visible !== false).map((label) => <g key={label.id} className={`canvas-label${selection?.kind === 'label' && selection.id === label.id ? ' selected' : ''}`} onPointerDown={(event) => beginDrag(event, 'label', label.id)} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'label', id: label.id }) } }}><rect x={label.x - 3} y={label.y - 22} width={Math.max(34, label.name.length * 7 + 14)} height="26" fill="transparent"/><line x1={label.x} y1={label.y} x2={label.x + 7} y2={label.y - 8} stroke="#9cc4a8" strokeWidth="1"/><text x={label.x + 9} y={label.y - 9}>{label.name}</text></g>)}
       {project.junctions.map((junction, index) => <circle key={`junction-${index}`} cx={junction.x} cy={junction.y} r="4" fill="#a9d8b7"/>)}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
-      {project.parts.map((part) => <CircuitPart key={part.id} part={part} selected={part.id === selectedId} onSelect={setSelectedId} onPointerDown={beginDrag} tool={tool}/>) }
+      {project.parts.map((part) => <CircuitPart key={part.id} part={part} selected={selection?.kind === 'part' && part.id === selection.id} onSelect={(id) => setSelection({ kind: 'part', id })} onPointerDown={(event, id) => beginDrag(event, 'part', id)} tool={tool}/>) }
       <g className="canvas-label"><text x="138" y="238">INPUT</text><text x="567" y="265">OUTPUT</text></g>
     </svg>
+    {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}
     <div className="canvas-footer"><span><Grid2X2 size={13}/> Snap to grid</span><span><span className="shortcut">⌘</span> + scroll to zoom</span><span>{project.parts.length} components</span></div>
   </div>
 }
@@ -136,7 +165,7 @@ export default function App() {
       return saved ? validateProject(JSON.parse(saved)) : createStarterProject()
     } catch { return createStarterProject() }
   })
-  const [selectedId, setSelectedId] = useState<string | null>('p-r1')
+  const [selection, setSelection] = useState<Selection>({ kind: 'part', id: 'p-r1' })
   const [tool, setTool] = useState<ToolMode>('select')
   const [netlistOpen, setNetlistOpen] = useState(false)
   const [notice, setNotice] = useState('')
@@ -156,9 +185,33 @@ export default function App() {
   const setProject = (fn: (current: Project) => Project) => setProjectState((current) => {
     const next = fn(current)
     if (next === current) return current
+    const snapshot = { ...current, parts: current.parts.map((part) => ({ ...part })), wires: current.wires.map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x, y] as [number, number]) })), netLabels: current.netLabels.map((label) => ({ ...label })) }
+    if (!editGroup.current) history.current = { past: [...history.current.past, snapshot].slice(-100), future: [] }
     return { ...next, updatedAt: new Date().toISOString() }
   })
-  const selected = project.parts.find((part) => part.id === selectedId) ?? null
+  const history = useRef<{ past: Project[]; future: Project[] }>({ past: [], future: [] })
+  const editGroup = useRef(false)
+  const beginEdit = () => {
+    if (editGroup.current) return
+    editGroup.current = true
+    history.current = { past: [...history.current.past, structuredClone(projectRef.current)].slice(-100), future: [] }
+  }
+  const endEdit = () => { editGroup.current = false }
+  const selected = selection?.kind === 'part' ? project.parts.find((part) => part.id === selection.id) ?? null : null
+  const selectedWire = selection?.kind === 'wire' ? project.wires.find((wire) => wire.id === selection.id) ?? null : null
+  const selectedLabel = selection?.kind === 'label' ? project.netLabels.find((label) => label.id === selection.id) ?? null : null
+  const undo = () => {
+    const previous = history.current.past.at(-1)
+    if (!previous) return
+    history.current = { past: history.current.past.slice(0, -1), future: [project, ...history.current.future].slice(0, 100) }
+    setProjectState(previous)
+  }
+  const redo = () => {
+    const next = history.current.future[0]
+    if (!next) return
+    history.current = { past: [...history.current.past, project].slice(-100), future: history.current.future.slice(1) }
+    setProjectState(next)
+  }
 
   const saveProject = () => {
     const blob = new Blob([JSON.stringify(projectRef.current, null, 2)], { type: 'application/json' })
@@ -175,7 +228,8 @@ export default function App() {
     try {
       const parsed = validateProject(JSON.parse(await file.text()))
       setProjectState(parsed)
-      setSelectedId(null)
+      history.current = { past: [], future: [] }
+      setSelection(null)
       setNotice(`Opened ${parsed.name}`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not open this project') }
     event.target.value = ''
@@ -187,7 +241,7 @@ export default function App() {
     const placeY = 375 + (Math.floor(project.parts.length / 4) % 2) * 90
     const part: Part = { id, kind, ref: nextRef(project.parts, kind), value: defaults[kind], x: placeX, y: placeY, rotation: 0 }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
-    setSelectedId(id)
+    setSelection({ kind: 'part', id })
     setNotice(`${kindNames[kind]} added. Connect its pins before simulation.`)
   }
   const updateSelected = (patch: Partial<Part>) => {
@@ -208,14 +262,46 @@ export default function App() {
     if (!selected) return
     const clone = { ...selected, id: `p-${crypto.randomUUID()}`, ref: `${selected.ref}_copy`, x: selected.x + 80, y: selected.y + 60 }
     setProject((current) => ({ ...current, parts: [...current.parts, clone] }))
-    setSelectedId(clone.id)
+    setSelection({ kind: 'part', id: clone.id })
   }
   const deleteSelected = () => {
     if (!selected) return
     const pins = componentPins(selected)
     setProject((current) => ({ ...current, parts: current.parts.filter((part) => part.id !== selected.id), wires: current.wires.filter((wire) => !wire.points.some(([x, y]) => pins.some((pin) => Math.abs(pin.x - x) < .5 && Math.abs(pin.y - y) < .5))) }))
-    setSelectedId(null)
+    setSelection(null)
   }
+  const deleteSelection = () => {
+    if (!selection) return
+    if (selection.kind === 'part') deleteSelected()
+    else if (selection.kind === 'wire') setProject((current) => ({ ...current, wires: current.wires.filter((wire) => wire.id !== selection.id) }))
+    else setProject((current) => ({ ...current, netLabels: current.netLabels.filter((label) => label.id !== selection.id) }))
+    setSelection(null)
+  }
+  const renameSelectedLabel = (name: string) => {
+    if (!selectedLabel) return
+    const value = name.trim()
+    if (!/^(0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(value)) { setNotice('Use a SPICE net name: start with a letter or underscore.'); return }
+    setProject((current) => ({ ...current, netLabels: current.netLabels.map((label) => label.id === selectedLabel.id ? { ...label, name: value } : label) }))
+  }
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target
+      if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
+      const key = event.key.toLowerCase()
+      if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
+      if ((event.ctrlKey || event.metaKey) && key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return }
+      if ((event.ctrlKey || event.metaKey) && key === 'y') { event.preventDefault(); redo(); return }
+      if (event.ctrlKey || event.metaKey || event.altKey) return
+      if (key === 'v') setTool('select')
+      else if (key === 'w') setTool('wire')
+      else if (key === 'n') setTool('label')
+      else if (key === 'r' && selected) rotateSelected()
+      else if ((key === 'delete' || key === 'backspace') && selection) { event.preventDefault(); deleteSelection() }
+      else if (key === 'escape') setSelection(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [tool, selection, selected, project])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
     try { await navigator.clipboard.writeText(netlist); setNotice('Generated netlist copied') }
@@ -230,7 +316,8 @@ export default function App() {
   const resetProject = () => {
     if (!window.confirm('Start a new circuit? Unsaved changes in this tab will be lost.')) return
     setProjectState(createStarterProject())
-    setSelectedId(null)
+    history.current = { past: [], future: [] }
+    setSelection(null)
   }
 
   return <div className="app-shell">
@@ -246,9 +333,9 @@ export default function App() {
     <div className="main-toolbar">
       <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={saveProject}><Save size={15}/> Save</button><input ref={fileInput} type="file" accept=".json,.elsim.json,application/json" hidden onChange={loadProject}/></div>
       <span className="toolbar-separator"/>
-      <div className="menu-group"><IconButton title="Undo · coming soon" disabled><Undo2 size={15}/></IconButton><IconButton title="Redo · coming soon" disabled><Redo2 size={15}/></IconButton></div>
+      <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
-      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={15}/></IconButton><IconButton title="Wire tool" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={15}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton></div>
+      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={15}/></IconButton><IconButton title="Wire tool" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <button className="analysis-select" title="Transient analysis is the current preview mode" disabled><Activity size={15}/> Transient <ChevronDown size={13}/></button>
       <button className="run-button" onClick={startSimulation}><Play size={15} fill="currentColor"/> Run simulation</button>
@@ -268,7 +355,7 @@ export default function App() {
 
       <main className="editor-column">
         <div className="sheet-tabs"><button className="sheet-tab active"><span className="sheet-dot"/> Main circuit <MoreHorizontal size={15}/></button><button className="add-sheet" onClick={() => setNotice('Hierarchical sheets are planned for a later milestone.')}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet settings"><SlidersHorizontal size={15}/></button></div>
-        <Schematic project={project} selectedId={selectedId} setSelectedId={setSelectedId} setProject={setProject} tool={tool} setTool={setTool} setNotice={setNotice}/>
+        <Schematic project={project} selection={selection} setSelection={setSelection} setProject={setProject} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit}/>
         <section className="analysis-panel">
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'blocked' ? 'needs-engine' : ''}`}><span className="engine-dot"/> ngspice WASM · not connected</span><button className="subtle-icon" title="Panel options"><MoreHorizontal size={17}/></button></div></div>
           <div className="analysis-content">
@@ -286,6 +373,14 @@ export default function App() {
           <div className="form-section"><div className="form-section-title">CONNECTIONS</div><div className="pin-row"><span className="pin-index">1</span><span>Positive / pin 1</span><strong>{pinNet(connectivity, selected, 0)}</strong></div>{selected.kind !== 'ground' && <div className="pin-row"><span className="pin-index">2</span><span>Negative / pin 2</span><strong>{pinNet(connectivity, selected, 1)}</strong></div>}<div className="field-hint">Node names are derived from wires, pin positions, ground symbols, and labels.</div></div>
           <div className="form-section"><div className="form-section-title">APPEARANCE</div><button className="wide-select" onClick={rotateSelected}>Orientation <span>{selected.rotation}° <RotateCw size={13}/></span></button><div className="field-hint">Symbol appearance stays separate from electrical behavior.</div></div>
           <div className="inspector-bottom"><button onClick={duplicateSelected}><Copy size={14}/> Duplicate</button><button className="delete-action" onClick={deleteSelected}><Trash2 size={14}/> Delete part</button></div>
+        </> : selectedWire ? <>
+          <div className="selected-part-card"><span className="selected-part-icon icon-wire"><Cable size={18}/></span><div><strong>Wire segment</strong><span>{selectedWire.points.length} routing points · electrical connection</span></div></div>
+          <div className="form-section"><div className="form-section-title">CONNECTION</div><div className="field-hint">Wire geometry defines connectivity. Select a different tool to keep drawing, or drag this wire to reroute its displayed path.</div></div>
+          <div className="inspector-bottom"><button className="delete-action" onClick={deleteSelection}><Trash2 size={14}/> Delete wire</button></div>
+        </> : selectedLabel ? <>
+          <div className="selected-part-card"><span className="selected-part-icon icon-label"><Bookmark size={17}/></span><div><strong>Net label</strong><span>Shared SPICE node name</span></div></div>
+          <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Net name<input value={selectedLabel.name} onChange={(event) => renameSelectedLabel(event.target.value)}/></label><div className="field-hint">Labels with the same name connect electrically across this sheet.</div></div>
+          <div className="inspector-bottom"><button className="delete-action" onClick={deleteSelection}><Trash2 size={14}/> Delete label</button></div>
         </> : <>
           <div className="project-summary"><div className="summary-row"><span>Project</span><strong>{project.name}</strong></div><div className="summary-row"><span>Format</span><strong>ELSim JSON · v2</strong></div><div className="summary-row"><span>Sheets</span><strong>1</strong></div><div className="summary-row"><span>Components</span><strong>{project.parts.length}</strong></div></div>
           <div className="form-section"><div className="form-section-title">SIMULATION</div><label className="field-label">Analysis type<select value="tran"><option value="tran">Transient</option><option disabled>DC operating point · soon</option><option disabled>AC analysis · soon</option></select></label><label className="field-label">Stop time<input value={project.simulation.stopTime} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, stopTime: event.target.value } }))}/></label><label className="field-label">Maximum step<input value={project.simulation.maxStep} onChange={(event) => setProject((p) => ({ ...p, simulation: { ...p.simulation, maxStep: event.target.value } }))}/></label></div>
