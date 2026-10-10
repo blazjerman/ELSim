@@ -18,6 +18,8 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   project.parts[0].pulse = { initial: '0', delay: '2m', rise: '4u', fall: '5u', width: '10m', period: '20m' }
   project.parts[0].sourceMode = 'pwl'
   project.parts[0].pwl = [{ time: '0', voltage: '0' }, { time: '5m', voltage: '3.3' }, { time: '10m', voltage: '0' }]
+  project.parts.push({ id: 'archive-i-pwl', kind: 'currentSource', ref: 'I1', value: '1m', sourceMode: 'pwl', currentPwl: [{ time: '0', current: '0' }, { time: '5m', current: '1m' }], x: 800, y: 500, rotation: 0 })
+  project.sheets[0].parts = project.parts
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'keep-me' } } }
   project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n' }
   project.importedChildSchematicSources = [{ format: 'ltspice-asc', filename: 'child.asc', originalText: 'Version 4\nIOPIN 0 0 In\nFLAG 0 0 INPUT\n' }]

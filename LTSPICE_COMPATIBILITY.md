@@ -43,7 +43,7 @@ This matrix describes the importer as implemented today. “Supported” means E
 | --- | --- | --- |
 | `R`, `C`, `L` | Resistor, capacitor, inductor | Scalar values only |
 | `V` | Voltage source | Scalar, seven-argument PULSE, and scalar-pair PWL values are supported; other waveform expressions remain unverified and prompt a warning |
-| `I` | Independent current source | Scalar DC and seven-argument PULSE; PWL current waveforms remain unsupported |
+| `I` | Independent current source | Scalar DC, seven-argument PULSE, and scalar-pair PWL waveforms |
 | `S` | Switch | ELSim on/off educational switch semantics, not the full LTspice switch dialect |
 | `E`, `G` | VCVS, VCCS | Linear four-terminal form |
 | `D` | Diode or LED | Device model must be supplied in a compatible imported library |

@@ -247,6 +247,22 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           continue
         }
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period})`
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'pwl') {
+        const points = part.currentPwl ?? []
+        const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), current: spiceNumber(point.current, 'currentSource') }))
+        let previousTime = -Infinity
+        let valid = points.length >= 2 && points.length <= 32
+        for (const point of normalized) {
+          if (point.time === null || point.timeMagnitude === null || point.timeMagnitude < 0 || point.timeMagnitude <= previousTime || point.current === null) { valid = false; break }
+          previousTime = point.timeMagnitude
+        }
+        if (!valid) {
+          const message = `${part.ref} PWL current source needs 2–32 points with valid currents and strictly increasing, nonnegative times.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `PWL(${normalized.map((point) => `${point.time} ${point.current}`).join(' ')})`
       }
       append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `AC ${value} 0` : project.simulation.analysis === 'tran' ? transientValue : value}`, part.id, 'component')
     }

@@ -163,6 +163,18 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   if (part.kind === 'currentSource') {
     const value = scalar(part.value, 'a')
     if (!value) return null
+    if (project.simulation.analysis === 'tran' && part.sourceMode === 'pwl') {
+      const points = part.currentPwl ?? []
+      const mapped = points.map((point) => ({ time: scalar(point.time, 's'), timeMagnitude: scalarMagnitude(point.time, 's'), current: scalar(point.current, 'a') }))
+      let previousTime = -Infinity
+      let valid = points.length >= 2 && points.length <= 32
+      for (const point of mapped) {
+        if (point.time === null || point.timeMagnitude === null || point.timeMagnitude < 0 || point.timeMagnitude <= previousTime || point.current === null) { valid = false; break }
+        previousTime = point.timeMagnitude
+      }
+      if (!valid) return null
+      return { value: `PWL(${mapped.map((point) => `${point.time} ${point.current}`).join(' ')})` }
+    }
     if (part.sourceMode === 'pulse') {
       const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
       const values = [scalar(pulse.initial, 'a'), scalar(pulse.delay, 's'), scalar(pulse.rise, 's'), scalar(pulse.fall, 's'), scalar(pulse.width, 's'), scalar(pulse.period, 's')]

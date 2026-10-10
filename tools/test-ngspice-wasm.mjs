@@ -241,6 +241,16 @@ assert.ok(Math.abs(Math.min(...currentPulseValues)) < 1e-10, 'current-source-pul
 assert.ok(Math.abs(Math.max(...currentPulseVoltage) - 1) < 1e-5, 'current-source-pulse: a 1 mA pulse into 1 kΩ should produce a 1 V pulse')
 process.stdout.write('PASS current-source-pulse-transient\n')
 
+const currentPwlPath = path.join(root, 'engine/wasm/fixtures/current-source-pwl.cir')
+const currentPwlResult = await runInWorker(currentPwlPath, true)
+assert.equal(currentPwlResult.status, 0, `current-source-pwl: ngspice exited with a nonzero status: ${currentPwlResult.stderr}`)
+const currentPwlValues = realRawVector(currentPwlResult.raw, 'i(@i1[current])')
+const currentPwlVoltage = realRawVector(currentPwlResult.raw, 'v(out)')
+assert.ok(Math.abs(Math.max(...currentPwlVoltage) - 1) < 1e-5, 'current-source-pwl: 1 mA into 1 kΩ should produce a 1 V peak')
+assert.ok(Math.abs(Math.min(...currentPwlVoltage) + 1) < 1e-5, 'current-source-pwl: negative 1 mA should produce negative 1 V')
+assert.ok(Math.min(...currentPwlValues) < -0.99e-3 && Math.max(...currentPwlValues) > 0.99e-3, 'current-source-pwl: source current should include both polarities')
+process.stdout.write('PASS current-source-pwl-transient\n')
+
 const measurementPath = path.join(root, 'engine/wasm/fixtures', 'measurement-transient.cir')
 const measurementResult = await runInWorker(measurementPath)
 assert.equal(measurementResult.status, 0, `measurement-transient: ngspice exited with a nonzero status: ${measurementResult.stderr}`)

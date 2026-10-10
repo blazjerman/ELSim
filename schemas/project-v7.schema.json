@@ -227,7 +227,7 @@
         },
         "sourceMode": {
           "enum": ["pulse", "dc", "pwl"],
-          "description": "For transient analysis, voltage sources support pulse, DC, or PWL; independent current sources support pulse or DC. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
+          "description": "For transient analysis, voltage and independent current sources support pulse, DC, or PWL. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
         },
         "pulse": {
           "type": "object",
@@ -257,6 +257,21 @@
             }
           },
           "description": "Piecewise-linear voltage source points in strictly increasing time order."
+        },
+        "currentPwl": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["time", "current"],
+            "properties": {
+              "time": { "type": "string", "maxLength": 64 },
+              "current": { "type": "string", "maxLength": 64 }
+            }
+          },
+          "description": "Piecewise-linear independent current source points in strictly increasing time order."
         },
         "extensions": {
           "type": "object",

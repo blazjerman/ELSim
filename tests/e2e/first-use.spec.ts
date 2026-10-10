@@ -341,6 +341,11 @@ test('current-source inspector edits a repeating PULSE waveform', async ({ page 
   await page.getByLabel('Initial current (A)').fill('-1mA')
   await page.getByRole('button', { name: 'Netlist', exact: true }).click()
   await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PULSE\(-1m 2m 0 1u 1u 50m 100m\)/)
+  await waveform.selectOption('pwl')
+  await expect(page.getByText('Current (A)', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('PWL point 2 current')).toHaveValue('5m')
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\)/)
 })
 
 test('controlled-source example opens and solves with input and output probes', async ({ page }) => {

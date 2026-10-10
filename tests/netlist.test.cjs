@@ -80,6 +80,21 @@ test('independent current source pulse mode emits validated PULSE current levels
   assert.throws(() => validateProject(project), /DC voltage\/current sources or R\/C\/L parts/)
 })
 
+test('independent current source PWL mode emits validated transient current points', () => {
+  const project = createStarterProject()
+  const current = { id: 'i-pwl', kind: 'currentSource', ref: 'I1', value: '5m', sourceMode: 'pwl', currentPwl: [{ time: '0', current: '0' }, { time: '2m', current: '5m' }, { time: '4m', current: '-1mA' }], x: 700, y: 500, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  let artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^I1 .* .* PWL\(0 0 2m 5m 4m -1m\)$/m)
+  current.currentPwl[1].time = '0'
+  artifact = createNetlistArtifact(project)
+  assert.match(artifact.diagnostics[0].message, /PWL current source needs 2–32 points/)
+  project.simulation.parameterSweeps = [{ component: 'I1', start: '1mA', stop: '2mA', points: 2 }]
+  assert.throws(() => validateProject(project), /DC voltage\/current sources or R\/C\/L parts/)
+})
+
 test('current-source beginner example predicts the expected one-volt load result', () => {
   const project = createCurrentSourceExampleProject()
   const artifact = createNetlistArtifact(project)
