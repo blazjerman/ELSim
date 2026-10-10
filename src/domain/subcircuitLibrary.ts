@@ -131,7 +131,12 @@ export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[
 }
 
 export function needsLtspiceFullDeckTranslation(source: string): boolean {
-  return source.replace(/^\uFEFF/, '').split(/\r?\n/).some((physicalLine) => {
+  const logical: string[] = []
+  for (const physicalLine of source.replace(/^\uFEFF/, '').split(/\r?\n/)) {
+    if (/^\s*\+/.test(physicalLine) && logical.length) logical[logical.length - 1] += ` ${physicalLine.replace(/^\s*\+\s?/, '').trim()}`
+    else logical.push(physicalLine)
+  }
+  return logical.some((physicalLine) => {
     const line = withoutInlineComment(physicalLine)
     return !!line && !line.startsWith('*') && /\b(?:uplim|dnlim|uplim_tanh|dnlim_tanh)\s*\(/i.test(line)
   })

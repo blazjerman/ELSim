@@ -64,6 +64,8 @@ test('reports LTspice compatibility-mode limit functions and VSWITCH without rew
   assert.equal(needsLtspiceFullDeckTranslation(source), true)
   assert.equal(needsLtspiceFullDeckTranslation('* B1 out 0 V=dnlim(V(in),2,0.1)\nR1 1 0 1k'), false)
   assert.equal(needsLtspiceFullDeckTranslation('B1 out 0 V=dnlim(V(in),2,0.1)'), true)
+  assert.equal(needsLtspiceFullDeckTranslation('B1 out 0 V=V(in)\n+ dnlim(V(ctrl),2,0.1)'), true)
+  assert.equal(needsLtspiceFullDeckTranslation('B1 out 0 V=V(in)\n+ $ dnlim(V(ctrl),2,0.1)'), false)
 })
 
 test('pinpoints LTspice behavioral forms and options, including continuation records', () => {
