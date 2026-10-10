@@ -305,6 +305,7 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
 })
 
 test('record large-project editor render and selection input-to-frame timings', async ({ page, browserName }) => {
+  test.setTimeout(180_000)
   test.setTimeout(120_000)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
@@ -313,7 +314,7 @@ test('record large-project editor render and selection input-to-frame timings', 
     if (benchmarkProject) localStorage.setItem('elsim:project:v7', benchmarkProject)
   })
 
-  const sizes = [100, 500, 1_000]
+  const sizes = [100, 500, 1_000, 5_000]
   const results = []
   for (const count of sizes) {
     await page.evaluate((partCount) => {
@@ -426,7 +427,7 @@ test('record large-project editor render and selection input-to-frame timings', 
   expect(transport.transfer.sharedAxis).toBe(true)
   expect(transport.transfer.detachedAtSend).toBe(true)
   expect(transport.clone.finalSample).toBeCloseTo(transport.transfer.finalSample, 12)
-  console.log(JSON.stringify({ benchmark: 'editor-large-project-v3', browser: browserName, inputTiming: 'synthetic click dispatch to next animation frame; excludes Playwright locator/actionability overhead', results, transport }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'editor-large-project-v4', browser: browserName, inputTiming: 'synthetic click dispatch to next animation frame; excludes Playwright locator/actionability overhead', results, transport }, null, 2))
 })
 
 test('measure selection latency in a large routed-wire schematic', async ({ page, browserName }) => {

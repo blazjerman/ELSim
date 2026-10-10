@@ -167,6 +167,17 @@ SVG element counts remain unchanged because the complete schematic stays in the 
 The comparison shows much lower selection latency for this wire-heavy case. The max-of-seven value is noisy and the initial-render timing is not attributed to memoization. All wire paths remain in the SVG with their existing button role, keyboard selection, probing, and segment-drag behavior.
 
 
+### 5,000-part browser schematic (2026-10-11)
+
+The editor benchmark now also opens a 5,000-resistor schematic with 10,000 net labels and measures synthetic selection input through the next animation frame. This isolates UI update work from Playwright locator/actionability time. The full SVG remains keyboard accessible and contains 80,010 elements at this size.
+
+| Browser | Parts | Editor ready (ms) | Selection median (ms) | Selection max-of-5 (ms) | SVG elements |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Chromium | 5,000 | 3,498.35 | 531.7 | 557.3 | 80,010 |
+| Firefox | 5,000 | 4,001.17 | 308 | 336 | 80,010 |
+
+This establishes that the editor can load the large sheet in both tested browsers, but selection exceeds a 16 ms frame and remains a user-visible bottleneck. The next renderer work should lower selection latency while retaining keyboard access to every component; these single-run timings are a baseline, not a release budget. Browser heap metrics are omitted because the available readings did not vary reliably with project size.
+
 ### Browser waveform transport check
 
 The worker now shares one parsed axis across all traces and transfers unique axis/value buffers to the UI, avoiding per-trace axis copies and a structured-clone copy of result vectors. The UI validates shared typed vectors once per response. A Playwright `MessageChannel` check used six 100,000-sample traces (5.6 MB total including one shared axis); both clone and transfer preserved values and shared-axis identity, and transfer detached the sender buffers as expected.
