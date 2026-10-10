@@ -36,6 +36,13 @@ test('reads and renders polyline geometry used by imported LTspice symbols', () 
   assert.throws(() => parseLtspiceSymbol(`POLYLINE Normal ${Array(514).fill('0').join(' ')}\nPIN 20 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 1`, 'oversized-polyline.asy'), /2–256 coordinate pairs/)
 })
 
+test('preserves symbol TEXT as literal inert artwork with bounded styling', () => {
+  const symbol = parseLtspiceSymbol('TEXT -12 18 Right 3 !.include \"external.lib\"\nPIN 20 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 1', 'text.asy')
+  assert.deepEqual(symbol.primitives[0], { kind: 'text', x: -12, y: 18, alignment: 'Right', size: 3, text: '!.include "external.lib"' })
+  assert.throws(() => parseLtspiceSymbol('TEXT 0 0 Bottom 2 label\nPIN 20 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 1', 'bad-alignment.asy'), /alignment/)
+  assert.throws(() => parseLtspiceSymbol('TEXT 0 0 Left 65 label\nPIN 20 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 1', 'bad-size.asy'), /size must/)
+})
+
 test('skips unknown non-executable records with a diagnostic', () => {
   const symbol = parseLtspiceSymbol('FUTURE foo\nPIN 0 0 R\nPINATTR PinName A\nPINATTR SpiceOrder 1', 'future.asy')
   assert.deepEqual(symbol.warnings, ['Line 1: unsupported .asy record FUTURE was skipped.'])

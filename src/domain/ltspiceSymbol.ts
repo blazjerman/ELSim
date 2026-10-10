@@ -5,6 +5,7 @@
 export type SymbolPrimitive =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'polyline'; points: [number, number][] }
+  | { kind: 'text'; x: number; y: number; alignment: 'Left' | 'Right' | 'Center'; size: number; text: string }
   | { kind: 'rectangle'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'circle'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'arc'; x1: number; y1: number; x2: number; y2: number; startX: number; startY: number; endX: number; endY: number }
@@ -81,6 +82,13 @@ export function parseLtspiceSymbol(text: string, filename = 'Imported symbol.asy
           points.push([numberToken(coordinateTokens[point], lineNo), numberToken(coordinateTokens[point + 1], lineNo)])
         }
         result.primitives.push({ kind: 'polyline', points })
+      } else if (upper === 'TEXT') {
+        if (tokens.length < 5 || !['LEFT', 'RIGHT', 'CENTER'].includes(tokens[2].toUpperCase())) throw new Error('TEXT expects x y alignment size and text.')
+        const size = Number(tokens[3])
+        const textValue = tokens.slice(4).join(' ')
+        if (!Number.isInteger(size) || size < 1 || size > 64) throw new Error('TEXT size must be an integer from 1 to 64.')
+        if (!textValue || textValue.length > 512) throw new Error('TEXT content must contain 1 to 512 characters.')
+        result.primitives.push({ kind: 'text', x: numberToken(tokens[0], lineNo), y: numberToken(tokens[1], lineNo), alignment: tokens[2][0].toUpperCase() + tokens[2].slice(1).toLowerCase() as 'Left' | 'Right' | 'Center', size, text: textValue })
       } else if (upper === 'RECTANGLE') {
         if (tokens.length < 5) throw new Error('RECTANGLE expects style and two coordinate pairs.')
         result.primitives.push({ kind: 'rectangle', x1: numberToken(tokens[1], lineNo), y1: numberToken(tokens[2], lineNo), x2: numberToken(tokens[3], lineNo), y2: numberToken(tokens[4], lineNo) })

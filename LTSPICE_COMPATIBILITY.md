@@ -42,6 +42,7 @@ This matrix describes the importer as implemented today. “Supported” means E
 | Syntax or behavior | Status | Evidence / diagnostic |
 | --- | --- | --- |
 | `LINE`, `POLYLINE`, `RECTANGLE`, `CIRCLE`, `ARC` | Parsed as bounded drawing primitives and rendered in the imported symbol preview | Geometry, coordinate-limit, and invalid arc fixtures in `tests/ltspice-symbol.test.cjs` |
+| `TEXT` | Preserved as literal, inert symbol artwork; never executed as a SPICE directive | Text content, alignment, and size bounds in `tests/ltspice-symbol.test.cjs` |
 | `PIN`, `PINATTR PinName`, `PINATTR SpiceOrder` | Supported; pins are sorted by contiguous `SpiceOrder` | Sorting, duplicate, missing, gap, and coordinate-limit tests |
 | `SYMATTR Prefix`, `Value`, `Description`, `ModelFile`; `SYMBOLTYPE` | Parsed as metadata | ModelFile preservation and schematic dependency warning tests |
 | Unknown non-executable symbol record | Skipped with warning | Covered by `tests/ltspice-symbol.test.cjs` |

@@ -1,5 +1,6 @@
 Version 4
 SYMATTR Prefix X
+TEXT 0 -36 Center 2 USER IC
 LINE Normal -24 -32 24 0
 LINE Normal 24 0 -24 32
 LINE Normal -24 32 -24 -32

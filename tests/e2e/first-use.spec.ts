@@ -1538,6 +1538,7 @@ test('user-provided op-amp IC model imports and simulates with ordered pins', as
   ])
   await expect(page.getByText(/Imported user-opamp with 4 parts, 0 wires and 1 model library/)).toBeVisible()
   const modelInstance = page.locator('.circuit-part[data-part-id]')
+  await expect(page.locator('.imported-symbol-art text').filter({ hasText: 'USER IC' })).toBeVisible()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets[0].parts.find((part: { ref: string }) => part.ref === 'XU1')?.modelPins)).toEqual(['INP', 'INM', 'VPOS', 'VNEG', 'OUT'])
   await expect(page.getByRole('button', { name: /Add to schematic/ })).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
