@@ -3,6 +3,7 @@ import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseSubcircuitLibrary } from './subcircuitLibrary'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
 import { componentCurrentVector } from './probe'
+import { analyzeConnectivity, pinNet } from './connectivity'
 
 type AscSymbol = { name: string; x: number; y: number; rotation: number; flipX: boolean; attributes: Record<string, string>; rawRecords: string[]; line: number }
 export type LtspiceSchematicImport = { project: Project; warnings: string[] }
@@ -13,6 +14,12 @@ const MAX_ASC_WIRES = 2_000
 const MAX_ASC_SYMBOLS = 1_000
 const MAX_UNSUPPORTED_RECORD_CHARS = 240
 const validScalar = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?$/i.test(value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u'))
+
+function negateInitialScalar(value: string): string {
+  const match = value.match(/^([+-]?)(\d+(?:\.\d*)?|\.\d+)([eE][+-]?\d+)?(meg|[tgkmunpf])?(v)?$/i)
+  if (!match) return value
+  return `${match[1] === '-' ? '' : '-'}${match[2]}${match[3] ?? ''}${match[4] ?? ''}${match[5] ?? ''}`
+}
 
 function recordExcerpt(raw: string): string {
   const compact = raw.replace(/\s+/g, ' ').trim()
@@ -141,21 +148,37 @@ function applyDirective(project: Project, directive: string, warnings: string[],
   }
   if (command === '.ic') {
     const body = directive.trim().replace(/^\.ic\b/i, '').trim()
-    const assignments = [...body.matchAll(/([vi])\(\s*([A-Za-z_][A-Za-z0-9_.$]*)\s*\)\s*=\s*([^\s]+)/ig)]
-    const remainder = body.replace(/([vi])\(\s*([A-Za-z_][A-Za-z0-9_.$]*)\s*\)\s*=\s*([^\s]+)/ig, '').trim()
-    if (!assignments.length || remainder) { warnings.push(`Line ${line}: .ic contains settings that ELSim cannot map to labeled-node voltage or inductor-current initial conditions.`); return }
+    const assignmentPattern = /([vi])\(\s*(0|[A-Za-z_][A-Za-z0-9_.$]*)(?:\s*,\s*(0|[A-Za-z_][A-Za-z0-9_.$]*))?\s*\)\s*=\s*([^\s]+)/ig
+    const assignments = [...body.matchAll(assignmentPattern)]
+    const remainder = body.replace(assignmentPattern, '').trim()
+    if (!assignments.length || remainder) { warnings.push(`Line ${line}: .ic contains settings that ELSim cannot map to labeled-node voltage, capacitor voltage, or inductor-current initial conditions.`); return }
     const conditions = project.simulation.initialConditions ?? []
     for (const assignment of assignments) {
-      const kind = assignment[1].toLowerCase(), target = assignment[2], value = assignment[3]
-      const node = kind === 'v' ? project.netLabels.find((label) => label.name.toLowerCase() === target.toLowerCase()) : undefined
-      const inductor = kind === 'i' ? project.parts.find((part) => part.kind === 'inductor' && part.ref.toLowerCase() === target.toLowerCase()) : undefined
-      const duplicate = conditions.some((condition) => 'node' in condition ? kind === 'v' && condition.node.toLowerCase() === target.toLowerCase() : kind === 'i' && condition.element.toLowerCase() === target.toLowerCase())
+      const kind = assignment[1].toLowerCase(), target = assignment[2], negativeTarget = assignment[3], rawValue = assignment[4]
+      const node = kind === 'v' && !negativeTarget ? project.netLabels.find((label) => label.name.toLowerCase() === target.toLowerCase()) : undefined
+      const inductor = kind === 'i' && !negativeTarget ? project.parts.find((part) => part.kind === 'inductor' && part.ref.toLowerCase() === target.toLowerCase()) : undefined
+      const matchedCapacitor = kind === 'v' && negativeTarget ? (() => {
+        const connectivity = analyzeConnectivity(project)
+        for (const part of project.parts) if (part.kind === 'capacitor') {
+          const positive = pinNet(connectivity, part, 0).toLowerCase(), negative = pinNet(connectivity, part, 1).toLowerCase()
+          if (positive === target.toLowerCase() && negative === negativeTarget.toLowerCase()) return { part, value: rawValue }
+          if (positive === negativeTarget.toLowerCase() && negative === target.toLowerCase()) return { part, value: negateInitialScalar(rawValue) }
+        }
+        return undefined
+      })() : undefined
+      const capacitor = matchedCapacitor?.part
+      const value = matchedCapacitor?.value ?? rawValue
+      const duplicate = conditions.some((condition) => 'node' in condition
+        ? kind === 'v' && !negativeTarget && condition.node.toLowerCase() === target.toLowerCase()
+        : kind === 'i' && 'current' in condition
+          ? condition.element.toLowerCase() === target.toLowerCase()
+          : kind === 'v' && 'voltage' in condition && capacitor !== undefined && condition.element.toLowerCase() === capacitor.ref.toLowerCase())
       const wrongUnit = kind === 'v' ? /a$/i.test(value) : /v$/i.test(value)
-      if ((!node && !inductor) || (kind === 'v' && target === '0') || !validScalar(value) || wrongUnit || duplicate || conditions.length >= 8) {
-        warnings.push(`Line ${line}: .ic setting ${recordExcerpt(assignment[0])} does not resolve to a unique labeled node or placed inductor with a scalar value and was skipped.`)
+      if ((!node && !inductor && !capacitor) || (kind === 'v' && !negativeTarget && target === '0') || (kind === 'i' && negativeTarget) || !validScalar(value) || wrongUnit || duplicate || conditions.length >= 8) {
+        warnings.push(`Line ${line}: .ic setting ${recordExcerpt(assignment[0])} does not resolve to a unique labeled node, capacitor terminal pair, or placed inductor with a scalar value and was skipped.`)
         continue
       }
-      conditions.push(kind === 'v' ? { node: node!.name, voltage: value } : { element: inductor!.ref, current: value })
+      conditions.push(kind === 'v' ? capacitor ? { element: capacitor.ref, voltage: value } : { node: node!.name, voltage: value } : { element: inductor!.ref, current: value })
     }
     if (conditions.length) project.simulation.initialConditions = conditions
     return

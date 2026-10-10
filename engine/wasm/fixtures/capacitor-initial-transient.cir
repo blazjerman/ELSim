@@ -1,0 +1,11 @@
+ELSim capacitor element initial condition regression
+R1 out 0 1k
+C1 out 0 10u IC=2
+.tran 10u 30m uic
+.control
+set filetype=ascii
+run
+write /result.raw all
+quit
+.endc
+.end

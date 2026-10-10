@@ -362,15 +362,16 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'dc' ? `DC ${value}` : transientValue}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
-      const currentCondition = part.kind === 'inductor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined
-      const initialCurrent = currentCondition && 'current' in currentCondition ? spiceScalar(currentCondition.current.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/a$/i, ''), '') : null
-      if (currentCondition && !initialCurrent) {
-        const message = `Initial current for ${part.ref} must be a valid ampere value.`
+      const elementCondition = part.kind === 'inductor' || part.kind === 'capacitor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined
+      const initialCurrent = elementCondition && 'current' in elementCondition ? spiceScalar(elementCondition.current.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/a$/i, ''), '') : null
+      const initialVoltage = elementCondition && 'voltage' in elementCondition ? spiceScalar(elementCondition.voltage.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/v$/i, ''), '') : null
+      if (elementCondition && !initialCurrent && !initialVoltage) {
+        const message = `Initial ${part.kind === 'inductor' ? 'current' : 'voltage'} for ${part.ref} must be a valid ${part.kind === 'inductor' ? 'ampere' : 'volt'} value.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${negative} ${value}${initialCurrent ? ` IC=${initialCurrent}` : ''}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${value}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'led') {
       const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
@@ -512,8 +513,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   } else {
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)
-    const hasElementCurrentInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition) ?? false
-    if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}${project.simulation.skipInitialOperatingPoint || hasElementCurrentInitial ? ' uic' : ''}`, 'analysis:tran', 'analysis')
+    const hasElementInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition) ?? false
+    if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}${project.simulation.skipInitialOperatingPoint || hasElementInitial ? ' uic' : ''}`, 'analysis:tran', 'analysis')
     else {
       const message = 'Transient stop time and maximum step must be valid SPICE time values.'
       append(`* ERROR: ${message}`, 'analysis:tran', 'analysis')
@@ -522,10 +523,13 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   }
   for (const condition of project.simulation.initialConditions ?? []) {
     if ('element' in condition) {
-      const knownInductor = project.parts.some((part) => part.kind === 'inductor' && part.ref.toLowerCase() === condition.element.toLowerCase())
-      const value = spiceScalar(condition.current.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/a$/i, ''), '')
-      if (project.simulation.analysis !== 'tran' || !knownInductor || !value) {
-        const message = `Initial current for ${cleanComment(condition.element)} must reference an inductor and a valid current.`
+      const currentCondition = 'current' in condition
+      const kind = currentCondition ? 'inductor' : 'capacitor'
+      const quantity = currentCondition ? condition.current : condition.voltage
+      const knownElement = project.parts.some((part) => part.kind === kind && part.ref.toLowerCase() === condition.element.toLowerCase())
+      const value = spiceScalar(quantity.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(currentCondition ? /a$/i : /v$/i, ''), '')
+      if (project.simulation.analysis !== 'tran' || !knownElement || !value) {
+        const message = `Initial ${currentCondition ? 'current' : 'voltage'} for ${cleanComment(condition.element)} must reference a ${kind} and a valid ${currentCondition ? 'current' : 'voltage'}.`
         diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       }
       continue

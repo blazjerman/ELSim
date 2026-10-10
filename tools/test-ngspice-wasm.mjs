@@ -301,6 +301,14 @@ assert.ok(inductorCurrent[0] > 1.9e-3 && inductorCurrent[0] <= 2e-3, `inductor c
 assert.ok(Math.abs(inductorCurrent.at(-1)) < 1e-7, `inductor current should decay through the parallel resistor, got ${inductorCurrent.at(-1)}`)
 process.stdout.write('PASS transient-inductor-current-initial-condition\n')
 
+const capacitorInitialPath = path.join(root, 'engine/wasm/fixtures', 'capacitor-initial-transient.cir')
+const capacitorInitialResult = await runInWorker(capacitorInitialPath, true)
+assert.equal(capacitorInitialResult.status, 0, `capacitor-initial-transient: ngspice exited with a nonzero status: ${capacitorInitialResult.stderr}`)
+const capacitorVoltage = realRawVector(capacitorInitialResult.raw, 'v(out)')
+assert.ok(Math.abs(capacitorVoltage[0] - 2) < 5e-5, `capacitor voltage should start near 2 V, got ${capacitorVoltage[0]}`)
+assert.ok(capacitorVoltage.at(-1) < 0.2, `initially charged capacitor should discharge through R1, got ${capacitorVoltage.at(-1)}`)
+process.stdout.write('PASS transient-capacitor-voltage-initial-condition\n')
+
 const behavioralPath = path.join(root, 'engine/wasm/fixtures', 'behavioral-sources.cir')
 const behavioralResult = await runInWorker(behavioralPath, true)
 assert.equal(behavioralResult.status, 0, `behavioral-sources: ngspice exited with a nonzero status: ${behavioralResult.stderr}`)

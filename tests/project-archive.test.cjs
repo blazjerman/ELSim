@@ -180,11 +180,21 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.ok(schema.$defs.part.properties.componentDefinitionId)
   assert.ok(schema.$defs.part.properties.extensions.properties.ltspice.properties.attributes)
   assert.equal(schema.$defs.simulation.properties.parameterSweeps.maxItems, 3)
+  const initialConditions = schema.$defs.simulation.properties.initialConditions.items.oneOf
+  assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('voltage') && condition.properties.element.pattern.startsWith('^C')))
+  assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('current') && condition.properties.element.pattern.startsWith('^L')))
   assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc', 'pwl'])
   assert.equal(schema.$defs.part.properties.pwl.maxItems, 32)
   assert.deepEqual(schema.$defs.part.properties.pulse.required, ['initial', 'delay', 'rise', 'fall', 'width', 'period'])
   assert.deepEqual(schema.$defs.sheet.properties.ports.items.properties.side.enum, ['auto', 'left', 'right', 'top', 'bottom'])
   assert.ok(schema.$defs.part.properties.sheetPortLayout)
+})
+
+test('capacitor initial voltage survives project archive round-trip', () => {
+  const project = createStarterProject()
+  project.simulation.initialConditions = [{ element: 'C1', voltage: '2.5 V' }]
+  const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  assert.deepEqual(restored.simulation.initialConditions, [{ element: 'C1', voltage: '2.5 V' }])
 })
 
 test('LTspice source provenance validates its format, filename, and UTF-8 size limit', () => {

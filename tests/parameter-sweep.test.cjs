@@ -103,7 +103,7 @@ test('node-voltage initial conditions require labeled nodes and emit optional UI
   assert.match(deck, /\.tran .* uic/)
   assert.match(deck, /\.ic v\(vout\)=2/)
   validated.simulation.initialConditions = [{ node: 'missing', voltage: '2 V' }]
-  assert.throws(() => validateProject(validated), /labeled nodes or inductor elements/)
+  assert.throws(() => validateProject(validated), /labeled nodes, capacitor voltages, or inductor currents/)
   project.simulation.initialConditions = [{ node: 'vout', voltage: 'not volts' }]
   assert.throws(() => validateProject(project), /malformed/)
 })
@@ -116,7 +116,20 @@ test('inductor current initial conditions validate and enable UIC on the inducto
   assert.match(deck, /^L1 n\d+ n\d+ 10m IC=2m$/m)
   assert.match(deck, /^\.tran .* uic$/m)
   project.simulation.initialConditions = [{ element: 'R1', current: '2 mA' }]
-  assert.throws(() => validateProject(project), /inductor elements/)
+  assert.throws(() => validateProject(project), /labeled nodes, capacitor voltages, or inductor currents/)
   project.simulation.initialConditions = [{ element: 'L1', current: 'bad' }]
+  assert.throws(() => validateProject(project), /malformed/)
+})
+
+test('capacitor voltage initial conditions validate and enable UIC on the capacitor card', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-c2', kind: 'capacitor', ref: 'C2', value: '10u', x: 700, y: 300, rotation: 0 })
+  project.simulation.initialConditions = [{ element: 'C2', voltage: '3.3 V' }]
+  const deck = createNetlistArtifact(validateProject(structuredClone(project))).text
+  assert.match(deck, /^C2 n\d+ n\d+ 10u IC=3\.3$/m)
+  assert.match(deck, /^\.tran .* uic$/m)
+  project.simulation.initialConditions = [{ element: 'L1', voltage: '2 V' }]
+  assert.throws(() => validateProject(project), /labeled nodes, capacitor voltages, or inductor currents/)
+  project.simulation.initialConditions = [{ element: 'C2', voltage: 'bad' }]
   assert.throws(() => validateProject(project), /malformed/)
 })

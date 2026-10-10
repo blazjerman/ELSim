@@ -542,6 +542,23 @@ test('imported LTspice .ic node and inductor values run through ngspice', async 
   await expect(page.locator('.measurement-results')).toContainText('IPEAK')
 })
 
+test('capacitor initial voltage editor starts the transient at the requested voltage', async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Add capacitor voltage' }).click()
+  const initialVoltage = page.getByLabel('Starting voltage', { exact: true })
+  await initialVoltage.fill('2 V')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.initialConditions)).toEqual([{ element: 'C1', voltage: '2 V' }])
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'Rewind result playback to the first solved sample' })).toBeVisible()
+  await page.getByRole('button', { name: 'Rewind result playback to the first solved sample' }).click()
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(vout\) = 2(?:\.0+)? V/)
+})
+
 test('LTspice import shows skipped records and preserves the original source', async ({ page }) => {
   await page.goto('/')
   const source = ['Version 4', 'CUSTOM_VENDOR_RECORD keep-this-note', ''].join('\n')

@@ -920,6 +920,24 @@
                 "additionalProperties": false,
                 "required": [
                   "element",
+                  "voltage"
+                ],
+                "properties": {
+                  "element": {
+                    "type": "string",
+                    "pattern": "^C[A-Za-z0-9_]+$"
+                  },
+                  "voltage": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "element",
                   "current"
                 ],
                 "properties": {

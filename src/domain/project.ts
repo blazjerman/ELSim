@@ -51,7 +51,7 @@ export type PlotSettings = {
 }
 export type ParameterSweep = { component: string; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
-export type InitialCondition = { node: string; voltage: string } | { element: string; current: string }
+export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
 export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
 export type SymbolAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
 export type LtspiceSchematicSource = { format: 'ltspice-asc'; filename: string; originalText: string }
@@ -422,18 +422,20 @@ export function validateProject(input: unknown): Project {
     const initialTargets = new Set<string>()
     for (const condition of simulation.initialConditions) {
       const elementCondition = condition && 'element' in condition && typeof condition.element === 'string'
+      const currentCondition = elementCondition && 'current' in condition
       const target = elementCondition && 'element' in condition ? condition.element : condition && 'node' in condition ? condition.node : undefined
-      const quantity = elementCondition && 'current' in condition ? condition.current : condition && 'voltage' in condition ? condition.voltage : undefined
+      const quantity = currentCondition && 'current' in condition ? condition.current : condition && 'voltage' in condition ? condition.voltage : undefined
       const validTarget = elementCondition
-        ? data.parts.some((part) => part.kind === 'inductor' && part.ref.toLowerCase() === target?.toLowerCase())
+        ? data.parts.some((part) => part.kind === (currentCondition ? 'inductor' : 'capacitor') && part.ref.toLowerCase() === target?.toLowerCase())
         : typeof target === 'string' && /^[A-Za-z_][A-Za-z0-9_.$]*$/.test(target) && data.netLabels.some((label) => label.name.toLowerCase() === target.toLowerCase())
-      if (!condition || typeof target !== 'string' || !validTarget || initialTargets.has(`${elementCondition ? 'L' : 'V'}:${target.toLowerCase()}`) || typeof quantity !== 'string' || !quantity.trim()) throw new Error('Initial conditions need unique labeled nodes or inductor elements with valid voltage or current values.')
-      const normalized = quantity.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(elementCondition ? /a$/i : /v$/i, '')
+      const targetKey = `${elementCondition ? currentCondition ? 'L' : 'C' : 'V'}:${target?.toLowerCase()}`
+      if (!condition || typeof target !== 'string' || !validTarget || initialTargets.has(targetKey) || typeof quantity !== 'string' || !quantity.trim()) throw new Error('Initial conditions need unique labeled nodes, capacitor voltages, or inductor currents with valid values.')
+      const normalized = quantity.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(currentCondition ? /a$/i : /v$/i, '')
       const match = normalized.match(/^([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?)(meg|[tgkmunpf])?$/i)
       if (!match) throw new Error(`Initial value for ${target} is malformed.`)
       const multiplier = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
       if (!Number.isFinite(Number(match[1]) * multiplier)) throw new Error(`Initial value for ${target} must be finite.`)
-      initialTargets.add(`${elementCondition ? 'L' : 'V'}:${target.toLowerCase()}`)
+      initialTargets.add(targetKey)
     }
   }
   const plotSettings = data.plotSettings as PlotSettings | undefined

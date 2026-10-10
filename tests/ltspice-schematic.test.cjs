@@ -90,10 +90,28 @@ test('imports supported node-voltage and inductor-current .ic values', () => {
   assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
 })
 
+test('maps two-node LTspice voltage initial conditions to matching capacitor terminals', () => {
+  const capacitor = {
+    id: 'symbol-capacitor', filename: 'cap.asy', sha256: 'd'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+    content: ['Version 4', 'SYMATTR Prefix C', 'PIN -16 0 R', 'PINATTR PinName A', 'PINATTR SpiceOrder 1', 'PIN 16 0 L', 'PINATTR PinName B', 'PINATTR SpiceOrder 2'].join('\n'),
+  }
+  const source = ['Version 4', 'FLAG 16 0 OUT', 'FLAG 48 0 0', 'SYMBOL cap 32 0 R0', 'SYMATTR InstName C1', 'SYMATTR Value 10u', 'TEXT 0 100 Left 2 !.ic V(OUT,0)=2.5', 'TEXT 0 120 Left 2 !.tran 0 5m 0 10u'].join('\n')
+  const forward = parseLtspiceSchematic(source, 'cap-initial.asc', [capacitor])
+  assert.deepEqual(forward.project.simulation.initialConditions, [{ element: 'C1', voltage: '2.5' }])
+  assert.deepEqual(forward.warnings, [])
+  const forwardDeck = createNetlistArtifact(forward.project)
+  assert.match(forwardDeck.text, /^C1 OUT 0 10u IC=2\.5$/m)
+  assert.match(forwardDeck.text, /^\.tran .* uic$/m)
+
+  const reversed = parseLtspiceSchematic(source.replace('V(OUT,0)=2.5', 'V(0,OUT)=2.5'), 'cap-initial-reversed.asc', [capacitor])
+  assert.deepEqual(reversed.project.simulation.initialConditions, [{ element: 'C1', voltage: '-2.5' }])
+  assert.deepEqual(reversed.warnings, [])
+})
+
 test('warns and skips unresolved, malformed, or non-transient .ic directives', () => {
   const unknown = parseLtspiceSchematic(['Version 4', 'TEXT 0 100 Left 2 !.ic V(missing)=1mA'].join('\n'), 'unknown-ic.asc')
   assert.equal(unknown.project.simulation.initialConditions, undefined)
-  assert.match(unknown.warnings[0], /does not resolve to a unique labeled node or placed inductor/)
+  assert.match(unknown.warnings[0], /does not resolve to a unique labeled node, capacitor terminal pair, or placed inductor/)
   const nonTransient = parseLtspiceSchematic(['Version 4', 'FLAG 0 0 OUT', 'TEXT 0 100 Left 2 !.ic V(out)=1', 'TEXT 0 120 Left 2 !.op'].join('\n'), 'op-ic.asc')
   assert.equal(nonTransient.project.simulation.initialConditions, undefined)
   assert.ok(nonTransient.warnings.some((warning) => /require transient analysis/.test(warning)))
