@@ -120,7 +120,7 @@ test('user model libraries round-trip inside project data with digest and licens
   const project = createStarterProject()
   const content = '.SUBCKT user_amp IN OUT VCC VEE\nR1 IN OUT 1k\n.ENDS user_amp\n'
   const digest = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(content)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-  project.modelAssets = [{ id: 'model-1', filename: 'user-amp.lib', sha256: digest, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.modelAssets = [{ id: 'model-1', filename: 'user-amp.lib', sha256: digest, content, licenseStatus: 'unknown', importedAt: new Date().toISOString(), sourceUrl: 'https://example.test/user-amp.lib', licenseReference: 'Supplier terms section 4', rightsNotes: 'Received from the project owner; redistribution not confirmed.' }]
   project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'user_amp', modelName: 'user_amp', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], x: 700, y: 400, rotation: 0 })
   const restored = validateProject(readProjectArchive(createProjectArchive(project)))
   project.parts.at(-1).componentDefinitionId = `user.${digest}.user-amp`
@@ -130,6 +130,8 @@ test('user model libraries round-trip inside project data with digest and licens
   await verifyModelAssetHashes(restored.modelAssets)
   await assert.rejects(verifyModelAssetHashes([{ ...restored.modelAssets[0], content: `${content}* changed` }]), /does not match/)
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], filename: '../user-amp.lib' }] }), /malformed imported model library/)
+  assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], rightsNotes: 'x'.repeat(1001) }] }), /malformed imported model library/)
+  assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], licenseReference: 42 }] }), /malformed imported model library/)
 })
 
 test('.MODEL-only libraries and device model assignments round-trip in project archives', async () => {
@@ -156,7 +158,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   ].join('\n')
   const digest = async (content) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(content)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
   project.modelAssets = [{ id: 'model-amp', filename: 'amp.lib', sha256: await digest(modelContent), content: modelContent, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-  project.symbolAssets = [{ id: 'symbol-amp', filename: 'amp.asy', sha256: await digest(symbolContent), content: symbolContent, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.symbolAssets = [{ id: 'symbol-amp', filename: 'amp.asy', sha256: await digest(symbolContent), content: symbolContent, licenseStatus: 'unknown', importedAt: new Date().toISOString(), licenseReference: 'Vendor permission page', rightsNotes: 'Internal use only per supplied notice.' }]
   const pinOffsets = [[-48, 0], [48, 0], [0, -32], [0, 32]]
   const instance = { id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'user_amp', modelName: 'user_amp', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], symbolAssetId: 'symbol-amp', symbolPinOffsets: pinOffsets, x: 700, y: 400, rotation: 0 }
   project.parts.push(instance)
@@ -178,6 +180,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.properties.importedChildSchematicSources.maxItems, 63)
   assert.ok(schema.$defs.part.properties.symbolPinOffsets)
   assert.ok(schema.$defs.part.properties.componentDefinitionId)
+  assert.equal(schema.$defs.modelAsset.properties.licenseReference.maxLength, 128)
+  assert.equal(schema.$defs.symbolAsset.properties.rightsNotes.maxLength, 1000)
   assert.ok(schema.$defs.part.properties.extensions.properties.ltspice.properties.attributes)
   assert.equal(schema.$defs.simulation.properties.parameterSweeps.maxItems, 3)
   assert.equal(schema.$defs.plotSettings.properties.panels.maxItems, 8)

@@ -520,6 +520,18 @@
         "importedAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "sourceUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "licenseReference": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "rightsNotes": {
+          "type": "string",
+          "maxLength": 1000
         }
       }
     },
@@ -558,6 +570,18 @@
         "importedAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "sourceUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "licenseReference": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "rightsNotes": {
+          "type": "string",
+          "maxLength": 1000
         }
       }
     },

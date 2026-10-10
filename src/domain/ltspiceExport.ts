@@ -11,7 +11,7 @@ export type LtspiceExportLoss = {
 }
 export type LtspiceExportBlocker = { sourceId: string; message: string }
 export type LtspiceExportFile = { path: string; content: string; sha256: string; mediaType: string }
-export type LtspiceExportAsset = { filename: string; sha256: string; licenseStatus: 'unknown' }
+export type LtspiceExportAsset = { filename: string; sha256: string; licenseStatus: 'unknown'; sourceUrl?: string; licenseReference?: string; rightsNotes?: string }
 export type LtspiceExportResult = {
   files: LtspiceExportFile[]
   losses: LtspiceExportLoss[]
@@ -516,7 +516,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
     while (usedModelPaths.has(path.toLowerCase())) path = original.replace(/(\.[^.]+)?$/, `_${suffix++}$1`)
     usedModelPaths.add(path.toLowerCase())
     modelPaths.set(asset.id, path)
-    includedAssets.push({ filename: asset.filename, sha256: asset.sha256, licenseStatus: asset.licenseStatus })
+    includedAssets.push({ filename: asset.filename, sha256: asset.sha256, licenseStatus: asset.licenseStatus, ...(asset.sourceUrl ? { sourceUrl: asset.sourceUrl } : {}), ...(asset.licenseReference ? { licenseReference: asset.licenseReference } : {}), ...(asset.rightsNotes ? { rightsNotes: asset.rightsNotes } : {}) })
   }
   for (const sheet of sheets) {
     if (sheet.ports.length > 0 && sheet.ports.some((port) => !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase()))) blockers.push({ sourceId: sheet.id, message: `${sheet.name} has a port without a matching named label.` })

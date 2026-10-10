@@ -54,8 +54,9 @@ export type PlotSettings = {
 export type ParameterSweep = { component: string; parameter?: string; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
-export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
-export type SymbolAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
+export type AssetProvenance = { sourceUrl?: string; licenseReference?: string; rightsNotes?: string }
+export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
+export type SymbolAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
 export type LtspiceSchematicSource = { format: 'ltspice-asc'; filename: string; originalText: string }
 export type ProjectSheet = {
   id: string
@@ -199,6 +200,12 @@ function migrateV1(input: Record<string, unknown>): Project {
   }
 }
 
+function validAssetProvenance(asset: Record<string, unknown>): boolean {
+  return (asset.sourceUrl === undefined || typeof asset.sourceUrl === 'string' && asset.sourceUrl.length <= 2048)
+    && (asset.licenseReference === undefined || typeof asset.licenseReference === 'string' && asset.licenseReference.length <= 128)
+    && (asset.rightsNotes === undefined || typeof asset.rightsNotes === 'string' && asset.rightsNotes.length <= 1000)
+}
+
 export function validateProject(input: unknown): Project {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('That file is not an ELSim project.')
   const data = input as Record<string, unknown>
@@ -277,7 +284,7 @@ export function validateProject(input: unknown): Project {
     const assetIds = new Set<string>(), modelNames = new Set<string>(), deviceModelNames = new Set<string>()
     let totalBytes = 0
     for (const candidate of data.modelAssets as ModelLibraryAsset[]) {
-      if (!candidate || typeof candidate.id !== 'string' || !candidate.id || assetIds.has(candidate.id) || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.content !== 'string' || !/^[a-f\d]{64}$/i.test(candidate.sha256) || candidate.licenseStatus !== 'unknown' || typeof candidate.importedAt !== 'string' || !Number.isFinite(Date.parse(candidate.importedAt))) throw new Error('Project contains a malformed imported model library.')
+      if (!candidate || typeof candidate.id !== 'string' || !candidate.id || assetIds.has(candidate.id) || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.content !== 'string' || !/^[a-f\d]{64}$/i.test(candidate.sha256) || candidate.licenseStatus !== 'unknown' || typeof candidate.importedAt !== 'string' || !Number.isFinite(Date.parse(candidate.importedAt)) || !validAssetProvenance(candidate)) throw new Error('Project contains a malformed imported model library.')
       const size = new TextEncoder().encode(candidate.content).length
       if (size > 4 * 1024 * 1024) throw new Error(`${candidate.filename} exceeds the 4 MiB model library limit.`)
       totalBytes += size
@@ -301,7 +308,7 @@ export function validateProject(input: unknown): Project {
     const symbolIds = new Set<string>()
     let totalBytes = 0
     for (const candidate of data.symbolAssets as SymbolAsset[]) {
-      if (!candidate || typeof candidate.id !== 'string' || !candidate.id || symbolIds.has(candidate.id) || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.content !== 'string' || !/^[a-f\d]{64}$/i.test(candidate.sha256) || candidate.licenseStatus !== 'unknown' || typeof candidate.importedAt !== 'string' || !Number.isFinite(Date.parse(candidate.importedAt))) throw new Error('Project contains a malformed imported symbol.')
+      if (!candidate || typeof candidate.id !== 'string' || !candidate.id || symbolIds.has(candidate.id) || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.content !== 'string' || !/^[a-f\d]{64}$/i.test(candidate.sha256) || candidate.licenseStatus !== 'unknown' || typeof candidate.importedAt !== 'string' || !Number.isFinite(Date.parse(candidate.importedAt)) || !validAssetProvenance(candidate)) throw new Error('Project contains a malformed imported symbol.')
       const size = new TextEncoder().encode(candidate.content).length
       if (size > 1024 * 1024) throw new Error(`${candidate.filename} exceeds the 1 MiB symbol limit.`)
       totalBytes += size

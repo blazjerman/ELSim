@@ -47,6 +47,37 @@ test('component categories filter the library and search crosses categories', as
   await expect(categories).toBeVisible()
 })
 
+test('imported library provenance notes persist while rights remain unverified', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'provenance-test.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.MODEL PROVENANCE_D D(Is=1n)\n'),
+  })
+  const details = page.locator('.asset-provenance').filter({ has: page.getByText('Record source and license notes') })
+  await details.locator('summary').click()
+  await page.getByLabel('Source URL for provenance-test.lib').fill('https://models.example.test/provenance-test.lib')
+  await page.getByLabel('License reference for provenance-test.lib').fill('Supplier model terms, section 2')
+  await page.getByLabel('Rights review notes for provenance-test.lib').fill('Received from supplier; redistribution permission still needs confirmation.')
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return project.modelAssets[0]
+  })).toMatchObject({
+    licenseStatus: 'unknown',
+    sourceUrl: 'https://models.example.test/provenance-test.lib',
+    licenseReference: 'Supplier model terms, section 2',
+    rightsNotes: 'Received from supplier; redistribution permission still needs confirmation.',
+  })
+  await expect(details).toContainText('status remains unknown')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  const review = page.getByRole('alertdialog', { name: 'Review imported files' })
+  await expect(review).toContainText('redistribution rights unknown')
+  await expect(review).toContainText('Supplier model terms, section 2')
+  await expect(review).toContainText('permission still needs confirmation')
+})
+
 test('component cards explain behavior on hover and keyboard focus', async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })

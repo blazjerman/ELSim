@@ -390,7 +390,7 @@ test('exports diagonal wires and preserves pin, label, endpoint, and explicit-ju
 test('includes only referenced model dependencies and signals the unknown-license gate', async () => {
   const project = createStarterProject()
   const content = '.SUBCKT USER_BLOCK IN OUT\nR1 IN OUT 1k\n.ENDS USER_BLOCK\n'
-  const asset = { id: 'user-library', filename: 'user-block.lib', content, sha256: sha256(content), licenseStatus: 'unknown', importedAt: new Date().toISOString() }
+  const asset = { id: 'user-library', filename: 'user-block.lib', content, sha256: sha256(content), licenseStatus: 'unknown', importedAt: new Date().toISOString(), sourceUrl: 'https://example.test/user-block.lib', licenseReference: 'Supplier terms', rightsNotes: 'Permission not verified.' }
   project.modelAssets = [asset]
   project.parts.push({ id: 'user-block-instance', kind: 'subcircuit', ref: 'XUSER', value: 'USER_BLOCK', modelName: 'USER_BLOCK', modelPins: ['IN', 'OUT'], x: 900, y: 600, rotation: 0 })
   project.sheets[0].parts = project.parts
@@ -398,6 +398,7 @@ test('includes only referenced model dependencies and signals the unknown-licens
   assert.deepEqual(output.blockers, [])
   assert.equal(output.requiresUnknownLicenseConfirmation, true)
   assert.deepEqual(output.includedAssets.map(({ filename }) => filename), ['user-block.lib'])
+  assert.deepEqual(output.includedAssets[0], { filename: 'user-block.lib', sha256: sha256(content), licenseStatus: 'unknown', sourceUrl: 'https://example.test/user-block.lib', licenseReference: 'Supplier terms', rightsNotes: 'Permission not verified.' })
   assert.ok(output.files.some((file) => file.path === 'models/user-block.lib' && file.content === content))
   assert.ok(output.files.find((file) => file.path.endsWith('.asc')).content.includes('.include "models/user-block.lib"'))
 })
