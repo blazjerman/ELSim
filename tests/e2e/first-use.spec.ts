@@ -47,6 +47,24 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(switchPart).toHaveAttribute('aria-label', /switch on/)
 })
 
+test('fit schematic view frames distant parts, wires, and labels', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.push({ id: 'far-part', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 1800, y: 1200, rotation: 0 })
+    project.wires.push({ id: 'far-wire', points: [[1500, 1000], [2100, 1400]] })
+    project.netLabels.push({ id: 'far-label', name: 'REMOTE', x: 2200, y: 1500, visible: true })
+    project.sheets[0].parts = project.parts
+    project.sheets[0].wires = project.wires
+    project.sheets[0].netLabels = project.netLabels
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByTitle('Fit all circuit content in view').click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view.zoom)).toBeLessThan(0.6)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view.panX)).not.toBe(0)
+})
+
 test('first use: run the RC starter and inspect its solved waveform', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

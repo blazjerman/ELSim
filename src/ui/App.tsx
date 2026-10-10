@@ -4,10 +4,11 @@ import {
   Activity, AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleDot, CircleHelp,
   Command, Copy, Download, FilePlus2, FlipHorizontal2, FolderOpen, Gauge, GitBranch, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
-  Save, Search, Settings2, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
+  Save, Scan, Search, Settings2, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
+import { fitEditorView } from '../domain/editorView'
 import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeModelDependencies, decodeModelLibrary, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
@@ -682,7 +683,7 @@ function Schematic({ project, selection, setSelection, setProject, setView, spac
   const focusablePartId = selectedPartId ?? project.parts[0]?.id
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
-      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.6, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton></div>
+      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project))}><Scan size={15}/></IconButton></div>
       <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Click a switch to toggle · drag wire segments to reroute · Ctrl/⌘+C/V copy/paste a part · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
     <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Focus a component, use arrow keys to move, then press Enter or Space to select or activate it." viewBox={viewBox} onPointerDown={beginPan} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onWheel={(event) => {
@@ -694,7 +695,7 @@ function Schematic({ project, selection, setSelection, setProject, setView, spac
       const fractionY = Math.max(0, Math.min(1, (event.clientY - rect.top - (rect.height - view.height * scale) / 2) / (view.height * scale)))
       const anchorX = view.x + fractionX * view.width, anchorY = view.y + fractionY * view.height
       setView((current) => {
-        const zoom = Math.max(.6, Math.min(2.5, current.zoom * Math.exp(-event.deltaY * .002)))
+        const zoom = Math.max(.1, Math.min(2.5, current.zoom * Math.exp(-event.deltaY * .002)))
         const width = 760 / zoom, height = 600 / zoom
         return { ...current, zoom, panX: (760 - width) / 2 - (anchorX - fractionX * width), panY: (600 - height) / 2 - (anchorY - fractionY * height) }
       })

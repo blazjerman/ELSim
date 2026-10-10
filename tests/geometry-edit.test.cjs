@@ -7,6 +7,29 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
+const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
+
+test('fit view centers and bounds distant parts, wire points, and labels', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'far-part', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 1800, y: 1200, rotation: 0 })
+  project.wires.push({ id: 'far-wire', points: [[1500, 1000], [2100, 1400]] })
+  project.netLabels.push({ id: 'far-label', name: 'REMOTE', x: 2200, y: 1500, visible: true })
+  const view = fitEditorView(project)
+  const content = [
+    ...project.parts.flatMap((part) => [{ x: part.x, y: part.y }, ...componentPins(part)]),
+    ...project.wires.flatMap((wire) => wire.points.map(([x, y]) => ({ x, y }))),
+    ...project.netLabels.map(({ x, y }) => ({ x, y })),
+  ]
+  const centerX = (Math.min(...content.map(({ x }) => x)) + Math.max(...content.map(({ x }) => x))) / 2
+  const centerY = (Math.min(...content.map(({ y }) => y)) + Math.max(...content.map(({ y }) => y))) / 2
+  assert.equal(view.panX, centerX - 380)
+  assert.equal(view.panY, centerY - 300)
+  for (const point of content) {
+    assert.ok(Math.abs((point.x - centerX) * view.zoom) <= 380)
+    assert.ok(Math.abs((point.y - centerY) * view.zoom) <= 300)
+  }
+  assert.ok(view.zoom >= .1 && view.zoom <= 2.5)
+})
 
 test('horizontal flip geometry updates indexed pin anchors and detects crossed starter wires', () => {
   const project = createStarterProject()
