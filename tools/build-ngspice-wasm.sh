@@ -80,6 +80,13 @@ cp "$BUILD_DIR/src/ngspice.js" "$ROOT_DIR/public/engine/ngspice.mjs"
 cp "$BUILD_DIR/src/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice.wasm"
 cp "$NGSPICE_SOURCE/COPYING" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"
 cp "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$ROOT_DIR/public/engine/THIRD_PARTY_NOTICES.md"
+git -C "$NGSPICE_SOURCE" archive --format=tar "$PINNED_COMMIT" | gzip -n > "$ROOT_DIR/public/engine/ngspice-source.tar.gz"
+mapfile -t RELINK_OBJECTS < <(find "$BUILD_DIR" -type f \( -name '*.o' -o -name '*.a' \) -printf '%P\n' | sort)
+if [[ ${#RELINK_OBJECTS[@]} -eq 0 ]]; then
+  echo "Expected compiled object or archive files for LGPL relinking materials" >&2
+  exit 2
+fi
+tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -cf - -C "$BUILD_DIR" "${RELINK_OBJECTS[@]}" | gzip -n > "$ROOT_DIR/public/engine/ngspice-relink-objects.tar.gz"
 LINK_MAP="$(find "$BUILD_DIR" -type f -name ngspice-link.map -print -quit)"
 if [[ -z "$LINK_MAP" || ! -s "$LINK_MAP" ]]; then
   echo "Expected a non-empty Emscripten linker map under $BUILD_DIR; refusing to emit an incomplete engine inventory" >&2
@@ -91,9 +98,11 @@ cp "$LINK_MAP" "$ROOT_DIR/public/engine/ngspice-link.map"
   printf 'Emscripten: %s\n' "$(emcc --version | head -n 1)"
   printf 'Build flags: --disable-shared --enable-static --enable-xspice --disable-cider --disable-osdi --disable-openmp --disable-klu --with-readline=no --with-editline=no --without-x\n'
   printf 'Linked-input inventory: ngspice-link.map (Emscripten linker map; inspect archive members and object paths against the pinned source COPYING file)\n'
-  printf 'Redistribution: check licenses/ngspice-distribution-review.json; do not distribute unless it approves these exact generated artifacts.\n'
+  printf 'Redistribution: check licenses/ngspice-distribution-review.json; do not distribute unless it approves these exact generated artifacts and source materials.\n'
+  printf 'Source commit: %s (must match the approved review record)\n' "$PINNED_COMMIT"
+  printf 'Source materials: ngspice-source.tar.gz and ngspice-relink-objects.tar.gz.\n'
   printf 'See adjacent THIRD_PARTY_NOTICES.md, ngspice-COPYING.txt, ngspice-link.map, and ngspice-SHA256SUMS.txt.\n'
 } > "$ROOT_DIR/public/engine/ngspice-build-info.txt"
-(cd "$ROOT_DIR/public/engine" && sha256sum ngspice.mjs ngspice.wasm ngspice-COPYING.txt ngspice-link.map THIRD_PARTY_NOTICES.md ngspice-build-info.txt > ngspice-SHA256SUMS.txt)
+(cd "$ROOT_DIR/public/engine" && sha256sum ngspice.mjs ngspice.wasm ngspice-COPYING.txt ngspice-link.map THIRD_PARTY_NOTICES.md ngspice-source.tar.gz ngspice-relink-objects.tar.gz ngspice-build-info.txt > ngspice-SHA256SUMS.txt)
 cat "$ROOT_DIR/public/engine/ngspice-SHA256SUMS.txt"
-du -h "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"
+du -h "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice-source.tar.gz" "$ROOT_DIR/public/engine/ngspice-relink-objects.tar.gz" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"

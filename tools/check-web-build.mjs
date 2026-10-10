@@ -9,6 +9,8 @@ const forbiddenEngineFiles = new Set([
   'ngspice.wasm',
   'ngspice-COPYING.txt',
   'ngspice-link.map',
+  'ngspice-source.tar.gz',
+  'ngspice-relink-objects.tar.gz',
   'ngspice-build-info.txt',
   'ngspice-SHA256SUMS.txt',
 ])

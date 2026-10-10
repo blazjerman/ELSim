@@ -14,12 +14,22 @@
     }
   ],
   "sourceAndRelinkingMaterials": false,
+  "sourceMaterials": [
+    "ngspice-source.tar.gz",
+    "ngspice-relink-objects.tar.gz",
+    "ngspice-COPYING.txt",
+    "ngspice-link.map",
+    "THIRD_PARTY_NOTICES.md"
+  ],
   "noticesVerified": false,
+  "buildChecksumSha256": "",
   "artifactSha256": {
     "ngspice.mjs": "",
     "ngspice.wasm": "",
     "ngspice-COPYING.txt": "",
     "ngspice-link.map": "",
+    "ngspice-source.tar.gz": "",
+    "ngspice-relink-objects.tar.gz": "",
     "THIRD_PARTY_NOTICES.md": "",
     "ngspice-build-info.txt": "",
     "ngspice-SHA256SUMS.txt": ""

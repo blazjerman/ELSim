@@ -3,36 +3,35 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const engineDir = path.join(root, 'public', 'engine');
-const reviewPath = path.join(root, 'licenses', 'ngspice-distribution-review.json');
+const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const requiredArtifacts = [
   'ngspice.mjs',
   'ngspice.wasm',
   'ngspice-COPYING.txt',
   'ngspice-link.map',
+  'ngspice-source.tar.gz',
+  'ngspice-relink-objects.tar.gz',
   'THIRD_PARTY_NOTICES.md',
   'ngspice-build-info.txt',
   'ngspice-SHA256SUMS.txt',
 ];
 const checksumCoveredArtifacts = requiredArtifacts.filter((name) => name !== 'ngspice-SHA256SUMS.txt');
 
-function fail(message) {
-  console.error(`ngspice release check failed: ${message}`);
-  process.exitCode = 1;
-}
-
 async function sha256(filePath) {
   return createHash('sha256').update(await readFile(filePath)).digest('hex');
 }
 
-async function main() {
+export async function checkNgspiceRelease(root = defaultRoot) {
+  const engineDir = path.join(root, 'public', 'engine');
+  const reviewPath = path.join(root, 'licenses', 'ngspice-distribution-review.json');
+  const errors = [];
+  const fail = (message) => errors.push(message);
   let review;
   try {
     review = JSON.parse(await readFile(reviewPath, 'utf8'));
   } catch {
     fail(`missing or invalid ${path.relative(root, reviewPath)}; copy the review template and obtain qualified review`);
-    return;
+    return errors;
   }
 
   if (review.status !== 'approved') fail('review status must be "approved"');
@@ -57,6 +56,39 @@ async function main() {
   }
   if (!review.sourceAndRelinkingMaterials || !review.noticesVerified) {
     fail('review must confirm source/relinking materials and notice verification');
+  }
+
+  const sourceMaterials = review.sourceMaterials;
+  const requiredSourceMaterials = ['ngspice-source.tar.gz', 'ngspice-relink-objects.tar.gz', 'ngspice-COPYING.txt', 'ngspice-link.map', 'THIRD_PARTY_NOTICES.md'];
+  if (!Array.isArray(sourceMaterials) || !requiredSourceMaterials.every((name) => sourceMaterials.includes(name))) {
+    fail(`review sourceMaterials must include ${requiredSourceMaterials.join(', ')}`);
+  } else {
+    const seen = new Set();
+    for (const [index, material] of sourceMaterials.entries()) {
+      if (typeof material !== 'string' || !material.trim() || path.isAbsolute(material) || material.split(/[\\/]/).includes('..')) {
+        fail(`sourceMaterials[${index}] must be a safe relative path inside public/engine`);
+        continue;
+      }
+      const normalized = path.normalize(material);
+      if (seen.has(normalized)) fail(`sourceMaterials contains duplicate path: ${normalized}`);
+      seen.add(normalized);
+      try {
+        const fullPath = path.resolve(engineDir, normalized);
+        if (!fullPath.startsWith(`${engineDir}${path.sep}`)) throw new Error('outside engine directory');
+        await readFile(fullPath);
+      } catch {
+        fail(`source/relinking material is missing from public/engine: ${normalized}`);
+      }
+    }
+  }
+
+  const buildInfo = await readFile(path.join(engineDir, 'ngspice-build-info.txt'), 'utf8').catch(() => '');
+  const buildCommit = buildInfo.match(/^ngspice source commit: ([a-f\d]{40})$/m)?.[1];
+  if (!buildCommit || review.upstreamCommit !== buildCommit) {
+    fail('review upstreamCommit must match the source commit recorded in public/engine/ngspice-build-info.txt');
+  }
+  if (review.buildChecksumSha256 !== (await sha256(path.join(engineDir, 'ngspice-SHA256SUMS.txt')).catch(() => ''))) {
+    fail('review buildChecksumSha256 must match the current ngspice-SHA256SUMS.txt; re-review changed build outputs');
   }
 
   for (const name of requiredArtifacts) {
@@ -91,9 +123,14 @@ async function main() {
     fail('ngspice-SHA256SUMS.txt is absent or could not be verified');
   }
 
-  if (process.exitCode) {
-    console.error('A passing check is a repository release gate, not legal advice or a substitute for qualified review.');
-  }
+  return errors;
 }
 
-await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const errors = await checkNgspiceRelease();
+  for (const error of errors) console.error(`ngspice release check failed: ${error}`);
+  if (errors.length) {
+    console.error('A passing check is a repository release gate, not legal advice or a substitute for qualified review.');
+    process.exitCode = 1;
+  }
+}
