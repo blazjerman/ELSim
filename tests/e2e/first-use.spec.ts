@@ -1473,6 +1473,21 @@ test('ngspice stderr errors identify the imported model line and unsupported fun
   await expect(modelDiagnostic).toContainText('does not provide')
 })
 
+test('LTspice model compatibility check warns about limit() clamp semantics', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'ltspice-clamp.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.SUBCKT CLAMP IN OUT\nB1 OUT 0 V=limit(V(IN),0,3)\n.ENDS CLAMP\n'),
+  })
+  const warning = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
+  await expect(warning).toContainText('LTspice limit() clamp semantics are unsupported')
+  await expect(warning).toContainText('ltspice-clamp.lib:2')
+  await expect(warning).toContainText('returns 0 instead of 3')
+  await expect(warning).toContainText('min(max(x, low), high)')
+})
+
 test('creating a child sheet can be undone and redone', async ({ page }) => {
   await page.goto('/')
   const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })

@@ -63,6 +63,12 @@ for (const fixture of fixtures) {
     assert.match(wasmResult.stdout, /nmin\s+1\.000000e\+00/i, 'min() should clamp the 2 V input to 1 V')
     assert.match(wasmResult.stdout, /nmax\s+3\.000000e\+00/i, 'max() should raise the 2 V input to 3 V')
     assert.match(wasmResult.stdout, /nramp\s+0\.000000e\+00/i, 'uramp() should return zero for a negative input')
+    assert.match(wasmResult.stdout, /nraw\s+0\.000000e\+00/i, 'ngspice limit() does not clamp 4 V to its 3 V upper bound')
+    assert.match(wasmResult.stdout, /nclamp\s+3\.000000e\+00/i, 'min(max()) should reproduce LTspice upper clamp semantics')
+    const ltaResult = await runInWorker(deckPath, false, undefined, true)
+    assert.equal(ltaResult.status, 0, 'limit() comparison should also run in lta compatibility mode')
+    assert.match(ltaResult.stdout, /nraw\s+0\.000000e\+00/i, 'lta mode does not fix limit() clamp semantics')
+    assert.match(ltaResult.stdout, /nclamp\s+3\.000000e\+00/i, 'min(max()) retains clamp behavior in lta mode')
   }
 
   if (fixture === 'pwl-repeat-forever') {

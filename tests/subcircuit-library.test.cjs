@@ -54,9 +54,10 @@ test('identifies protected LTspice models and binary inputs without attempting t
   assert.equal(decodeModelLibrary(new TextEncoder().encode('* ordinary model comment\n.SUBCKT AMP A B\n.ENDS')), '* ordinary model comment\n.SUBCKT AMP A B\n.ENDS')
 })
 
-test('reports LTspice compatibility-mode limit functions and VSWITCH without rewriting source', () => {
+test('reports LTspice limit() semantic mismatch, compatibility-mode functions, and VSWITCH without rewriting source', () => {
   const source = '* uplim(V(x), 1) is only a comment\n.SUBCKT AMP IN OUT\nB1 OUT 0 V=limit(V(IN),0,5)\nB2 OUT 0 V=uplim(V(IN),0,5)\n.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)\n.ENDS AMP\n'
   assert.deepEqual(analyzeLtspiceModelDialect(source), [
+    { sourceLine: 3, feature: 'LTspice limit() clamp semantics are unsupported', excerpt: 'B1 OUT 0 V=limit(V(IN),0,5)', impact: 'The pinned browser ngspice engine accepts limit() but does not match LTspice clamp behavior: with x=4, low=0, and high=3 it returns 0 instead of 3, including in lta mode.', suggestion: 'For ordered bounds, replace limit(x, low, high) with min(max(x, low), high) after checking the model author’s intended behavior. ELSim preserves the imported expression and does not rewrite it.' },
     { sourceLine: 4, feature: 'LTspice limit function (ngspice lta mode)', excerpt: 'B2 OUT 0 V=uplim(V(IN),0,5)', impact: 'ngspice translates this documented subset only when ELSim enables whole-deck lta compatibility. Other LTspice syntax is not covered by that mode.', suggestion: 'If simulation fails, check the mapped model line and simplify or replace the expression with a tested ngspice-compatible form.' },
     { sourceLine: 5, feature: 'VSWITCH model (unsupported by the current WASM engine)', excerpt: '.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)', impact: 'This switch model needs an XSPICE aswitch code model that is not present in the current browser runtime.', suggestion: 'Replace this model with a compatible user model or ELSim’s built-in ideal switch, then reconnect its control pins.' },
   ])
