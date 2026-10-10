@@ -13,6 +13,7 @@ try {
     '--target', 'ES2022',
     '--module', 'CommonJS',
     '--moduleResolution', 'Node',
+    '--rootDir', path.join(root, 'src'),
     '--outDir', output,
     '--noEmit', 'false',
     '--skipLibCheck',

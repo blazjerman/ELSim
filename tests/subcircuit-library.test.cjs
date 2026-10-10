@@ -81,8 +81,8 @@ test('pinpoints LTspice behavioral forms and options, including continuation rec
   assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
     [2, 'LTspice behavioral resistor/power source'],
     [3, 'LTspice behavioral resistor/power source'],
-    [4, 'LTspice behavioral Laplace option'],
-    [6, 'LTspice behavioral-source option'],
+    [5, 'LTspice behavioral Laplace option'],
+    [7, 'LTspice behavioral-source option'],
   ])
   assert.match(warnings[2].excerpt, /Laplace=1\/\(1\+s\)/i)
   assert.match(warnings[2].suggestion, /ngspice-compatible/)
