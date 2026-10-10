@@ -1114,6 +1114,24 @@ test('portable export names imported files and asks before including unknown-lic
   await page.getByRole('alertdialog', { name: 'Review imported files' }).getByRole('button', { name: 'Save project file', exact: true }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/\.elsim$/)
+  const archivePath = await download.path()
+  expect(archivePath).not.toBeNull()
+
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.locator('input[accept^=".elsim,.json"]').setInputFiles(archivePath!)
+  await expect(page.getByText('Opened RC step response')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return {
+      model: project.modelAssets.find((asset: { filename: string }) => asset.filename === 'user-diode.lib')?.content,
+      symbol: project.symbolAssets.find((asset: { filename: string }) => asset.filename === 'user-device.asy')?.content,
+      originalSource: project.importedSchematicSource?.originalText,
+    }
+  })).toEqual({
+    model: content,
+    symbol: symbolContent,
+    originalSource: 'Version 4\nSHEET 1 880 680\n',
+  })
 })
 
 test('opening a project asks before replacing the current circuit', async ({ page }) => {
