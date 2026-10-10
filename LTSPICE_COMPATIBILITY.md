@@ -61,7 +61,7 @@ This matrix describes the importer as implemented today. “Supported” means E
 
 ## Model dialect checks
 
-The compatibility assistant currently detects selected LTspice constructs rather than claiming full dialect validation. Tested diagnostics include encrypted model files, `uplim`/`dnlim` handling through ngspice `lta` (including SPICE `+` continuation lines), unavailable `VSWITCH`, B-source `R=`/`P=`, behavioral Laplace options, LTspice `table()` expressions (which the pinned browser ngspice engine rejects as an unknown function), and unsupported timestep/Laplace tuning options. The worker enables `lta` mode when a limit function appears anywhere in a logical deck record; imported model text is preserved unchanged.
+The compatibility assistant currently detects selected LTspice constructs rather than claiming full dialect validation. Tested diagnostics include encrypted model files, `uplim`/`dnlim` handling through ngspice `lta` (including SPICE `+` continuation lines), unavailable `VSWITCH`, B-source `R=`/`P=`, behavioral Laplace options, LTspice `table()` and `idt()` expressions (which the pinned browser ngspice engine rejects as unknown functions), and unsupported timestep/Laplace tuning options. The worker enables `lta` mode when a limit function appears anywhere in a logical deck record; imported model text is preserved unchanged.
 
 ## Provenance and licensing
 

@@ -347,4 +347,10 @@ assert.ok(onIndex >= 0 && transistorOutputs[onIndex] < 0.5, `NPN should saturate
 assert.ok(collectorCurrent[onIndex] > 1e-3, `NPN collector current should be positive while switched on, got ${collectorCurrent[onIndex]}`)
 process.stdout.write('PASS npn-transistor-switch\n')
 
+const unsupportedIdtPath = path.join(root, 'engine/wasm/fixtures', 'unsupported-ltspice-idt.cir')
+const unsupportedIdtResult = await runInWorker(unsupportedIdtPath)
+assert.notEqual(unsupportedIdtResult.status, 0, 'unsupported-ltspice-idt: ngspice unexpectedly accepted idt()')
+assert.match(`${unsupportedIdtResult.stdout}\n${unsupportedIdtResult.stderr}`, /no such function ['\"]idt['\"]/i, 'unsupported-ltspice-idt: engine failure did not identify idt()')
+process.stdout.write('PASS unsupported-ltspice-idt-diagnostic\n')
+
 if (!nativeNgspice) process.stdout.write('Native parity comparison skipped; pass the pinned native ngspice executable as argument 2.\n')

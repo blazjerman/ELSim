@@ -101,6 +101,14 @@ test('flags LTspice table() expressions rejected by the pinned browser ngspice e
   assert.equal(source.includes('table(V(IN)'), true)
 })
 
+test('flags LTspice idt() behavioral functions rejected by the pinned browser ngspice engine', () => {
+  const source = '.SUBCKT integrator IN OUT\nB1 OUT 0 V=idt(V(IN))\n.ENDS integrator'
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'LTspice behavioral integration function'])
+  assert.match(warning.impact, /no such function/)
+  assert.match(warning.suggestion, /capacitor-based circuit/)
+})
+
 test('dialect warnings retain continuation line numbers and ignore dollar signs inside quotes', () => {
   const source = [
     '.SUBCKT compat IN OUT',

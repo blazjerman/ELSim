@@ -1,0 +1,6 @@
+Original unsupported LTspice integration function case
+V1 in 0 1
+B1 out 0 V=idt(V(in))
+R1 out 0 1k
+.op
+.end
