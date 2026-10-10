@@ -868,6 +868,32 @@ test('PWL source can repeat forever in the browser ngspice engine', async ({ pag
   await expect(page.getByRole('button', { name: 'V\(vin\)', exact: true })).toBeVisible()
 })
 
+test('finite PWL repeat count is editable and runs in the browser ngspice engine', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    const source = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    source.sourceMode = 'pwl'
+    source.pwl = [{ time: '0', voltage: '0 V' }, { time: '2m', voltage: '5 V' }, { time: '4m', voltage: '0 V' }]
+    source.pwlRepeat = undefined
+    source.pwlRepeatCount = 3
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    project.simulation.stopTime = '14m'
+    project.simulation.maxStep = '100u'
+    localStorage.setItem(key, JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await expect(page.getByRole('spinbutton', { name: 'PWL repeat cycles' })).toHaveValue('3')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V\(vin\)', exact: true })).toBeVisible()
+})
+
 
 test('LTspice current-source SINE waveform edits and simulates in the browser engine', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

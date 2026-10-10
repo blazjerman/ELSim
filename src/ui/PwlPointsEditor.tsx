@@ -1,13 +1,14 @@
 import type { CurrentSourcePwlPoint, SourcePwlPoint } from '../domain/project'
 import { validateSourcePwlPoints } from '../domain/sourcePwl'
 
-export default function PwlPointsEditor({ points, onChange, partId, validationMessage, quantity = 'voltage', repeatForever = false, onRepeatForeverChange }: { points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined; onChange: (points: (SourcePwlPoint | CurrentSourcePwlPoint)[]) => void; partId: string; validationMessage?: string; quantity?: 'voltage' | 'current'; repeatForever?: boolean; onRepeatForeverChange?: (repeat: boolean) => void }) {
+export default function PwlPointsEditor({ points, onChange, partId, validationMessage, quantity = 'voltage', repeatForever = false, onRepeatForeverChange, repeatCount, onRepeatCountChange }: { points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined; onChange: (points: (SourcePwlPoint | CurrentSourcePwlPoint)[]) => void; partId: string; validationMessage?: string; quantity?: 'voltage' | 'current'; repeatForever?: boolean; onRepeatForeverChange?: (repeat: boolean) => void; repeatCount?: number; onRepeatCountChange?: (count: number | undefined) => void }) {
   const valueKey = quantity === 'voltage' ? 'voltage' : 'current'
   const rows = (points ?? [{ time: '0', [valueKey]: '0' }, { time: '10m', [valueKey]: quantity === 'voltage' ? '5' : '5m' }]) as (SourcePwlPoint | CurrentSourcePwlPoint)[]
   const errors = validateSourcePwlPoints(rows, quantity)
   const pointValue = (point: SourcePwlPoint | CurrentSourcePwlPoint) => 'voltage' in point ? point.voltage : point.current
   const fieldPrefix = quantity === 'voltage' ? 'pwl' : 'currentPwl'
   const countErrorId = `pwl-point-count-error-${partId}`
+  const maxRepeatCount = Math.floor((32 - rows.length) / (rows.length - 1)) + 1
   const updateRows = (next: { time: string; value: string }[]) => onChange(next.map(({ time, value }) => quantity === 'voltage' ? { time, voltage: value } : { time, current: value }))
   const addPoint = () => {
     const lastTime = rows.at(-1)?.time ?? '0'
@@ -27,5 +28,6 @@ export default function PwlPointsEditor({ points, onChange, partId, validationMe
     </div>)}
     <button type="button" className="add-pwl-point" data-part-setting={`${partId}:${fieldPrefix}.points`} aria-invalid={Boolean(validationMessage)} aria-describedby={validationMessage ? countErrorId : undefined} disabled={rows.length >= 32} onClick={addPoint}>+ Add point</button>
     {quantity === 'voltage' && onRepeatForeverChange && <label className="field-label"><input type="checkbox" aria-label="Repeat PWL waveform forever" checked={repeatForever} onChange={(event) => onRepeatForeverChange(event.target.checked)}/>Repeat waveform forever</label>}
+    {quantity === 'voltage' && onRepeatCountChange && <label className="field-label">Finite repeat cycles<input type="number" aria-label="PWL repeat cycles" min="1" max={maxRepeatCount} step="1" disabled={repeatForever} value={repeatForever ? '' : repeatCount ?? ''} placeholder="Once" onChange={(event) => { const value = event.target.value; if (!value) onRepeatCountChange(undefined); else { const count = Number(value); if (Number.isInteger(count) && count >= 1 && count <= maxRepeatCount) onRepeatCountChange(count) } }}/><small className="field-hint">Leave blank to play once. A repeating table must start and end at the same voltage; this point count allows up to {maxRepeatCount} cycles.</small></label>}
   </div>
 }
