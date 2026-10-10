@@ -391,7 +391,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
   const [cursorIndex, setCursorIndex] = useState<number | null>(sampleIndex)
   useEffect(() => setCursorIndex(sampleIndex), [traces, sampleIndex])
-  const pathFor = (trace: Trace) => {
+  const plotPaths = useMemo(() => shown.map((trace) => {
     const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
     const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
     const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
@@ -403,8 +403,8 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
       const y = bottom - ((trace.values[index] - minValue) / range) * (bottom - top)
       points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
     }
-    return points.join(' ')
-  }
+    return { id: trace.id, color: colors[traces.indexOf(trace) % colors.length], points: points.join(' ') }
+  }), [shown, minTime, maxTime, voltageRange[0], voltageRange[1], currentRange[0], currentRange[1]])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -419,7 +419,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
     <svg className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds`} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, width, height, right - left, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
       {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const v = voltageRange[1] - (line / 3) * (voltageRange[1] - voltageRange[0]); const a = currentRange[1] - (line / 3) * (currentRange[1] - currentRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{v.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{a.toPrecision(3)} A</text>}</g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
-      {shown.map((trace) => <polyline key={trace.id} points={pathFor(trace)} fill="none" stroke={colors[traces.indexOf(trace) % colors.length]} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
+      {plotPaths.map((plot) => <polyline key={plot.id} points={plot.points} fill="none" stroke={plot.color} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} x2={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
     </svg>

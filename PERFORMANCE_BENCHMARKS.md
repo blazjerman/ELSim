@@ -103,14 +103,14 @@ The hierarchy generator repeatedly resolved sheet IDs with linear array searches
 
 ### Browser large transient
 
-`npm run benchmark:browser -- --grep "million-sample transient"` runs a 1 s RC transient with a 1 µs maximum step through the actual ngspice browser worker, app response handling, result plot, and time scrubber. It selects up to five available voltage/current traces and requires at least four plotted traces, then checks at least one million solved samples, cursor readout at the last sample, and no page errors. A 16 ms main-thread timer records its largest scheduling gap during the run. `resultReadyMs` covers Run click through the completion notice. These are single local observations, not thresholds.
+`npm run benchmark:browser -- --grep "million-sample transient"` runs a 1 s RC transient with a 1 µs maximum step through the actual ngspice browser worker, app response handling, result plot, and time scrubber. It selects up to five available voltage/current traces and requires at least four plotted traces, then checks at least one million solved samples, cursor readout at the last sample, and no page errors. A 16 ms main-thread timer records its largest scheduling gap during the run. `resultReadyMs` covers Run click through the completion notice. Repeated scrub measurements include End → Home → End. The first scrub may include trace setup; later cursor updates reuse memoized SVG trace geometry and do not rescan the sample vectors. These are single local observations, not thresholds.
 
-| Browser | Solved samples | Plotted traces | Result ready (ms) | Final scrub (ms) | Largest main-thread timer gap (ms) | Renderer heap before → after |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Chromium | 1,000,130 | 5 | 7,939.78 | 109.78 | 70 | 23.1 → 23.1 MB |
-| Firefox | 1,000,130 | 5 | 20,054.67 | 343.97 | 69 | unavailable |
+| Browser | Solved samples | Plotted traces | Result ready (ms) | Scrubs End/Home/End (ms) | Largest main-thread timer gap (ms) | Renderer heap before → after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Chromium | 1,000,130 | 5 | 7,999.36 | 240.51 / 37.18 / 22.34 | 108 | 26.0 → 26.0 MB |
+| Firefox | 1,000,130 | 5 | 20,059.97 | 45.49 / 27.78 / 28.81 | 48 | unavailable |
 
-Chromium's `performance.memory` numbers cover the page renderer and remained unchanged at the reported resolution; they do not include the dedicated worker's WASM memory. Firefox does not expose that API in this run. The timer gaps indicate that the renderer remained responsive while the worker solved and parsed results, but do not provide a worker-memory measurement. Reliable per-worker peak memory remains unmeasured.
+Cursor-only updates now avoid rebuilding sampled polyline strings; changing traces, visible time range, or value scale still rebuilds affected geometry. Chromium's `performance.memory` numbers cover the page renderer and remained unchanged at the reported resolution; they do not include the dedicated worker's WASM memory. Firefox does not expose that API in this run. The timer gaps indicate that the renderer remained responsive while the worker solved and parsed results, but do not provide a worker-memory measurement. Reliable per-worker peak memory remains unmeasured.
 
 ### Browser multi-trace transient
 
@@ -118,10 +118,10 @@ The performance Playwright suite builds a 24-resistor DC chain, runs a 10 ms tra
 
 | Browser | Solved samples | Available vectors | Plotted traces | Max rendered points/trace | Result ready (ms) | Select/render (ms) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Chromium | 10,012 | 49 | 40 | 452 | 988.61 | 701.90 |
-| Firefox | 10,012 | 49 | 40 | 452 | 2,032.61 | 1,023.00 |
+| Chromium | 10,012 | 49 | 40 | 452 | 1,003.87 | 658.70 |
+| Firefox | 10,012 | 49 | 40 | 452 | 2,005.67 | 817.00 |
 
-These are single local observations, not release budgets. They verify the combined high-trace/high-sample browser workload at this size. Larger simultaneous sample/trace counts and reliable browser/worker peak-memory measurement remain open.
+These are single local observations, not release budgets. The rerun after memoizing trace geometry verifies the combined high-trace/high-sample browser workload at this size. Cursor-only changes do not regenerate the polylines. Larger simultaneous sample/trace counts and reliable browser/worker peak-memory measurement remain open.
 
 ## Legacy browser editor timing (2026-10-10)
 

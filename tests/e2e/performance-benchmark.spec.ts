@@ -209,10 +209,13 @@ test('measure a million-sample transient through the browser ngspice worker and 
   expect(selectedTraceCount).toBeGreaterThanOrEqual(4)
   const renderedTraceCount = await page.locator('.waveform-chart polyline').count()
   expect(renderedTraceCount).toBe(selectedTraceCount)
-  const scrubStarted = performance.now()
-  await slider.press('End')
-  await expect(page.locator('.cursor-readout')).toContainText('V(vout)')
-  const scrubMs = performance.now() - scrubStarted
+  const scrubTimes: number[] = []
+  for (const key of ['End', 'Home', 'End']) {
+    const scrubStarted = performance.now()
+    await slider.press(key)
+    await expect(page.locator('.cursor-readout')).toContainText('V(vout)')
+    scrubTimes.push(Number((performance.now() - scrubStarted).toFixed(2)))
+  }
   const after = await page.evaluate(() => {
     const perf = performance as Performance & { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }
     const win = window as Window & { __largeTransientWatch?: { maxIntervalDelayMs: number }; __largeTransientTimer?: number }
@@ -225,7 +228,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
     }
   })
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-million-sample-multi-trace-transient-v2', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), finalSampleScrubMs: Number(scrubMs.toFixed(2)), heapBefore: before, heapAfter: after }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-million-sample-multi-trace-transient-v3', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, heapBefore: before, heapAfter: after }, null, 2))
 })
 
 test('measure browser waveform rendering with dozens of solved traces', async ({ page, browserName }) => {
