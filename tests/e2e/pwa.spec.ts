@@ -1,7 +1,25 @@
 import { test, expect } from '@playwright/test'
 
 test('production app shell opens offline and preserves local project edits', async ({ page, context }) => {
-  await page.goto('/')
+  await page.addInitScript(() => {
+    const testWindow = window as Window & { __cspViolations?: string[] }
+    const storageKey = 'elsim:test:csp-violations'
+    testWindow.__cspViolations = JSON.parse(sessionStorage.getItem(storageKey) ?? '[]') as string[]
+    window.addEventListener('securitypolicyviolation', (event) => {
+      testWindow.__cspViolations?.push(`${event.effectiveDirective}: ${event.blockedURI}`)
+      sessionStorage.setItem(storageKey, JSON.stringify(testWindow.__cspViolations))
+    })
+  })
+  const response = await page.goto('/')
+  expect(response).not.toBeNull()
+  const headers = response!.headers()
+  const csp = headers['content-security-policy']
+  expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'")
+  expect(csp).not.toContain("'unsafe-eval'")
+  expect(csp).toContain("frame-ancestors 'none'")
+  expect(headers['x-content-type-options']).toBe('nosniff')
+  expect(headers['x-frame-options']).toBe('DENY')
+  await expect.poll(() => page.evaluate(() => WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])).then(() => true))).toBe(true)
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
   await page.evaluate(() => navigator.serviceWorker.ready)
   await page.reload()
@@ -22,4 +40,5 @@ test('production app shell opens offline and preserves local project edits', asy
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
   await expect(page.locator('svg.schematic .circuit-part.selected .part-ref')).toHaveText('R1')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-r1')?.value)).toBe('2.2k')
+  expect(await page.evaluate(() => (window as Window & { __cspViolations?: string[] }).__cspViolations)).toEqual([])
 })

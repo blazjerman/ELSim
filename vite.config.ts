@@ -7,6 +7,27 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
+const securityHeaders = {
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "connect-src 'self'",
+    "font-src 'self' data:",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "frame-src 'none'",
+    "img-src 'self' data:",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "script-src 'self' 'wasm-unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "worker-src 'self'",
+  ].join('; '),
+  'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+}
 
 export default defineConfig(({ command, mode }) => {
   if (command === 'build' && mode === 'release') {
@@ -43,6 +64,8 @@ export default defineConfig(({ command, mode }) => {
         const precache = ['./', ...assets.map(({ path: assetPath }) => assetPath)]
         const worker = `const CACHE_PREFIX = 'elsim-shell-'\nconst CACHE_NAME = ${JSON.stringify(cacheName)}\nconst PRECACHE_URLS = ${JSON.stringify(precache)}\n\nself.addEventListener('install', (event) => {\n  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)))\n})\n\nself.addEventListener('activate', (event) => {\n  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map((key) => caches.delete(key)))))\n})\n\nself.addEventListener('fetch', (event) => {\n  const request = event.request\n  if (request.method !== 'GET') return\n  const url = new URL(request.url)\n  if (url.origin !== self.location.origin || !url.href.startsWith(self.registration.scope)) return\n  if (request.mode === 'navigate') {\n    event.respondWith(fetch(request).then((response) => response).catch(async () => {\n      const cache = await caches.open(CACHE_NAME)\n      return (await cache.match(request)) || (await cache.match(new URL('./index.html', self.registration.scope).href)) || Response.error()\n    }))\n    return\n  }\n  event.respondWith((async () => {\n    const cache = await caches.open(CACHE_NAME)\n    const cached = await cache.match(request)\n    if (cached) return cached\n    const response = await fetch(request)\n    if (response.ok && response.type === 'basic' && !/no-store/i.test(response.headers.get('Cache-Control') || '')) await cache.put(request, response.clone())\n    return response\n  })())\n})\n`
         this.emitFile({ type: 'asset', fileName: 'sw.js', source: worker })
+        const hostedHeaders = ['/*', ...Object.entries(securityHeaders).map(([name, value]) => `  ${name}: ${value}`)].join('\n') + '\n'
+        this.emitFile({ type: 'asset', fileName: '_headers', source: hostedHeaders })
       },
     }, {
       name: 'copy-third-party-notices',
@@ -54,6 +77,7 @@ export default defineConfig(({ command, mode }) => {
       },
     }],
     worker: { format: 'es' },
+    preview: { headers: securityHeaders },
     // The checked-in source build must not accidentally redistribute an
     // ignored, locally generated ngspice binary. Dev keeps it available for
     // local simulation; release mode includes it only after the gate above.

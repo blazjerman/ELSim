@@ -1,4 +1,4 @@
-import { access, readdir } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -24,6 +24,10 @@ async function visit(directory) {
 try {
   await access(path.join(output, 'index.html'))
   await access(path.join(output, 'THIRD_PARTY_NOTICES.md'))
+  const securityHeaders = await readFile(path.join(output, '_headers'), 'utf8')
+  if (!securityHeaders.includes("script-src 'self' 'wasm-unsafe-eval'") || securityHeaders.includes("'unsafe-eval'")) {
+    throw new Error('Standard web build is missing the restricted WebAssembly Content Security Policy.')
+  }
   await visit(output)
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Standard web build verification failed.')
