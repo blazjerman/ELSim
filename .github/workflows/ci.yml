@@ -46,6 +46,12 @@ jobs:
       - name: Verify offline editing in the production preview
         run: npm run test:e2e:pwa
 
+      - name: Install Firefox and WebKit for Playwright
+        run: npx playwright install --with-deps firefox webkit
+
+      - name: Run Firefox and WebKit compatibility regressions
+        run: npm run test:e2e:compat
+
       - name: Upload browser traces on failure
         if: failure()
         uses: actions/upload-artifact@v5

@@ -12,6 +12,7 @@
     "test": "node tests/run-netlist-tests.cjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --grep-invert \"first use: run the RC starter|import, place, and simulate a user-supplied IC\"",
+    "test:e2e:compat": "playwright test --config playwright.browser-matrix.config.ts",
     "test:e2e:pwa": "playwright test --config playwright.pwa.config.ts",
     "test:wasm": "node tools/test-ngspice-wasm.mjs",
     "check:ngspice-release": "node tools/check-ngspice-release.mjs",

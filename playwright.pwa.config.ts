@@ -8,13 +8,13 @@ export default defineConfig({
   reporter: 'list',
   use: {
     ...devices['Desktop Chrome'],
-    baseURL: 'http://127.0.0.1:4181',
+    baseURL: 'http://127.0.0.1:4183',
     viewport: { width: 1100, height: 900 },
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --port 4181 --strictPort',
-    url: 'http://127.0.0.1:4181',
+    command: 'npm run preview -- --host 127.0.0.1 --port 4183 --strictPort',
+    url: 'http://127.0.0.1:4183',
     reuseExistingServer: false,
     timeout: 30_000,
   },

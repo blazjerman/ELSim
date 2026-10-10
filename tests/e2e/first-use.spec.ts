@@ -117,8 +117,10 @@ test('junction tool toggles a crossing connection in the schematic', async ({ pa
   const svg = page.locator('svg.schematic')
   const box = await svg.boundingBox()
   expect(box).not.toBeNull()
-  const coordinate = (x: number, y: number) => ({ x: box!.x + x / 760 * box!.width, y: box!.y + y / 600 * box!.height })
-  const crossing = coordinate(350, 300)
+  const crossing = await svg.evaluate((element) => {
+    const matrix = element.getScreenCTM()!
+    return { x: matrix.a * 350 + matrix.c * 300 + matrix.e, y: matrix.b * 350 + matrix.d * 300 + matrix.f }
+  })
 
   await page.getByRole('button', { name: 'Toggle a wire crossing junction (J)' }).click()
   await svg.click({ position: { x: crossing.x - box!.x, y: crossing.y - box!.y } })
