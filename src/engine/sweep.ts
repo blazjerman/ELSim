@@ -1,20 +1,39 @@
-import type { ParameterSweep, Project } from '../domain/project'
+import type { ParameterSweep, Project, SourceSweepParameter } from '../domain/project'
 import { componentMagnitude } from '../domain/componentValue'
 import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 
-export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; sourceParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
+export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; sourceParameter?: SourceSweepParameter; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
 
 function componentUnit(kind: string): string {
   return kind === 'source' ? 'V' : kind === 'currentSource' ? 'A' : kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
 }
 
+function sourceParameterUnit(parameter: SourceSweepParameter, kind: string): string {
+  const field = parameter.split('.').at(-1)
+  if (['frequency', 'carrierFrequency', 'signalFrequency'].includes(field ?? '')) return 'Hz'
+  if (['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field ?? '')) return 's'
+  if (parameter === 'pwl.scale') return '×'
+  if (field === 'phase') return '°'
+  if (['initial', 'high', 'pulsed', 'offset', 'amplitude'].includes(field ?? '')) return kind === 'source' ? 'V' : 'A'
+  return ''
+}
+
 function buildValues(project: Project, sweep: ParameterSweep) {
   const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
   if (sweep.sourceParameter) {
-    if (!part || (part.kind !== 'source' && part.kind !== 'currentSource') || (sweep.sourceParameter === 'sine.frequency' && part.sourceMode !== 'sine') || (sweep.sourceParameter.startsWith('sffm.') && part.sourceMode !== 'sffm')) throw new Error(`${sweep.component}.${sweep.sourceParameter} is not a frequency field on its selected source waveform.`)
-    const values = [sweep.start, sweep.stop].map((value) => scalarMagnitude(value.trim().replace(/hz$/i, '')))
+    const mode = part?.sourceMode ?? (part?.kind === 'source' ? 'pulse' : 'dc')
+    if (!part || (part.kind !== 'source' && part.kind !== 'currentSource') || (sweep.sourceParameter === 'pwl.scale' ? mode !== 'pwl' : !sweep.sourceParameter.startsWith(`${mode}.`))) throw new Error(`${sweep.component}.${sweep.sourceParameter} does not belong to its selected source waveform.`)
+    const field = sweep.sourceParameter.split('.').at(-1)!
+    const dimensioned = ['frequency', 'carrierFrequency', 'signalFrequency', 'delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
+    const values = [sweep.start, sweep.stop].map((value) => {
+      if (['initial', 'high', 'pulsed', 'offset', 'amplitude'].includes(field)) return componentMagnitude(value, part.kind)
+      return scalarMagnitude(dimensioned ? value.trim().replace(/(?:hz|s)$/i, '') : field === 'phase' ? value.trim().replace(/°$/i, '') : value)
+    })
     const [start, stop] = values
-    if (start === null || stop === null || start <= 0 || stop <= 0 || start === stop) throw new Error(`${part.ref}.${sweep.sourceParameter} needs valid, positive, different frequency endpoints.`)
+    const frequency = ['frequency', 'carrierFrequency', 'signalFrequency'].includes(field)
+    const time = ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
+    const positive = ['period', 'riseTau', 'fallTau'].includes(field)
+    if (start === null || stop === null || start === stop || (frequency && (start <= 0 || stop <= 0)) || (time && (start < 0 || stop < 0 || (positive && (start <= 0 || stop <= 0))))) throw new Error(`${part.ref}.${sweep.sourceParameter} needs valid, different endpoints${frequency || positive ? ' (positive values required)' : ''}.`)
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (sweep.parameter) {
@@ -60,13 +79,14 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
     combinations = combinations.flatMap((combination) => values.map((value) => {
       const parameter = sweep.parameter
       const sourceParameter = sweep.sourceParameter
-      const pwlScale = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pwl'
-      const waveformAmplitude = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && ['sine', 'exp', 'sffm'].includes(part.sourceMode ?? '')
-      const display = parameter ? `${Number(value.toPrecision(5))}` : sourceParameter ? `${Number(value.toPrecision(5))} Hz` : pwlScale ? `${Number(value.toPrecision(5))}×` : `${Number(value.toPrecision(5))} ${componentUnit(part.kind)}`
+      const pwlScale = !parameter && !sourceParameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pwl'
+      const waveformAmplitude = !parameter && !sourceParameter && (part.kind === 'source' || part.kind === 'currentSource') && ['sine', 'exp', 'sffm'].includes(part.sourceMode ?? '')
+      const parameterUnit = sourceParameter ? sourceParameterUnit(sourceParameter, part.kind) : ''
+      const display = parameter ? `${Number(value.toPrecision(5))}` : sourceParameter ? `${Number(value.toPrecision(5))}${parameterUnit ? ` ${parameterUnit}` : ''}` : pwlScale ? `${Number(value.toPrecision(5))}×` : `${Number(value.toPrecision(5))} ${componentUnit(part.kind)}`
       const target = parameter ? `${part.ref}.${parameter}` : sourceParameter ? `${part.ref}.${sourceParameter}` : part.ref
       const label = combination.label ? `${combination.label}, ${target}=${display}` : `${target}=${display}`
       const model = parameter ? part.deviceModel : undefined
-      const pulseHigh = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
+      const pulseHigh = !parameter && !sourceParameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
       return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model } : {}), ...(sourceParameter ? { sourceParameter } : {}), ...(!sourceParameter && pulseHigh ? { pulseHigh: true } : {}), ...(!sourceParameter && pwlScale ? { pwlScale: true } : {}), ...(!sourceParameter && waveformAmplitude ? { waveformAmplitude: true } : {}) }], label }
     }))
   }

@@ -57,7 +57,8 @@ export type PlotSettings = {
   detachedWindow?: { x: number; y: number; width: number; height: number }
   panels?: PlotPanel[]
 }
-export type ParameterSweep = { component: string; parameter?: string; sourceParameter?: 'sine.frequency' | 'sffm.carrierFrequency' | 'sffm.signalFrequency'; start: string; stop: string; points: number }
+export type SourceSweepParameter = 'pulse.initial' | 'pulse.high' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pwl.scale' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
+export type ParameterSweep = { component: string; parameter?: string; sourceParameter?: SourceSweepParameter; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
 export type AssetProvenance = { sourceUrl?: string; licenseReference?: string; rightsNotes?: string }
@@ -405,13 +406,14 @@ export function validateProject(input: unknown): Project {
       if (!sweep || typeof sweep.component !== 'string' || !sweep.component.trim()) throw new Error('Parameter stepping settings are malformed.')
       const component = data.parts.find((part) => (part as Part).ref.toLowerCase() === sweep.component.toLowerCase()) as Part | undefined
       const modelSweep = typeof sweep.parameter === 'string'
-      const frequencySweep = sweep.sourceParameter !== undefined
-      const validFrequencyTarget = (component?.kind === 'source' || component?.kind === 'currentSource') && ((component.sourceMode === 'sine' && sweep.sourceParameter === 'sine.frequency') || (component.sourceMode === 'sffm' && ['sffm.carrierFrequency', 'sffm.signalFrequency'].includes(sweep.sourceParameter ?? '')))
+      const sourceFieldSweep = sweep.sourceParameter !== undefined
+      const sourceMode = component?.sourceMode ?? (component?.kind === 'source' ? 'pulse' : 'dc')
+      const validSourceTarget = (component?.kind === 'source' || component?.kind === 'currentSource') && (sweep.sourceParameter === 'pwl.scale' ? sourceMode === 'pwl' : typeof sweep.sourceParameter === 'string' && sweep.sourceParameter.startsWith(`${sourceMode}.`))
       const supportedDevice = ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(component?.kind ?? '')
       const selectedModel = component?.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === component.deviceModel!.toLowerCase()) : undefined
       const modelParameter = modelSweep && selectedModel?.parameters.find((parameter) => parameter.name.toLowerCase() === sweep.parameter!.toLowerCase())
       const waveformSweep = !modelSweep && (component?.kind === 'source' || component?.kind === 'currentSource') && ['pulse', 'pwl', 'sine', 'exp', 'sffm'].includes(component.sourceMode ?? '')
-      if (!component || (modelSweep && (frequencySweep || !supportedDevice || !selectedModel || !modelParameter || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.parameter!))) || (frequencySweep && (modelSweep || !validFrequencyTarget)) || (!modelSweep && !frequencySweep && !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component.kind)) || (!modelSweep && !frequencySweep && component.kind === 'source' && component.sourceMode !== 'dc' && !waveformSweep) || (!modelSweep && !frequencySweep && component.kind === 'currentSource' && component.sourceMode !== 'dc' && component.sourceMode !== undefined && !waveformSweep) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct scalar DC, PULSE/PWL, SINE, EXP, or SFFM sources, R/C/L parts, valid source frequency targets, or numeric parameters on selected imported device models, with 2–10 steps.')
+      if (!component || (modelSweep && (sourceFieldSweep || !supportedDevice || !selectedModel || !modelParameter || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.parameter!))) || (sourceFieldSweep && (modelSweep || !validSourceTarget)) || (!modelSweep && !sourceFieldSweep && !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component.kind)) || (!modelSweep && !sourceFieldSweep && component.kind === 'source' && component.sourceMode !== 'dc' && !waveformSweep) || (!modelSweep && !sourceFieldSweep && component.kind === 'currentSource' && component.sourceMode !== 'dc' && component.sourceMode !== undefined && !waveformSweep) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct scalar DC, PULSE/PWL, SINE, EXP, or SFFM sources, R/C/L parts, a valid source waveform field, or numeric parameters on selected imported device models, with 2–10 steps.')
       const parseComponentValue = (value: string): number | null => {
         const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/[ΩΩ]|ohms?|[vVaAfFhH]$/gi, '')
         const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
@@ -420,10 +422,15 @@ export function validateProject(input: unknown): Project {
         const parsed = Number(match[1]) * scale
         return Number.isFinite(parsed) ? parsed : null
       }
-      const parseFrequency = (value: string) => parseComponentValue(value.trim().replace(/hz$/i, ''))
-      const start = frequencySweep ? parseFrequency(sweep.start) : parseComponentValue(sweep.start)
-      const stop = frequencySweep ? parseFrequency(sweep.stop) : parseComponentValue(sweep.stop)
-      if (start === null || stop === null || start === stop || (frequencySweep && (start <= 0 || stop <= 0)) || (!sweep.parameter && !frequencySweep && !['source', 'currentSource'].includes(component.kind) && (start <= 0 || stop <= 0))) throw new Error(`${component.ref} needs valid, different parameter start and stop values; passive values and source frequencies must be positive.`)
+      const sourceField = sweep.sourceParameter?.split('.').at(-1)
+      const unitlessSourceTarget = sourceFieldSweep && (['frequency', 'carrierFrequency', 'signalFrequency', 'delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau', 'scale', 'damping', 'phase', 'modulationIndex'].includes(sourceField ?? ''))
+      const parseSourceValue = (value: string) => parseComponentValue(unitlessSourceTarget ? value.trim().replace(/(?:hz|s|°)$/i, '') : value)
+      const start = sourceFieldSweep ? parseSourceValue(sweep.start) : parseComponentValue(sweep.start)
+      const stop = sourceFieldSweep ? parseSourceValue(sweep.stop) : parseComponentValue(sweep.stop)
+      const frequencyField = sourceField === 'frequency' || sourceField === 'carrierFrequency' || sourceField === 'signalFrequency'
+      const timeField = ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(sourceField ?? '')
+      const positiveTimeField = ['period', 'riseTau', 'fallTau'].includes(sourceField ?? '')
+      if (start === null || stop === null || start === stop || (frequencyField && (start <= 0 || stop <= 0)) || (timeField && (start < 0 || stop < 0 || (positiveTimeField && (start <= 0 || stop <= 0)))) || (!sweep.parameter && !sourceFieldSweep && !['source', 'currentSource'].includes(component.kind) && (start <= 0 || stop <= 0))) throw new Error(`${component.ref} needs valid, different parameter start and stop values; passive values, source frequencies, and positive time constants must be positive.`)
       sweepRefs.add(sweep.component.toLowerCase())
       combinations *= sweep.points
     }

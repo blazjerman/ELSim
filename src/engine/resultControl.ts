@@ -14,8 +14,8 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const pwlParameters = new Map([...new Set(pwlSweeps)].map((component) => [component.toLowerCase(), `ELSIM_SWEEP_PWL_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_SCALE`]))
   const amplitudeSweeps = parameterSweep.flatMap((run) => run.values.filter((value) => value.waveformAmplitude).map((value) => value.component))
   const amplitudeParameters = new Map([...new Set(amplitudeSweeps)].map((component) => [component.toLowerCase(), `ELSIM_SWEEP_WAVE_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_AMPLITUDE`]))
-  const frequencyTargets = parameterSweep.flatMap((run) => run.values.filter((value) => value.sourceParameter).map((value) => ({ component: value.component, sourceParameter: value.sourceParameter! })))
-  const frequencyParameters = new Map(frequencyTargets.map(({ component, sourceParameter }) => [`${component.toLowerCase()}.${sourceParameter}`, `ELSIM_SWEEP_FREQ_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_${sourceParameter.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}`]))
+  const sourceFieldTargets = parameterSweep.flatMap((run) => run.values.filter((value) => value.sourceParameter).map((value) => ({ component: value.component, sourceParameter: value.sourceParameter! })))
+  const sourceFieldParameters = new Map(sourceFieldTargets.map(({ component, sourceParameter }) => [`${component.toLowerCase()}.${sourceParameter}`, `ELSIM_SWEEP_SOURCE_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_${sourceParameter.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}`]))
   const waveformParameterRows = [...pulseParameters].map(([component, parameter]) => {
     const line = rows.findIndex((row) => row.trim().match(new RegExp(`^${component}\\s`, 'i')))
     if (line < 0) throw new Error(`Pulse source ${component} is missing from the generated netlist.`)
@@ -56,22 +56,32 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     if (!initial) throw new Error(`Waveform source ${component} has no initial stepped amplitude.`)
     return `.param ${parameter}=${initial}`
   }))
-  waveformParameterRows.push(...[...frequencyParameters].map(([target, parameter]) => {
+  waveformParameterRows.push(...[...sourceFieldParameters].map(([target, parameter]) => {
     const separator = target.indexOf('.')
     const component = target.slice(0, separator)
     const sourceParameter = target.slice(separator + 1)
     const line = rows.findIndex((row) => row.trim().match(new RegExp(`^${component}\\s`, 'i')))
-    if (line < 0) throw new Error(`Frequency source ${component} is missing from the generated netlist.`)
-    const fieldIndex = sourceParameter === 'sine.frequency' ? 2 : sourceParameter === 'sffm.carrierFrequency' ? 2 : 4
-    rows[line] = rows[line].replace(/(?:SIN|SFFM)\(([^()]*)\)/i, (waveform, args: string) => {
+    if (line < 0) throw new Error(`Waveform source ${component} is missing from the generated netlist.`)
+    const [mode, field] = sourceParameter.split('.')
+    const waveformName = ({ pulse: 'PULSE', pwl: 'PWL', sine: 'SIN', exp: 'EXP', sffm: 'SFFM' } as Record<string, string>)[mode]
+    if (!waveformName) throw new Error(`Source parameter ${sourceParameter} has no generated waveform.`)
+    const waveformPattern = new RegExp(`${waveformName}\\(([^()]*)\\)`, 'i')
+    rows[line] = rows[line].replace(waveformPattern, (waveform, args: string) => {
       const values = args.trim().split(/\s+/)
-      if (values.length <= fieldIndex) throw new Error(`Frequency source ${component} has an invalid generated waveform.`)
-      values[fieldIndex] = `{${parameter}}`
+      if (field === 'scale') {
+        if (values.length < 4 || values.length % 2 !== 0) throw new Error(`PWL source ${component} has an invalid generated waveform.`)
+        for (let index = 1; index < values.length; index += 2) values[index] = `{${values[index]}*${parameter}}`
+      } else {
+        const fieldIndex = ({ initial: 0, high: 1, delay: mode === 'pulse' ? 2 : 3, rise: 3, fall: 4, width: 5, period: 6, offset: 0, amplitude: 1, frequency: 2, damping: 4, phase: 5, pulsed: 1, riseDelay: 2, riseTau: 3, fallDelay: 4, fallTau: 5, carrierFrequency: 2, modulationIndex: 3, signalFrequency: 4 } as Record<string, number>)[field]
+        if (fieldIndex === undefined || values.length <= fieldIndex) throw new Error(`Waveform source ${component} has an invalid generated field ${field}.`)
+        values[fieldIndex] = `{${parameter}}`
+      }
       return `${waveform.slice(0, waveform.indexOf('(') + 1)}${values.join(' ')})`
     })
-    if (!rows[line].includes(`{${parameter}}`)) throw new Error(`Frequency source ${component} has no matching generated waveform field.`)
+    const marker = field === 'scale' ? parameter : `{${parameter}}`
+    if (!rows[line].includes(marker)) throw new Error(`Waveform source ${component} has no matching generated waveform field.`)
     const initial = parameterSweep.flatMap((run) => run.values).find((value) => `${value.component.toLowerCase()}.${value.sourceParameter}` === target)?.value
-    if (!initial) throw new Error(`Frequency source ${component} has no initial stepped value.`)
+    if (!initial) throw new Error(`Waveform source ${component} has no initial stepped value.`)
     return `.param ${parameter}=${initial}`
   }))
   for (let index = endLine - 1; index >= 0; index--) if (/^\s*\.meas\s+tran\s+ELSIM_/i.test(rows[index])) rows.splice(index, 1)
@@ -95,7 +105,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const commands = ['.control', 'set filetype=ascii']
   if (parameterSweep.length) {
     parameterSweep.forEach((run, index) => {
-      run.values.forEach(({ component, value, parameter, model, sourceParameter, pulseHigh, pwlScale, waveformAmplitude }) => commands.push(parameter ? `altermod ${model} ${parameter}=${value}` : sourceParameter ? `alterparam ${frequencyParameters.get(`${component.toLowerCase()}.${sourceParameter}`)}=${value}` : pulseHigh ? `alterparam ${pulseParameters.get(component.toLowerCase())}=${value}` : pwlScale ? `alterparam ${pwlParameters.get(component.toLowerCase())}=${value}` : waveformAmplitude ? `alterparam ${amplitudeParameters.get(component.toLowerCase())}=${value}` : `alter ${component} ${value}`))
+      run.values.forEach(({ component, value, parameter, model, sourceParameter, pulseHigh, pwlScale, waveformAmplitude }) => commands.push(parameter ? `altermod ${model} ${parameter}=${value}` : sourceParameter ? `alterparam ${sourceFieldParameters.get(`${component.toLowerCase()}.${sourceParameter}`)}=${value}` : pulseHigh ? `alterparam ${pulseParameters.get(component.toLowerCase())}=${value}` : pwlScale ? `alterparam ${pwlParameters.get(component.toLowerCase())}=${value}` : waveformAmplitude ? `alterparam ${amplitudeParameters.get(component.toLowerCase())}=${value}` : `alter ${component} ${value}`))
       if (run.values.some((value) => value.sourceParameter || value.pulseHigh || value.pwlScale || value.waveformAmplitude)) commands.push('reset')
       commands.push('run', ...measurements.map((measurement) => measurementCommand(measurement, `_${index}`)).filter((command): command is string => Boolean(command)), `write /result-${index}.raw all`)
     })
