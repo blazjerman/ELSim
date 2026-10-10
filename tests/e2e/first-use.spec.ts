@@ -107,6 +107,41 @@ test('reused sheet interface edits update block pins and attached wires', async 
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets.find((sheet: { id: string }) => sheet.id === 'sheet-main').parts.find((part: { id: string }) => part.id === 'root-load').sheetParameters)).toEqual({})
 })
 
+test('hierarchical block parameter overrides validate before saving and update the netlist', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const child = {
+      id: 'sheet-parameter', name: 'Parameterized load', parentSheetId: 'sheet-main',
+      parts: [{ id: 'parameter-resistor', kind: 'resistor', componentDefinitionId: 'elsim.resistor', ref: 'RLOAD', value: '{RLOAD}', x: 300, y: 200, rotation: 0 }],
+      wires: [], junctions: [],
+      netLabels: [{ id: 'parameter-label-in', name: 'IN', x: 248, y: 200, visible: true }, { id: 'parameter-label-out', name: 'OUT', x: 352, y: 200, visible: true }],
+      view: { zoom: 1, panX: 0, panY: 0 },
+      ports: [{ id: 'parameter-port-in', name: 'IN', side: 'left', direction: 'input' }, { id: 'parameter-port-out', name: 'OUT', side: 'right', direction: 'output' }],
+      parameters: [{ id: 'parameter-rload', name: 'RLOAD', defaultValue: '1k' }],
+    }
+    const block = { id: 'parameter-block', kind: 'subcircuit', componentDefinitionId: 'elsim.subcircuit', ref: 'XLOAD', value: 'Parameterized load', modelName: 'ELSIM_SHEET_sheet_parameter', modelPins: ['IN', 'OUT'], sheetId: child.id, sheetPortLayout: child.ports.map(({ side, direction }) => ({ side, direction })), x: 700, y: 500, rotation: 0 }
+    project.parts.push(block)
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    project.sheets.push(child)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.locator('.circuit-part[data-part-id="parameter-block"]').click()
+  const value = page.getByLabel('RLOAD block value')
+  await value.fill('not-a-value')
+  await value.blur()
+  await expect(page.getByRole('alert')).toContainText('Enter a numeric SPICE value')
+  await expect(value).toHaveAttribute('aria-invalid', 'true')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'parameter-block').sheetParameters)).toBeUndefined()
+  await value.fill('3k')
+  await value.blur()
+  await expect(value).toHaveAttribute('aria-invalid', 'false')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'parameter-block').sheetParameters)).toEqual({ RLOAD: '3k' })
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText(/XLOAD \S+ \S+ ELSIM_SHEET_sheet_parameter PARAMS: RLOAD=3k/)
+})
+
 test('shift selection moves, copies, pastes, and deletes a group of parts', async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
