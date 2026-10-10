@@ -4,6 +4,7 @@ export type SubcircuitDefinition = { name: string; pins: string[]; parameters: S
 export type SpiceModelDefinition = { name: string; type: string; startLine: number; endLine: number }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
+export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string }
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string }
 export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
 
@@ -89,6 +90,20 @@ export function isSafeSubcircuitParameterValue(value: string): boolean {
   if (typeof value !== 'string' || value.length > 64) return false
   const scalar = value.trim().replace(/^\{(.*)\}$/, '$1')
   return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i.test(scalar)
+}
+
+/** Find LTspice compatibility-mode features that the current worker does not enable. */
+export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[] {
+  const features = [
+    { pattern: /\b(?:uplim|dnim|uplim_tanh|dnim_tanh)\s*\(/i, name: 'LTspice compatibility-mode limit function' },
+    { pattern: /^\s*\.model\s+\S+\s+VSWITCH\b/i, name: 'LTspice VSWITCH model' },
+  ]
+  return source.replace(/^\uFEFF/, '').split(/\r?\n/).flatMap((physicalLine, index) => {
+    const line = withoutInlineComment(physicalLine)
+    if (!line || line.startsWith('*')) return []
+    const feature = features.find(({ pattern }) => pattern.test(line))
+    return feature ? [{ sourceLine: index + 1, feature: feature.name, excerpt: line.slice(0, 160) }] : []
+  })
 }
 
 /** Parse self-contained SPICE model libraries without executing file directives. */
