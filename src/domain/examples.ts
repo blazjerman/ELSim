@@ -179,6 +179,38 @@ export function createMosfetSwitchExampleProject(): Project {
   return project
 }
 
+/** A high-side PMOS switch that demonstrates active-low gate control. */
+export function createMosfetHighSideExampleProject(): Project {
+  const project = createStarterProject()
+  const drive: Part = { id: 'pmos-switch-vdrive', kind: 'source', ref: 'VDRIVE', value: '0 V', pulse: { initial: '5 V', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m' }, x: 180, y: 600, rotation: 0 }
+  const gateResistor: Part = { id: 'pmos-switch-rgate', kind: 'resistor', ref: 'RGATE', value: '100 Ω', x: 390, y: 500, rotation: 0 }
+  const transistor: Part = { id: 'pmos-switch-m1', kind: 'pmos', ref: 'M1', value: '0', x: 640, y: 500, rotation: 0 }
+  const supply: Part = { id: 'pmos-switch-vcc', kind: 'source', ref: 'VCC', value: '5 V', sourceMode: 'dc', x: 880, y: 220, rotation: 0 }
+  const load: Part = { id: 'pmos-switch-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 880, y: 390, rotation: 90 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'PMOS high-side switch'
+  project.parts = [drive, gateResistor, transistor, supply, load]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('pmos-switch-vin-drive', 'VIN', drive, 0), labelAt('pmos-switch-vin-rgate', 'VIN', gateResistor, 0),
+    labelAt('pmos-switch-gate-rgate', 'GATE', gateResistor, 1), labelAt('pmos-switch-gate-m1', 'GATE', transistor, 1),
+    labelAt('pmos-switch-ground-drive', '0', drive, 1), labelAt('pmos-switch-vcc-source', 'VCC', supply, 0),
+    labelAt('pmos-switch-vcc-sourcepin', 'VCC', transistor, 2), labelAt('pmos-switch-vcc-bulk', 'VCC', transistor, 3),
+    labelAt('pmos-switch-ground-vcc', '0', supply, 1), labelAt('pmos-switch-drain-load', 'DRAIN', load, 0),
+    labelAt('pmos-switch-ground-load', '0', load, 1), labelAt('pmos-switch-drain-m1', 'DRAIN', transistor, 0),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(GATE)', 'V(DRAIN)', 'I(M1)'], ranges: {} }
+  project.view = { zoom: 0.8, panX: -70, panY: -20 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A sensed 1 mA branch drives a CCCS and a CCVS in parallel comparison circuits. */
 export function createCurrentControlledSourcesExampleProject(): Project {
   const project = createStarterProject()

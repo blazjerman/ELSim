@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createLedExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { validateSourcePwlPoints } = require(path.join(build, 'domain/sourcePwl.js'))
 
@@ -271,6 +271,17 @@ test('NMOS switch example drives the gate and returns the drain load to the supp
   assert.match(artifact.text, /^RLOAD VCC DRAIN 1k$/m)
   assert.match(artifact.text, /^M1 DRAIN GATE 0 0 ELSIM_MODEL_M1$/m)
   assert.match(artifact.text, /^\.model ELSIM_MODEL_M1 NMOS \(LEVEL=1 VTO=2 KP=20u LAMBDA=0\.02\)$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(GATE)', 'V(DRAIN)', 'I(M1)'])
+})
+
+test('PMOS high-side example uses active-low gate drive and ties source and bulk to supply', () => {
+  const project = createMosfetHighSideExampleProject()
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^VDRIVE VIN 0 PULSE\(5 0 0 1u 1u 50m 100m\)$/m)
+  assert.match(artifact.text, /^VCC VCC 0 DC 5$/m)
+  assert.match(artifact.text, /^M1 DRAIN GATE VCC VCC ELSIM_MODEL_M1$/m)
+  assert.match(artifact.text, /^RLOAD DRAIN 0 1k$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(GATE)', 'V(DRAIN)', 'I(M1)'])
 })
 
