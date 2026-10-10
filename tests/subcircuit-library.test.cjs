@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeModelDependencies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeModelDependencies, decodeModelLibrary, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('parses ordered subcircuit pins, parameters, continuations, shared models, and multiple definitions', () => {
   const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10 R=20k\nR1 INP OUT\n+ 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
@@ -45,6 +45,13 @@ test('rejects oversized or empty model libraries and orphan continuation lines',
   assert.throws(() => parseSubcircuitLibrary('   '), /empty/)
   assert.throws(() => parseSubcircuitLibrary('x'.repeat(4 * 1024 * 1024 + 1)), /4 MiB/)
   assert.throws(() => parseSubcircuitLibrary('+ orphan\n.SUBCKT x A\n.ENDS'), /continuation has no preceding line/)
+})
+
+test('identifies protected LTspice models and binary inputs without attempting to decode them', () => {
+  assert.throws(() => decodeModelLibrary(new TextEncoder().encode('* LTspice Encrypted File\nBegin:\nabc')), /cannot import or decrypt protected models/)
+  assert.throws(() => decodeModelLibrary(new Uint8Array([0x53, 0x50, 0x49, 0x43, 0xff])), /binary or is not valid UTF-8/)
+  assert.throws(() => decodeModelLibrary(new Uint8Array([0x53, 0x50, 0x49, 0x43, 0x00])), /contains binary data/)
+  assert.equal(decodeModelLibrary(new TextEncoder().encode('* ordinary model comment\n.SUBCKT AMP A B\n.ENDS')), '* ordinary model comment\n.SUBCKT AMP A B\n.ENDS')
 })
 
 test('rejects executable, external-file, and whole-circuit directives', () => {

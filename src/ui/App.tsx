@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
 import { checkCircuit } from '../domain/electricalCheck'
-import { analyzeModelDependencies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
+import { analyzeModelDependencies, decodeModelLibrary, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
 import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
@@ -995,7 +995,7 @@ export default function App() {
     if (!file) return
     try {
       if (file.size > 4 * 1024 * 1024) throw new Error('Model libraries are limited to 4 MiB per file.')
-      const content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
+      const content = decodeModelLibrary(new Uint8Array(await file.arrayBuffer()))
       const parsed = parseSubcircuitLibrary(content)
       const currentAssets = projectRef.current.modelAssets ?? []
       if (replaceId && !currentAssets.some((asset) => asset.id === replaceId)) throw new Error('The model library selected for replacement is no longer in this project.')

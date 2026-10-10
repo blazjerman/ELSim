@@ -13,6 +13,21 @@ const pinName = /^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/
 const safeTopLevel = new Set(['.model', '.param', '.func', '.global'])
 const forbidden = new Set(['.control', '.endc', '.end', '.include', '.lib', '.endl', '.exec', '.shell', '.cm'])
 
+/** Decode a user-selected library as plain UTF-8 and identify protected LTspice models. */
+export function decodeModelLibrary(bytes: Uint8Array): string {
+  let source: string
+  try {
+    source = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    throw new Error('This model file is binary or is not valid UTF-8. ELSim imports plain-text SPICE libraries only.')
+  }
+  if (/^\s*\*\s*LTspice Encrypted File\b/im.test(source.slice(0, 4096))) {
+    throw new Error('This is an LTspice-encrypted model. ELSim cannot import or decrypt protected models; ask the model author or vendor for an unencrypted, redistributable version.')
+  }
+  if (source.includes('\0')) throw new Error('This model file contains binary data. ELSim imports plain-text SPICE libraries only.')
+  return source
+}
+
 type LogicalLine = { text: string; start: number; end: number }
 
 function logicalLines(source: string): LogicalLine[] {
