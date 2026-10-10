@@ -628,7 +628,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
     { name: 'user_double.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('X', [['IN', -16, 0, 'R'], ['OUT', 16, 0, 'L'], ['VSS', 0, 16, 'U']])) },
     { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
   ])
-  await expect(page.getByText(/Imported user-double with 3 parts and 0 wires/)).toBeVisible()
+  await expect(page.getByText(/Imported user-double with 3 parts, 0 wires/)).toBeVisible()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.selectedTraceIds)).toEqual(['v(out)', 'i(@r1[i])'])
   const importedDefinition = page.locator(`[data-component-definition-id="${expectedDefinitionId}"]`)
   await expect(importedDefinition).toBeVisible()
@@ -1042,7 +1042,7 @@ test('LTspice PWL file source imports its table and simulates in the browser eng
     { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
     { name: 'wave.dat', mimeType: 'text/plain', buffer: Buffer.from('0 0\n1m 5\n2m 0\n') },
   ])
-  await expect(page.getByText(/Imported file-pwl with 2 parts and 0 wires/)).toBeVisible()
+  await expect(page.getByText(/Imported file-pwl with 2 parts, 0 wires/)).toBeVisible()
   await expect.poll(() => page.evaluate(() => {
     const source = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'V1')
     return { mode: source.sourceMode, file: source.pwlFileName, points: source.pwl }
@@ -1312,7 +1312,7 @@ test('import a user NJF model and LTspice symbol, then simulate it in the browse
     { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
     { name: 'njfet.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('J', [['D', 0, -16, 'U'], ['G', -16, 0, 'L'], ['S', 0, 16, 'D']])) },
   ])
-  await expect(page.getByText(/Imported user-jfet with 5 parts and 0 wires/)).toBeVisible()
+  await expect(page.getByText(/Imported user-jfet with 5 parts, 0 wires/)).toBeVisible()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'J1')?.deviceModel)).toBe('USER_NJF')
   const jfet = page.locator('.circuit-part[aria-label^="J1,"]')
   await jfet.click()
