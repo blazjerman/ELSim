@@ -1,0 +1,379 @@
+import { componentPins, pointOnSegment, subcircuitPinOffsets } from './geometry'
+import { validateProject, type Part, type PartKind, type Project, type ProjectSheet } from './project'
+import { analyzeModelDependencies, requiredModelAssetIds } from './subcircuitLibrary'
+
+export type LtspiceExportLoss = {
+  severity: 'info' | 'warning'
+  sourceId: string
+  title: string
+  explanation: string
+}
+export type LtspiceExportBlocker = { sourceId: string; message: string }
+export type LtspiceExportFile = { path: string; content: string; sha256: string; mediaType: string }
+export type LtspiceExportAsset = { filename: string; sha256: string; licenseStatus: 'unknown' }
+export type LtspiceExportResult = {
+  files: LtspiceExportFile[]
+  losses: LtspiceExportLoss[]
+  blockers: LtspiceExportBlocker[]
+  includedAssets: LtspiceExportAsset[]
+  requiresUnknownLicenseConfirmation: boolean
+}
+
+const encoder = new TextEncoder()
+const refPrefix: Record<PartKind, string> = {
+  source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S',
+  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+}
+const genericPrefix: Partial<Record<PartKind, string>> = {
+  source: 'V', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+}
+
+function safeStem(value: string, fallback: string): string {
+  const stem = value.trim().replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? ''
+  const safe = stem.normalize('NFKD').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^[-_]+|[-_]+$/g, '').slice(0, 48)
+  return safe || fallback
+}
+
+function scalar(value: string, unit = ''): string | null {
+  let normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll('Ω', '').replaceAll('Ω', '').replace(/ohms?/gi, '').replaceAll(' ', '')
+  if (unit && normalized.toLowerCase().endsWith(unit)) normalized = normalized.slice(0, -unit.length)
+  const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+  if (!match) return null
+  return `${match[1]}${match[2]?.toLowerCase() === 'm' && match[2] === 'M' ? 'meg' : (match[2]?.toLowerCase() ?? '')}`
+}
+
+function frequencyScalar(value: string): string | null {
+  const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
+  const withUnit = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])hz$/i)
+  if (!withUnit) return scalar(normalized)
+  const suffix = withUnit[2] === 'M' ? 'meg' : withUnit[2]
+  return scalar(`${withUnit[1]}${suffix}`)
+}
+
+function spiceIdentifier(value: string): string {
+  return safeStem(value, 'SHEET').replaceAll('-', '_')
+}
+
+function localPinOffsets(part: Part): [number, number][] {
+  return componentPins({ ...part, x: 0, y: 0, rotation: 0, flipX: false }).map(({ x, y }) => [x, y])
+}
+
+function pinDirection([x, y]: [number, number]): 'R' | 'L' | 'U' | 'D' {
+  if (Math.abs(x) >= Math.abs(y)) return x < 0 ? 'R' : 'L'
+  return y < 0 ? 'D' : 'U'
+}
+
+function genericSymbol(prefix: string, pins: { name: string; offset: [number, number] }[], block = false): string {
+  const extentX = Math.max(32, ...pins.map(({ offset: [x] }) => Math.abs(x) + 16))
+  const extentY = Math.max(24, ...pins.map(({ offset: [, y] }) => Math.abs(y) + 16))
+  const halfX = Math.ceil(extentX / 16) * 16
+  const halfY = Math.ceil(extentY / 16) * 16
+  const records = [
+    'Version 4',
+    block ? 'SymbolType BLOCK' : 'SymbolType CELL',
+    ...(!block ? [] : []),
+    `RECTANGLE Normal ${-halfX / 2} ${-halfY / 2} ${halfX / 2} ${halfY / 2}`,
+    ...(block ? [] : [`SYMATTR Prefix ${prefix}`]),
+    ...pins.flatMap((pin, index) => [`PIN ${pin.offset[0]} ${pin.offset[1]} ${pinDirection(pin.offset)}`, `PINATTR PinName ${pin.name}`, `PINATTR SpiceOrder ${index + 1}`]),
+  ]
+  return `${records.join('\n')}\n`
+}
+
+function checkCoordinate(value: number, sourceId: string, blockers: LtspiceExportBlocker[]): string {
+  if (!Number.isInteger(value) || Math.abs(value) > 1_000_000) blockers.push({ sourceId, message: `Coordinate ${value} is not a supported integer schematic coordinate.` })
+  return String(Math.round(value))
+}
+
+function checkText(value: string, sourceId: string, label: string, blockers: LtspiceExportBlocker[]): boolean {
+  if (!value || /[\r\n\u0000-\u001f]/.test(value)) {
+    blockers.push({ sourceId, message: `${label} contains an empty value or line-breaking/control characters.` })
+    return false
+  }
+  return true
+}
+
+function sheetWireRecords(sheet: ProjectSheet, blockers: LtspiceExportBlocker[]): string[] {
+  const splitPoints = [
+    ...sheet.parts.flatMap((part) => componentPins(part).map(({ x, y }) => [x, y] as [number, number])),
+    ...sheet.netLabels.map(({ x, y }) => [x, y] as [number, number]),
+    ...sheet.junctions.map(({ x, y }) => [x, y] as [number, number]),
+    ...sheet.wires.flatMap((wire) => wire.points),
+  ]
+  const records: string[] = []
+  for (const wire of sheet.wires) {
+    for (let segment = 0; segment < wire.points.length - 1; segment += 1) {
+      const a = wire.points[segment], b = wire.points[segment + 1]
+      if (Math.abs(a[0] - b[0]) > 1e-4 && Math.abs(a[1] - b[1]) > 1e-4) blockers.push({ sourceId: wire.id, message: 'Diagonal wire segments do not have a verified LTspice connection mapping.' })
+      const intersections = [...new Map(splitPoints.filter(([x, y]) => pointOnSegment({ x, y }, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }, 1e-4)).map(([x, y]) => [`${x},${y}`, [x, y] as [number, number]])).values()]
+      const points: [number, number][] = [a, ...intersections.filter(([x, y]) => Math.hypot(x - a[0], y - a[1]) > 1e-4 && Math.hypot(x - b[0], y - b[1]) > 1e-4), b]
+      const dx = b[0] - a[0], dy = b[1] - a[1]
+      points.sort((left, right) => dx * (left[0] - right[0]) + dy * (left[1] - right[1]))
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const first = points[index], second = points[index + 1]
+        records.push(`WIRE ${checkCoordinate(first[0], wire.id, blockers)} ${checkCoordinate(first[1], wire.id, blockers)} ${checkCoordinate(second[0], wire.id, blockers)} ${checkCoordinate(second[1], wire.id, blockers)}`)
+      }
+    }
+  }
+  return records
+}
+
+function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymbolNames: Map<string, string>): { value: string; spiceLine?: string } | null {
+  const parameter = part.value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
+  if (parameter && sheet.parameters?.some((entry) => entry.name.toLowerCase() === parameter[1].toLowerCase())) return { value: part.value.trim() }
+  if (part.kind === 'resistor') { const value = scalar(part.value); return value ? { value } : null }
+  if (part.kind === 'capacitor') { const value = scalar(part.value, 'f'); return value ? { value } : null }
+  if (part.kind === 'inductor') { const value = scalar(part.value, 'h'); return value ? { value } : null }
+  if (part.kind === 'source') {
+    const value = scalar(part.value, 'v')
+    if (!value) return null
+    const output = project.simulation.analysis === 'tran' ? `PULSE(0 ${value} 0 1u 1u 50m 100m)` : value
+    const spiceLine = project.simulation.analysis === 'ac' ? `AC ${scalar(project.simulation.sourceAcMagnitude ?? '1 V', 'v') ?? '1'}` : undefined
+    return { value: output, ...(spiceLine ? { spiceLine } : {}) }
+  }
+  if (part.kind === 'diode' || part.kind === 'led') return { value: part.deviceModel ?? 'DDEFAULT' }
+  if (part.kind === 'npn' || part.kind === 'pnp') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
+  if (part.kind === 'vcvs' || part.kind === 'vccs') { const value = scalar(part.value, part.kind === 'vccs' ? 's' : ''); return value ? { value } : null }
+  if (part.kind === 'subcircuit') {
+    if (part.sheetId) return { value: sheetSymbolNames.get(part.sheetId) ?? part.value }
+    if (!part.modelName || !(project.modelAssets ?? []).some((asset) => asset.content.toLowerCase().includes(`.subckt ${part.modelName!.toLowerCase()} `))) return null
+    const overrides = Object.entries(part.modelParameters ?? {}).map(([name, value]) => `${name}=${value}`)
+    return { value: part.modelName, ...(overrides.length ? { spiceLine: `PARAMS: ${overrides.join(' ')}` } : {}) }
+  }
+  return null
+}
+
+function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<string, string>, modelPaths: Map<string, string>, symbolNames: Map<string, string>, blockers: LtspiceExportBlocker[], losses: LtspiceExportLoss[]): string {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  const includePoint = (x: number, y: number) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y) }
+  for (const wire of sheet.wires) for (const [x, y] of wire.points) includePoint(x, y)
+  for (const label of sheet.netLabels) includePoint(label.x, label.y)
+  for (const part of sheet.parts) { includePoint(part.x, part.y); for (const pin of componentPins(part)) includePoint(pin.x, pin.y) }
+  const width = Number.isFinite(minX) ? Math.max(800, Math.ceil((maxX - minX + 512) / 16) * 16) : 800
+  const height = Number.isFinite(minY) ? Math.max(600, Math.ceil((maxY - minY + 512) / 16) * 16) : 600
+  const rows = ['Version 4', `SHEET 1 ${width} ${height}`, ...sheetWireRecords(sheet, blockers)]
+  let directiveIndex = 0
+  const addDirective = (directive: string) => rows.push(`TEXT 0 ${directiveIndex++ * 32} Left 2 !${directive}`)
+  const ports = new Map(sheet.ports.map((port) => [port.name.toLowerCase(), port]))
+  const emittedPorts = new Set<string>()
+  for (const label of sheet.netLabels) {
+    const x = checkCoordinate(label.x, label.id, blockers), y = checkCoordinate(label.y, label.id, blockers)
+    rows.push(`FLAG ${x} ${y} ${label.name}`)
+    const port = ports.get(label.name.toLowerCase())
+    if (port && !emittedPorts.has(port.name.toLowerCase())) {
+      rows.push(`IOPIN ${x} ${y} ${port.direction === 'input' ? 'In' : port.direction === 'output' ? 'Out' : 'BiDir'}`)
+      emittedPorts.add(port.name.toLowerCase())
+    }
+  }
+  for (const part of sheet.parts) {
+    const pins = componentPins(part)
+    if (part.kind === 'ground') {
+      const pin = pins[0]
+      if (pin) rows.push(`FLAG ${checkCoordinate(pin.x, part.id, blockers)} ${checkCoordinate(pin.y, part.id, blockers)} 0`)
+      continue
+    }
+    if (part.kind === 'subcircuit' && part.sheetId) {
+      const child = project.sheets.find((candidate) => candidate.id === part.sheetId)
+      if (!child) { blockers.push({ sourceId: part.id, message: 'Hierarchical block refers to a missing sheet.' }); continue }
+      const symbolName = sheetFiles.get(child.id)!
+      rows.push(`SYMBOL ${symbolName} ${checkCoordinate(part.x, part.id, blockers)} ${checkCoordinate(part.y, part.id, blockers)} ${part.flipX ? 'M' : 'R'}${part.rotation}`)
+      rows.push(`SYMATTR InstName ${part.ref}`)
+      const overrides = Object.entries(part.sheetParameters ?? {})
+      if (overrides.length) rows.push(`SYMATTR SpiceLine PARAMS: ${overrides.map(([name, value]) => `${name}=${value}`).join(' ')}`)
+      continue
+    }
+    const prefix = genericPrefix[part.kind]
+    const mapped = modelValue(part, project, sheet, sheetFiles)
+    if (!prefix || !mapped) {
+      if (mapped === null && !blockers.some((item) => item.sourceId === part.id)) blockers.push({ sourceId: part.id, message: `${part.ref} has a value that cannot be represented in the LTspice schematic format.` })
+      continue
+    }
+    if (!checkText(part.ref, part.id, 'Reference designator', blockers) || !checkText(mapped.value, part.id, 'Component value', blockers) || (mapped.spiceLine && !checkText(mapped.spiceLine, part.id, 'SPICE line', blockers))) continue
+    const symbolName = symbolNames.get(part.id)!
+    rows.push(`SYMBOL ${symbolName} ${checkCoordinate(part.x, part.id, blockers)} ${checkCoordinate(part.y, part.id, blockers)} ${part.flipX ? 'M' : 'R'}${part.rotation}`)
+    rows.push(`SYMATTR InstName ${part.ref}`)
+    rows.push(`SYMATTR Value ${mapped.value}`)
+    if (mapped.spiceLine) rows.push(`SYMATTR SpiceLine ${mapped.spiceLine}`)
+    if (part.kind === 'diode' || part.kind === 'led') {
+      if (!part.deviceModel) losses.push({ severity: 'info', sourceId: part.id, title: 'Default diode model generated', explanation: 'A generic DDEFAULT model is written into this schematic.' })
+    }
+    if (part.symbolAssetId) losses.push({ severity: 'warning', sourceId: part.id, title: 'Imported artwork replaced', explanation: 'The circuit uses an original generated symbol with the same ordered pins; user-provided .asy artwork is not included.' })
+  }
+  for (const parameter of sheet.parameters ?? []) addDirective(`.param ${parameter.name}=${parameter.defaultValue}`)
+  if (sheet.id === project.rootSheetId) {
+    for (const [assetId, path] of modelPaths) {
+      const asset = project.modelAssets?.find((item) => item.id === assetId)
+      if (asset) addDirective(`.include "${path}"`)
+    }
+    for (const condition of project.simulation.initialConditions ?? []) {
+      if ('node' in condition) {
+        const voltage = scalar(condition.voltage, 'v')
+        if (voltage) addDirective(`.ic V(${condition.node})=${voltage}`)
+        else blockers.push({ sourceId: `initial:${condition.node}`, message: 'Initial node voltage is not a supported scalar.' })
+      }
+      else losses.push({ severity: 'warning', sourceId: `initial:${condition.element}`, title: 'Inductor initial current omitted', explanation: 'This exporter version does not yet map LTspice inductor initial-current attributes.' })
+    }
+    const simulation = project.simulation
+    if (project.sheets.some((candidate) => candidate.parts.some((part) => (part.kind === 'diode' || part.kind === 'led') && !part.deviceModel))) addDirective('.model DDEFAULT D')
+    for (const candidate of project.sheets.flatMap((item) => item.parts.map((part) => ({ sheet: item, part })))) {
+      if ((candidate.part.kind !== 'npn' && candidate.part.kind !== 'pnp') || candidate.part.deviceModel) continue
+      const beta = scalar(candidate.part.value)
+      if (!beta) blockers.push({ sourceId: candidate.part.id, message: `${candidate.part.ref} needs a numeric forward beta to generate its ELSim transistor model.` })
+      else {
+        const modelName = `ELSIM_MODEL_${spiceIdentifier(candidate.sheet.id).toUpperCase()}_${candidate.part.ref}`
+        addDirective(`.model ${modelName} ${candidate.part.kind === 'npn' ? 'NPN' : 'PNP'}(IS=1e-14 BF=${beta} VAF=100 CJE=10p CJC=5p TF=300p TR=10n)`)
+      }
+    }
+    if (simulation.analysis === 'op') addDirective('.op')
+    else if (simulation.analysis === 'ac') {
+      const sweep = simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
+      const start = frequencyScalar(sweep.startFrequency), stop = frequencyScalar(sweep.stopFrequency)
+      if (start && stop) addDirective(`.ac ${sweep.scale} ${sweep.points} ${start} ${stop}`)
+      else blockers.push({ sourceId: 'analysis:ac', message: 'AC sweep frequencies must be valid scalar frequencies.' })
+    } else if (simulation.analysis === 'dc') {
+      const sweep = simulation.dcSweep
+      if (sweep) {
+        const start = scalar(sweep.start, 'v'), stop = scalar(sweep.stop, 'v'), step = scalar(sweep.step, 'v')
+        if (start && stop && step) addDirective(`.dc ${sweep.source} ${start} ${stop} ${step}`)
+        else blockers.push({ sourceId: 'analysis:dc', message: 'DC sweep values must be valid scalar voltages.' })
+      }
+      else blockers.push({ sourceId: 'analysis:dc', message: 'DC sweep settings are missing.' })
+    } else {
+      const maxStep = scalar(simulation.maxStep, 's'), stopTime = scalar(simulation.stopTime, 's')
+      if (maxStep && stopTime) addDirective(`.tran ${maxStep} ${stopTime}${simulation.skipInitialOperatingPoint || simulation.initialConditions?.some((condition) => 'element' in condition) ? ' uic' : ''}`)
+      else blockers.push({ sourceId: 'analysis:tran', message: 'Transient stop time and maximum step must be supported scalar time values.' })
+    }
+    if (simulation.parameterSweeps?.length) losses.push({ severity: 'warning', sourceId: 'analysis:parameter-sweep', title: 'Parameter sweep omitted', explanation: 'The schematic exports its current nominal component values; the ELSim parameter sweep is not translated.' })
+    if (simulation.transientMeasurements?.length) losses.push({ severity: 'warning', sourceId: 'analysis:measurements', title: 'Transient measurements omitted', explanation: 'Configured ELSim measurements are not emitted as LTspice .MEAS directives yet.' })
+  }
+  return `${rows.join('\n')}\n`
+}
+
+function generatedPartSymbol(part: Part): { name: string; content: string } {
+  const key = part.kind === 'subcircuit' ? safeStem(part.modelName ?? part.ref, part.ref) : part.kind.toUpperCase()
+  const name = `ELSIM_${key.toUpperCase()}`
+  const offsets = localPinOffsets(part)
+  const labels = part.kind === 'npn' || part.kind === 'pnp' ? ['C', 'B', 'E']
+    : part.kind === 'vcvs' || part.kind === 'vccs' ? ['OUT+', 'OUT-', 'IN+', 'IN-']
+      : part.kind === 'subcircuit' ? (part.modelPins ?? offsets.map((_, index) => `P${index + 1}`))
+        : offsets.map((_, index) => `P${index + 1}`)
+  return { name, content: genericSymbol(refPrefix[part.kind], offsets.map((offset, index) => ({ name: labels[index], offset }))) }
+}
+
+function generatedSheetSymbol(sheet: ProjectSheet): string {
+  const offsets = subcircuitPinOffsets(sheet.ports.length, sheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })))
+  return genericSymbol('', offsets.map((offset, index) => ({ name: sheet.ports[index].name, offset })), true)
+}
+
+async function sha256(content: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error('Web Crypto is required to calculate export integrity hashes.')
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', encoder.encode(content))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/** Build a deterministic, loss-reported file tree without touching the browser or filesystem. */
+export async function exportLtspiceProject(input: unknown): Promise<LtspiceExportResult> {
+  const blockers: LtspiceExportBlocker[] = [], losses: LtspiceExportLoss[] = [], includedAssets: LtspiceExportAsset[] = []
+  if (!globalThis.crypto?.subtle) return { files: [], losses, blockers: [{ sourceId: 'export', message: 'This browser context does not provide Web Crypto for export integrity hashes.' }], includedAssets, requiresUnknownLicenseConfirmation: false }
+  let project: Project
+  try { project = validateProject(structuredClone(input)) }
+  catch (error) {
+    return { files: [], losses, blockers: [{ sourceId: 'project', message: error instanceof Error ? error.message : 'Project validation failed.' }], includedAssets, requiresUnknownLicenseConfirmation: false }
+  }
+  const sheets = project.sheets
+  const basenameBySheet = new Map<string, string>()
+  const usedPaths = new Set<string>()
+  for (const sheet of sheets) {
+    const raw = sheet.id === project.rootSheetId ? project.name : sheet.name
+    const base = safeStem(raw, sheet.id)
+    let name = base, suffix = 2
+    while (usedPaths.has(`${name.toLowerCase()}.asc`) || usedPaths.has(`${name.toLowerCase()}.asy`)) name = `${base.slice(0, 42)}_${suffix++}`
+    usedPaths.add(`${name.toLowerCase()}.asc`)
+    basenameBySheet.set(sheet.id, name)
+  }
+  const symbolNames = new Map<string, string>()
+  const generatedSymbols = new Map<string, string>()
+  for (const part of sheets.flatMap((sheet) => sheet.parts)) if (part.kind !== 'ground' && !(part.kind === 'subcircuit' && part.sheetId)) {
+    if (!genericPrefix[part.kind]) continue
+    const symbol = generatedPartSymbol(part)
+    symbolNames.set(part.id, symbol.name)
+    generatedSymbols.set(symbol.name, symbol.content)
+  }
+  const modelParts = sheets.flatMap((sheet) => sheet.parts)
+  const modelAnalysis = analyzeModelDependencies((project.modelAssets ?? []).map(({ id, filename, content }) => ({ id, filename, content })))
+  const requiredAssets = requiredModelAssetIds(modelAnalysis, modelParts)
+  const modelPaths = new Map<string, string>()
+  const usedModelPaths = new Set<string>()
+  for (const asset of project.modelAssets ?? []) if (requiredAssets.has(asset.id)) {
+    let filename = safeStem(asset.filename, asset.id) + (asset.filename.match(/\.[^.]+$/)?.[0] ?? '.lib')
+    filename = filename.replace(/[^A-Za-z0-9._-]/g, '_')
+    let path = `models/${filename}`, suffix = 2
+    const original = path
+    while (usedModelPaths.has(path.toLowerCase())) path = original.replace(/(\.[^.]+)?$/, `_${suffix++}$1`)
+    usedModelPaths.add(path.toLowerCase())
+    modelPaths.set(asset.id, path)
+    includedAssets.push({ filename: asset.filename, sha256: asset.sha256, licenseStatus: asset.licenseStatus })
+  }
+  for (const sheet of sheets) {
+    if (sheet.ports.length > 0 && sheet.ports.some((port) => !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase()))) blockers.push({ sourceId: sheet.id, message: `${sheet.name} has a port without a matching named label.` })
+    for (const part of sheet.parts) {
+      if (part.kind === 'switch' || part.kind === 'behavioral' || part.kind === 'cccs' || part.kind === 'ccvs') blockers.push({ sourceId: part.id, message: `${part.ref} (${part.kind}) has no verified LTspice schematic mapping yet.` })
+      if (part.sheetParameters && Object.keys(part.sheetParameters).length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Sheet parameter overrides may differ', explanation: 'The current exporter writes the child block value but does not yet validate LTspice SpiceLine parameter override behavior.' })
+      if (part.kind === 'subcircuit' && !part.sheetId && part.modelParameters && Object.keys(part.modelParameters).length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Model parameter overrides may differ', explanation: 'The current exporter writes SpiceLine PARAMS: overrides; verify parameter handling in the target LTspice version.' })
+    }
+  }
+  if (project.simulation.initialConditions?.some((condition) => 'element' in condition)) losses.push({ severity: 'warning', sourceId: 'analysis:initial-conditions', title: 'Inductor initial currents are not fully mapped', explanation: 'Those inductor conditions are omitted. Node-voltage initial conditions are written as .ic directives.' })
+  losses.push({ severity: 'info', sourceId: 'elsim-ui-state', title: 'ELSim-only interface state omitted', explanation: 'Editor view state, animation presentation, selections, plot windows, and saved waveform display choices have no LTspice schematic equivalent.' })
+  if (project.importedSchematicSource || project.importedChildSchematicSources?.length) losses.push({ severity: 'info', sourceId: 'provenance:asc', title: 'Original schematic text not replayed', explanation: 'Export is generated from current ELSim sheets; original LTspice comments, unknown records, and source layout are preserved only in the ELSim project.' })
+  if (project.plotSettings?.selectedTraceIds.length || Object.keys(project.plotSettings?.ranges ?? {}).length) losses.push({ severity: 'info', sourceId: 'plot-settings', title: 'Plot presentation omitted', explanation: 'Selected traces and ELSim plot ranges do not have an LTspice schematic equivalent.' })
+  if ((project.symbolAssets ?? []).length) losses.push({ severity: 'warning', sourceId: 'symbol-assets', title: 'User symbol artwork omitted', explanation: 'Generated original generic symbols preserve ordered electrical pins; imported .asy artwork is not copied into the export.' })
+  for (const asset of project.modelAssets ?? []) if (!requiredAssets.has(asset.id)) losses.push({ severity: 'info', sourceId: `model:${asset.id}`, title: 'Unused model library omitted', explanation: `${asset.filename} is not required by a placed component or transitive model dependency.` })
+  for (const part of modelParts) {
+    const owner = sheets.find((sheet) => sheet.parts.some((candidate) => candidate.id === part.id))!
+    const value = modelValue(part, project, owner, basenameBySheet)
+    if (genericPrefix[part.kind] && !value && !blockers.some((item) => item.sourceId === part.id)) blockers.push({ sourceId: part.id, message: `${part.ref} has a value that cannot be represented in LTspice.` })
+  }
+  const files: LtspiceExportFile[] = []
+  if (!blockers.length) {
+    const sheetFileMap = new Map(sheets.map((sheet) => [sheet.id, basenameBySheet.get(sheet.id)!]))
+    for (const sheet of sheets) {
+      const content = sheetContents(project, sheet, sheetFileMap, modelPaths, symbolNames, blockers, losses)
+      files.push({ path: `${basenameBySheet.get(sheet.id)}.asc`, content, sha256: await sha256(content), mediaType: 'text/plain' })
+    }
+    for (const sheet of sheets) if (sheet.id !== project.rootSheetId) {
+      const name = basenameBySheet.get(sheet.id)!
+      const content = generatedSheetSymbol(sheet)
+      files.push({ path: `${name}.asy`, content, sha256: await sha256(content), mediaType: 'text/plain' })
+    }
+    for (const [name, content] of generatedSymbols) files.push({ path: `${name}.asy`, content, sha256: await sha256(content), mediaType: 'text/plain' })
+    for (const assetId of requiredAssets) {
+      const asset = project.modelAssets?.find((candidate) => candidate.id === assetId)
+      const path = modelPaths.get(assetId)
+      if (asset && path) {
+        const digest = await sha256(asset.content)
+        if (digest.toLowerCase() !== asset.sha256.toLowerCase()) blockers.push({ sourceId: `model:${asset.id}`, message: `Stored SHA-256 for ${asset.filename} does not match its current content.` })
+        files.push({ path, content: asset.content, sha256: digest, mediaType: 'text/plain' })
+      }
+    }
+    const filePaths = new Set<string>()
+    for (const file of files) {
+      const key = file.path.toLowerCase()
+      if (filePaths.has(key)) blockers.push({ sourceId: file.path, message: `Generated output path ${file.path} collides with another output file.` })
+      filePaths.add(key)
+    }
+    for (const reserved of ['elsim-export.json', 'loss-report.md']) if (filePaths.has(reserved)) blockers.push({ sourceId: reserved, message: `A generated schematic or asset collides with reserved export file ${reserved}.` })
+    if (!blockers.length) {
+      files.sort((a, b) => a.path.localeCompare(b.path))
+      const manifest = { format: 'elsim-ltspice-export', version: 1, projectFormat: project.format, projectVersion: project.version, files: files.map(({ path, sha256: hash, mediaType }) => ({ path, sha256: hash, mediaType })), includedAssets, losses, blockers }
+      const reportText = [
+        '# LTspice export loss report', '',
+        losses.length ? losses.map((loss) => `## ${loss.title}\n\n- Source: \`${loss.sourceId}\`\n- Severity: ${loss.severity}\n\n${loss.explanation}`).join('\n\n') : 'No known losses were identified by this exporter.',
+        '',
+        'The report describes transformations detected by ELSim. It does not establish that included models are supported by LTspice or that their redistribution is permitted.',
+      ].join('\n')
+      files.push({ path: 'loss-report.md', content: reportText, sha256: await sha256(reportText), mediaType: 'text/markdown' })
+      const manifestText = `${JSON.stringify({ ...manifest, files: [...manifest.files, { path: 'loss-report.md', sha256: await sha256(reportText), mediaType: 'text/markdown' }] }, null, 2)}\n`
+      files.push({ path: 'elsim-export.json', content: manifestText, sha256: await sha256(manifestText), mediaType: 'application/json' })
+    }
+  }
+  return { files: blockers.length ? [] : files, losses, blockers, includedAssets, requiresUnknownLicenseConfirmation: includedAssets.some((asset) => asset.licenseStatus === 'unknown') }
+}

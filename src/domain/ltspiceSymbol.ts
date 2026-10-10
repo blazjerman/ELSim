@@ -94,7 +94,8 @@ export function parseLtspiceSymbol(text: string, filename = 'Imported symbol.asy
         if (attribute === 'prefix') result.prefix = value
         else if (attribute === 'value') result.value = value
         else if (attribute === 'description') result.description = value
-      } else if (upper === 'symboltype') result.symbolType = tokens.join(' ')
+      } else if (upper === 'SYMBOLTYPE') result.symbolType = tokens.join(' ')
+      else if (upper === 'WINDOW') { /* LTspice display placement metadata. */ }
       else if (upper !== 'VERSION') result.warnings.push(`Line ${lineNo}: unsupported .asy record ${command} was skipped.`)
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'invalid record'

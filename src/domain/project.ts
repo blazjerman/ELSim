@@ -529,7 +529,7 @@ export function validateProject(input: unknown): Project {
     const ports = new Set<string>()
     const portIds = new Set<string>()
     for (const port of sheet.ports) {
-      if (!port || typeof port.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(port.id) || portIds.has(port.id) || typeof port.name !== 'string' || !/^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(port.name) || ports.has(port.name.toLowerCase()) || !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase())) throw new Error(`Sheet ${sheet.name} has a malformed port. Ports must expose unique labeled nodes.`)
+      if (!port || typeof port.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(port.id) || portIds.has(port.id) || typeof port.name !== 'string' || !/^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(port.name) || ports.has(port.name.toLowerCase()) || !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase())) throw new Error(`Sheet ${sheet.name} has a malformed port ${port?.name ?? '(missing name)'}. Ports must expose unique labeled nodes.`)
       if (port.side !== undefined && !['auto', 'left', 'right', 'top', 'bottom'].includes(port.side) || port.direction !== undefined && !['input', 'output', 'inout'].includes(port.direction)) throw new Error(`Sheet ${sheet.name} has invalid port placement metadata.`)
       port.side ??= 'auto'; port.direction ??= 'inout'
       ports.add(port.name.toLowerCase())

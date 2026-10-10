@@ -17,6 +17,11 @@ function recordExcerpt(raw: string): string {
   return compact.length > MAX_UNSUPPORTED_RECORD_CHARS ? `${compact.slice(0, MAX_UNSUPPORTED_RECORD_CHARS - 1)}…` : compact
 }
 
+function scalarSourceValue(value: string): string {
+  const generatedPulse = value.trim().match(/^PULSE\(\s*0\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?)\s+0\s+1u\s+1u\s+50m\s+100m\s*\)$/i)
+  return generatedPulse?.[1] ?? value
+}
+
 function coordinate(value: string, line: number): number {
   const number = Number(value)
   if (!Number.isInteger(number) || Math.abs(number) > 1_000_000) throw new Error(`.asc line ${line}: coordinate is invalid or out of range.`)
@@ -69,6 +74,19 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     if (!knownLibraries.has(dependency)) warnings.push(`Line ${line}: ${command} dependency “${tokens.join(' ')}” is missing; import its model library separately.`)
     return
   }
+  if (command === '.param') {
+    const assignments = tokens.map((item) => item.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/)).filter((item): item is RegExpMatchArray => Boolean(item))
+    for (const assignment of assignments) {
+      const [, name, defaultValue] = assignment
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || !defaultValue) continue
+      const activeSheet = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
+      if (!activeSheet) continue
+      activeSheet.parameters ??= []
+      if (!activeSheet.parameters.some((item) => item.name.toLowerCase() === name.toLowerCase())) activeSheet.parameters.push({ id: `asc-param-${activeSheet.parameters.length + 1}`, name, defaultValue })
+    }
+    if (!assignments.length) warnings.push(`Line ${line}: could not interpret .param settings.`)
+    return
+  }
   if (command.startsWith('.')) warnings.push(`Line ${line}: directive ${command} is retained as an import warning but is not translated yet.`)
 }
 
@@ -82,10 +100,10 @@ function partKind(symbol: AscSymbol, prefix: string, modelValue: string, subcirc
   if (key === 'S') return { kind: 'switch' }
   if (key === 'E') return { kind: 'vcvs' }
   if (key === 'G') return { kind: 'vccs' }
-  if (key === 'D') return { kind: name === 'led' ? 'led' : 'diode', ...(deviceModels.has(modelValue.toLowerCase()) ? { deviceModel: modelValue } : {}) }
+  if (key === 'D') return { kind: name === 'led' || name === 'elsim_led' ? 'led' : 'diode', ...(deviceModels.has(modelValue.toLowerCase()) ? { deviceModel: modelValue } : {}) }
   if (key === 'Q') {
     const type = deviceModels.get(modelValue.toLowerCase())
-    const kind = type === 'pnp' || name === 'pnp' ? 'pnp' : 'npn'
+    const kind = type === 'pnp' || name === 'pnp' || name === 'elsim_pnp' ? 'pnp' : 'npn'
     return { kind, ...(deviceModels.has(modelValue.toLowerCase()) ? { deviceModel: modelValue } : {}) }
   }
   if (key === 'X') {
@@ -96,7 +114,7 @@ function partKind(symbol: AscSymbol, prefix: string, modelValue: string, subcirc
   if (name === 'cap' || name === 'capacitor') return { kind: 'capacitor' }
   if (name === 'ind' || name === 'inductor') return { kind: 'inductor' }
   if (name === 'voltage') return { kind: 'source' }
-  if (name === 'diode' || name === 'led') return { kind: name === 'led' ? 'led' : 'diode', ...(deviceModels.has(modelValue.toLowerCase()) ? { deviceModel: modelValue } : {}) }
+  if (name === 'diode' || name === 'led' || name === 'elsim_led') return { kind: name === 'led' || name === 'elsim_led' ? 'led' : 'diode', ...(deviceModels.has(modelValue.toLowerCase()) ? { deviceModel: modelValue } : {}) }
   if (name === 'sw') return { kind: 'switch' }
   if (name === 'npn' || name === 'pnp') return { kind: name }
   if (subcircuits.has(modelValue.toLowerCase())) return { kind: 'subcircuit', modelName: modelValue }
@@ -160,7 +178,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
         if (tokens.length < 5) throw new Error('TEXT record is incomplete.')
         const value = tokens.slice(4).join(' ')
         if (value.startsWith('!')) textRecords.push({ line: lineNo, text: value.slice(1).replace(/\\n/g, '\n') })
-      } else if (keyword === 'WINDOW' || keyword === 'VERSION' || keyword === 'SHEET') {
+      } else if (keyword === 'WINDOW' || keyword === 'VERSION' || keyword === 'SHEET' || keyword === 'IOPIN') {
         // Presentation metadata only; the project uses its own page layout.
       } else {
         finish()
@@ -215,7 +233,8 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
 
   for (const symbol of symbols) {
     const identity = symbol.attributes.INSTNAME
-    const value = symbol.attributes.VALUE ?? symbol.attributes.VALUE2 ?? ''
+    const rawValue = symbol.attributes.VALUE ?? symbol.attributes.VALUE2 ?? ''
+    const value = symbol.attributes.INSTNAME?.[0]?.toUpperCase() === 'V' ? scalarSourceValue(rawValue) : rawValue
     if (!identity || !/^[A-Za-z][A-Za-z0-9_]*$/.test(identity)) { warnings.push(`Line ${symbol.line}: ${symbol.name} is missing a valid SYMATTR InstName and was skipped.`); continue }
     const sidecar = symbolByName.get(baseName(symbol.name))
     if (!sidecar) { warnings.push(`Line ${symbol.line}: symbol ${symbol.name} (${identity}) is missing its .asy sidecar and was skipped.`); continue }
@@ -260,7 +279,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
             parts: sheet.parts.map((part) => ({ ...part, id: `${idPrefix}${part.id}`, ...(part.sheetId ? { sheetId: sheetIdMap.get(part.sheetId), modelName: sheetModelName(sheetIdMap.get(part.sheetId) ?? part.sheetId) } : {}) })),
             wires: sheet.wires.map((wire) => ({ ...wire, id: `${idPrefix}${wire.id}` })),
             netLabels: sheet.netLabels.map((label) => ({ ...label, id: `${idPrefix}${label.id}` })),
-            ports: sheet.ports.map((port) => ({ ...port, id: `${idPrefix}${port.id}` })),
+            ports: sheet.ports.map((port, index) => ({ ...port, id: `p-${mappedId.slice(-48)}-${index + 1}` })),
             junctions: sheet.junctions.map((junction) => ({ ...junction })),
           }
         }
@@ -281,9 +300,9 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     if (expectedPinNames && pins.some((pin, index) => pin.name.toLowerCase() !== expectedPinNames[index]?.toLowerCase())) { warnings.push(`Line ${symbol.line}: ${symbol.name} SpiceOrder pin names do not match ${mapped.modelName}; it was skipped.`); continue }
     const kind = mapped.kind
     const defaultValue = kind === 'switch' ? (/^(?:on|1|true)$/i.test(value) ? 'On' : 'Off') : kind === 'diode' ? 'Default diode' : kind === 'led' ? 'Default LED' : kind === 'npn' || kind === 'pnp' ? '100' : kind === 'vcvs' ? '1' : kind === 'vccs' ? '1 mS' : value
-    if (kind === 'source' && value.includes('(')) warnings.push(`Line ${symbol.line}: source waveform on ${identity} is not translated yet; check its value before running.`)
+    if (kind === 'source' && rawValue.includes('(') && value === rawValue) warnings.push(`Line ${symbol.line}: source waveform on ${identity} is not translated yet; check its value before running.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !value) warnings.push(`Line ${symbol.line}: ${identity} has no value; set one in the inspector before running.`)
-    else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
+    else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
     if ((prefix.toUpperCase() === 'D' || prefix.toUpperCase() === 'Q') && value && !deviceModels.has(value.toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${value}” for ${identity} is missing; the educational default model will be used.`)
     const offsets = pins.map(({ x, y }) => [x, y] as [number, number])
     const part: Part = {
