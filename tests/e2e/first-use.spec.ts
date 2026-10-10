@@ -524,6 +524,16 @@ test('first use: run the RC starter and inspect its solved waveform', async ({ p
   await page.getByRole('button', { name: 'Add independent plot panel' }).click()
   const independentPanel = page.getByRole('dialog', { name: 'Plot panel 1' })
   await expect(independentPanel).toBeVisible()
+  await page.getByRole('button', { name: 'Tile open plot windows' }).click()
+  await expect(page.getByText(/Arranged 2 open plot windows/)).toBeVisible()
+  const tiledBounds = await page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings
+    return { primary: settings.detachedWindow, secondary: settings.panels[0].bounds }
+  })
+  expect(tiledBounds.primary.x + tiledBounds.primary.width).toBeLessThanOrEqual(tiledBounds.secondary.x)
+  expect(tiledBounds.primary.y).toBe(tiledBounds.secondary.y)
+  await expect(page.getByRole('dialog', { name: 'Detached waveform panel' })).toHaveCSS('left', `${tiledBounds.primary.x}px`)
+  await expect(independentPanel).toHaveCSS('left', `${tiledBounds.secondary.x}px`)
   const independentTrace = independentPanel.locator('.trace-toggles button[aria-pressed="true"]').first()
   await independentTrace.click()
   const plotPreferences = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings)
