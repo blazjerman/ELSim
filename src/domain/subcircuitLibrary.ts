@@ -4,7 +4,7 @@ export type SubcircuitDefinition = { name: string; pins: string[]; parameters: S
 export type SpiceModelDefinition = { name: string; type: string; startLine: number; endLine: number }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
-export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string }
+export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string }
 export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
 
@@ -95,14 +95,21 @@ export function isSafeSubcircuitParameterValue(value: string): boolean {
 /** Find compatibility-mode features and known gaps in the current WASM build. */
 export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[] {
   const features = [
-    { pattern: /\b(?:uplim|dnlim|uplim_tanh|dnlim_tanh)\s*\(/i, name: 'LTspice limit function (ngspice lta mode)' },
-    { pattern: /^\s*\.model\s+\S+\s+VSWITCH\b/i, name: 'VSWITCH model (unsupported by the current WASM engine)' },
+    { pattern: /\b(?:uplim|dnlim|uplim_tanh|dnlim_tanh)\s*\(/i, name: 'LTspice limit function (ngspice lta mode)', impact: 'ngspice translates this documented subset only when ELSim enables whole-deck lta compatibility. Other LTspice syntax is not covered by that mode.', suggestion: 'If simulation fails, check the mapped model line and simplify or replace the expression with a tested ngspice-compatible form.' },
+    { pattern: /^\s*\.model\s+\S+\s+VSWITCH\b/i, name: 'VSWITCH model (unsupported by the current WASM engine)', impact: 'This switch model needs an XSPICE aswitch code model that is not present in the current browser runtime.', suggestion: 'Replace this model with a compatible user model or ELSim’s built-in ideal switch, then reconnect its control pins.' },
+    { pattern: /^\s*b\S*\s+\S+\s+\S+\s+[rp]\s*=/i, name: 'LTspice behavioral resistor/power source', impact: 'This LTspice B-source R= or P= form is outside ngspice’s documented B-source V=/I= syntax.', suggestion: 'Rewrite as a supported ngspice B-source V= or I= expression, or provide an equivalent subcircuit.' },
+    { pattern: /^\s*b\S*\s+.*\blaplace\s*=/i, name: 'LTspice behavioral Laplace option', impact: 'LTspice behavioral-source Laplace options are not translated by ELSim’s current compatibility path. ngspice’s E-source Laplace support uses a separate XSPICE code model.', suggestion: 'Use a tested ngspice-compatible transfer model or replace this block with a supported ngspice-compatible circuit/subcircuit model.' },
+    { pattern: /^\s*b\S*\s+.*\b(?:tripdv|tripdt|nfft|window|mtol)\s*=/i, name: 'LTspice behavioral-source option', impact: 'This LTspice timestep/Laplace tuning option is not part of ngspice’s documented B-source instance syntax and may prevent the card from parsing.', suggestion: 'Remove or replace the option only after checking the model author’s intended behavior; ELSim does not rewrite it.' },
   ]
-  return source.replace(/^\uFEFF/, '').split(/\r?\n/).flatMap((physicalLine, index) => {
-    const line = withoutInlineComment(physicalLine)
+  const logical: { sourceLine: number; text: string }[] = []
+  for (const [index, physicalLine] of source.replace(/^\uFEFF/, '').split(/\r?\n/).entries()) {
+    if (/^\s*\+/.test(physicalLine) && logical.length) logical.at(-1)!.text += ` ${physicalLine.replace(/^\s*\+\s?/, '').trim()}`
+    else logical.push({ sourceLine: index + 1, text: physicalLine })
+  }
+  return logical.flatMap(({ sourceLine, text }) => {
+    const line = withoutInlineComment(text)
     if (!line || line.startsWith('*')) return []
-    const feature = features.find(({ pattern }) => pattern.test(line))
-    return feature ? [{ sourceLine: index + 1, feature: feature.name, excerpt: line.slice(0, 160) }] : []
+    return features.flatMap(({ pattern, name, impact, suggestion }) => pattern.test(line) ? [{ sourceLine, feature: name, excerpt: line.slice(0, 160), impact, suggestion }] : [])
   })
 }
 

@@ -57,13 +57,37 @@ test('identifies protected LTspice models and binary inputs without attempting t
 test('reports LTspice compatibility-mode limit functions and VSWITCH without rewriting source', () => {
   const source = '* uplim(V(x), 1) is only a comment\n.SUBCKT AMP IN OUT\nB1 OUT 0 V=limit(V(IN),0,5)\nB2 OUT 0 V=uplim(V(IN),0,5)\n.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)\n.ENDS AMP\n'
   assert.deepEqual(analyzeLtspiceModelDialect(source), [
-    { sourceLine: 4, feature: 'LTspice limit function (ngspice lta mode)', excerpt: 'B2 OUT 0 V=uplim(V(IN),0,5)' },
-    { sourceLine: 5, feature: 'VSWITCH model (unsupported by the current WASM engine)', excerpt: '.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)' },
+    { sourceLine: 4, feature: 'LTspice limit function (ngspice lta mode)', excerpt: 'B2 OUT 0 V=uplim(V(IN),0,5)', impact: 'ngspice translates this documented subset only when ELSim enables whole-deck lta compatibility. Other LTspice syntax is not covered by that mode.', suggestion: 'If simulation fails, check the mapped model line and simplify or replace the expression with a tested ngspice-compatible form.' },
+    { sourceLine: 5, feature: 'VSWITCH model (unsupported by the current WASM engine)', excerpt: '.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)', impact: 'This switch model needs an XSPICE aswitch code model that is not present in the current browser runtime.', suggestion: 'Replace this model with a compatible user model or ELSim’s built-in ideal switch, then reconnect its control pins.' },
   ])
   assert.equal(source.includes('uplim(V(IN)'), true)
   assert.equal(needsLtspiceFullDeckTranslation(source), true)
   assert.equal(needsLtspiceFullDeckTranslation('* B1 out 0 V=dnlim(V(in),2,0.1)\nR1 1 0 1k'), false)
   assert.equal(needsLtspiceFullDeckTranslation('B1 out 0 V=dnlim(V(in),2,0.1)'), true)
+})
+
+test('pinpoints LTspice behavioral forms and options, including continuation records', () => {
+  const source = [
+    '.SUBCKT compat IN OUT',
+    'BRES OUT 0 R=V(IN)',
+    'BPOWER OUT 0 P=V(IN)*I(VSENSE)',
+    'BLAP OUT 0 V=V(IN)',
+    '+ Laplace=1/(1+s)',
+    'BSTEP OUT 0 V=V(IN)',
+    '+ tripdv=1m tripdt=1n',
+    '.ENDS compat',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [2, 'LTspice behavioral resistor/power source'],
+    [3, 'LTspice behavioral resistor/power source'],
+    [4, 'LTspice behavioral Laplace option'],
+    [6, 'LTspice behavioral-source option'],
+  ])
+  assert.match(warnings[2].excerpt, /Laplace=1\/\(1\+s\)/i)
+  assert.match(warnings[2].suggestion, /ngspice-compatible/)
+  assert.match(warnings[3].impact, /may prevent the card from parsing/)
+  assert.equal(source.includes('Laplace=1/(1+s)'), true)
 })
 
 test('rejects executable, external-file, and whole-circuit directives', () => {

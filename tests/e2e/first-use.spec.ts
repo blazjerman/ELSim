@@ -80,3 +80,20 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
   await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()
   expect(pageErrors).toEqual([])
 })
+
+test('show source-line guidance for a known unsupported LTspice model construct', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'laplace-model.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.SUBCKT FILTER IN OUT\nB1 OUT 0 V=V(IN)\n+ Laplace=1/(1+s)\n.ENDS FILTER\n'),
+  })
+
+  const warnings = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
+  await expect(warnings).toBeVisible()
+  await expect(warnings).toContainText('laplace-model.lib:2')
+  await expect(warnings).toContainText('LTspice behavioral Laplace option')
+  await expect(warnings).toContainText('not translated by ELSim’s current compatibility path')
+  await expect(warnings).toContainText('Use a tested ngspice-compatible transfer model')
+})
