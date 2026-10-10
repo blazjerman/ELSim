@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsim.app/schemas/component-definition-v1.schema.json",
+  "title": "ELSim component definition v1",
+  "description": "Versioned reusable electrical component definition. Project instances continue storing their editable values and identity separately.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "kind", "name", "electricalType", "pins", "properties", "animationChannels"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^elsim\\.[a-z0-9-]+$", "maxLength": 80 },
+    "version": { "const": 1 },
+    "kind": { "type": "string", "enum": ["source", "currentSource", "resistor", "lamp", "capacitor", "ground", "inductor", "diode", "led", "switch", "vcvs", "vccs", "cccs", "ccvs", "behavioral", "npn", "pnp", "subcircuit"] },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "electricalType": { "type": "string", "enum": ["V", "I", "R", "C", "L", "GND", "D", "S", "E", "G", "F", "H", "B", "Q", "X"] },
+    "pins": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "direction", "spiceOrder"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$", "maxLength": 64 },
+          "direction": { "enum": ["passive", "input", "output"] },
+          "spiceOrder": { "type": "integer", "minimum": 1, "maximum": 64 }
+        }
+      }
+    },
+    "properties": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "label", "unit"],
+        "properties": {
+          "key": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*$", "maxLength": 64 },
+          "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "unit": { "type": "string", "maxLength": 32 },
+          "defaultValue": { "type": "string", "maxLength": 128 },
+          "required": { "type": "boolean" }
+        }
+      }
+    },
+    "animationChannels": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*(?:\\.[a-zA-Z0-9]+)*$", "maxLength": 80 } }
+  }
+}

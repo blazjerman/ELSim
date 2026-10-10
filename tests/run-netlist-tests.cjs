@@ -33,6 +33,7 @@ try {
     path.join(root, 'src/domain/hierarchyProbe.ts'),
     path.join(root, 'src/domain/hierarchyNavigation.ts'),
     path.join(root, 'src/domain/project.ts'),
+    path.join(root, 'src/domain/componentDefinitions.ts'),
     path.join(root, 'src/domain/sourcePwl.ts'),
     path.join(root, 'src/domain/examples.ts'),
     path.join(root, 'src/domain/partClipboard.ts'),
@@ -48,7 +49,7 @@ try {
   if (compile.status !== 0) {
     process.exitCode = compile.status ?? 1
   } else {
-    const tests = spawnSync(process.execPath, ['--test', '--test-reporter=spec', path.join(__dirname, 'engine-protocol.test.cjs'), path.join(__dirname, 'netlist.test.cjs'), path.join(__dirname, 'behavioral-expression.test.cjs'), path.join(__dirname, 'raw.test.cjs'), path.join(__dirname, 'probe.test.cjs'), path.join(__dirname, 'project-archive.test.cjs'), path.join(__dirname, 'subcircuit-library.test.cjs'), path.join(__dirname, 'ltspice-symbol.test.cjs'), path.join(__dirname, 'ltspice-schematic.test.cjs'), path.join(__dirname, 'ltspice-export.test.cjs'), path.join(__dirname, 'result-control.test.cjs'), path.join(__dirname, 'parameter-sweep.test.cjs'), path.join(__dirname, 'measurements.test.cjs'), path.join(__dirname, 'diagnostics.test.cjs'), path.join(__dirname, 'wire-flow.test.cjs'), path.join(__dirname, 'geometry-edit.test.cjs'), path.join(__dirname, 'part-clipboard.test.cjs'), path.join(__dirname, 'electrical-check.test.cjs'), path.join(__dirname, 'hierarchy.test.cjs'), path.join(__dirname, 'plot.test.cjs')], {
+    const tests = spawnSync(process.execPath, ['--test', '--test-reporter=spec', path.join(__dirname, 'component-definitions.test.cjs'), path.join(__dirname, 'engine-protocol.test.cjs'), path.join(__dirname, 'netlist.test.cjs'), path.join(__dirname, 'behavioral-expression.test.cjs'), path.join(__dirname, 'raw.test.cjs'), path.join(__dirname, 'probe.test.cjs'), path.join(__dirname, 'project-archive.test.cjs'), path.join(__dirname, 'subcircuit-library.test.cjs'), path.join(__dirname, 'ltspice-symbol.test.cjs'), path.join(__dirname, 'ltspice-schematic.test.cjs'), path.join(__dirname, 'ltspice-export.test.cjs'), path.join(__dirname, 'result-control.test.cjs'), path.join(__dirname, 'parameter-sweep.test.cjs'), path.join(__dirname, 'measurements.test.cjs'), path.join(__dirname, 'diagnostics.test.cjs'), path.join(__dirname, 'wire-flow.test.cjs'), path.join(__dirname, 'geometry-edit.test.cjs'), path.join(__dirname, 'part-clipboard.test.cjs'), path.join(__dirname, 'electrical-check.test.cjs'), path.join(__dirname, 'hierarchy.test.cjs'), path.join(__dirname, 'plot.test.cjs')], {
       cwd: root,
       env: { ...process.env, ELSIM_TEST_BUILD: output },
       stdio: 'inherit',

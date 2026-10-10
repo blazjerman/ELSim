@@ -2,6 +2,7 @@ import { componentPins } from './geometry'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
+import { componentDefinitionByKind } from './componentDefinitions'
 
 export type PartKind = 'source' | 'currentSource' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
@@ -207,6 +208,7 @@ export function validateProject(input: unknown): Project {
     throw new Error('This project format is not supported. Expected ELSim project version 7.')
   }
   const allowed = new Set<PartKind>(['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'subcircuit'])
+  if (allowed.size !== Object.keys(componentDefinitionByKind).length || [...allowed].some((kind) => componentDefinitionByKind[kind]?.kind !== kind)) throw new Error('Built-in component definition registry does not match supported component kinds.')
   const refs = new Set<string>()
   const partIds = new Set<string>()
   for (const candidate of data.parts as Part[]) {
