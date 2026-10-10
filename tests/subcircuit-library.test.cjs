@@ -40,6 +40,29 @@ test('imports .MODEL-only libraries, including numeric-leading model names and c
   assert.match(parsed.modelText, /\+ Rs=1/)
 })
 
+test('preserves unsupported AKO inheritance and MOSFET bins with source-line diagnostics', () => {
+  const source = [
+    '.MODEL child AKO:base NMOS W=1u',
+    '.MODEL N1.1 NMOS LEVEL=1',
+    '+ LMIN=1u LMAX=4u WMIN=1u WMAX=4u',
+    '.MODEL exact NMOS LEVEL=1',
+  ].join('\n')
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.models.map(({ name, type }) => [name, type]), [
+    ['child', 'NMOS'], ['N1.1', 'NMOS'], ['exact', 'NMOS'],
+  ])
+  assert.equal(parsed.modelText, source)
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [1, 'LTspice AKO model inheritance (unsupported by browser ngspice)'],
+    [2, 'LTspice MOSFET model binning (automatic selection unsupported)'],
+  ])
+  assert.match(warnings[0].impact, /model-type mismatch/)
+  assert.match(warnings[0].suggestion, /does not expand AKO inheritance/)
+  assert.match(warnings[1].impact, /base model cannot be found/)
+  assert.match(warnings[1].suggestion, /does not choose one automatically/)
+})
+
 test('accepts a SPICE title line and CRLF source', () => {
   const parsed = parseSubcircuitLibrary('User amplifier library\r\n.SUBCKT amp IN OUT\r\nR1 IN OUT 1k\r\n.ENDS amp\r\n')
   assert.equal(parsed.subcircuits[0].startLine, 2)

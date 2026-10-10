@@ -817,6 +817,24 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await expect(warnings).toContainText('external .cm modules')
 })
 
+test('show source-line guidance for imported AKO models and MOSFET bins', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'vendor-models.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.MODEL child AKO:base NMOS W=1u\n.MODEL N1.1 NMOS LEVEL=1\n+ LMIN=1u LMAX=4u WMIN=1u WMAX=4u\n'),
+  })
+
+  const warnings = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
+  await expect(warnings).toBeVisible()
+  await expect(warnings).toContainText('vendor-models.lib:1')
+  await expect(warnings).toContainText('LTspice AKO model inheritance')
+  await expect(warnings).toContainText('vendor-models.lib:2')
+  await expect(warnings).toContainText('LTspice MOSFET model binning')
+  await expect(warnings).toContainText('does not choose one automatically')
+})
+
 test('show schematic compatibility diagnostics for unresolved LTspice directives', async ({ page }) => {
   await page.goto('/')
   const source = [

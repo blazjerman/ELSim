@@ -2,6 +2,8 @@
 
 This matrix describes the importer as implemented today. “Supported” means ELSim maps the record into its own project model; it does not promise byte-for-byte round trips or full behavioral equivalence with LTspice. Fixtures are hand-written in the repository and contain no vendor artwork or models.
 
+Model-library preflight recognizes LTspice `.MODEL child AKO:base NMOS` inheritance and dimension-selected MOSFET bins such as `.MODEL N1.1 NMOS ... LMIN=... LMAX=... WMIN=... WMAX=...`. Both constructs are preserved on import and reported with their source lines. The pinned browser ngspice runtime rejects the tested AKO card and does not select a suffixed bin from an instance's unsuffixed base model name; ELSim does not expand inheritance or choose bins. Use only model replacements or explicit bin selections verified against their author's intent and ngspice behavior. Hand-written unit tests cover source preservation and diagnostics. LTspice syntax reference: [MOSFET models and bins](https://ltspicehelpmanual.azurewebsites.net/mmosfet.htm).
+
 ## Schematic files (`.asc`)
 
 | Syntax or behavior | Status | Evidence / diagnostic |
