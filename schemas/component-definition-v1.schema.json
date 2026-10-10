@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["id", "version", "kind", "name", "electricalType", "pins", "properties", "animationChannels"],
   "properties": {
-    "id": { "type": "string", "pattern": "^elsim\\.[a-z0-9-]+$", "maxLength": 80 },
+    "id": { "type": "string", "pattern": "^(?:elsim\\.[a-z0-9-]+|user\\.[a-f0-9]{64}\\.[a-z0-9-]+)$", "maxLength": 160 },
     "version": { "const": 1 },
     "kind": { "type": "string", "enum": ["source", "currentSource", "resistor", "lamp", "capacitor", "ground", "inductor", "diode", "led", "switch", "vcvs", "vccs", "cccs", "ccvs", "behavioral", "npn", "pnp", "subcircuit"] },
     "name": { "type": "string", "minLength": 1, "maxLength": 120 },
@@ -20,8 +20,8 @@
         "additionalProperties": false,
         "required": ["name", "direction", "spiceOrder"],
         "properties": {
-          "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$", "maxLength": 64 },
-          "direction": { "enum": ["passive", "input", "output"] },
+          "name": { "type": "string", "pattern": "^(?:[0-9]+|[A-Za-z_][A-Za-z0-9_.$]*)$", "maxLength": 64 },
+          "direction": { "enum": ["passive", "input", "output", "inout"] },
           "spiceOrder": { "type": "integer", "minimum": 1, "maximum": 64 }
         }
       }
@@ -42,6 +42,8 @@
         }
       }
     },
-    "animationChannels": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*(?:\\.[a-zA-Z0-9]+)*$", "maxLength": 80 } }
+    "animationChannels": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*(?:\\.[a-zA-Z0-9]+)*$", "maxLength": 80 } },
+    "modelParameters": { "type": "array", "maxItems": 32, "items": { "type": "object", "additionalProperties": false, "required": ["name", "defaultValue"], "properties": { "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "maxLength": 64 }, "defaultValue": { "type": "string", "maxLength": 128 } } } },
+    "provenance": { "type": "object", "additionalProperties": false, "required": ["assetId", "filename", "sha256"], "properties": { "assetId": { "type": "string", "minLength": 1, "maxLength": 128 }, "filename": { "type": "string", "minLength": 1, "maxLength": 256 }, "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" } } }
   }
 }

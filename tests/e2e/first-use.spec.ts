@@ -160,11 +160,13 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/')
 
+  const modelLibrary = '.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
+  const expectedDefinitionId = `user.${createHash('sha256').update(modelLibrary).digest('hex').slice(0, 12)}.user-double`
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-double.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.SUBCKT USER_DOUBLE IN OUT VSS\nE1 OUT VSS IN VSS 2\n.ENDS USER_DOUBLE\n'),
+    buffer: Buffer.from(modelLibrary),
   })
   await expect(page.getByText(/Imported 1 subcircuit and 0 device models from user-double\.lib/)).toBeVisible()
 
@@ -189,6 +191,10 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
     { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
   ])
   await expect(page.getByText(/Imported user-double with 3 parts and 0 wires/)).toBeVisible()
+  const importedDefinition = page.locator(`[data-component-definition-id="${expectedDefinitionId}"]`)
+  await expect(importedDefinition).toBeVisible()
+  await expect(importedDefinition).toContainText('Add to schematic')
+  await expect(page.locator('.imported-model')).toContainText('Parameters: gain=2')
   await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled()
   await page.getByRole('button', { name: 'Run simulation' }).click()
 

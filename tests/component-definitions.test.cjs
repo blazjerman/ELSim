@@ -5,9 +5,10 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { componentDefinitions, componentDefinitionFor, componentDefaultValue } = require(path.join(build, 'domain/componentDefinitions.js'))
+const { componentDefinitions, componentDefinitionFor, componentDefaultValue, importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createStarterProject, kindNames, kindPrefix } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
+const { parseSubcircuitLibrary } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('built-in component definitions have stable identities, ordered unique SPICE pins, and instance pin counts', () => {
   const schema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8'))
@@ -37,4 +38,22 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.ok(componentDefinitionFor('capacitor').animationChannels.includes('charge.voltage'))
   assert.ok(componentDefinitionFor('inductor').animationChannels.includes('field.current'))
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
+})
+
+test('imported subcircuits become content-addressed component definitions with ordered pins, parameters, and provenance', () => {
+  const library = '.SUBCKT amp 1 OUT PARAMS: gain=2 bias={0.5}\nR1 1 OUT 1k\n.ENDS amp\n'
+  const parsed = parseSubcircuitLibrary(library).subcircuits[0]
+  const provenance = { assetId: 'model-asset-1', filename: 'amp.lib', sha256: 'a'.repeat(64) }
+  const definition = importedSubcircuitComponentDefinition(parsed, provenance)
+  assert.match(definition.id, /^user\.a{64}\.amp$/)
+  assert.equal(definition.kind, 'subcircuit')
+  assert.equal(definition.electricalType, 'X')
+  assert.deepEqual(definition.pins, [
+    { name: '1', direction: 'inout', spiceOrder: 1 },
+    { name: 'OUT', direction: 'inout', spiceOrder: 2 },
+  ])
+  assert.deepEqual(definition.modelParameters, [{ name: 'gain', defaultValue: '2' }, { name: 'bias', defaultValue: '{0.5}' }])
+  assert.deepEqual(definition.provenance, provenance)
+  assert.throws(() => importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'bad' }), /SHA-256/)
+  assert.notEqual(importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'b'.repeat(64) }).id, definition.id)
 })

@@ -1,9 +1,11 @@
 import type { PartKind } from './project'
+import type { SubcircuitDefinition } from './subcircuitLibrary'
 
-export type ComponentPinDefinition = { name: string; direction: 'passive' | 'input' | 'output'; spiceOrder: number }
+export type ComponentPinDefinition = { name: string; direction: 'passive' | 'input' | 'output' | 'inout'; spiceOrder: number }
 export type ComponentPropertyDefinition = { key: string; label: string; unit: string; defaultValue?: string; required?: boolean }
+export type ComponentModelParameter = { name: string; defaultValue: string }
 export type ComponentDefinition = {
-  id: `elsim.${string}`
+  id: string
   version: 1
   kind: PartKind
   name: string
@@ -11,6 +13,8 @@ export type ComponentDefinition = {
   pins: readonly ComponentPinDefinition[]
   properties: readonly ComponentPropertyDefinition[]
   animationChannels: readonly string[]
+  modelParameters?: readonly ComponentModelParameter[]
+  provenance?: { assetId: string; filename: string; sha256: string }
 }
 
 const twoPin: readonly ComponentPinDefinition[] = [
@@ -53,4 +57,28 @@ export function componentDefinitionFor(kind: PartKind): ComponentDefinition {
 
 export function componentDefaultValue(kind: PartKind): string {
   return componentDefinitionFor(kind).properties.find((property) => property.key === 'value')?.defaultValue ?? ''
+}
+
+function definitionSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'model'
+}
+
+export function importedSubcircuitComponentDefinition(
+  subcircuit: SubcircuitDefinition,
+  provenance: { assetId: string; filename: string; sha256: string },
+): ComponentDefinition {
+  if (!/^[0-9a-f]{64}$/i.test(provenance.sha256)) throw new Error('Imported component definition needs a valid model-library SHA-256.')
+  if (!subcircuit.name || subcircuit.name.length > 128 || subcircuit.pins.length < 1 || subcircuit.pins.length > 64) throw new Error('Imported component definition has an invalid model name or pin count.')
+  return Object.freeze({
+    id: `user.${provenance.sha256.toLowerCase()}.${definitionSlug(subcircuit.name)}`,
+    version: 1,
+    kind: 'subcircuit',
+    name: subcircuit.name,
+    electricalType: 'X',
+    pins: Object.freeze(subcircuit.pins.map((name, index) => Object.freeze({ name, direction: 'inout' as const, spiceOrder: index + 1 }))),
+    properties: Object.freeze([{ key: 'modelName', label: 'Model', unit: '', defaultValue: subcircuit.name, required: true }]),
+    modelParameters: Object.freeze(subcircuit.parameters.map(({ name, defaultValue }) => Object.freeze({ name, defaultValue }))),
+    animationChannels: Object.freeze([]),
+    provenance: Object.freeze({ ...provenance }),
+  })
 }
