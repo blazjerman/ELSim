@@ -319,6 +319,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
     'SYMBOL user_double 64 0 R0', 'SYMATTR InstName X1', 'SYMATTR Value USER_DOUBLE',
     'SYMBOL res 96 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
     'TEXT 0 80 Left 2 !.op',
+    'TEXT 0 100 Left 2 !.save V(out)',
   ].join('\n')
   const symbol = (prefix: string, pins: Array<[string, number, number, string]>) => [
     'Version 4', `SYMATTR Prefix ${prefix}`, 'RECTANGLE Normal -8 -8 8 8',
@@ -332,6 +333,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
     { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
   ])
   await expect(page.getByText(/Imported user-double with 3 parts and 0 wires/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.selectedTraceIds)).toEqual(['v(out)'])
   const importedDefinition = page.locator(`[data-component-definition-id="${expectedDefinitionId}"]`)
   await expect(importedDefinition).toBeVisible()
   await expect(importedDefinition).toContainText('Add to schematic')

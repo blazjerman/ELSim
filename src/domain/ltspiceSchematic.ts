@@ -2,6 +2,7 @@ import { createStarterProject, sheetModelName, validateProject, type Part, type 
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseSubcircuitLibrary } from './subcircuitLibrary'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
+import { componentCurrentVector } from './probe'
 
 type AscSymbol = { name: string; x: number; y: number; rotation: number; flipX: boolean; attributes: Record<string, string>; rawRecords: string[]; line: number }
 export type LtspiceSchematicImport = { project: Project; warnings: string[] }
@@ -106,6 +107,31 @@ function applyDirective(project: Project, directive: string, warnings: string[],
       if (!activeSheet.parameters.some((item) => item.name.toLowerCase() === name.toLowerCase())) activeSheet.parameters.push({ id: `asc-param-${activeSheet.parameters.length + 1}`, name, defaultValue })
     }
     if (!assignments.length) warnings.push(`Line ${line}: could not interpret .param settings.`)
+    return
+  }
+  if (command === '.save') {
+    const body = directive.trim().replace(/^\.save\b/i, '').trim()
+    const vectors = body.match(/[vi]\(\s*[^()]+\s*\)/ig) ?? []
+    const remainder = body.replace(/[vi]\(\s*[^()]+\s*\)/ig, '').trim()
+    if (!vectors.length || remainder) { warnings.push(`Line ${line}: .save contains vectors that ELSim cannot map to named nodes or placed components.`); return }
+    const selected = new Set(project.plotSettings?.selectedTraceIds ?? [])
+    for (const vector of vectors) {
+      const match = vector.match(/^([vi])\(\s*([^()]+?)\s*\)$/i)!
+      const kind = match[1].toLowerCase(), name = match[2].trim()
+      if (kind === 'v' && /^[A-Za-z_][A-Za-z0-9_.$]*$/.test(name) && project.netLabels.some((label) => label.name.toLowerCase() === name.toLowerCase())) {
+        selected.add(`v(${name.toLowerCase()})`)
+        continue
+      }
+      if (kind === 'i' && /^[A-Za-z_][A-Za-z0-9_.$]*$/.test(name)) {
+        const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === name.toLowerCase())
+        if (part && part.kind !== 'subcircuit' && part.kind !== 'ground') {
+          selected.add(componentCurrentVector(part).toLowerCase())
+          continue
+        }
+      }
+      warnings.push(`Line ${line}: .save vector “${recordExcerpt(vector)}” does not resolve to a named node or placed component and was not selected.`)
+    }
+    project.plotSettings = { ...(project.plotSettings ?? { selectedTraceIds: [], ranges: {} }), selectedTraceIds: [...selected] }
     return
   }
   if (command.startsWith('.')) warnings.push(`Line ${line}: directive ${command} is retained as an import warning but is not translated yet.`)

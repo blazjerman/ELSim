@@ -40,6 +40,16 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
   assert.notEqual(positive, pinNet(connectivity, pins, 1))
 })
 
+test('imports named-node and placed-component .save vectors as plot selections', () => {
+  const asc = [
+    'Version 4', 'FLAG 48 0 Out', 'SYMBOL res 32 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'TEXT 0 100 Left 2 !.save V(OUT) I(r1)',
+  ].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'saved-traces.asc', [symbol])
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['v(out)', 'i(@r1[i])'])
+  assert.deepEqual(warnings, [])
+})
+
 test('preserves untranslated component SYMATTR records in a bounded LTspice extension', () => {
   const asc = ['Version 4', 'SYMBOL res 32 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k', 'SYMATTR SpiceLine temp=40', 'SYMATTR VendorTag keep this value'].join('\n')
   const imported = parseLtspiceSchematic(asc, 'extended.asc', [symbol])
@@ -148,7 +158,7 @@ test('reports missing symbol files and unsupported directives instead of silentl
   assert.equal(project.importedSchematicSource.originalText, asc)
   assert.equal(warnings.length, 2)
   assert.match(warnings[0], /missing its \.asy sidecar/)
-  assert.match(warnings[1], /directive \.save.*not translated/)
+  assert.match(warnings[1], /\.save vector “V\(out\)” does not resolve/)
 })
 
 test('reports a missing SYMATTR ModelFile dependency and accepts an imported matching library filename', () => {
