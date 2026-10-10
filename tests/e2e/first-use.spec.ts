@@ -1447,6 +1447,38 @@ test('one LTspice import loads its schematic, symbol, and user IC model together
   await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()
 })
 
+test('LTspice B-source voltage expression imports and solves in the browser engine', async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  const source = [
+    'Version 4', 'SHEET 1 640 240',
+    'FLAG -16 0 VIN', 'FLAG 16 0 0', 'FLAG 48 0 OUT', 'FLAG 80 0 0', 'FLAG 112 0 OUT', 'FLAG 144 0 0',
+    'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 1',
+    'SYMBOL bv 64 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V={2*V(VIN)}',
+    'SYMBOL res 128 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'TEXT 0 100 Left 2 !.op', 'TEXT 0 120 Left 2 !.save V(OUT) I(R1)',
+  ].join('\n')
+  const symbol = (prefix: string, pins: Array<[string, number, number, string]>) => [
+    'Version 4', `SYMATTR Prefix ${prefix}`,
+    ...pins.flatMap(([name, x, y, orientation], index) => [`PIN ${x} ${y} ${orientation}`, `PINATTR PinName ${name}`, `PINATTR SpiceOrder ${index + 1}`]),
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'behavioral.asc', mimeType: 'text/plain', buffer: Buffer.from(source) },
+    { name: 'voltage.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('V', [['PLUS', -16, 0, 'R'], ['MINUS', 16, 0, 'L']])) },
+    { name: 'bv.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('B', [['PLUS', -16, 0, 'R'], ['MINUS', 16, 0, 'L']])) },
+    { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
+  ])
+  await expect(page.getByText(/Imported behavioral with 3 parts, 0 wires\./)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'B1')?.behavioralOutput)).toBe('voltage')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'B1')?.value)).toBe('2*V(VIN)')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByRole('table')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()
+})
+
 test('user-provided op-amp IC model imports and simulates with ordered pins', async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
