@@ -2,6 +2,8 @@
 
 ELSim source is distributed under the MIT License in [LICENSE](LICENSE). Third-party software keeps its own terms. The complete locked npm dependency inventory is in [`licenses/npm-dependencies.json`](licenses/npm-dependencies.json). This file includes the full declared license text for direct production dependencies bundled by the current browser build.
 
+After `npm ci`, run `npm run check:npm-licenses` to verify the installed package inventory, exact versions, license-file hashes, and direct dependency notice headings. This check detects stale or missing records; it does not determine license compatibility or replace review of the applicable terms.
+
 ## lucide-react@0.468.0 — ISC
 
 Source: https://github.com/lucide-icons/lucide

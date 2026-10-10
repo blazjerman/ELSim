@@ -31,6 +31,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Check npm license inventory and direct dependency notices
+        run: npm run check:npm-licenses
+
       - name: Run domain and netlist tests
         run: npm test
 

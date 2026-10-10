@@ -23,7 +23,8 @@
     "test:wasm": "node tools/test-ngspice-wasm.mjs",
     "check:ngspice-release": "node tools/check-ngspice-release.mjs",
     "build:release": "npm run check:ngspice-release && npm run typecheck && vite build --mode release",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:npm-licenses": "node tools/check-npm-license-inventory.mjs"
   },
   "dependencies": {
     "react": "19.1.0",
