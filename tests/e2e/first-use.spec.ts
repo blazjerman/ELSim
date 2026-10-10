@@ -761,6 +761,7 @@ test('MOSFET switch example demonstrates gate drive and drain switching', async 
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(gate)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'V(drain)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'I(m1)', exact: true })).toBeVisible()
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
   await timeSlider.fill(String(Math.floor(finalSample / 4)))

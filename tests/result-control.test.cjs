@@ -17,13 +17,14 @@ test('result control saves device currents needed for probes and visualizations'
     'S1 n3 0 ctrl 0 ELSIM_INTERNAL_SW',
     'F1 n3 0 VSENSE 2',
     'H1 n3 0 VSENSE 1k',
+    'M1 d g s b ELSIM_MODEL_M1',
     'B1 n3 0 V={V(in)*2}',
     '.model DDEFAULT D',
     '.tran 1u 1m',
     '.end',
   ].join('\n')
   const instrumented = addResultControl(netlist)
-  assert.match(instrumented, /^\.save all @R1\[i\] @C1\[i\] @L1\[i\] @D1\[id\] @S1\[i\] @F1\[i\] @H1\[i\] @B1\[i\]$/m)
+  assert.match(instrumented, /^\.save all @R1\[i\] @C1\[i\] @L1\[i\] @D1\[id\] @S1\[i\] @F1\[i\] @H1\[i\] @M1\[id\] @B1\[i\]$/m)
   assert.match(instrumented, /\.control\nset filetype=ascii\ntran 1u 1m\nwrite \/result\.raw all\nquit\n\.endc\n\.end\n$/)
 })
 
@@ -74,9 +75,11 @@ test('controlled sources have their branch currents saved for probing', () => {
   assert.match(control, /^\.save all @E1\[i\] @G1\[i\]$/m)
 })
 
-test('BJT models save collector current using the device-specific ngspice vector', () => {
+test('BJT and MOSFET models save device current using ngspice-specific vectors', () => {
   const control = addResultControl('Q1 c b e ELSIM_MODEL_Q1\n.model ELSIM_MODEL_Q1 NPN(BF=100)\n.tran 1u 1m\n.end')
   assert.match(control, /^\.save all @Q1\[ic\]$/m)
+  const mosfet = addResultControl('M1 d g s b ELSIM_MODEL_M1\n.tran 1u 1m\n.end')
+  assert.match(mosfet, /^\.save all @M1\[id\]$/m)
 })
 
 test('result control does not emit unscoped current saves for subcircuit definitions', () => {
