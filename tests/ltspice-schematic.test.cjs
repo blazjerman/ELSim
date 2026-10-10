@@ -183,6 +183,7 @@ test('imports scalar LTspice current sources with ampere values and ordered pins
   assert.deepEqual(pulsed.warnings, [])
   assert.match(createNetlist(pulsed.project), /^I2 .* .* PULSE\(0 1m 0 1u 1u 5m 10m\)$/m)
   const currentPwl = parseLtspiceSchematic(['Version 4', 'SYMBOL current 0 0 R0', 'SYMATTR InstName I3', 'SYMATTR Value PWL(0 0, 2m 1mA, 4m -2mA)'].join('\n'), 'current-pwl.asc', [currentSymbol])
+  assert.equal(currentPwl.project.parts[0].sourceMode, 'pwl')
   assert.deepEqual(currentPwl.project.parts[0].currentPwl, [{ time: '0', current: '0' }, { time: '2m', current: '1mA' }, { time: '4m', current: '-2mA' }])
   assert.deepEqual(currentPwl.warnings, [])
   assert.match(createNetlist(currentPwl.project), /^I3 .* .* PWL\(0 0 2m 1m 4m -2m\)$/m)
