@@ -60,6 +60,17 @@ export type SimulationResult = {
   measurements: MeasurementResult[]
 }
 
+/** Return each backing ArrayBuffer once so worker results can move without cloning. */
+export function transferableTraceBuffers(traces: readonly Trace[]): ArrayBuffer[] {
+  const buffers = new Set<ArrayBuffer>()
+  for (const trace of traces) {
+    for (const vector of [trace.axis, trace.values, trace.imaginaryValues]) {
+      if (vector?.buffer instanceof ArrayBuffer) buffers.add(vector.buffer)
+    }
+  }
+  return [...buffers]
+}
+
 // Keep the editor independent of a specific ngspice-WASM build. Only this
 // interface may cross the worker boundary when the engine is integrated.
 export interface SimulationEngine {
@@ -105,11 +116,13 @@ function isSource(value: unknown): value is NetlistSource {
     && (value.assetLine === undefined || (Number.isInteger(value.assetLine) && Number(value.assetLine) >= 1))
 }
 
-function isFiniteVector(value: unknown): value is Float64Array | number[] {
+function isFiniteVector(value: unknown, validatedVectors?: WeakSet<Float64Array>): value is Float64Array | number[] {
   if (Array.isArray(value)) return value.every((sample) => typeof sample === 'number' && Number.isFinite(sample))
   if (!ArrayBuffer.isView(value) || Object.prototype.toString.call(value) !== '[object Float64Array]') return false
   const vector = value as Float64Array
+  if (validatedVectors?.has(vector)) return true
   for (let index = 0; index < vector.length; index++) if (!Number.isFinite(vector[index])) return false
+  validatedVectors?.add(vector)
   return true
 }
 
@@ -125,11 +138,11 @@ function isCompletedMetadata(value: unknown): value is RunMetadata & { completed
     && isRecord(value.settings) && Object.values(value.settings).every((setting) => typeof setting === 'string' || typeof setting === 'boolean' || (typeof setting === 'number' && Number.isFinite(setting)))
 }
 
-function isTrace(value: unknown): value is Trace {
+function isTrace(value: unknown, validatedVectors?: WeakSet<Float64Array>): value is Trace {
   if (!isRecord(value)) return false
   if (typeof value.id !== 'string' || !value.id || typeof value.label !== 'string' || typeof value.unit !== 'string' || typeof value.axisLabel !== 'string' || typeof value.axisUnit !== 'string') return false
-  if (!isFiniteVector(value.axis) || !isFiniteVector(value.values) || value.axis.length === 0 || value.axis.length !== value.values.length) return false
-  if (value.imaginaryValues !== undefined && (!isFiniteVector(value.imaginaryValues) || value.imaginaryValues.length !== value.values.length)) return false
+  if (!isFiniteVector(value.axis, validatedVectors) || !isFiniteVector(value.values, validatedVectors) || value.axis.length === 0 || value.axis.length !== value.values.length) return false
+  if (value.imaginaryValues !== undefined && (!isFiniteVector(value.imaginaryValues, validatedVectors) || value.imaginaryValues.length !== value.values.length)) return false
   if (value.baseId !== undefined && typeof value.baseId !== 'string') return false
   if (value.sweep !== undefined && (!isRecord(value.sweep) || typeof value.sweep.label !== 'string' || !Number.isInteger(value.sweep.index) || Number(value.sweep.index) < 0)) return false
   return true
@@ -158,14 +171,14 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
   if (candidate.type === 'cancelled') return typeof candidate.runId === 'string'
   if (candidate.type === 'result') {
     const result = candidate.result
-    return isRecord(result)
-      && isCompletedMetadata(result.metadata)
-      && typeof result.netlist === 'string'
-      && Array.isArray(result.sourceMap) && result.sourceMap.every(isSource)
-      && Array.isArray(result.traces) && result.traces.length > 0 && result.traces.every(isTrace)
-      && Array.isArray(result.diagnostics) && result.diagnostics.every(isDiagnostic)
-      && ['tran', 'op', 'ac', 'dc'].includes(String(result.analysis))
-      && Array.isArray(result.measurements) && result.measurements.every(isMeasurementResult)
+    if (!isRecord(result) || !isCompletedMetadata(result.metadata) || typeof result.netlist !== 'string'
+      || !Array.isArray(result.sourceMap) || !result.sourceMap.every(isSource)
+      || !Array.isArray(result.traces) || result.traces.length === 0
+      || !Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)
+      || !['tran', 'op', 'ac', 'dc'].includes(String(result.analysis))
+      || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return false
+    const validatedVectors = new WeakSet<Float64Array>()
+    return result.traces.every((trace) => isTrace(trace, validatedVectors))
   }
   if (candidate.type === 'error') return isDiagnostic(candidate.error)
   return false
@@ -195,13 +208,14 @@ export function engineResponseIssue(value: unknown): string {
     if (typeof result.netlist !== 'string') return 'generated netlist is missing'
     if (!Array.isArray(result.sourceMap) || !result.sourceMap.every(isSource)) return 'netlist source map is malformed'
     if (!Array.isArray(result.traces) || result.traces.length === 0) return 'result has no waveform traces'
+    const validatedVectors = new WeakSet<Float64Array>()
     for (let index = 0; index < result.traces.length; index++) {
       const trace = result.traces[index]
       if (!isRecord(trace)) return `trace ${index + 1} is not an object`
-      if (!isFiniteVector(trace.axis) || !isFiniteVector(trace.values)) return `trace ${index + 1} has an invalid numeric vector`
+      if (!isFiniteVector(trace.axis, validatedVectors) || !isFiniteVector(trace.values, validatedVectors)) return `trace ${index + 1} has an invalid numeric vector`
       if (trace.axis.length === 0 || trace.axis.length !== trace.values.length) return `trace ${index + 1} axis/value lengths do not match`
-      if (trace.imaginaryValues !== undefined && (!isFiniteVector(trace.imaginaryValues) || trace.imaginaryValues.length !== trace.values.length)) return `trace ${index + 1} complex vector length does not match`
-      if (!isTrace(trace)) return `trace ${index + 1} metadata is malformed`
+      if (trace.imaginaryValues !== undefined && (!isFiniteVector(trace.imaginaryValues, validatedVectors) || trace.imaginaryValues.length !== trace.values.length)) return `trace ${index + 1} complex vector length does not match`
+      if (!isTrace(trace, validatedVectors)) return `trace ${index + 1} metadata is malformed`
     }
     if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
     if (!['tran', 'op', 'ac', 'dc'].includes(String(result.analysis))) return 'analysis type is invalid'

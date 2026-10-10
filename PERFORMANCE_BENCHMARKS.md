@@ -44,7 +44,7 @@ These are working engineering targets for this fixture, not heterogeneous-CI pas
 
 ## Not yet measured
 
-The browser editor benchmark below measures reload readiness and click-to-selection completion, but not pointer-to-paint latency, animation update cost, large transient trace parsing/transport, actual browser worker structured-clone/transfer behavior, or reliable peak browser memory. The one-point OP solve is not a large-trace simulator benchmark. Record hardware/runtime details before setting browser budgets. Add a wire-segment-heavy layout and a nested-sheet fixture before treating the resistor chain as representative of all schematics.
+The browser editor benchmark below measures reload readiness and click-to-selection completion, but not pointer-to-paint latency, animation update cost, large transient trace parsing, actual engine-worker end-to-end latency at million-sample scale, or reliable peak browser memory. The one-point OP solve is not a large-trace simulator benchmark. Record hardware/runtime details before setting browser budgets. Add a wire-segment-heavy layout and a nested-sheet fixture before treating the resistor chain as representative of all schematics.
 
 ## Browser editor baseline (2026-10-10)
 
@@ -52,11 +52,22 @@ Playwright benchmark: `npm run benchmark:browser` (Chromium and Firefox). The ge
 
 | Browser | Parts | Editor ready (ms) | Selection median (ms) | Selection p95 (ms) | SVG elements |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Chromium | 100 | 296 | 102 | 107 | 1,610 |
-| Chromium | 500 | 585 | 174 | 296 | 8,010 |
-| Chromium | 1,000 | 933 | 324 | 482 | 16,010 |
-| Firefox | 100 | 403 | 83 | 128 | 1,610 |
-| Firefox | 500 | 624 | 192 | 209 | 8,010 |
-| Firefox | 1,000 | 1,032 | 309 | 379 | 16,010 |
+| Chromium | 100 | 296 | 102 | 113 | 1,610 |
+| Chromium | 500 | 552 | 170 | 305 | 8,010 |
+| Chromium | 1,000 | 789 | 352 | 458 | 16,010 |
+| Firefox | 100 | 398 | 87 | 131 | 1,610 |
+| Firefox | 500 | 596 | 173 | 240 | 8,010 |
+| Firefox | 1,000 | 932 | 305 | 383 | 16,010 |
 
-`CircuitPart` now memoizes its SVG subtree and uses stable event wrappers that dispatch to the latest schematic handlers. Against the earlier recorded run, 1,000-part selection median improved from 415 to 324 ms in Chromium and 387 to 309 ms in Firefox. Selection still takes roughly 0.3 seconds, so it remains a profiling target; these figures are a baseline and should not be treated as release budgets. Heap readings from browser automation were inconsistent and are excluded from conclusions. SVG size grows linearly with parts and labels, so the next editor work should profile render cost and consider viewport culling or a canvas layer only if measured data supports it.
+`CircuitPart` now memoizes its SVG subtree and uses stable event wrappers that dispatch to the latest schematic handlers. Earlier post-change runs measured 1,000-part selection medians at 324 ms in Chromium and 309 ms in Firefox; this run measured 352 and 305 ms respectively, showing some run-to-run variation. Selection still takes roughly 0.3 seconds, so it remains a profiling target; these figures are a baseline and should not be treated as release budgets. Heap readings from browser automation were inconsistent and are excluded from conclusions. SVG size grows linearly with parts and labels, so the next editor work should profile render cost and consider viewport culling or a canvas layer only if measured data supports it.
+
+### Browser waveform transport check
+
+The worker now shares one parsed axis across all traces and transfers unique axis/value buffers to the UI, avoiding per-trace axis copies and a structured-clone copy of result vectors. The UI validates shared typed vectors once per response. A Playwright `MessageChannel` check used six 100,000-sample traces (5.6 MB total including one shared axis); both clone and transfer preserved values and shared-axis identity, and transfer detached the sender buffers as expected.
+
+| Browser | Clone round trip (ms) | Transfer round trip (ms) | Payload |
+| --- | ---: | ---: | ---: |
+| Chromium | 3.90 | 0.20 | 5.6 MB |
+| Firefox | 2.00 | 3.00 | 5.6 MB |
+
+These small-payload timings vary by browser and are not budgets. Transfer’s consistent benefit is avoiding the waveform buffer copy and reducing peak duplicate memory; large end-to-end engine-worker runs remain to be measured.

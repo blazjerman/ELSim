@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { engineResponseIssue, isEngineRequest, isEngineResponse } = require(path.join(process.env.ELSIM_TEST_BUILD, 'engine/contract.js'))
+const { engineResponseIssue, isEngineRequest, isEngineResponse, transferableTraceBuffers } = require(path.join(process.env.ELSIM_TEST_BUILD, 'engine/contract.js'))
 
 const artifact = { text: '.tran 1u 1m', sourceMap: [], diagnostics: [] }
 const metadata = { runId: 'run-1', startedAt: '2026-10-10T12:00:00.000Z', engine: 'fixture', engineVersion: '1', projectVersion: 7, netlistHash: 'abc123', settings: { analysis: 'tran' } }
@@ -47,6 +47,38 @@ test('response consumer rejects malformed or incomplete worker messages', () => 
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, metadata: { ...completedMetadata, completedAt: 'not-a-date' } } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'peak', operation: 'delay', vector: 'v(in)', value: 0.1, unit: 'V' }] } }), false)
   assert.equal(isEngineResponse({ type: 'unknown', requestId: 'run-1' }), false)
+})
+
+test('trace transport transfers shared axes once and preserves typed-vector contents', () => {
+  const axis = new Float64Array([0, 0.5, 1])
+  const voltage = new Float64Array([0, 2.5, 5])
+  const current = new Float64Array([0, 0.01, 0.02])
+  const traces = [
+    { ...trace, axis, values: voltage },
+    { ...trace, id: 'i(r1)', label: 'I(R1)', unit: 'A', axis, values: current },
+  ]
+  const transfer = transferableTraceBuffers(traces)
+  assert.equal(transfer.length, 3)
+  const received = structuredClone({ traces }, { transfer }).traces
+  assert.equal(axis.byteLength, 0)
+  assert.equal(voltage.byteLength, 0)
+  assert.equal(current.byteLength, 0)
+  assert.equal(received[0].axis, received[1].axis)
+  assert.deepEqual([...received[0].axis], [0, 0.5, 1])
+  assert.deepEqual([...received[0].values], [0, 2.5, 5])
+  assert.deepEqual([...received[1].values], [0, 0.01, 0.02])
+})
+
+test('worker response validation accepts shared axes and still rejects non-finite shared samples', () => {
+  const sharedAxis = new Float64Array([0, 0.5, 1])
+  const traces = [
+    { ...trace, axis: sharedAxis, values: new Float64Array([0, 1, 2]) },
+    { ...trace, id: 'v(in)', axis: sharedAxis, values: new Float64Array([0, 3, 5]) },
+  ]
+  const result = { metadata: completedMetadata, netlist: artifact.text, sourceMap: [], traces, diagnostics: [], analysis: 'tran', measurements: [] }
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-shared-axis', result }), true)
+  sharedAxis[1] = Number.NaN
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-shared-axis', result }), false)
 })
 
 test('published JSON schema describes delay measurements and seconds', () => {

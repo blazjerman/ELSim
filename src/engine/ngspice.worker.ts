@@ -3,7 +3,7 @@ import { isTraceVariable, parseAsciiRawFile } from './raw'
 import { addResultControl } from './resultControl'
 import { parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice } from './diagnostics'
-import { isEngineRequest, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
+import { isEngineRequest, transferableTraceBuffers, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
 import type { TransientMeasurement } from '../domain/project'
 import { needsLtspiceFullDeckTranslation } from '../domain/subcircuitLibrary'
 
@@ -26,7 +26,7 @@ function makeTraces(rawText: string): Trace[] {
       unit: current ? 'A' : 'V',
       axisLabel: parsed.axisLabel,
       axisUnit: parsed.axisUnit,
-      axis: new Float64Array(axis),
+      axis,
       values: variable.values,
       ...(variable.imaginaryValues ? { imaginaryValues: variable.imaginaryValues } : {}),
     }
@@ -79,7 +79,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc',
       measurements: measurementOutput.results,
     }
-    worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse)
+    worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse, transferableTraceBuffers(traces))
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     worker.postMessage({ type: 'error', requestId, error: diagnosticForNgspice(message, artifact) } satisfies EngineResponse)

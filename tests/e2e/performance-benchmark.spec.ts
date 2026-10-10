@@ -85,5 +85,39 @@ test('record large-project editor render and selection timings', async ({ page, 
     })
   }
 
-  console.log(JSON.stringify({ benchmark: 'editor-large-project-v1', browser: browserName, results }, null, 2))
+  const transport = await page.evaluate(async () => {
+    const sampleCount = 100_000, traceCount = 6
+    const createTraces = () => {
+      const axis = Float64Array.from({ length: sampleCount }, (_, index) => index / (sampleCount - 1))
+      return Array.from({ length: traceCount }, (_, traceIndex) => ({
+        axis,
+        values: Float64Array.from({ length: sampleCount }, (_, index) => Math.sin(index / 100 + traceIndex)),
+      }))
+    }
+    const measure = async (transferBuffers: boolean) => {
+      const channel = new MessageChannel(), traces = createTraces()
+      const buffers = new Set<ArrayBuffer>()
+      for (const trace of traces) { buffers.add(trace.axis.buffer as ArrayBuffer); buffers.add(trace.values.buffer as ArrayBuffer) }
+      const received = new Promise<typeof traces>((resolve) => { channel.port1.onmessage = (event) => resolve(event.data.traces) })
+      const started = performance.now()
+      channel.port2.postMessage({ traces }, transferBuffers ? [...buffers] : [])
+      const detachedAtSend = transferBuffers && traces.every((trace) => trace.axis.byteLength === 0 && trace.values.byteLength === 0)
+      const receivedTraces = await received
+      const elapsedMs = performance.now() - started
+      channel.port1.close(); channel.port2.close()
+      return {
+        elapsedMs: Number(elapsedMs.toFixed(2)),
+        payloadBytes: sampleCount * Float64Array.BYTES_PER_ELEMENT * (traceCount + 1),
+        detachedAtSend,
+        sharedAxis: receivedTraces.every((trace) => trace.axis === receivedTraces[0].axis),
+        finalSample: receivedTraces[traceCount - 1].values[sampleCount - 1],
+      }
+    }
+    return { clone: await measure(false), transfer: await measure(true) }
+  })
+  expect(transport.clone.sharedAxis).toBe(true)
+  expect(transport.transfer.sharedAxis).toBe(true)
+  expect(transport.transfer.detachedAtSend).toBe(true)
+  expect(transport.clone.finalSample).toBeCloseTo(transport.transfer.finalSample, 12)
+  console.log(JSON.stringify({ benchmark: 'editor-large-project-v2', browser: browserName, results, transport }, null, 2))
 })
