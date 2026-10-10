@@ -15,12 +15,14 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   const project = createStarterProject()
   project.simulation.analysis = 'ac'
   project.parts[1].flipX = true
+  project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n' }
   const first = createProjectArchive(project)
   const second = createProjectArchive(project)
   assert.deepEqual(first, second)
   assert.equal(isProjectArchive(first), true)
   const restored = validateProject(readProjectArchive(first))
   assert.deepEqual(restored, project)
+  assert.match(restored.importedSchematicSource.originalText, /UNKNOWN_VENDOR_RECORD keep-me/)
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926)
 })
 
@@ -140,9 +142,18 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.throws(() => validateProject(mismatch), /symbol pin order or coordinates do not match/)
   const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v7.schema.json'), 'utf8'))
   assert.equal(schema.properties.symbolAssets.maxItems, 32)
+  assert.equal(schema.properties.importedSchematicSource.$ref, '#/$defs/ltspiceSchematicSource')
   assert.ok(schema.$defs.part.properties.symbolPinOffsets)
   assert.deepEqual(schema.$defs.sheet.properties.ports.items.properties.side.enum, ['auto', 'left', 'right', 'top', 'bottom'])
   assert.ok(schema.$defs.part.properties.sheetPortLayout)
+})
+
+test('LTspice source provenance validates its format, filename, and UTF-8 size limit', () => {
+  const project = createStarterProject()
+  project.importedSchematicSource = { format: 'ltspice-asc', filename: 'safe.asc', originalText: 'Version 4\nUNKNOWN keep-me\n' }
+  assert.deepEqual(validateProject(project).importedSchematicSource, project.importedSchematicSource)
+  assert.throws(() => validateProject({ ...project, importedSchematicSource: { ...project.importedSchematicSource, filename: '../unsafe.asc' } }), /malformed LTspice schematic source provenance/)
+  assert.throws(() => validateProject({ ...project, importedSchematicSource: { ...project.importedSchematicSource, format: 'other' } }), /malformed LTspice schematic source provenance/)
 })
 
 test('plot preferences survive project validation and old projects receive defaults', () => {

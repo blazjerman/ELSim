@@ -183,6 +183,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
 
   const project = createStarterProject()
   project.name = filename.replace(/\\/g, '/').split('/').pop()?.replace(/\.asc$/i, '') || 'Imported LTspice schematic'
+  project.importedSchematicSource = { format: 'ltspice-asc', filename: filename.replace(/\\/g, '/').split('/').pop() || filename, originalText: source }
   project.parts = []
   project.sheets[0].parts = project.parts
   project.wires = wires

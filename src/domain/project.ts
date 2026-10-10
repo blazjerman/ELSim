@@ -40,6 +40,7 @@ export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string }
 export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
 export type SymbolAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
+export type LtspiceSchematicSource = { format: 'ltspice-asc'; filename: string; originalText: string }
 export type ProjectSheet = {
   id: string
   name: string
@@ -71,6 +72,7 @@ export type Project = {
   plotSettings?: PlotSettings
   modelAssets?: ModelLibraryAsset[]
   symbolAssets?: SymbolAsset[]
+  importedSchematicSource?: LtspiceSchematicSource
   simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
   rootSheetId: string
   activeSheetId: string
@@ -378,6 +380,11 @@ export function validateProject(input: unknown): Project {
       parseLtspiceSymbol(candidate.content, candidate.filename)
       symbolIds.add(candidate.id)
     }
+  }
+  if (data.importedSchematicSource !== undefined) {
+    const source = data.importedSchematicSource as LtspiceSchematicSource
+    if (!source || source.format !== 'ltspice-asc' || typeof source.filename !== 'string' || !source.filename.trim() || /[\\/\u0000-\u001f]/.test(source.filename) || typeof source.originalText !== 'string' || !source.originalText.length) throw new Error('Project contains malformed LTspice schematic source provenance.')
+    if (new TextEncoder().encode(source.originalText).length > 10 * 1024 * 1024) throw new Error('Original LTspice schematic source exceeds the 10 MiB import limit.')
   }
   const importedDefinitions = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits) ?? []
   const importedDeviceModels = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).models) ?? []

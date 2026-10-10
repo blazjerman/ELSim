@@ -30,6 +30,8 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
   assert.equal(project.simulation.analysis, 'tran')
   assert.equal(project.simulation.stopTime, '5m')
   assert.equal(project.simulation.maxStep, '10u')
+  assert.equal(project.importedSchematicSource.filename, 'rc.asc')
+  assert.equal(project.importedSchematicSource.originalText, asc)
   assert.deepEqual(warnings, [])
   const connectivity = analyzeConnectivity(project)
   const pins = project.parts[0]
@@ -42,6 +44,7 @@ test('reports missing symbol files and unsupported directives instead of silentl
   const asc = ['Version 4', 'SYMBOL res 0 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k', 'TEXT 0 80 Left 2 !.save V(out)'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'missing.asc')
   assert.equal(project.parts.length, 0)
+  assert.equal(project.importedSchematicSource.originalText, asc)
   assert.equal(warnings.length, 2)
   assert.match(warnings[0], /missing its \.asy sidecar/)
   assert.match(warnings[1], /directive \.save.*not translated/)
