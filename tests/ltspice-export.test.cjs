@@ -578,24 +578,27 @@ test('blocks switch export when the saved state is invalid', async () => {
   assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'invalid-switch' && /state must be On or Off/.test(blocker.message)))
 })
 
-test('exports supported behavioral sources as LTspice B devices and restores their expressions', async () => {
+test('exports behavioral sources with declared parameters as LTspice B devices and restores them', async () => {
   const project = createStarterProject()
+  project.sheets[0].parameters = [{ id: 'parameter-gain', name: 'GAIN', defaultValue: '2' }]
   project.parts.push(
-    { id: 'behavioral-voltage', kind: 'behavioral', ref: 'B1', value: '2*V(vin)', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 },
-    { id: 'behavioral-current', kind: 'behavioral', ref: 'B2', value: 'V(vin)/1k', behavioralOutput: 'current', x: 1000, y: 600, rotation: 0 },
+    { id: 'behavioral-voltage', kind: 'behavioral', ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 },
+    { id: 'behavioral-current', kind: 'behavioral', ref: 'B2', value: 'GAIN*V(vin)/1k', behavioralOutput: 'current', x: 1000, y: 600, rotation: 0 },
   )
   project.sheets[0].parts = project.parts
   const output = await exportLtspiceProject(project)
   assert.deepEqual(output.blockers, [])
   assert.ok(output.losses.some((loss) => loss.sourceId === 'behavioral-voltage' && loss.severity === 'warning' && /passed through/.test(loss.title)))
   const asc = output.files.find((file) => file.path.endsWith('.asc'))
-  assert.match(asc.content, /SYMATTR InstName B1\nSYMATTR Value V=\{2\*V\(vin\)\}/)
-  assert.match(asc.content, /SYMATTR InstName B2\nSYMATTR Value I=\{V\(vin\)\/1k\}/)
+  assert.match(asc.content, /SYMATTR InstName B1\nSYMATTR Value V=\{GAIN\*V\(vin\)\}/)
+  assert.match(asc.content, /SYMATTR InstName B2\nSYMATTR Value I=\{GAIN\*V\(vin\)\/1k\}/)
+  assert.match(asc.content, /!\.param GAIN=2/)
   const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `export-symbol-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
   const imported = parseLtspiceSchematic(asc.content, asc.path, symbols).project
+  assert.deepEqual(imported.sheets[0].parameters, [{ id: 'asc-param-1', name: 'GAIN', defaultValue: '2' }])
   assert.deepEqual(imported.parts.filter((part) => part.kind === 'behavioral').map(({ ref, value, behavioralOutput }) => ({ ref, value, behavioralOutput })), [
-    { ref: 'B1', value: '2*V(vin)', behavioralOutput: 'voltage' },
-    { ref: 'B2', value: 'V(vin)/1k', behavioralOutput: 'current' },
+    { ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage' },
+    { ref: 'B2', value: 'GAIN*V(vin)/1k', behavioralOutput: 'current' },
   ])
 })
 
