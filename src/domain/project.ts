@@ -259,6 +259,41 @@ export function createTransistorSwitchExampleProject(): Project {
   return project
 }
 
+/** A sensed 1 mA branch drives a CCCS and a CCVS in parallel comparison circuits. */
+export function createCurrentControlledSourcesExampleProject(): Project {
+  const project = createStarterProject()
+  const control: Part = { id: 'current-v1', kind: 'source', ref: 'VCTRL', value: '1 V', x: 180, y: 360, rotation: 0 }
+  const senseResistor: Part = { id: 'current-rsense', kind: 'resistor', ref: 'RSENSE', value: '1 kΩ', x: 390, y: 300, rotation: 0 }
+  const sensor: Part = { id: 'current-vsense', kind: 'source', ref: 'VSENSE', value: '0 V', x: 600, y: 420, rotation: 0 }
+  const cccs: Part = { id: 'current-f1', kind: 'cccs', ref: 'F1', value: '2', controlSource: 'VSENSE', x: 820, y: 300, rotation: 0 }
+  const cccsLoad: Part = { id: 'current-rf', kind: 'resistor', ref: 'RLOADF', value: '1 kΩ', x: 1060, y: 300, rotation: 0 }
+  const ccvs: Part = { id: 'current-h1', kind: 'ccvs', ref: 'H1', value: '2 kΩ', controlSource: 'VSENSE', x: 820, y: 620, rotation: 0 }
+  const ccvsLoad: Part = { id: 'current-rh', kind: 'resistor', ref: 'RLOADH', value: '1 kΩ', x: 1060, y: 620, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Current-controlled sources'
+  project.parts = [control, senseResistor, sensor, cccs, cccsLoad, ccvs, ccvsLoad]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('current-vin-source', 'VIN', control, 0), labelAt('current-vin-r', 'VIN', senseResistor, 0),
+    labelAt('current-sense-r', 'SENSE', senseResistor, 1), labelAt('current-sense-v', 'SENSE', sensor, 0),
+    labelAt('current-ground-vctrl', '0', control, 1), labelAt('current-ground-vsense', '0', sensor, 1),
+    labelAt('current-f-out', 'V_F', cccs, 0), labelAt('current-f-load', 'V_F', cccsLoad, 0),
+    labelAt('current-f-ground', '0', cccs, 1), labelAt('current-rf-ground', '0', cccsLoad, 1),
+    labelAt('current-h-out', 'V_H', ccvs, 0), labelAt('current-h-load', 'V_H', ccvsLoad, 0),
+    labelAt('current-h-ground', '0', ccvs, 1), labelAt('current-rh-ground', '0', ccvsLoad, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'I(VSENSE)', 'V(V_F)', 'V(V_H)'], ranges: {} }
+  project.view = { zoom: 0.75, panX: -110, panY: -50 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A two-level reusable block example with two differently parameterized instances. */
 export function createHierarchicalExampleProject(): Project {
   const project = createStarterProject()

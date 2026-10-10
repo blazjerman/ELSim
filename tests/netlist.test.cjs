@@ -6,7 +6,7 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
-const { createControlledSourceExampleProject, createLedExampleProject, createRlcExampleProject, createStarterProject, createTransistorSwitchExampleProject, validateProject } = require(path.join(build, 'domain/project.js'))
+const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createLedExampleProject, createRlcExampleProject, createStarterProject, createTransistorSwitchExampleProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
@@ -86,6 +86,20 @@ test('NPN switch example drives the base through a resistor and returns the coll
   assert.match(artifact.text, /^RLOAD VCC COLLECTOR 1k$/m)
   assert.match(artifact.text, /^Q1 COLLECTOR BASE 0 ELSIM_MODEL_Q1$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(BASE)', 'V(COLLECTOR)', 'I(Q1)'])
+})
+
+test('CCCS and CCVS example share a named voltage-source current sensor', () => {
+  const project = createCurrentControlledSourcesExampleProject()
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^VCTRL VIN 0 PULSE\(0 1 0 1u 1u 50m 100m\)$/m)
+  assert.match(artifact.text, /^RSENSE VIN SENSE 1k$/m)
+  assert.match(artifact.text, /^VSENSE SENSE 0 PULSE\(0 0 0 1u 1u 50m 100m\)$/m)
+  assert.match(artifact.text, /^F1 V_F 0 VSENSE 2$/m)
+  assert.match(artifact.text, /^RLOADF V_F 0 1k$/m)
+  assert.match(artifact.text, /^H1 V_H 0 VSENSE 2k$/m)
+  assert.match(artifact.text, /^RLOADH V_H 0 1k$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'I(VSENSE)', 'V(V_F)', 'V(V_H)'])
 })
 
 test('imported model cards keep source filename and original line in the netlist source map', () => {
