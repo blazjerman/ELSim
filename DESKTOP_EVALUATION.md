@@ -1,0 +1,51 @@
+# Desktop packaging evaluation
+
+Status: initial architecture recommendation; no desktop wrapper or platform build has been prototyped yet. This document closes the design question only provisionally. M4.2 remains open until clean Windows, macOS, and Linux builds are exercised and packaging/signing are reviewed.
+
+## Recommendation
+
+Keep the browser PWA as the primary product and keep the simulation engine behind the existing worker/engine adapter. For a later installed desktop app, prototype Tauri 2 wrapping the same built web UI and the same ngspice WebAssembly worker. Do not add a native ngspice binding or fork the UI before a measured browser/WASM limitation requires it.
+
+This route best preserves the current local-first architecture: the web build remains independently deployable, while the desktop shell adds native file dialogs and OS packaging around the same project format and simulation protocol. The recommendation does not establish that one artifact can be cross-compiled or signed for all three operating systems; release jobs must build on each target OS and verify its own installer.
+
+## Options
+
+| Option | Advantages for ELSim | Costs and risks | Current disposition |
+| --- | --- | --- | --- |
+| Browser PWA | Already implemented; one web build; offline editing; no installer or platform-specific signing | Browser support and origin policies; engine assets are intentionally excluded from the standard public build until the ngspice license gate passes | Keep as the primary and fully supported distribution |
+| Tauri 2 + shared WASM | Reuses the Vite UI and worker; native file dialogs and window integration can be added without changing project/engine contracts; avoids bundling a second Chromium runtime | Depends on platform WebViews (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux); WebView behavior and OS packaging need per-platform testing; Rust/OS build toolchains and signing add release work | Preferred desktop prototype after web workflows and license gate are ready |
+| Electron + shared WASM | Bundles Chromium, reducing dependence on different system WebView versions; mature packaging options | Ships a browser runtime with the app; larger distribution; Node/Electron security surface and update maintenance; built-in updater does not cover Linux | Keep as fallback if Tauri WebView differences break required editor or plotting behavior |
+| Tauri/Electron + native libngspice | Potentially useful for native model loading, callbacks, or measured performance needs | Separate engine build and adapter; three native packaging pipelines; ABI/runtime differences; adds ngspice-linked materials to every installer and does not remove the existing license review/relinking obligations | Defer; only prototype after a browser/WASM limitation is demonstrated |
+
+Tauri uses the operating system WebView, while Electron packages its application resources and provides an OS-specific distribution/signing workflow. Electron's built-in auto-updater currently targets macOS and Windows; Linux updates are expected to use package managers. These tradeoffs support Tauri as the first small-shell experiment and Electron as the compatibility fallback, not as a tested performance conclusion.
+
+## Proposed desktop boundary
+
+1. Keep schematic, project validation, netlisting, results, plotting, and component animation in the existing TypeScript application.
+2. Keep `.elsim` as the single native project format on web and desktop. Desktop file-open/save should call the same validated archive reader/writer and preserve current size/path limits.
+3. Keep `EngineAdapter` requests/responses platform-neutral. First desktop prototype should run the same ngspice WASM worker, not create a second native netlist/result path.
+4. Let the shell provide narrowly scoped file picker and save dialog capabilities. Do not grant arbitrary filesystem access to the webview; keep the app content local and permissions explicit.
+5. Treat PWA and desktop packaging as separate delivery targets. Their content security policies, worker loading, WASM loading, offline behavior, and update mechanisms need separate verification.
+
+## Prototype and release gates
+
+- Build and launch the unchanged app shell in Tauri on Windows, macOS, and Linux from clean checkouts. Record OS, toolchain, WebView version, installer size, and startup time.
+- Verify project open/save, user model/symbol import, worker initialization, RC transient, AC, DC sweep, cancellation, waveform zoom/pan, and large-trace interaction on each target.
+- Confirm that the WebView can load the WASM worker under the production CSP and that project files remain accessible only through user-selected paths.
+- Compare installed size, idle memory, startup, 1-million-sample solve/render, and selection responsiveness against the browser baseline in `PERFORMANCE_BENCHMARKS.md`. Do not select native ngspice without a measured need.
+- Produce native installers on their target CI runners. Test signing/notarization and update installation with release credentials stored outside the repository. Publish checksums and platform-specific dependency notices.
+- Keep automatic updates disabled in the first desktop prototype. Before enabling them, define signed metadata/artifact verification, rollback behavior, release channels, and Linux update ownership (app updater versus package manager).
+- Repeat the ngspice object/source license audit for the exact desktop engine artifacts. A native wrapper does not make static-linking obligations disappear; do not distribute an engine-containing installer until the existing legal release gate is satisfied.
+
+## Decision status
+
+Provisional choice: PWA first, Tauri 2 + shared WASM as the desktop prototype, Electron as the fallback, and native ngspice deferred. Evidence still needed: target-OS prototypes, actual installer sizes and performance, WebView workflow parity, signing and notarization, and completed ngspice distribution review. No cross-platform desktop release is claimed by this decision.
+
+## References
+
+- [Tauri architecture and license](https://tauri.app/concept/architecture/)
+- [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/)
+- [Tauri updater signatures](https://v2.tauri.app/plugin/updater/)
+- [Electron distribution and signing](https://www.electronjs.org/docs/latest/tutorial/distribution-overview)
+- [Electron updater platform notes](https://www.electronjs.org/docs/latest/api/auto-updater/)
+- [ngspice shared-library API](https://ngspice.sourceforge.io/shared.html)
