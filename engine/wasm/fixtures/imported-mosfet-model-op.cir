@@ -1,0 +1,16 @@
+Original user-supplied NMOS model fixture
+VDD vdd 0 DC 5
+VG gate 0 DC 5
+RLOAD vdd drain 1k
+M1 drain gate 0 0 MUSER
+.MODEL MUSER NMOS(LEVEL=1 VTO=1.5 KP=800u LAMBDA=0.02)
+.op
+.print op v(drain)
+.save all @m1[id]
+.control
+set filetype=ascii
+op
+write /result.raw all
+quit
+.endc
+.end

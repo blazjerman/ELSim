@@ -538,15 +538,16 @@ test('imported subcircuits place ordered pins and generate X-device netlists wit
   assert.doesNotMatch(unsafeNetlist.text, /^X1 .*\.end/m)
 })
 
-test('imported diode and BJT .MODEL cards connect to compatible devices while defaults remain available', () => {
+test('imported diode, BJT, and MOSFET .MODEL cards connect to compatible devices while defaults remain available', () => {
   const project = createStarterProject()
-  const content = 'Vendor primitive models\n.MODEL 1N4148 D(Is=2n N=1.8)\n.MODEL BUSER NPN(IS=1e-14 BF=125)\n'
-  project.modelAssets = [{ id: 'model-devices', filename: 'devices.lib', content, sha256: 'e4bd89b6b550541df5304b2a92c382359026f2a16c500744275eb8a815e1006c', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  const content = 'Original primitive model fixtures\n.MODEL 1N4148 D(Is=2n N=1.8)\n.MODEL BUSER NPN(IS=1e-14 BF=125)\n.MODEL MUSER NMOS(LEVEL=1 VTO=1.5 KP=800u LAMBDA=0.02)\n'
+  project.modelAssets = [{ id: 'model-devices', filename: 'devices.lib', content, sha256: 'f843fca3f6a3e028859934fc0a51c5eb8bc192a726bbb2f65c4381b98a1d5d81', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push(
     { id: 'p-d1', kind: 'diode', ref: 'D1', value: 'Default diode', deviceModel: '1N4148', x: 700, y: 300, rotation: 0 },
     { id: 'p-d2', kind: 'diode', ref: 'D2', value: 'Default diode', x: 820, y: 300, rotation: 0 },
     { id: 'p-q1', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'BUSER', x: 700, y: 450, rotation: 0 },
     { id: 'p-q2', kind: 'npn', ref: 'Q2', value: '100', x: 820, y: 450, rotation: 0 },
+    { id: 'p-m1', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'MUSER', x: 700, y: 600, rotation: 0 },
   )
   const validated = validateProject(project)
   const artifact = createNetlistArtifact(validated)
@@ -555,6 +556,9 @@ test('imported diode and BJT .MODEL cards connect to compatible devices while de
   assert.match(artifact.text, /^D2 n\d+ n\d+ DDEFAULT$/m)
   assert.match(artifact.text, /^Q1 n\d+ n\d+ n\d+ BUSER$/m)
   assert.match(artifact.text, /^Q2 n\d+ n\d+ n\d+ ELSIM_MODEL_Q2$/m)
+  assert.match(artifact.text, /^M1 n\d+ n\d+ n\d+ n\d+ MUSER$/m)
+  assert.match(artifact.text, /^\.MODEL MUSER NMOS\(LEVEL=1 VTO=1.5 KP=800u LAMBDA=0.02\)$/m)
+  assert.doesNotMatch(artifact.text, /^\.model ELSIM_MODEL_M1/m)
   assert.match(artifact.text, /^\.MODEL 1N4148 D\(Is=2n N=1\.8\)$/m)
   assert.match(artifact.text, /^\.model DDEFAULT D$/m)
   assert.match(artifact.text, /^\.model ELSIM_MODEL_Q2 NPN/m)
