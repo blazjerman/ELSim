@@ -222,6 +222,38 @@ export function createControlledSourceExampleProject(): Project {
   return project
 }
 
+/** A low-side NPN switch driven through a base resistor and feeding a resistive load. */
+export function createTransistorSwitchExampleProject(): Project {
+  const project = createStarterProject()
+  const drive: Part = { id: 'switch-vdrive', kind: 'source', ref: 'VDRIVE', value: '5 V', x: 180, y: 600, rotation: 0 }
+  const baseResistor: Part = { id: 'switch-rbase', kind: 'resistor', ref: 'RBASE', value: '10 kΩ', x: 390, y: 500, rotation: 0 }
+  const transistor: Part = { id: 'switch-q1', kind: 'npn', ref: 'Q1', value: '100', x: 610, y: 500, rotation: 0 }
+  const supply: Part = { id: 'switch-vcc', kind: 'source', ref: 'VCC', value: '5 V', x: 830, y: 220, rotation: 0 }
+  const load: Part = { id: 'switch-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 830, y: 390, rotation: 90 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'NPN low-side switch'
+  project.parts = [drive, baseResistor, transistor, supply, load]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('switch-vin-drive', 'VIN', drive, 0), labelAt('switch-vin-rbase', 'VIN', baseResistor, 0),
+    labelAt('switch-base-rbase', 'BASE', baseResistor, 1), labelAt('switch-base-q1', 'BASE', transistor, 1),
+    labelAt('switch-ground-drive', '0', drive, 1), labelAt('switch-ground-q1', '0', transistor, 2),
+    labelAt('switch-vcc-source', 'VCC', supply, 0), labelAt('switch-vcc-load', 'VCC', load, 0),
+    labelAt('switch-ground-vcc', '0', supply, 1), labelAt('switch-collector-load', 'COLLECTOR', load, 1),
+    labelAt('switch-collector-q1', 'COLLECTOR', transistor, 0),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(BASE)', 'V(COLLECTOR)', 'I(Q1)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: -40, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A two-level reusable block example with two differently parameterized instances. */
 export function createHierarchicalExampleProject(): Project {
   const project = createStarterProject()
