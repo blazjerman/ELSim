@@ -183,7 +183,7 @@ test('LTspice source provenance validates its format, filename, and UTF-8 size l
 
 test('plot preferences survive project validation and old projects receive defaults', () => {
   const project = createStarterProject()
-  project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } } }
+  project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } }, detachedWindow: { x: 42, y: 54, width: 720, height: 460 } }
   assert.deepEqual(validateProject(structuredClone(project)).plotSettings, project.plotSettings)
   const oldProject = structuredClone(project)
   delete oldProject.plotSettings
@@ -191,6 +191,9 @@ test('plot preferences survive project validation and old projects receive defau
   const malformed = structuredClone(project)
   malformed.plotSettings.ranges.tran = { start: 0.8, end: 0.2 }
   assert.throws(() => validateProject(malformed), /Plot view range is malformed/)
+  const malformedWindow = structuredClone(project)
+  malformedWindow.plotSettings.detachedWindow.width = 100
+  assert.throws(() => validateProject(malformedWindow), /Detached plot window settings are malformed/)
 })
 
 test('project validation bounds namespaced imported LTspice attributes', () => {

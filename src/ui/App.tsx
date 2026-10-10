@@ -845,7 +845,8 @@ export default function App() {
   const [parameterDefaultDrafts, setParameterDefaultDrafts] = useState<Record<string, string>>({})
   const [parameterFormError, setParameterFormError] = useState('')
   const [waveformDetached, setWaveformDetached] = useState(false)
-  const [plotPosition, setPlotPosition] = useState({ x: 24, y: 24 })
+  const [plotBounds, setPlotBounds] = useState(() => project.plotSettings?.detachedWindow ?? { x: 24, y: 24, width: 680, height: 390 })
+  const plotWindowRef = useRef<HTMLElement>(null)
   const plotDrag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
@@ -883,17 +884,50 @@ export default function App() {
   }, [tourStep])
   useEffect(() => {
     if (!waveformDetached) return
+    const saveBounds = (bounds: typeof plotBounds) => setProjectState((current) => {
+      const settings = current.plotSettings ?? { selectedTraceIds: [], ranges: {} }
+      const previous = settings.detachedWindow
+      if (previous && previous.x === bounds.x && previous.y === bounds.y && previous.width === bounds.width && previous.height === bounds.height) return current
+      return { ...current, plotSettings: { ...settings, detachedWindow: bounds } }
+    })
+    const clampBounds = (bounds: typeof plotBounds) => {
+      const width = Math.max(280, Math.min(bounds.width, window.innerWidth - 16))
+      const height = Math.max(160, Math.min(bounds.height, window.innerHeight - 16))
+      return { x: Math.max(8 - width, Math.min(window.innerWidth - 48, bounds.x)), y: Math.max(8, Math.min(window.innerHeight - 48, bounds.y)), width, height }
+    }
+    const clamped = clampBounds(plotBounds)
+    if (clamped.x !== plotBounds.x || clamped.y !== plotBounds.y || clamped.width !== plotBounds.width || clamped.height !== plotBounds.height) setPlotBounds(clamped)
+    const observer = new ResizeObserver(() => {
+      const rect = plotWindowRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const next = clampBounds({ ...plotBounds, width: rect.width, height: rect.height })
+      setPlotBounds((current) => current.width === next.width && current.height === next.height ? current : next)
+      saveBounds(next)
+    })
+    if (plotWindowRef.current) observer.observe(plotWindowRef.current)
+    saveBounds(clamped)
     const move = (event: globalThis.PointerEvent) => {
       if (!plotDrag.current) return
       const { x, y, left, top } = plotDrag.current
-      const width = Math.min(720, window.innerWidth - 24)
-      setPlotPosition({ x: Math.max(12 - width, Math.min(window.innerWidth - 48, left + event.clientX - x)), y: Math.max(12, Math.min(window.innerHeight - 70, top + event.clientY - y)) })
+      const next = clampBounds({ ...plotBounds, x: left + event.clientX - x, y: top + event.clientY - y })
+      setPlotBounds(next)
+      saveBounds(next)
     }
     const up = () => { plotDrag.current = null }
+    const resize = () => setPlotBounds((current) => {
+      const next = clampBounds(current)
+      saveBounds(next)
+      return next
+    })
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
-    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
-  }, [waveformDetached])
+    window.addEventListener('resize', resize)
+    return () => { observer.disconnect(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('resize', resize) }
+  }, [waveformDetached, plotBounds])
+  useEffect(() => {
+    const saved = project.plotSettings?.detachedWindow
+    if (saved) setPlotBounds((current) => current.x === saved.x && current.y === saved.y && current.width === saved.width && current.height === saved.height ? current : saved)
+  }, [project.plotSettings?.detachedWindow])
   const setView = (fn: (current: Project['view']) => Project['view']) => setProjectState((current) => {
     const view = fn(current.view)
     return { ...current, view, sheets: current.sheets.map((sheet) => sheet.id === current.activeSheetId ? { ...sheet, view } : sheet) }
@@ -1808,8 +1842,8 @@ export default function App() {
         </section>
       </main>
 
-      {waveformDetached && <section className="plot-window" role="dialog" aria-label="Detached waveform panel" style={{ left: plotPosition.x, top: plotPosition.y }}>
-        <div className="plot-window-title" onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; plotDrag.current = { x: event.clientX, y: event.clientY, left: plotPosition.x, top: plotPosition.y } }}><span><Activity size={14}/> Waveforms</span><button aria-label="Restore waveform panel" title="Restore waveform panel" onClick={() => setWaveformDetached(false)}><ArrowDown size={14}/></button></div>
+      {waveformDetached && <section ref={plotWindowRef} className="plot-window" role="dialog" aria-label="Detached waveform panel" style={{ left: plotBounds.x, top: plotBounds.y, width: plotBounds.width, height: plotBounds.height }}>
+        <div className="plot-window-title" onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; plotDrag.current = { x: event.clientX, y: event.clientY, left: plotBounds.x, top: plotBounds.y } }}><span><Activity size={14}/> Waveforms</span><button aria-label="Restore waveform panel" title="Restore waveform panel" onClick={() => setWaveformDetached(false)}><ArrowDown size={14}/></button></div>
         <div className="plot-window-content">{simulationResult ? simulationResult.analysis === 'op' ? <OperatingPointView traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'ac' ? <AcPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.ac} onRangeChange={(range) => changePlotRange('ac', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'dc' ? <DcSweepPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.dc} onRangeChange={(range) => changePlotRange('dc', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.tran} onRangeChange={(range) => changePlotRange('tran', range)} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt} measurements={simulationResult.measurements}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this panel.</p></div></div>}</div>
       </section>}
 

@@ -47,6 +47,7 @@ export type PlotRange = { start: number; end: number }
 export type PlotSettings = {
   selectedTraceIds: string[]
   ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>>
+  detachedWindow?: { x: number; y: number; width: number; height: number }
 }
 export type ParameterSweep = { component: string; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
@@ -442,6 +443,8 @@ export function validateProject(input: unknown): Project {
       const range = plotSettings.ranges[analysis]
       if (range !== undefined && (!range || !Number.isFinite(range.start) || !Number.isFinite(range.end) || range.start < 0 || range.end > 1 || range.end - range.start < 0.03)) throw new Error('Plot view range is malformed.')
     }
+    const detachedWindow = plotSettings.detachedWindow
+    if (detachedWindow !== undefined && (!detachedWindow || !Number.isFinite(detachedWindow.x) || !Number.isFinite(detachedWindow.y) || !Number.isFinite(detachedWindow.width) || !Number.isFinite(detachedWindow.height) || Math.abs(detachedWindow.x) > 100_000 || Math.abs(detachedWindow.y) > 100_000 || detachedWindow.width < 280 || detachedWindow.width > 4_000 || detachedWindow.height < 160 || detachedWindow.height > 3_000)) throw new Error('Detached plot window settings are malformed.')
   } else {
     data.plotSettings = { selectedTraceIds: [], ranges: {} }
   }

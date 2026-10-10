@@ -599,6 +599,17 @@
               "$ref": "#/$defs/plotRange"
             }
           }
+        },
+        "detachedWindow": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": { "type": "number", "minimum": -100000, "maximum": 100000 },
+            "y": { "type": "number", "minimum": -100000, "maximum": 100000 },
+            "width": { "type": "number", "minimum": 280, "maximum": 4000 },
+            "height": { "type": "number", "minimum": 160, "maximum": 3000 }
+          }
         }
       }
     },
