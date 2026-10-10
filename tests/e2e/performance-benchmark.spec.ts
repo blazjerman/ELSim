@@ -75,6 +75,75 @@ test('measure a million-sample transient through the browser ngspice worker and 
   console.log(JSON.stringify({ benchmark: 'browser-million-sample-multi-trace-transient-v2', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), finalSampleScrubMs: Number(scrubMs.toFixed(2)), heapBefore: before, heapAfter: after }, null, 2))
 })
 
+test('measure browser waveform rendering with dozens of solved traces', async ({ page, browserName }) => {
+  test.setTimeout(120_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the browser multi-trace benchmark').toEqual([])
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const sourceTemplate = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    const resistorTemplate = project.parts.find((part: { kind: string }) => part.kind === 'resistor')
+    const sections = 24
+    const source = { ...sourceTemplate, id: 'trace-bench-v1', ref: 'V1', x: 120, y: 360 }
+    const resistors = Array.from({ length: sections }, (_, index) => ({
+      ...resistorTemplate,
+      id: `trace-bench-r-${index + 1}`,
+      ref: `R${index + 1}`,
+      value: '1k',
+      x: 240 + index * 120,
+      y: 360,
+    }))
+    const netLabels = [
+      { id: 'trace-bench-source-positive', name: 'N0', x: source.x, y: source.y - 52, visible: true },
+      { id: 'trace-bench-source-return', name: '0', x: source.x, y: source.y + 52, visible: true },
+    ]
+    resistors.forEach((part, index) => {
+      netLabels.push({ id: `trace-bench-label-${index}-left`, name: `N${index}`, x: part.x - 52, y: part.y, visible: true })
+      netLabels.push({ id: `trace-bench-label-${index}-right`, name: index === sections - 1 ? '0' : `N${index + 1}`, x: part.x + 52, y: part.y, visible: true })
+    })
+    const parts = [source, ...resistors]
+    project.name = 'Browser multi-trace benchmark · 24 resistor sections'
+    project.parts = parts
+    project.wires = []
+    project.junctions = []
+    project.netLabels = netLabels
+    project.simulation.analysis = 'tran'
+    project.simulation.stopTime = '10 ms'
+    project.simulation.maxStep = '1 µs'
+    project.plotSettings.selectedTraceIds = []
+    project.sheets = project.sheets.map((sheet: { id: string }) => sheet.id === project.rootSheetId
+      ? { ...sheet, parts, wires: [], junctions: [], netLabels }
+      : sheet)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const started = performance.now()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 90_000 })
+  const resultReadyMs = performance.now() - started
+  const traceButtons = page.locator('.trace-toggles button')
+  const availableTraceCount = await traceButtons.count()
+  expect(availableTraceCount).toBeGreaterThanOrEqual(40)
+  const selection = await page.evaluate(async () => {
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('.trace-toggles button')]
+    const selected = buttons.slice(0, 40)
+    const started = performance.now()
+    for (const button of selected) {
+      if (button.getAttribute('aria-pressed') !== 'true') button.click()
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    }
+    return { elapsedMs: performance.now() - started, selectedCount: document.querySelectorAll('.trace-toggles button[aria-pressed="true"]').length }
+  })
+  await expect(page.locator('.waveform-chart polyline')).toHaveCount(selection.selectedCount)
+  expect(selection.selectedCount).toBeGreaterThanOrEqual(40)
+  expect(pageErrors).toEqual([])
+  console.log(JSON.stringify({ benchmark: 'browser-24-section-40-trace-transient-v1', browser: browserName, sections: 24, availableTraces: availableTraceCount, plottedTraces: selection.selectedCount, resultReadyMs: Number(resultReadyMs.toFixed(2)), selectAndRenderNextFrameMs: Number(selection.elapsedMs.toFixed(2)) }, null, 2))
+})
+
 test('record large-project editor render and selection input-to-frame timings', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   await page.goto('/')

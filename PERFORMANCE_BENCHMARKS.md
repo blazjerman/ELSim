@@ -101,6 +101,17 @@ The hierarchy generator repeatedly resolved sheet IDs with linear array searches
 
 Chromium's `performance.memory` numbers cover the page renderer and remained unchanged at the reported resolution; they do not include the dedicated worker's WASM memory. Firefox does not expose that API in this run. The timer gaps indicate that the renderer remained responsive while the worker solved and parsed results, but do not provide a worker-memory measurement. Reliable per-worker peak memory remains unmeasured.
 
+### Browser multi-trace transient
+
+The performance Playwright suite also builds a 24-resistor DC chain, runs a 10 ms transient through the browser ngspice worker, and uses the returned 49 vectors (24 currents and 25 node voltages) to render 40 traces in the waveform plot. It selects one trace per animation frame so React commits each selection, then verifies that the rendered SVG polyline count matches the selected trace count. This gives a reproducible higher-trace-count UI check without creating placeholder vectors.
+
+| Browser | Available vectors | Plotted traces | Result ready (ms) | Select 40 traces / render frames (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| Chromium | 49 | 40 | 1,059.73 | 716 |
+| Firefox | 49 | 40 | 2,023.21 | 1,071 |
+
+These are single local observations. They establish that a real transient result with dozens of traces renders in both tested browsers; they do not measure larger circuits with simultaneously high sample counts, and they are not performance budgets.
+
 ## Legacy browser editor timing (2026-10-10)
 
 These are results from the v2 Playwright benchmark in `npm run benchmark:browser` (Chromium and Firefox). The generated project contains one resistor and two net labels per component. `editorReadyMs` measures reload through rendered component count; selection timings include Playwright locator lookup, click/actionability work, and the React update. They are local historical measurements, not CI thresholds, and are not directly comparable to the in-browser v3 input-to-frame timings below.
