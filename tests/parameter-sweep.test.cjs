@@ -126,6 +126,31 @@ test('voltage and current PWL levels are scaled together through alterparam', ()
   assert.match(control, /alterparam ELSIM_SWEEP_PWL_V1_SCALE=2\.00000000e\+0\nalterparam ELSIM_SWEEP_PWL_I1_SCALE=3\.00000000e\+0\nreset\nrun/)
 })
 
+test('SINE, EXP, and SFFM amplitudes are parameter stepped without changing timing', () => {
+  const project = createStarterProject()
+  const sine = project.parts.find((part) => part.kind === 'source')
+  sine.sourceMode = 'sine'
+  sine.sine = { offset: '0 V', amplitude: '1 V', frequency: '1 kHz', delay: '0', damping: '0', phase: '0' }
+  const exp = { id: 'sweep-exp', kind: 'currentSource', ref: 'I1', value: '1 mA', sourceMode: 'exp', exp: { initial: '0 A', pulsed: '1 mA', riseDelay: '0', riseTau: '1u', fallDelay: '2m', fallTau: '1u' }, x: 700, y: 600, rotation: 0 }
+  const sffm = { id: 'sweep-sffm', kind: 'source', ref: 'V2', value: '1 V', sourceMode: 'sffm', sffm: { offset: '0 V', amplitude: '1 V', carrierFrequency: '1 kHz', modulationIndex: '0', signalFrequency: '100 Hz' }, x: 900, y: 600, rotation: 0 }
+  project.parts.push(exp, sffm)
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [
+    { component: 'V1', start: '1 V', stop: '2 V', points: 2 },
+    { component: 'I1', start: '1 mA', stop: '2 mA', points: 2 },
+    { component: 'V2', start: '1 V', stop: '3 V', points: 2 },
+  ]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 8)
+  assert.ok(runs[0].values.every((value) => value.waveformAmplitude))
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /SIN\(0 \{ELSIM_SWEEP_WAVE_V1_AMPLITUDE\} 1k 0 0 0\)/)
+  assert.match(control, /EXP\(0 \{ELSIM_SWEEP_WAVE_I1_AMPLITUDE\} 0 1u 2m 1u\)/)
+  assert.match(control, /SFFM\(0 \{ELSIM_SWEEP_WAVE_V2_AMPLITUDE\} 1k 0 100\)/)
+  assert.match(control, /alterparam ELSIM_SWEEP_WAVE_V1_AMPLITUDE=2\.00000000e\+0[\s\S]*alterparam ELSIM_SWEEP_WAVE_I1_AMPLITUDE=2\.00000000e-3[\s\S]*alterparam ELSIM_SWEEP_WAVE_V2_AMPLITUDE=3\.00000000e\+0\nreset\nrun/)
+})
+
 test('imported device model parameters are validated and emitted with altermod', () => {
   const project = createStarterProject()
   const part = { id: 'sweep-q1', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 400, rotation: 0, deviceModel: 'USER_NPN' }
@@ -165,7 +190,7 @@ test('parameter sweep rejects duplicate parts, equal endpoints, and more than te
   project.simulation.analysis = 'tran'
   project.parts.find((part) => part.ref === 'V1').sourceMode = 'sine'
   project.simulation.parameterSweeps = [{ component: 'V1', start: '1 V', stop: '2 V', points: 3 }]
-  assert.throws(() => validateProject(project), /PULSE\/PWL sources, R\/C\/L parts/)
+  assert.deepEqual(validateProject(structuredClone(project)).simulation.parameterSweeps, project.simulation.parameterSweeps)
 })
 
 test('node-voltage initial conditions require labeled nodes and emit optional UIC', () => {

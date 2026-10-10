@@ -1456,6 +1456,32 @@ test('PWL source amplitude scale can be swept in the browser ngspice engine', as
   expect(labels.some((label) => label.includes('V1=2×'))).toBe(true)
 })
 
+test('SINE source amplitude can be swept in the browser ngspice engine', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    const source = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    source.sourceMode = 'sine'
+    source.sine = { offset: '0 V', amplitude: '1 V', frequency: '1 kHz', delay: '0', damping: '0', phase: '0' }
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    project.simulation.stopTime = '3m'
+    project.simulation.maxStep = '100u'
+    project.simulation.parameterSweeps = [{ component: source.ref, start: '1 V', stop: '2 V', points: 2 }]
+    localStorage.setItem(key, JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('V1')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  const labels = await page.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('V1=1 V'))).toBe(true)
+  expect(labels.some((label) => label.includes('V1=2 V'))).toBe(true)
+})
+
 test('imported device model parameters can be stepped through the browser ngspice engine', async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

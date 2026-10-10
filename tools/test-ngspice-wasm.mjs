@@ -224,6 +224,15 @@ assert.ok(Math.abs(pwlVoltagePeaks[1] - 6) < 1e-6, `pulse-source-sweep: second P
 const pwlCurrentPeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(ipwl)')))
 assert.ok(Math.abs(pwlCurrentPeaks[0] - 2) < 1e-6, `pulse-source-sweep: first PWL current should produce 2 V, got ${pwlCurrentPeaks[0]} V`)
 assert.ok(Math.abs(pwlCurrentPeaks[1] - 6) < 1e-6, `pulse-source-sweep: second PWL current should produce 6 V, got ${pwlCurrentPeaks[1]} V`)
+const sinePeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(vsine)')))
+assert.ok(Math.abs(sinePeaks[0] - 1) < 1e-3, `pulse-source-sweep: first SINE amplitude should peak near 1 V, got ${sinePeaks[0]} V`)
+assert.ok(Math.abs(sinePeaks[1] - 2) < 1e-3, `pulse-source-sweep: second SINE amplitude should peak near 2 V, got ${sinePeaks[1]} V`)
+const expPeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(iexp)')))
+assert.ok(Math.abs(expPeaks[0] - 1) < 1e-3, `pulse-source-sweep: first EXP current amplitude should produce 1 V, got ${expPeaks[0]} V`)
+assert.ok(Math.abs(expPeaks[1] - 2) < 1e-3, `pulse-source-sweep: second EXP current amplitude should produce 2 V, got ${expPeaks[1]} V`)
+const sffmPeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(vsffm)')))
+assert.ok(Math.abs(sffmPeaks[0] - 0.5) < 1e-3, `pulse-source-sweep: first SFFM amplitude should peak near 0.5 V, got ${sffmPeaks[0]} V`)
+assert.ok(Math.abs(sffmPeaks[1] - 1.5) < 1e-3, `pulse-source-sweep: second SFFM amplitude should peak near 1.5 V, got ${sffmPeaks[1]} V`)
 
 const repeatedVectors = [
   ['v(xload1.mid)', 'v(mid1)', 2.5],

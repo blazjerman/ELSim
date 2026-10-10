@@ -2,7 +2,7 @@ import type { ParameterSweep, Project } from '../domain/project'
 import { componentMagnitude } from '../domain/componentValue'
 import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 
-export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; pulseHigh?: boolean; pwlScale?: boolean }[]; label: string }
+export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
 
 function componentUnit(kind: string): string {
   return kind === 'source' ? 'V' : kind === 'currentSource' ? 'A' : kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
@@ -22,8 +22,9 @@ function buildValues(project: Project, sweep: ParameterSweep) {
   if (!part || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, pulse source, resistor, lamp, capacitor, or inductor for parameter stepping.')
   const pulseHigh = (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
   const pwlScale = (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pwl'
-  if (part.kind === 'source' && part.sourceMode !== 'dc' && !pulseHigh && !pwlScale) throw new Error(`${part.ref} must use DC, PULSE, or PWL waveform mode for parameter stepping.`)
-  if (part.kind === 'currentSource' && part.sourceMode !== 'dc' && part.sourceMode !== undefined && !pulseHigh && !pwlScale) throw new Error(`${part.ref} must use scalar DC, PULSE, or PWL waveform mode for parameter stepping.`)
+  const waveformAmplitude = (part.kind === 'source' || part.kind === 'currentSource') && ['sine', 'exp', 'sffm'].includes(part.sourceMode ?? '')
+  if (part.kind === 'source' && part.sourceMode !== 'dc' && !pulseHigh && !pwlScale && !waveformAmplitude) throw new Error(`${part.ref} must use a supported scalar, PULSE, PWL, SINE, EXP, or SFFM waveform mode for parameter stepping.`)
+  if (part.kind === 'currentSource' && part.sourceMode !== 'dc' && part.sourceMode !== undefined && !pulseHigh && !pwlScale && !waveformAmplitude) throw new Error(`${part.ref} must use a supported scalar, PULSE, PWL, SINE, EXP, or SFFM waveform mode for parameter stepping.`)
   const start = pwlScale ? scalarMagnitude(sweep.start) : componentMagnitude(sweep.start, part.kind)
   const stop = pwlScale ? scalarMagnitude(sweep.stop) : componentMagnitude(sweep.stop, part.kind)
   if (start === null || stop === null || start === stop) throw new Error(`${part.ref} needs valid, different start and stop values.`)
@@ -52,12 +53,13 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
     combinations = combinations.flatMap((combination) => values.map((value) => {
       const parameter = sweep.parameter
       const pwlScale = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pwl'
+      const waveformAmplitude = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && ['sine', 'exp', 'sffm'].includes(part.sourceMode ?? '')
       const display = parameter ? `${Number(value.toPrecision(5))}` : pwlScale ? `${Number(value.toPrecision(5))}×` : `${Number(value.toPrecision(5))} ${componentUnit(part.kind)}`
       const target = parameter ? `${part.ref}.${parameter}` : part.ref
       const label = combination.label ? `${combination.label}, ${target}=${display}` : `${target}=${display}`
       const model = parameter ? part.deviceModel : undefined
       const pulseHigh = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
-      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model } : {}), ...(pulseHigh ? { pulseHigh: true } : {}), ...(pwlScale ? { pwlScale: true } : {}) }], label }
+      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model } : {}), ...(pulseHigh ? { pulseHigh: true } : {}), ...(pwlScale ? { pwlScale: true } : {}), ...(waveformAmplitude ? { waveformAmplitude: true } : {}) }], label }
     }))
   }
   if (combinations.length > 10) throw new Error('Parameter stepping is limited to 10 total combinations.')
