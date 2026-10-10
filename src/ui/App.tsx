@@ -1317,10 +1317,11 @@ export default function App() {
   const flipSelected = () => selected && updateSelected({ flipX: !selected.flipX })
   const duplicateSelected = () => selectedParts.length && pasteParts(createPartClipboard(project, selectedParts.map((part) => part.id)), 80, 60)
   const pasteParts = (clipboard = copiedParts.current, offsetX = 40, offsetY = 40) => {
-    if (!clipboard?.parts.length) return
+    if (!clipboard || (!clipboard.parts.length && !clipboard.netLabels.length)) return
     const sources = clipboard.parts
     const pastedIds = sources.map(() => `p-${crypto.randomUUID()}`)
     const pastedWires = clipboard.wires.map((wire) => ({ id: `w-${crypto.randomUUID()}`, points: wire.points.map(([x, y]) => [x + offsetX, y + offsetY] as [number, number]) }))
+    const pastedLabels = clipboard.netLabels.map((label) => ({ ...label, id: `label-${crypto.randomUUID()}`, x: label.x + offsetX, y: label.y + offsetY }))
     setProject((current) => {
       let parts = [...current.parts]
       sources.forEach((source, index) => {
@@ -1338,12 +1339,18 @@ export default function App() {
         }
         parts = [...parts, pasted]
       })
-      return { ...current, parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))] }
+      return { ...current, parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))], netLabels: [...current.netLabels, ...pastedLabels] }
     })
-    const lastId = pastedIds.at(-1)!
+    const lastPartId = pastedIds.at(-1)
+    const lastLabel = pastedLabels.at(-1)
     setSelectedPartIds(pastedIds)
-    setSelection({ kind: 'part', id: lastId })
-    setNotice(`Pasted ${sources.length} ${sources.length === 1 ? kindNames[sources[0].kind].toLowerCase() : 'components'} and ${pastedWires.length} attached wire segments. Ends at unselected parts stay open; net labels are not copied.`)
+    if (lastPartId) {
+      setSelection({ kind: 'part', id: lastPartId })
+      setNotice(`Pasted ${sources.length} ${sources.length === 1 ? kindNames[sources[0].kind].toLowerCase() : 'components'} and ${pastedWires.length} attached wire segments. Ends at unselected parts stay open; net labels are not copied.`)
+    } else if (lastLabel) {
+      setSelection({ kind: 'label', id: lastLabel.id })
+      setNotice(`Pasted net label ${lastLabel.name}. Same-name labels on this sheet connect to the same electrical node.`)
+    }
   }
   const deleteSelected = () => {
     if (!selected) return
@@ -1396,7 +1403,13 @@ export default function App() {
         setNotice(`Copied ${selectedParts.length} ${selectedParts.length === 1 ? selectedParts[0].ref : 'components'} and ${copiedParts.current.wires.length} attached wire segments. Ends at unselected parts will stay open; net labels are not copied.`)
         return
       }
-      if ((event.ctrlKey || event.metaKey) && key === 'v' && copiedParts.current?.parts.length) {
+      if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedLabel) {
+        event.preventDefault()
+        copiedParts.current = createPartClipboard(project, [], [selectedLabel.id])
+        setNotice(`Copied net label ${selectedLabel.name}. Pasting it keeps the same name; same-name labels on this sheet connect.`)
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && key === 'v' && (copiedParts.current?.parts.length || copiedParts.current?.netLabels.length)) {
         event.preventDefault()
         const unavailableSheet = copiedParts.current.parts.find((source) => source.sheetId && !project.sheets.some((sheet) => sheet.id === source.sheetId))
         if (unavailableSheet) {
@@ -1425,7 +1438,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, selectedParts, selectedPartIds, project, tourStep, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, ltspiceExport, ltspiceExportBusy])
+  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, project, tourStep, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, ltspiceExport, ltspiceExportBusy])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
     try { await navigator.clipboard.writeText(netlist); setNotice('Generated netlist copied') }

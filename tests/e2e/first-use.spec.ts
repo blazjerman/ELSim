@@ -145,6 +145,20 @@ test('shift selection moves, copies, pastes, and deletes a group of parts', asyn
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial)
 })
 
+test('copy and paste an explicitly selected net label with its global connection semantics', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.canvas-label').filter({ hasText: 'vout' }).click()
+  await page.keyboard.press('Control+c')
+  await expect(page.locator('.toast')).toContainText('Pasting it keeps the same name')
+  await page.keyboard.press('Control+v')
+
+  await expect(page.locator('.toast')).toContainText('same electrical node')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).netLabels
+    .filter((label: { name: string }) => label.name === 'vout')
+    .map((label: { x: number; y: number }) => [label.x, label.y]))).toEqual([[475, 290], [515, 330]])
+  await expect(page.locator('.canvas-label').filter({ hasText: 'vout' })).toHaveCount(2)
+})
+
 test('fit schematic view frames distant parts, wires, and labels', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {

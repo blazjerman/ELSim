@@ -39,3 +39,14 @@ test('single-part clipboard retains attached geometry as an open stub and ignore
   assert.deepEqual(clipboard.parts.map((part) => part.id), ['r1'])
   assert.deepEqual(clipboard.wires.map((wire) => wire.id), ['inside'])
 })
+
+test('global net labels are copied only when selected explicitly', () => {
+  const project = connectedPartsProject()
+  project.netLabels = [{ id: 'label-vin', name: 'vin', x: 1052, y: 500, visible: true }]
+  const componentClipboard = createPartClipboard(project, ['r1'])
+  assert.deepEqual(componentClipboard.netLabels, [])
+
+  const labelClipboard = createPartClipboard(project, [], ['label-vin'])
+  assert.deepEqual(labelClipboard.netLabels, [{ id: 'label-vin', name: 'vin', x: 1052, y: 500, visible: true }])
+  assert.deepEqual(labelClipboard.parts, [])
+})

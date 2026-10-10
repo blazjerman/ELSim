@@ -6,15 +6,17 @@ export type PartClipboard = {
   parts: Part[]
   wires: Project['wires']
   junctions: Project['junctions']
+  netLabels: Project['netLabels']
 }
 
 /** Copy wire geometry attached to selected pins. Pasted geometry is translated,
  * so endpoints that belonged to unselected devices become explicit open stubs.
- * Labels are left out because their names are global. */
-export function createPartClipboard(project: Project, selectedPartIds: readonly string[]): PartClipboard {
+ * Global labels are copied only when the user selected them explicitly. */
+export function createPartClipboard(project: Project, selectedPartIds: readonly string[], selectedLabelIds: readonly string[] = []): PartClipboard {
   const selected = new Set(selectedPartIds)
   const parts = project.parts.filter((part) => selected.has(part.id)).map((part) => ({ ...part }))
-  if (!parts.length) return { parts: [], wires: [], junctions: [] }
+  const netLabels = project.netLabels.filter((label) => selectedLabelIds.includes(label.id)).map((label) => ({ ...label }))
+  if (!parts.length) return { parts: [], wires: [], junctions: [], netLabels }
 
   const connectivity = analyzeConnectivity(project)
   const selectedNets = new Set<string>()
@@ -36,5 +38,5 @@ export function createPartClipboard(project: Project, selectedPartIds: readonly 
       pointOnSegment({ x: junction.x, y: junction.y }, { x: wire.points[index][0], y: wire.points[index][1] }, { x: point[0], y: point[1] })))
     return crossingWires.length >= 2 && crossingWires.every((wire) => copiedWireIds.has(wire.id))
   }).map((junction) => ({ ...junction }))
-  return { parts, wires, junctions }
+  return { parts, wires, junctions, netLabels }
 }
