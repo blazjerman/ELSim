@@ -9,6 +9,7 @@ const requiredArtifacts = [
   'ngspice.wasm',
   'ngspice-COPYING.txt',
   'ngspice-link.map',
+  'ngspice-linked-object-inventory.json',
   'ngspice-source.tar.gz',
   'ngspice-relink-objects.tar.gz',
   'THIRD_PARTY_NOTICES.md',
@@ -54,12 +55,46 @@ export async function checkNgspiceRelease(root = defaultRoot) {
       }
     }
   }
+  try {
+    const inventory = JSON.parse(await readFile(path.join(engineDir, 'ngspice-linked-object-inventory.json'), 'utf8'));
+    if (!Array.isArray(inventory.objects) || inventory.objects.length === 0) {
+      fail('ngspice-linked-object-inventory.json must contain linked objects before release review');
+    } else {
+      const reviewed = review.reviewedLinkedObjects;
+      if (!Array.isArray(reviewed)) {
+        fail('review must include reviewedLinkedObjects covering every generated linked-object path');
+      } else {
+        const entries = new Map();
+        for (const [index, item] of reviewed.entries()) {
+          if (!item.objectPath || !item.sourcePath || !item.license || !item.obligations) {
+            fail(`reviewedLinkedObjects[${index}] needs objectPath, sourcePath, license, and obligations`);
+          }
+          if (entries.has(item.objectPath)) fail(`reviewedLinkedObjects contains duplicate objectPath: ${item.objectPath}`);
+          entries.set(item.objectPath, item);
+        }
+        for (const object of inventory.objects) {
+          const item = entries.get(object.objectPath);
+          if (!item) fail(`linked object is not covered by review: ${object.objectPath}`);
+          else if (object.sourcePath && item.sourcePath !== object.sourcePath) {
+            fail(`reviewed sourcePath does not match generated candidate for ${object.objectPath}`);
+          }
+        }
+        for (const objectPath of entries.keys()) {
+          if (!inventory.objects.some((object) => object.objectPath === objectPath)) {
+            fail(`reviewedLinkedObjects contains an object absent from the generated inventory: ${objectPath}`);
+          }
+        }
+      }
+    }
+  } catch {
+    fail('ngspice-linked-object-inventory.json is missing or invalid; rebuild and review the generated linked-object inventory');
+  }
   if (!review.sourceAndRelinkingMaterials || !review.noticesVerified) {
     fail('review must confirm source/relinking materials and notice verification');
   }
 
   const sourceMaterials = review.sourceMaterials;
-  const requiredSourceMaterials = ['ngspice-source.tar.gz', 'ngspice-relink-objects.tar.gz', 'ngspice-COPYING.txt', 'ngspice-link.map', 'THIRD_PARTY_NOTICES.md'];
+  const requiredSourceMaterials = ['ngspice-source.tar.gz', 'ngspice-relink-objects.tar.gz', 'ngspice-COPYING.txt', 'ngspice-link.map', 'ngspice-linked-object-inventory.json', 'THIRD_PARTY_NOTICES.md'];
   if (!Array.isArray(sourceMaterials) || !requiredSourceMaterials.every((name) => sourceMaterials.includes(name))) {
     fail(`review sourceMaterials must include ${requiredSourceMaterials.join(', ')}`);
   } else {

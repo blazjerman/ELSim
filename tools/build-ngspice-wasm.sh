@@ -93,16 +93,21 @@ if [[ -z "$LINK_MAP" || ! -s "$LINK_MAP" ]]; then
   exit 2
 fi
 cp "$LINK_MAP" "$ROOT_DIR/public/engine/ngspice-link.map"
+tar -tzf "$ROOT_DIR/public/engine/ngspice-source.tar.gz" > "$BUILD_DIR/ngspice-source-paths.txt"
+node "$ROOT_DIR/tools/inventory-ngspice-link-map.mjs" \
+  "$ROOT_DIR/public/engine/ngspice-link.map" \
+  "$BUILD_DIR/ngspice-source-paths.txt" \
+  "$ROOT_DIR/public/engine/ngspice-linked-object-inventory.json"
 {
   printf 'ngspice source commit: %s\n' "$PINNED_COMMIT"
   printf 'Emscripten: %s\n' "$(emcc --version | head -n 1)"
   printf 'Build flags: --disable-shared --enable-static --enable-xspice --disable-cider --disable-osdi --disable-openmp --disable-klu --with-readline=no --with-editline=no --without-x\n'
-  printf 'Linked-input inventory: ngspice-link.map (Emscripten linker map; inspect archive members and object paths against the pinned source COPYING file)\n'
+  printf 'Linked-input inventory: ngspice-link.map plus ngspice-linked-object-inventory.json (candidate source paths require per-file license review; generated inventory is not a legal determination)\n'
   printf 'Redistribution: check licenses/ngspice-distribution-review.json; do not distribute unless it approves these exact generated artifacts and source materials.\n'
   printf 'Source commit: %s (must match the approved review record)\n' "$PINNED_COMMIT"
   printf 'Source materials: ngspice-source.tar.gz and ngspice-relink-objects.tar.gz.\n'
-  printf 'See adjacent THIRD_PARTY_NOTICES.md, ngspice-COPYING.txt, ngspice-link.map, and ngspice-SHA256SUMS.txt.\n'
+  printf 'See adjacent THIRD_PARTY_NOTICES.md, ngspice-COPYING.txt, ngspice-link.map, ngspice-linked-object-inventory.json, and ngspice-SHA256SUMS.txt.\n'
 } > "$ROOT_DIR/public/engine/ngspice-build-info.txt"
-(cd "$ROOT_DIR/public/engine" && sha256sum ngspice.mjs ngspice.wasm ngspice-COPYING.txt ngspice-link.map THIRD_PARTY_NOTICES.md ngspice-source.tar.gz ngspice-relink-objects.tar.gz ngspice-build-info.txt > ngspice-SHA256SUMS.txt)
+(cd "$ROOT_DIR/public/engine" && sha256sum ngspice.mjs ngspice.wasm ngspice-COPYING.txt ngspice-link.map ngspice-linked-object-inventory.json THIRD_PARTY_NOTICES.md ngspice-source.tar.gz ngspice-relink-objects.tar.gz ngspice-build-info.txt > ngspice-SHA256SUMS.txt)
 cat "$ROOT_DIR/public/engine/ngspice-SHA256SUMS.txt"
 du -h "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice-source.tar.gz" "$ROOT_DIR/public/engine/ngspice-relink-objects.tar.gz" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"

@@ -13,12 +13,14 @@
       "obligations": ""
     }
   ],
+  "reviewedLinkedObjects": [],
   "sourceAndRelinkingMaterials": false,
   "sourceMaterials": [
     "ngspice-source.tar.gz",
     "ngspice-relink-objects.tar.gz",
     "ngspice-COPYING.txt",
     "ngspice-link.map",
+    "ngspice-linked-object-inventory.json",
     "THIRD_PARTY_NOTICES.md"
   ],
   "noticesVerified": false,
