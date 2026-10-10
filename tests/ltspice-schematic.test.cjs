@@ -58,10 +58,11 @@ test('limits retained LTspice attributes and points back to the preserved source
 
 test('imports scalar LTspice voltage sources as DC and preserves PULSE levels and timing', () => {
   const sourceSymbol = { ...symbol, id: 'symbol-source', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
-  const scalar = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 5'].join('\n')
+  const scalar = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 5', 'SYMATTR Value2 AC 1'].join('\n')
   const dc = parseLtspiceSchematic(scalar, 'dc.asc', [sourceSymbol]).project.parts[0]
   assert.equal(dc.value, '5')
   assert.equal(dc.sourceMode, 'dc')
+  assert.deepEqual(dc.extensions, { ltspice: { attributes: { VALUE2: 'AC 1' } } })
   const pulse = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V2', 'SYMATTR Value PULSE(1 5 2m 3u 4u 5m 10m)'].join('\n')
   const imported = parseLtspiceSchematic(pulse, 'pulse.asc', [sourceSymbol]).project.parts[0]
   assert.equal(imported.value, '5')

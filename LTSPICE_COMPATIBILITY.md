@@ -11,7 +11,7 @@ This matrix describes the importer as implemented today. “Supported” means E
 | `FLAG` labels | Supported for `0` and conservative SPICE node names | Unsupported names produce a warning |
 | `IOPIN` with same-coordinate `FLAG` | Supported as ordered `input`, `output`, or `inout` child-sheet ports | Matched, unmatched, and duplicate cases in `tests/ltspice-schematic.test.cjs` |
 | `SYMBOL` orientations `R0/R90/R180/R270`, `M0/M90/M180/M270` | Supported | Coordinates and pin locations are transformed into ELSim geometry |
-| `SYMATTR InstName`, `Value`, `Value2` | Supported for recognized parts | Missing or invalid instance names are reported |
+| `SYMATTR InstName`, `Value`, `Value2` | `InstName` and selected value are mapped; `Value2` is retained when `Value` is also present | Missing or invalid instance names and `Value2` preservation are covered in `tests/ltspice-schematic.test.cjs` |
 | Other component `SYMATTR` records | Retained under `part.extensions.ltspice.attributes` with bounded count/value lengths; not interpreted by the solver | `SpiceLine`, custom vendor attributes, archive round-trip, and export-loss cases are covered by importer/project/export tests |
 | No-prefix hierarchy block plus matching basename `.asc` | Supported recursively when ordered symbol pins match child ports | Nested import and generated X netlist fixtures in `tests/ltspice-schematic.test.cjs` |
 | `.tran`, `.op`, `.ac`, `.dc` in `TEXT` | Supported for the parsed scalar/sweep settings | AC, DC, and transient fixture coverage in `tests/ltspice-schematic.test.cjs` |
