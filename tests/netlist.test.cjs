@@ -6,7 +6,8 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
-const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createLedExampleProject, createRlcExampleProject, createStarterProject, createTransistorSwitchExampleProject, validateProject } = require(path.join(build, 'domain/project.js'))
+const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
+const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createLedExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {

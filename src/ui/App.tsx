@@ -21,7 +21,7 @@ import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import { exportLtspiceProject, type LtspiceExportResult } from '../domain/ltspiceExport'
-import { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createHierarchicalExampleProject, createLedExampleProject, createRlcExampleProject, createStarterProject, createTransistorSwitchExampleProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
+import { createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef, validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlist'
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -1610,8 +1610,18 @@ export default function App() {
     setSelection(null)
     setHierarchyWalkthroughStep(null)
   }
-  const loadExample = (example: 'rc' | 'led' | 'rlc' | 'controlled' | 'current-controlled' | 'transistor' | 'hierarchy') => {
-    const next = example === 'hierarchy' ? createHierarchicalExampleProject() : example === 'led' ? createLedExampleProject() : example === 'rlc' ? createRlcExampleProject() : example === 'controlled' ? createControlledSourceExampleProject() : example === 'current-controlled' ? createCurrentControlledSourcesExampleProject() : example === 'transistor' ? createTransistorSwitchExampleProject() : createStarterProject()
+  const loadExample = async (example: 'rc' | 'led' | 'rlc' | 'controlled' | 'current-controlled' | 'transistor' | 'hierarchy') => {
+    let next: Project
+    try {
+      if (example === 'rc') next = createStarterProject()
+      else {
+        const examples = await import('../domain/examples')
+        next = example === 'hierarchy' ? examples.createHierarchicalExampleProject() : example === 'led' ? examples.createLedExampleProject() : example === 'rlc' ? examples.createRlcExampleProject() : example === 'controlled' ? examples.createControlledSourceExampleProject() : example === 'current-controlled' ? examples.createCurrentControlledSourcesExampleProject() : examples.createTransistorSwitchExampleProject()
+      }
+    } catch {
+      setNotice('Could not load the example. Refresh ELSim and try again.')
+      return
+    }
     activeWorkerRef.current?.terminate()
     activeWorkerRef.current = null
     setRunState('idle')

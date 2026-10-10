@@ -42,5 +42,12 @@ test('production app shell opens offline and preserves local project edits', asy
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
   await expect(page.locator('svg.schematic .circuit-part.selected .part-ref')).toHaveText('R1')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-r1')?.value)).toBe('2.2k')
+
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await expect(examples).toBeVisible()
+  await examples.locator('.example-list article').filter({ hasText: 'RLC ringing' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('RLC ringing')
   expect(await page.evaluate(() => (window as Window & { __cspViolations?: string[] }).__cspViolations)).toEqual([])
 })

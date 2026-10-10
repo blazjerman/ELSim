@@ -297,7 +297,7 @@ test('controlled-source example opens and solves with input and output probes', 
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
-  await dialog.locator('.example-list article').filter({ hasText: 'Voltage-controlled amplifier' }).getByRole('button', { name: 'Open example' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Voltage-controlled sources' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Voltage-controlled amplifier')
   await page.getByRole('button', { name: 'Run simulation' }).click()

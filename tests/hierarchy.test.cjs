@@ -4,7 +4,8 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { createHierarchicalExampleProject, createStarterProject, validateProject, sheetModelName } = require(path.join(build, 'domain/project.js'))
+const { createStarterProject, validateProject, sheetModelName } = require(path.join(build, 'domain/project.js'))
+const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
