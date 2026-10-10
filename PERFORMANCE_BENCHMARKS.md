@@ -44,4 +44,18 @@ These are working engineering targets for this fixture, not heterogeneous-CI pas
 
 ## Not yet measured
 
-The first baseline does not claim coverage of browser SVG render latency, pointer-to-paint response, animation update cost, large transient trace parsing/transport, actual browser worker structured-clone/transfer behavior, or peak browser memory. The one-point OP solve is not a large-trace simulator benchmark. Add browser workloads with named hardware/runtime details before setting budgets for editor and animation paths. Add a wire-segment-heavy layout and a nested-sheet fixture before treating the resistor chain as representative of all schematics.
+The browser editor benchmark below measures reload readiness and click-to-selection completion, but not pointer-to-paint latency, animation update cost, large transient trace parsing/transport, actual browser worker structured-clone/transfer behavior, or reliable peak browser memory. The one-point OP solve is not a large-trace simulator benchmark. Record hardware/runtime details before setting browser budgets. Add a wire-segment-heavy layout and a nested-sheet fixture before treating the resistor chain as representative of all schematics.
+## Browser editor baseline (2026-10-10)
+
+Playwright benchmark: `npm run benchmark:browser` (Chromium and Firefox). The generated project contains one resistor and two net labels per component. `editorReadyMs` measures reload through rendered component count; selection timings include the browser click and React update. These are local measurements, not CI thresholds.
+
+| Browser | Parts | Editor ready (ms) | Selection median (ms) | Selection p95 (ms) | SVG elements |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Chromium | 100 | 303 | 74 | 102 | 1,610 |
+| Chromium | 500 | 613 | 207 | 333 | 8,010 |
+| Chromium | 1,000 | 1,015 | 415 | 516 | 16,010 |
+| Firefox | 100 | 403 | 95 | 100 | 1,610 |
+| Firefox | 500 | 667 | 248 | 257 | 8,010 |
+| Firefox | 1,000 | 1,130 | 387 | 489 | 16,010 |
+
+At 1,000 parts, selecting a component still takes roughly 0.4 seconds. This is the next profiling target; these figures are a baseline and should not be treated as release budgets. Heap readings from browser automation were inconsistent and are excluded from conclusions. SVG size grows linearly with parts and labels, so the next editor work should profile render cost and consider viewport culling or a canvas layer only if measured data supports it.

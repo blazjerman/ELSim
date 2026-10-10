@@ -15,6 +15,7 @@
     "test:e2e:compat": "playwright test --config playwright.browser-matrix.config.ts",
     "test:e2e:pwa": "playwright test --config playwright.pwa.config.ts",
     "benchmark:performance": "node tools/benchmark-performance.mjs",
+    "benchmark:browser": "playwright test --config playwright.performance.config.ts",
     "test:wasm": "node tools/test-ngspice-wasm.mjs",
     "check:ngspice-release": "node tools/check-ngspice-release.mjs",
     "build:release": "npm run check:ngspice-release && npm run typecheck && vite build --mode release",

@@ -779,8 +779,8 @@ export default function App() {
   useEffect(() => {
     if (playbackRunning && (!playbackAvailable || (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1)) setPlaybackRunning(false)
   }, [playbackRunning, playbackAvailable, sampleIndex, transientAxis])
-  const connectivity = analyzeConnectivity(project)
-  const electricalIssues = checkCircuit(project, connectivity)
+  const connectivity = useMemo(() => analyzeConnectivity(project), [project])
+  const electricalIssues = useMemo(() => checkCircuit(project, connectivity), [project, connectivity])
   const analysisSettingErrors = validateAnalysisSettings(project)
   const analysisSettingError = (field: AnalysisSettingField) => analysisSettingErrors.find((error) => error.field === field)?.message
   const importedModels = useMemo(() => (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits.map((subcircuit) => ({ ...subcircuit, assetId: asset.id, filename: asset.filename }))), [project.modelAssets])
