@@ -26,6 +26,19 @@ test('analysis settings validation identifies invalid transient fields', () => {
   assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['stopTime', 'maxStep'])
 })
 
+test('source waveform mode chooses a constant DC source or the backward-compatible pulse', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.ref === 'V1')
+  source.sourceMode = 'dc'
+  let artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.match(artifact.text, /^V1 vin 0 DC 5$/m)
+  source.sourceMode = 'pulse'
+  artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.match(artifact.text, /^V1 vin 0 PULSE\(0 5 0 1u 1u 50m 100m\)$/m)
+  source.kind = 'resistor'
+  assert.throws(() => validateProject(project), /invalid source waveform mode/i)
+})
+
 test('analysis settings validation identifies invalid AC sweep fields', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'
@@ -83,7 +96,7 @@ test('NPN switch example drives the base through a resistor and returns the coll
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^VDRIVE VIN 0 PULSE\(0 5 0 1u 1u 50m 100m\)$/m)
   assert.match(artifact.text, /^RBASE VIN BASE 10k$/m)
-  assert.match(artifact.text, /^VCC VCC 0 PULSE\(0 5 0 1u 1u 50m 100m\)$/m)
+  assert.match(artifact.text, /^VCC VCC 0 DC 5$/m)
   assert.match(artifact.text, /^RLOAD VCC COLLECTOR 1k$/m)
   assert.match(artifact.text, /^Q1 COLLECTOR BASE 0 ELSIM_MODEL_Q1$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(BASE)', 'V(COLLECTOR)', 'I(Q1)'])

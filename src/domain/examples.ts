@@ -78,7 +78,7 @@ export function createTransistorSwitchExampleProject(): Project {
   const drive: Part = { id: 'switch-vdrive', kind: 'source', ref: 'VDRIVE', value: '5 V', x: 180, y: 600, rotation: 0 }
   const baseResistor: Part = { id: 'switch-rbase', kind: 'resistor', ref: 'RBASE', value: '10 kΩ', x: 390, y: 500, rotation: 0 }
   const transistor: Part = { id: 'switch-q1', kind: 'npn', ref: 'Q1', value: '100', x: 610, y: 500, rotation: 0 }
-  const supply: Part = { id: 'switch-vcc', kind: 'source', ref: 'VCC', value: '5 V', x: 830, y: 220, rotation: 0 }
+  const supply: Part = { id: 'switch-vcc', kind: 'source', ref: 'VCC', value: '5 V', sourceMode: 'dc', x: 830, y: 220, rotation: 0 }
   const load: Part = { id: 'switch-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 830, y: 390, rotation: 90 }
   const labelAt = (id: string, name: string, part: Part, pin: number) => {
     const location = componentPins(part)[pin]

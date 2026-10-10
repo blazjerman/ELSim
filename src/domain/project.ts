@@ -22,6 +22,7 @@ export type Part = {
   deviceModel?: string
   controlSource?: string
   behavioralOutput?: 'voltage' | 'current'
+  sourceMode?: 'pulse' | 'dc'
   animationNominalPower?: number
   symbolAssetId?: string
   symbolPinOffsets?: [number, number][]
@@ -205,6 +206,7 @@ export function validateProject(input: unknown): Project {
     }
     partIds.add(candidate.id)
     const prefix = ({ source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[candidate.kind]
+    if (candidate.sourceMode !== undefined && (candidate.kind !== 'source' || !['pulse', 'dc'].includes(candidate.sourceMode))) throw new Error(`${candidate.ref} has an invalid source waveform mode.`)
     if (candidate.animationNominalPower !== undefined && (candidate.kind !== 'lamp' || !Number.isFinite(candidate.animationNominalPower) || candidate.animationNominalPower <= 0 || candidate.animationNominalPower > 100_000)) throw new Error(`${candidate.ref} has an invalid animation nominal power.`)
     if (!candidate.ref.startsWith(prefix) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(candidate.ref)) throw new Error(`The reference designator ${candidate.ref} is invalid for ${candidate.kind}.`)
     if (refs.has(candidate.ref.toLowerCase())) throw new Error(`The reference designator ${candidate.ref} is used more than once.`)

@@ -147,6 +147,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.properties.importedSchematicSource.$ref, '#/$defs/ltspiceSchematicSource')
   assert.equal(schema.properties.importedChildSchematicSources.maxItems, 63)
   assert.ok(schema.$defs.part.properties.symbolPinOffsets)
+  assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc'])
   assert.deepEqual(schema.$defs.sheet.properties.ports.items.properties.side.enum, ['auto', 'left', 'right', 'top', 'bottom'])
   assert.ok(schema.$defs.part.properties.sheetPortLayout)
 })

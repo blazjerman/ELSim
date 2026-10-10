@@ -229,7 +229,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : project.simulation.analysis === 'dc' ? `DC ${value}` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`}`, part.id, 'component')
+      const transientValue = part.sourceMode === 'dc' ? `DC ${value}` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : project.simulation.analysis === 'dc' ? `DC ${value}` : transientValue}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const currentCondition = part.kind === 'inductor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined

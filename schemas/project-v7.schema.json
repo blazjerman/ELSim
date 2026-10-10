@@ -224,6 +224,10 @@
         "behavioralOutput": {
           "enum": ["voltage", "current"]
         },
+        "sourceMode": {
+          "enum": ["pulse", "dc"],
+          "description": "For transient analysis, choose the standard pulse source or a constant DC source. Omitted means pulse for backward compatibility."
+        },
         "animationNominalPower": {
           "type": "number",
           "exclusiveMinimum": 0,

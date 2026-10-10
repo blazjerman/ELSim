@@ -335,6 +335,9 @@ test('transistor switch example demonstrates base drive and collector switching'
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
   await expect(page.locator('.cursor-readout')).toContainText(/V\(base\) = 0\.7/)
   await expect(page.locator('.cursor-readout')).toContainText(/V\(collector\) = 0\./)
+  await timeSlider.fill(String(Math.floor(finalSample * 3 / 4)))
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(base\) = 0\.0+/)
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(collector\) = 5\.0+/)
 })
 
 test('current-controlled sources example shows CCCS gain and CCVS transresistance', async ({ page }) => {
@@ -398,6 +401,18 @@ test('circuit checks can select the affected component and orphan wire', async (
   await expect(report).toContainText('Wire is not attached to a component or label')
   await report.getByRole('button', { name: 'Select wire' }).click()
   await expect(page.locator('.wire-line.selected')).toHaveCount(1)
+})
+
+test('voltage source inspector selects steady DC or pulse transient behavior', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  const waveform = page.getByRole('combobox', { name: 'Source waveform' })
+  await expect(waveform).toHaveValue('pulse')
+  await waveform.selectOption('dc')
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 DC 5')
+  await waveform.selectOption('pulse')
+  await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 PULSE(0 5 0 1u 1u 50m 100m)')
 })
 
 test('lamp palette item exposes resistance and nominal animation power', async ({ page }) => {
