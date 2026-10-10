@@ -312,10 +312,15 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
     if ((prefix.toUpperCase() === 'D' || prefix.toUpperCase() === 'Q') && value && !deviceModels.has(value.toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${value}” for ${identity} is missing; the educational default model will be used.`)
     const offsets = pins.map(({ x, y }) => [x, y] as [number, number])
+    const extensionAttributes = Object.fromEntries(Object.entries(symbol.attributes).filter(([key]) => !['INSTNAME', 'VALUE', 'VALUE2'].includes(key)).slice(0, 16).map(([key, attribute]) => [key, attribute.slice(0, 512)]))
+    const unmappedAttributes = Object.entries(symbol.attributes).filter(([key]) => !['INSTNAME', 'VALUE', 'VALUE2'].includes(key))
+    const omittedAttributes = unmappedAttributes.length - Math.min(unmappedAttributes.length, 16) + unmappedAttributes.slice(0, 16).filter(([, attribute]) => attribute.length > 512).length
+    if (omittedAttributes > 0) warnings.push(`Line ${symbol.line}: ${omittedAttributes} imported SYMATTR record(s) on ${identity} exceed ELSim's extension limit; the original .asc source is retained.`)
     const part: Part = {
       id: `asc-part-${project.parts.length + 1}`, kind, ref: identity, value: defaultValue,
       x: symbol.x, y: symbol.y, rotation: symbol.rotation as Part['rotation'], flipX: symbol.flipX,
       symbolAssetId: sidecar.asset.id, symbolPinOffsets: offsets,
+      ...(Object.keys(extensionAttributes).length ? { extensions: { ltspice: { attributes: extensionAttributes } } } : {}),
       ...(kind === 'subcircuit' ? { modelName: mapped.modelName, modelPins: [...pins.map((pin) => pin.name)], ...(childSheet ? { sheetId: childSheet.id, sheetPortLayout: childSheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })) } : {}) } : {}),
       ...(mapped.deviceModel ? { deviceModel: mapped.deviceModel } : {}),
       ...(kind === 'source' && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),

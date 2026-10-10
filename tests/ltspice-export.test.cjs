@@ -55,6 +55,15 @@ test('exports a deterministic portable file tree for the beginner circuit', asyn
   assert.ok(first.files.every((file) => file.sha256 === sha256(file.content)))
 })
 
+test('reports retained imported LTspice attributes omitted from generated schematics', async () => {
+  const project = createStarterProject()
+  project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'original-value' } } }
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const loss = output.losses.find((item) => item.sourceId === project.parts[1].id && item.title === 'Imported LTspice attributes omitted')
+  assert.match(loss.explanation, /SPICELINE, VENDORTAG/)
+})
+
 test('splits supported orthogonal wires at explicit junctions', async () => {
   const project = createStarterProject()
   project.wires.push({ id: 'wire-horizontal', points: [[700, 600], [900, 600]] }, { id: 'wire-vertical', points: [[800, 500], [800, 700]] })

@@ -40,6 +40,22 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
   assert.notEqual(positive, pinNet(connectivity, pins, 1))
 })
 
+test('preserves untranslated component SYMATTR records in a bounded LTspice extension', () => {
+  const asc = ['Version 4', 'SYMBOL res 32 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k', 'SYMATTR SpiceLine temp=40', 'SYMATTR VendorTag keep this value'].join('\n')
+  const imported = parseLtspiceSchematic(asc, 'extended.asc', [symbol])
+  assert.deepEqual(imported.project.parts[0].extensions, { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'keep this value' } } })
+  assert.deepEqual(imported.warnings, [])
+})
+
+test('limits retained LTspice attributes and points back to the preserved source', () => {
+  const manyAttributes = Array.from({ length: 18 }, (_, index) => `SYMATTR Vendor${index} value${index}`)
+  const asc = ['Version 4', 'SYMBOL res 32 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k', ...manyAttributes].join('\n')
+  const imported = parseLtspiceSchematic(asc, 'bounded.asc', [symbol])
+  assert.equal(Object.keys(imported.project.parts[0].extensions.ltspice.attributes).length, 16)
+  assert.ok(imported.warnings.some((warning) => /2 imported SYMATTR record.*exceed ELSim's extension limit/.test(warning)))
+  assert.equal(imported.project.importedSchematicSource.originalText, asc)
+})
+
 test('imports scalar LTspice voltage sources as DC and preserves PULSE levels and timing', () => {
   const sourceSymbol = { ...symbol, id: 'symbol-source', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
   const scalar = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 5'].join('\n')

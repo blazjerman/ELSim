@@ -25,6 +25,7 @@ export type Part = {
   behavioralOutput?: 'voltage' | 'current'
   sourceMode?: 'pulse' | 'dc'
   pulse?: SourcePulse
+  extensions?: { ltspice?: { attributes?: Record<string, string> } }
   animationNominalPower?: number
   symbolAssetId?: string
   symbolPinOffsets?: [number, number][]
@@ -210,6 +211,15 @@ export function validateProject(input: unknown): Project {
     const prefix = ({ source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[candidate.kind]
     if (candidate.sourceMode !== undefined && (candidate.kind !== 'source' || !['pulse', 'dc'].includes(candidate.sourceMode))) throw new Error(`${candidate.ref} has an invalid source waveform mode.`)
     if (candidate.pulse !== undefined && (candidate.kind !== 'source' || !candidate.pulse || ['initial', 'delay', 'rise', 'fall', 'width', 'period'].some((key) => typeof candidate.pulse?.[key as keyof typeof candidate.pulse] !== 'string'))) throw new Error(`${candidate.ref} has malformed pulse settings.`)
+    if (candidate.extensions !== undefined) {
+      const attributes = candidate.extensions?.ltspice?.attributes
+      const extensions = candidate.extensions
+      const ltspice = extensions?.ltspice
+      const malformed = !extensions || typeof extensions !== 'object' || Array.isArray(extensions) || Object.keys(extensions).some((key) => key !== 'ltspice')
+        || (ltspice !== undefined && (!ltspice || typeof ltspice !== 'object' || Array.isArray(ltspice) || Object.keys(ltspice).some((key) => key !== 'attributes')))
+        || (attributes !== undefined && (!attributes || typeof attributes !== 'object' || Array.isArray(attributes) || Object.keys(attributes).length > 16 || Object.entries(attributes).some(([key, value]) => !/^[A-Z][A-Z0-9_]{0,63}$/.test(key) || typeof value !== 'string' || value.length > 512 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value))))
+      if (malformed) throw new Error(`${candidate.ref} has malformed imported LTspice extension attributes.`)
+    }
     if (candidate.animationNominalPower !== undefined && (candidate.kind !== 'lamp' || !Number.isFinite(candidate.animationNominalPower) || candidate.animationNominalPower <= 0 || candidate.animationNominalPower > 100_000)) throw new Error(`${candidate.ref} has an invalid animation nominal power.`)
     if (!candidate.ref.startsWith(prefix) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(candidate.ref)) throw new Error(`The reference designator ${candidate.ref} is invalid for ${candidate.kind}.`)
     if (refs.has(candidate.ref.toLowerCase())) throw new Error(`The reference designator ${candidate.ref} is used more than once.`)

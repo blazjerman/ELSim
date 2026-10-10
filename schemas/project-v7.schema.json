@@ -242,6 +242,24 @@
           },
           "description": "Optional LTspice-compatible pulse levels and timing; omitted fields use the ELSim default pulse."
         },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ltspice": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "attributes": {
+                  "type": "object",
+                  "maxProperties": 16,
+                  "propertyNames": { "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+                  "additionalProperties": { "type": "string", "maxLength": 512 }
+                }
+              }
+            }
+          }
+        },
         "animationNominalPower": {
           "type": "number",
           "exclusiveMinimum": 0,

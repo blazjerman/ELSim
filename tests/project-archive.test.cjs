@@ -16,6 +16,7 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   project.simulation.analysis = 'ac'
   project.parts[1].flipX = true
   project.parts[0].pulse = { initial: '0', delay: '2m', rise: '4u', fall: '5u', width: '10m', period: '20m' }
+  project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'keep-me' } } }
   project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n' }
   project.importedChildSchematicSources = [{ format: 'ltspice-asc', filename: 'child.asc', originalText: 'Version 4\nIOPIN 0 0 In\nFLAG 0 0 INPUT\n' }]
   const first = createProjectArchive(project)
@@ -24,6 +25,7 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   assert.equal(isProjectArchive(first), true)
   const restored = validateProject(readProjectArchive(first))
   assert.deepEqual(restored, project)
+  assert.deepEqual(restored.parts[1].extensions, project.parts[1].extensions)
   assert.match(restored.importedSchematicSource.originalText, /UNKNOWN_VENDOR_RECORD keep-me/)
   assert.match(restored.importedChildSchematicSources[0].originalText, /IOPIN 0 0 In/)
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926)
@@ -148,6 +150,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.properties.importedSchematicSource.$ref, '#/$defs/ltspiceSchematicSource')
   assert.equal(schema.properties.importedChildSchematicSources.maxItems, 63)
   assert.ok(schema.$defs.part.properties.symbolPinOffsets)
+  assert.ok(schema.$defs.part.properties.extensions.properties.ltspice.properties.attributes)
   assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc'])
   assert.deepEqual(schema.$defs.part.properties.pulse.required, ['initial', 'delay', 'rise', 'fall', 'width', 'period'])
   assert.deepEqual(schema.$defs.sheet.properties.ports.items.properties.side.enum, ['auto', 'left', 'right', 'top', 'bottom'])
@@ -172,6 +175,21 @@ test('plot preferences survive project validation and old projects receive defau
   const malformed = structuredClone(project)
   malformed.plotSettings.ranges.tran = { start: 0.8, end: 0.2 }
   assert.throws(() => validateProject(malformed), /Plot view range is malformed/)
+})
+
+test('project validation bounds namespaced imported LTspice attributes', () => {
+  const project = createStarterProject()
+  project.parts[0].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40' } } }
+  assert.deepEqual(validateProject(project).parts[0].extensions, project.parts[0].extensions)
+  const malformed = structuredClone(project)
+  malformed.parts[0].extensions.ltspice.attributes['BAD KEY'] = 'value'
+  assert.throws(() => validateProject(malformed), /malformed imported LTspice extension attributes/)
+  const malformedNamespace = structuredClone(project)
+  malformedNamespace.parts[0].extensions.ltspice = 1
+  assert.throws(() => validateProject(malformedNamespace), /malformed imported LTspice extension attributes/)
+  const oversized = structuredClone(project)
+  oversized.parts[0].extensions.ltspice.attributes.SPICELINE = 'x'.repeat(513)
+  assert.throws(() => validateProject(oversized), /malformed imported LTspice extension attributes/)
 })
 
 test('project ZIP archive rejects corrupted project data and traversal paths', () => {

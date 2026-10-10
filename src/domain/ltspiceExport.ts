@@ -207,6 +207,8 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
     }
   }
   for (const part of sheet.parts) {
+    const importedAttributes = Object.keys(part.extensions?.ltspice?.attributes ?? {})
+    if (importedAttributes.length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Imported LTspice attributes omitted', explanation: `The generated schematic does not write the retained attributes: ${importedAttributes.join(', ')}.` })
     const pins = componentPins(part)
     if (part.kind === 'ground') {
       const pin = pins[0]
