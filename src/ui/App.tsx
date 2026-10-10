@@ -87,6 +87,16 @@ const CanvasNetLabel = memo(function CanvasNetLabel({ label, selected, tool, onP
   }}><rect x={label.x - 3} y={label.y - 22} width={Math.max(34, label.name.length * 7 + 14)} height="26" fill="transparent"/><line x1={label.x} y1={label.y} x2={label.x + 7} y2={label.y - 8} stroke="#9cc4a8" strokeWidth="1"/><text x={label.x + 9} y={label.y - 9}>{label.name}</text></g>
 })
 
+const CanvasNetLabelLayer = memo(function CanvasNetLabelLayer({ labels, selectedId, tool, onPointerDown, onSelect }: {
+  labels: Project['netLabels']
+  selectedId?: string
+  tool: ToolMode
+  onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void
+  onSelect: (id: string) => void
+}) {
+  return <>{labels.filter((label) => label.visible !== false).map((label) => <CanvasNetLabel key={label.id} label={label} selected={selectedId === label.id} tool={tool} onPointerDown={onPointerDown} onSelect={onSelect}/>)}</>
+})
+
 function focusAfterInspectorRender(selector: string) {
   let attempts = 0
   const initialFocus = document.activeElement
@@ -1111,7 +1121,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect width="100%" height="100%" fill="url(#large-grid)"/>
       {project.wires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selection?.kind === 'wire' && selection.id === wire.id} tool={tool} spacePan={spacePan} movableSegments={wireMovableSegments.get(wire.id) ?? []} flow={wireFlows.get(wire.id) ?? null} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onBeginSegmentDrag={beginWireSegmentDrag} onSelect={selectWire}/>) }
-      {project.netLabels.filter((label) => label.visible !== false).map((label) => <CanvasNetLabel key={label.id} label={label} selected={selection?.kind === 'label' && selection.id === label.id} tool={tool} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>)}
+      <CanvasNetLabelLayer labels={project.netLabels} selectedId={selection?.kind === 'label' ? selection.id : undefined} tool={tool} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart}/>

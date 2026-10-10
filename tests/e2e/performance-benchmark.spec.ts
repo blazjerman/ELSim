@@ -385,9 +385,12 @@ test('record large-project editor render and selection input-to-frame timings', 
       interactionSamples.push(interactionMs)
     }
     interactionSamples.sort((a, b) => a - b)
+    const renderedLabelCount = await page.locator('svg.schematic [data-net-label-id]').count()
+    expect(renderedLabelCount).toBe(count * 2)
     results.push({
       parts: count,
       labels: count * 2,
+      renderedLabelCount,
       editorReadyMs: Number(renderMs.toFixed(2)),
       twoAnimationFramesAfterDomMs: Number(twoFrameMs.toFixed(2)),
       selectionInputToFrameMedianMs: Number(interactionSamples[2].toFixed(2)),
