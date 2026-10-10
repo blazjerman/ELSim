@@ -815,6 +815,10 @@ test('show schematic compatibility diagnostics for unresolved LTspice directives
   await expect(diagnostics).toContainText('LTspice simulation options are not applied')
   await expect(diagnostics).toContainText('Partially supported .save vectors')
   await expect(diagnostics).toContainText('Import the referenced plain-text model library')
+  await diagnostics.getByRole('button', { name: 'Select referenced model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'missing.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL DUMMY D(IS=1n)\n') })
+  await expect(page.getByText('Imported 0 subcircuits and 1 device model from missing.lib. Redistribution rights remain unknown.')).toBeVisible()
+  await expect(diagnostics).not.toContainText('Unresolved .include model dependency')
 })
 
 test('junction tool toggles a crossing connection in the schematic', async ({ page }) => {
