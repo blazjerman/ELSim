@@ -10,7 +10,7 @@ const MAX_ASC_LINES = 100_000
 const MAX_ASC_WIRES = 2_000
 const MAX_ASC_SYMBOLS = 1_000
 const MAX_UNSUPPORTED_RECORD_CHARS = 240
-const validScalar = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|s|hz)?$/i.test(value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u'))
+const validScalar = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?$/i.test(value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u'))
 
 function recordExcerpt(raw: string): string {
   const compact = raw.replace(/\s+/g, ' ').trim()
@@ -250,7 +250,9 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const identity = symbol.attributes.INSTNAME
     const rawValue = symbol.attributes.VALUE ?? symbol.attributes.VALUE2 ?? ''
     const representedValueAttribute = symbol.attributes.VALUE !== undefined ? 'VALUE' : 'VALUE2'
-    const parsedSource = symbol.attributes.INSTNAME?.[0]?.toUpperCase() === 'V' ? sourceValue(rawValue) : { value: rawValue }
+    const sourcePrefix = symbol.attributes.INSTNAME?.[0]?.toUpperCase()
+    const parsedWaveform = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceValue(rawValue) : { value: rawValue }
+    const parsedSource = sourcePrefix === 'I' && parsedWaveform.mode === 'pwl' ? { value: rawValue } : parsedWaveform
     const value = parsedSource.value
     if (!identity || !/^[A-Za-z][A-Za-z0-9_]*$/.test(identity)) { warnings.push(`Line ${symbol.line}: ${symbol.name} is missing a valid SYMATTR InstName and was skipped.`); continue }
     const sidecar = symbolByName.get(baseName(symbol.name))
@@ -318,7 +320,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const kind = mapped.kind
     const defaultValue = kind === 'switch' ? (/^(?:on|1|true)$/i.test(value) ? 'On' : 'Off') : kind === 'diode' ? 'Default diode' : kind === 'led' ? 'Default LED' : kind === 'npn' || kind === 'pnp' ? '100' : kind === 'vcvs' ? '1' : kind === 'vccs' ? '1 mS' : value
     if (kind === 'source' && rawValue.includes('(') && value === rawValue) warnings.push(`Line ${symbol.line}: source waveform on ${identity} is not translated yet; check its value before running.`)
-    if (kind === 'currentSource' && rawValue.includes('(')) warnings.push(`Line ${symbol.line}: current-source waveform on ${identity} is not translated yet; scalar DC current is supported.`)
+    if (kind === 'currentSource' && rawValue.includes('(') && parsedSource.mode !== 'pulse') warnings.push(`Line ${symbol.line}: current-source waveform on ${identity} is not translated yet; only PULSE waveforms are supported.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !value) warnings.push(`Line ${symbol.line}: ${identity} has no value; set one in the inspector before running.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
     if ((prefix.toUpperCase() === 'D' || prefix.toUpperCase() === 'Q') && value && !deviceModels.has(value.toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${value}” for ${identity} is missing; the educational default model will be used.`)
@@ -335,8 +337,8 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...(Object.keys(extensionAttributes).length ? { extensions: { ltspice: { attributes: extensionAttributes } } } : {}),
       ...(kind === 'subcircuit' ? { modelName: mapped.modelName, modelPins: [...pins.map((pin) => pin.name)], ...(childSheet ? { sheetId: childSheet.id, sheetPortLayout: childSheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })) } : {}) } : {}),
       ...(mapped.deviceModel ? { deviceModel: mapped.deviceModel } : {}),
-      ...(kind === 'source' && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
-      ...(kind === 'source' && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
+      ...((kind === 'source' || kind === 'currentSource') && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
+      ...((kind === 'source' || kind === 'currentSource') && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
       ...(kind === 'source' && parsedSource.pwl ? { pwl: parsedSource.pwl } : {}),
     }
     project.parts.push(part)

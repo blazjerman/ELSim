@@ -54,6 +54,15 @@ test('current sources export and reimport as I devices with ampere values', asyn
   const restored = imported.parts.find((part) => part.ref === 'I1')
   assert.equal(restored.kind, 'currentSource')
   assert.equal(restored.value, '2m')
+  currentSource.sourceMode = 'pulse'
+  currentSource.pulse = { initial: '0', delay: '1m', rise: '2u', fall: '3u', width: '4m', period: '8m' }
+  const pulsedExport = await exportLtspiceProject(project)
+  assert.deepEqual(pulsedExport.blockers, [])
+  const pulsedAsc = pulsedExport.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(pulsedAsc.content, /SYMATTR InstName I1\nSYMATTR Value PULSE\(0 2m 1m 2u 3u 4m 8m\)/)
+  const pulsedRestored = parseLtspiceSchematic(pulsedAsc.content, pulsedAsc.path, symbols).project.parts.find((part) => part.ref === 'I1')
+  assert.equal(pulsedRestored.sourceMode, 'pulse')
+  assert.equal(pulsedRestored.value, '2m')
 })
 
 test('exports a deterministic portable file tree for the beginner circuit', async () => {

@@ -323,6 +323,26 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', a
   await expect(page.getByRole('row', { name: /V\(out\).*1\.000000 V/i })).toBeVisible()
 })
 
+test('current-source inspector edits a repeating PULSE waveform', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const source = { id: 'ui-pulse-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 700, y: 500, rotation: 0 }
+    project.parts.push(source)
+    project.sheets[0].parts = project.parts
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: /^I1, Current source/ }).click()
+  const waveform = page.getByRole('combobox', { name: 'Current source waveform' })
+  await expect(waveform).toHaveValue('dc')
+  await waveform.selectOption('pulse')
+  await page.getByRole('textbox', { name: 'Current (A)', exact: true }).fill('2mA')
+  await page.getByLabel('Initial current (A)').fill('-1mA')
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PULSE\(-1m 2m 0 1u 1u 50m 100m\)/)
+})
+
 test('controlled-source example opens and solves with input and output probes', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

@@ -1,0 +1,12 @@
+ELSim independent current-source PULSE transient
+I1 0 out PULSE(0 1m 0 1u 1u 1m 2m)
+R1 out 0 1k
+.tran 20u 4m
+.save all @i1[current]
+.control
+set filetype=ascii
+run
+write /result.raw all
+quit
+.endc
+.end

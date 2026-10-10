@@ -11,6 +11,7 @@ function buildValues(project: Project, sweep: ParameterSweep) {
   const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
   if (!part || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, current source, resistor, lamp, capacitor, or inductor for parameter stepping.')
   if (part.kind === 'source' && part.sourceMode !== 'dc') throw new Error(`${part.ref} must use the DC waveform mode for parameter stepping. Pulse and PWL waveform stepping is unsupported.`)
+  if (part.kind === 'currentSource' && part.sourceMode === 'pulse') throw new Error(`${part.ref} must use scalar DC mode for parameter stepping. Pulse waveform stepping is unsupported.`)
   const start = componentMagnitude(sweep.start, part.kind)
   const stop = componentMagnitude(sweep.stop, part.kind)
   if (start === null || stop === null || start === stop) throw new Error(`${part.ref} needs valid, different start and stop values.`)

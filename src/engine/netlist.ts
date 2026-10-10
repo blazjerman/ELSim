@@ -231,7 +231,24 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       continue
     }
     if (part.kind === 'currentSource') {
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `AC ${value} 0` : value}`, part.id, 'component')
+      let transientValue = value
+      if (project.simulation.analysis === 'tran' && part.sourceMode === 'pulse') {
+        const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
+        const initial = spiceNumber(pulse.initial, 'currentSource')
+        const delay = spiceTime(pulse.delay)
+        const rise = spiceTime(pulse.rise)
+        const fall = spiceTime(pulse.fall)
+        const width = spiceTime(pulse.width)
+        const period = spiceTime(pulse.period)
+        if (initial === null || [delay, rise, fall, width, period].some((time) => time === null || Number(time) < 0) || Number(period) <= 0) {
+          const message = `${part.ref} pulse current levels and timing must be valid SPICE values (period must be positive).`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period})`
+      }
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `AC ${value} 0` : project.simulation.analysis === 'tran' ? transientValue : value}`, part.id, 'component')
     }
     else if (part.kind === 'source') {
       const acMagnitude = spiceNumber(project.simulation.sourceAcMagnitude ?? '1 V', 'source')

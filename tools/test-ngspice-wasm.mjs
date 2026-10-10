@@ -231,6 +231,16 @@ assert.ok(Math.abs(sourceSweepFinalValues[2].currentOutput - 1) < 1e-9 && Math.a
 assert.ok(Math.abs(sourceSweepFinalValues[2].current - 0.001) < 1e-9 && Math.abs(sourceSweepFinalValues[3].current - 0.002) < 1e-9, 'stepped current-source branch vectors should preserve amperes')
 process.stdout.write('PASS scalar-source-parameter-sweep\n')
 
+const currentPulsePath = path.join(root, 'engine/wasm/fixtures', 'current-source-pulse.cir')
+const currentPulseResult = await runInWorker(currentPulsePath, true)
+assert.equal(currentPulseResult.status, 0, `current-source-pulse: ngspice exited with a nonzero status: ${currentPulseResult.stderr}`)
+const currentPulseValues = realRawVector(currentPulseResult.raw, 'i(@i1[current])')
+const currentPulseVoltage = realRawVector(currentPulseResult.raw, 'v(out)')
+assert.ok(Math.abs(Math.max(...currentPulseValues) - 1e-3) < 1e-8, 'current-source-pulse: peak branch current should be 1 mA')
+assert.ok(Math.abs(Math.min(...currentPulseValues)) < 1e-10, 'current-source-pulse: branch current should return to 0 A while the source is off')
+assert.ok(Math.abs(Math.max(...currentPulseVoltage) - 1) < 1e-5, 'current-source-pulse: a 1 mA pulse into 1 kΩ should produce a 1 V pulse')
+process.stdout.write('PASS current-source-pulse-transient\n')
+
 const measurementPath = path.join(root, 'engine/wasm/fixtures', 'measurement-transient.cir')
 const measurementResult = await runInWorker(measurementPath)
 assert.equal(measurementResult.status, 0, `measurement-transient: ngspice exited with a nonzero status: ${measurementResult.stderr}`)

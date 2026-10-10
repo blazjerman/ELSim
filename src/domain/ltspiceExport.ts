@@ -163,6 +163,12 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   if (part.kind === 'currentSource') {
     const value = scalar(part.value, 'a')
     if (!value) return null
+    if (part.sourceMode === 'pulse') {
+      const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
+      const values = [scalar(pulse.initial, 'a'), scalar(pulse.delay, 's'), scalar(pulse.rise, 's'), scalar(pulse.fall, 's'), scalar(pulse.width, 's'), scalar(pulse.period, 's')]
+      if (values.some((entry) => entry === null) || scalarMagnitude(pulse.period, 's')! <= 0) return null
+      return { value: `PULSE(${values[0]} ${value} ${values[1]} ${values[2]} ${values[3]} ${values[4]} ${values[5]})` }
+    }
     return { value, ...(project.simulation.analysis === 'ac' ? { spiceLine: `AC ${value} 0` } : {}) }
   }
   if (part.kind === 'source') {

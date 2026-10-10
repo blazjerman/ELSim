@@ -85,8 +85,14 @@ test('imports scalar LTspice current sources with ampere values and ordered pins
   assert.deepEqual(warnings, [])
   assert.match(createNetlist(project), /^I1 .* .* 1m$/m)
   const waveform = ['Version 4', 'SYMBOL current 0 0 R0', 'SYMATTR InstName I2', 'SYMATTR Value PULSE(0 1m 0 1u 1u 5m 10m)'].join('\n')
-  const unsupported = parseLtspiceSchematic(waveform, 'current-waveform.asc', [currentSymbol])
-  assert.ok(unsupported.warnings.some((warning) => /current-source waveform on I2 is not translated yet/.test(warning)))
+  const pulsed = parseLtspiceSchematic(waveform, 'current-waveform.asc', [currentSymbol])
+  assert.equal(pulsed.project.parts[0].sourceMode, 'pulse')
+  assert.equal(pulsed.project.parts[0].value, '1m')
+  assert.deepEqual(pulsed.project.parts[0].pulse, { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '5m', period: '10m' })
+  assert.deepEqual(pulsed.warnings, [])
+  assert.match(createNetlist(pulsed.project), /^I2 .* .* PULSE\(0 1m 0 1u 1u 5m 10m\)$/m)
+  const unsupportedPwl = parseLtspiceSchematic(['Version 4', 'SYMBOL current 0 0 R0', 'SYMATTR InstName I3', 'SYMATTR Value PWL(0 0, 2m 1m)'].join('\n'), 'current-pwl.asc', [currentSymbol])
+  assert.ok(unsupportedPwl.warnings.some((warning) => /current-source waveform on I3 is not translated yet.*only PULSE waveforms are supported/.test(warning)))
 })
 
 test('reports missing symbol files and unsupported directives instead of silently importing an incomplete part', () => {

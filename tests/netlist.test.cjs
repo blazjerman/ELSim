@@ -65,6 +65,21 @@ test('independent current sources netlist in amperes and receive I designators',
   assert.throws(() => validateProject({ ...project, parts: [{ ...project.parts[0], ref: 'V1' }, project.parts[1]], sheets: [{ ...project.sheets[0], parts: [{ ...project.parts[0], ref: 'V1' }, project.parts[1]] }] }), /invalid for currentSource/i)
 })
 
+test('independent current source pulse mode emits validated PULSE current levels', () => {
+  const project = createStarterProject()
+  const current = { id: 'i-pulse', kind: 'currentSource', ref: 'I1', value: '2 mA', sourceMode: 'pulse', pulse: { initial: '-1 mA', delay: '2m', rise: '3u', fall: '4u', width: '5m', period: '10m' }, x: 700, y: 500, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^I1 .* .* PULSE\(-1m 2m 2m 3u 4u 5m 10m\)$/m)
+  current.pulse.period = '0'
+  assert.match(createNetlistArtifact(project).diagnostics[0].message, /pulse current levels and timing/)
+  current.pulse.period = '10m'
+  project.simulation.parameterSweeps = [{ component: 'I1', start: '1mA', stop: '2mA', points: 2 }]
+  assert.throws(() => validateProject(project), /DC voltage\/current sources or R\/C\/L parts/)
+})
+
 test('current-source beginner example predicts the expected one-volt load result', () => {
   const project = createCurrentSourceExampleProject()
   const artifact = createNetlistArtifact(project)
