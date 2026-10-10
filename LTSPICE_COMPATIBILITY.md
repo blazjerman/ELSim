@@ -25,6 +25,7 @@ This matrix describes the importer as implemented today. “Supported” means E
 | Seven-argument `PULSE(low high delay rise fall width period)` voltage values | Supported for scalar levels and timing values | Pulse level/timing import and editable transient source behavior are tested |
 | Scalar-pair `PWL(time voltage ...)` voltage values | Supported for 2–32 strictly increasing, nonnegative time points | Import, netlist, project archive, and LTspice export round-trip fixtures cover PWL points |
 | `.save V(named_node)` and `.save I(placed_component)` | Supported as persisted plot-trace selections; selected vectors are not solver restrictions because ELSim manages result vectors itself | Named labels and placed current-bearing components are matched case-insensitively; unknown nodes/components and other `.save` expressions produce a warning |
+| `.ic V(named_node)=scalar` and `.ic I(inductor)=scalar` | Supported for transient analysis | Labeled nodes and placed inductors are matched case-insensitively; unresolved targets, invalid units/values, duplicate settings, or non-transient analyses produce warnings |
 | Other dot directives | Not translated | A warning names the directive |
 | Unknown or unsupported record | Skipped with bounded source excerpt | Warning is covered by a test |
 | `.asc` source preservation | Supported for root and supplied child files | Project validation and archive round-trip in `tests/project-archive.test.cjs` |

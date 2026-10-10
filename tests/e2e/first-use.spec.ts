@@ -348,6 +348,38 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
   expect(pageErrors).toEqual([])
 })
 
+test('imported LTspice .ic node and inductor values run through ngspice', async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  const source = [
+    'Version 4',
+    'FLAG -16 0 0', 'FLAG 16 0 OUT', 'FLAG 48 0 OUT', 'FLAG 80 0 N1', 'FLAG 96 0 N1', 'FLAG 128 0 0',
+    'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 1',
+    'SYMBOL res 64 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'SYMBOL ind 112 0 R0', 'SYMATTR InstName L1', 'SYMATTR Value 10m',
+    'TEXT 0 100 Left 2 !.ic V(N1)=0 I(L1)=2mA',
+    'TEXT 0 120 Left 2 !.tran 0 10m 0 10u',
+  ].join('\n')
+  const symbol = (prefix: string) => [
+    'Version 4', `SYMATTR Prefix ${prefix}`,
+    'PIN -16 0 R', 'PINATTR PinName A', 'PINATTR SpiceOrder 1',
+    'PIN 16 0 L', 'PINATTR PinName B', 'PINATTR SpiceOrder 2',
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'initial-rl.asc', mimeType: 'text/plain', buffer: Buffer.from(source) },
+    ...(['voltage', 'res', 'ind'] as const).map((name) => ({ name: `${name}.asy`, mimeType: 'text/plain', buffer: Buffer.from(symbol(name === 'voltage' ? 'V' : name === 'res' ? 'R' : 'L')) })),
+  ])
+  await expect(page.getByText(/Imported initial-rl with 3 parts/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.initialConditions)).toEqual([{ node: 'N1', voltage: '0' }, { element: 'L1', current: '2mA' }])
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(n1)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'I(l1)', exact: true })).toBeVisible()
+})
+
 test('show source-line guidance for a known unsupported LTspice model construct', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()

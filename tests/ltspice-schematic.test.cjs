@@ -5,7 +5,7 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { parseLtspiceSchematic } = require(path.join(build, 'domain/ltspiceSchematic.js'))
 const { analyzeConnectivity, pinNet } = require(path.join(build, 'domain/connectivity.js'))
-const { createNetlist } = require(path.join(build, 'engine/netlist.js'))
+const { createNetlist, createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 
 const symbol = {
   id: 'symbol-res', filename: 'res.asy', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
@@ -48,6 +48,36 @@ test('imports named-node and placed-component .save vectors as plot selections',
   const { project, warnings } = parseLtspiceSchematic(asc, 'saved-traces.asc', [symbol])
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['v(out)', 'i(@r1[i])'])
   assert.deepEqual(warnings, [])
+})
+
+test('imports supported node-voltage and inductor-current .ic values', () => {
+  const inductor = {
+    id: 'symbol-inductor', filename: 'ind.asy', sha256: 'b'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+    content: ['Version 4', 'SYMATTR Prefix L', 'PIN -16 0 R', 'PINATTR PinName A', 'PINATTR SpiceOrder 1', 'PIN 16 0 L', 'PINATTR PinName B', 'PINATTR SpiceOrder 2'].join('\n'),
+  }
+  const asc = [
+    'Version 4', 'FLAG 0 0 OUT', 'SYMBOL ind 32 0 R0', 'SYMATTR InstName L1', 'SYMATTR Value 10m',
+    'TEXT 0 100 Left 2 !.ic V(out)=1.5V I(L1)=2mA',
+    'TEXT 0 120 Left 2 !.tran 0 5m 0 10u',
+  ].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'initial.asc', [inductor])
+  assert.deepEqual(project.simulation.initialConditions, [{ node: 'OUT', voltage: '1.5V' }, { element: 'L1', current: '2mA' }])
+  assert.equal(project.simulation.analysis, 'tran')
+  assert.deepEqual(warnings, [])
+  const netlist = createNetlistArtifact(project)
+  assert.match(netlist.text, /^\.tran .* uic$/m)
+  assert.match(netlist.text, /^\.ic v\(OUT\)=1\.5$/m)
+  assert.match(netlist.text, /^L1 .* 10m IC=2m$/m)
+  assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+})
+
+test('warns and skips unresolved, malformed, or non-transient .ic directives', () => {
+  const unknown = parseLtspiceSchematic(['Version 4', 'TEXT 0 100 Left 2 !.ic V(missing)=1mA'].join('\n'), 'unknown-ic.asc')
+  assert.equal(unknown.project.simulation.initialConditions, undefined)
+  assert.match(unknown.warnings[0], /does not resolve to a unique labeled node or placed inductor/)
+  const nonTransient = parseLtspiceSchematic(['Version 4', 'FLAG 0 0 OUT', 'TEXT 0 100 Left 2 !.ic V(out)=1', 'TEXT 0 120 Left 2 !.op'].join('\n'), 'op-ic.asc')
+  assert.equal(nonTransient.project.simulation.initialConditions, undefined)
+  assert.ok(nonTransient.warnings.some((warning) => /require transient analysis/.test(warning)))
 })
 
 test('preserves untranslated component SYMATTR records in a bounded LTspice extension', () => {

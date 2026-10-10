@@ -134,6 +134,27 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     project.plotSettings = { ...(project.plotSettings ?? { selectedTraceIds: [], ranges: {} }), selectedTraceIds: [...selected] }
     return
   }
+  if (command === '.ic') {
+    const body = directive.trim().replace(/^\.ic\b/i, '').trim()
+    const assignments = [...body.matchAll(/([vi])\(\s*([A-Za-z_][A-Za-z0-9_.$]*)\s*\)\s*=\s*([^\s]+)/ig)]
+    const remainder = body.replace(/([vi])\(\s*([A-Za-z_][A-Za-z0-9_.$]*)\s*\)\s*=\s*([^\s]+)/ig, '').trim()
+    if (!assignments.length || remainder) { warnings.push(`Line ${line}: .ic contains settings that ELSim cannot map to labeled-node voltage or inductor-current initial conditions.`); return }
+    const conditions = project.simulation.initialConditions ?? []
+    for (const assignment of assignments) {
+      const kind = assignment[1].toLowerCase(), target = assignment[2], value = assignment[3]
+      const node = kind === 'v' ? project.netLabels.find((label) => label.name.toLowerCase() === target.toLowerCase()) : undefined
+      const inductor = kind === 'i' ? project.parts.find((part) => part.kind === 'inductor' && part.ref.toLowerCase() === target.toLowerCase()) : undefined
+      const duplicate = conditions.some((condition) => 'node' in condition ? kind === 'v' && condition.node.toLowerCase() === target.toLowerCase() : kind === 'i' && condition.element.toLowerCase() === target.toLowerCase())
+      const wrongUnit = kind === 'v' ? /a$/i.test(value) : /v$/i.test(value)
+      if ((!node && !inductor) || (kind === 'v' && target === '0') || !validScalar(value) || wrongUnit || duplicate || conditions.length >= 8) {
+        warnings.push(`Line ${line}: .ic setting ${recordExcerpt(assignment[0])} does not resolve to a unique labeled node or placed inductor with a scalar value and was skipped.`)
+        continue
+      }
+      conditions.push(kind === 'v' ? { node: node!.name, voltage: value } : { element: inductor!.ref, current: value })
+    }
+    if (conditions.length) project.simulation.initialConditions = conditions
+    return
+  }
   if (command.startsWith('.')) warnings.push(`Line ${line}: directive ${command} is retained as an import warning but is not translated yet.`)
 }
 
@@ -432,6 +453,11 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   }
   project.sheets[0].ports = ports
   for (const record of textRecords) for (const directive of record.text.split(/\n|!\s+(?=\.)/).map((item) => item.trim()).filter(Boolean)) applyDirective(project, directive, warnings, record.line, knownLibraries)
+  const hasImportedInitialConditions = (project.simulation.initialConditions ?? []).length > 0
+  if (project.simulation.analysis !== 'tran' && hasImportedInitialConditions) {
+    warnings.push('Imported .ic initial conditions require transient analysis; they were skipped because the imported analysis is not transient.')
+    delete project.simulation.initialConditions
+  }
 
   const points = [
     ...project.wires.flatMap((wire) => wire.points.map(([x, y]) => ({ x, y }))),
