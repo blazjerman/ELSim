@@ -46,6 +46,10 @@ test('PWL waveform example generates an editable four-point RC response', () => 
   assert.deepEqual(artifact.diagnostics, [])
   assert.equal(project.name, 'PWL waveform response')
   assert.match(artifact.text, /^V1 vin 0 PWL\(0 0 2m 5 4m 2 6m 0\)$/m)
+  project.parts.find((part) => part.ref === 'V1').pwlRepeat = 'forever'
+  const repeated = createNetlistArtifact(validateProject(structuredClone(project)))
+  assert.deepEqual(repeated.diagnostics, [])
+  assert.match(repeated.text, /^V1 vin 0 PWL\(0 0 2m 5 4m 2 6m 0\) r=0$/m)
   assert.match(artifact.text, /^R1 vin vout 1k$/m)
   assert.match(artifact.text, /^C1 vout 0 10u$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(vin)', 'V(vout)'])

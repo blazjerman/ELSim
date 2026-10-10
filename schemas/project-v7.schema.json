@@ -374,6 +374,10 @@
           },
           "description": "Piecewise-linear voltage source points in strictly increasing time order."
         },
+        "pwlRepeat": {
+          "enum": ["forever"],
+          "description": "Repeat the voltage-source PWL point sequence forever."
+        },
         "currentPwl": {
           "type": "array",
           "minItems": 2,

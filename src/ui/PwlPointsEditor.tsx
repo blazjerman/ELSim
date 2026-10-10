@@ -1,7 +1,7 @@
 import type { CurrentSourcePwlPoint, SourcePwlPoint } from '../domain/project'
 import { validateSourcePwlPoints } from '../domain/sourcePwl'
 
-export default function PwlPointsEditor({ points, onChange, partId, validationMessage, quantity = 'voltage' }: { points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined; onChange: (points: (SourcePwlPoint | CurrentSourcePwlPoint)[]) => void; partId: string; validationMessage?: string; quantity?: 'voltage' | 'current' }) {
+export default function PwlPointsEditor({ points, onChange, partId, validationMessage, quantity = 'voltage', repeatForever = false, onRepeatForeverChange }: { points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined; onChange: (points: (SourcePwlPoint | CurrentSourcePwlPoint)[]) => void; partId: string; validationMessage?: string; quantity?: 'voltage' | 'current'; repeatForever?: boolean; onRepeatForeverChange?: (repeat: boolean) => void }) {
   const valueKey = quantity === 'voltage' ? 'voltage' : 'current'
   const rows = (points ?? [{ time: '0', [valueKey]: '0' }, { time: '10m', [valueKey]: quantity === 'voltage' ? '5' : '5m' }]) as (SourcePwlPoint | CurrentSourcePwlPoint)[]
   const errors = validateSourcePwlPoints(rows, quantity)
@@ -26,5 +26,6 @@ export default function PwlPointsEditor({ points, onChange, partId, validationMe
       <button type="button" aria-label={`Remove PWL point ${index + 1}`} disabled={rows.length <= 2} onClick={() => onChange(rows.filter((_, itemIndex) => itemIndex !== index))}>×</button>
     </div>)}
     <button type="button" className="add-pwl-point" data-part-setting={`${partId}:${fieldPrefix}.points`} aria-invalid={Boolean(validationMessage)} aria-describedby={validationMessage ? countErrorId : undefined} disabled={rows.length >= 32} onClick={addPoint}>+ Add point</button>
+    {quantity === 'voltage' && onRepeatForeverChange && <label className="field-label"><input type="checkbox" aria-label="Repeat PWL waveform forever" checked={repeatForever} onChange={(event) => onRepeatForeverChange(event.target.checked)}/>Repeat waveform forever</label>}
   </div>
 }

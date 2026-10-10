@@ -1,0 +1,7 @@
+ELSim ngspice WebAssembly repeating PWL voltage source example
+V1 in 0 PWL(0 0 1m 5 2m 0) r=0
+R1 in out 1k
+C1 out 0 10u
+.tran 50u 5m
+.print tran v(in) v(out)
+.end

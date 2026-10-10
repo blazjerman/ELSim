@@ -38,6 +38,7 @@ export type Part = {
   exp?: SourceExp
   sffm?: SourceSffm
   pwl?: SourcePwlPoint[]
+  pwlRepeat?: 'forever'
   currentPwl?: CurrentSourcePwlPoint[]
   extensions?: { ltspice?: { attributes?: Record<string, string> } }
   animationNominalPower?: number
@@ -243,6 +244,7 @@ export function validateProject(input: unknown): Project {
     if (candidate.exp !== undefined && ((candidate.kind !== 'source' && candidate.kind !== 'currentSource') || !candidate.exp || typeof candidate.exp !== 'object' || Array.isArray(candidate.exp) || Object.keys(candidate.exp).some((key) => !['initial', 'pulsed', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(key)) || ['initial', 'pulsed', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].some((key) => typeof candidate.exp?.[key as keyof typeof candidate.exp] !== 'string' || candidate.exp[key as keyof typeof candidate.exp]!.length > 64))) throw new Error(`${candidate.ref} has malformed exponential waveform settings.`)
     if (candidate.sffm !== undefined && ((candidate.kind !== 'source' && candidate.kind !== 'currentSource') || !candidate.sffm || typeof candidate.sffm !== 'object' || Array.isArray(candidate.sffm) || Object.keys(candidate.sffm).some((key) => !['offset', 'amplitude', 'carrierFrequency', 'modulationIndex', 'signalFrequency'].includes(key)) || ['offset', 'amplitude', 'carrierFrequency', 'modulationIndex', 'signalFrequency'].some((key) => typeof candidate.sffm?.[key as keyof typeof candidate.sffm] !== 'string' || candidate.sffm[key as keyof typeof candidate.sffm]!.length > 64))) throw new Error(`${candidate.ref} has malformed SFFM waveform settings.`)
     if (candidate.pwl !== undefined && (candidate.kind !== 'source' || !Array.isArray(candidate.pwl) || candidate.pwl.length < 2 || candidate.pwl.length > 32 || candidate.pwl.some((point) => !point || typeof point !== 'object' || Array.isArray(point) || Object.keys(point).some((key) => key !== 'time' && key !== 'voltage') || typeof point.time !== 'string' || point.time.length > 64 || typeof point.voltage !== 'string' || point.voltage.length > 64))) throw new Error(`${candidate.ref} has malformed PWL source points.`)
+    if (candidate.pwlRepeat !== undefined && (candidate.kind !== 'source' || candidate.sourceMode !== 'pwl' || candidate.pwlRepeat !== 'forever')) throw new Error(`${candidate.ref} PWL repeat settings are malformed or unsupported for this source.`)
     if (candidate.currentPwl !== undefined && (candidate.kind !== 'currentSource' || !Array.isArray(candidate.currentPwl) || candidate.currentPwl.length < 2 || candidate.currentPwl.length > 32 || candidate.currentPwl.some((point) => !point || typeof point !== 'object' || Array.isArray(point) || Object.keys(point).some((key) => key !== 'time' && key !== 'current') || typeof point.time !== 'string' || point.time.length > 64 || typeof point.current !== 'string' || point.current.length > 64))) throw new Error(`${candidate.ref} has malformed PWL current points.`)
     if (candidate.extensions !== undefined) {
       const attributes = candidate.extensions?.ltspice?.attributes

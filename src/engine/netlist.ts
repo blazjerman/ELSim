@@ -466,7 +466,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
           continue
         }
-        transientValue = `PWL(${normalized.map((point) => `${point.time} ${point.voltage}`).join(' ')})`
+        transientValue = `PWL(${normalized.map((point) => `${point.time} ${point.voltage}`).join(' ')})${part.pwlRepeat === 'forever' ? ' r=0' : ''}`
       } else if (part.sourceMode === 'pulse' || part.sourceMode === undefined) {
         const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
         const initial = spiceNumber(pulse.initial, 'source')

@@ -248,6 +248,11 @@ test('imports scalar LTspice voltage sources as DC and preserves PULSE levels an
   assert.equal(importedPwl.value, '-1')
   assert.equal(importedPwl.sourceMode, 'pwl')
   assert.deepEqual(importedPwl.pwl, [{ time: '0', voltage: '0' }, { time: '2m', voltage: '5' }, { time: '4m', voltage: '-1' }])
+  const repeatedPwl = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V4', 'SYMATTR Value PWL REPEAT FOREVER (0 0, 2m 5, 4m -1) ENDREPEAT'].join('\n')
+  const importedRepeatedPwl = parseLtspiceSchematic(repeatedPwl, 'pwl-repeat.asc', [sourceSymbol])
+  assert.equal(importedRepeatedPwl.project.parts[0].pwlRepeat, 'forever')
+  assert.deepEqual(importedRepeatedPwl.warnings, [])
+  assert.match(createNetlist(importedRepeatedPwl.project), /^V4 .* PWL\(0 0 2m 5 4m -1\) r=0$/m)
 })
 
 test('imports scalar LTspice current sources with ampere values and ordered pins', () => {
