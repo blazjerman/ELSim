@@ -89,22 +89,43 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   if (project.modelAssets?.length) {
     try {
       const dependencies = analyzeModelDependencies(project.modelAssets)
-      const placed = project.sheets.flatMap((sheet) => sheet.parts.map((part) => ({ kind: part.kind, modelName: part.modelName, deviceModel: part.deviceModel })))
-      const usedSubcircuits = new Set(placed.filter((part) => part.kind === 'subcircuit').map((part) => part.modelName?.toLowerCase()).filter((name): name is string => Boolean(name)))
-      const usedDevices = new Set(placed.flatMap((part) => part.deviceModel ? [part.deviceModel.toLowerCase()] : []))
+      const modelParts = project.sheets.flatMap((sheet) => sheet.parts.filter((part) => part.kind === 'subcircuit' && !part.sheetId && part.modelName).map((part) => ({ id: part.id, modelName: part.modelName!.toLowerCase() })))
+      const graph = new Map<string, Set<string>>()
+      for (const dependency of dependencies.resolved) if (dependency.kind === 'subcircuit') {
+        const owner = dependency.owner.toLowerCase(), child = dependency.modelName.toLowerCase()
+        const children = graph.get(owner) ?? new Set<string>()
+        children.add(child)
+        graph.set(owner, children)
+      }
+      const reaches = (root: string, target: string): boolean => {
+        const pending = [root], visited = new Set<string>()
+        while (pending.length) {
+          const name = pending.pop()!
+          if (name === target) return true
+          if (visited.has(name)) continue
+          visited.add(name)
+          pending.push(...(graph.get(name) ?? []))
+        }
+        return false
+      }
+      const usedDevices = new Set(project.sheets.flatMap((sheet) => sheet.parts.flatMap((part) => part.deviceModel ? [part.deviceModel.toLowerCase()] : [])))
       const assets = new Map(project.modelAssets.map((asset) => [asset.id, asset.filename]))
       for (const missing of dependencies.missing) {
-        if (missing.kind === 'subcircuit' ? !usedSubcircuits.has(missing.owner.toLowerCase()) : !usedDevices.has(missing.owner.toLowerCase())) continue
-        issues.push({
-          id: `missing-model-dependency:${missing.assetId}:${missing.sourceLine}:${missing.modelName.toLowerCase()}`,
+        const affected = missing.kind === 'subcircuit'
+          ? modelParts.filter((part) => reaches(part.modelName, missing.owner.toLowerCase()))
+          : modelParts.filter((part) => reaches(part.modelName, missing.owner.toLowerCase()))
+        if (!affected.length && !usedDevices.has(missing.owner.toLowerCase())) continue
+        for (const part of affected.length ? affected : [{ id: undefined }]) issues.push({
+          id: `missing-model-dependency:${missing.assetId}:${missing.sourceLine}:${missing.modelName.toLowerCase()}:${part.id ?? 'library'}`,
           severity: 'warning',
           title: `${missing.owner} needs missing ${missing.kind} ${missing.modelName}`,
           detail: `Import the library that defines ${missing.modelName}; this dependency is referenced by ${assets.get(missing.assetId) ?? 'an imported model'} at line ${missing.sourceLine}.`,
+          ...(part.id ? { partId: part.id } : {}),
         })
       }
       for (const chain of dependencies.recursiveChains) {
         const chainNames = new Set(chain.map((name) => name.toLowerCase()))
-        if (!([...usedSubcircuits].some((name) => chainNames.has(name)) || [...placed].some((part) => part.kind === 'subcircuit' && part.modelName && chainNames.has(part.modelName.toLowerCase())))) continue
+        if (!modelParts.some((part) => [...chainNames].some((name) => reaches(part.modelName, name)))) continue
         issues.push({ id: `recursive-model:${chain.map((name) => name.toLowerCase()).join(':')}`, severity: 'warning', title: 'A used subcircuit has a recursive model chain', detail: `${chain.join(' → ')}. ngspice cannot instantiate a recursive subcircuit chain.` })
       }
     } catch {
