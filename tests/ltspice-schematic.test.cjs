@@ -101,6 +101,26 @@ test('imports a matching child ASC as a native hierarchical sheet block and reta
   assert.match(createNetlist(project), /X1\s+\S+\s+\S+\s+ELSIM_SHEET_asc_divider/)
 })
 
+test('recursively imports nested child schematics with remapped sheet references', () => {
+  const blockSymbol = (name) => ({ ...symbol, id: `symbol-${name}`, filename: `${name}.asy`, content: ['Version 4', 'RECTANGLE Normal -32 -24 32 24', 'PIN -32 0 R', 'PINATTR PinName IN', 'PINATTR SpiceOrder 1', 'PIN 32 0 L', 'PINATTR PinName OUT', 'PINATTR SpiceOrder 2'].join('\n') })
+  const root = ['Version 4', 'SYMBOL middle 0 0 R0', 'SYMATTR InstName XMID', 'SYMATTR Value middle'].join('\n')
+  const middle = ['Version 4', 'IOPIN 0 0 In', 'FLAG 0 0 IN', 'IOPIN 80 0 Out', 'FLAG 80 0 OUT', 'SYMBOL leaf 100 100 R0', 'SYMATTR InstName XLEAF', 'SYMATTR Value leaf'].join('\n')
+  const leaf = ['Version 4', 'IOPIN 0 0 In', 'FLAG 0 0 IN', 'IOPIN 80 0 Out', 'FLAG 80 0 OUT'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(root, 'top.asc', [blockSymbol('middle'), blockSymbol('leaf')], [], [
+    { filename: 'middle.asc', content: middle },
+    { filename: 'leaf.asc', content: leaf },
+  ])
+  assert.deepEqual(warnings, [])
+  assert.equal(project.sheets.length, 3)
+  const middleSheet = project.sheets.find(({ name }) => name === 'middle')
+  const leafSheet = project.sheets.find(({ name }) => name === 'leaf')
+  assert.ok(middleSheet)
+  assert.ok(leafSheet)
+  assert.equal(leafSheet.parentSheetId, middleSheet.id)
+  assert.equal(middleSheet.parts[0].sheetId, leafSheet.id)
+  assert.match(createNetlist(project), /XLEAF\s+\S+\s+\S+\s+ELSIM_SHEET_/)
+})
+
 test('maps an X-prefixed imported IC symbol to an imported subcircuit model in SpiceOrder', () => {
   const modelContent = '.SUBCKT user_amp IN OUT\nR1 IN OUT 1k\n.ENDS user_amp\n'
   const modelAsset = { id: 'model-amp', filename: 'amp.lib', sha256: 'b'.repeat(64), content: modelContent, licenseStatus: 'unknown', importedAt: new Date().toISOString() }

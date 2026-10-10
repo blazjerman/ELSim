@@ -104,7 +104,7 @@ function partKind(symbol: AscSymbol, prefix: string, modelValue: string, subcirc
 }
 
 /** Import a bounded subset of ordinary LTspice .asc schematics using user-provided .asy sidecars. */
-export function parseLtspiceSchematic(source: string, filename: string, symbolAssets: SymbolAsset[] = [], modelAssets: Project['modelAssets'] = [], childSchematics: { filename: string; content: string }[] = []): LtspiceSchematicImport {
+export function parseLtspiceSchematic(source: string, filename: string, symbolAssets: SymbolAsset[] = [], modelAssets: Project['modelAssets'] = [], childSchematics: { filename: string; content: string }[] = [], ancestors: string[] = []): LtspiceSchematicImport {
   if (typeof source !== 'string' || source.length === 0 || new TextEncoder().encode(source).length > MAX_ASC_BYTES) throw new Error(`${filename} must contain between 1 byte and 10 MiB of text.`)
   const lines = source.replace(/^\uFEFF/, '').split(/\r?\n/)
   if (lines.length > MAX_ASC_LINES) throw new Error(`${filename} contains too many records.`)
@@ -191,6 +191,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
 
   const project = createStarterProject()
   project.name = filename.replace(/\\/g, '/').split('/').pop()?.replace(/\.asc$/i, '') || 'Imported LTspice schematic'
+  project.sheets[0].name = project.name
   project.importedSchematicSource = { format: 'ltspice-asc', filename: filename.replace(/\\/g, '/').split('/').pop() || filename, originalText: source }
   project.parts = []
   project.sheets[0].parts = project.parts
@@ -206,8 +207,10 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   project.simulation.initialConditions = undefined
   project.simulation.skipInitialOperatingPoint = undefined
   project.symbolAssets = [...symbolAssets]
-  project.importedChildSchematicSources = childSchematics.filter((child) => baseName(child.filename) !== baseName(filename)).map((child) => ({ format: 'ltspice-asc', filename: child.filename.replace(/\\/g, '/').split('/').pop() || child.filename, originalText: child.content }))
-  const childByName = new Map(childSchematics.map((child) => [baseName(child.filename), child]))
+  const currentAncestry = ancestors.includes(baseName(filename)) ? ancestors : [...ancestors, baseName(filename)]
+  const availableChildren = childSchematics.filter((child) => !currentAncestry.includes(baseName(child.filename)))
+  project.importedChildSchematicSources = availableChildren.map((child) => ({ format: 'ltspice-asc', filename: child.filename.replace(/\\/g, '/').split('/').pop() || child.filename, originalText: child.content }))
+  const childByName = new Map(availableChildren.map((child) => [baseName(child.filename), child]))
   const importedChildren = new Map<string, ProjectSheet>()
 
   for (const symbol of symbols) {
@@ -221,31 +224,50 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     let childSheet: ProjectSheet | undefined
     if (sidecar.parsed.prefix === undefined) {
       if (!childSource) { warnings.push(`Line ${symbol.line}: hierarchical symbol ${symbol.name} (${identity}) has no matching child .asc file and was skipped.`); continue }
+      if (currentAncestry.includes(baseName(childSource.filename))) { warnings.push(`Line ${symbol.line}: hierarchical reference ${identity} would create a child-sheet cycle and was skipped.`); continue }
       const childKey = baseName(childSource.filename)
       childSheet = importedChildren.get(childKey)
       if (!childSheet) {
         if (project.sheets.length >= 64) { warnings.push(`Line ${symbol.line}: project sheet limit reached; ${identity} was skipped.`); continue }
-        const parsedChild = parseLtspiceSchematic(childSource.content, childSource.filename, symbolAssets, modelAssets)
+        const parsedChild = parseLtspiceSchematic(childSource.content, childSource.filename, symbolAssets, modelAssets, childSchematics, currentAncestry)
         warnings.push(...parsedChild.warnings.map((warning) => `${childSource.filename}: ${warning}`))
+        if (project.sheets.length + parsedChild.project.sheets.length - 1 > 64) { warnings.push(`Line ${symbol.line}: importing ${childSource.filename} would exceed the 64-sheet project limit; ${identity} was skipped.`); continue }
         const childRoot = parsedChild.project.sheets[0]
-        const idBase = `asc-${childKey.replace(/[^A-Za-z0-9_-]/g, '-')}`.slice(0, 56)
-        const sheetId = /^[A-Za-z]/.test(idBase) ? idBase : `asc-${idBase}`
+        const validSheetId = (candidate: string) => {
+          const clean = candidate.replace(/[^A-Za-z0-9_-]/g, '-')
+          return (/^[A-Za-z]/.test(clean) ? clean : `asc-${clean}`).slice(0, 63)
+        }
+        const uniqueSheetId = (candidate: string) => {
+          const base = validSheetId(candidate)
+          let id = base, suffix = 2
+          while (project.sheets.some((sheet) => sheet.id === id)) id = `${base.slice(0, 60)}-${suffix++}`
+          return id
+        }
+        const sheetId = uniqueSheetId(`asc-${childKey}`)
         const childPorts = childRoot.ports
         if (childPorts.length !== sidecar.parsed.pins.length || childPorts.some((port, index) => port.name.toLowerCase() !== sidecar.parsed.pins[index]?.name.toLowerCase())) {
           warnings.push(`Line ${symbol.line}: ${symbol.name} pins do not match the ordered IOPIN/FLAG ports in ${childSource.filename}; it was skipped.`)
           continue
         }
-        const idPrefix = `${sheetId}-`
-        childSheet = {
-          ...childRoot, id: sheetId, name: childRoot.name, parentSheetId: project.rootSheetId,
-          parts: childRoot.parts.map((part) => ({ ...part, id: `${idPrefix}${part.id}` })),
-          wires: childRoot.wires.map((wire) => ({ ...wire, id: `${idPrefix}${wire.id}` })),
-          netLabels: childRoot.netLabels.map((label) => ({ ...label, id: `${idPrefix}${label.id}` })),
-          ports: childPorts.map((port) => ({ ...port, id: `${idPrefix}${port.id}` })),
-          junctions: childRoot.junctions.map((junction) => ({ ...junction })),
+        const sheetIdMap = new Map<string, string>([[parsedChild.project.rootSheetId, sheetId]])
+        for (const nested of parsedChild.project.sheets) if (nested.id !== parsedChild.project.rootSheetId) sheetIdMap.set(nested.id, uniqueSheetId(`${sheetId}-${nested.id}`))
+        const remapSheet = (sheet: ProjectSheet): ProjectSheet => {
+          const mappedId = sheetIdMap.get(sheet.id)!
+          const idPrefix = `${mappedId}-`
+          return {
+            ...sheet, id: mappedId,
+            parentSheetId: sheet.id === parsedChild.project.rootSheetId ? project.rootSheetId : (sheet.parentSheetId ? sheetIdMap.get(sheet.parentSheetId) ?? project.rootSheetId : project.rootSheetId),
+            parts: sheet.parts.map((part) => ({ ...part, id: `${idPrefix}${part.id}`, ...(part.sheetId ? { sheetId: sheetIdMap.get(part.sheetId), modelName: sheetModelName(sheetIdMap.get(part.sheetId) ?? part.sheetId) } : {}) })),
+            wires: sheet.wires.map((wire) => ({ ...wire, id: `${idPrefix}${wire.id}` })),
+            netLabels: sheet.netLabels.map((label) => ({ ...label, id: `${idPrefix}${label.id}` })),
+            ports: sheet.ports.map((port) => ({ ...port, id: `${idPrefix}${port.id}` })),
+            junctions: sheet.junctions.map((junction) => ({ ...junction })),
+          }
         }
+        const remappedSheets = parsedChild.project.sheets.map(remapSheet)
+        childSheet = remappedSheets[0]
         importedChildren.set(childKey, childSheet)
-        project.sheets.push(childSheet)
+        project.sheets.push(...remappedSheets)
       }
     }
     const modelFile = sidecar.parsed.attributes.modelfile
