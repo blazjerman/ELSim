@@ -2,7 +2,7 @@
 import { isTraceVariable, parseAsciiRawFile } from './raw'
 import { addResultControl } from './resultControl'
 import { parseMeasurementOutput } from './measurements'
-import { diagnosticForNgspice } from './diagnostics'
+import { diagnosticForNgspice, firstNgspiceError } from './diagnostics'
 import { isEngineRequest, transferableTraceBuffers, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
 import type { TransientMeasurement } from '../domain/project'
 import { needsLtspiceFullDeckTranslation } from '../domain/subcircuitLibrary'
@@ -53,9 +53,8 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` } satisfies EngineResponse)
     const status = module.callMain(['-b', '/project.cir'])
     const output = stdout.join('\n')
-    const errors = output.split(/\r?\n/).filter((line) => /^\s*(?:Error|Fatal):/i.test(line))
-    if (status !== 0 || errors.length) {
-      const message = errors[0] ?? output.split(/\r?\n/).find((line) => /no writable vector|not available or has zero length|Error during/i.test(line)) ?? stderr.find((line) => /RuntimeError|out of bounds|stack overflow|Aborted\(/i.test(line)) ?? `ngspice exited with status ${status}.`
+    const message = firstNgspiceError(output, stderr.join('\n'), status)
+    if (message) {
       worker.postMessage({ type: 'error', requestId, error: diagnosticForNgspice(message, artifact) } satisfies EngineResponse)
       return
     }

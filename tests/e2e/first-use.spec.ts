@@ -1449,6 +1449,30 @@ test('circuit checks explain and select a current-controlled source with no cont
   await expect(page.locator('.circuit-part[data-part-id="current-f1"].selected')).toHaveCount(1)
 })
 
+test('ngspice stderr errors identify the imported model line and unsupported function', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.evaluate(async () => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const content = '.SUBCKT UNSUPPORTED IN OUT\nB1 OUT 0 V=if(V(IN)>0,1,0)\n.ENDS UNSUPPORTED\n'
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
+    const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    project.modelAssets = [{ id: 'unsupported-function-library', filename: 'unsupported-function.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+    project.parts.push({ id: 'unsupported-function-instance', kind: 'subcircuit', ref: 'XU1', value: 'UNSUPPORTED', modelName: 'UNSUPPORTED', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  const modelDiagnostic = page.getByRole('region', { name: 'ngspice model compatibility diagnostic' })
+  await expect(modelDiagnostic).toBeVisible({ timeout: 60_000 })
+  await expect(modelDiagnostic).toContainText('unsupported-function.lib · source line 2')
+  await expect(modelDiagnostic).toContainText('Error: no such function')
+  await expect(modelDiagnostic).toContainText('if()')
+  await expect(modelDiagnostic).toContainText('does not provide')
+})
+
 test('creating a child sheet can be undone and redone', async ({ page }) => {
   await page.goto('/')
   const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })
