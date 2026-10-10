@@ -88,9 +88,9 @@ The performance runner creates 100, 500, 1,000, or 5,000 instances of a two-leve
 
 Chromium's `performance.memory` numbers cover the page renderer and remained unchanged at the reported resolution; they do not include the dedicated worker's WASM memory. Firefox does not expose that API in this run. The timer gaps indicate that the renderer remained responsive while the worker solved and parsed results, but do not provide a worker-memory measurement. Reliable per-worker peak memory remains unmeasured.
 
-## Browser editor baseline (2026-10-10)
+## Legacy browser editor timing (2026-10-10)
 
-Playwright benchmark: `npm run benchmark:browser` (Chromium and Firefox). The generated project contains one resistor and two net labels per component. `editorReadyMs` measures reload through rendered component count; selection timings include the browser click and React update. These are local measurements, not CI thresholds.
+These are results from the v2 Playwright benchmark in `npm run benchmark:browser` (Chromium and Firefox). The generated project contains one resistor and two net labels per component. `editorReadyMs` measures reload through rendered component count; selection timings include Playwright locator lookup, click/actionability work, and the React update. They are local historical measurements, not CI thresholds, and are not directly comparable to the in-browser v3 input-to-frame timings below.
 
 | Browser | Parts | Editor ready (ms) | Selection median (ms) | Selection p95 (ms) | SVG elements |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -101,7 +101,23 @@ Playwright benchmark: `npm run benchmark:browser` (Chromium and Firefox). The ge
 | Firefox | 500 | 596 | 173 | 240 | 8,010 |
 | Firefox | 1,000 | 932 | 305 | 383 | 16,010 |
 
-`CircuitPart` now memoizes its SVG subtree and uses stable event wrappers that dispatch to the latest schematic handlers. Earlier post-change runs measured 1,000-part selection medians at 324 ms in Chromium and 309 ms in Firefox; this run measured 352 and 305 ms respectively, showing some run-to-run variation. Selection still takes roughly 0.3 seconds, so it remains a profiling target; these figures are a baseline and should not be treated as release budgets. Heap readings from browser automation were inconsistent and are excluded from conclusions. SVG size grows linearly with parts and labels, so the next editor work should profile render cost and consider viewport culling or a canvas layer only if measured data supports it.
+`CircuitPart` memoizes its SVG subtree and uses stable event wrappers that dispatch to the latest schematic handlers. The older Playwright locator-click measurements show substantial run-to-run variation, so use the input-to-frame comparison below when assessing selection updates. Heap readings from browser automation were inconsistent and are excluded from conclusions. SVG size grows linearly with parts and labels, so the next editor work should profile render cost and consider viewport culling or a canvas layer only if measured data supports it.
+
+### Schematic label selection update (2026-10-10)
+
+`CanvasNetLabel` now memoizes each label's SVG subtree and receives stable event wrappers, so selecting an object no longer rebuilds every label's SVG children. The editor benchmark now dispatches a synthetic click inside the browser and measures through the next animation frame; it excludes Playwright selector lookup and actionability overhead. The same benchmark configuration was run before and after label memoization on this host. This is one run per browser and is an engineering comparison, not a release budget.
+
+| Browser | Parts / labels | Before median / p95 (ms) | After median / p95 (ms) | Median change |
+| --- | ---: | ---: | ---: | ---: |
+| Chromium | 100 / 200 | 20.2 / 35.3 | 14.9 / 17.0 | -26% |
+| Chromium | 500 / 1,000 | 56.5 / 194.9 | 43.2 / 166.5 | -24% |
+| Chromium | 1,000 / 2,000 | 107.8 / 235.6 | 79.5 / 207.7 | -26% |
+| Firefox | 100 / 200 | 14.0 / 16.0 | 13.0 / 15.0 | -7% |
+| Firefox | 500 / 1,000 | 47.0 / 91.0 | 35.0 / 69.0 | -26% |
+| Firefox | 1,000 / 2,000 | 92.0 / 142.0 | 77.0 / 106.0 | -16% |
+
+SVG element counts remain unchanged because the complete schematic stays in the DOM for visibility and keyboard access. This change lowers selection update cost but does not solve first-render cost or very large-circuit accessibility/performance; those remain open.
+
 
 ### Browser waveform transport check
 

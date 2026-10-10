@@ -70,6 +70,21 @@ function IconButton({ title, children, onClick, active = false, disabled = false
   return <button className={`icon-button${active ? ' active' : ''}`} title={title} aria-label={title} onClick={onClick} disabled={disabled}>{children}</button>
 }
 
+const CanvasNetLabel = memo(function CanvasNetLabel({ label, selected, tool, onPointerDown, onSelect }: {
+  label: Project['netLabels'][number]
+  selected: boolean
+  tool: ToolMode
+  onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void
+  onSelect: (id: string) => void
+}) {
+  return <g data-net-label-id={label.id} className={`canvas-label${selected ? ' selected' : ''}`} role="button" tabIndex={0} aria-label={`Net label ${label.name}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onKeyDown={(event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault(); event.stopPropagation(); onSelect(label.id)
+  }} onPointerDown={(event) => onPointerDown(event, label.id)} onClick={(event) => {
+    if (tool === 'select') { event.stopPropagation(); onSelect(label.id) }
+  }}><rect x={label.x - 3} y={label.y - 22} width={Math.max(34, label.name.length * 7 + 14)} height="26" fill="transparent"/><line x1={label.x} y1={label.y} x2={label.x + 7} y2={label.y - 8} stroke="#9cc4a8" strokeWidth="1"/><text x={label.x + 9} y={label.y - 9}>{label.name}</text></g>
+})
+
 function focusAfterInspectorRender(selector: string) {
   let attempts = 0
   const initialFocus = document.activeElement
@@ -815,6 +830,13 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, points: wire?.points.map(([x,y]) => [x,y]), group }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
+  const labelEventHandlers = useRef({ beginDrag })
+  labelEventHandlers.current = { beginDrag }
+  const beginLabelDrag = useCallback((event: PointerEvent<SVGGElement>, id: string) => labelEventHandlers.current.beginDrag(event, 'label', id), [])
+  const selectLabel = useCallback((id: string) => {
+    setSelectedPartIds([])
+    setSelection({ kind: 'label', id })
+  }, [])
   const navigatePart = (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => {
     const origin = project.parts.find((part) => part.id === id)
     if (!origin || project.parts.length < 2) return
@@ -980,7 +1002,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
           <circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/>
         </g>
       })}
-      {project.netLabels.filter((label) => label.visible !== false).map((label) => <g key={label.id} className={`canvas-label${selection?.kind === 'label' && selection.id === label.id ? ' selected' : ''}`} role="button" tabIndex={0} aria-label={`Net label ${label.name}`} aria-pressed={selection?.kind === 'label' && selection.id === label.id} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); setSelectedPartIds([]); setSelection({ kind: 'label', id: label.id }) }} onPointerDown={(event) => beginDrag(event, 'label', label.id)} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'label', id: label.id }) } }}><rect x={label.x - 3} y={label.y - 22} width={Math.max(34, label.name.length * 7 + 14)} height="26" fill="transparent"/><line x1={label.x} y1={label.y} x2={label.x + 7} y2={label.y - 8} stroke="#9cc4a8" strokeWidth="1"/><text x={label.x + 9} y={label.y - 9}>{label.name}</text></g>)}
+      {project.netLabels.filter((label) => label.visible !== false).map((label) => <CanvasNetLabel key={label.id} label={label} selected={selection?.kind === 'label' && selection.id === label.id} tool={tool} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>)}
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
       {project.parts.map((part) => <CircuitPart key={part.id} part={part} symbol={part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined} selected={visibleSelectedPartIds.includes(part.id)} focusable={part.id === focusablePartId} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} tool={tool} onProbe={probePart} onSwitchToggle={togglePart} {...componentSample(part)}/>)}

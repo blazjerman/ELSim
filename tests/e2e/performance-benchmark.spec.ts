@@ -75,7 +75,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
   console.log(JSON.stringify({ benchmark: 'browser-million-sample-multi-trace-transient-v2', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), finalSampleScrubMs: Number(scrubMs.toFixed(2)), heapBefore: before, heapAfter: after }, null, 2))
 })
 
-test('record large-project editor render and selection timings', async ({ page, browserName }) => {
+test('record large-project editor render and selection input-to-frame timings', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
@@ -142,10 +142,14 @@ test('record large-project editor render and selection timings', async ({ page, 
     const interactionSamples = []
     for (let index = 0; index < 5; index += 1) {
       const part = page.locator(`svg.schematic .circuit-part:has(.part-ref:text-is("R${index + 1}"))`)
-      const interactionStart = performance.now()
-      await part.click()
+      const interactionMs = await part.evaluate(async (element) => {
+        const started = performance.now()
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+        return performance.now() - started
+      })
       await expect(part).toHaveClass(/selected/)
-      interactionSamples.push(performance.now() - interactionStart)
+      interactionSamples.push(interactionMs)
     }
     interactionSamples.sort((a, b) => a - b)
     results.push({
@@ -153,8 +157,8 @@ test('record large-project editor render and selection timings', async ({ page, 
       labels: count * 2,
       editorReadyMs: Number(renderMs.toFixed(2)),
       twoAnimationFramesAfterDomMs: Number(twoFrameMs.toFixed(2)),
-      selectionMedianMs: Number(interactionSamples[2].toFixed(2)),
-      selectionP95Ms: Number(interactionSamples[4].toFixed(2)),
+      selectionInputToFrameMedianMs: Number(interactionSamples[2].toFixed(2)),
+      selectionInputToFrameP95Ms: Number(interactionSamples[4].toFixed(2)),
       ...browserMetrics,
     })
   }
@@ -193,5 +197,5 @@ test('record large-project editor render and selection timings', async ({ page, 
   expect(transport.transfer.sharedAxis).toBe(true)
   expect(transport.transfer.detachedAtSend).toBe(true)
   expect(transport.clone.finalSample).toBeCloseTo(transport.transfer.finalSample, 12)
-  console.log(JSON.stringify({ benchmark: 'editor-large-project-v2', browser: browserName, results, transport }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'editor-large-project-v3', browser: browserName, inputTiming: 'synthetic click dispatch to next animation frame; excludes Playwright locator/actionability overhead', results, transport }, null, 2))
 })
