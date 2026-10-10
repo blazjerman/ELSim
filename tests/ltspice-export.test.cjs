@@ -124,11 +124,62 @@ test('includes only referenced model dependencies and signals the unknown-licens
   assert.ok(output.files.find((file) => file.path.endsWith('.asc')).content.includes('.include "models/user-block.lib"'))
 })
 
-test('blocks schematic devices without a tested mapping rather than silently dropping them', async () => {
+test('exports fixed-state switches as explicit resistor transformations with round-trip pins', async () => {
   const project = createStarterProject()
-  project.parts.push({ id: 'unsupported-switch', kind: 'switch', ref: 'S1', value: 'Off', x: 800, y: 600, rotation: 0 })
+  const switchPart = { id: 'fixed-switch-off', kind: 'switch', ref: 'S1', value: 'Off', x: 800, y: 600, rotation: 0 }
+  const onSwitchPart = { id: 'fixed-switch-on', kind: 'switch', ref: 'S2', value: 'On', x: 1000, y: 600, rotation: 0 }
+  project.parts.push(switchPart, onSwitchPart)
+  project.netLabels.push(
+    { id: 'switch-left-label', name: 'SW_IN', x: 748, y: 600, visible: true },
+    { id: 'switch-right-label', name: 'SW_OUT', x: 852, y: 600, visible: true },
+    { id: 'switch-on-left-label', name: 'SW_ON_IN', x: 948, y: 600, visible: true },
+    { id: 'switch-on-right-label', name: 'SW_ON_OUT', x: 1052, y: 600, visible: true },
+  )
+  project.sheets[0].parts = project.parts
+  project.sheets[0].netLabels = project.netLabels
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const root = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(root.content, /SYMATTR InstName R_ELSIM_sheet_main_fixed_switch_off\nSYMATTR Value 1T/)
+  assert.match(root.content, /SYMATTR InstName R_ELSIM_sheet_main_fixed_switch_on\nSYMATTR Value 1m/)
+  assert.ok(output.losses.some((loss) => loss.sourceId === switchPart.id && /Fixed-state switch exported as a resistor/.test(loss.title)))
+  assert.ok(output.losses.some((loss) => loss.sourceId === onSwitchPart.id && /Fixed-state switch exported as a resistor/.test(loss.title)))
+  const symbol = output.files.find((file) => file.path === 'ELSIM_SWITCH.asy')
+  assert.match(symbol.content, /^SYMATTR Prefix R$/m)
+  assert.equal((symbol.content.match(/^PIN /gm) ?? []).length, 2)
+
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `switch-export-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const restored = parseLtspiceSchematic(root.content, root.path, symbols)
+  const restoredSwitch = restored.project.parts.find((part) => part.ref === 'R_ELSIM_sheet_main_fixed_switch_off')
+  const restoredOnSwitch = restored.project.parts.find((part) => part.ref === 'R_ELSIM_sheet_main_fixed_switch_on')
+  assert.equal(restoredSwitch.kind, 'resistor')
+  assert.equal(restoredSwitch.value, '1T')
+  assert.equal(restoredOnSwitch.kind, 'resistor')
+  assert.equal(restoredOnSwitch.value, '1m')
+  const originalConnectivity = analyzeConnectivity(project)
+  const restoredConnectivity = analyzeConnectivity(restored.project)
+  assert.equal(originalConnectivity.pinNets.get(`${switchPart.id}:0`), 'SW_IN')
+  assert.equal(originalConnectivity.pinNets.get(`${switchPart.id}:1`), 'SW_OUT')
+  assert.equal(restoredConnectivity.pinNets.get(`${restoredSwitch.id}:0`), 'SW_IN')
+  assert.equal(restoredConnectivity.pinNets.get(`${restoredSwitch.id}:1`), 'SW_OUT')
+  assert.equal(restoredConnectivity.pinNets.get(`${restoredOnSwitch.id}:0`), 'SW_ON_IN')
+  assert.equal(restoredConnectivity.pinNets.get(`${restoredOnSwitch.id}:1`), 'SW_ON_OUT')
+})
+
+test('blocks switch export when the saved state is invalid', async () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'invalid-switch', kind: 'switch', ref: 'S1', value: 'Maybe', x: 800, y: 600, rotation: 0 })
   project.sheets[0].parts = project.parts
   const output = await exportLtspiceProject(project)
   assert.equal(output.files.length, 0)
-  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'unsupported-switch' && /no verified LTspice schematic mapping/.test(blocker.message)))
+  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'invalid-switch' && /state must be On or Off/.test(blocker.message)))
+})
+
+test('blocks schematic devices without a tested mapping rather than silently dropping them', async () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'unsupported-behavioral', kind: 'behavioral', ref: 'B1', value: 'V(vin)', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  const output = await exportLtspiceProject(project)
+  assert.equal(output.files.length, 0)
+  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'unsupported-behavioral' && /no verified LTspice schematic mapping/.test(blocker.message)))
 })

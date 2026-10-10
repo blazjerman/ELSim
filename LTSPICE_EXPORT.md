@@ -29,6 +29,7 @@ Only dependencies actually referenced by placed parts should be included. An exp
 | Each wire polyline | One `WIRE` record for each adjacent point pair |
 | Named net label | `FLAG x y name` at the current label coordinate |
 | Built-in or imported part | `SYMBOL name x y orientation`, then safe `SYMATTR InstName` and `SYMATTR Value` records |
+| Fixed-state ELSim switch | Two-terminal resistor at `1m` when On or `1T` when Off, matching the current ELSim switch model's `Ron` / `Roff`; the generated instance gets an `R_` reference |
 | Child sheet block | A no-prefix block `.asy` named after its child `.asc`; ordered `PIN` / `PINATTR PinName` / `PINATTR SpiceOrder` records derive from the child sheet's ports |
 | Child sheet port | `IOPIN x y In/Out/BiDir` at the matching current label coordinate, with a same-coordinate `FLAG` |
 | Analysis settings | Generated `TEXT` directives for supported `.tran`, `.op`, `.ac`, or `.dc` settings |
@@ -53,6 +54,7 @@ Potential losses that must be disclosed:
 
 - ELSim-only animation metadata, charge/current visualizations, editor layout, selection state, plot windows, prior simulation traces, and onboarding state are omitted.
 - Unsupported ELSim component families, source waveform/expression differences, directives, parameters, or model constructs are omitted or transformed only through an explicitly tested mapping.
+- The ELSim switch has a saved, user-selected On/Off state rather than an external control signal. Export writes that fixed state as the matching `Ron` / `Roff` resistor value and reports that it is no longer toggleable in LTspice. Users who need dynamic switching must replace it with an LTspice-controlled switch.
 - Imported source `.asc` comments, unknown records, and original layout are not merged into generated output; the current ELSim scene is authoritative.
 - A custom ELSim symbol may be replaced by a generated generic symbol when the original `.asy` is unavailable or the user declines to include it.
 - Model text is copied unchanged. A successful export does not establish that LTspice supports the model dialect or that the user may redistribute it.

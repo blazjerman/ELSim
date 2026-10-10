@@ -21,11 +21,11 @@ export type LtspiceExportResult = {
 
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
-  source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S',
+  source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'R',
   vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+  source: 'V', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -144,6 +144,10 @@ function sheetWireRecords(sheet: ProjectSheet, blockers: LtspiceExportBlocker[])
 function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymbolNames: Map<string, string>): { value: string; spiceLine?: string } | null {
   const parameter = part.value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
   if (parameter && sheet.parameters?.some((entry) => entry.name.toLowerCase() === parameter[1].toLowerCase())) return { value: part.value.trim() }
+  if (part.kind === 'switch') {
+    const state = part.value.trim().toLowerCase()
+    return state === 'on' ? { value: '1m' } : state === 'off' ? { value: '1T' } : null
+  }
   if (part.kind === 'resistor') { const value = scalar(part.value); return value ? { value } : null }
   if (part.kind === 'capacitor') { const value = scalar(part.value, 'f'); return value ? { value } : null }
   if (part.kind === 'inductor') { const value = scalar(part.value, 'h'); return value ? { value } : null }
@@ -175,6 +179,15 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
   const width = Number.isFinite(minX) ? Math.max(800, Math.ceil((maxX - minX + 512) / 16) * 16) : 800
   const height = Number.isFinite(minY) ? Math.max(600, Math.ceil((maxY - minY + 512) / 16) * 16) : 600
   const rows = ['Version 4', `SHEET 1 ${width} ${height}`, ...sheetWireRecords(sheet, blockers)]
+  const instanceNames = new Map(sheet.parts.map((part) => [part.id, part.ref]))
+  const usedReferences = new Set(sheet.parts.map((part) => part.ref.toLowerCase()))
+  for (const part of sheet.parts.filter((candidate) => candidate.kind === 'switch')) {
+    const base = `R_ELSIM_${spiceIdentifier(sheet.id)}_${spiceIdentifier(part.id)}`
+    let name = base, suffix = 2
+    while (usedReferences.has(name.toLowerCase())) name = `${base}_${suffix++}`
+    usedReferences.add(name.toLowerCase())
+    instanceNames.set(part.id, name)
+  }
   let directiveIndex = 0
   const addDirective = (directive: string) => rows.push(`TEXT 0 ${directiveIndex++ * 32} Left 2 !${directive}`)
   const ports = new Map(sheet.ports.map((port) => [port.name.toLowerCase(), port]))
@@ -211,10 +224,11 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       if (mapped === null && !blockers.some((item) => item.sourceId === part.id)) blockers.push({ sourceId: part.id, message: `${part.ref} has a value that cannot be represented in the LTspice schematic format.` })
       continue
     }
-    if (!checkText(part.ref, part.id, 'Reference designator', blockers) || !checkText(mapped.value, part.id, 'Component value', blockers) || (mapped.spiceLine && !checkText(mapped.spiceLine, part.id, 'SPICE line', blockers))) continue
+    const instanceName = instanceNames.get(part.id) ?? part.ref
+    if (!checkText(instanceName, part.id, 'Reference designator', blockers) || !checkText(mapped.value, part.id, 'Component value', blockers) || (mapped.spiceLine && !checkText(mapped.spiceLine, part.id, 'SPICE line', blockers))) continue
     const symbolName = symbolNames.get(part.id)!
     rows.push(`SYMBOL ${symbolName} ${checkCoordinate(part.x, part.id, blockers)} ${checkCoordinate(part.y, part.id, blockers)} ${part.flipX ? 'M' : 'R'}${part.rotation}`)
-    rows.push(`SYMATTR InstName ${part.ref}`)
+    rows.push(`SYMATTR InstName ${instanceName}`)
     rows.push(`SYMATTR Value ${mapped.value}`)
     if (mapped.spiceLine) rows.push(`SYMATTR SpiceLine ${mapped.spiceLine}`)
     if (part.kind === 'diode' || part.kind === 'led') {
@@ -340,7 +354,11 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
   for (const sheet of sheets) {
     if (sheet.ports.length > 0 && sheet.ports.some((port) => !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase()))) blockers.push({ sourceId: sheet.id, message: `${sheet.name} has a port without a matching named label.` })
     for (const part of sheet.parts) {
-      if (part.kind === 'switch' || part.kind === 'behavioral' || part.kind === 'cccs' || part.kind === 'ccvs') blockers.push({ sourceId: part.id, message: `${part.ref} (${part.kind}) has no verified LTspice schematic mapping yet.` })
+      if (part.kind === 'behavioral' || part.kind === 'cccs' || part.kind === 'ccvs') blockers.push({ sourceId: part.id, message: `${part.ref} (${part.kind}) has no verified LTspice schematic mapping yet.` })
+      if (part.kind === 'switch') {
+        if (!['on', 'off'].includes(part.value.trim().toLowerCase())) blockers.push({ sourceId: part.id, message: `${part.ref} state must be On or Off before LTspice export.` })
+        else losses.push({ severity: 'warning', sourceId: part.id, title: 'Fixed-state switch exported as a resistor', explanation: `The saved ${part.value.trim()} state is exported as a fixed 1 mΩ or 1 TΩ resistor, matching ELSim's current switch Ron/Roff settings. It will not be toggleable in LTspice; replace it with a voltage-controlled switch if dynamic control is needed.` })
+      }
       if (part.sheetParameters && Object.keys(part.sheetParameters).length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Sheet parameter overrides may differ', explanation: 'The current exporter writes the child block value but does not yet validate LTspice SpiceLine parameter override behavior.' })
       if (part.kind === 'subcircuit' && !part.sheetId && part.modelParameters && Object.keys(part.modelParameters).length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Model parameter overrides may differ', explanation: 'The current exporter writes SpiceLine PARAMS: overrides; verify parameter handling in the target LTspice version.' })
     }

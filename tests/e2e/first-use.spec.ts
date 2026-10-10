@@ -417,7 +417,7 @@ test('LTspice export preview gates unknown-license model ZIPs and reports blocke
 
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    project.parts.push({ id: 'export-switch', kind: 'switch', ref: 'S1', value: 'Off', x: 800, y: 600, rotation: 0 })
+    project.parts.push({ id: 'export-behavioral', kind: 'behavioral', ref: 'B1', value: 'V(vin)', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 })
     project.sheets.find((sheet: { id: string }) => sheet.id === project.activeSheetId).parts = project.parts
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
@@ -425,6 +425,6 @@ test('LTspice export preview gates unknown-license model ZIPs and reports blocke
   await page.getByRole('button', { name: 'Export LTspice', exact: true }).click()
   const blockedPreview = page.getByRole('dialog', { name: 'Review export' })
   await expect(blockedPreview).toContainText('Export blocked')
-  await expect(blockedPreview).toContainText('S1')
+  await expect(blockedPreview).toContainText('B1')
   await expect(blockedPreview.getByRole('button', { name: 'Download ZIP' })).toBeDisabled()
 })
