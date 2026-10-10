@@ -935,6 +935,13 @@
                 "type": "string",
                 "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
               },
+              "sourceParameter": {
+                "enum": [
+                  "sine.frequency",
+                  "sffm.carrierFrequency",
+                  "sffm.signalFrequency"
+                ]
+              },
               "start": {
                 "type": "string",
                 "minLength": 1

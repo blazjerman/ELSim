@@ -151,6 +151,31 @@ test('SINE, EXP, and SFFM amplitudes are parameter stepped without changing timi
   assert.match(control, /alterparam ELSIM_SWEEP_WAVE_V1_AMPLITUDE=2\.00000000e\+0[\s\S]*alterparam ELSIM_SWEEP_WAVE_I1_AMPLITUDE=2\.00000000e-3[\s\S]*alterparam ELSIM_SWEEP_WAVE_V2_AMPLITUDE=3\.00000000e\+0\nreset\nrun/)
 })
 
+test('SINE and SFFM frequency fields can be swept in hertz', () => {
+  const project = createStarterProject()
+  const sine = project.parts.find((part) => part.kind === 'source')
+  sine.sourceMode = 'sine'
+  sine.sine = { offset: '0 V', amplitude: '1 V', frequency: '1 kHz', delay: '0', damping: '0', phase: '0' }
+  const sffm = { id: 'sweep-frequency-sffm', kind: 'currentSource', ref: 'I1', value: '1 mA', sourceMode: 'sffm', sffm: { offset: '0 A', amplitude: '1 mA', carrierFrequency: '1 kHz', modulationIndex: '1', signalFrequency: '100 Hz' }, x: 700, y: 600, rotation: 0 }
+  project.parts.push(sffm)
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [
+    { component: 'V1', sourceParameter: 'sine.frequency', start: '1 kHz', stop: '2 kHz', points: 3 },
+    { component: 'I1', sourceParameter: 'sffm.signalFrequency', start: '100 Hz', stop: '200 Hz', points: 2 },
+  ]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 6)
+  assert.equal(runs[0].values[0].sourceParameter, 'sine.frequency')
+  assert.equal(runs[0].values[1].sourceParameter, 'sffm.signalFrequency')
+  assert.match(runs[0].label, /V1\.sine\.frequency=1000 Hz, I1\.sffm\.signalFrequency=100 Hz/)
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /SIN\(0 1 \{ELSIM_SWEEP_FREQ_V1_SINE_FREQUENCY\} 0 0 0\)/)
+  assert.match(control, /SFFM\(0 1m 1k 1 \{ELSIM_SWEEP_FREQ_I1_SFFM_SIGNALFREQUENCY\}\)/)
+  assert.match(control, /alterparam ELSIM_SWEEP_FREQ_V1_SINE_FREQUENCY=1\.00000000e\+3\nalterparam ELSIM_SWEEP_FREQ_I1_SFFM_SIGNALFREQUENCY=1\.00000000e\+2\nreset\nrun/)
+  assert.match(control, /alterparam ELSIM_SWEEP_FREQ_V1_SINE_FREQUENCY=2\.00000000e\+3\nalterparam ELSIM_SWEEP_FREQ_I1_SFFM_SIGNALFREQUENCY=2\.00000000e\+2\nreset\nrun/)
+})
+
 test('imported device model parameters are validated and emitted with altermod', () => {
   const project = createStarterProject()
   const part = { id: 'sweep-q1', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 400, rotation: 0, deviceModel: 'USER_NPN' }
@@ -183,7 +208,7 @@ test('parameter sweep rejects duplicate parts, equal endpoints, and more than te
   ]
   assert.throws(() => validateProject(project), /10 total combinations/)
   project.simulation.parameterSweeps = [{ component: 'R1', start: 'invalid', stop: '2 kΩ', points: 3 }]
-  assert.throws(() => validateProject(project), /passive values must be positive/)
+  assert.throws(() => validateProject(project), /passive values and source frequencies must be positive/)
   project.simulation.analysis = 'ac'
   project.simulation.parameterSweeps = [{ component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 3 }]
   assert.throws(() => validateProject(project), /transient analysis only/)

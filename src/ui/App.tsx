@@ -506,6 +506,15 @@ function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove
   const modelFor = (part?: Part) => models.find((model) => model.name.toLowerCase() === part?.deviceModel?.toLowerCase())
   const numericModelParameters = (part?: Part) => modelFor(part)?.parameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) ?? []
   const modelRange = (value: string) => { const magnitude = componentMagnitude(value, 'resistor'); return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` } }
+  const frequencyValue = (part: Part, parameter: string) => parameter === 'sine.frequency' ? part.sine?.frequency ?? '1 kHz' : parameter === 'sffm.carrierFrequency' ? part.sffm?.carrierFrequency ?? '1 kHz' : part.sffm?.signalFrequency ?? '100 Hz'
+  const frequencyRange = (part: Part, parameter: string) => {
+    const start = frequencyValue(part, parameter)
+    const normalized = start.trim().replaceAll(' ', '').replace(/hz$/i, '').replaceAll('µ', 'u').replaceAll('μ', 'u')
+    const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+    const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match?.[2]?.toLowerCase() ?? ''] ?? 1
+    const magnitude = match ? Number(match[1]) * scale : NaN
+    return { start, stop: Number.isFinite(magnitude) && magnitude > 0 ? `${(magnitude * 2).toExponential(5)} Hz` : start }
+  }
   const supportedSourceModes = ['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm']
   const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === undefined || supportedSourceModes.includes(part.sourceMode))) || (part.kind === 'source' && supportedSourceModes.includes(part.sourceMode ?? 'pulse')) || numericModelParameters(part).length > 0)
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
@@ -524,20 +533,21 @@ function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove
           if (parameters.length) {
             const parameter = parameters[0]
             const { start, stop } = modelRange(parameter.defaultValue)
-            onChange(index, { component: nextPart.ref, parameter: parameter.name, start, stop })
+            onChange(index, { component: nextPart.ref, parameter: parameter.name, sourceParameter: undefined, start, stop })
             return
           }
           if (nextPart.sourceMode === 'pwl') {
-            onChange(index, { component: nextPart.ref, parameter: undefined, start: '1', stop: '2' })
+            onChange(index, { component: nextPart.ref, parameter: undefined, sourceParameter: undefined, start: '1', stop: '2' })
             return
           }
           const sourceAmplitude = nextPart.sourceMode === 'sine' ? nextPart.sine?.amplitude : nextPart.sourceMode === 'exp' ? nextPart.exp?.pulsed : nextPart.sourceMode === 'sffm' ? nextPart.sffm?.amplitude : undefined
           const startValue = sourceAmplitude ?? nextPart.value
           const magnitude = componentMagnitude(startValue, nextPart.kind)
           const unit = nextPart.kind === 'source' ? 'V' : nextPart.kind === 'currentSource' ? 'A' : nextPart.kind === 'resistor' || nextPart.kind === 'lamp' ? 'Ω' : nextPart.kind === 'capacitor' ? 'F' : 'H'
-          onChange(index, { component: nextPart.ref, parameter: undefined, start: startValue, stop: magnitude === null ? startValue : `${(magnitude * 2).toExponential(5)} ${unit}` })
+          onChange(index, { component: nextPart.ref, parameter: undefined, sourceParameter: undefined, start: startValue, stop: magnitude === null ? startValue : `${(magnitude * 2).toExponential(5)} ${unit}` })
         }}>{eligible.map((item) => <option key={item.id} value={item.ref} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && other.component.toLowerCase() === item.ref.toLowerCase())}>{item.ref} · {kindNames[item.kind]}</option>)}</select></label>
-        {modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())) && <label className="field-label">Imported model parameter<select aria-label={`Parameter ${index + 1} model parameter`} value={sweep.parameter ?? ''} onChange={(event) => { const parameter = numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).find((item) => item.name === event.target.value); if (!parameter) return; const { start, stop } = modelRange(parameter.defaultValue); onChange(index, { parameter: parameter.name, start, stop }) }}>{numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).map((parameter) => <option key={parameter.name} value={parameter.name}>{parameter.name} · default {parameter.defaultValue}</option>)}</select></label>}
+        {modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())) && <label className="field-label">Imported model parameter<select aria-label={`Parameter ${index + 1} model parameter`} value={sweep.parameter ?? ''} onChange={(event) => { const parameter = numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).find((item) => item.name === event.target.value); if (!parameter) return; const { start, stop } = modelRange(parameter.defaultValue); onChange(index, { parameter: parameter.name, sourceParameter: undefined, start, stop }) }}>{numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).map((parameter) => <option key={parameter.name} value={parameter.name}>{parameter.name} · default {parameter.defaultValue}</option>)}</select></label>}
+        {(() => { const selected = parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase()); const options = selected?.sourceMode === 'sine' ? [{ value: 'sine.frequency', label: 'Frequency' }] : selected?.sourceMode === 'sffm' ? [{ value: 'sffm.carrierFrequency', label: 'Carrier frequency' }, { value: 'sffm.signalFrequency', label: 'Signal frequency' }] : []; return options.length ? <label className="field-label">Source waveform parameter<select aria-label={`Parameter ${index + 1} source parameter`} value={sweep.sourceParameter ?? ''} onChange={(event) => { if (!selected) return; const sourceParameter = event.target.value as ParameterSweep['sourceParameter']; if (sourceParameter) { const range = frequencyRange(selected, sourceParameter); onChange(index, { parameter: undefined, sourceParameter, start: range.start, stop: range.stop }) } else { const amplitude = selected.sourceMode === 'sine' ? selected.sine?.amplitude ?? selected.value : selected.sffm?.amplitude ?? selected.value; const unit = selected.kind === 'source' ? 'V' : 'A'; const magnitude = componentMagnitude(amplitude, selected.kind) ?? 0; onChange(index, { sourceParameter: undefined, start: amplitude, stop: `${(magnitude * 2).toExponential(5)} ${unit}` }) } }}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}<option value="">Amplitude</option></select></label> : null })()}
         <div className="parameter-sweep-inputs"><label className="field-label">Start<input aria-label={`Parameter ${index + 1} start value`} value={sweep.start} onChange={(event) => onChange(index, { start: event.target.value })}/></label><label className="field-label">Stop<input aria-label={`Parameter ${index + 1} stop value`} value={sweep.stop} onChange={(event) => onChange(index, { stop: event.target.value })}/></label></div>
         <label className="field-label">Number of values<input aria-label={`Parameter ${index + 1} number of values`} type="number" min="2" max={maxPoints} value={sweep.points} onChange={(event) => onChange(index, { points: Number(event.target.value) })}/></label>
       </div>

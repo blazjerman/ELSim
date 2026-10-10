@@ -234,6 +234,22 @@ const sffmPeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVect
 assert.ok(Math.abs(sffmPeaks[0] - 0.5) < 1e-3, `pulse-source-sweep: first SFFM amplitude should peak near 0.5 V, got ${sffmPeaks[0]} V`)
 assert.ok(Math.abs(sffmPeaks[1] - 1.5) < 1e-3, `pulse-source-sweep: second SFFM amplitude should peak near 1.5 V, got ${sffmPeaks[1]} V`)
 
+const frequencySweepDeck = path.join(root, 'engine/wasm/fixtures', 'source-frequency-sweep.cir')
+const frequencySweepResult = await runInWorker(frequencySweepDeck, false, ['/result-0.raw', '/result-1.raw'])
+assert.equal(frequencySweepResult.status, 0, 'source-frequency-sweep: ngspice exited with a nonzero status')
+const realRawSampleAt = (raw, vector, targetTime) => {
+  const times = realRawVector(raw, 'time'), values = realRawVector(raw, vector)
+  let closest = 0
+  for (let index = 1; index < times.length; index += 1) if (Math.abs(times[index] - targetTime) < Math.abs(times[closest] - targetTime)) closest = index
+  return values[closest]
+}
+assert.ok(realRawSampleAt(frequencySweepResult.rawFiles[0], 'v(sine)', 0.25e-3) > 0.99, 'source-frequency-sweep: 1 kHz SINE should be near its peak at 0.25 ms')
+assert.ok(Math.abs(realRawSampleAt(frequencySweepResult.rawFiles[1], 'v(sine)', 0.25e-3)) < 0.05, `source-frequency-sweep: 2 kHz SINE should cross zero near 0.25 ms, got ${realRawSampleAt(frequencySweepResult.rawFiles[1], 'v(sine)', 0.25e-3)}`)
+assert.ok(realRawSampleAt(frequencySweepResult.rawFiles[0], 'v(carrier)', 0.25e-3) > 0.49, 'source-frequency-sweep: 1 kHz SFFM carrier should be near its peak at 0.25 ms')
+assert.ok(Math.abs(realRawSampleAt(frequencySweepResult.rawFiles[1], 'v(carrier)', 0.25e-3)) < 0.02, 'source-frequency-sweep: 2 kHz SFFM carrier should cross zero at 0.25 ms')
+assert.ok(Math.abs(realRawSampleAt(frequencySweepResult.rawFiles[0], 'v(modulation)', 0.5e-3) + Math.sin(Math.sin(2 * Math.PI * 100 * 0.5e-3))) < 0.02, 'source-frequency-sweep: 100 Hz SFFM signal frequency should match its modulation at 0.5 ms')
+assert.ok(Math.abs(realRawSampleAt(frequencySweepResult.rawFiles[1], 'v(modulation)', 0.5e-3) + Math.sin(Math.sin(2 * Math.PI * 200 * 0.5e-3))) < 0.02, 'source-frequency-sweep: 200 Hz SFFM signal frequency should match its modulation at 0.5 ms')
+
 const repeatedVectors = [
   ['v(xload1.mid)', 'v(mid1)', 2.5],
   ['v(xload2.mid)', 'v(mid2)', 5],

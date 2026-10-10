@@ -2,7 +2,7 @@ import type { ParameterSweep, Project } from '../domain/project'
 import { componentMagnitude } from '../domain/componentValue'
 import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 
-export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
+export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; sourceParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
 
 function componentUnit(kind: string): string {
   return kind === 'source' ? 'V' : kind === 'currentSource' ? 'A' : kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
@@ -10,6 +10,13 @@ function componentUnit(kind: string): string {
 
 function buildValues(project: Project, sweep: ParameterSweep) {
   const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
+  if (sweep.sourceParameter) {
+    if (!part || (part.kind !== 'source' && part.kind !== 'currentSource') || (sweep.sourceParameter === 'sine.frequency' && part.sourceMode !== 'sine') || (sweep.sourceParameter.startsWith('sffm.') && part.sourceMode !== 'sffm')) throw new Error(`${sweep.component}.${sweep.sourceParameter} is not a frequency field on its selected source waveform.`)
+    const values = [sweep.start, sweep.stop].map((value) => scalarMagnitude(value.trim().replace(/hz$/i, '')))
+    const [start, stop] = values
+    if (start === null || stop === null || start <= 0 || stop <= 0 || start === stop) throw new Error(`${part.ref}.${sweep.sourceParameter} needs valid, positive, different frequency endpoints.`)
+    return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
+  }
   if (sweep.parameter) {
     const model = project.modelAssets?.flatMap((asset) => parseSubcircuitLibrary(asset.content).models)
       .find((candidate) => candidate.name.toLowerCase() === part?.deviceModel?.toLowerCase())
@@ -52,14 +59,15 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
     const values = buildValues(project, sweep)
     combinations = combinations.flatMap((combination) => values.map((value) => {
       const parameter = sweep.parameter
+      const sourceParameter = sweep.sourceParameter
       const pwlScale = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pwl'
       const waveformAmplitude = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && ['sine', 'exp', 'sffm'].includes(part.sourceMode ?? '')
-      const display = parameter ? `${Number(value.toPrecision(5))}` : pwlScale ? `${Number(value.toPrecision(5))}×` : `${Number(value.toPrecision(5))} ${componentUnit(part.kind)}`
-      const target = parameter ? `${part.ref}.${parameter}` : part.ref
+      const display = parameter ? `${Number(value.toPrecision(5))}` : sourceParameter ? `${Number(value.toPrecision(5))} Hz` : pwlScale ? `${Number(value.toPrecision(5))}×` : `${Number(value.toPrecision(5))} ${componentUnit(part.kind)}`
+      const target = parameter ? `${part.ref}.${parameter}` : sourceParameter ? `${part.ref}.${sourceParameter}` : part.ref
       const label = combination.label ? `${combination.label}, ${target}=${display}` : `${target}=${display}`
       const model = parameter ? part.deviceModel : undefined
       const pulseHigh = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
-      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model } : {}), ...(pulseHigh ? { pulseHigh: true } : {}), ...(pwlScale ? { pwlScale: true } : {}), ...(waveformAmplitude ? { waveformAmplitude: true } : {}) }], label }
+      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model } : {}), ...(sourceParameter ? { sourceParameter } : {}), ...(!sourceParameter && pulseHigh ? { pulseHigh: true } : {}), ...(!sourceParameter && pwlScale ? { pwlScale: true } : {}), ...(!sourceParameter && waveformAmplitude ? { waveformAmplitude: true } : {}) }], label }
     }))
   }
   if (combinations.length > 10) throw new Error('Parameter stepping is limited to 10 total combinations.')

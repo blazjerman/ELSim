@@ -189,12 +189,13 @@ function isParameterSweepRun(value: unknown): boolean {
     if (!isRecord(entry) || typeof entry.component !== 'string' || !entry.component.trim()
       || typeof entry.value !== 'string' || !Number.isFinite(Number(entry.value))) return false
     const hasModelTarget = entry.parameter !== undefined || entry.model !== undefined
+    if (entry.sourceParameter !== undefined && (!['sine.frequency', 'sffm.carrierFrequency', 'sffm.signalFrequency'].includes(String(entry.sourceParameter)) || hasModelTarget)) return false
     if (hasModelTarget && (typeof entry.parameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter)
       || typeof entry.model !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(entry.model))) return false
     if (entry.pulseHigh !== undefined && (typeof entry.pulseHigh !== 'boolean' || (entry.pulseHigh && hasModelTarget))) return false
     if (entry.pwlScale !== undefined && (typeof entry.pwlScale !== 'boolean' || (entry.pwlScale && hasModelTarget))) return false
     if (entry.waveformAmplitude !== undefined && (typeof entry.waveformAmplitude !== 'boolean' || (entry.waveformAmplitude && hasModelTarget))) return false
-    if ([entry.pulseHigh, entry.pwlScale, entry.waveformAmplitude].filter(Boolean).length > 1) return false
+    if ([entry.pulseHigh, entry.pwlScale, entry.waveformAmplitude, entry.sourceParameter !== undefined].filter(Boolean).length > 1) return false
     const key = entry.component.toLowerCase()
     if (components.has(key)) return false
     components.add(key)
