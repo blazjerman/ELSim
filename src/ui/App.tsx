@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
 import { checkCircuit } from '../domain/electricalCheck'
-import { analyzeModelDependencies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
+import { analyzeModelDependencies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
 import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
@@ -1011,6 +1011,7 @@ export default function App() {
       if (duplicateDeviceModel) throw new Error(`${duplicateDeviceModel.name} is already present outside the library being replaced.`)
       const asset = { id: replaceId ?? `model-${crypto.randomUUID()}`, filename: file.name, content, sha256: await sha256Text(content), licenseStatus: 'unknown' as const, importedAt: new Date().toISOString() }
       const nextAssets = replaceId ? currentAssets.map((current) => current.id === replaceId ? asset : current) : [...currentAssets, asset]
+      if (replaceId) validateModelLibraryReplacement(currentAssets, nextAssets, projectRef.current.sheets.flatMap((sheet) => sheet.parts))
       const validated = validateProject({ ...projectRef.current, modelAssets: nextAssets })
       setProject(() => validated)
       setCompatibilityDiagnostic(null)

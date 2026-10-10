@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeModelDependencies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeModelDependencies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('parses ordered subcircuit pins, parameters, continuations, shared models, and multiple definitions', () => {
   const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10 R=20k\nR1 INP OUT\n+ 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
@@ -126,4 +126,26 @@ test('reports missing model dependencies and recursive subcircuit chains', () =>
     { owner: 'AMP', reference: 'D1', modelName: 'DFAST', kind: 'device' },
   ])
   assert.deepEqual(report.recursiveChains, [['AMP', 'CORE', 'AMP']])
+})
+
+test('blocks replacements that newly break dependencies or make a used IC recursive', () => {
+  const previous = [
+    { id: 'amp', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\nD1 OUT 0 DFAST\n.ENDS AMP' },
+    { id: 'core', filename: 'core.lib', content: '.SUBCKT CORE A B\nR1 A B 1k\n.ENDS CORE\n.MODEL DFAST D(Is=1n)' },
+  ]
+  const parts = [{ kind: 'subcircuit', modelName: 'AMP' }]
+  const removesDeviceModel = [previous[0], { ...previous[1], content: '.SUBCKT CORE A B\nR1 A B 1k\n.ENDS CORE' }]
+  assert.throws(() => validateModelLibraryReplacement(previous, removesDeviceModel, parts), /Replacement would break AMP: D1 needs device DFAST/)
+
+  const makesRecursive = [previous[0], { ...previous[1], content: '.SUBCKT CORE A B\nXBACK A B AMP\n.ENDS CORE\n.MODEL DFAST D(Is=1n)' }]
+  assert.throws(() => validateModelLibraryReplacement(previous, makesRecursive, parts), /Replacement would make a required subcircuit recursive/)
+})
+
+test('allows replacing a library without introducing new issues into a used IC', () => {
+  const previous = [
+    { id: 'amp', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\nD1 OUT 0 DFAST\n.ENDS AMP' },
+    { id: 'core', filename: 'core.lib', content: '.SUBCKT CORE A B\nR1 A B 1k\n.ENDS CORE\n.MODEL DFAST D(Is=1n)' },
+  ]
+  const revisedCore = [previous[0], { ...previous[1], content: '.SUBCKT CORE A B\nR1 A B 2k\n.ENDS CORE\n.MODEL DFAST D(Is=2n)' }]
+  assert.doesNotThrow(() => validateModelLibraryReplacement(previous, revisedCore, [{ kind: 'subcircuit', modelName: 'AMP' }]))
 })

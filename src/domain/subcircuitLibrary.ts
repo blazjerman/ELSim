@@ -236,6 +236,26 @@ export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: 
   return required
 }
 
+/** Reject a model-library replacement only when it newly breaks a dependency used by placed parts. */
+export function validateModelLibraryReplacement(
+  previousAssets: { id: string; filename: string; content: string }[],
+  nextAssets: { id: string; filename: string; content: string }[],
+  parts: { kind: string; modelName?: string; deviceModel?: string }[],
+): void {
+  const previous = analyzeModelDependencies(previousAssets)
+  const next = analyzeModelDependencies(nextAssets)
+  const required = requiredModelAssetIds(next, parts)
+  const missingKey = (issue: ModelDependencyIssue) => [issue.assetId, issue.owner.toLowerCase(), issue.reference.toLowerCase(), issue.modelName.toLowerCase(), issue.kind].join(':')
+  const previousMissing = new Set(previous.missing.map(missingKey))
+  const newlyMissing = next.missing.find((issue) => required.has(issue.assetId) && !previousMissing.has(missingKey(issue)))
+  if (newlyMissing) throw new Error(`Replacement would break ${newlyMissing.owner}: ${newlyMissing.reference} needs ${newlyMissing.kind} ${newlyMissing.modelName}, missing from the imported project (${newlyMissing.filename}:${newlyMissing.sourceLine}).`)
+
+  const cycleKey = (chain: string[]) => [...new Set(chain.slice(0, -1).map((name) => name.toLowerCase()))].sort().join(':')
+  const previousCycles = new Set(previous.recursiveChains.map(cycleKey))
+  const newlyRecursive = next.recursiveChains.find((chain) => chain.some((name) => required.has(next.subcircuitAssets.get(name.toLowerCase()) ?? '')) && !previousCycles.has(cycleKey(chain)))
+  if (newlyRecursive) throw new Error(`Replacement would make a required subcircuit recursive: ${newlyRecursive.join(' → ')}.`)
+}
+
 export async function sha256Text(value: string): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error('This browser does not support secure SHA-256 model fingerprints.')
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
