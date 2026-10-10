@@ -1,7 +1,26 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
-import { test, expect } from '@playwright/test'
+import { test, expect, type Locator } from '@playwright/test'
+
+async function scrubToTime(slider: Locator, targetSeconds: number) {
+  let low = 0
+  let high = Number(await slider.getAttribute('max'))
+  let bestIndex = 0
+  let bestDifference = Number.POSITIVE_INFINITY
+  const output = slider.locator('xpath=following-sibling::output')
+  while (low <= high) {
+    const index = Math.floor((low + high) / 2)
+    await slider.fill(String(index))
+    const seconds = Number.parseFloat((await output.textContent()) ?? '')
+    const difference = Math.abs(seconds - targetSeconds)
+    if (difference < bestDifference) { bestDifference = difference; bestIndex = index }
+    if (seconds < targetSeconds) low = index + 1
+    else if (seconds > targetSeconds) high = index - 1
+    else break
+  }
+  await slider.fill(String(bestIndex))
+}
 
 test('quick tour explains the current workspace and project save flow', async ({ page }) => {
   await page.goto('/')
@@ -1305,6 +1324,34 @@ test('N-JFET example demonstrates zero-bias conduction and negative-gate cutoff'
   await expect(page.locator('.cursor-readout')).toContainText(/V\(gate\) = (?:0\.0+|[0-9.]+e-\d+)/)
   await expect(page.locator('.cursor-readout')).toContainText(/V\(drain\) = [0-4]\.\d+/)
   await expect.poll(async () => Number(await currentArrow.getAttribute('opacity'))).toBeGreaterThan(0)
+})
+
+test('P-JFET example demonstrates zero-bias conduction and positive-gate cutoff', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'P-JFET positive-rail switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('P-JFET positive-rail switch')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(gate)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'V(drain)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'I(j1)', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Pause result playback/ }).click()
+  const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  await scrubToTime(timeSlider, 0.025)
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(gate\) = 0\.[0-9]+/)
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(drain\) = [0-4]\.\d+/)
+  const transistor = page.locator('.circuit-part[data-part-id="pjfet-switch-j1"]')
+  await expect(transistor.locator('title')).toContainText('conventional current out of the drain terminal')
+  await expect.poll(async () => Number(await transistor.locator('.transistor-current-indicator').getAttribute('opacity'))).toBeGreaterThan(0)
+  await scrubToTime(timeSlider, 0.075)
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(gate\) = 5\.0+/)
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(drain\) = 5\.0+/)
+  await expect.poll(async () => Number(await transistor.locator('.transistor-current-indicator').getAttribute('opacity'))).toBeLessThan(0.05)
 })
 
 test('import a user NJF model and LTspice symbol, then simulate it in the browser', async ({ page }) => {

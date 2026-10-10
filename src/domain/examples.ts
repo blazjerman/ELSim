@@ -275,6 +275,38 @@ export function createJfetSwitchExampleProject(): Project {
   return project
 }
 
+/** A P-channel depletion JFET on a positive rail that turns off when its gate rises above the source. */
+export function createPjfetSwitchExampleProject(): Project {
+  const project = createStarterProject()
+  const drive: Part = { id: 'pjfet-switch-vdrive', kind: 'source', ref: 'VDRIVE', value: '5 V', pulse: { initial: '0 V', delay: '50m', rise: '1u', fall: '1u', width: '50m', period: '100m' }, x: 180, y: 600, rotation: 0 }
+  const gateResistor: Part = { id: 'pjfet-switch-rgate', kind: 'resistor', ref: 'RGATE', value: '100 Ω', x: 390, y: 500, rotation: 0 }
+  const transistor: Part = { id: 'pjfet-switch-j1', kind: 'pjfet', ref: 'J1', value: '', x: 640, y: 500, rotation: 0 }
+  const supply: Part = { id: 'pjfet-switch-vcc', kind: 'source', ref: 'VCC', value: '5 V', sourceMode: 'dc', x: 880, y: 220, rotation: 0 }
+  const load: Part = { id: 'pjfet-switch-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 880, y: 390, rotation: 90 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'P-JFET positive-rail switch'
+  project.parts = [drive, gateResistor, transistor, supply, load]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('pjfet-switch-vin-drive', 'VIN', drive, 0), labelAt('pjfet-switch-vin-rgate', 'VIN', gateResistor, 0),
+    labelAt('pjfet-switch-gate-rgate', 'GATE', gateResistor, 1), labelAt('pjfet-switch-gate-j1', 'GATE', transistor, 1),
+    labelAt('pjfet-switch-ground-drive', '0', drive, 1), labelAt('pjfet-switch-ground-source', '0', transistor, 2),
+    labelAt('pjfet-switch-vcc-source', 'VCC', supply, 0), labelAt('pjfet-switch-vcc-load', 'VCC', load, 0),
+    labelAt('pjfet-switch-ground-vcc', '0', supply, 1), labelAt('pjfet-switch-drain-load', 'DRAIN', load, 1),
+    labelAt('pjfet-switch-drain-j1', 'DRAIN', transistor, 0),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(GATE)', 'V(DRAIN)', 'I(J1)'], ranges: {} }
+  project.view = { zoom: 0.8, panX: -70, panY: -20 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A sensed 1 mA branch drives a CCCS and a CCVS in parallel comparison circuits. */
 export function createCurrentControlledSourcesExampleProject(): Project {
   const project = createStarterProject()
