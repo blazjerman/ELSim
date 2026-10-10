@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
+const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -78,6 +78,16 @@ for (const fixture of fixtures) {
     assert.ok(Math.abs(loadVoltage[0] - 1) < 1e-6, `EXP current source should start at 1 mA through 1 kΩ, got ${loadVoltage[0]} V`)
     assert.ok(Math.max(...loadVoltage) > 2.99, 'EXP current source should rise close to 3 mA through 1 kΩ')
     assert.ok(Math.abs(loadVoltage.at(-1) - 1) < 0.01, `EXP current source should return close to 1 mA through 1 kΩ, got ${loadVoltage.at(-1)} V`)
+  }
+
+  if (fixture === 'pulse-cycle-count') {
+    const samples = wasmRows.map((row) => row.trim().split(/\s+/).map(Number))
+    const at = (target) => samples.reduce((best, row) => Math.abs(row[1] - target) < Math.abs(samples[best][1] - target) ? samples.indexOf(row) : best, 0)
+    const firstPulse = samples[at(0.001)], afterPulses = samples[at(0.009)]
+    assert.ok(firstPulse[2] > 4.9, `pulse-cycle-count: voltage pulse should reach its high state during cycle one, got ${firstPulse[2]} V`)
+    assert.ok(firstPulse[3] > 0.9, `pulse-cycle-count: current source should produce the expected load voltage during cycle one, got ${firstPulse[3]} V`)
+    assert.ok(Math.abs(afterPulses[2]) < 1e-9, `pulse-cycle-count: voltage source should stop after two cycles, got ${afterPulses[2]} V`)
+    assert.ok(Math.abs(afterPulses[3]) < 1e-9, `pulse-cycle-count: current source should stop after two cycles, got ${afterPulses[3]} V`)
   }
 
   if (fixture === 'sffm-sources-transient') {

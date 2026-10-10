@@ -213,6 +213,16 @@ test('current-source SINE settings survive project archive round-trip', () => {
   assert.deepEqual(restored.parts.find((part) => part.id === source.id).sine, source.sine)
 })
 
+test('pulse cycle counts survive project archive round-trip', () => {
+  const project = createStarterProject()
+  const settings = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '4m', cycleCount: '2' }
+  const source = { id: 'archive-pulse-v1', kind: 'source', ref: 'V2', value: '5', sourceMode: 'pulse', pulse: settings, x: 700, y: 500, rotation: 0 }
+  project.parts.push(source)
+  project.sheets[0].parts = project.parts
+  const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  assert.deepEqual(restored.parts.find((part) => part.id === source.id).pulse, settings)
+})
+
 test('voltage EXP settings survive project archive round-trip', () => {
   const project = createStarterProject()
   const settings = { initial: '0', pulsed: '5', riseDelay: '1m', riseTau: '10u', fallDelay: '4m', fallTau: '20u' }

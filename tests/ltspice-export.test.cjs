@@ -289,6 +289,25 @@ test('reports retained imported LTspice attributes omitted from generated schema
   assert.match(loss.explanation, /SPICELINE, VENDORTAG/)
 })
 
+test('pulse cycle counts survive LTspice export and reimport for both source kinds', async () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'tran'
+  const voltage = project.parts.find((part) => part.kind === 'source')
+  voltage.pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '4m', cycleCount: '2' }
+  const current = { id: 'export-pulse-cycle-i1', kind: 'currentSource', ref: 'I1', value: '1m', sourceMode: 'pulse', pulse: { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '4m', cycleCount: '3' }, x: 720, y: 520, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName V1\nSYMATTR Value PULSE\(0 5 0 1u 1u 2m 4m 2\)/)
+  assert.match(asc.content, /SYMATTR InstName I1\nSYMATTR Value PULSE\(0 1m 0 1u 1u 2m 4m 3\)/)
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `pulse-count-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project.parts
+  assert.equal(restored.find((part) => part.ref === 'V1').pulse.cycleCount, '2')
+  assert.equal(restored.find((part) => part.ref === 'I1').pulse.cycleCount, '3')
+})
+
 test('exports and reimports supported PWL source points', async () => {
   const project = createStarterProject()
   project.parts[0].sourceMode = 'pwl'

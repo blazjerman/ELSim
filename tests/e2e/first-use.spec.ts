@@ -787,7 +787,7 @@ test('voltage source SINE waveform is editable and runs in the browser ngspice e
   await expect(page.locator('.netlist-panel pre')).toContainText(/V1 vin 0 SIN\(1 2 1k 0 0 90\)/)
   await page.getByRole('slider', { name: 'Simulation time' }).press('End')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')
-  await expect(source.locator('title')).toContainText(/V = 3(?:\.0+)? V/)
+  await expect(source.locator('title')).toContainText(/3(?:\.0+)? V across pins/)
 })
 
 test('LTspice voltage EXP waveform is editable and simulates in the browser engine', async ({ page }) => {
@@ -881,7 +881,7 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', a
   await expect(page.getByRole('row', { name: /V\(out\).*1\.000000 V/i })).toBeVisible()
 })
 
-test('current-source inspector edits a repeating PULSE waveform', async ({ page }) => {
+test('current-source inspector edits a finite-cycle PULSE waveform', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
@@ -897,8 +897,9 @@ test('current-source inspector edits a repeating PULSE waveform', async ({ page 
   await waveform.selectOption('pulse')
   await page.getByRole('textbox', { name: 'Current (A)', exact: true }).fill('2mA')
   await page.getByLabel('Initial current (A)').fill('-1mA')
+  await page.getByLabel('Number of cycles (0 = unlimited)').fill('2')
   await page.getByRole('button', { name: 'Netlist', exact: true }).click()
-  await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PULSE\(-1m 2m 0 1u 1u 50m 100m\)/)
+  await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PULSE\(-1m 2m 0 1u 1u 50m 100m 2\)/)
   await waveform.selectOption('pwl')
   await expect(page.getByText('Current (A)', { exact: true })).toBeVisible()
   await expect(page.getByLabel('PWL point 2 current')).toHaveValue('5m')
@@ -1232,8 +1233,9 @@ test('voltage source inspector edits DC, pulse, and validated PWL transient beha
   await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 DC 5')
   await waveform.selectOption('pulse')
   await page.getByLabel('Period', { exact: true }).fill('20m')
+  await page.getByLabel('Number of cycles (0 = unlimited)').fill('3')
   await page.getByRole('button', { name: 'Netlist', exact: true }).click()
-  await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 PULSE(0 5 0 1u 1u 50m 20m)')
+  await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 PULSE(0 5 0 1u 1u 50m 20m 3)')
   await expect(page.getByLabel('Initial voltage (V)')).toHaveValue('0')
   await waveform.selectOption('pwl')
   await page.getByLabel('PWL point 2 time').fill('2m')

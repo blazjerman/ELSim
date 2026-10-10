@@ -672,3 +672,19 @@ test('SFFM source order converts LTspice fields to ngspice fields for voltage an
   voltage.sffm.modulationIndex = '20'
   assert.ok(validateAnalysisSettings(project).some((error) => error.field === 'sffm.modulationIndex'))
 })
+
+
+test('pulse source cycle counts are emitted for voltage/current and validated as nonnegative integers', () => {
+  const project = createStarterProject()
+  const voltage = project.parts.find((part) => part.kind === 'source')
+  voltage.pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '4m', cycleCount: '2' }
+  const current = { id: 'cycle-count-i1', kind: 'currentSource', ref: 'I1', value: '1m', sourceMode: 'pulse', pulse: { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '4m', cycleCount: '3' }, x: 700, y: 500, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 PULSE\(0 5 0 1u 1u 2m 4m 2\)$/m)
+  assert.match(artifact.text, /^I1 .* .* PULSE\(0 1m 0 1u 1u 2m 4m 3\)$/m)
+  voltage.pulse.cycleCount = '-1'
+  assert.ok(validateAnalysisSettings(project).some((error) => error.field === 'pulse.cycleCount'))
+})

@@ -59,10 +59,11 @@ function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'p
       return { value: amplitude, mode: 'sine', sine: { offset, amplitude, frequency, delay, damping, phase } }
     }
   }
-  const generatedPulse = trimmed.match(/^PULSE\(\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\)$/i)
-  if (generatedPulse && generatedPulse.slice(1).every((entry) => validScalar(entry))) {
-    const [, initial, high, delay, rise, fall, width, period] = generatedPulse
-    return { value: high, mode: 'pulse', pulse: { initial, delay, rise, fall, width, period } }
+  const generatedPulse = trimmed.match(/^PULSE\(\s*([^()]*)\s*\)$/i)
+  const pulseValues = generatedPulse?.[1].trim().split(/[\s,]+/).filter(Boolean) ?? []
+  if ((pulseValues.length === 7 || pulseValues.length === 8) && pulseValues.slice(0, 7).every(validScalar) && (pulseValues[7] === undefined || /^(?:0|[1-9]\d*)$/.test(pulseValues[7]))) {
+    const [initial, high, delay, rise, fall, width, period, cycleCount] = pulseValues
+    return { value: high, mode: 'pulse', pulse: { initial, delay, rise, fall, width, period, ...(cycleCount === undefined ? {} : { cycleCount }) } }
   }
   const generatedPwl = trimmed.match(/^PWL\(\s*([^()]*)\s*\)$/i)
   if (generatedPwl) {

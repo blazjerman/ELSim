@@ -300,9 +300,14 @@
             "period": {
               "type": "string",
               "maxLength": 64
+            },
+            "cycleCount": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Optional nonnegative whole number of pulses; zero or omission means repeat indefinitely."
             }
           },
-          "description": "Optional LTspice-compatible voltage or current pulse level and timing; omitted fields use the ELSim default pulse."
+          "description": "Optional LTspice-compatible voltage or current pulse level, timing, and cycle count; omitted fields use the ELSim default pulse."
         },
         "sine": {
           "type": "object",

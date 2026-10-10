@@ -247,7 +247,9 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
       const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
       const values = [scalar(pulse.initial, 'a'), scalar(pulse.delay, 's'), scalar(pulse.rise, 's'), scalar(pulse.fall, 's'), scalar(pulse.width, 's'), scalar(pulse.period, 's')]
       if (values.some((entry) => entry === null) || scalarMagnitude(pulse.period, 's')! <= 0) return null
-      return { value: `PULSE(${values[0]} ${value} ${values[1]} ${values[2]} ${values[3]} ${values[4]} ${values[5]})`, ...(value2 ? { value2 } : {}) }
+      const cycleCount = part.pulse?.cycleCount?.trim() ?? ''
+      if (cycleCount && !/^(?:0|[1-9]\d*)$/.test(cycleCount)) return null
+      return { value: `PULSE(${values[0]} ${value} ${values[1]} ${values[2]} ${values[3]} ${values[4]} ${values[5]}${cycleCount ? ` ${cycleCount}` : ''})`, ...(value2 ? { value2 } : {}) }
     }
     return { value, ...(value2 ? { value2 } : {}) }
   }
@@ -303,8 +305,10 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
       return { value: output, ...(value2 ? { value2 } : {}) }
     }
     if (isTransient && part.sourceMode !== 'dc' && pulseValues.some((entry) => entry === null)) return null
+    const cycleCount = part.pulse?.cycleCount?.trim() ?? ''
+    if (cycleCount && !/^(?:0|[1-9]\d*)$/.test(cycleCount)) return null
     const output = isTransient && part.sourceMode !== 'dc'
-      ? `PULSE(${pulseValues[0]} ${value} ${pulseValues[1]} ${pulseValues[2]} ${pulseValues[3]} ${pulseValues[4]} ${pulseValues[5]})`
+      ? `PULSE(${pulseValues[0]} ${value} ${pulseValues[1]} ${pulseValues[2]} ${pulseValues[3]} ${pulseValues[4]} ${pulseValues[5]}${cycleCount ? ` ${cycleCount}` : ''})`
       : value
     const acMagnitude = part.acMagnitude ?? (project.simulation.analysis === 'ac' ? project.simulation.sourceAcMagnitude ?? '1 V' : undefined)
     const acScalar = acMagnitude === undefined ? undefined : scalar(acMagnitude, 'v')

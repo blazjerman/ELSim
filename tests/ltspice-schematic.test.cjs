@@ -63,6 +63,19 @@ test('imports LTspice SFFM source parameters without reordering in project data'
   assert.match(createNetlist(project), /^V1 .* .* SFFM\(0 1 1k 5 100\)$/m)
 })
 
+test('imports finite LTspice voltage and current pulse cycle counts', () => {
+  const voltageSymbol = { ...symbol, id: 'symbol-voltage-pulse-cycles', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
+  const currentSymbol = { ...symbol, id: 'symbol-current-pulse-cycles', filename: 'current.asy', content: symbol.content.replace('Prefix R', 'Prefix I') }
+  const voltage = parseLtspiceSchematic(['Version 4', 'SYMBOL voltage 32 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value PULSE(0 5 0 1u 1u 2m 4m 2)'].join('\n'), 'pulse-count.asc', [voltageSymbol])
+  assert.deepEqual(voltage.warnings, [])
+  assert.deepEqual(voltage.project.parts[0].pulse, { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '4m', cycleCount: '2' })
+  assert.match(createNetlist(voltage.project), /^V1 .* .* PULSE\(0 5 0 1u 1u 2m 4m 2\)$/m)
+  const current = parseLtspiceSchematic(['Version 4', 'SYMBOL current 0 0 R0', 'SYMATTR InstName I1', 'SYMATTR Value PULSE(0 1m 0 1u 1u 2m 4m 3)'].join('\n'), 'current-pulse-count.asc', [currentSymbol])
+  assert.deepEqual(current.warnings, [])
+  assert.deepEqual(current.project.parts[0].pulse, { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '4m', cycleCount: '3' })
+  assert.match(createNetlist(current.project), /^I1 .* .* PULSE\(0 1m 0 1u 1u 2m 4m 3\)$/m)
+})
+
 test('imports engineering-suffixed SINE damping and defaults omitted optional fields', () => {
   const voltageSymbol = { ...symbol, id: 'symbol-voltage-sine-suffix', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
   const asc = ['Version 4', 'SHEET 1 880 680', 'SYMBOL voltage 32 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value SINE(0 5 2k 1m 4k)', 'TEXT 0 100 Left 2 !.tran 0 10m 0 10u'].join('\n')

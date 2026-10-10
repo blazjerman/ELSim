@@ -93,7 +93,7 @@ function spiceSffm(part: Part): string | null {
   return `SFFM(${offset} ${amplitude} ${carrier} ${index} ${signal})`
 }
 
-export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
+export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
@@ -114,6 +114,7 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
         const invalid = magnitude === null || magnitude < 0 || (key === 'period' && magnitude <= 0)
         if (invalid) add(`pulse.${key}`, `${part.ref} ${key} must be a valid ${key === 'period' ? 'positive' : 'nonnegative'} time value.`, part.id)
       }
+      if (pulse.cycleCount !== undefined && pulse.cycleCount.trim() !== '' && !/^(?:0|[1-9]\d*)$/.test(pulse.cycleCount.trim())) add('pulse.cycleCount', `${part.ref} pulse cycle count must be a nonnegative whole number; zero repeats indefinitely.`, part.id, 'pulse.cycleCount')
     }
     for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'sine')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
@@ -347,7 +348,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
           continue
         }
-        transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period})`
+        const cycleCount = part.pulse?.cycleCount?.trim()
+        if (cycleCount && !/^(?:0|[1-9]\d*)$/.test(cycleCount)) {
+          const message = `${part.ref} pulse cycle count must be a nonnegative whole number.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period}${cycleCount ? ` ${cycleCount}` : ''})`
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'exp') {
         const exponential = spiceExponential(part)
         if (!exponential) {
@@ -473,7 +481,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
           continue
         }
-        transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period})`
+        const cycleCount = part.pulse?.cycleCount?.trim()
+        if (cycleCount && !/^(?:0|[1-9]\d*)$/.test(cycleCount)) {
+          const message = `${part.ref} pulse cycle count must be a nonnegative whole number.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period}${cycleCount ? ` ${cycleCount}` : ''})`
       }
       append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'dc' ? `DC ${value}` : transientValue}`, part.id, 'component')
     }
