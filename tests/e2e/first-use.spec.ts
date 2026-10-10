@@ -559,6 +559,29 @@ test('portable export names imported files and asks before including unknown-lic
   expect(download.suggestedFilename()).toMatch(/\.elsim$/)
 })
 
+test('opening a project asks before replacing the current circuit', async ({ page }) => {
+  await page.goto('/')
+  const currentName = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)
+  const importedProject = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.name = 'Imported round-trip design'
+    project.parts[1].value = '2.2 kΩ'
+    project.sheets.find((sheet: { id: string }) => sheet.id === project.activeSheetId).parts = project.parts
+    return project
+  })
+  const file = { name: 'round-trip.elsim.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(importedProject)) }
+  const openInput = page.locator('input[accept^=".elsim,.json"]')
+
+  page.once('dialog', (dialog) => dialog.dismiss())
+  await openInput.setInputFiles(file)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)).toBe(currentName)
+
+  page.once('dialog', (dialog) => dialog.accept())
+  await openInput.setInputFiles(file)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)).toBe('Imported round-trip design')
+  await expect(page.getByText('Opened Imported round-trip design')).toBeVisible()
+})
+
 test('LTspice export preview gates unknown-license model ZIPs and reports blockers', async ({ page }) => {
   await page.goto('/')
   const content = '.MODEL USER_D D(Is=1e-14)\n'
