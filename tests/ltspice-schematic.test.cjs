@@ -40,6 +40,35 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
   assert.notEqual(positive, pinNet(connectivity, pins, 1))
 })
 
+test('imports supported LTspice B-source voltage and current expressions as behavioral sources', () => {
+  const behavioralSymbol = { ...symbol, id: 'symbol-behavioral', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
+  const resistorSymbol = { ...symbol, id: 'symbol-resistor-load', filename: 'res.asy' }
+  const voltageAsc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V={2*V(IN)}'].join('\n')
+  const voltage = parseLtspiceSchematic(voltageAsc, 'behavioral-voltage.asc', [behavioralSymbol])
+  assert.deepEqual(voltage.warnings, [])
+  assert.equal(voltage.project.parts[0].kind, 'behavioral')
+  assert.equal(voltage.project.parts[0].behavioralOutput, 'voltage')
+  assert.equal(voltage.project.parts[0].value, '2*V(IN)')
+  assert.match(createNetlist(voltage.project), /^B1\s+IN\s+OUT\s+V=\{2\*V\(IN\)\}$/m)
+
+  const currentAsc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value I={I(R1)}', 'SYMBOL res 120 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k'].join('\n')
+  const current = parseLtspiceSchematic(currentAsc, 'behavioral-current.asc', [behavioralSymbol, resistorSymbol])
+  assert.equal(current.project.parts[0].kind, 'behavioral')
+  assert.equal(current.project.parts[0].behavioralOutput, 'current')
+  assert.equal(current.project.parts[0].value, 'I(R1)')
+  assert.match(createNetlist(current.project), /^B1\s+IN\s+OUT\s+I=\{I\(R1\)\}$/m)
+})
+
+test('skips LTspice B sources outside the behavioral expression subset with a source-preserving warning', () => {
+  const behavioralSymbol = { ...symbol, id: 'symbol-unsupported-behavioral', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
+  const asc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V=table(V(IN),0,0,1,1)'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'unsupported-behavioral.asc', [behavioralSymbol])
+  assert.equal(project.parts.length, 0)
+  assert.equal(project.importedSchematicSource.originalText, asc)
+  assert.match(warnings[0], /LTspice behavioral source B1 was skipped: Function “table” is not supported/)
+  assert.match(warnings[0], /original schematic source is preserved/)
+})
+
 test('imports an LTspice voltage SINE waveform with optional delay, damping, and phase', () => {
   const voltageSymbol = { ...symbol, id: 'symbol-voltage-sine', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
   const asc = ['Version 4', 'SHEET 1 880 680', 'SYMBOL voltage 32 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value SINE(1 2 1k 3m 4 90)', 'TEXT 0 100 Left 2 !.tran 0 10m 0 10u'].join('\n')

@@ -4,6 +4,7 @@ import { parseSubcircuitLibrary } from './subcircuitLibrary'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
 import { componentCurrentVector } from './probe'
 import { analyzeConnectivity, pinNet } from './connectivity'
+import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 
 type AscSymbol = { name: string; x: number; y: number; rotation: number; flipX: boolean; attributes: Record<string, string>; rawRecords: string[]; line: number }
 export type LtspiceSchematicImport = { project: Project; warnings: string[] }
@@ -338,7 +339,8 @@ function partKind(symbol: AscSymbol, prefix: string, modelValue: string, subcirc
   if (key === 'I') return { kind: 'currentSource' }
   if (key === 'C') return { kind: 'capacitor' }
   if (key === 'L') return { kind: 'inductor' }
-  if (key === 'V' || key === 'B') return { kind: 'source' }
+  if (key === 'V') return { kind: 'source' }
+  if (key === 'B') return { kind: 'behavioral' }
   if (key === 'S') return { kind: 'switch' }
   if (key === 'E') return { kind: 'vcvs' }
   if (key === 'G') return { kind: 'vccs' }
@@ -492,13 +494,15 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const identity = symbol.attributes.INSTNAME
     const sourcePrefix = symbol.attributes.INSTNAME?.[0]?.toUpperCase()
     const rawValue = symbol.attributes.VALUE ?? symbol.attributes.VALUE2 ?? ''
+    const behavioralRecord = sourcePrefix === 'B' ? rawValue.trim().match(/^([VI])\s*=\s*(.+)$/i) : null
+    const behavioralExpression = behavioralRecord?.[2].trim().replace(/^\{([\s\S]*)\}$/, '$1').trim()
     const valueAc = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceAc(rawValue) : null
     const value2Ac = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceAc(symbol.attributes.VALUE2) : null
     const representedValueAttribute = valueAc && symbol.attributes.VALUE2 !== undefined ? 'VALUE2' : symbol.attributes.VALUE !== undefined ? 'VALUE' : 'VALUE2'
     const fallbackSourceValue = valueAc ? (symbol.attributes.VALUE2 && !value2Ac ? symbol.attributes.VALUE2 : '0') : rawValue
     const parsedWaveform = sourcePrefix === 'V' || sourcePrefix === 'I' ? valueAc ? { ...sourceValue(fallbackSourceValue, pwlFiles), mode: 'dc' as const } : sourceValue(rawValue, pwlFiles) : { value: rawValue }
     const parsedSource = parsedWaveform
-    const value = parsedSource.value
+    const value = behavioralExpression ?? parsedSource.value
     if (!identity || !/^[A-Za-z][A-Za-z0-9_]*$/.test(identity)) { warnings.push(`Line ${symbol.line}: ${symbol.name} is missing a valid SYMATTR InstName and was skipped.`); continue }
     const sidecar = symbolByName.get(baseName(symbol.name))
     if (!sidecar) { warnings.push(`Line ${symbol.line}: symbol ${symbol.name} (${identity}) is missing its .asy sidecar and was skipped.`); continue }
@@ -563,6 +567,22 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     if (pins.length !== expectedPinCount) { warnings.push(`Line ${symbol.line}: ${symbol.name} has ${pins.length} pins but ${identity} requires ${expectedPinCount}; it was skipped.`); continue }
     if (expectedPinNames && pins.some((pin, index) => pin.name.toLowerCase() !== expectedPinNames[index]?.toLowerCase())) { warnings.push(`Line ${symbol.line}: ${symbol.name} SpiceOrder pin names do not match ${mapped.modelName}; it was skipped.`); continue }
     const kind = mapped.kind
+    let behavioralOutput: Part['behavioralOutput'] | undefined
+    if (kind === 'behavioral') {
+      if (!behavioralRecord || !behavioralExpression) {
+        warnings.push(`Line ${symbol.line}: LTspice behavioral source ${identity} must use a V= or I= expression; it was skipped and preserved in the original schematic source.`)
+        continue
+      }
+      behavioralOutput = behavioralRecord[1].toUpperCase() === 'I' ? 'current' : 'voltage'
+      try {
+        const parsed = parseBehavioralExpression(behavioralExpression)
+        validateBehavioralReferences(parsed.references, flags.map((flag) => flag.name), symbols.flatMap((candidate) => candidate.attributes.INSTNAME ? [candidate.attributes.INSTNAME] : []))
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'the expression or one of its references is unsupported.'
+        warnings.push(`Line ${symbol.line}: LTspice behavioral source ${identity} was skipped: ${message} The original schematic source is preserved.`)
+        continue
+      }
+    }
     const isCurrentControlled = kind === 'cccs' || kind === 'ccvs'
     const controlSource = isCurrentControlled ? symbol.attributes.VALUE?.trim() : undefined
     const coefficient = isCurrentControlled ? symbol.attributes.VALUE2?.trim() ?? '' : value
@@ -606,6 +626,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...(kind === 'subcircuit' ? { modelName: mapped.modelName, modelPins: [...pins.map((pin) => pin.name)], ...(childSheet ? { sheetId: childSheet.id, sheetPortLayout: childSheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })) } : {}) } : {}),
       ...(mapped.deviceModel ? { deviceModel: mapped.deviceModel } : {}),
       ...(isCurrentControlled ? { controlSource } : {}),
+      ...(behavioralOutput ? { behavioralOutput } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.sine ? { sine: parsedSource.sine } : {}),
