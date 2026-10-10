@@ -53,7 +53,7 @@ test('LTspice parameter arithmetic imports while unsupported expressions are pre
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).importedSchematicSource.originalText)).toBe(source)
 })
 
-test('quick tour can run the open circuit directly from its simulation step', async ({ page }) => {
+test('quick tour can run the open circuit directly from its simulation step', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -68,7 +68,7 @@ test('quick tour can run the open circuit directly from its simulation step', as
   await expect(page.getByRole('button', { name: 'V\(vout\)', exact: true })).toBeVisible()
 })
 
-test('toggling an interactive switch reruns a current circuit automatically', async ({ page }) => {
+test('toggling an interactive switch reruns a current circuit automatically', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -164,7 +164,7 @@ test('component cards explain behavior on hover and keyboard focus', async ({ pa
   await expect.poll(() => resistor.evaluate((element) => getComputedStyle(element, '::after').visibility)).toBe('visible')
 })
 
-test('AC source validation focuses its inspector field before simulation', async ({ page }) => {
+test('AC source validation focuses its inspector field before simulation', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')
   await source.click()
@@ -485,7 +485,7 @@ test('fit schematic view frames distant parts, wires, and labels', async ({ page
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view.panX)).not.toBe(0)
 })
 
-test('first use: run the RC starter and inspect its solved waveform', async ({ page }) => {
+test('first use: run the RC starter and inspect its solved waveform', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
 
@@ -604,7 +604,7 @@ test('first use: run the RC starter and inspect its solved waveform', async ({ p
   expect(pageErrors).toEqual([])
 })
 
-test('first use: run the RC starter and inspect its solved waveform with a time-windowed measurement', async ({ page }) => {
+test('first use: run the RC starter and inspect its solved waveform with a time-windowed measurement', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before testing measurement windows').toEqual([])
   await page.goto('/')
@@ -623,7 +623,7 @@ test('first use: run the RC starter and inspect its solved waveform with a time-
   expect(result).toBeLessThan(5)
 })
 
-test('first use: reduced-motion preference pauses result animation but keeps manual playback', async ({ page }) => {
+test('first use: reduced-motion preference pauses result animation but keeps manual playback', { tag: '@ngspice' }, async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
@@ -638,7 +638,7 @@ test('first use: reduced-motion preference pauses result animation but keeps man
   await expect.poll(async () => Number(await slider.inputValue())).toBeGreaterThan(0)
 })
 
-test('import, place, and simulate a user-supplied IC with its symbol', async ({ page }) => {
+test('import, place, and simulate a user-supplied IC with its symbol', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
@@ -694,7 +694,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
   expect(pageErrors).toEqual([])
 })
 
-test('imported LTspice .ic node and inductor values run through ngspice', async ({ page }) => {
+test('imported LTspice .ic node and inductor values run through ngspice', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -729,7 +729,7 @@ test('imported LTspice .ic node and inductor values run through ngspice', async 
   await expect(page.locator('.measurement-results')).toContainText('IPEAK')
 })
 
-test('LTspice capacitor SpiceLine IC starts the ngspice transient at its imported voltage', async ({ page }) => {
+test('LTspice capacitor SpiceLine IC starts the ngspice transient at its imported voltage', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -761,7 +761,7 @@ test('LTspice capacitor SpiceLine IC starts the ngspice transient at its importe
   await expect(page.locator('.cursor-readout')).toContainText(/V\(out\) = 2(?:\.0+)? V/)
 })
 
-test('capacitor initial voltage editor starts the transient at the requested voltage', async ({ page }) => {
+test('capacitor initial voltage editor starts the transient at the requested voltage', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -975,7 +975,7 @@ test('wire segment drag reroutes its path and viewport gestures preserve the cir
   await expect.poll(async () => Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))).toBeGreaterThan(beforeZoom)
 })
 
-test('RLC example opens and solves with capacitor-voltage and inductor-current probes', async ({ page }) => {
+test('RLC example opens and solves with capacitor-voltage and inductor-current probes', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1002,7 +1002,7 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   expect(arrowPath?.startsWith(titleText?.includes('from pin 1 toward pin 2') ? 'M-10' : 'M10')).toBe(true)
 })
 
-test('diode rectifier example clips the negative half-cycle in the browser engine', async ({ page }) => {
+test('diode rectifier example clips the negative half-cycle in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1029,7 +1029,7 @@ test('diode rectifier example clips the negative half-cycle in the browser engin
 })
 
 
-test('voltage source SINE waveform is editable and runs in the browser ngspice engine', async ({ page }) => {
+test('voltage source SINE waveform is editable and runs in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1050,7 +1050,7 @@ test('voltage source SINE waveform is editable and runs in the browser ngspice e
   await expect(source.locator('title')).toContainText(/3(?:\.0+)? V across pins/)
 })
 
-test('LTspice voltage EXP waveform is editable and simulates in the browser engine', async ({ page }) => {
+test('LTspice voltage EXP waveform is editable and simulates in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1068,7 +1068,7 @@ test('LTspice voltage EXP waveform is editable and simulates in the browser engi
   await expect(page.locator('.netlist-panel pre')).toContainText(/V1 vin 0 EXP\(0 5 1m 100u 4m 100u\)/)
 })
 
-test('voltage SFFM waveform preserves LTspice fields and runs in the browser engine', async ({ page }) => {
+test('voltage SFFM waveform preserves LTspice fields and runs in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1085,7 +1085,7 @@ test('voltage SFFM waveform preserves LTspice fields and runs in the browser eng
   await expect(page.locator('.netlist-panel pre')).toContainText(/V1 vin 0 SFFM\(0 1 1k 5 100\)/)
 })
 
-test('PWL waveform example opens with editable points and solves the RC response', async ({ page }) => {
+test('PWL waveform example opens with editable points and solves the RC response', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1103,7 +1103,7 @@ test('PWL waveform example opens with editable points and solves the RC response
   await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
 })
 
-test('PWL source can repeat forever in the browser ngspice engine', async ({ page }) => {
+test('PWL source can repeat forever in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser test').toEqual([])
   await page.goto('/')
@@ -1128,7 +1128,7 @@ test('PWL source can repeat forever in the browser ngspice engine', async ({ pag
   await expect(page.getByRole('button', { name: 'V\(vin\)', exact: true })).toBeVisible()
 })
 
-test('finite PWL repeat count is editable and runs in the browser ngspice engine', async ({ page }) => {
+test('finite PWL repeat count is editable and runs in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1159,7 +1159,7 @@ test('finite PWL repeat count is editable and runs in the browser ngspice engine
   await expect(page.getByRole('button', { name: 'V\(vin\)', exact: true })).toBeVisible()
 })
 
-test('LTspice PWL file source imports its table and simulates in the browser engine', async ({ page }) => {
+test('LTspice PWL file source imports its table and simulates in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -1193,7 +1193,7 @@ test('LTspice PWL file source imports its table and simulates in the browser eng
 })
 
 
-test('LTspice current-source SINE waveform edits and simulates in the browser engine', async ({ page }) => {
+test('LTspice current-source SINE waveform edits and simulates in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1216,7 +1216,7 @@ test('LTspice current-source SINE waveform edits and simulates in the browser en
   await expect(page.locator('.netlist-panel pre')).toContainText(/I1 0 OUT SIN\(1m 2m 1k 0 0 0\)/)
 })
 
-test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', async ({ page }) => {
+test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1256,7 +1256,7 @@ test('current-source inspector edits a finite-cycle PULSE waveform', async ({ pa
   await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\)/)
 })
 
-test('stop terminates an active ngspice run and leaves the workspace responsive', async ({ page }) => {
+test('stop terminates an active ngspice run and leaves the workspace responsive', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1274,7 +1274,7 @@ test('stop terminates an active ngspice run and leaves the workspace responsive'
   await expect(page.getByRole('dialog', { name: 'Open a working circuit' })).toBeVisible()
 })
 
-test('controlled-source example opens and solves with input and output probes', async ({ page }) => {
+test('controlled-source example opens and solves with input and output probes', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1299,7 +1299,7 @@ test('controlled-source example opens and solves with input and output probes', 
   await expect(page.locator('.cursor-readout')).toContainText(/V\(gout\) = -1\.0+/)
 })
 
-test('transistor switch example demonstrates base drive and collector switching', async ({ page }) => {
+test('transistor switch example demonstrates base drive and collector switching', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1328,7 +1328,7 @@ test('transistor switch example demonstrates base drive and collector switching'
   await expect(page.locator('.cursor-readout')).toContainText(/V\(collector\) = 5\.0+/)
 })
 
-test('PNP switch example demonstrates active-low base drive and high-side load switching', async ({ page }) => {
+test('PNP switch example demonstrates active-low base drive and high-side load switching', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1358,7 +1358,7 @@ test('PNP switch example demonstrates active-low base drive and high-side load s
   await expect.poll(async () => Number(await currentArrow.getAttribute('opacity'))).toBeLessThan(0.05)
 })
 
-test('MOSFET switch example demonstrates gate drive and drain switching', async ({ page }) => {
+test('MOSFET switch example demonstrates gate drive and drain switching', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1387,7 +1387,7 @@ test('MOSFET switch example demonstrates gate drive and drain switching', async 
   await expect(page.locator('.cursor-readout')).toContainText(/V\(drain\) = 5\.0+/)
 })
 
-test('PMOS switch example demonstrates active-low high-side switching', async ({ page }) => {
+test('PMOS switch example demonstrates active-low high-side switching', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1416,7 +1416,7 @@ test('PMOS switch example demonstrates active-low high-side switching', async ({
   await expect(page.locator('.cursor-readout')).toContainText(/V\(drain\) = (?:0\.0+|[0-9.]+e-)/)
 })
 
-test('N-JFET example demonstrates zero-bias conduction and negative-gate cutoff', async ({ page }) => {
+test('N-JFET example demonstrates zero-bias conduction and negative-gate cutoff', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1445,7 +1445,7 @@ test('N-JFET example demonstrates zero-bias conduction and negative-gate cutoff'
   await expect.poll(async () => Number(await currentArrow.getAttribute('opacity'))).toBeGreaterThan(0)
 })
 
-test('P-JFET example demonstrates zero-bias conduction and positive-gate cutoff', async ({ page }) => {
+test('P-JFET example demonstrates zero-bias conduction and positive-gate cutoff', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1478,7 +1478,7 @@ test('P-JFET example demonstrates zero-bias conduction and positive-gate cutoff'
   await expect(lesson).toHaveCount(0)
 })
 
-test('import a user NJF model and LTspice symbol, then simulate it in the browser', async ({ page }) => {
+test('import a user NJF model and LTspice symbol, then simulate it in the browser', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -1534,7 +1534,7 @@ test('import a user NJF model and LTspice symbol, then simulate it in the browse
   await expect(jfet).toHaveCount(1)
 })
 
-test('one LTspice import loads its schematic, symbol, and user IC model together', async ({ page }) => {
+test('one LTspice import loads its schematic, symbol, and user IC model together', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -1566,7 +1566,7 @@ test('one LTspice import loads its schematic, symbol, and user IC model together
   await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()
 })
 
-test('LTspice B-source voltage expression imports and solves in the browser engine', async ({ page }) => {
+test('LTspice B-source voltage expression imports and solves in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -1598,7 +1598,7 @@ test('LTspice B-source voltage expression imports and solves in the browser engi
   await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()
 })
 
-test('user-provided op-amp IC model imports and simulates with ordered pins', async ({ page }) => {
+test('user-provided op-amp IC model imports and simulates with ordered pins', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
@@ -1630,7 +1630,7 @@ test('user-provided op-amp IC model imports and simulates with ordered pins', as
   expect(pageErrors).toEqual([])
 })
 
-test('current-controlled sources example shows CCCS gain and CCVS transresistance', async ({ page }) => {
+test('current-controlled sources example shows CCCS gain and CCVS transresistance', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -1755,7 +1755,7 @@ test('circuit checks explain and select a current-controlled source with no cont
   await expect(page.locator('.circuit-part[data-part-id="current-f1"].selected')).toHaveCount(1)
 })
 
-test('ngspice stderr errors identify the imported model line and unsupported function', async ({ page }) => {
+test('ngspice stderr errors identify the imported model line and unsupported function', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -1894,7 +1894,7 @@ test('lamp palette item exposes resistance and nominal animation power', async (
   await expect(page.getByText(/no thermal filament behavior is simulated/i)).toBeVisible()
 })
 
-test('phone-width workspace switches panels without horizontal page scrolling', async ({ page }) => {
+test('phone-width workspace switches panels without horizontal page scrolling', { tag: '@ngspice' }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
   await expect(page.getByRole('navigation', { name: 'Workspace panels' })).toBeVisible()
@@ -1916,7 +1916,7 @@ test('phone-width workspace switches panels without horizontal page scrolling', 
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
 })
 
-test('waveform click moves the cursor while drag pans and persists the plot range', async ({ page }) => {
+test('waveform click moves the cursor while drag pans and persists the plot range', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
@@ -1941,7 +1941,7 @@ test('waveform click moves the cursor while drag pans and persists the plot rang
   await expect(page.locator('.plot-cursor')).toBeAttached()
 })
 
-test('AC waveform supports frequency cursor and persistent drag-pan', async ({ page }) => {
+test('AC waveform supports frequency cursor and persistent drag-pan', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
   await page.getByLabel('Analysis type').selectOption('ac')
@@ -1970,7 +1970,7 @@ test('AC waveform supports frequency cursor and persistent drag-pan', async ({ p
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.ranges.ac.start)).not.toBe(zoomedRange.start)
 })
 
-test('DC sweep waveform supports source cursor and persistent drag-pan', async ({ page }) => {
+test('DC sweep waveform supports source cursor and persistent drag-pan', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByLabel('Analysis type').selectOption('dc')
   await page.getByRole('button', { name: 'Run simulation' }).click()
@@ -1991,7 +1991,7 @@ test('DC sweep waveform supports source cursor and persistent drag-pan', async (
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.ranges.dc.start)).not.toBe(zoomedRange.start)
 })
 
-test('three-parameter sweep runs all eight bounded cases in the browser engine', async ({ page }) => {
+test('three-parameter sweep runs all eight bounded cases in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
     const key = 'elsim:project:v7'
@@ -2018,7 +2018,7 @@ test('three-parameter sweep runs all eight bounded cases in the browser engine',
   expect(labels).toContain('R1=2000 Ω, C1=0.00002 F, V1=1 V')
 })
 
-test('pulse source high levels can be swept in the browser ngspice engine', async ({ page }) => {
+test('pulse source high levels can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2045,7 +2045,7 @@ test('pulse source high levels can be swept in the browser ngspice engine', asyn
   expect(labels.some((label) => label.includes('V1=4 V'))).toBe(true)
 })
 
-test('PWL source point can be swept in the browser ngspice engine', async ({ page }) => {
+test('PWL source point can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2076,7 +2076,7 @@ test('PWL source point can be swept in the browser ngspice engine', async ({ pag
   expect(labels.some((label) => label.includes('V1.pwl.point.2=3 V'))).toBe(true)
 })
 
-test('SINE source amplitude can be swept in the browser ngspice engine', async ({ page }) => {
+test('SINE source amplitude can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2102,7 +2102,7 @@ test('SINE source amplitude can be swept in the browser ngspice engine', async (
   expect(labels.some((label) => label.includes('V1=2 V'))).toBe(true)
 })
 
-test('SINE source frequency can be swept in the browser ngspice engine', async ({ page }) => {
+test('SINE source frequency can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2128,7 +2128,7 @@ test('SINE source frequency can be swept in the browser ngspice engine', async (
   expect(labels.some((label) => label.includes('V1.sine.frequency=2000 Hz'))).toBe(true)
 })
 
-test('SINE phase can be selected and swept in the browser ngspice engine', async ({ page }) => {
+test('SINE phase can be selected and swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2156,7 +2156,7 @@ test('SINE phase can be selected and swept in the browser ngspice engine', async
   expect(labels.some((label) => label.includes('V1.sine.phase=90'))).toBe(true)
 })
 
-test('imported device model parameters can be stepped through the browser ngspice engine', async ({ page }) => {
+test('imported device model parameters can be stepped through the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
