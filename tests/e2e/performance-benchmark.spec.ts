@@ -1,5 +1,69 @@
 import { test, expect } from '@playwright/test'
 import { performance } from 'node:perf_hooks'
+import { existsSync } from 'node:fs'
+import path from 'node:path'
+
+test('measure a million-sample transient through the browser ngspice worker and plot UI', async ({ page, browserName }) => {
+  test.setTimeout(120_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the browser transient benchmark').toEqual([])
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.simulation.analysis = 'tran'
+    project.simulation.stopTime = '1 s'
+    project.simulation.maxStep = '1 µs'
+    project.plotSettings.selectedTraceIds = ['V(vout)']
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const before = await page.evaluate(() => {
+    const perf = performance as Performance & { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }
+    const watch = { last: performance.now(), maxIntervalDelayMs: 0 }
+    ;(window as Window & { __largeTransientWatch?: typeof watch }).__largeTransientWatch = watch
+    const timer = window.setInterval(() => {
+      const now = performance.now()
+      watch.maxIntervalDelayMs = Math.max(watch.maxIntervalDelayMs, now - watch.last - 16)
+      watch.last = now
+    }, 16)
+    ;(window as Window & { __largeTransientTimer?: number }).__largeTransientTimer = timer
+    return { usedHeapBytes: perf.memory?.usedJSHeapSize ?? null, totalHeapBytes: perf.memory?.totalJSHeapSize ?? null }
+  })
+  const started = performance.now()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 90_000 })
+  const completedMs = performance.now() - started
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  await expect(slider).toBeVisible()
+  const maxSample = Number(await slider.getAttribute('max'))
+  expect(maxSample).toBeGreaterThan(1_000_000)
+  const trace = page.getByRole('button', { name: 'V(vout)', exact: true })
+  await expect(trace).toBeVisible()
+  if (!(await trace.getAttribute('class'))?.includes('selected')) await trace.click()
+  await expect(trace).toHaveClass(/selected/)
+  const renderedTraceCount = await page.locator('.waveform-chart polyline').count()
+  expect(renderedTraceCount).toBeGreaterThan(0)
+  const scrubStarted = performance.now()
+  await slider.press('End')
+  await expect(page.locator('.cursor-readout')).toContainText('V(vout)')
+  const scrubMs = performance.now() - scrubStarted
+  const after = await page.evaluate(() => {
+    const perf = performance as Performance & { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }
+    const win = window as Window & { __largeTransientWatch?: { maxIntervalDelayMs: number }; __largeTransientTimer?: number }
+    window.clearInterval(win.__largeTransientTimer)
+    return {
+      usedHeapBytes: perf.memory?.usedJSHeapSize ?? null,
+      totalHeapBytes: perf.memory?.totalJSHeapSize ?? null,
+      maxIntervalDelayMs: win.__largeTransientWatch?.maxIntervalDelayMs ?? null,
+      renderedTraceCount: document.querySelectorAll('.waveform-chart polyline').length,
+    }
+  })
+  expect(pageErrors).toEqual([])
+  console.log(JSON.stringify({ benchmark: 'browser-million-sample-transient-v1', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, resultReadyMs: Number(completedMs.toFixed(2)), finalSampleScrubMs: Number(scrubMs.toFixed(2)), heapBefore: before, heapAfter: after }, null, 2))
+})
 
 test('record large-project editor render and selection timings', async ({ page, browserName }) => {
   test.setTimeout(120_000)

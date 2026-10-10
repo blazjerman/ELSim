@@ -53,7 +53,18 @@ These are working engineering targets for this fixture, not heterogeneous-CI pas
 
 ## Not yet measured
 
-The browser editor benchmark below measures reload readiness and click-to-selection completion, but not pointer-to-paint latency, animation update cost, large transient rendering/cursor interaction in an actual browser, engine-worker result transfer at million-sample scale, or reliable peak browser memory. The transient benchmark above measures solver output and raw parsing in a Node worker, not the complete browser app adapter or SVG rendering. Record hardware/runtime details before setting browser budgets. Add a wire-segment-heavy layout and a nested-sheet fixture before treating the resistor chain as representative of all schematics.
+The browser editor benchmark below measures reload readiness and click-to-selection completion, but not pointer-to-paint latency, animation update cost, multi-trace rendering cost, or reliable peak browser/worker memory. The browser transient result is a single RC circuit and does not represent every trace count or circuit shape. Record hardware/runtime details before setting browser budgets. Add a wire-segment-heavy layout and a nested-sheet fixture before treating the resistor chain as representative of all schematics.
+
+### Browser large transient
+
+`npm run benchmark:browser -- --grep "million-sample transient"` runs a 1 s RC transient with a 1 µs maximum step through the actual ngspice browser worker, app response handling, result plot, and time scrubber. It checks at least one million solved samples, rendered result traces, cursor readout at the last sample, and no page errors. A 16 ms main-thread timer records its largest scheduling gap during the run. `resultReadyMs` covers Run click through the completion notice. These are single local observations, not thresholds.
+
+| Browser | Solved samples | Result ready (ms) | Final scrub (ms) | Largest main-thread timer gap (ms) | Renderer heap before → after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Chromium | 1,000,130 | 7,953.55 | 44.95 | 68 | 27.6 → 27.6 MB |
+| Firefox | 1,000,130 | 20,069.81 | 115.96 | 51 | unavailable |
+
+Chromium's `performance.memory` numbers cover the page renderer and remained unchanged at the reported resolution; they do not include the dedicated worker's WASM memory. Firefox does not expose that API in this run. The timer gaps indicate that the renderer remained responsive while the worker solved and parsed results, but do not provide a worker-memory measurement. Safari and reliable per-worker peak memory remain unmeasured.
 
 ## Browser editor baseline (2026-10-10)
 
