@@ -97,6 +97,25 @@ test('voltage SINE sources export and reimport with all waveform fields', async 
   assert.deepEqual(restored.sine, source.sine)
 })
 
+test('voltage and current EXP sources export and reimport all delay and time-constant fields', async () => {
+  const project = createStarterProject()
+  const voltage = project.parts.find((part) => part.kind === 'source')
+  voltage.sourceMode = 'exp'
+  voltage.exp = { initial: '1 V', pulsed: '5 V', riseDelay: '1 ms', riseTau: '10 us', fallDelay: '4 ms', fallTau: '20 us' }
+  const current = { id: 'export-exp-i1', kind: 'currentSource', ref: 'I1', value: '3mA', sourceMode: 'exp', exp: { initial: '1mA', pulsed: '3mA', riseDelay: '1ms', riseTau: '10us', fallDelay: '4ms', fallTau: '20us' }, x: 700, y: 500, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName V1\nSYMATTR Value EXP\(1 5 1m 10u 4m 20u\)/)
+  assert.match(asc.content, /SYMATTR InstName I1\nSYMATTR Value EXP\(1m 3m 1m 10u 4m 20u\)/)
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `exp-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project.parts
+  assert.deepEqual(restored.find((part) => part.ref === 'V1').exp, { initial: '1', pulsed: '5', riseDelay: '1m', riseTau: '10u', fallDelay: '4m', fallTau: '20u' })
+  assert.deepEqual(restored.find((part) => part.ref === 'I1').exp, { initial: '1m', pulsed: '3m', riseDelay: '1m', riseTau: '10u', fallDelay: '4m', fallTau: '20u' })
+})
+
 test('linear CCCS and CCVS export as LTspice F/H symbols and reimport with their sensor and coefficient', async () => {
   const project = createStarterProject()
   const f = { id: 'export-cccs', kind: 'cccs', ref: 'F1', value: '2', controlSource: 'V1', x: 760, y: 520, rotation: 0 }

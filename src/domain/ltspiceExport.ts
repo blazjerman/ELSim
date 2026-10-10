@@ -61,6 +61,16 @@ function frequencyScalar(value: string): string | null {
   return scalar(`${withUnit[1]}${suffix}`)
 }
 
+function exponentialSourceValue(part: Part): string | null {
+  if (part.kind !== 'source' && part.kind !== 'currentSource') return null
+  const unit = part.kind === 'source' ? 'v' : 'a'
+  const exp = { initial: '0', pulsed: part.value.replace(new RegExp(`\\s*${unit}$`, 'i'), ''), riseDelay: '0', riseTau: '1u', fallDelay: '10m', fallTau: '1u', ...part.exp }
+  const values = [scalar(exp.initial, unit), scalar(exp.pulsed, unit), scalar(exp.riseDelay, 's'), scalar(exp.riseTau, 's'), scalar(exp.fallDelay, 's'), scalar(exp.fallTau, 's')]
+  const riseDelay = scalarMagnitude(exp.riseDelay, 's'), riseTau = scalarMagnitude(exp.riseTau, 's'), fallDelay = scalarMagnitude(exp.fallDelay, 's'), fallTau = scalarMagnitude(exp.fallTau, 's')
+  if (values.some((value) => value === null) || riseDelay === null || riseDelay < 0 || riseTau === null || riseTau <= 0 || fallDelay === null || fallDelay < riseDelay || fallTau === null || fallTau <= 0) return null
+  return `EXP(${values.join(' ')})`
+}
+
 function spiceIdentifier(value: string): string {
   return safeStem(value, 'SHEET').replaceAll('-', '_')
 }
@@ -201,6 +211,10 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
     const phaseScalar = acMagnitude === undefined ? '0' : scalar(part.acPhase ?? '0', '')
     if ((acMagnitude !== undefined && acScalar === null) || phaseScalar === null) return null
     const value2 = acScalar === undefined ? undefined : `AC ${acScalar} ${phaseScalar}`
+    if (project.simulation.analysis === 'tran' && part.sourceMode === 'exp') {
+      const waveform = exponentialSourceValue(part)
+      return waveform ? { value: waveform, ...(value2 ? { value2 } : {}) } : null
+    }
     if (project.simulation.analysis === 'tran' && part.sourceMode === 'pwl') {
       const points = part.currentPwl ?? []
       const mapped = points.map((point) => ({ time: scalar(point.time, 's'), timeMagnitude: scalarMagnitude(point.time, 's'), current: scalar(point.current, 'a') }))
@@ -224,6 +238,15 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   if (part.kind === 'source') {
     const value = scalar(part.value, 'v')
     if (!value) return null
+    if (project.simulation.analysis === 'tran' && part.sourceMode === 'exp') {
+      const waveform = exponentialSourceValue(part)
+      if (!waveform) return null
+      const acMagnitude = part.acMagnitude
+      const acScalar = acMagnitude === undefined ? undefined : scalar(acMagnitude, 'v')
+      const phaseScalar = acMagnitude === undefined ? '0' : scalar(part.acPhase ?? '0', '')
+      if ((acMagnitude !== undefined && acScalar === null) || phaseScalar === null) return null
+      return { value: waveform, ...(acScalar === undefined ? {} : { value2: `AC ${acScalar} ${phaseScalar}` }) }
+    }
     if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
       const sine = { offset: '0', amplitude: part.value.replace(/\s*v$/i, ''), frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
       const values = [scalar(sine.offset, 'v'), scalar(sine.amplitude, 'v'), scalar(sine.frequency, 'hz'), scalar(sine.delay, 's'), scalar(sine.damping), scalar(sine.phase)]

@@ -189,7 +189,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const initialConditions = schema.$defs.simulation.properties.initialConditions.items.oneOf
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('voltage') && condition.properties.element.pattern.startsWith('^C')))
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('current') && condition.properties.element.pattern.startsWith('^L')))
-  assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc', 'pwl', 'sine'])
+  assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc', 'pwl', 'sine', 'exp'])
   assert.deepEqual(schema.$defs.part.properties.sine.required, ['offset', 'amplitude', 'frequency', 'delay', 'damping', 'phase'])
   assert.equal(schema.$defs.part.properties.pwl.maxItems, 32)
   assert.deepEqual(schema.$defs.part.properties.pulse.required, ['initial', 'delay', 'rise', 'fall', 'width', 'period'])
@@ -211,6 +211,16 @@ test('current-source SINE settings survive project archive round-trip', () => {
   project.sheets[0].parts = project.parts
   const restored = validateProject(readProjectArchive(createProjectArchive(project)))
   assert.deepEqual(restored.parts.find((part) => part.id === source.id).sine, source.sine)
+})
+
+test('voltage EXP settings survive project archive round-trip', () => {
+  const project = createStarterProject()
+  const settings = { initial: '0', pulsed: '5', riseDelay: '1m', riseTau: '10u', fallDelay: '4m', fallTau: '20u' }
+  const source = { id: 'archive-exp-v1', kind: 'source', ref: 'V2', value: '5', sourceMode: 'exp', exp: settings, x: 700, y: 500, rotation: 0 }
+  project.parts.push(source)
+  project.sheets[0].parts = project.parts
+  const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  assert.deepEqual(restored.parts.find((part) => part.id === source.id).exp, settings)
 })
 
 test('LTspice source provenance validates its format, filename, and UTF-8 size limit', () => {

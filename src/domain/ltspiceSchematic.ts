@@ -1,4 +1,4 @@
-import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourcePulse, type SourcePwlPoint, type SourceSine, type SymbolAsset, type Wire } from './project'
+import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourceExp, type SourcePulse, type SourcePwlPoint, type SourceSine, type SymbolAsset, type Wire } from './project'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseSubcircuitLibrary } from './subcircuitLibrary'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
@@ -31,8 +31,16 @@ function recordExcerpt(raw: string): string {
   return compact.length > MAX_UNSUPPORTED_RECORD_CHARS ? `${compact.slice(0, MAX_UNSUPPORTED_RECORD_CHARS - 1)}…` : compact
 }
 
-function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; sine?: SourceSine } {
+function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; sine?: SourceSine; exp?: SourceExp } {
   const trimmed = value.trim()
+  const generatedExp = trimmed.match(/^EXP\(\s*([^()]*)\s*\)$/i)
+  if (generatedExp) {
+    const values = generatedExp[1].trim().split(/[\s,]+/).filter(Boolean)
+    if (values.length === 6 && values.every((entry) => validScalar(entry))) {
+      const [initial, pulsed, riseDelay, riseTau, fallDelay, fallTau] = values
+      return { value: pulsed, mode: 'exp', exp: { initial, pulsed, riseDelay, riseTau, fallDelay, fallTau } }
+    }
+  }
   const generatedSine = trimmed.match(/^SINE\(\s*([^()]*)\s*\)$/i)
   if (generatedSine) {
     const values = generatedSine[1].trim().split(/[\s,]+/).filter(Boolean)
@@ -498,7 +506,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     }
     const defaultValue = kind === 'switch' ? (/^(?:on|1|true)$/i.test(value) ? 'On' : 'Off') : kind === 'diode' ? 'Default diode' : kind === 'led' ? 'Default LED' : kind === 'npn' || kind === 'pnp' ? '100' : kind === 'njfet' || kind === 'pjfet' ? '' : kind === 'nmos' || kind === 'pmos' ? '0' : kind === 'vcvs' ? '1' : kind === 'vccs' ? '1 mS' : value
     if (kind === 'source' && rawValue.includes('(') && value === rawValue) warnings.push(`Line ${symbol.line}: source waveform on ${identity} is not translated yet; check its value before running.`)
-    if (kind === 'currentSource' && rawValue.includes('(') && !['pulse', 'pwl', 'sine'].includes(parsedSource.mode ?? '')) warnings.push(`Line ${symbol.line}: current-source waveform on ${identity} is not translated yet; only PULSE, SINE, and scalar-pair PWL waveforms are supported.`)
+    if (kind === 'currentSource' && rawValue.includes('(') && !['pulse', 'pwl', 'sine', 'exp'].includes(parsedSource.mode ?? '')) warnings.push(`Line ${symbol.line}: current-source waveform on ${identity} is not translated yet; only PULSE, SINE, EXP, and scalar-pair PWL waveforms are supported.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !value) warnings.push(`Line ${symbol.line}: ${identity} has no value; set one in the inspector before running.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
     if ((['D', 'Q', 'M', 'J'].includes(prefix.toUpperCase())) && (mapped.deviceModel ?? value) && !deviceModels.has((mapped.deviceModel ?? value).toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${mapped.deviceModel ?? value}” for ${identity} is missing; the educational default model will be used.`)
@@ -525,6 +533,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.sine ? { sine: parsedSource.sine } : {}),
+      ...((kind === 'source' || kind === 'currentSource') && parsedSource.exp ? { exp: parsedSource.exp } : {}),
       ...((kind === 'source' || kind === 'currentSource') && (valueAc ?? value2Ac) ? { acMagnitude: (valueAc ?? value2Ac)!.magnitude, acPhase: (valueAc ?? value2Ac)!.phase } : {}),
       ...(kind === 'source' && parsedSource.pwl ? { pwl: parsedSource.pwl } : {}),
       ...(kind === 'currentSource' && parsedSource.pwl ? { currentPwl: parsedSource.pwl.map(({ time, voltage: current }) => ({ time, current })) } : {}),

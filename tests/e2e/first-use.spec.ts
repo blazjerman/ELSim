@@ -790,6 +790,24 @@ test('voltage source SINE waveform is editable and runs in the browser ngspice e
   await expect(source.locator('title')).toContainText(/V = 3(?:\.0+)? V/)
 })
 
+test('LTspice voltage EXP waveform is editable and simulates in the browser engine', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('exp')
+  await page.getByLabel('Initial (V)').fill('0')
+  await page.getByLabel('Pulsed (V)').fill('5')
+  await page.getByLabel('Rise delay').fill('1m')
+  await page.getByLabel('Rise time constant').fill('100u')
+  await page.getByLabel('Fall delay').fill('4m')
+  await page.getByLabel('Fall time constant').fill('100u')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText(/V1 vin 0 EXP\(0 5 1m 100u 4m 100u\)/)
+})
+
 test('PWL waveform example opens with editable points and solves the RC response', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

@@ -175,6 +175,21 @@ test('independent current source SINE mode emits current-valued fields and valid
   assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['sine.offset'])
 })
 
+test('voltage and current EXP sources netlist and validate positive time constants and ordered delays', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'v-exp', kind: 'source', ref: 'V2', value: '5', sourceMode: 'exp', exp: { initial: '0', pulsed: '5', riseDelay: '1m', riseTau: '10u', fallDelay: '4m', fallTau: '20u' }, x: 700, y: 450, rotation: 0 },
+    { id: 'i-exp', kind: 'currentSource', ref: 'I1', value: '2m', sourceMode: 'exp', exp: { initial: '0', pulsed: '2m', riseDelay: '1m', riseTau: '10u', fallDelay: '4m', fallTau: '20u' }, x: 700, y: 550, rotation: 0 },
+  )
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V2 .* EXP\(0 5 1m 10u 4m 20u\)$/m)
+  assert.match(artifact.text, /^I1 .* EXP\(0 2m 1m 10u 4m 20u\)$/m)
+  project.parts.find((part) => part.id === 'i-exp').exp.fallDelay = '0.5m'
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['exp.fallDelay'])
+})
+
 test('current-source beginner example predicts the expected one-volt load result', () => {
   const project = createCurrentSourceExampleProject()
   const artifact = createNetlistArtifact(project)

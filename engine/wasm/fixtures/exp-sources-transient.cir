@@ -1,0 +1,8 @@
+ELSim ngspice WebAssembly exponential source transient example
+V1 vin 0 EXP(0 5 1m 100u 4m 100u)
+R1 vin 0 1k
+I1 0 iout EXP(1m 3m 1m 100u 4m 100u)
+R2 iout 0 1k
+.tran 25u 6m
+.print tran time V(vin) V(iout)
+.end

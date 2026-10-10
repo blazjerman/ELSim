@@ -71,7 +71,17 @@ function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage
   return Number.isFinite(result) ? result : null
 }
 
-export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase'
+function spiceExponential(part: Part): string | null {
+  if (part.kind !== 'source' && part.kind !== 'currentSource') return null
+  const exp = { initial: '0', pulsed: part.value, riseDelay: '0', riseTau: '1u', fallDelay: '10m', fallTau: '1u', ...part.exp }
+  const initial = spiceNumber(exp.initial, part.kind), pulsed = spiceNumber(exp.pulsed, part.kind)
+  const times = [exp.riseDelay, exp.riseTau, exp.fallDelay, exp.fallTau].map(spiceTime)
+  const magnitudes = [exp.riseDelay, exp.riseTau, exp.fallDelay, exp.fallTau].map(spiceTimeMagnitude)
+  if (initial === null || pulsed === null || times.some((time) => time === null) || magnitudes.some((time) => time === null || time < 0) || (magnitudes[1] ?? 0) <= 0 || (magnitudes[3] ?? 0) <= 0 || (magnitudes[2] ?? -1) < (magnitudes[0] ?? 0)) return null
+  return `EXP(${initial} ${pulsed} ${times.join(' ')})`
+}
+
+export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
@@ -105,6 +115,17 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
       const damping = spiceScalar(sine.damping, '')
       if (damping === null || Number(damping) < 0) add('sine.damping', `${part.ref} sine damping must be nonnegative.`, part.id, 'sine.damping')
       if (spiceScalar(sine.phase, '') === null) add('sine.phase', `${part.ref} sine phase must be a numeric angle in degrees.`, part.id, 'sine.phase')
+    }
+    for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'exp')) {
+      const quantity = part.kind === 'source' ? 'voltage' : 'current'
+      const exp = { initial: '0', pulsed: part.value, riseDelay: '0', riseTau: '1u', fallDelay: '10m', fallTau: '1u', ...part.exp }
+      if (spiceNumber(exp.initial, part.kind) === null) add('exp.initial', `${part.ref} EXP initial level must be a valid ${quantity}.`, part.id, 'exp.initial')
+      if (spiceNumber(exp.pulsed, part.kind) === null) add('exp.pulsed', `${part.ref} EXP pulsed level must be a valid ${quantity}.`, part.id, 'exp.pulsed')
+      const riseDelay = spiceTimeMagnitude(exp.riseDelay), riseTau = spiceTimeMagnitude(exp.riseTau), fallDelay = spiceTimeMagnitude(exp.fallDelay), fallTau = spiceTimeMagnitude(exp.fallTau)
+      if (riseDelay === null || riseDelay < 0) add('exp.riseDelay', `${part.ref} EXP rise delay must be a nonnegative time.`, part.id, 'exp.riseDelay')
+      if (riseTau === null || riseTau <= 0) add('exp.riseTau', `${part.ref} EXP rise time constant must be positive.`, part.id, 'exp.riseTau')
+      if (fallDelay === null || fallDelay < 0 || riseDelay !== null && fallDelay < riseDelay) add('exp.fallDelay', `${part.ref} EXP fall delay must be nonnegative and no earlier than its rise delay.`, part.id, 'exp.fallDelay')
+      if (fallTau === null || fallTau <= 0) add('exp.fallTau', `${part.ref} EXP fall time constant must be positive.`, part.id, 'exp.fallTau')
     }
     for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'pwl')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
@@ -304,6 +325,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           continue
         }
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period})`
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'exp') {
+        const exponential = spiceExponential(part)
+        if (!exponential) {
+          const message = `${part.ref} EXP levels and timing must be valid currents, time constants positive, and fall delay no earlier than rise delay.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = exponential
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
         const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
         const offset = spiceNumber(sine.offset, 'currentSource'), amplitude = spiceNumber(sine.amplitude, 'currentSource')
@@ -352,7 +382,16 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       let transientValue = `DC ${value}`
-      if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
+      if (project.simulation.analysis === 'tran' && part.sourceMode === 'exp') {
+        const exponential = spiceExponential(part)
+        if (!exponential) {
+          const message = `${part.ref} EXP levels and timing must be valid voltages, time constants positive, and fall delay no earlier than rise delay.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = exponential
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
         const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
         const offset = spiceNumber(sine.offset, 'source'), amplitude = spiceNumber(sine.amplitude, 'source')
         const frequency = spiceFrequency(sine.frequency), delay = spiceTime(sine.delay), damping = spiceScalar(sine.damping, ''), phase = spiceScalar(sine.phase, '')

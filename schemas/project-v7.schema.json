@@ -249,7 +249,8 @@
             "pulse",
             "dc",
             "pwl",
-            "sine"
+            "sine",
+            "exp"
           ],
           "description": "For transient analysis, voltage and independent current sources support pulse, DC, PWL, or SINE. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
         },
@@ -315,6 +316,20 @@
             "phase": { "type": "string", "maxLength": 64 }
           },
           "description": "Optional voltage/current-source transient SINE settings: offset and amplitude in the source quantity, frequency, delay, damping factor, and phase degrees."
+        },
+        "exp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["initial", "pulsed", "riseDelay", "riseTau", "fallDelay", "fallTau"],
+          "properties": {
+            "initial": { "type": "string", "maxLength": 64 },
+            "pulsed": { "type": "string", "maxLength": 64 },
+            "riseDelay": { "type": "string", "maxLength": 64 },
+            "riseTau": { "type": "string", "maxLength": 64 },
+            "fallDelay": { "type": "string", "maxLength": 64 },
+            "fallTau": { "type": "string", "maxLength": 64 }
+          },
+          "description": "Optional transient EXP source settings: initial and pulsed source quantity, rise delay/time constant, and fall delay/time constant."
         },
         "pwl": {
           "type": "array",

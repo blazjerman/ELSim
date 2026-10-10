@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'sine-transient', 'sine-current-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
+const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -65,6 +65,19 @@ for (const fixture of fixtures) {
     assert.ok(wasmRows.some((row) => { const values = row.trim().split(/\s+/).slice(1).map(Number); return Math.abs(values[1] - 5) < 1e-6 }), 'pwl-transient: source never reached 5 V')
     assert.ok(wasmRows.some((row) => { const values = row.trim().split(/\s+/).slice(1).map(Number); return values[1] < 1e-6 }), 'pwl-transient: source never returned to 0 V')
     assert.ok(wasmRows.some((row) => { const values = row.trim().split(/\s+/).slice(1).map(Number); return Math.abs(values[1] - 2) < 1e-6 }), 'pwl-transient: source never reached its middle 2 V level')
+  }
+
+  if (fixture === 'exp-sources-transient') {
+    assert.ok(wasmRows.length > 20, 'exp-sources-transient: expected transient samples')
+    const samples = wasmRows.map((row) => row.trim().split(/\s+/).map(Number))
+    const sourceVoltage = samples.map((values) => values[2])
+    const loadVoltage = samples.map((values) => values[3])
+    assert.ok(Math.abs(sourceVoltage[0]) < 1e-9, `EXP voltage source should start at 0 V, got ${sourceVoltage[0]} V`)
+    assert.ok(Math.max(...sourceVoltage) > 4.99, 'EXP voltage source should rise close to 5 V')
+    assert.ok(Math.abs(sourceVoltage.at(-1)) < 0.01, `EXP voltage source should return close to 0 V, got ${sourceVoltage.at(-1)} V`)
+    assert.ok(Math.abs(loadVoltage[0] - 1) < 1e-6, `EXP current source should start at 1 mA through 1 kΩ, got ${loadVoltage[0]} V`)
+    assert.ok(Math.max(...loadVoltage) > 2.99, 'EXP current source should rise close to 3 mA through 1 kΩ')
+    assert.ok(Math.abs(loadVoltage.at(-1) - 1) < 0.01, `EXP current source should return close to 1 mA through 1 kΩ, got ${loadVoltage.at(-1)} V`)
   }
 
   if (fixture === 'sine-current-transient') {

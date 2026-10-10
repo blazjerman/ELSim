@@ -22,7 +22,8 @@ This matrix describes the importer as implemented today. “Supported” means E
 | Scalar `I` current sources | Supported as constant DC current sources; current probe uses ngspice `@i[current]` | Hand-written import/export fixture, current waveform import/export fixtures, and 1 mA into 1 kΩ WASM operating-point/current-vector fixture |
 | Current-source `PULSE(low high delay rise fall width period)` | Supported for transient analysis; low/high values and timing are editable | Hand-written import/export round trip and `current-source-pulse.cir` WASM fixture verify 1 mA into 1 kΩ produces a 1 V pulse |
 | Current-source `PWL(time current ...)` expressions | Supported for 2–32 scalar time/current pairs; times must be nonnegative and strictly increasing | `tests/ltspice-schematic.test.cjs` verifies imported mode, point mapping, no warning, and generated PWL current-source netlist; current waveform values use their own editor fields |
-| Voltage- and current-source `SINE(VOFF VAMPL FREQ [TD [THETA [PHASE]]])` | Supported for transient analysis; omitted optional fields default to zero and frequency must be positive | Import, editable quantity-specific parameter validation, netlist, LTspice export round trip, project archive, and numeric WASM transient fixtures cover voltage and current waveforms |
+| Voltage- and current-source `SINE(...)` | Supported for transient analysis; omitted optional fields default to zero and frequency must be positive | Import, editable quantity-specific parameter validation, netlist, LTspice export round trip, project archive, and numeric WASM transient fixtures cover voltage and current waveforms |
+| Voltage- and current-source `EXP(V1 V2 TD1 TAU1 TD2 TAU2)` | Supported for transient analysis; time constants must be positive and fall delay must not precede rise delay | Import, editable quantity-specific fields, validation, netlist, LTspice round trip, and paired numeric WASM fixture cover voltage and current sources |
 | Seven-argument `PULSE(low high delay rise fall width period)` voltage values | Supported for scalar levels and timing values | Pulse level/timing import and editable transient source behavior are tested |
 | Scalar-pair `PWL(time voltage ...)` voltage values | Supported for 2–32 strictly increasing, nonnegative time points | Import, netlist, project archive, and LTspice export round-trip fixtures cover PWL points |
 | `.save V(named_node)` and `.save I(placed_component)` | Supported as persisted plot-trace selections; selected vectors are not solver restrictions because ELSim manages result vectors itself | Named labels and placed current-bearing components are matched case-insensitively; unknown nodes/components and other `.save` expressions produce a warning |
@@ -48,8 +49,8 @@ This matrix describes the importer as implemented today. “Supported” means E
 | LTspice prefix / symbol family | ELSim mapping | Limits |
 | --- | --- | --- |
 | `R`, `C`, `L` | Resistor, capacitor, inductor | Scalar values only |
-| `V` | Voltage source | Scalar, SINE, seven-argument PULSE, and scalar-pair PWL values are supported; other waveform expressions remain unverified and prompt a warning |
-| `I` | Independent current source | Scalar DC, SINE, seven-argument PULSE, and scalar-pair PWL waveforms |
+| `V` | Voltage source | Scalar, SINE, EXP, seven-argument PULSE, and scalar-pair PWL values are supported; other waveform expressions remain unverified and prompt a warning |
+| `I` | Independent current source | Scalar DC, SINE, EXP, seven-argument PULSE, and scalar-pair PWL waveforms |
 | `S` | Switch | ELSim on/off educational switch semantics, not the full LTspice switch dialect |
 | `E`, `G` | VCVS, VCCS | Linear four-terminal form |
 | `F`, `H` | CCCS, CCVS | Linear two-terminal form; `Value` must name an existing voltage-source current sensor in the same sheet and `Value2` supplies the gain/transresistance. Behavioral `POLY` and other nonlinear forms are not translated. |
