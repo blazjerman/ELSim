@@ -10,6 +10,7 @@ try {
     print: (...parts) => stdout.push(parts.join(' ')),
     printErr: (...parts) => stderr.push(parts.join(' ')),
   })
+  if (workerData.ltspiceMode) module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
   const deck = new Uint8Array(await readFile(workerData.deckPath))
   module.FS.writeFile('/test.cir', deck)
   const status = module.callMain(['-b', '/test.cir'])

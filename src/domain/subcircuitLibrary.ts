@@ -92,17 +92,24 @@ export function isSafeSubcircuitParameterValue(value: string): boolean {
   return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i.test(scalar)
 }
 
-/** Find LTspice compatibility-mode features that the current worker does not enable. */
+/** Find compatibility-mode features and known gaps in the current WASM build. */
 export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[] {
   const features = [
-    { pattern: /\b(?:uplim|dnim|uplim_tanh|dnim_tanh)\s*\(/i, name: 'LTspice compatibility-mode limit function' },
-    { pattern: /^\s*\.model\s+\S+\s+VSWITCH\b/i, name: 'LTspice VSWITCH model' },
+    { pattern: /\b(?:uplim|dnlim|uplim_tanh|dnlim_tanh)\s*\(/i, name: 'LTspice limit function (ngspice lta mode)' },
+    { pattern: /^\s*\.model\s+\S+\s+VSWITCH\b/i, name: 'VSWITCH model (unsupported by the current WASM engine)' },
   ]
   return source.replace(/^\uFEFF/, '').split(/\r?\n/).flatMap((physicalLine, index) => {
     const line = withoutInlineComment(physicalLine)
     if (!line || line.startsWith('*')) return []
     const feature = features.find(({ pattern }) => pattern.test(line))
     return feature ? [{ sourceLine: index + 1, feature: feature.name, excerpt: line.slice(0, 160) }] : []
+  })
+}
+
+export function needsLtspiceFullDeckTranslation(source: string): boolean {
+  return source.replace(/^\uFEFF/, '').split(/\r?\n/).some((physicalLine) => {
+    const line = withoutInlineComment(physicalLine)
+    return !!line && !line.startsWith('*') && /\b(?:uplim|dnlim|uplim_tanh|dnlim_tanh)\s*\(/i.test(line)
   })
 }
 

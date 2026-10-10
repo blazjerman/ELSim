@@ -1,0 +1,9 @@
+LTspice compatibility-mode limit function
+V1 IN 0 3
+XAMP IN OUT SOFTLIMIT
+.SUBCKT SOFTLIMIT IN OUT
+B1 OUT 0 V=uplim(V(IN),2,0.1)
+.ENDS SOFTLIMIT
+.op
+.print op v(out)
+.end

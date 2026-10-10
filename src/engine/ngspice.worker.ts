@@ -5,6 +5,7 @@ import { parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice } from './diagnostics'
 import { isEngineRequest, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
 import type { TransientMeasurement } from '../domain/project'
+import { needsLtspiceFullDeckTranslation } from '../domain/subcircuitLibrary'
 
 const worker = self as DedicatedWorkerGlobalScope
 type NgspiceModule = { FS: { writeFile(path: string, data: string): void; readFile(path: string, options: { encoding: 'utf8' }): string }; callMain(args: string[]): number }
@@ -45,6 +46,9 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       printErr: (...parts) => stderr.push(parts.join(' ')),
     })
     const runDeck = addResultControl(artifact.text, parameterSweep, measurements)
+    if (needsLtspiceFullDeckTranslation(runDeck)) {
+      module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
+    }
     module.FS.writeFile('/project.cir', runDeck)
     worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` } satisfies EngineResponse)
     const status = module.callMain(['-b', '/project.cir'])
