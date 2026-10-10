@@ -74,8 +74,8 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return output
 }
 
-function zipStored(files: { path: string; bytes: Uint8Array }[]): Uint8Array {
-  if (files.length > MAX_ENTRIES) throw new Error('Project archive contains too many files.')
+function zipStored(files: { path: string; bytes: Uint8Array }[], maxEntries = MAX_ENTRIES, maxBytes = MAX_ARCHIVE_BYTES): Uint8Array {
+  if (files.length > maxEntries) throw new Error('Archive contains too many files.')
   let offset = 0
   const entries: ZipEntry[] = files.map(({ path, bytes }) => {
     validatePath(path)
@@ -94,8 +94,14 @@ function zipStored(files: { path: string; bytes: Uint8Array }[]): Uint8Array {
   put16(view, 8, entries.length); put16(view, 10, entries.length)
   put32(view, 12, directorySize); put32(view, 16, directoryOffset); put16(view, 20, 0)
   const result = concat([...locals, ...directory, end])
-  if (result.length > MAX_ARCHIVE_BYTES) throw new Error('Project archive exceeds the total size limit.')
+  if (result.length > maxBytes) throw new Error('Archive exceeds the total size limit.')
   return result
+}
+
+/** Create a bounded, deterministic, uncompressed ZIP for generated portable file trees. */
+export function createFilesZip(files: { path: string; content: string }[]): Uint8Array {
+  if (!Array.isArray(files) || files.length > 256) throw new Error('Export archive contains too many files.')
+  return zipStored(files.map(({ path, content }) => ({ path, bytes: encoder.encode(content) })), 256, 100 * 1024 * 1024)
 }
 
 export function createProjectArchive(project: Project): Uint8Array {

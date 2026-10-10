@@ -15,6 +15,8 @@ This matrix describes the importer as implemented today. “Supported” means E
 | No-prefix hierarchy block plus matching basename `.asc` | Supported recursively when ordered symbol pins match child ports | Nested import and generated X netlist fixtures in `tests/ltspice-schematic.test.cjs` |
 | `.tran`, `.op`, `.ac`, `.dc` in `TEXT` | Supported for the parsed scalar/sweep settings | AC, DC, and transient fixture coverage in `tests/ltspice-schematic.test.cjs` |
 | `.include`, `.inc`, `.lib` | Dependency presence is checked by imported filename; directive itself is not emitted | Missing dependency warning; library content is supplied separately |
+| `.param NAME=value` | Supported for conservative single-token scalar/expression defaults in the active sheet | Nested exported sheet parameters and `{NAME}` values round-trip in `tests/ltspice-export.test.cjs`; broader LTspice parameter syntax is unverified |
+| Exporter-generated default `PULSE(0 value 0 1u 1u 50m 100m)` | Collapsed back to the original scalar source value | Exact-pattern normalization test in `tests/ltspice-export.test.cjs`; arbitrary pulse shapes remain unsupported |
 | Other dot directives | Not translated | A warning names the directive; `.save` is covered by a test |
 | Unknown or unsupported record | Skipped with bounded source excerpt | Warning is covered by a test |
 | `.asc` source preservation | Supported for root and supplied child files | Project validation and archive round-trip in `tests/project-archive.test.cjs` |

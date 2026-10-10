@@ -343,3 +343,42 @@ test('portable export names imported files and asks before including unknown-lic
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/\.elsim$/)
 })
+
+test('LTspice export preview gates unknown-license model ZIPs and reports blockers', async ({ page }) => {
+  await page.goto('/')
+  const content = '.MODEL USER_D D(Is=1e-14)\n'
+  const sha256 = createHash('sha256').update(content).digest('hex')
+  await page.evaluate(({ content, sha256 }) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.modelAssets = [{ id: 'model-export', filename: 'user-diode.lib', content, sha256, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+    const diode = { id: 'export-diode', kind: 'diode', ref: 'D1', value: 'Default diode', deviceModel: 'USER_D', x: 700, y: 500, rotation: 0 }
+    project.parts.push(diode)
+    project.sheets.find((sheet: { id: string }) => sheet.id === project.activeSheetId).parts = project.parts
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  }, { content, sha256 })
+  await page.reload()
+  await page.getByRole('button', { name: 'Export LTspice', exact: true }).click()
+  const preview = page.getByRole('dialog', { name: 'Review export' })
+  await expect(preview).toContainText('user-diode.lib')
+  await expect(preview).toContainText('redistribution rights unknown')
+  const downloadButton = preview.getByRole('button', { name: 'Download ZIP' })
+  await expect(downloadButton).toBeDisabled()
+  await preview.getByLabel(/I have reviewed the included filenames/).check()
+  await expect(downloadButton).toBeEnabled()
+  const downloadPromise = page.waitForEvent('download')
+  await downloadButton.click()
+  expect((await downloadPromise).suggestedFilename()).toMatch(/ltspice-export\.zip$/)
+
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.push({ id: 'export-switch', kind: 'switch', ref: 'S1', value: 'Off', x: 800, y: 600, rotation: 0 })
+    project.sheets.find((sheet: { id: string }) => sheet.id === project.activeSheetId).parts = project.parts
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Export LTspice', exact: true }).click()
+  const blockedPreview = page.getByRole('dialog', { name: 'Review export' })
+  await expect(blockedPreview).toContainText('Export blocked')
+  await expect(blockedPreview).toContainText('S1')
+  await expect(blockedPreview.getByRole('button', { name: 'Download ZIP' })).toBeDisabled()
+})

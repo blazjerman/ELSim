@@ -9,8 +9,35 @@ const { exportLtspiceProject } = require(path.join(build, 'domain/ltspiceExport.
 const { createStarterProject, createHierarchicalExampleProject } = require(path.join(build, 'domain/project.js'))
 const { analyzeConnectivity, pinNet } = require(path.join(build, 'domain/connectivity.js'))
 const { parseLtspiceSchematic } = require(path.join(build, 'domain/ltspiceSchematic.js'))
+const { createFilesZip } = require(path.join(build, 'domain/projectArchive.js'))
 
 function sha256(content) { return crypto.createHash('sha256').update(content).digest('hex') }
+
+function zipPaths(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const end = bytes.length - 22
+  assert.equal(view.getUint32(end, true), 0x06054b50)
+  const count = view.getUint16(end + 10, true), size = view.getUint32(end + 12, true)
+  let offset = view.getUint32(end + 16, true)
+  const paths = []
+  while (paths.length < count) {
+    assert.equal(view.getUint32(offset, true), 0x02014b50)
+    const nameLength = view.getUint16(offset + 28, true), extraLength = view.getUint16(offset + 30, true), commentLength = view.getUint16(offset + 32, true)
+    paths.push(new TextDecoder().decode(bytes.subarray(offset + 46, offset + 46 + nameLength)))
+    offset += 46 + nameLength + extraLength + commentLength
+  }
+  assert.equal(offset, view.getUint32(end + 16, true) + size)
+  return paths
+}
+
+test('packages generated export files as a deterministic, path-safe ZIP', () => {
+  const files = [{ path: 'demo.asc', content: 'Version 4\n' }, { path: 'models/user.lib', content: '.MODEL TEST D\n' }]
+  const first = createFilesZip(files), second = createFilesZip(files)
+  assert.deepEqual(first, second)
+  assert.deepEqual(zipPaths(first), ['demo.asc', 'models/user.lib'])
+  assert.throws(() => createFilesZip([{ path: '../outside.lib', content: 'x' }]), /unsafe path/i)
+  assert.throws(() => createFilesZip(Array.from({ length: 257 }, (_, index) => ({ path: `file-${index}.asc`, content: '' }))), /too many files/i)
+})
 
 test('exports a deterministic portable file tree for the beginner circuit', async () => {
   const project = createStarterProject()
@@ -25,6 +52,19 @@ test('exports a deterministic portable file tree for the beginner circuit', asyn
   assert.match(root.content, /\.tran 100u 100m/)
   assert.ok(first.files.some((file) => file.path === 'loss-report.md'))
   assert.ok(first.files.every((file) => file.sha256 === sha256(file.content)))
+})
+
+test('splits supported orthogonal wires at explicit junctions', async () => {
+  const project = createStarterProject()
+  project.wires.push({ id: 'wire-horizontal', points: [[700, 600], [900, 600]] }, { id: 'wire-vertical', points: [[800, 500], [800, 700]] })
+  project.junctions.push({ x: 800, y: 600 })
+  project.sheets[0].wires = project.wires
+  project.sheets[0].junctions = project.junctions
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const asc = output.files.find((file) => file.path.endsWith('.asc')).content
+  assert.match(asc, /WIRE 700 600 800 600\nWIRE 800 600 900 600/)
+  assert.match(asc, /WIRE 800 500 800 600\nWIRE 800 600 800 700/)
 })
 
 test('exports nested sheets and generated block symbols, then reimports the topology', async () => {

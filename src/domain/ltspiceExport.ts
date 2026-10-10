@@ -71,7 +71,6 @@ function genericSymbol(prefix: string, pins: { name: string; offset: [number, nu
   const records = [
     'Version 4',
     block ? 'SymbolType BLOCK' : 'SymbolType CELL',
-    ...(!block ? [] : []),
     `RECTANGLE Normal ${-halfX / 2} ${-halfY / 2} ${halfX / 2} ${halfY / 2}`,
     ...(block ? [] : [`SYMATTR Prefix ${prefix}`]),
     ...pins.flatMap((pin, index) => [`PIN ${pin.offset[0]} ${pin.offset[1]} ${pinDirection(pin.offset)}`, `PINATTR PinName ${pin.name}`, `PINATTR SpiceOrder ${index + 1}`]),
@@ -99,12 +98,36 @@ function sheetWireRecords(sheet: ProjectSheet, blockers: LtspiceExportBlocker[])
     ...sheet.junctions.map(({ x, y }) => [x, y] as [number, number]),
     ...sheet.wires.flatMap((wire) => wire.points),
   ]
+  const rowIndex = new Map<number, [number, number][]>()
+  const columnIndex = new Map<number, [number, number][]>()
+  for (const point of splitPoints) {
+    const row = Math.round(point[1] * 10_000), column = Math.round(point[0] * 10_000)
+    const rowPoints = rowIndex.get(row) ?? []; rowPoints.push(point); rowIndex.set(row, rowPoints)
+    const columnPoints = columnIndex.get(column) ?? []; columnPoints.push(point); columnIndex.set(column, columnPoints)
+  }
+  for (const points of rowIndex.values()) points.sort((a, b) => a[0] - b[0])
+  for (const points of columnIndex.values()) points.sort((a, b) => a[1] - b[1])
+  const nearby = (index: Map<number, [number, number][]>, key: number, primary: 0 | 1, minimum: number, maximum: number) => {
+    const candidates: [number, number][] = []
+    for (let offset = -1; offset <= 1; offset += 1) for (const point of index.get(key + offset) ?? []) {
+      if (point[primary] >= minimum - 1e-4 && point[primary] <= maximum + 1e-4) candidates.push(point)
+    }
+    return candidates
+  }
   const records: string[] = []
   for (const wire of sheet.wires) {
     for (let segment = 0; segment < wire.points.length - 1; segment += 1) {
       const a = wire.points[segment], b = wire.points[segment + 1]
-      if (Math.abs(a[0] - b[0]) > 1e-4 && Math.abs(a[1] - b[1]) > 1e-4) blockers.push({ sourceId: wire.id, message: 'Diagonal wire segments do not have a verified LTspice connection mapping.' })
-      const intersections = [...new Map(splitPoints.filter(([x, y]) => pointOnSegment({ x, y }, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }, 1e-4)).map(([x, y]) => [`${x},${y}`, [x, y] as [number, number]])).values()]
+      const horizontal = Math.abs(a[1] - b[1]) <= 1e-4
+      const vertical = Math.abs(a[0] - b[0]) <= 1e-4
+      if (!horizontal && !vertical) {
+        blockers.push({ sourceId: wire.id, message: 'Diagonal wire segments do not have a verified LTspice connection mapping.' })
+        continue
+      }
+      const candidates = horizontal
+        ? nearby(rowIndex, Math.round(((a[1] + b[1]) / 2) * 10_000), 0, Math.min(a[0], b[0]), Math.max(a[0], b[0]))
+        : nearby(columnIndex, Math.round(((a[0] + b[0]) / 2) * 10_000), 1, Math.min(a[1], b[1]), Math.max(a[1], b[1]))
+      const intersections = [...new Map(candidates.filter(([x, y]) => pointOnSegment({ x, y }, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }, 1e-4)).map(([x, y]) => [`${x},${y}`, [x, y] as [number, number]])).values()]
       const points: [number, number][] = [a, ...intersections.filter(([x, y]) => Math.hypot(x - a[0], y - a[1]) > 1e-4 && Math.hypot(x - b[0], y - b[1]) > 1e-4), b]
       const dx = b[0] - a[0], dy = b[1] - a[1]
       points.sort((left, right) => dx * (left[0] - right[0]) + dy * (left[1] - right[1]))

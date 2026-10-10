@@ -1,6 +1,6 @@
 # LTspice export design
 
-Status: implementation specification. Export must be generated from the current ELSim project model. Original imported `.asc` text is provenance only and must never be replayed over edited project data.
+Status: pure exporter and browser preview/ZIP download are implemented for a tested subset. Export is generated from the current ELSim project model. Original imported `.asc` text is provenance only and is never replayed over edited project data. Native LTspice open/simulate verification is still a release gate; generated files have only been round-tripped through ELSim and ZIP integrity checked.
 
 The format reference used here is Analog Devices' [LTspice schematic reference](https://analogdevicesinc.github.io/ltspice-reference/ai_ref/SCHEMATIC-REFERENCE.html). It documents the text records, symbol syntax, hierarchical pins, and hierarchy naming conventions. The reference describes an observed file format, so every emitted construct still needs fixture tests and a native LTspice open/simulate check before being called compatible.
 
