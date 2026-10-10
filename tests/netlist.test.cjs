@@ -530,6 +530,22 @@ test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin ord
   assert.match(createNetlistArtifact(project).diagnostics.map(({ message }) => message).join('\n'), /not a NMOS model/i)
 })
 
+test('N- and P-channel JFETs generate J devices in D-G-S order and matching teaching models', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'j-n1', kind: 'njfet', ref: 'J1', value: '', x: 700, y: 300, rotation: 0 },
+    { id: 'j-p1', kind: 'pjfet', ref: 'J2', value: '', x: 820, y: 400, rotation: 0 },
+  )
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^J1 .* ELSIM_MODEL_J1$/m)
+  assert.match(artifact.text, /^\.model ELSIM_MODEL_J1 NJF \(VTO=-2 BETA=1m LAMBDA=0\.02\)$/m)
+  assert.match(artifact.text, /^J2 .* ELSIM_MODEL_J2$/m)
+  assert.match(artifact.text, /^\.model ELSIM_MODEL_J2 PJF \(VTO=2 BETA=1m LAMBDA=0\.02\)$/m)
+  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'J1')).map(({ x, y }) => [x - 700, y - 300]), [[0, -52], [-52, 0], [0, 52]])
+  assert.equal(nextRef(project.parts, 'njfet'), 'J3')
+})
+
 test('imported subcircuits place ordered pins and generate X-device netlists with model source mapping', () => {
   const project = createStarterProject()
   const content = '.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN=2\nE1 OUT 0 IN 0 {GAIN}\n.ENDS gain\n'

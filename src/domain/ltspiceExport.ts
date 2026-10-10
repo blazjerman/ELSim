@@ -23,10 +23,10 @@ export type LtspiceExportResult = {
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
   source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'R',
-  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', nmos: 'M', pmos: 'M', subcircuit: 'X',
+  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', nmos: 'M', pmos: 'M', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -76,6 +76,7 @@ function pinDirection([x, y]: [number, number]): 'R' | 'L' | 'U' | 'D' {
 
 function generatedPinOffsets(part: Part): [number, number][] {
   if (part.kind === 'nmos' || part.kind === 'pmos') return [[0, -52], [-52, 0], [0, 52], [52, 0]]
+  if (part.kind === 'njfet' || part.kind === 'pjfet') return [[0, -52], [-52, 0], [0, 52]]
   return localPinOffsets(part)
 }
 
@@ -247,6 +248,7 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   }
   if (part.kind === 'diode' || part.kind === 'led') return { value: part.deviceModel ?? 'DDEFAULT' }
   if (part.kind === 'npn' || part.kind === 'pnp') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
+  if (part.kind === 'njfet' || part.kind === 'pjfet') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
   if (part.kind === 'nmos' || part.kind === 'pmos') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
   if (part.kind === 'vcvs' || part.kind === 'vccs') { const value = scalar(part.value, part.kind === 'vccs' ? 's' : ''); return value ? { value } : null }
   if (part.kind === 'cccs' || part.kind === 'ccvs') {
@@ -342,6 +344,12 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
         const modelName = `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}`
         addDirective(`.model ${modelName} ${part.kind === 'npn' ? 'NPN' : 'PNP'}(IS=1e-14 BF=${beta} VAF=100 CJE=10p CJC=5p TF=300p TR=10n)`)
       }
+    }
+    if ((part.kind === 'njfet' || part.kind === 'pjfet') && !part.deviceModel) {
+      const type = part.kind === 'njfet' ? 'NJF' : 'PJF'
+      const threshold = part.kind === 'njfet' ? '-2' : '2'
+      const modelName = `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}`
+      addDirective(`.model ${modelName} ${type} (VTO=${threshold} BETA=1m LAMBDA=0.02)`)
     }
     if ((part.kind === 'nmos' || part.kind === 'pmos') && !part.deviceModel) {
       const type = part.kind === 'nmos' ? 'NMOS' : 'PMOS'
@@ -448,6 +456,7 @@ function generatedPartSymbol(part: Part): { name: string; content: string } {
   const name = `ELSIM_${key.toUpperCase()}`
   const offsets = generatedPinOffsets(part)
   const labels = part.kind === 'npn' || part.kind === 'pnp' ? ['C', 'B', 'E']
+    : part.kind === 'njfet' || part.kind === 'pjfet' ? ['D', 'G', 'S']
     : part.kind === 'nmos' || part.kind === 'pmos' ? ['D', 'G', 'S', 'B']
     : part.kind === 'vcvs' || part.kind === 'vccs' ? ['OUT+', 'OUT-', 'IN+', 'IN-']
       : part.kind === 'subcircuit' ? (part.modelPins ?? offsets.map((_, index) => `P${index + 1}`))

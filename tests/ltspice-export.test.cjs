@@ -95,6 +95,31 @@ test('linear CCCS and CCVS export as LTspice F/H symbols and reimport with their
   ])
 })
 
+test('exports original educational JFET models and round-trips N/P JFET pin order', async () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'export-njfet', kind: 'njfet', ref: 'J1', value: '', x: 760, y: 520, rotation: 0 },
+    { id: 'export-pjfet', kind: 'pjfet', ref: 'J2', value: '', x: 920, y: 520, rotation: 0 },
+  )
+  project.sheets[0].parts = project.parts
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMBOL ELSIM_NJFET/)
+  assert.match(asc.content, /SYMBOL ELSIM_PJFET/)
+  assert.match(asc.content, /SYMATTR InstName J1\nSYMATTR Value ELSIM_MODEL_/)
+  assert.match(asc.content, /\.model ELSIM_MODEL_.* NJF \(VTO=-2 BETA=1m LAMBDA=0\.02\)/)
+  assert.match(asc.content, /\.model ELSIM_MODEL_.* PJF \(VTO=2 BETA=1m LAMBDA=0\.02\)/)
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `jfet-export-symbol-${index}`, filename: file.path.split('/').at(-1), sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const modelText = output.files.filter((file) => file.path.endsWith('.lib')).map((file) => file.content).join('\n')
+  const models = modelText ? [{ id: 'jfet-models', filename: 'models.lib', sha256: sha256(modelText), content: modelText, licenseStatus: 'unknown', importedAt: new Date().toISOString() }] : []
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols, models).project
+  assert.deepEqual(restored.parts.filter((part) => part.ref === 'J1' || part.ref === 'J2').map(({ ref, kind, symbolPinOffsets }) => ({ ref, kind, symbolPinOffsets })), [
+    { ref: 'J1', kind: 'njfet', symbolPinOffsets: [[0, -52], [-52, 0], [0, 52]] },
+    { ref: 'J2', kind: 'pjfet', symbolPinOffsets: [[0, -52], [-52, 0], [0, 52]] },
+  ])
+})
+
 test('exports a deterministic portable file tree for the beginner circuit', async () => {
   const project = createStarterProject()
   const first = await exportLtspiceProject(project)

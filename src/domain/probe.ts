@@ -6,7 +6,7 @@ export type ProbeTarget = { kind: 'node'; name: string } | { kind: 'part'; id: s
 
 export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref'>): string {
   if (part.kind === 'currentSource') return `i(@${part.ref}[current])`
-  const currentName = part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : part.kind === 'nmos' || part.kind === 'pmos' ? 'id' : 'i'
+  const currentName = part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' ? 'id' : 'i'
   return `i(@${part.ref}[${currentName}])`
 }
 

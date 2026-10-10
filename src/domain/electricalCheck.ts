@@ -57,7 +57,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
       }
     }
-    if ((part.kind === 'diode' || part.kind === 'led' || part.kind === 'npn' || part.kind === 'pnp' || part.kind === 'nmos' || part.kind === 'pmos') && part.deviceModel) {
+    if ((part.kind === 'diode' || part.kind === 'led' || part.kind === 'npn' || part.kind === 'pnp' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos') && part.deviceModel) {
       let foundModel = false
       for (const asset of project.modelAssets ?? []) {
         try { if (analyzeModelDependencies([asset]).deviceModelAssets.has(part.deviceModel.toLowerCase())) foundModel = true }

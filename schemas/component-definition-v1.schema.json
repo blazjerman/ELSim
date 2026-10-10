@@ -46,7 +46,9 @@
         "pnp",
         "subcircuit",
         "nmos",
-        "pmos"
+        "pmos",
+        "njfet",
+        "pjfet"
       ]
     },
     "name": {
@@ -64,6 +66,7 @@
         "L",
         "GND",
         "D",
+        "J",
         "S",
         "E",
         "G",

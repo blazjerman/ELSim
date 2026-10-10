@@ -36,6 +36,7 @@ export function componentPins(part: Part): PinLocation[] {
   else if (part.kind === 'subcircuit') local = subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout)
   else if (part.kind === 'vcvs' || part.kind === 'vccs') local = [[-52, 0], [52, 0], [0, -52], [0, 52]]
   else if (part.kind === 'npn' || part.kind === 'pnp') local = [[35, -52], [-52, 0], [35, 52]]
+  else if (part.kind === 'njfet' || part.kind === 'pjfet') local = [[0, -52], [-52, 0], [0, 52]]
   else if (part.kind === 'nmos' || part.kind === 'pmos') local = [[0, -52], [-52, 0], [0, 52], [52, 0]]
   else if (part.kind === 'ground') local = [[0, -22]]
   else if (part.kind === 'source') local = [[0, -52], [0, 52]]

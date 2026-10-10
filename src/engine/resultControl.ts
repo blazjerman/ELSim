@@ -14,10 +14,10 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     if (/^\s*\.subckt\b/i.test(line)) { insideSubcircuit = true; return [] }
     if (/^\s*\.ends\b/i.test(line)) { insideSubcircuit = false; return [] }
     if (insideSubcircuit) return []
-    const ref = line.match(/^\s*([RCLDSEGFHQBIM][A-Za-z0-9_]+)\s+/i)?.[1]
+    const ref = line.match(/^\s*([RCLDSEGFHQBJIM][A-Za-z0-9_]+)\s+/i)?.[1]
     if (!ref) return []
     if (analysisType === 'ac' && /^[CL]/i.test(ref)) return []
-    const current = ref[0].toUpperCase() === 'D' || ref[0].toUpperCase() === 'M' ? 'id' : ref[0].toUpperCase() === 'Q' ? 'ic' : ref[0].toUpperCase() === 'I' ? 'current' : 'i'
+    const current = ref[0].toUpperCase() === 'D' || ref[0].toUpperCase() === 'J' || ref[0].toUpperCase() === 'M' ? 'id' : ref[0].toUpperCase() === 'Q' ? 'ic' : ref[0].toUpperCase() === 'I' ? 'current' : 'i'
     return [`@${ref}[${current}]`]
   })
   const hasSourceCurrentVector = (measurement: TransientMeasurement) => /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.vector.trim()) || (measurement.operation === 'delay' && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.targetVector.trim()))

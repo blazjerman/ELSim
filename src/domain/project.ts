@@ -4,7 +4,7 @@ import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
 
-export type PartKind = 'source' | 'currentSource' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'nmos' | 'pmos' | 'subcircuit'
+export type PartKind = 'source' | 'currentSource' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'njfet' | 'pjfet' | 'nmos' | 'pmos' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
 export type SourcePulse = { initial: string; delay: string; rise: string; fall: string; width: string; period: string }
 export type SourcePwlPoint = { time: string; voltage: string }
@@ -210,7 +210,7 @@ export function validateProject(input: unknown): Project {
   if (data.version !== 7 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
     throw new Error('This project format is not supported. Expected ELSim project version 7.')
   }
-  const allowed = new Set<PartKind>(['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'nmos', 'pmos', 'subcircuit'])
+  const allowed = new Set<PartKind>(['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'subcircuit'])
   if (allowed.size !== Object.keys(componentDefinitionByKind).length || [...allowed].some((kind) => componentDefinitionByKind[kind]?.kind !== kind)) throw new Error('Built-in component definition registry does not match supported component kinds.')
   const refs = new Set<string>()
   const partIds = new Set<string>()
@@ -219,7 +219,7 @@ export function validateProject(input: unknown): Project {
       throw new Error('Project contains a malformed component.')
     }
     partIds.add(candidate.id)
-    const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[candidate.kind]
+    const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[candidate.kind]
     if (candidate.sourceMode !== undefined && ((candidate.kind !== 'source' && candidate.kind !== 'currentSource') || !['pulse', 'dc', 'pwl'].includes(candidate.sourceMode))) throw new Error(`${candidate.ref} has an invalid source waveform mode.`)
     if ((candidate.acMagnitude !== undefined && (candidate.kind !== 'source' && candidate.kind !== 'currentSource' || typeof candidate.acMagnitude !== 'string' || candidate.acMagnitude.length > 64)) || (candidate.acPhase !== undefined && (candidate.kind !== 'source' && candidate.kind !== 'currentSource' || typeof candidate.acPhase !== 'string' || candidate.acPhase.length > 64))) throw new Error(`${candidate.ref} has malformed AC source settings.`)
     if (candidate.pulse !== undefined && ((candidate.kind !== 'source' && candidate.kind !== 'currentSource') || !candidate.pulse || ['initial', 'delay', 'rise', 'fall', 'width', 'period'].some((key) => typeof candidate.pulse?.[key as keyof typeof candidate.pulse] !== 'string'))) throw new Error(`${candidate.ref} has malformed pulse settings.`)
@@ -343,7 +343,7 @@ export function validateProject(input: unknown): Project {
       const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
       if (!symbolAsset) throw new Error(`${part.ref} refers to a missing imported symbol.`)
       const symbol = parseLtspiceSymbol(symbolAsset.content, symbolAsset.filename)
-      const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, currentSource: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3, nmos: 4, pmos: 4 } as const)[part.kind]
+      const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, currentSource: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3, njfet: 3, pjfet: 3, nmos: 4, pmos: 4 } as const)[part.kind]
       if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
     }
     if (part.kind === 'subcircuit' && !part.sheetId) {
@@ -365,7 +365,7 @@ export function validateProject(input: unknown): Project {
     }
     if (part.deviceModel !== undefined) {
       const model = importedDeviceModels.find((candidate) => candidate.name.toLowerCase() === part.deviceModel?.toLowerCase())
-      const expectedType = part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' ? 'npn' : part.kind === 'pnp' ? 'pnp' : part.kind === 'nmos' ? 'nmos' : part.kind === 'pmos' ? 'pmos' : null
+      const expectedType = part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' ? 'npn' : part.kind === 'pnp' ? 'pnp' : part.kind === 'njfet' ? 'njf' : part.kind === 'pjfet' ? 'pjf' : part.kind === 'nmos' ? 'nmos' : part.kind === 'pmos' ? 'pmos' : null
       if (!model || !expectedType || model.type.toLowerCase() !== expectedType) throw new Error(`${part.ref} has a missing or incompatible imported device model ${part.deviceModel}.`)
     }
   }
@@ -408,7 +408,7 @@ export function validateProject(input: unknown): Project {
     if (simulation.analysis !== 'tran') throw new Error('Transient measurements require transient analysis.')
     const measurementIds = new Set<string>()
     for (const measurement of simulation.transientMeasurements) {
-      const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQB][A-Za-z0-9_]*\)|i\(@I[A-Za-z0-9_]+\[current\]\))$/i
+      const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQBJ][A-Za-z0-9_]*\)|i\(@I[A-Za-z0-9_]+\[current\]\))$/i
       const validDelay = measurement?.operation === 'delay' && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && typeof measurement.targetVector === 'string' && vectorPattern.test(measurement.targetVector.trim()) && typeof measurement.threshold === 'string' && Number.isFinite(Number(measurement.threshold)) && typeof measurement.targetThreshold === 'string' && Number.isFinite(Number(measurement.targetThreshold)) && ['rise', 'fall', 'either'].includes(measurement.edge) && ['rise', 'fall', 'either'].includes(measurement.targetEdge)
       const validScalar = measurement && ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim())
       if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !(validDelay || validScalar)) throw new Error('Transient measurements require a unique name, supported operation, and valid voltage or device-current vectors and thresholds.')

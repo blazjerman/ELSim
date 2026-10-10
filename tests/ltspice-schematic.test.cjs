@@ -59,6 +59,26 @@ test('imports a user-supplied LTspice M device with D-G-S-B SpiceOrder mapping',
   assert.doesNotMatch(artifact.text, /^\.model ELSIM_MODEL_M1/m)
 })
 
+test('imports user-supplied N- and P-channel JFET cards with D-G-S SpiceOrder mapping', () => {
+  const makeJfetSymbol = (id, filename) => ({
+    id, filename, sha256: (filename.startsWith('n') ? 'd' : 'e').repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+    content: ['Version 4', 'SYMATTR Prefix J', 'LINE Normal -16 0 16 0', 'PIN 0 -16 U', 'PINATTR PinName D', 'PINATTR SpiceOrder 1', 'PIN -16 0 L', 'PINATTR PinName G', 'PINATTR SpiceOrder 2', 'PIN 0 16 D', 'PINATTR PinName S', 'PINATTR SpiceOrder 3'].join('\n'),
+  })
+  const symbols = [makeJfetSymbol('symbol-njfet', 'njfet.asy'), makeJfetSymbol('symbol-pjfet', 'pjfet.asy')]
+  const model = { id: 'jfet-library', filename: 'user-jfet.lib', sha256: 'c'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(), content: '.MODEL NJF_TEST NJF (VTO=-2 BETA=1m)\n.MODEL PJF_TEST PJF (VTO=2 BETA=1m)' }
+  const asc = ['Version 4', 'SHEET 1 880 680', 'SYMBOL njfet 32 32 R0', 'SYMATTR InstName J1', 'SYMATTR Value NJF_TEST', 'SYMBOL pjfet 128 32 R0', 'SYMATTR InstName J2', 'SYMATTR Value PJF_TEST'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'jfet.asc', symbols, [model])
+  assert.deepEqual(project.parts.map(({ kind, ref, deviceModel, symbolPinOffsets }) => ({ kind, ref, deviceModel, symbolPinOffsets })), [
+    { kind: 'njfet', ref: 'J1', deviceModel: 'NJF_TEST', symbolPinOffsets: [[0, -16], [-16, 0], [0, 16]] },
+    { kind: 'pjfet', ref: 'J2', deviceModel: 'PJF_TEST', symbolPinOffsets: [[0, -16], [-16, 0], [0, 16]] },
+  ])
+  assert.deepEqual(warnings, [])
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^J1 .* NJF_TEST$/m)
+  assert.match(artifact.text, /^J2 .* PJF_TEST$/m)
+})
+
 test('imports named-node and placed-component .save vectors as plot selections', () => {
   const asc = [
     'Version 4', 'FLAG 48 0 Out', 'SYMBOL res 32 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',

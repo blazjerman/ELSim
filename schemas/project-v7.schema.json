@@ -163,7 +163,9 @@
             "pnp",
             "nmos",
             "pmos",
-            "subcircuit"
+            "subcircuit",
+            "njfet",
+            "pjfet"
           ]
         },
         "componentDefinitionId": {

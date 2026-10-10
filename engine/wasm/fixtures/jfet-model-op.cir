@@ -1,0 +1,15 @@
+ELSim browser JFET operating point and drain current probe fixture
+VDD vdd 0 DC 5
+RLOAD vdd drain 1k
+J1 drain 0 0 JNTEST
+.MODEL JNTEST NJF (VTO=-2 BETA=1m)
+.op
+.print op v(drain)
+.save all @J1[id]
+.control
+set filetype=ascii
+op
+write /result.raw all
+quit
+.endc
+.end
