@@ -44,10 +44,12 @@ export type Part = {
 export type Wire = { id: string; points: [number, number][] }
 export type NetLabel = { id: string; name: string; x: number; y: number; visible: boolean }
 export type PlotRange = { start: number; end: number }
+export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>> }
 export type PlotSettings = {
   selectedTraceIds: string[]
   ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>>
   detachedWindow?: { x: number; y: number; width: number; height: number }
+  panels?: PlotPanel[]
 }
 export type ParameterSweep = { component: string; parameter?: string; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
@@ -451,6 +453,19 @@ export function validateProject(input: unknown): Project {
     }
     const detachedWindow = plotSettings.detachedWindow
     if (detachedWindow !== undefined && (!detachedWindow || !Number.isFinite(detachedWindow.x) || !Number.isFinite(detachedWindow.y) || !Number.isFinite(detachedWindow.width) || !Number.isFinite(detachedWindow.height) || Math.abs(detachedWindow.x) > 100_000 || Math.abs(detachedWindow.y) > 100_000 || detachedWindow.width < 280 || detachedWindow.width > 4_000 || detachedWindow.height < 160 || detachedWindow.height > 3_000)) throw new Error('Detached plot window settings are malformed.')
+    if (plotSettings.panels !== undefined) {
+      if (!Array.isArray(plotSettings.panels) || plotSettings.panels.length > 8) throw new Error('A project can save up to eight additional plot panels.')
+      const panelIds = new Set<string>()
+      for (const panel of plotSettings.panels) {
+        const bounds = panel?.bounds
+        if (!panel || typeof panel.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(panel.id) || panelIds.has(panel.id) || !Array.isArray(panel.selectedTraceIds) || panel.selectedTraceIds.length > 256 || panel.selectedTraceIds.some((id) => typeof id !== 'string') || !panel.ranges || typeof panel.ranges !== 'object' || Array.isArray(panel.ranges) || !bounds || !Number.isFinite(bounds.x) || !Number.isFinite(bounds.y) || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height) || Math.abs(bounds.x) > 100_000 || Math.abs(bounds.y) > 100_000 || bounds.width < 280 || bounds.width > 4_000 || bounds.height < 160 || bounds.height > 3_000) throw new Error('Plot panel settings are malformed.')
+        for (const analysis of ['tran', 'ac', 'dc'] as const) {
+          const range = panel.ranges[analysis]
+          if (range !== undefined && (!range || !Number.isFinite(range.start) || !Number.isFinite(range.end) || range.start < 0 || range.end > 1 || range.end - range.start < 0.03)) throw new Error('Plot panel view range is malformed.')
+        }
+        panelIds.add(panel.id)
+      }
+    }
   } else {
     data.plotSettings = { selectedTraceIds: [], ranges: {} }
   }

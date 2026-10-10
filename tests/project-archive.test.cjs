@@ -180,6 +180,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.ok(schema.$defs.part.properties.componentDefinitionId)
   assert.ok(schema.$defs.part.properties.extensions.properties.ltspice.properties.attributes)
   assert.equal(schema.$defs.simulation.properties.parameterSweeps.maxItems, 3)
+  assert.equal(schema.$defs.plotSettings.properties.panels.maxItems, 8)
+  assert.equal(schema.$defs.plotPanel.required.includes('selectedTraceIds'), true)
   const initialConditions = schema.$defs.simulation.properties.initialConditions.items.oneOf
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('voltage') && condition.properties.element.pattern.startsWith('^C')))
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('current') && condition.properties.element.pattern.startsWith('^L')))
@@ -207,7 +209,7 @@ test('LTspice source provenance validates its format, filename, and UTF-8 size l
 
 test('plot preferences survive project validation and old projects receive defaults', () => {
   const project = createStarterProject()
-  project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } }, detachedWindow: { x: 42, y: 54, width: 720, height: 460 } }
+  project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } }, detachedWindow: { x: 42, y: 54, width: 720, height: 460 }, panels: [{ id: 'plot-a', bounds: { x: 100, y: 80, width: 600, height: 320 }, selectedTraceIds: ['v(vout)'], ranges: { tran: { start: 0.1, end: 0.8 } } }] }
   assert.deepEqual(validateProject(structuredClone(project)).plotSettings, project.plotSettings)
   const oldProject = structuredClone(project)
   delete oldProject.plotSettings
@@ -218,6 +220,9 @@ test('plot preferences survive project validation and old projects receive defau
   const malformedWindow = structuredClone(project)
   malformedWindow.plotSettings.detachedWindow.width = 100
   assert.throws(() => validateProject(malformedWindow), /Detached plot window settings are malformed/)
+  const malformedPanel = structuredClone(project)
+  malformedPanel.plotSettings.panels[0].ranges.tran = { start: 0.8, end: 0.2 }
+  assert.throws(() => validateProject(malformedPanel), /Plot panel view range is malformed/)
 })
 
 test('project validation bounds namespaced imported LTspice attributes', () => {

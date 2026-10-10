@@ -24,7 +24,7 @@ import { wireCurrentFlow } from '../domain/wireFlow'
 import { componentDefaultValue, componentDefinitionFor, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
-import { createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
+import { createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type Project, type TransientMeasurement } from '../domain/project'
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef, validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlist'
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -455,6 +455,50 @@ function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, on
     {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <div className="cursor-readout">{shown.map((trace) => <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</div>}
     {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh the plot.</div>}
   </div>
+}
+
+function ResultPlot({ result, selectedIds, onToggle, stale, onExport, ranges, onRangeChange, sampleIndex, onSampleChange }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc', range: PlotRange) => void; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
+  if (result.analysis === 'op') return <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} stale={stale}/>
+  if (result.analysis === 'ac') return <AcPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} onExport={onExport} stale={stale}/>
+  if (result.analysis === 'dc') return <DcSweepPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.dc} onRangeChange={(range) => onRangeChange('dc', range)} onExport={onExport} stale={stale}/>
+  return <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} sampleIndex={sampleIndex} onSampleChange={onSampleChange} onExport={onExport} stale={stale} measurements={result.measurements}/>
+}
+
+function FloatingPlotPanel({ panel, index, onBoundsChange, onClose, onActivate, children }: { panel: PlotPanel; index: number; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onActivate: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLElement>(null)
+  const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
+  useEffect(() => {
+    const clamp = (bounds: PlotPanel['bounds']) => {
+      const width = Math.max(280, Math.min(bounds.width, window.innerWidth - 16))
+      const height = Math.max(160, Math.min(bounds.height, window.innerHeight - 16))
+      return { x: Math.max(8 - width, Math.min(window.innerWidth - 48, bounds.x)), y: Math.max(8, Math.min(window.innerHeight - 48, bounds.y)), width, height }
+    }
+    const initial = clamp(panel.bounds)
+    if (initial.x !== panel.bounds.x || initial.y !== panel.bounds.y || initial.width !== panel.bounds.width || initial.height !== panel.bounds.height) onBoundsChange(initial)
+    const saveSize = () => {
+      const rect = ref.current?.getBoundingClientRect()
+      if (!rect) return
+      const next = clamp({ ...panel.bounds, width: rect.width, height: rect.height })
+      if (next.width !== panel.bounds.width || next.height !== panel.bounds.height) onBoundsChange(next)
+    }
+    const observer = new ResizeObserver(saveSize)
+    if (ref.current) observer.observe(ref.current)
+    const move = (event: globalThis.PointerEvent) => {
+      if (!drag.current) return
+      const { x, y, left, top } = drag.current
+      onBoundsChange(clamp({ ...panel.bounds, x: left + event.clientX - x, y: top + event.clientY - y }))
+    }
+    const up = () => { drag.current = null }
+    const resize = () => onBoundsChange(clamp(panel.bounds))
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('resize', resize)
+    return () => { observer.disconnect(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('resize', resize) }
+  }, [panel.bounds, onBoundsChange])
+  return <section ref={ref} className="plot-window additional-plot-window" role="dialog" aria-label={`Plot panel ${index + 1}`} style={{ left: panel.bounds.x, top: panel.bounds.y, width: panel.bounds.width, height: panel.bounds.height, zIndex: 9 + index }} onPointerDownCapture={onActivate}>
+    <div className="plot-window-title" onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> Plot panel {index + 1}</span><button aria-label={`Close plot panel ${index + 1}`} title="Close plot panel" onClick={onClose}><X size={14}/></button></div>
+    <div className="plot-window-content">{children}</div>
+  </section>
 }
 
 function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string }[] }[]; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
@@ -893,6 +937,7 @@ export default function App() {
   const [parameterFormError, setParameterFormError] = useState('')
   const [waveformDetached, setWaveformDetached] = useState(false)
   const [plotBounds, setPlotBounds] = useState(() => project.plotSettings?.detachedWindow ?? { x: 24, y: 24, width: 680, height: 390 })
+  const [additionalPlotPanels, setAdditionalPlotPanels] = useState<PlotPanel[]>(() => project.plotSettings?.panels ?? [])
   const plotWindowRef = useRef<HTMLElement>(null)
   const plotDrag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
@@ -1059,6 +1104,15 @@ export default function App() {
     if (next === before) return current
     return { ...current, plotSettings: next }
   })
+  const saveAdditionalPlotPanels = useCallback((panels: PlotPanel[]) => {
+    setAdditionalPlotPanels(panels)
+    setProjectState((current) => {
+      const settings = current.plotSettings ?? { selectedTraceIds: [], ranges: {} }
+      if (JSON.stringify(settings.panels ?? []) === JSON.stringify(panels)) return current
+      return { ...current, plotSettings: { ...settings, panels } }
+    })
+  }, [])
+  useEffect(() => { setAdditionalPlotPanels(project.plotSettings?.panels ?? []) }, [project.rootSheetId, project.plotSettings?.panels])
   const changeTraceSelection = (id: string) => {
     const next = selectedTraceIds.includes(id) ? selectedTraceIds.filter((item) => item !== id) : [...selectedTraceIds, id]
     setSelectedTraceIds(next)
@@ -1069,6 +1123,15 @@ export default function App() {
     if (current?.start === range.start && current?.end === range.end) return settings
     return { ...settings, ranges: { ...settings.ranges, [analysis]: range } }
   })
+  const addPlotPanel = () => {
+    if (additionalPlotPanels.length >= 8) { setNotice('A project can open up to eight additional plot panels.'); return }
+    const offset = (additionalPlotPanels.length % 6) * 28
+    const panel: PlotPanel = { id: crypto.randomUUID(), bounds: { x: 72 + offset, y: 58 + offset, width: 680, height: 390 }, selectedTraceIds: [...selectedTraceIds], ranges: { ...(project.plotSettings?.ranges ?? {}) } }
+    saveAdditionalPlotPanels([...additionalPlotPanels, panel])
+  }
+  const updatePlotPanel = (panelId: string, update: (panel: PlotPanel) => PlotPanel) => saveAdditionalPlotPanels(additionalPlotPanels.map((panel) => panel.id === panelId ? update(panel) : panel))
+  const togglePlotPanelTrace = (panelId: string, traceId: string) => updatePlotPanel(panelId, (panel) => ({ ...panel, selectedTraceIds: panel.selectedTraceIds.includes(traceId) ? panel.selectedTraceIds.filter((id) => id !== traceId) : [...panel.selectedTraceIds, traceId] }))
+  const changePlotPanelRange = (panelId: string, analysis: 'tran' | 'ac' | 'dc', range: PlotRange) => updatePlotPanel(panelId, (panel) => ({ ...panel, ranges: { ...panel.ranges, [analysis]: range } }))
   const findSheetInstancePath = (targetSheetId: string, sheetId = projectRef.current.rootSheetId, path: string[] = [], visited = new Set<string>(), sourceProject = projectRef.current): string[] | null => {
     if (sheetId === targetSheetId) return path
     if (visited.has(sheetId)) return null
@@ -1731,6 +1794,11 @@ export default function App() {
         if (!initialTraces.length) initialTraces = response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.baseId ?? trace.id)).slice(0, response.result.analysis === 'op' ? undefined : response.result.analysis === 'dc' ? undefined : 2).map((trace) => trace.id)
         setSelectedTraceIds(initialTraces)
         savePlotSettings((settings) => ({ ...settings, selectedTraceIds: initialTraces }))
+        const traceIds = new Set(response.result.traces.map((trace) => trace.id))
+        saveAdditionalPlotPanels((projectRef.current.plotSettings?.panels ?? []).map((panel) => {
+          const restored = panel.selectedTraceIds.filter((id) => traceIds.has(id))
+          return { ...panel, selectedTraceIds: restored.length ? restored : initialTraces }
+        }))
         setRunState('idle')
         if (hierarchyWalkthroughStep === 0) {
           setHierarchyWalkthroughStep(1)
@@ -1959,7 +2027,7 @@ export default function App() {
         <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => setSheetSettingsOpen(true)}><SlidersHorizontal size={15}/></button></div>
         <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
-          <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button>}</div></div>
+          <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <><button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button><button className="subtle-icon" title="Add independent plot panel" aria-label="Add independent plot panel" onClick={addPlotPanel} disabled={!simulationResult || additionalPlotPanels.length >= 8}><Plus size={15}/></button></>}</div></div>
           <div className="analysis-content">
             {analysisTab === 'waveforms' ? simulationResult ? simulationResult.analysis === 'op' ? <OperatingPointView traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'ac' ? <AcPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.ac} onRangeChange={(range) => changePlotRange('ac', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'dc' ? <DcSweepPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.dc} onRangeChange={(range) => changePlotRange('dc', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.tran} onRangeChange={(range) => changePlotRange('tran', range)} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt} measurements={simulationResult.measurements}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>{runState === 'loading' ? 'Loading the circuit simulator' : runState === 'running' ? `Running ${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'ac' ? 'AC sweep' : project.simulation.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` : engineAssetAvailable === false ? 'Build the local ngspice engine' : 'Your results will appear here'}</strong><p>{runState === 'loading' || runState === 'running' ? 'The solver runs in a worker so the schematic remains responsive.' : engineAssetAvailable === false ? 'Follow engine/wasm/README.md to build the local ngspice WebAssembly engine.' : project.simulation.analysis === 'op' ? 'Run DC operating point to inspect solved node voltages and component currents.' : project.simulation.analysis === 'ac' ? 'Run an AC sweep to inspect frequency response magnitude and phase.' : project.simulation.analysis === 'dc' ? 'Sweep a voltage source to inspect how node voltages and currents change.' : 'Run transient analysis to inspect calculated voltages and currents. No placeholder data is generated.'}</p></div><button onClick={() => setAnalysisTab('netlist')}>View generated netlist <ArrowUp size={14}/></button></div> : <div className="netlist-panel"><pre>{createNetlist(project)}</pre><button className="copy-netlist" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div>}
           </div>
@@ -1971,6 +2039,10 @@ export default function App() {
         <div className="plot-window-title" onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; plotDrag.current = { x: event.clientX, y: event.clientY, left: plotBounds.x, top: plotBounds.y } }}><span><Activity size={14}/> Waveforms</span><button aria-label="Restore waveform panel" title="Restore waveform panel" onClick={() => setWaveformDetached(false)}><ArrowDown size={14}/></button></div>
         <div className="plot-window-content">{simulationResult ? simulationResult.analysis === 'op' ? <OperatingPointView traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'ac' ? <AcPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.ac} onRangeChange={(range) => changePlotRange('ac', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'dc' ? <DcSweepPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.dc} onRangeChange={(range) => changePlotRange('dc', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.tran} onRangeChange={(range) => changePlotRange('tran', range)} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt} measurements={simulationResult.measurements}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this panel.</p></div></div>}</div>
       </section>}
+
+      {additionalPlotPanels.map((panel, index) => <FloatingPlotPanel key={panel.id} panel={panel} index={index} onBoundsChange={(bounds) => updatePlotPanel(panel.id, (current) => ({ ...current, bounds }))} onClose={() => saveAdditionalPlotPanels(additionalPlotPanels.filter((item) => item.id !== panel.id))} onActivate={() => { if (index !== additionalPlotPanels.length - 1) saveAdditionalPlotPanels([...additionalPlotPanels.filter((item) => item.id !== panel.id), panel]) }}>
+        {simulationResult ? <ResultPlot result={simulationResult} selectedIds={panel.selectedTraceIds} onToggle={(traceId) => togglePlotPanelTrace(panel.id, traceId)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt} ranges={panel.ranges} onRangeChange={(analysis, range) => changePlotPanelRange(panel.id, analysis, range)} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this panel.</p></div></div>}
+      </FloatingPlotPanel>)}
 
       <aside className={`inspector-panel${mobilePane === 'properties' ? ' mobile-active' : ''}`}>
         <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : 'Circuit settings'}</h2></div><button className="subtle-icon" title="More properties"><MoreHorizontal size={17}/></button></div>

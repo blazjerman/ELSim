@@ -726,7 +726,43 @@
               "maximum": 3000
             }
           }
+        },
+        "panels": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/plotPanel" }
         }
+      }
+    },
+    "plotPanel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "bounds", "selectedTraceIds", "ranges"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "bounds": { "$ref": "#/$defs/plotWindowBounds" },
+        "selectedTraceIds": { "type": "array", "maxItems": 256, "items": { "type": "string" } },
+        "ranges": { "$ref": "#/$defs/plotRanges" }
+      }
+    },
+    "plotWindowBounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number", "minimum": -100000, "maximum": 100000 },
+        "y": { "type": "number", "minimum": -100000, "maximum": 100000 },
+        "width": { "type": "number", "minimum": 280, "maximum": 4000 },
+        "height": { "type": "number", "minimum": 160, "maximum": 3000 }
+      }
+    },
+    "plotRanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tran": { "$ref": "#/$defs/plotRange" },
+        "ac": { "$ref": "#/$defs/plotRange" },
+        "dc": { "$ref": "#/$defs/plotRange" }
       }
     },
     "plotRange": {
