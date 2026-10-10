@@ -918,6 +918,62 @@ test('N-JFET example demonstrates zero-bias conduction and negative-gate cutoff'
   await expect.poll(async () => Number(await currentArrow.getAttribute('opacity'))).toBeGreaterThan(0)
 })
 
+test('import a user NJF model and LTspice symbol, then simulate it in the browser', async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  const modelLibrary = '.MODEL USER_NJF NJF (VTO=-1 BETA=0.5m)\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'user-njf.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from user-njf\.lib/)).toBeVisible()
+
+  const source = [
+    'Version 4', 'SHEET 1 640 240',
+    'FLAG -16 0 VIN', 'FLAG 16 0 0', 'FLAG 48 0 VIN', 'FLAG 80 0 GATE',
+    'FLAG 112 0 GATE', 'FLAG 128 -16 DRAIN', 'FLAG 128 16 0',
+    'FLAG 176 64 VCC', 'FLAG 208 64 0', 'FLAG 240 64 VCC', 'FLAG 272 64 DRAIN',
+    'SYMBOL voltage 0 0 R0', 'SYMATTR InstName VDRIVE', 'SYMATTR Value PULSE(0 -5 0 1u 1u 50m 100m)',
+    'SYMBOL res 64 0 R0', 'SYMATTR InstName RGATE', 'SYMATTR Value 100',
+    'SYMBOL njfet 128 0 R0', 'SYMATTR InstName J1', 'SYMATTR Value USER_NJF',
+    'SYMBOL voltage 192 64 R0', 'SYMATTR InstName VCC', 'SYMATTR Value 5',
+    'SYMBOL res 256 64 R0', 'SYMATTR InstName RLOAD', 'SYMATTR Value 1k',
+    'TEXT 0 120 Left 2 !.tran 100u 100m', 'TEXT 0 140 Left 2 !.save V(GATE) V(DRAIN) I(J1)',
+  ].join('\n')
+  const symbol = (prefix: string, pins: Array<[string, number, number, string]>) => [
+    'Version 4', `SYMATTR Prefix ${prefix}`, 'RECTANGLE Normal -12 -12 12 12',
+    ...pins.flatMap(([name, x, y, orientation], index) => [`PIN ${x} ${y} ${orientation}`, `PINATTR PinName ${name}`, `PINATTR SpiceOrder ${index + 1}`]),
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'user-jfet.asc', mimeType: 'text/plain', buffer: Buffer.from(source) },
+    { name: 'voltage.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('V', [['PLUS', -16, 0, 'R'], ['MINUS', 16, 0, 'L']])) },
+    { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
+    { name: 'njfet.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('J', [['D', 0, -16, 'U'], ['G', -16, 0, 'L'], ['S', 0, 16, 'D']])) },
+  ])
+  await expect(page.getByText(/Imported user-jfet with 5 parts and 0 wires/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'J1')?.deviceModel)).toBe('USER_NJF')
+  const jfet = page.locator('.circuit-part[aria-label^="J1,"]')
+  await jfet.click()
+  await expect(page.getByLabel('Device model')).toHaveValue('USER_NJF')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(gate)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'V(drain)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'I(j1)', exact: true })).toBeVisible()
+  const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  const finalSample = Number(await timeSlider.getAttribute('max'))
+  await timeSlider.fill(String(Math.floor(finalSample / 4)))
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(gate\) = -5\.0+/)
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(drain\) = 5\.0+/)
+  await timeSlider.fill(String(Math.floor(finalSample * 3 / 4)))
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(gate\) = (?:0\.0+|[0-9.]+e-\d+)/)
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(drain\) = 4\.[0-9]+/)
+  await expect(jfet).toHaveCount(1)
+})
+
 test('current-controlled sources example shows CCCS gain and CCVS transresistance', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
