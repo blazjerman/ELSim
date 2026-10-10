@@ -149,6 +149,29 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(switchPart).toHaveAttribute('aria-label', /switch on/)
 })
 
+test('schematic wire paths and net labels can be selected from the keyboard', async ({ page }) => {
+  await page.goto('/')
+  const wire = page.getByRole('button', { name: 'Wire path with 2 segments' }).first()
+  await expect(wire).toHaveAttribute('tabindex', '0')
+  await wire.focus()
+  await page.keyboard.press('Enter')
+  await expect(wire).toHaveClass(/selected/)
+  await expect(wire).toHaveAttribute('aria-pressed', 'true')
+  const wireBefore = await wire.locator('polyline').first().getAttribute('points')
+  await page.keyboard.press('Shift+ArrowRight')
+  await expect.poll(() => wire.locator('polyline').first().getAttribute('points')).not.toBe(wireBefore)
+
+  const label = page.getByRole('button', { name: 'Net label vin' })
+  await expect(label).toHaveAttribute('tabindex', '0')
+  await label.focus()
+  await page.keyboard.press('Space')
+  await expect(label).toHaveClass(/selected/)
+  await expect(label).toHaveAttribute('aria-pressed', 'true')
+  const labelY = Number(await label.locator('rect').getAttribute('y'))
+  await page.keyboard.press('Shift+ArrowDown')
+  await expect.poll(async () => Number(await label.locator('rect').getAttribute('y'))).toBe(labelY + 10)
+})
+
 test('reused sheet interface edits update block pins and attached wires', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
