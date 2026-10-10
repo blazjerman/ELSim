@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect } from '@playwright/test'
 
@@ -306,4 +307,39 @@ test('DC sweep waveform supports source cursor and persistent drag-pan', async (
   await page.mouse.move(box!.x + box!.width * 0.58, box!.y + box!.height * 0.5, { steps: 5 })
   await page.mouse.up()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.ranges.dc.start)).not.toBe(zoomedRange.start)
+})
+
+test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {
+  await page.goto('/')
+  const content = '.MODEL USER_D D(Is=1e-14)\n'
+  const sha256 = createHash('sha256').update(content).digest('hex')
+  const symbolContent = 'Version 4\nSYMATTR Prefix X\nPIN 0 0 R\nPINATTR PinName IN\nPINATTR SpiceOrder 1\n'
+  const symbolSha256 = createHash('sha256').update(symbolContent).digest('hex')
+  await page.evaluate(({ content, sha256, symbolContent, symbolSha256 }) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.modelAssets = [{ id: 'model-export-warning', filename: 'user-diode.lib', content, sha256, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+    project.symbolAssets = [{ id: 'symbol-export-warning', filename: 'user-device.asy', content: symbolContent, sha256: symbolSha256, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+    project.importedSchematicSource = { format: 'ltspice-asc', filename: 'user-design.asc', originalText: 'Version 4\nSHEET 1 880 680\n' }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  }, { content, sha256, symbolContent, symbolSha256 })
+  await page.reload()
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  const warning = page.getByRole('alertdialog', { name: 'Review imported files' })
+  await expect(warning).toBeVisible()
+  await expect(warning).toContainText('user-diode.lib')
+  await expect(warning).toContainText('user-device.asy')
+  await expect(warning).toContainText('user-design.asc')
+  await expect(warning).toContainText('SPICE model library · redistribution rights unknown')
+  await expect(warning).toContainText('symbol file · redistribution rights unknown')
+  await expect(warning).toContainText('original schematic source · redistribution rights unknown')
+  await expect(warning).toContainText('Saving a copy for your own use does not grant permission')
+  await warning.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(warning).toBeHidden()
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('alertdialog', { name: 'Review imported files' }).getByRole('button', { name: 'Save project file', exact: true }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/\.elsim$/)
 })
