@@ -6,6 +6,7 @@ import { parseBehavioralExpression, validateBehavioralReferences } from './behav
 export type PartKind = 'source' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
 export type SourcePulse = { initial: string; delay: string; rise: string; fall: string; width: string; period: string }
+export type SourcePwlPoint = { time: string; voltage: string }
 
 export type Part = {
   id: string
@@ -23,8 +24,9 @@ export type Part = {
   deviceModel?: string
   controlSource?: string
   behavioralOutput?: 'voltage' | 'current'
-  sourceMode?: 'pulse' | 'dc'
+  sourceMode?: 'pulse' | 'dc' | 'pwl'
   pulse?: SourcePulse
+  pwl?: SourcePwlPoint[]
   extensions?: { ltspice?: { attributes?: Record<string, string> } }
   animationNominalPower?: number
   symbolAssetId?: string
@@ -209,8 +211,9 @@ export function validateProject(input: unknown): Project {
     }
     partIds.add(candidate.id)
     const prefix = ({ source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[candidate.kind]
-    if (candidate.sourceMode !== undefined && (candidate.kind !== 'source' || !['pulse', 'dc'].includes(candidate.sourceMode))) throw new Error(`${candidate.ref} has an invalid source waveform mode.`)
+    if (candidate.sourceMode !== undefined && (candidate.kind !== 'source' || !['pulse', 'dc', 'pwl'].includes(candidate.sourceMode))) throw new Error(`${candidate.ref} has an invalid source waveform mode.`)
     if (candidate.pulse !== undefined && (candidate.kind !== 'source' || !candidate.pulse || ['initial', 'delay', 'rise', 'fall', 'width', 'period'].some((key) => typeof candidate.pulse?.[key as keyof typeof candidate.pulse] !== 'string'))) throw new Error(`${candidate.ref} has malformed pulse settings.`)
+    if (candidate.pwl !== undefined && (candidate.kind !== 'source' || !Array.isArray(candidate.pwl) || candidate.pwl.length < 2 || candidate.pwl.length > 32 || candidate.pwl.some((point) => !point || typeof point !== 'object' || Array.isArray(point) || Object.keys(point).some((key) => key !== 'time' && key !== 'voltage') || typeof point.time !== 'string' || point.time.length > 64 || typeof point.voltage !== 'string' || point.voltage.length > 64))) throw new Error(`${candidate.ref} has malformed PWL source points.`)
     if (candidate.extensions !== undefined) {
       const attributes = candidate.extensions?.ltspice?.attributes
       const extensions = candidate.extensions

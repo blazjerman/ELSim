@@ -39,6 +39,15 @@ function spiceTime(value: string): string | null {
   return spiceScalar(result, '')
 }
 
+function spiceTimeMagnitude(value: string): number | null {
+  const normalized = spiceTime(value)
+  const match = normalized?.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+  if (!match) return null
+  const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
+  const magnitude = Number(match[1]) * scale
+  return Number.isFinite(magnitude) ? magnitude : null
+}
+
 function spiceFrequency(value: string): string | null {
   let result = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
   if (result.toLowerCase().endsWith('hz')) result = result.slice(0, -2)
@@ -230,7 +239,23 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       let transientValue = `DC ${value}`
-      if (part.sourceMode !== 'dc') {
+      if (part.sourceMode === 'pwl') {
+        const points = part.pwl ?? []
+        const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), voltage: spiceNumber(point.voltage, 'source') }))
+        let previousTime = -Infinity
+        let valid = points.length >= 2 && points.length <= 32
+        for (const point of normalized) {
+          if (point.time === null || point.timeMagnitude === null || point.timeMagnitude < 0 || point.timeMagnitude <= previousTime || point.voltage === null) { valid = false; break }
+          previousTime = point.timeMagnitude
+        }
+        if (!valid) {
+          const message = `${part.ref} PWL source needs 2–32 points with valid voltages and strictly increasing, nonnegative times.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `PWL(${normalized.map((point) => `${point.time} ${point.voltage}`).join(' ')})`
+      } else if (part.sourceMode !== 'dc') {
         const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
         const initial = spiceNumber(pulse.initial, 'source')
         const delay = spiceTime(pulse.delay)

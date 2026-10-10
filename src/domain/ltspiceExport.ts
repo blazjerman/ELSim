@@ -43,6 +43,15 @@ function scalar(value: string, unit = ''): string | null {
   return `${match[1]}${match[2]?.toLowerCase() === 'm' && match[2] === 'M' ? 'meg' : (match[2]?.toLowerCase() ?? '')}`
 }
 
+function scalarMagnitude(value: string, unit = ''): number | null {
+  const normalized = scalar(value, unit)
+  const match = normalized?.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+  if (!match) return null
+  const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
+  const magnitude = Number(match[1]) * scale
+  return Number.isFinite(magnitude) ? magnitude : null
+}
+
 function frequencyScalar(value: string): string | null {
   const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
   const withUnit = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])hz$/i)
@@ -156,8 +165,22 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
     if (!value) return null
     const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
     const pulseValues = [pulse.initial, pulse.delay, pulse.rise, pulse.fall, pulse.width, pulse.period].map((entry) => scalar(entry, entry === pulse.initial ? 'v' : 's'))
-    if (project.simulation.analysis === 'tran' && part.sourceMode !== 'dc' && pulseValues.some((entry) => entry === null)) return null
-    const output = project.simulation.analysis === 'tran' && part.sourceMode !== 'dc'
+    const isTransient = project.simulation.analysis === 'tran'
+    if (isTransient && part.sourceMode === 'pwl') {
+      const points = part.pwl ?? []
+      const mapped = points.map((point) => ({ time: scalar(point.time, 's'), timeMagnitude: scalarMagnitude(point.time, 's'), voltage: scalar(point.voltage, 'v') }))
+      let previousTime = -Infinity
+      let valid = points.length >= 2 && points.length <= 32
+      for (const point of mapped) {
+        if (point.time === null || point.timeMagnitude === null || point.timeMagnitude < 0 || point.timeMagnitude <= previousTime || point.voltage === null) { valid = false; break }
+        previousTime = point.timeMagnitude
+      }
+      if (!valid) return null
+      const output = `PWL(${mapped.map((point) => `${point.time} ${point.voltage}`).join(' ')})`
+      return { value: output }
+    }
+    if (isTransient && part.sourceMode !== 'dc' && pulseValues.some((entry) => entry === null)) return null
+    const output = isTransient && part.sourceMode !== 'dc'
       ? `PULSE(${pulseValues[0]} ${value} ${pulseValues[1]} ${pulseValues[2]} ${pulseValues[3]} ${pulseValues[4]} ${pulseValues[5]})`
       : value
     const spiceLine = project.simulation.analysis === 'ac' ? `AC ${scalar(project.simulation.sourceAcMagnitude ?? '1 V', 'v') ?? '1'}` : undefined

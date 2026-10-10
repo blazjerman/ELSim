@@ -1,0 +1,7 @@
+ELSim ngspice WebAssembly PWL transient
+V1 in 0 PWL(0 0 2m 5 4m 0)
+R1 in out 1k
+C1 out 0 10u
+.tran 100u 6m
+.print tran v(in) v(out)
+.end

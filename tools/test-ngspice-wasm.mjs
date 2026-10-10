@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op']
+const fixtures = ['rc-transient', 'pwl-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -58,6 +58,13 @@ for (const fixture of fixtures) {
   const wasmRows = numericRows(wasmResult.stdout)
   if (fixture === 'hierarchical-parameter') { assert.match(wasmResult.stdout, /in\s+5\.000000e\+00/i); assert.match(wasmResult.stdout, /in2\s+1\.000000e\+01/i); assert.match(wasmResult.stdout, /resistance\s+2000\s+1000/i); assert.match(wasmResult.stdout, /\bi\s+0\.005\s+0\.005/i) }
   if (fixture !== 'hierarchical-parameter' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
+
+  if (fixture === 'pwl-transient') {
+    assert.match(wasmResult.stdout, /v\(in\)/i, 'pwl-transient: input voltage was not printed')
+    assert.ok(wasmRows.length > 10, 'pwl-transient: expected multiple transient samples')
+    assert.ok(wasmRows.some((row) => { const values = row.trim().split(/\s+/).slice(1).map(Number); return Math.abs(values[1] - 5) < 1e-6 }), 'pwl-transient: source never reached 5 V')
+    assert.ok(wasmRows.some((row) => { const values = row.trim().split(/\s+/).slice(1).map(Number); return values[1] < 1e-6 }), 'pwl-transient: source never returned to 0 V')
+  }
 
   if (fixture.endsWith('-op')) {
     assert.match(wasmResult.stdout, /Voltage|v\(out\)/i, `${fixture}: no operating-point result was printed`)

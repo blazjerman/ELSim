@@ -51,6 +51,20 @@ test('source pulse levels and timing are editable and validated before netlistin
   assert.match(artifact.diagnostics[0].message, /period must be positive/i)
 })
 
+test('PWL voltage sources emit ordered time-voltage pairs and diagnose invalid ordering', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.kind === 'source')
+  source.sourceMode = 'pwl'
+  source.pwl = [{ time: '0 s', voltage: '0 V' }, { time: '2 ms', voltage: '5 V' }, { time: '3 ms', voltage: '-1 V' }]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 PWL\(0 0 2m 5 3m -1\)$/m)
+  source.pwl[1].time = '0'
+  const invalid = createNetlistArtifact(project)
+  assert.equal(invalid.diagnostics[0].severity, 'error')
+  assert.match(invalid.diagnostics[0].message, /strictly increasing/)
+})
+
 test('zero-volt pulse initial level is valid', () => {
   const project = createStarterProject()
   const artifact = createNetlistArtifact(project)

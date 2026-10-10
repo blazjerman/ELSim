@@ -1,4 +1,4 @@
-import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourcePulse, type SymbolAsset, type Wire } from './project'
+import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourcePulse, type SourcePwlPoint, type SymbolAsset, type Wire } from './project'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseSubcircuitLibrary } from './subcircuitLibrary'
 
@@ -10,19 +10,27 @@ const MAX_ASC_LINES = 100_000
 const MAX_ASC_WIRES = 2_000
 const MAX_ASC_SYMBOLS = 1_000
 const MAX_UNSUPPORTED_RECORD_CHARS = 240
-const validScalar = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:meg|[tgkmunpf])?(?:s|hz)?$/i.test(value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u'))
+const validScalar = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|s|hz)?$/i.test(value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u'))
 
 function recordExcerpt(raw: string): string {
   const compact = raw.replace(/\s+/g, ' ').trim()
   return compact.length > MAX_UNSUPPORTED_RECORD_CHARS ? `${compact.slice(0, MAX_UNSUPPORTED_RECORD_CHARS - 1)}…` : compact
 }
 
-function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc'; pulse?: SourcePulse } {
+function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'pwl'; pulse?: SourcePulse; pwl?: SourcePwlPoint[] } {
   const trimmed = value.trim()
   const generatedPulse = trimmed.match(/^PULSE\(\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\)$/i)
   if (generatedPulse && generatedPulse.slice(1).every((entry) => validScalar(entry))) {
     const [, initial, high, delay, rise, fall, width, period] = generatedPulse
     return { value: high, mode: 'pulse', pulse: { initial, delay, rise, fall, width, period } }
+  }
+  const generatedPwl = trimmed.match(/^PWL\(\s*([^()]*)\s*\)$/i)
+  if (generatedPwl) {
+    const values = generatedPwl[1].trim().split(/[\s,]+/).filter(Boolean)
+    if (values.length >= 4 && values.length <= 64 && values.length % 2 === 0 && values.every((entry) => validScalar(entry))) {
+      const pwl = Array.from({ length: values.length / 2 }, (_, index) => ({ time: values[index * 2], voltage: values[index * 2 + 1] }))
+      return { value: pwl.at(-1)!.voltage, mode: 'pwl', pwl }
+    }
   }
   if (validScalar(trimmed)) return { value: trimmed, mode: 'dc' }
   return { value: trimmed }
@@ -327,6 +335,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...(mapped.deviceModel ? { deviceModel: mapped.deviceModel } : {}),
       ...(kind === 'source' && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
       ...(kind === 'source' && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
+      ...(kind === 'source' && parsedSource.pwl ? { pwl: parsedSource.pwl } : {}),
     }
     project.parts.push(part)
     warnings.push(...sidecar.parsed.warnings.map((warning) => `${identity}: ${warning}`))

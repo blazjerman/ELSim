@@ -68,6 +68,11 @@ test('imports scalar LTspice voltage sources as DC and preserves PULSE levels an
   assert.equal(imported.value, '5')
   assert.equal(imported.sourceMode, 'pulse')
   assert.deepEqual(imported.pulse, { initial: '1', delay: '2m', rise: '3u', fall: '4u', width: '5m', period: '10m' })
+  const pwl = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V3', 'SYMATTR Value PWL(0 0, 2m 5, 4m -1)'].join('\n')
+  const importedPwl = parseLtspiceSchematic(pwl, 'pwl.asc', [sourceSymbol]).project.parts[0]
+  assert.equal(importedPwl.value, '-1')
+  assert.equal(importedPwl.sourceMode, 'pwl')
+  assert.deepEqual(importedPwl.pwl, [{ time: '0', voltage: '0' }, { time: '2m', voltage: '5' }, { time: '4m', voltage: '-1' }])
 })
 
 test('reports missing symbol files and unsupported directives instead of silently importing an incomplete part', () => {
