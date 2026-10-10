@@ -4,15 +4,17 @@ import { componentMagnitude } from '../domain/componentValue'
 export type ParameterSweepRun = { values: { component: string; value: string }[]; label: string }
 
 function componentUnit(kind: string): string {
-  return kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
+  return kind === 'source' ? 'V' : kind === 'currentSource' ? 'A' : kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
 }
 
 function buildValues(project: Project, sweep: ParameterSweep) {
   const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
-  if (!part || !['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error(`Choose a resistor, lamp, capacitor, or inductor for parameter stepping.`)
+  if (!part || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, current source, resistor, lamp, capacitor, or inductor for parameter stepping.')
+  if (part.kind === 'source' && part.sourceMode !== 'dc') throw new Error(`${part.ref} must use the DC waveform mode for parameter stepping. Pulse and PWL waveform stepping is unsupported.`)
   const start = componentMagnitude(sweep.start, part.kind)
   const stop = componentMagnitude(sweep.stop, part.kind)
   if (start === null || stop === null || start === stop) throw new Error(`${part.ref} needs valid, different start and stop values.`)
+  if (!['source', 'currentSource'].includes(part.kind) && (start <= 0 || stop <= 0)) throw new Error(`${part.ref} passive values must be positive.`)
   return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
 }
 

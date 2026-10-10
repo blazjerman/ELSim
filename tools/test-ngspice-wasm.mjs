@@ -217,6 +217,20 @@ const outputMaxima = parameterSweepResult.rawFiles.map((raw) => Math.max(...real
 assert.ok(outputMaxima[0] > outputMaxima[1] && outputMaxima[1] > outputMaxima[2], 'increasing R must reduce the RC output peak')
 process.stdout.write('PASS parameter-sweep-transient-vectors\n')
 
+const sourceSweepPaths = Array.from({ length: 4 }, (_, index) => `/result-${index}.raw`)
+const sourceSweepResult = await runInWorker(path.join(root, 'engine/wasm/fixtures', 'parameter-source-sweep.cir'), false, sourceSweepPaths)
+assert.equal(sourceSweepResult.status, 0, `parameter-source-sweep: ngspice exited with a nonzero status: ${sourceSweepResult.stderr}`)
+assert.equal(sourceSweepResult.rawFiles.length, 4)
+const sourceSweepFinalValues = sourceSweepResult.rawFiles.map((raw) => ({
+  voltage: realRawVector(raw, 'v(vout)').at(-1),
+  currentOutput: realRawVector(raw, 'v(iout)').at(-1),
+  current: realRawVector(raw, 'i(@i1[current])').at(-1),
+}))
+assert.ok(Math.abs(sourceSweepFinalValues[0].voltage + 1) < 0.02 && Math.abs(sourceSweepFinalValues[1].voltage - 1) < 0.02, 'alter on a scalar DC voltage source should change the RC output')
+assert.ok(Math.abs(sourceSweepFinalValues[2].currentOutput - 1) < 1e-9 && Math.abs(sourceSweepFinalValues[3].currentOutput - 2) < 1e-9, 'alter on an independent current source should change the load voltage')
+assert.ok(Math.abs(sourceSweepFinalValues[2].current - 0.001) < 1e-9 && Math.abs(sourceSweepFinalValues[3].current - 0.002) < 1e-9, 'stepped current-source branch vectors should preserve amperes')
+process.stdout.write('PASS scalar-source-parameter-sweep\n')
+
 const measurementPath = path.join(root, 'engine/wasm/fixtures', 'measurement-transient.cir')
 const measurementResult = await runInWorker(measurementPath)
 assert.equal(measurementResult.status, 0, `measurement-transient: ngspice exited with a nonzero status: ${measurementResult.stderr}`)

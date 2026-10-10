@@ -407,11 +407,11 @@ function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, on
 }
 
 function ParameterSweepEditor({ parts, sweeps, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
-  const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind))
+  const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor', 'currentSource'].includes(part.kind) || (part.kind === 'source' && part.sourceMode === 'dc'))
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
-    <p className="field-hint">Compare circuit results while changing one or two component values.</p>
+    <p className="field-hint">Compare results while changing one or two passive values or scalar DC source levels.</p>
     {sweeps.map((sweep, index) => {
       const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
       const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
@@ -421,7 +421,7 @@ function ParameterSweepEditor({ parts, sweeps, onAdd, onChange, onRemove }: { pa
           const nextPart = eligible.find((item) => item.ref === event.target.value)
           if (!nextPart) return
           const magnitude = componentMagnitude(nextPart.value, nextPart.kind)
-          const unit = nextPart.kind === 'resistor' || nextPart.kind === 'lamp' ? 'Ω' : nextPart.kind === 'capacitor' ? 'F' : 'H'
+          const unit = nextPart.kind === 'source' ? 'V' : nextPart.kind === 'currentSource' ? 'A' : nextPart.kind === 'resistor' || nextPart.kind === 'lamp' ? 'Ω' : nextPart.kind === 'capacitor' ? 'F' : 'H'
           onChange(index, { component: nextPart.ref, start: nextPart.value, stop: magnitude === null ? nextPart.value : `${(magnitude * 2).toExponential(5)} ${unit}` })
         }}>{eligible.map((item) => <option key={item.id} value={item.ref} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && other.component.toLowerCase() === item.ref.toLowerCase())}>{item.ref} · {kindNames[item.kind]}</option>)}</select></label>
         <div className="parameter-sweep-inputs"><label className="field-label">Start<input aria-label={`Parameter ${index + 1} start value`} value={sweep.start} onChange={(event) => onChange(index, { start: event.target.value })}/></label><label className="field-label">Stop<input aria-label={`Parameter ${index + 1} stop value`} value={sweep.stop} onChange={(event) => onChange(index, { stop: event.target.value })}/></label></div>

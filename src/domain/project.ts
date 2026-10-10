@@ -363,18 +363,18 @@ export function validateProject(input: unknown): Project {
     for (const sweep of simulation.parameterSweeps) {
       if (!sweep || typeof sweep.component !== 'string' || !sweep.component.trim()) throw new Error('Parameter stepping settings are malformed.')
       const component = data.parts.find((part) => (part as Part).ref.toLowerCase() === sweep.component.toLowerCase()) as Part | undefined
-      if (!component || !['resistor', 'lamp', 'capacitor', 'inductor'].includes(component.kind) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct resistors, lamps, capacitors, or inductors and 2–10 steps.')
+      if (!component || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component.kind) || (component.kind === 'source' && component.sourceMode !== 'dc') || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct DC voltage/current sources or R/C/L parts and 2–10 steps.')
       const parseComponentValue = (value: string): number | null => {
-        const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/[ΩΩ]|ohms?|[fFhH]$/gi, '')
-        const match = normalized.match(/^([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+        const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/[ΩΩ]|ohms?|[vVaAfFhH]$/gi, '')
+        const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
         if (!match) return null
         const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
         const parsed = Number(match[1]) * scale
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+        return Number.isFinite(parsed) ? parsed : null
       }
       const start = parseComponentValue(sweep.start)
       const stop = parseComponentValue(sweep.stop)
-      if (start === null || stop === null || start === stop) throw new Error(`${component.ref} needs valid, positive, different parameter start and stop values.`)
+      if (start === null || stop === null || start === stop || (!['source', 'currentSource'].includes(component.kind) && (start <= 0 || stop <= 0))) throw new Error(`${component.ref} needs valid, different parameter start and stop values; passive values must be positive.`)
       sweepRefs.add(sweep.component.toLowerCase())
       combinations *= sweep.points
     }

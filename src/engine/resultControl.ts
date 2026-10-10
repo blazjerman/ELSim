@@ -14,10 +14,10 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     if (/^\s*\.subckt\b/i.test(line)) { insideSubcircuit = true; return [] }
     if (/^\s*\.ends\b/i.test(line)) { insideSubcircuit = false; return [] }
     if (insideSubcircuit) return []
-    const ref = line.match(/^\s*([RCLDSEGFHQB][A-Za-z0-9_]+)\s+/i)?.[1]
+    const ref = line.match(/^\s*([RCLDSEGFHQBI][A-Za-z0-9_]+)\s+/i)?.[1]
     if (!ref) return []
     if (analysisType === 'ac' && /^[CL]/i.test(ref)) return []
-    const current = ref[0].toUpperCase() === 'D' ? 'id' : ref[0].toUpperCase() === 'Q' ? 'ic' : 'i'
+    const current = ref[0].toUpperCase() === 'D' ? 'id' : ref[0].toUpperCase() === 'Q' ? 'ic' : ref[0].toUpperCase() === 'I' ? 'current' : 'i'
     return [`@${ref}[${current}]`]
   })
   const measurementCommand = (measurement: TransientMeasurement, suffix = '') => measurement.operation === 'delay'

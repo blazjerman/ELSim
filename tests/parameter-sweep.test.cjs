@@ -13,6 +13,8 @@ test('engineering units parse to base magnitudes for resistor, capacitor, and in
   assert.equal(componentMagnitude('1 kΩ', 'resistor'), 1000)
   assert.ok(Math.abs(componentMagnitude('10 µF', 'capacitor') - 10e-6) < 1e-15)
   assert.ok(Math.abs(componentMagnitude('5 mH', 'inductor') - 5e-3) < 1e-15)
+  assert.equal(componentMagnitude('-5 V', 'source'), -5)
+  assert.equal(componentMagnitude('2 mA', 'currentSource'), 0.002)
   assert.equal(componentMagnitude('not a value', 'resistor'), null)
 })
 
@@ -33,6 +35,25 @@ test('single and nested parameter sweeps produce deterministic, bounded combinat
   assert.match(control, /alter R1 1\.00000000e\+3\nalter C1 1\.00000000e-5\nrun\nwrite \/result-0\.raw all/)
 })
 
+test('scalar DC voltage and current sources are stepped in signed native units', () => {
+  const project = createStarterProject()
+  const voltage = project.parts.find((part) => part.kind === 'source')
+  voltage.sourceMode = 'dc'
+  const current = { id: 'sweep-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 700, y: 600, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [
+    { component: 'V1', start: '-1 V', stop: '1 V', points: 3 },
+    { component: 'I1', start: '1 mA', stop: '2 mA', points: 2 },
+  ]
+  const runs = prepareParameterSweep(validateProject(structuredClone(project)))
+  assert.equal(runs.length, 6)
+  assert.equal(runs[0].label, 'V1=-1 V, I1=0.001 A')
+  assert.equal(runs[0].values[0].value, '-1.00000000e+0')
+  assert.equal(runs[0].values[1].value, '1.00000000e-3')
+  assert.match(addResultControl(createNetlistArtifact(project).text, runs), /alter V1 -1\.00000000e\+0\nalter I1 1\.00000000e-3/)
+})
+
 test('parameter sweep rejects duplicate parts, equal endpoints, and more than ten combinations', () => {
   const project = createStarterProject()
   project.simulation.parameterSweeps = [{ component: 'R1', start: '1 kΩ', stop: '1 kΩ', points: 3 }]
@@ -43,10 +64,14 @@ test('parameter sweep rejects duplicate parts, equal endpoints, and more than te
   ]
   assert.throws(() => validateProject(project), /10 total combinations/)
   project.simulation.parameterSweeps = [{ component: 'R1', start: 'invalid', stop: '2 kΩ', points: 3 }]
-  assert.throws(() => validateProject(project), /valid, positive, different/)
+  assert.throws(() => validateProject(project), /passive values must be positive/)
   project.simulation.analysis = 'ac'
   project.simulation.parameterSweeps = [{ component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 3 }]
   assert.throws(() => validateProject(project), /transient analysis only/)
+  project.simulation.analysis = 'tran'
+  project.parts.find((part) => part.ref === 'V1').sourceMode = 'pulse'
+  project.simulation.parameterSweeps = [{ component: 'V1', start: '1 V', stop: '2 V', points: 3 }]
+  assert.throws(() => validateProject(project), /DC voltage\/current sources or R\/C\/L parts/)
 })
 
 test('node-voltage initial conditions require labeled nodes and emit optional UIC', () => {

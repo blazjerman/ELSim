@@ -1,0 +1,25 @@
+ELSim ngspice scalar source parameter stepping
+V1 vin 0 DC 1
+R1 vin vout 1k
+C1 vout 0 10u
+I1 0 iout 1m
+R2 iout 0 1k
+.tran 100u 3m
+.save all @i1[current]
+.control
+set filetype=ascii
+alter V1 -1
+run
+write /result-0.raw all
+alter V1 1
+run
+write /result-1.raw all
+alter I1 1m
+run
+write /result-2.raw all
+alter I1 2m
+run
+write /result-3.raw all
+quit
+.endc
+.end
