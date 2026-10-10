@@ -81,16 +81,43 @@ export type EngineResponse =
   | { type: 'cancelled'; requestId: string; runId: string }
   | { type: 'error'; requestId: string; error: SimulationDiagnostic }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function isDiagnostic(value: unknown): value is SimulationDiagnostic {
+  return isRecord(value) && ['info', 'warning', 'error'].includes(String(value.severity)) && typeof value.message === 'string'
+}
+
+/** Runtime boundary check for messages received from a worker implementation. */
 export function isEngineResponse(value: unknown): value is EngineResponse {
-  if (!value || typeof value !== 'object') return false
-  const candidate = value as Record<string, unknown>
+  if (!isRecord(value)) return false
+  const candidate = value
   if (typeof candidate.requestId !== 'string') return false
   if (candidate.type === 'ready') return typeof candidate.engine === 'string' && typeof candidate.engineVersion === 'string'
   if (candidate.type === 'progress') return typeof candidate.runId === 'string' && typeof candidate.fraction === 'number' && Number.isFinite(candidate.fraction) && candidate.fraction >= 0 && candidate.fraction <= 1
   if (candidate.type === 'cancelled') return typeof candidate.runId === 'string'
-  if (candidate.type === 'result') return Boolean(candidate.result && typeof candidate.result === 'object')
-  if (candidate.type === 'error') return Boolean(candidate.error && typeof candidate.error === 'object' && typeof (candidate.error as Record<string, unknown>).message === 'string')
+  if (candidate.type === 'result') {
+    const result = candidate.result
+    return isRecord(result) && isRecord(result.metadata) && typeof result.netlist === 'string' && Array.isArray(result.sourceMap) && Array.isArray(result.traces) && Array.isArray(result.diagnostics) && result.diagnostics.every(isDiagnostic) && ['tran', 'op', 'ac', 'dc'].includes(String(result.analysis)) && Array.isArray(result.measurements)
+  }
+  if (candidate.type === 'error') return isDiagnostic(candidate.error)
   return false
+}
+
+/** Runtime boundary check for independently implemented request producers. */
+export function isEngineRequest(value: unknown): value is EngineRequest {
+  if (!isRecord(value) || typeof value.requestId !== 'string') return false
+  if (value.type === 'initialize' || value.type === 'dispose') return true
+  if (value.type === 'cancel') return typeof value.runId === 'string'
+  if (value.type !== 'run' || !isRecord(value.artifact) || !isRecord(value.metadata)) return false
+  const artifact = value.artifact
+  const metadata = value.metadata
+  if (typeof artifact.text !== 'string' || !Array.isArray(artifact.sourceMap) || !Array.isArray(artifact.diagnostics) || !artifact.diagnostics.every(isDiagnostic)) return false
+  if (typeof metadata.runId !== 'string' || typeof metadata.startedAt !== 'string' || typeof metadata.engine !== 'string' || typeof metadata.engineVersion !== 'string' || typeof metadata.projectVersion !== 'number' || typeof metadata.netlistHash !== 'string' || !isRecord(metadata.settings)) return false
+  if (value.parameterSweep !== undefined && !Array.isArray(value.parameterSweep)) return false
+  if (value.measurements !== undefined && !Array.isArray(value.measurements)) return false
+  return true
 }
 
 export class EngineNotIntegratedError extends Error {

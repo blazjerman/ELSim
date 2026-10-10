@@ -86,10 +86,11 @@
       "required": ["id", "operation", "vector", "value", "unit"],
       "properties": {
         "id": { "type": "string" },
-        "operation": { "enum": ["max", "min", "avg", "rms"] },
+        "operation": { "enum": ["max", "min", "avg", "rms", "delay"] },
         "vector": { "type": "string" },
+        "targetVector": { "type": "string" },
         "value": { "type": "number" },
-        "unit": { "enum": ["V", "A"] },
+        "unit": { "enum": ["V", "A", "s"] },
         "sweep": { "type": "object", "additionalProperties": false, "required": ["label", "index"], "properties": { "label": { "type": "string" }, "index": { "type": "integer", "minimum": 0 } } }
       }
     },
@@ -113,14 +114,31 @@
       }
     },
     "transientMeasurement": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "operation", "vector"],
-      "properties": {
-        "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$" },
-        "operation": { "enum": ["max", "min", "avg", "rms"] },
-        "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" }
-      }
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["id", "operation", "vector"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$" },
+            "operation": { "enum": ["max", "min", "avg", "rms"] },
+            "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["id", "operation", "vector", "threshold", "targetVector", "targetThreshold", "edge", "targetEdge"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$" },
+            "operation": { "const": "delay" },
+            "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" },
+            "threshold": { "type": "string", "pattern": "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" },
+            "targetVector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" },
+            "targetThreshold": { "type": "string", "pattern": "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" },
+            "edge": { "enum": ["rise", "fall", "either"] },
+            "targetEdge": { "enum": ["rise", "fall", "either"] }
+          }
+        }
+      ]
     },
     "request": {
       "oneOf": [

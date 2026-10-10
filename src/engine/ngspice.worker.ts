@@ -3,7 +3,7 @@ import { isTraceVariable, parseAsciiRawFile } from './raw'
 import { addResultControl } from './resultControl'
 import { parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice } from './diagnostics'
-import type { EngineRequest, EngineResponse, NetlistArtifact, RunMetadata, Trace } from './contract'
+import { isEngineRequest, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
 import type { TransientMeasurement } from '../domain/project'
 
 const worker = self as DedicatedWorkerGlobalScope
@@ -82,7 +82,8 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
   }
 }
 
-worker.addEventListener('message', (event: MessageEvent<EngineRequest>) => {
+worker.addEventListener('message', (event: MessageEvent<unknown>) => {
+  if (!isEngineRequest(event.data)) return
   const request = event.data
   if (request.type === 'run') void run(request.requestId, request.artifact, request.metadata, request.parameterSweep, request.measurements)
   else if (request.type === 'dispose') worker.close()
