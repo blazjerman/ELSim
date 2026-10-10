@@ -18,7 +18,7 @@ const sources = [
   'src/domain/connectivity.ts', 'src/domain/electricalCheck.ts', 'src/domain/geometry.ts',
   'src/domain/probe.ts', 'src/domain/hierarchyProbe.ts', 'src/domain/project.ts',
   'src/domain/behavioralExpression.ts', 'src/domain/subcircuitLibrary.ts',
-  'src/domain/ltspiceSymbol.ts', 'src/domain/ltspiceSchematic.ts',
+  'src/domain/ltspiceSymbol.ts', 'src/domain/ltspiceSchematic.ts', 'src/domain/examples.ts',
 ]
 
 function summary(samples) {
@@ -117,6 +117,41 @@ function makeWireGrid(createStarterProject, componentPins, count) {
   return project
 }
 
+function makeHierarchy(createHierarchicalExampleProject, componentPins, count) {
+  const project = createHierarchicalExampleProject()
+  const root = project.sheets.find((sheet) => sheet.id === project.rootSheetId)
+  const template = root.parts.find((part) => part.sheetId)
+  if (!root || !template) throw new Error('Hierarchical benchmark example has no reusable child-block instance.')
+  const parts = Array.from({ length: count }, (_, index) => ({
+    ...structuredClone(template),
+    id: `hierarchy-bench-x-${index + 1}`,
+    ref: `XLOAD${index + 1}`,
+    x: 160 + (index % 50) * 160,
+    y: 200 + Math.floor(index / 50) * 120,
+  }))
+  const netLabels = []
+  for (const [index, part] of parts.entries()) {
+    for (const pin of componentPins(part)) netLabels.push({
+      id: `hierarchy-bench-label-${index}-${pin.index}`,
+      name: pin.index === 2 ? '0' : `${pin.index === 0 ? 'IN' : 'OUT'}_${index + 1}`,
+      x: pin.x,
+      y: pin.y,
+      visible: true,
+    })
+  }
+  project.name = `Benchmark two-level reusable blocks (${count} instances)`
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.activeSheetId = project.rootSheetId
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.sheets = project.sheets.map((sheet) => sheet.id === project.rootSheetId
+    ? { ...sheet, parts, wires: [], junctions: [], netLabels }
+    : sheet)
+  return project
+}
+
 function runWasm(moduleUrl, deck, options = {}) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(path.join(root, 'tests/wasm/ngspice-benchmark-worker.mjs'), { workerData: { moduleUrl, deck, ...options } })
@@ -168,6 +203,7 @@ try {
 
   const build = createRequire(import.meta.url)
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
+  const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
   const { componentPins } = build(path.join(output, 'domain/geometry.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
   const { createNetlistArtifact } = build(path.join(output, 'engine/netlist.js'))
@@ -189,6 +225,28 @@ try {
       nets: new Set(connectivity.value.pinNets.values()).size,
       netlistLines: artifact.text.trimEnd().split('\n').length,
       netlistBytes: Buffer.byteLength(artifact.text),
+      connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
+      netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
+    })
+  }
+
+  const hierarchyResults = []
+  for (const count of [100, 500, 1_000, 5_000]) {
+    const project = makeHierarchy(createHierarchicalExampleProject, componentPins, count)
+    const connectivity = measure(() => analyzeConnectivity(project))
+    const netlist = measure(() => createNetlistArtifact(project))
+    const artifact = netlist.value
+    if (artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error(`Hierarchical benchmark fixture ${count} produced netlist errors.`)
+    if (connectivity.value.pinNets.size !== count * 3) throw new Error(`Hierarchical benchmark fixture ${count} lost one or more root block pins.`)
+    if (!/^\.SUBCKT ELSIM_SHEET_sheet_core/m.test(artifact.text) || !/^\.SUBCKT ELSIM_SHEET_sheet_divider/m.test(artifact.text)) throw new Error(`Hierarchical benchmark fixture ${count} lost a nested block definition.`)
+    if (!new RegExp(`^XLOAD${count}\\s`, 'm').test(artifact.text)) throw new Error(`Hierarchical benchmark fixture ${count} omitted its final block instance.`)
+    hierarchyResults.push({
+      instances: count,
+      parts: project.parts.length,
+      rootPins: connectivity.value.pinNets.size,
+      labels: project.netLabels.length,
+      nets: new Set(connectivity.value.pinNets.values()).size,
+      netlistLines: artifact.text.trimEnd().split('\n').length,
       connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
       netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
     })
@@ -295,6 +353,7 @@ try {
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
     wireResults,
+    hierarchyResults,
     plotResults,
     simulationResults: simulationResults ?? 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations',
     transientResults: transientResults ?? 'skipped: build the optional local ngspice WASM runtime to include large transient and process-memory observations',
