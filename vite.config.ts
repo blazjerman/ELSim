@@ -82,5 +82,16 @@ export default defineConfig(({ command, mode }) => {
     // ignored, locally generated ngspice binary. Dev keeps it available for
     // local simulation; release mode includes it only after the gate above.
     publicDir: command === 'build' && mode !== 'release' ? false : 'public',
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('/node_modules/')) return
+            if (/\/node_modules\/(?:react|react-dom|scheduler)\//.test(id)) return 'react-vendor'
+            if (id.includes('/node_modules/lucide-react/')) return 'icons-vendor'
+          },
+        },
+      },
+    },
   }
 })
