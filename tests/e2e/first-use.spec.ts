@@ -303,12 +303,17 @@ test('controlled-source example opens and solves with input and output probes', 
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(vin)', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
+  const voutTrace = page.getByRole('button', { name: 'V(vout)', exact: true })
+  await expect(voutTrace).toBeVisible()
+  if (!(await voutTrace.getAttribute('class'))?.includes('selected')) await voutTrace.click()
+  await expect(page.getByRole('button', { name: 'V(gout)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'I(rload)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'I(rloadg)', exact: true })).toBeVisible()
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
   await expect(page.locator('.cursor-readout')).toContainText(/V\(vout\) = 2\.0+/)
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(gout\) = -1\.0+/)
 })
 
 test('transistor switch example demonstrates base drive and collector switching', async ({ page }) => {

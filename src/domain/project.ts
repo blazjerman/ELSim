@@ -200,12 +200,14 @@ export function createControlledSourceExampleProject(): Project {
   const source: Part = { id: 'amp-v1', kind: 'source', ref: 'V1', value: '1 V', x: 190, y: 440, rotation: 0 }
   const amplifier: Part = { id: 'amp-e1', kind: 'vcvs', ref: 'E1', value: '2', x: 500, y: 360, rotation: 0 }
   const load: Part = { id: 'amp-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 790, y: 360, rotation: 0 }
+  const transconductance: Part = { id: 'amp-g1', kind: 'vccs', ref: 'G1', value: '1 mS', x: 500, y: 680, rotation: 0 }
+  const currentLoad: Part = { id: 'amp-rloadg', kind: 'resistor', ref: 'RLOADG', value: '1 kΩ', x: 790, y: 680, rotation: 0 }
   const labelAt = (id: string, name: string, part: Part, pin: number) => {
     const location = componentPins(part)[pin]
     return { id, name, x: location.x, y: location.y, visible: true }
   }
   project.name = 'Voltage-controlled amplifier'
-  project.parts = [source, amplifier, load]
+  project.parts = [source, amplifier, load, transconductance, currentLoad]
   project.wires = []
   project.junctions = []
   project.netLabels = [
@@ -213,10 +215,13 @@ export function createControlledSourceExampleProject(): Project {
     labelAt('amp-source-ground', '0', source, 1), labelAt('amp-control-ground', '0', amplifier, 3),
     labelAt('amp-output', 'VOUT', amplifier, 0), labelAt('amp-load-in', 'VOUT', load, 0),
     labelAt('amp-output-ground', '0', amplifier, 1), labelAt('amp-load-ground', '0', load, 1),
+    labelAt('amp-g-control', 'VIN', transconductance, 2), labelAt('amp-g-control-ground', '0', transconductance, 3),
+    labelAt('amp-g-output', 'GOUT', transconductance, 0), labelAt('amp-g-load-in', 'GOUT', currentLoad, 0),
+    labelAt('amp-g-output-ground', '0', transconductance, 1), labelAt('amp-g-load-ground', '0', currentLoad, 1),
   ]
   project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
-  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'I(RLOAD)'], ranges: {} }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'V(GOUT)', 'I(RLOAD)', 'I(RLOADG)'], ranges: {} }
   project.view = { zoom: 0.9, panX: -20, panY: 0 }
   project.sheets[0].view = project.view
   return project

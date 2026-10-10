@@ -70,8 +70,10 @@ test('VCVS amplifier example connects signal and reference pins in SPICE order',
   assert.match(artifact.text, /^V1 VIN 0 PULSE\(0 1 0 1u 1u 50m 100m\)$/m)
   assert.match(artifact.text, /^E1 VOUT 0 VIN 0 2$/m)
   assert.match(artifact.text, /^RLOAD VOUT 0 1k$/m)
+  assert.match(artifact.text, /^G1 GOUT 0 VIN 0 1m$/m)
+  assert.match(artifact.text, /^RLOADG GOUT 0 1k$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
-  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)', 'I(RLOAD)'])
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)', 'V(GOUT)', 'I(RLOAD)', 'I(RLOADG)'])
 })
 
 test('NPN switch example drives the base through a resistor and returns the collector load to the supply', () => {
