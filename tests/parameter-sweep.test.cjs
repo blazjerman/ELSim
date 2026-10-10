@@ -101,6 +101,31 @@ test('voltage and current PULSE high levels are parameter stepped through alterp
   assert.match(control, /alterparam ELSIM_SWEEP_PULSE_V1=4\.00000000e\+0\nalterparam ELSIM_SWEEP_PULSE_I1=3\.00000000e-3\nreset\nrun/)
 })
 
+test('voltage and current PWL levels are scaled together through alterparam', () => {
+  const project = createStarterProject()
+  const voltage = project.parts.find((part) => part.kind === 'source')
+  voltage.sourceMode = 'pwl'
+  voltage.pwl = [{ time: '0', voltage: '2 V' }, { time: '2m', voltage: '-1 V' }, { time: '4m', voltage: '4 V' }]
+  const current = { id: 'sweep-pwl-current', kind: 'currentSource', ref: 'I1', value: '2 mA', sourceMode: 'pwl', currentPwl: [{ time: '0', current: '0' }, { time: '2m', current: '2 mA' }, { time: '4m', current: '-1 mA' }], x: 700, y: 600, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [
+    { component: 'V1', start: '1', stop: '2', points: 2 },
+    { component: 'I1', start: '1', stop: '3', points: 2 },
+  ]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 4)
+  assert.equal(runs[0].values[0].pwlScale, true)
+  assert.match(runs[0].label, /V1=1×, I1=1×/)
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /\.param ELSIM_SWEEP_PWL_V1_SCALE=1/)
+  assert.match(control, /PWL\(0 \{2\*ELSIM_SWEEP_PWL_V1_SCALE\} 2m \{-1\*ELSIM_SWEEP_PWL_V1_SCALE\} 4m \{4\*ELSIM_SWEEP_PWL_V1_SCALE\}\)/)
+  assert.match(control, /PWL\(0 \{0\*ELSIM_SWEEP_PWL_I1_SCALE\} 2m \{2m\*ELSIM_SWEEP_PWL_I1_SCALE\} 4m \{-1m\*ELSIM_SWEEP_PWL_I1_SCALE\}\)/)
+  assert.match(control, /alterparam ELSIM_SWEEP_PWL_V1_SCALE=1\.00000000e\+0\nalterparam ELSIM_SWEEP_PWL_I1_SCALE=1\.00000000e\+0\nreset\nrun/)
+  assert.match(control, /alterparam ELSIM_SWEEP_PWL_V1_SCALE=2\.00000000e\+0\nalterparam ELSIM_SWEEP_PWL_I1_SCALE=3\.00000000e\+0\nreset\nrun/)
+})
+
 test('imported device model parameters are validated and emitted with altermod', () => {
   const project = createStarterProject()
   const part = { id: 'sweep-q1', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 400, rotation: 0, deviceModel: 'USER_NPN' }
@@ -140,7 +165,7 @@ test('parameter sweep rejects duplicate parts, equal endpoints, and more than te
   project.simulation.analysis = 'tran'
   project.parts.find((part) => part.ref === 'V1').sourceMode = 'sine'
   project.simulation.parameterSweeps = [{ component: 'V1', start: '1 V', stop: '2 V', points: 3 }]
-  assert.throws(() => validateProject(project), /pulse sources, R\/C\/L parts/)
+  assert.throws(() => validateProject(project), /PULSE\/PWL sources, R\/C\/L parts/)
 })
 
 test('node-voltage initial conditions require labeled nodes and emit optional UIC', () => {

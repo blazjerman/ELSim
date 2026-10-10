@@ -218,6 +218,12 @@ assert.ok(Math.abs(pulseSweepPeaks[1] - 4) < 1e-6, `pulse-source-sweep: second v
 const pulseSweepCurrentPeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(load)')))
 assert.ok(Math.abs(pulseSweepCurrentPeaks[0] - 1) < 1e-6, `pulse-source-sweep: first current pulse should produce 1 V, got ${pulseSweepCurrentPeaks[0]} V`)
 assert.ok(Math.abs(pulseSweepCurrentPeaks[1] - 3) < 1e-6, `pulse-source-sweep: second current pulse should produce 3 V, got ${pulseSweepCurrentPeaks[1]} V`)
+const pwlVoltagePeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(vpwl)')))
+assert.ok(Math.abs(pwlVoltagePeaks[0] - 3) < 1e-6, `pulse-source-sweep: first PWL voltage should reach 3 V, got ${pwlVoltagePeaks[0]} V`)
+assert.ok(Math.abs(pwlVoltagePeaks[1] - 6) < 1e-6, `pulse-source-sweep: second PWL voltage should reach 6 V, got ${pwlVoltagePeaks[1]} V`)
+const pwlCurrentPeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(ipwl)')))
+assert.ok(Math.abs(pwlCurrentPeaks[0] - 2) < 1e-6, `pulse-source-sweep: first PWL current should produce 2 V, got ${pwlCurrentPeaks[0]} V`)
+assert.ok(Math.abs(pwlCurrentPeaks[1] - 6) < 1e-6, `pulse-source-sweep: second PWL current should produce 6 V, got ${pwlCurrentPeaks[1]} V`)
 
 const repeatedVectors = [
   ['v(xload1.mid)', 'v(mid1)', 2.5],

@@ -160,7 +160,8 @@ test('independent current source PWL mode emits validated transient current poin
   artifact = createNetlistArtifact(project)
   assert.match(artifact.diagnostics[0].message, /PWL current source needs 2–32 points/)
   project.simulation.parameterSweeps = [{ component: 'I1', start: '1mA', stop: '2mA', points: 2 }]
-  assert.throws(() => validateProject(project), /distinct scalar DC sources, pulse sources, R\/C\/L parts/)
+  current.currentPwl[1].time = '2m'
+  assert.deepEqual(validateProject(JSON.parse(JSON.stringify(project))).simulation.parameterSweeps, project.simulation.parameterSweeps)
 })
 
 test('independent current source SINE mode emits current-valued fields and validates quantity', () => {

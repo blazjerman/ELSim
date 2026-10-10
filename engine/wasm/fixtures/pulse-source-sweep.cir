@@ -1,20 +1,30 @@
 * Pulse-source parameter stepping regression
 .param ELSIM_SWEEP_PULSE_V1=2
 .param ELSIM_SWEEP_PULSE_I1=1m
+.param ELSIM_SWEEP_PWL_V2_SCALE=1
+.param ELSIM_SWEEP_PWL_I2_SCALE=1
 V1 vin 0 PULSE(0 {ELSIM_SWEEP_PULSE_V1} 0 1u 1u 2m 4m)
 R1 load 0 1k
 I1 0 load PULSE(0 {ELSIM_SWEEP_PULSE_I1} 0 1u 1u 2m 4m)
+V2 vpwl 0 PWL(0 {3*ELSIM_SWEEP_PWL_V2_SCALE} 1m {-1*ELSIM_SWEEP_PWL_V2_SCALE} 2m {2*ELSIM_SWEEP_PWL_V2_SCALE})
+R2 vpwl 0 1k
+I2 0 ipwl PWL(0 {1m*ELSIM_SWEEP_PWL_I2_SCALE} 1m {2m*ELSIM_SWEEP_PWL_I2_SCALE} 2m {-1m*ELSIM_SWEEP_PWL_I2_SCALE})
+R3 ipwl 0 1k
 .tran 100u 3m
 .save all @I1[current]
 .control
 set filetype=ascii
 alterparam ELSIM_SWEEP_PULSE_V1=2
 alterparam ELSIM_SWEEP_PULSE_I1=1m
+alterparam ELSIM_SWEEP_PWL_V2_SCALE=1
+alterparam ELSIM_SWEEP_PWL_I2_SCALE=1
 reset
 run
 write /result-0.raw all
 alterparam ELSIM_SWEEP_PULSE_V1=4
 alterparam ELSIM_SWEEP_PULSE_I1=3m
+alterparam ELSIM_SWEEP_PWL_V2_SCALE=2
+alterparam ELSIM_SWEEP_PWL_I2_SCALE=3
 reset
 run
 write /result-1.raw all
