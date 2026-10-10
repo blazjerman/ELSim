@@ -1183,6 +1183,9 @@ export default function App() {
       const target = event.target
       if (event.key === 'Escape' && electricalCheckOpen) { setElectricalCheckOpen(false); return }
       if (event.key === 'Escape' && tourStep !== null) { setTourStep(null); return }
+      if (event.key === 'Escape' && examplesOpen) { setExamplesOpen(false); setPendingExample(null); return }
+      if (event.key === 'Escape' && sheetSettingsOpen) { setSheetSettingsOpen(false); return }
+      if (event.key === 'Escape' && netlistOpen) { setNetlistOpen(false); return }
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
       const modalOpen = tourStep !== null || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen
       if (event.key === '/' && !modalOpen && !editingText) { event.preventDefault(); componentSearchRef.current?.focus(); return }
