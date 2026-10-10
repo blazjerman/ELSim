@@ -17,6 +17,7 @@ function connectedPartsProject() {
   project.wires = [
     { id: 'inside', points: [[1052, 500], [1148, 500]] },
     { id: 'external', points: [[1252, 500], [1348, 500]] },
+    { id: 'unrelated', points: [[100, 100], [200, 100]] },
   ]
   project.netLabels = []
   project.junctions = []
@@ -24,17 +25,17 @@ function connectedPartsProject() {
   return project
 }
 
-test('clipboard includes internal wires and excludes nets shared with unselected parts', () => {
+test('clipboard includes internal wires and attached wire stubs without copying unselected parts', () => {
   const project = connectedPartsProject()
   const clipboard = createPartClipboard(project, ['r1', 'r2'])
   assert.deepEqual(clipboard.parts.map((part) => part.id), ['r1', 'r2'])
-  assert.deepEqual(clipboard.wires.map((wire) => wire.id), ['inside'])
+  assert.deepEqual(clipboard.wires.map((wire) => wire.id), ['inside', 'external'])
   assert.deepEqual(clipboard.junctions, [])
 })
 
-test('single-part clipboard omits a wire that would reconnect it to an unselected component', () => {
+test('single-part clipboard retains attached geometry as an open stub and ignores unrelated wires', () => {
   const project = connectedPartsProject()
-  const clipboard = createPartClipboard(project, ['r2'])
-  assert.deepEqual(clipboard.parts.map((part) => part.id), ['r2'])
-  assert.deepEqual(clipboard.wires, [])
+  const clipboard = createPartClipboard(project, ['r1'])
+  assert.deepEqual(clipboard.parts.map((part) => part.id), ['r1'])
+  assert.deepEqual(clipboard.wires.map((wire) => wire.id), ['inside'])
 })

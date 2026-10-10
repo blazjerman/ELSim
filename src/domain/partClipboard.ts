@@ -8,9 +8,9 @@ export type PartClipboard = {
   junctions: Project['junctions']
 }
 
-/** Copy geometry only for nets whose component pins are all in the selection.
- * This preserves internal wiring without silently attaching the pasted group
- * to unselected devices. Labels are left out because their names are global. */
+/** Copy wire geometry attached to selected pins. Pasted geometry is translated,
+ * so endpoints that belonged to unselected devices become explicit open stubs.
+ * Labels are left out because their names are global. */
 export function createPartClipboard(project: Project, selectedPartIds: readonly string[]): PartClipboard {
   const selected = new Set(selectedPartIds)
   const parts = project.parts.filter((part) => selected.has(part.id)).map((part) => ({ ...part }))
@@ -18,19 +18,17 @@ export function createPartClipboard(project: Project, selectedPartIds: readonly 
 
   const connectivity = analyzeConnectivity(project)
   const selectedNets = new Set<string>()
-  const externalNets = new Set<string>()
   for (const part of project.parts) {
     for (let pin = 0; pin < componentPins(part).length; pin += 1) {
       const net = connectivity.pinNets.get(`${part.id}:${pin}`)
       if (!net) continue
       if (selected.has(part.id)) selectedNets.add(net)
-      else externalNets.add(net)
     }
   }
 
   const wires = project.wires.filter((wire) => {
     const net = connectivity.wireNets.get(wire.id)
-    return Boolean(net && selectedNets.has(net) && !externalNets.has(net))
+    return Boolean(net && selectedNets.has(net))
   }).map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x, y] as [number, number]) }))
   const copiedWireIds = new Set(wires.map((wire) => wire.id))
   const junctions = project.junctions.filter((junction) => {

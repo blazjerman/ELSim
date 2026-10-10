@@ -78,7 +78,7 @@ test('shift selection moves, copies, pastes, and deletes a group of parts', asyn
   await page.keyboard.press('Control+c')
   await page.keyboard.press('Control+v')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial + 2)
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wiresBeforeCopy + 1)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wiresBeforeCopy + 3)
   await expect(page.locator('.circuit-part.selected')).toHaveCount(2)
   await page.keyboard.press('Delete')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial)
