@@ -92,6 +92,15 @@ test('pinpoints LTspice behavioral forms and options, including continuation rec
   assert.equal(source.includes('Laplace=1/(1+s)'), true)
 })
 
+test('flags LTspice table() expressions rejected by the pinned browser ngspice engine', () => {
+  const source = '.SUBCKT lookup IN OUT\nB1 OUT 0 V=table(V(IN),0,0,1,5)\n.ENDS lookup'
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'LTspice table() behavioral lookup function'])
+  assert.match(warning.impact, /no such function/)
+  assert.match(warning.suggestion, /does not rewrite/)
+  assert.equal(source.includes('table(V(IN)'), true)
+})
+
 test('dialect warnings retain continuation line numbers and ignore dollar signs inside quotes', () => {
   const source = [
     '.SUBCKT compat IN OUT',
