@@ -3,6 +3,8 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
+  workers: process.env.CI ? 1 : undefined,
+  globalTimeout: process.env.CI ? 10 * 60 * 1000 : undefined,
   reporter: 'list',
   use: {
     ...devices['Desktop Chrome'],

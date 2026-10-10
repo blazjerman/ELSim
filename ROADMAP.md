@@ -115,7 +115,7 @@ Current slice: failures mapped to generated model-library lines report the impor
 
 ### M4 — Distribution and performance
 
-**M4.1 Browser release.** CI build, CSP review, offline/PWA behavior, browser support matrix, accessibility pass, reproducible WASM bundle, source/notice delivery, and download size budget. Acceptance: clean install and offline example run on supported browsers.
+**M4.1 Browser release.** Partial: GitHub Actions now runs locked-dependency install, domain tests, standard production build (which checks that ngspice artifacts are excluded), and 11 Chromium UI regressions that do not require the optional engine. The two simulation E2E tests remain a separate local-runtime gate. Remaining: CSP/header review, offline/PWA behavior, Firefox and Safari/WebKit browser matrix, broader accessibility pass, reproducible WASM build in CI after license obligations are resolved, source/notice delivery verification, and download-size budget. Acceptance: clean install and offline example run on supported browsers.
 
 **M4.2 Desktop evaluation.** Compare Tauri/native ngspice versus packaging the browser WASM build for Windows, macOS, Linux. Include code signing, native library license notices, auto-update policy, and performance. Acceptance: written choice backed by prototype and repeatable builds on all three systems.
 
