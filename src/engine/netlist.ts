@@ -238,7 +238,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         const fall = spiceTime(pulse.fall)
         const width = spiceTime(pulse.width)
         const period = spiceTime(pulse.period)
-        if (!initial || [delay, rise, fall, width, period].some((time) => time === null || Number(time) < 0) || Number(period) <= 0) {
+        if (initial === null || [delay, rise, fall, width, period].some((time) => time === null || Number(time) < 0) || Number(period) <= 0) {
           const message = `${part.ref} pulse levels and timing must be valid SPICE values (period must be positive).`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })

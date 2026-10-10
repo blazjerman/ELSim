@@ -51,6 +51,13 @@ test('source pulse levels and timing are editable and validated before netlistin
   assert.match(artifact.diagnostics[0].message, /period must be positive/i)
 })
 
+test('zero-volt pulse initial level is valid', () => {
+  const project = createStarterProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 PULSE\(0 5 0 1u 1u 50m 100m\)$/m)
+})
+
 test('analysis settings validation identifies invalid AC sweep fields', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'

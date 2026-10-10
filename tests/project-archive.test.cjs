@@ -15,6 +15,7 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   const project = createStarterProject()
   project.simulation.analysis = 'ac'
   project.parts[1].flipX = true
+  project.parts[0].pulse = { initial: '0', delay: '2m', rise: '4u', fall: '5u', width: '10m', period: '20m' }
   project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n' }
   project.importedChildSchematicSources = [{ format: 'ltspice-asc', filename: 'child.asc', originalText: 'Version 4\nIOPIN 0 0 In\nFLAG 0 0 INPUT\n' }]
   const first = createProjectArchive(project)
