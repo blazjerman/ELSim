@@ -77,6 +77,19 @@ The performance runner creates 100, 500, 1,000, or 5,000 instances of a two-leve
 | 1,000 | 3,000 | 3,000 | 1,021 | 15.935 | 33.289 |
 | 5,000 | 15,000 | 15,000 | 5,101 | 138.603 | 217.649 |
 
+### Repeat run (2026-10-10)
+
+I reran the full benchmark on the same i7-12700F host with Node 18.20.4. The 5,000-instance nested hierarchy remained within the 500 ms domain target, with connectivity p95 199.797 ms and netlist p95 430.732 ms. The 5,000-part wire-heavy circuit measured 169.824 ms connectivity and 207.514 ms netlisting p95. Both show meaningful run-to-run variation from the earlier observations, so these are reference observations rather than a claim of a regression or improvement. The 1M-sample plot reducer returned 902 points at 1.1 ms p95.
+
+| Fixture | Size | Connectivity p95 (ms) | Netlist p95 (ms) |
+| --- | ---: | ---: | ---: |
+| Nested hierarchy | 5,000 instances / 15,000 pins | 199.797 | 430.732 |
+| Routed wires | 5,000 resistors / 34,300 segments | 169.824 | 207.514 |
+
+The current 1M-sample solver observation produced 1,034,006 samples and the expected final output (1.888 V), with 55,759,475 bytes of ASCII raw data, 16,544,096 bytes of parsed vectors, 1,127.562 ms raw parsing, and 3,527.138 ms solve/write. Sampled process RSS was 360.9 MB at baseline and 719.0 MB at peak; the baseline includes the preceding 100k run, so this is not an isolated memory cost. This confirms the large-trace pipeline works in the local worker benchmark and keeps memory measurement as an open limitation.
+
+The hierarchy generator repeatedly resolved sheet IDs with linear array searches. Replacing those searches with a per-netlist `Map` preserves the same child definitions, ports, diagnostics, and netlist format while avoiding repeated scans. A subsequent run measured the 5,000-instance hierarchy netlist at 298.878 ms p95 versus 430.732 ms immediately before the change; connectivity was 184.198 ms. The netlist observation is about 31% lower, but timings vary between runs (an earlier run measured 217.649 ms), so the benchmark is evidence of a likely improvement rather than a stable guarantee.
+
 ### Browser large transient
 
 `npm run benchmark:browser -- --grep "million-sample transient"` runs a 1 s RC transient with a 1 µs maximum step through the actual ngspice browser worker, app response handling, result plot, and time scrubber. It selects up to five available voltage/current traces and requires at least four plotted traces, then checks at least one million solved samples, cursor readout at the last sample, and no page errors. A 16 ms main-thread timer records its largest scheduling gap during the run. `resultReadyMs` covers Run click through the completion notice. These are single local observations, not thresholds.

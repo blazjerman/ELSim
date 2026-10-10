@@ -233,13 +233,14 @@ export function createNetlistArtifact(project: Project): NetlistArtifact {
 }
 
 function generateSheetLibrary(project: Project, parentSheetId: string): { text: string; diagnostics: NetlistArtifact['diagnostics'] } {
+  const sheetsById = new Map(project.sheets.map((sheet) => [sheet.id, sheet]))
   const definitions = new Map<string, string>()
   const modelLines = new Set<string>()
   const diagnostics: NetlistArtifact['diagnostics'] = []
   const visiting = new Set<string>()
   const completed = new Set<string>()
   const visit = (sheetId: string): void => {
-    const sheet = project.sheets.find((candidate) => candidate.id === sheetId)
+    const sheet = sheetsById.get(sheetId)
     if (!sheet || completed.has(sheetId)) return
     if (visiting.has(sheetId)) return
     visiting.add(sheetId)
@@ -248,7 +249,7 @@ function generateSheetLibrary(project: Project, parentSheetId: string): { text: 
     const childLibrary = [...definitions.values()].join('\n')
     const errorsBeforeSheet = diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length
     for (const part of sheet.parts) if (part.sheetId) {
-      const child = project.sheets.find((candidate) => candidate.id === part.sheetId)
+      const child = sheetsById.get(part.sheetId)
       if (!child || child.ports.length === 0) diagnostics.push({ severity: 'error', message: `${part.ref} refers to a sheet block with no ports. Expose at least one labeled node as a port.`, sourceId: part.id, line: 1 })
       else if (part.modelPins?.length !== child.ports.length || child.ports.some((port, index) => port.name.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) diagnostics.push({ severity: 'error', message: `${part.ref} port mapping no longer matches sheet ${child.name}.`, sourceId: part.id, line: 1 })
     }
@@ -267,17 +268,18 @@ function generateSheetLibrary(project: Project, parentSheetId: string): { text: 
     visiting.delete(sheetId)
     completed.add(sheetId)
   }
-  const root = project.sheets.find((candidate) => candidate.id === parentSheetId)
+  const root = sheetsById.get(parentSheetId)
   for (const sheetId of [...new Set(root?.parts.flatMap((part) => part.sheetId ? [part.sheetId] : []) ?? [])]) visit(sheetId)
   const text = [...modelLines, ...definitions.values()].join('\n')
   return { text, diagnostics }
 }
 
 function hierarchicalSaveVectors(project: Project): string[] {
+  const sheetsById = new Map(project.sheets.map((sheet) => [sheet.id, sheet]))
   const saves = new Set<string>()
   const visit = (sheetId: string, path: string[], ancestry: Set<string>) => {
     if (ancestry.has(sheetId)) return
-    const sheet = project.sheets.find((candidate) => candidate.id === sheetId)
+    const sheet = sheetsById.get(sheetId)
     if (!sheet) return
     const nextAncestry = new Set(ancestry).add(sheetId)
     const ports = new Set(sheet.ports.map((port) => port.name.toLowerCase()))
