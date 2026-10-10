@@ -88,3 +88,4 @@
 .capacitor-charge-sign{font:700 11px var(--mono);text-anchor:middle;pointer-events:none}
 .inductor-current-arrow{pointer-events:none}
 .transistor-current-indicator{pointer-events:none;filter:drop-shadow(0 0 3px #79d9a4)}
+.transient-presets{margin:-3px 0 13px}.transient-presets>.field-label{margin-bottom:6px}.preset-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.preset-buttons button{height:27px;border:1px solid #354038;border-radius:5px;background:#1a211c;color:#b7c5ba;font-size:9px}.preset-buttons button:hover:not(:disabled){border-color:#648a70;background:#222d25;color:#dce9de}.preset-buttons button:focus-visible{outline:2px solid #80d9a7;outline-offset:2px}

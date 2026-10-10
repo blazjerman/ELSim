@@ -124,6 +124,24 @@ test('invalid component values select and focus the value field before engine ch
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-r1').value)).toBe('2k')
 })
 
+test('transient resolution presets derive and save a maximum step from stop time', async ({ page }) => {
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await page.getByLabel('Stop time').fill('200 ms')
+  const presets = page.getByRole('group', { name: 'Transient resolution presets' })
+  const maxStep = page.getByLabel('Maximum step')
+  await presets.getByRole('button', { name: 'Detailed' }).click()
+  await expect(maxStep).toHaveValue('4.000000e-5 s')
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return [project.simulation.stopTime, project.simulation.maxStep]
+  })).toEqual(['200 ms', '4.000000e-5 s'])
+  await presets.getByRole('button', { name: 'Quick' }).click()
+  await expect(maxStep).toHaveValue('8.000000e-4 s')
+  await presets.getByRole('button', { name: 'Standard' }).click()
+  await expect(maxStep).toHaveValue('2.000000e-4 s')
+})
+
 test('wire current animation respects the operating system reduced-motion preference', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
