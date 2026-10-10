@@ -633,7 +633,7 @@ function Schematic({ project, selection, setSelection, setProject, setView, spac
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
       <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.6, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton></div>
-      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Drag wire segments to reroute · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
+      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Drag wire segments to reroute · Ctrl/⌘+C/V copy/paste a part · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
     <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} viewBox={viewBox} onPointerDown={beginPan} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onWheel={(event) => {
       if (!event.ctrlKey && !event.metaKey) return
@@ -717,9 +717,15 @@ export default function App() {
   const modelFileInput = useRef<HTMLInputElement>(null)
   const symbolFileInput = useRef<HTMLInputElement>(null)
   const componentSearchRef = useRef<HTMLInputElement>(null)
+  const copiedPart = useRef<Part | null>(null)
   const activeWorkerRef = useRef<Worker | null>(null)
   const projectRef = useRef(project)
   projectRef.current = project
+  const clipboardProjectRef = useRef(project.rootSheetId)
+  useEffect(() => {
+    if (clipboardProjectRef.current !== project.rootSheetId) copiedPart.current = null
+    clipboardProjectRef.current = project.rootSheetId
+  }, [project.rootSheetId])
   useEffect(() => {
     if (!waveformDetached) return
     const move = (event: globalThis.PointerEvent) => {
@@ -1095,9 +1101,29 @@ export default function App() {
   const flipSelected = () => selected && updateSelected({ flipX: !selected.flipX })
   const duplicateSelected = () => {
     if (!selected) return
-    const clone = { ...selected, id: `p-${crypto.randomUUID()}`, ref: `${selected.ref}_copy`, x: selected.x + 80, y: selected.y + 60 }
-    setProject((current) => ({ ...current, parts: [...current.parts, clone] }))
-    setSelection({ kind: 'part', id: clone.id })
+    pastePart(selected, 80, 60)
+  }
+  const pastePart = (source = copiedPart.current, offsetX = 40, offsetY = 40) => {
+    if (!source) return
+    const id = `p-${crypto.randomUUID()}`
+    setProject((current) => {
+      const ref = nextRef(current.parts, source.kind)
+      const pasted: Part = {
+        ...source,
+        id,
+        ref,
+        x: source.x + offsetX,
+        y: source.y + offsetY,
+        ...(source.modelPins ? { modelPins: [...source.modelPins] } : {}),
+        ...(source.symbolPinOffsets ? { symbolPinOffsets: source.symbolPinOffsets.map(([x, y]) => [x, y] as [number, number]) } : {}),
+        ...(source.sheetPortLayout ? { sheetPortLayout: source.sheetPortLayout.map((port) => ({ ...port })) } : {}),
+        ...(source.sheetParameters ? { sheetParameters: { ...source.sheetParameters } } : {}),
+        ...(source.modelParameters ? { modelParameters: { ...source.modelParameters } } : {}),
+      }
+      return { ...current, parts: [...current.parts, pasted] }
+    })
+    setSelection({ kind: 'part', id })
+    setNotice(`Pasted ${kindNames[source.kind].toLowerCase()}. Connect its pins before running a simulation.`)
   }
   const deleteSelected = () => {
     if (!selected) return
@@ -1129,6 +1155,22 @@ export default function App() {
       if (editingText) return
       const key = event.key.toLowerCase()
       if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
+      if ((event.ctrlKey || event.metaKey) && key === 'c' && selected) {
+        event.preventDefault()
+        copiedPart.current = { ...selected }
+        setNotice(`Copied ${selected.ref}. Paste creates an unwired component.`)
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && key === 'v' && copiedPart.current) {
+        event.preventDefault()
+        const source = copiedPart.current
+        if (source.sheetId && !project.sheets.some((sheet) => sheet.id === source.sheetId)) {
+          setNotice('This copied block belongs to a different project and its sheet definition is unavailable.')
+          return
+        }
+        pastePart(source)
+        return
+      }
       if ((event.ctrlKey || event.metaKey) && key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return }
       if ((event.ctrlKey || event.metaKey) && key === 'y') { event.preventDefault(); redo(); return }
       if (event.ctrlKey || event.metaKey || event.altKey) return
