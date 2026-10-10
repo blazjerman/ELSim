@@ -15,7 +15,9 @@ export default defineConfig({
   webServer: {
     command: 'npm run preview -- --host 127.0.0.1 --port 4179 --strictPort',
     url: 'http://127.0.0.1:4179',
-    reuseExistingServer: !process.env.CI,
+    // Reuse a production preview started for local validation; in CI, start
+    // one when none is already listening on the dedicated PWA test port.
+    reuseExistingServer: true,
     timeout: 30_000,
   },
 })

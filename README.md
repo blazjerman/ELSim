@@ -23,7 +23,7 @@ Use Save to download a portable `.elsim` archive, or Open to restore one. Existi
 
 ## Tests
 
-Run `npm test` for domain and netlist tests. Run `npm run build` for the standard browser distribution and its check that no ngspice binaries were included. For browser UI regressions without an engine build, install Chromium with `npx playwright install chromium` and run `npm run test:e2e:ui`; run `npm run test:e2e:pwa` after the build to verify offline editing in the production preview. The RC and imported-IC simulation smoke tests require the local WASM runtime; build it as described above, then run `npm run test:e2e` to include those two tests as well. GitHub Actions runs unit tests, the standard build, and the engine-independent Chromium UI tests on pushes and pull requests.
+Run `npm test` for domain and netlist tests. Run `npm run build` for the standard browser distribution and its check that no ngspice binaries were included. For browser UI regressions without an engine build, install Chromium with `npx playwright install chromium` and run `npm run test:e2e:ui`; run `npm run test:e2e:pwa` after the build to verify offline editing in the production preview. The RC and imported-IC simulation smoke tests require the local WASM runtime; build it as described above, then run `npm run test:e2e` to include those two tests as well. GitHub Actions runs unit tests, the standard build, the engine-independent Chromium UI tests, and the production offline-editing test on pushes and pull requests.
 
 ## Engine and licensing
 

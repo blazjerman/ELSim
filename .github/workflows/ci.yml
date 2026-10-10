@@ -43,6 +43,9 @@ jobs:
       - name: Run browser UI regressions without the optional ngspice runtime
         run: npm run test:e2e:ui
 
+      - name: Verify offline editing in the production preview
+        run: npm run test:e2e:pwa
+
       - name: Upload browser traces on failure
         if: failure()
         uses: actions/upload-artifact@v5
