@@ -73,6 +73,7 @@ export type Project = {
   modelAssets?: ModelLibraryAsset[]
   symbolAssets?: SymbolAsset[]
   importedSchematicSource?: LtspiceSchematicSource
+  importedChildSchematicSources?: LtspiceSchematicSource[]
   simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
   rootSheetId: string
   activeSheetId: string
@@ -385,6 +386,17 @@ export function validateProject(input: unknown): Project {
     const source = data.importedSchematicSource as LtspiceSchematicSource
     if (!source || source.format !== 'ltspice-asc' || typeof source.filename !== 'string' || !source.filename.trim() || /[\\/\u0000-\u001f]/.test(source.filename) || typeof source.originalText !== 'string' || !source.originalText.length) throw new Error('Project contains malformed LTspice schematic source provenance.')
     if (new TextEncoder().encode(source.originalText).length > 10 * 1024 * 1024) throw new Error('Original LTspice schematic source exceeds the 10 MiB import limit.')
+  }
+  if (data.importedChildSchematicSources !== undefined) {
+    if (!Array.isArray(data.importedChildSchematicSources) || data.importedChildSchematicSources.length > 63) throw new Error('A project can retain up to 63 imported child schematics.')
+    let totalBytes = data.importedSchematicSource ? new TextEncoder().encode((data.importedSchematicSource as LtspiceSchematicSource).originalText).length : 0
+    for (const candidate of data.importedChildSchematicSources as LtspiceSchematicSource[]) {
+      if (!candidate || candidate.format !== 'ltspice-asc' || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.originalText !== 'string' || !candidate.originalText.length) throw new Error('Project contains malformed LTspice child schematic source provenance.')
+      const size = new TextEncoder().encode(candidate.originalText).length
+      if (size > 10 * 1024 * 1024) throw new Error(`${candidate.filename} exceeds the 10 MiB LTspice schematic limit.`)
+      totalBytes += size
+      if (totalBytes > 50 * 1024 * 1024) throw new Error('Original LTspice schematic sources exceed the 50 MiB project limit.')
+    }
   }
   const importedDefinitions = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits) ?? []
   const importedDeviceModels = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).models) ?? []

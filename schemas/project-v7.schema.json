@@ -84,6 +84,11 @@
     "importedSchematicSource": {
       "$ref": "#/$defs/ltspiceSchematicSource"
     },
+    "importedChildSchematicSources": {
+      "type": "array",
+      "maxItems": 63,
+      "items": { "$ref": "#/$defs/ltspiceSchematicSource" }
+    },
     "rootSheetId": {
       "type": "string",
       "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"

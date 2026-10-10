@@ -985,6 +985,7 @@ export default function App() {
     ...(projectRef.current.modelAssets ?? []).map((asset) => ({ filename: asset.filename, type: 'SPICE model library' })),
     ...(projectRef.current.symbolAssets ?? []).map((asset) => ({ filename: asset.filename, type: 'symbol file' })),
     ...(projectRef.current.importedSchematicSource ? [{ filename: projectRef.current.importedSchematicSource.filename, type: 'original schematic source' }] : []),
+    ...(projectRef.current.importedChildSchematicSources ?? []).map((source) => ({ filename: source.filename, type: 'original child schematic source' })),
   ]
   const saveProject = () => {
     if (exportProvenanceFiles().length) { setSaveWarningOpen(true); return }
@@ -1063,10 +1064,12 @@ export default function App() {
   const importLtspiceSchematic = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.target.files ?? [])]
     const ascFile = files.find((file) => /\.asc$/i.test(file.name))
-    if (!ascFile) { setNotice('Choose one LTspice .asc schematic and, when available, its .asy symbol files.'); event.target.value = ''; return }
+    if (!ascFile) { setNotice('Choose an LTspice .asc schematic and, when available, its child .asc and .asy files.'); event.target.value = ''; return }
     try {
       if (files.length > 128) throw new Error('Import up to 128 schematic and symbol files at a time.')
-      if (ascFile.size > 10 * 1024 * 1024) throw new Error('LTspice schematics are limited to 10 MiB.')
+      const ascFiles = files.filter((candidate) => /\.asc$/i.test(candidate.name))
+      if (ascFiles.some((candidate) => candidate.size > 10 * 1024 * 1024)) throw new Error('LTspice schematics are limited to 10 MiB each.')
+      if (ascFiles.reduce((sum, candidate) => sum + candidate.size, 0) > 50 * 1024 * 1024) throw new Error('LTspice schematic sources exceed the 50 MiB import limit.')
       const currentSymbols = projectRef.current.symbolAssets ?? []
       const newSymbols = [] as NonNullable<Project['symbolAssets']>
       for (const file of files.filter((candidate) => /\.asy$/i.test(candidate.name))) {
@@ -1083,7 +1086,8 @@ export default function App() {
       const symbols = [...currentSymbols, ...newSymbols]
       if (symbols.length > 32 || symbols.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0) > 5 * 1024 * 1024) throw new Error('Imported symbols exceed the project limits of 32 files and 5 MiB total.')
       const source = new TextDecoder('utf-8', { fatal: true }).decode(await ascFile.arrayBuffer())
-      const imported = parseLtspiceSchematic(source, ascFile.name, symbols, projectRef.current.modelAssets)
+      const childSchematics = await Promise.all(ascFiles.filter((candidate) => candidate !== ascFile).map(async (file) => ({ filename: file.name, content: new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()) })))
+      const imported = parseLtspiceSchematic(source, ascFile.name, symbols, projectRef.current.modelAssets, childSchematics)
       setProjectState(imported.project)
       setImportWarnings(imported.warnings)
       setSelectedTraceIds([])
@@ -1522,7 +1526,7 @@ export default function App() {
     </header>
 
     <div className="main-toolbar">
-      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Import an LTspice .asc file with its .asy symbols"><FolderOpen size={15}/> Import LTspice</button><button onClick={saveProject}><Save size={15}/> Save</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple hidden onChange={importLtspiceSchematic}/></div>
+      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Select the parent .asc first, then matching child .asc and .asy files"><FolderOpen size={15}/> Import LTspice</button><button onClick={saveProject}><Save size={15}/> Save</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple hidden onChange={importLtspiceSchematic}/></div>
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>

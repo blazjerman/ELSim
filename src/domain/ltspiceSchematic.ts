@@ -1,4 +1,4 @@
-import { createStarterProject, validateProject, type Part, type PartKind, type Project, type SymbolAsset, type Wire } from './project'
+import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SymbolAsset, type Wire } from './project'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseSubcircuitLibrary } from './subcircuitLibrary'
 
@@ -24,7 +24,7 @@ function coordinate(value: string, line: number): number {
 }
 
 function baseName(value: string): string {
-  return value.trim().replace(/^['"]|['"]$/g, '').replace(/\\/g, '/').split('/').pop()?.replace(/\.asy$/i, '').toLowerCase() ?? ''
+  return value.trim().replace(/^['"]|['"]$/g, '').replace(/\\/g, '/').split('/').pop()?.replace(/\.(?:asy|asc)$/i, '').toLowerCase() ?? ''
 }
 
 function transform([x, y]: [number, number], symbol: Pick<AscSymbol, 'x' | 'y' | 'rotation' | 'flipX'>): [number, number] {
@@ -104,7 +104,7 @@ function partKind(symbol: AscSymbol, prefix: string, modelValue: string, subcirc
 }
 
 /** Import a bounded subset of ordinary LTspice .asc schematics using user-provided .asy sidecars. */
-export function parseLtspiceSchematic(source: string, filename: string, symbolAssets: SymbolAsset[] = [], modelAssets: Project['modelAssets'] = []): LtspiceSchematicImport {
+export function parseLtspiceSchematic(source: string, filename: string, symbolAssets: SymbolAsset[] = [], modelAssets: Project['modelAssets'] = [], childSchematics: { filename: string; content: string }[] = []): LtspiceSchematicImport {
   if (typeof source !== 'string' || source.length === 0 || new TextEncoder().encode(source).length > MAX_ASC_BYTES) throw new Error(`${filename} must contain between 1 byte and 10 MiB of text.`)
   const lines = source.replace(/^\uFEFF/, '').split(/\r?\n/)
   if (lines.length > MAX_ASC_LINES) throw new Error(`${filename} contains too many records.`)
@@ -206,6 +206,9 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   project.simulation.initialConditions = undefined
   project.simulation.skipInitialOperatingPoint = undefined
   project.symbolAssets = [...symbolAssets]
+  project.importedChildSchematicSources = childSchematics.filter((child) => baseName(child.filename) !== baseName(filename)).map((child) => ({ format: 'ltspice-asc', filename: child.filename.replace(/\\/g, '/').split('/').pop() || child.filename, originalText: child.content }))
+  const childByName = new Map(childSchematics.map((child) => [baseName(child.filename), child]))
+  const importedChildren = new Map<string, ProjectSheet>()
 
   for (const symbol of symbols) {
     const identity = symbol.attributes.INSTNAME
@@ -214,12 +217,43 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const sidecar = symbolByName.get(baseName(symbol.name))
     if (!sidecar) { warnings.push(`Line ${symbol.line}: symbol ${symbol.name} (${identity}) is missing its .asy sidecar and was skipped.`); continue }
     const prefix = sidecar.parsed.prefix ?? identity[0]
+    const childSource = sidecar.parsed.prefix === undefined ? childByName.get(baseName(symbol.name)) : undefined
+    let childSheet: ProjectSheet | undefined
+    if (sidecar.parsed.prefix === undefined) {
+      if (!childSource) { warnings.push(`Line ${symbol.line}: hierarchical symbol ${symbol.name} (${identity}) has no matching child .asc file and was skipped.`); continue }
+      const childKey = baseName(childSource.filename)
+      childSheet = importedChildren.get(childKey)
+      if (!childSheet) {
+        if (project.sheets.length >= 64) { warnings.push(`Line ${symbol.line}: project sheet limit reached; ${identity} was skipped.`); continue }
+        const parsedChild = parseLtspiceSchematic(childSource.content, childSource.filename, symbolAssets, modelAssets)
+        warnings.push(...parsedChild.warnings.map((warning) => `${childSource.filename}: ${warning}`))
+        const childRoot = parsedChild.project.sheets[0]
+        const idBase = `asc-${childKey.replace(/[^A-Za-z0-9_-]/g, '-')}`.slice(0, 56)
+        const sheetId = /^[A-Za-z]/.test(idBase) ? idBase : `asc-${idBase}`
+        const childPorts = childRoot.ports
+        if (childPorts.length !== sidecar.parsed.pins.length || childPorts.some((port, index) => port.name.toLowerCase() !== sidecar.parsed.pins[index]?.name.toLowerCase())) {
+          warnings.push(`Line ${symbol.line}: ${symbol.name} pins do not match the ordered IOPIN/FLAG ports in ${childSource.filename}; it was skipped.`)
+          continue
+        }
+        const idPrefix = `${sheetId}-`
+        childSheet = {
+          ...childRoot, id: sheetId, name: childRoot.name, parentSheetId: project.rootSheetId,
+          parts: childRoot.parts.map((part) => ({ ...part, id: `${idPrefix}${part.id}` })),
+          wires: childRoot.wires.map((wire) => ({ ...wire, id: `${idPrefix}${wire.id}` })),
+          netLabels: childRoot.netLabels.map((label) => ({ ...label, id: `${idPrefix}${label.id}` })),
+          ports: childPorts.map((port) => ({ ...port, id: `${idPrefix}${port.id}` })),
+          junctions: childRoot.junctions.map((junction) => ({ ...junction })),
+        }
+        importedChildren.set(childKey, childSheet)
+        project.sheets.push(childSheet)
+      }
+    }
     const modelFile = sidecar.parsed.attributes.modelfile
     if (modelFile && !knownLibraries.has(baseName(modelFile))) warnings.push(`Line ${symbol.line}: ${symbol.name} references missing model file “${modelFile}”; import it separately if required.`)
-    const mapped = partKind(symbol, prefix, value, subcircuits, deviceModels)
+    const mapped = childSheet ? { kind: 'subcircuit' as const, modelName: sheetModelName(childSheet.id) } : partKind(symbol, prefix, value, subcircuits, deviceModels)
     if (!mapped.kind) { warnings.push(`Line ${symbol.line}: ${symbol.name} (${identity}) is unsupported or refers to missing subcircuit model ${value}; symbol was skipped: “${recordExcerpt(symbol.rawRecords.join(' | '))}”.`); continue }
     const pins = sidecar.parsed.pins
-    const expectedPinNames = mapped.kind === 'subcircuit' ? subcircuits.get(mapped.modelName!.toLowerCase()) ?? [] : null
+    const expectedPinNames = childSheet ? childSheet.ports.map((port) => port.name) : mapped.kind === 'subcircuit' ? subcircuits.get(mapped.modelName!.toLowerCase()) ?? [] : null
     const expectedPinCount = expectedPinNames?.length ?? ({ source: 2, resistor: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3, subcircuit: 0 } satisfies Record<PartKind, number>)[mapped.kind]
     if (pins.length !== expectedPinCount) { warnings.push(`Line ${symbol.line}: ${symbol.name} has ${pins.length} pins but ${identity} requires ${expectedPinCount}; it was skipped.`); continue }
     if (expectedPinNames && pins.some((pin, index) => pin.name.toLowerCase() !== expectedPinNames[index]?.toLowerCase())) { warnings.push(`Line ${symbol.line}: ${symbol.name} SpiceOrder pin names do not match ${mapped.modelName}; it was skipped.`); continue }
@@ -234,7 +268,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       id: `asc-part-${project.parts.length + 1}`, kind, ref: identity, value: defaultValue,
       x: symbol.x, y: symbol.y, rotation: symbol.rotation as Part['rotation'], flipX: symbol.flipX,
       symbolAssetId: sidecar.asset.id, symbolPinOffsets: offsets,
-      ...(kind === 'subcircuit' ? { modelName: mapped.modelName, modelPins: [...pins.map((pin) => pin.name)] } : {}),
+      ...(kind === 'subcircuit' ? { modelName: mapped.modelName, modelPins: [...pins.map((pin) => pin.name)], ...(childSheet ? { sheetId: childSheet.id, sheetPortLayout: childSheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })) } : {}) } : {}),
       ...(mapped.deviceModel ? { deviceModel: mapped.deviceModel } : {}),
     }
     project.parts.push(part)

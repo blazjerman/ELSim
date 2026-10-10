@@ -16,6 +16,7 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   project.simulation.analysis = 'ac'
   project.parts[1].flipX = true
   project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n' }
+  project.importedChildSchematicSources = [{ format: 'ltspice-asc', filename: 'child.asc', originalText: 'Version 4\nIOPIN 0 0 In\nFLAG 0 0 INPUT\n' }]
   const first = createProjectArchive(project)
   const second = createProjectArchive(project)
   assert.deepEqual(first, second)
@@ -23,6 +24,7 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   const restored = validateProject(readProjectArchive(first))
   assert.deepEqual(restored, project)
   assert.match(restored.importedSchematicSource.originalText, /UNKNOWN_VENDOR_RECORD keep-me/)
+  assert.match(restored.importedChildSchematicSources[0].originalText, /IOPIN 0 0 In/)
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926)
 })
 
@@ -143,6 +145,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v7.schema.json'), 'utf8'))
   assert.equal(schema.properties.symbolAssets.maxItems, 32)
   assert.equal(schema.properties.importedSchematicSource.$ref, '#/$defs/ltspiceSchematicSource')
+  assert.equal(schema.properties.importedChildSchematicSources.maxItems, 63)
   assert.ok(schema.$defs.part.properties.symbolPinOffsets)
   assert.deepEqual(schema.$defs.sheet.properties.ports.items.properties.side.enum, ['auto', 'left', 'right', 'top', 'bottom'])
   assert.ok(schema.$defs.part.properties.sheetPortLayout)
