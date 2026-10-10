@@ -317,13 +317,17 @@ const CircuitPart = memo(function CircuitPart({ part, selected, focusable, onSel
 
 function TraceToggles({ traces, selectedIds, onToggle, ariaLabel, colorFor }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; ariaLabel: string; colorFor: (index: number) => string }) {
   const [filter, setFilter] = useState('')
+  const [visibleLimit, setVisibleLimit] = useState(100)
   const matching = useMemo(() => {
     const query = filter.trim().toLocaleLowerCase()
     return traces.flatMap((trace, index) => !query || `${trace.label} ${trace.id}`.toLocaleLowerCase().includes(query) ? [{ trace, index }] : [])
   }, [filter, traces])
+  const visible = traces.length > 100 ? matching.slice(0, visibleLimit) : matching
+  const remaining = Math.max(0, matching.length - visible.length)
   return <div className="trace-selector">
-    {traces.length > 12 && <div className="trace-filter"><Search size={12} aria-hidden="true"/><input type="search" aria-label={`Filter ${ariaLabel.toLocaleLowerCase()}`} placeholder="Filter by name…" value={filter} onChange={(event) => setFilter(event.target.value)}/><span aria-live="polite">{matching.length} / {traces.length}</span></div>}
-    <div className={`trace-toggles${traces.length > 12 ? ' trace-toggles-many' : ''}`} role="group" aria-label={ariaLabel}>{matching.map(({ trace, index }) => <button key={trace.id} aria-pressed={selectedIds.includes(trace.id)} className={selectedIds.includes(trace.id) ? 'selected' : ''} onClick={() => onToggle(trace.id)}><span style={{ background: colorFor(index) }}/>{trace.label}</button>)}</div>
+    {traces.length > 12 && <div className="trace-filter"><Search size={12} aria-hidden="true"/><input type="search" aria-label={`Filter ${ariaLabel.toLocaleLowerCase()}`} placeholder="Filter by name…" value={filter} onChange={(event) => { setFilter(event.target.value); setVisibleLimit(100) }}/><span aria-live="polite">{matching.length} / {traces.length}</span></div>}
+    <div className={`trace-toggles${traces.length > 12 ? ' trace-toggles-many' : ''}`} role="group" aria-label={ariaLabel}>{visible.map(({ trace, index }) => <button key={trace.id} aria-pressed={selectedIds.includes(trace.id)} className={selectedIds.includes(trace.id) ? 'selected' : ''} onClick={() => onToggle(trace.id)}><span style={{ background: colorFor(index) }}/>{trace.label}</button>)}</div>
+    {remaining > 0 && <button className="trace-show-more" onClick={() => setVisibleLimit((limit) => Math.min(matching.length, limit + 100))}>Show next {Math.min(100, remaining)} traces ({remaining} remaining)</button>}
     {filter.trim() && matching.length === 0 && <div className="trace-filter-empty" role="status">No traces match “{filter.trim()}”.</div>}
   </div>
 }
