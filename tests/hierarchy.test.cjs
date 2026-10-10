@@ -10,6 +10,7 @@ const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
 const { preferredSheetInstancePath } = require(path.join(build, 'domain/hierarchyNavigation.js'))
+const { updateSheetDefinition } = require(path.join(build, 'domain/sheetDefinition.js'))
 
 test('current-source probes use ngspice current parameters in root and nested sheets', () => {
   const project = createCurrentSourceExampleProject()
@@ -54,6 +55,45 @@ function createBlockProject() {
   ]
   return project
 }
+
+test('editing a reused sheet definition updates instance pins and keeps surviving wires attached', () => {
+  const project = createBlockProject()
+  const original = componentPins(project.parts[1])
+  project.wires = original.map((pin, index) => ({ id: `block-wire-${index}`, points: [[pin.x, pin.y], [pin.x + 30, pin.y]] }))
+  project.junctions = [{ x: original[0].x, y: original[0].y }]
+  project.netLabels[1].x = original[0].x
+  project.netLabels[1].y = original[0].y
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels }
+  const ports = [
+    { ...project.sheets[1].ports[0], side: 'top', direction: 'input' },
+    { ...project.sheets[1].ports[1], side: 'bottom', direction: 'output' },
+  ]
+  const updated = updateSheetDefinition(project, 'sheet-load', ports)
+  const pins = componentPins(updated.parts[1])
+  assert.deepEqual(pins.map(({ x, y }) => [x, y]), [[300, 340], [300, 460]])
+  assert.deepEqual(updated.wires.map((wire) => wire.points[0]), pins.map(({ x, y }) => [x, y]))
+  assert.deepEqual(updated.junctions, [{ x: pins[0].x, y: pins[0].y }])
+  assert.deepEqual([updated.netLabels[1].x, updated.netLabels[1].y], [pins[0].x, pins[0].y])
+  assert.deepEqual(validateProject(updated).parts[1].sheetPortLayout, ports.map(({ side, direction }) => ({ side, direction })))
+})
+
+test('removing block parameters prunes stale per-instance overrides', () => {
+  const project = createBlockProject()
+  project.sheets[1].parameters = [{ id: 'param-r', name: 'RLOAD', defaultValue: '1k' }]
+  project.parts[1].sheetParameters = { RLOAD: '2k', UNUSED: '5k' }
+  project.sheets[0].parts = project.parts
+  const updated = updateSheetDefinition(project, 'sheet-load', project.sheets[1].ports, [])
+  assert.deepEqual(updated.parts[1].sheetParameters, {})
+  assert.deepEqual(updated.sheets[0].parts[1].sheetParameters, {})
+})
+
+test('used sheet ports can only be removed from the ordered list tail', () => {
+  const project = createBlockProject()
+  assert.throws(() => updateSheetDefinition(project, 'sheet-load', [project.sheets[1].ports[1]]), /Remove ports from the end/)
+  const shortened = updateSheetDefinition(project, 'sheet-load', project.sheets[1].ports.slice(0, 1))
+  assert.deepEqual(shortened.parts[1].modelPins, ['IN'])
+  assert.throws(() => updateSheetDefinition(shortened, 'sheet-load', []), /keep at least one port/)
+})
 
 test('hierarchical sheet instance emits a native ngspice subcircuit with ordered ports', () => {
   const project = validateProject(createBlockProject())

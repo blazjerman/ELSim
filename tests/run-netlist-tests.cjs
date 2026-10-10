@@ -32,6 +32,7 @@ try {
     path.join(root, 'src/domain/probe.ts'),
     path.join(root, 'src/domain/hierarchyProbe.ts'),
     path.join(root, 'src/domain/hierarchyNavigation.ts'),
+    path.join(root, 'src/domain/sheetDefinition.ts'),
     path.join(root, 'src/domain/project.ts'),
     path.join(root, 'src/domain/componentDefinitions.ts'),
     path.join(root, 'src/domain/sourcePwl.ts'),

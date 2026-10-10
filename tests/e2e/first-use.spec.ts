@@ -63,6 +63,38 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(switchPart).toHaveAttribute('aria-label', /switch on/)
 })
 
+test('reused sheet interface edits update block pins and attached wires', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const child = {
+      id: 'sheet-edit', name: 'Reusable load', parentSheetId: 'sheet-main',
+      parts: [{ id: 'sheet-edit-r', kind: 'resistor', componentDefinitionId: 'elsim.resistor', ref: 'RLOAD', value: '1k', x: 300, y: 200, rotation: 0 }],
+      wires: [], junctions: [],
+      netLabels: [{ id: 'port-label-in', name: 'IN', x: 248, y: 200, visible: true }, { id: 'port-label-out', name: 'OUT', x: 352, y: 200, visible: true }],
+      view: { zoom: 1, panX: 0, panY: 0 },
+      ports: [{ id: 'port-in', name: 'IN', side: 'left', direction: 'input' }, { id: 'port-out', name: 'OUT', side: 'right', direction: 'output' }],
+      parameters: [{ id: 'param-rload', name: 'RLOAD', defaultValue: '1k' }],
+    }
+    const block = { id: 'root-load', kind: 'subcircuit', componentDefinitionId: 'elsim.subcircuit', ref: 'XLOAD', value: 'Reusable load', modelName: 'ELSIM_SHEET_sheet_edit', modelPins: ['IN', 'OUT'], sheetId: child.id, sheetPortLayout: child.ports.map(({ side, direction }) => ({ side, direction })), sheetParameters: { RLOAD: '2k' }, x: 700, y: 500, rotation: 0 }
+    project.parts.push(block)
+    project.wires.push({ id: 'wire-to-load', points: [[620, 500], [580, 500]] }, { id: 'wire-from-load', points: [[780, 500], [820, 500]] })
+    project.netLabels.push({ id: 'load-in-net', name: 'load_in', x: 620, y: 500, visible: true }, { id: 'load-out-net', name: 'load_out', x: 780, y: 500, visible: true })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, netLabels: project.netLabels }
+    project.sheets.push(child)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.locator('.sheet-tab').filter({ hasText: 'Reusable load' }).click()
+  await page.getByRole('button', { name: 'Sheet ports and block settings' }).click()
+  await page.getByLabel('Pin 1 placement').selectOption('top')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'root-load').sheetPortLayout[0].side)).toBe('top')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.find((wire: { id: string }) => wire.id === 'wire-to-load').points[0])).toEqual([700, 440])
+  const parameter = page.locator('.example-list article').filter({ hasText: 'RLOAD = 1k' })
+  await parameter.getByRole('button', { name: 'Remove' }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'root-load').sheetParameters)).toEqual({})
+})
+
 test('shift selection moves, copies, pastes, and deletes a group of parts', async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
