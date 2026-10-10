@@ -161,23 +161,50 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     return
   }
   if (command === '.meas' || command === '.measure') {
-    const [analysis, id, operationText, vectorText, ...options] = tokens
+    const [analysis, id, operationText, ...measurementTokens] = tokens
     const operation = operationText?.toLowerCase()
-    const vector = vectorText?.match(/^([vi])\(\s*([A-Za-z_][A-Za-z0-9_.$]*)\s*\)$/i)
-    const vectorKind = vector?.[1].toLowerCase()
-    const target = vector?.[2]
     const validId = typeof id === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(id) && !['__proto__', 'constructor', 'prototype'].includes(id.toLowerCase())
-    const validOperation = operation === 'max' || operation === 'min' || operation === 'avg' || operation === 'rms'
-    const knownVector = vectorKind === 'v'
-      ? project.netLabels.some((label) => label.name.toLowerCase() === target?.toLowerCase())
-      : vectorKind === 'i' && project.parts.some((part) => part.ref.toLowerCase() === target?.toLowerCase() && part.kind !== 'ground' && part.kind !== 'subcircuit')
+    const vectorPattern = /^([vi])\(\s*([A-Za-z_][A-Za-z0-9_.$]*)\s*\)$/i
+    const resolveVector = (text: string | undefined): string | null => {
+      const match = text?.match(vectorPattern)
+      if (!match) return null
+      const [, kind, name] = match
+      const known = kind.toLowerCase() === 'v'
+        ? project.netLabels.some((label) => label.name.toLowerCase() === name.toLowerCase())
+        : project.parts.some((part) => part.ref.toLowerCase() === name.toLowerCase() && part.kind !== 'ground' && part.kind !== 'subcircuit')
+      return known ? `${kind.toLowerCase()}(${name.toLowerCase()})` : null
+    }
+    const validOperation = ['max', 'min', 'avg', 'rms'].includes(operation ?? '')
+    const scalarVector = validOperation ? resolveVector(measurementTokens[0]) : null
+    if (operation === 'trig') {
+      const parseTrigger = (index: number) => {
+        const vector = resolveVector(measurementTokens[index])
+        const value = measurementTokens[index + 1]?.match(/^(?:val=)?([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?)$/i)?.[1]
+        const edge = measurementTokens[index + 2]?.match(/^(rise|fall|cross)(?:=(\d+))?$/i)
+        if (!vector || !value || !edge || Number(edge[2] ?? '1') !== 1) return null
+        return { vector, threshold: value, edge: edge[1].toLowerCase() === 'cross' ? 'either' as const : edge[1].toLowerCase() as 'rise' | 'fall' }
+      }
+      const targetIndex = measurementTokens.findIndex((token) => token.toLowerCase() === 'targ')
+      const trigger = parseTrigger(0)
+      const target = targetIndex >= 0 ? parseTrigger(targetIndex + 1) : null
+      const supported = trigger && target && targetIndex === 3 && measurementTokens.length === 7
+      const measurements = project.simulation.transientMeasurements ?? []
+      const duplicate = measurements.some((measurement) => measurement.id.toLowerCase() === id?.toLowerCase())
+      if (analysis?.toLowerCase() !== 'tran' || !validId || !supported || duplicate || measurements.length >= 12) {
+        warnings.push(`Line ${line}: ${command} ${recordExcerpt(tokens.join(' '))} is not a supported trigger/target transient delay measurement.`)
+        return
+      }
+      measurements.push({ id, operation: 'delay', ...trigger, targetVector: target.vector, targetThreshold: target.threshold, targetEdge: target.edge })
+      project.simulation.transientMeasurements = measurements
+      return
+    }
     const measurements = project.simulation.transientMeasurements ?? []
     const duplicate = measurements.some((measurement) => measurement.id.toLowerCase() === id?.toLowerCase())
-    if (analysis?.toLowerCase() !== 'tran' || !validId || !validOperation || !vector || !knownVector || options.length || duplicate || measurements.length >= 12) {
+    if (analysis?.toLowerCase() !== 'tran' || !validId || !validOperation || !scalarVector || measurementTokens.length !== 1 || duplicate || measurements.length >= 12) {
       warnings.push(`Line ${line}: ${command} ${recordExcerpt(tokens.join(' '))} is not a supported scalar transient measurement; use MAX, MIN, AVG, or RMS on a labeled node or placed component.`)
       return
     }
-    measurements.push({ id, operation, vector: `${vectorKind}(${target!.toLowerCase()})` })
+    measurements.push({ id, operation: operation as 'max' | 'min' | 'avg' | 'rms', vector: scalarVector })
     project.simulation.transientMeasurements = measurements
     return
   }
