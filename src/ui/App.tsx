@@ -722,6 +722,8 @@ export default function App() {
   const [modelAssetsVerified, setModelAssetsVerified] = useState<boolean | null>(null)
   const [componentQuery, setComponentQuery] = useState('')
   const [tourStep, setTourStep] = useState<number | null>(null)
+  const tourNextButtonRef = useRef<HTMLButtonElement>(null)
+  const tourTriggerRef = useRef<HTMLElement | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const ascFileInput = useRef<HTMLInputElement>(null)
   const modelFileInput = useRef<HTMLInputElement>(null)
@@ -736,6 +738,13 @@ export default function App() {
     if (clipboardProjectRef.current !== project.rootSheetId) copiedPart.current = null
     clipboardProjectRef.current = project.rootSheetId
   }, [project.rootSheetId])
+  useEffect(() => {
+    if (tourStep !== null) tourNextButtonRef.current?.focus()
+    else {
+      tourTriggerRef.current?.focus()
+      tourTriggerRef.current = null
+    }
+  }, [tourStep])
   useEffect(() => {
     if (!waveformDetached) return
     const move = (event: globalThis.PointerEvent) => {
@@ -928,6 +937,7 @@ export default function App() {
   const selectedLabel = selection?.kind === 'label' ? project.netLabels.find((label) => label.id === selection.id) ?? null : null
   const filteredPalette = palette.filter(({ kind, label, subtitle }) => `${label} ${subtitle} ${kindNames[kind]}`.toLowerCase().includes(componentQuery.trim().toLowerCase()))
   const startTour = () => {
+    tourTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const firstPart = projectRef.current.parts.find((part) => part.kind === 'resistor') ?? projectRef.current.parts[0]
     setTool('select')
     setAnalysisTab('waveforms')
@@ -941,7 +951,7 @@ export default function App() {
       const part = projectRef.current.parts.find((item) => item.kind === 'resistor') ?? projectRef.current.parts[0]
       setSelection(part ? { kind: 'part', id: part.id } : null)
     }
-    if (step === 2) setAnalysisTab('netlist')
+    if (step >= 2) setAnalysisTab('waveforms')
     if (step === 0) setAnalysisTab('waveforms')
   }
   const undo = () => {
@@ -1615,12 +1625,12 @@ export default function App() {
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={() => setNetlistOpen(false)}><div className="netlist-modal" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2>Generated SPICE netlist</h2></div><button className="subtle-icon" onClick={() => setNetlistOpen(false)}><X size={17}/></button></div><pre>{createNetlist(project)}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div></div></div>}
     {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => setElectricalCheckOpen(false)}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button className="subtle-icon" aria-label="Close circuit checks" onClick={() => setElectricalCheckOpen(false)}><X size={17}/></button></div><p className="erc-intro">These checks look for common wiring mistakes. They do not decide whether ngspice can solve your circuit.</p>{electricalIssues.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={`erc-severity ${issue.severity}`}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => { setSelection({ kind: 'part', id: issue.partId! }); setElectricalCheckOpen(false) }}>Select affected component</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalIssues.length} finding{electricalIssues.length === 1 ? '' : 's'}</span><button className="primary-small" onClick={() => setElectricalCheckOpen(false)}>Done</button></div></section></div>}
     {examplesOpen && <div className="tour-backdrop" onClick={() => { setExamplesOpen(false); setPendingExample(null) }}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="examples-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">LEARN BY EXAMPLE</span><h2 id="examples-title">Open a working circuit</h2></div><button className="subtle-icon" aria-label="Close examples" onClick={() => { setExamplesOpen(false); setPendingExample(null) }}><X size={17}/></button></div><p className="tour-copy">Each example is a complete circuit you can inspect, edit, and simulate locally.</p>{pendingExample ? <div className="example-confirm" role="alert"><strong>Replace the current circuit?</strong><p>{pendingExample === 'hierarchy' ? 'Nested reusable divider' : pendingExample === 'led' ? 'LED pulse response' : 'RC step response'} will replace the circuit open in this tab. Save your current circuit first if you want to keep it.</p><div><button className="tour-secondary" onClick={() => setPendingExample(null)}>Cancel</button><button className="primary-small" onClick={() => loadExample(pendingExample)}>Replace and open</button></div></div> : <div className="example-list"><article><div><strong>RC step response</strong><p>Watch a capacitor charge through a resistor and explore the time constant.</p></div><button className="primary-small" onClick={() => setPendingExample('rc')}>Open example</button></article><article><div><strong>LED pulse response</strong><p>See ngspice current drive the LED brightness as a pulse source switches.</p></div><button className="primary-small" onClick={() => setPendingExample('led')}>Open example</button></article><article><div><strong>Nested reusable divider</strong><p>Run two instances, inspect a two-level block, compare parameter overrides, and probe the inner resistor current.</p></div><button className="primary-small" onClick={() => setPendingExample('hierarchy')}>Open example</button></article></div>}</section></div>}
-    {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 4</span><h2 id="tour-title">{['Start with a working example', 'Change a component value', 'Inspect the generated netlist', 'Run and see results'][tourStep]}</h2></div><button className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p className="tour-copy">{[
-      'The schematic canvas is in the center, the component library is on the left, and selected part properties appear on the right. Open Examples to load a ready-to-run circuit.',
-      'A component is selected in the inspector. Try changing its value; edits are saved locally as you work.',
-      'The Netlist tab shows the SPICE input generated from the schematic. You can inspect or copy it without writing SPICE yourself.',
-      'Run uses the local ngspice engine to calculate waveform vectors. Stop ends an active run, and editing the circuit marks its previous result as stale.',
-    ][tourStep]}</p><div className="tour-progress" aria-label={`Step ${tourStep + 1} of 4`}>{[0, 1, 2, 3].map((step) => <span key={step} className={step <= tourStep ? 'current' : ''}/>)}</div><div className="tour-actions"><button className="tour-skip" onClick={() => setTourStep(null)}>Skip tour</button><span/>{tourStep > 0 && <button className="tour-secondary" onClick={() => setTourPage(tourStep - 1)}>Back</button>}<button className="primary-small" onClick={() => tourStep === 3 ? setTourStep(null) : setTourPage(tourStep + 1)}>{tourStep === 3 ? 'Finish' : 'Next'} <ArrowUp size={13}/></button></div></section></div>}
+    {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key !== 'Tab') return; const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]; const first = buttons[0], last = buttons.at(-1); if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() } }}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 4</span><h2 id="tour-title">{['Start with the RC example', 'Change a component value', 'Run a simulation', 'Explore waveforms and animation'][tourStep]}</h2></div><button className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p className="tour-copy">{[
+      'This RC step-response circuit is ready to run. The canvas is in the center, parts are on the left, and selected part properties are on the right. Use Examples to try another circuit; you do not need to write a netlist.',
+      'The resistor is selected. Change its Value in the right panel, or select the capacitor and edit that value. The old result will be marked stale until you run the edited circuit again. Changes stay in this browser.',
+      'Leave Transient selected for this RC example, then choose Run simulation in the top toolbar. The local ngspice WebAssembly engine calculates the circuit; Stop ends an active run.',
+      'After a run, choose V(vout) or another trace in Waveforms and move the Simulation time slider to inspect values. The schematic animations follow the same solved results. The Netlist tab is optional; you never need to edit SPICE text.',
+    ][tourStep]}</p><div className="tour-progress" aria-label={`Step ${tourStep + 1} of 4`}>{[0, 1, 2, 3].map((step) => <span key={step} className={step <= tourStep ? 'current' : ''}/>)}</div><div className="tour-actions"><button className="tour-skip" onClick={() => setTourStep(null)}>Skip tour</button><span/>{tourStep > 0 && <button className="tour-secondary" onClick={() => setTourPage(tourStep - 1)}>Back</button>}<button ref={tourNextButtonRef} className="primary-small" onClick={() => tourStep === 3 ? setTourStep(null) : setTourPage(tourStep + 1)}>{tourStep === 3 ? 'Finish' : 'Next'} <ArrowUp size={13}/></button></div></section></div>}
     <footer className="app-status"><span><span className="status-dot"/> All changes saved locally</span><span>Original ELSim component symbols</span><span><Sparkles size={13}/> Built for curious minds</span></footer>
   </div>
 }
