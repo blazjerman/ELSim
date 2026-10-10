@@ -403,7 +403,7 @@ test('circuit checks can select the affected component and orphan wire', async (
   await expect(page.locator('.wire-line.selected')).toHaveCount(1)
 })
 
-test('voltage source inspector selects steady DC or pulse transient behavior', async ({ page }) => {
+test('voltage source inspector edits DC, pulse, and validated PWL transient behavior', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
   const waveform = page.getByRole('combobox', { name: 'Source waveform' })
@@ -419,6 +419,11 @@ test('voltage source inspector selects steady DC or pulse transient behavior', a
   await waveform.selectOption('pwl')
   await page.getByLabel('PWL point 2 time').fill('2m')
   await page.getByLabel('PWL point 2 voltage').fill('3.3')
+  await page.getByLabel('PWL point 2 time').fill('0')
+  await expect(page.getByLabel('PWL point 2 time')).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByText('Time must be later than the previous point.')).toBeVisible()
+  await page.getByLabel('PWL point 2 time').fill('2m')
+  await expect(page.getByLabel('PWL point 2 time')).not.toHaveAttribute('aria-invalid', 'true')
   await page.getByRole('button', { name: 'Netlist', exact: true }).click()
   await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 PWL(0 0 2m 3.3)')
 })

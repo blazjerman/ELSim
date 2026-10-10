@@ -9,6 +9,7 @@ const { createNetlistArtifact, validateAnalysisSettings } = require(path.join(bu
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createLedExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
+const { validateSourcePwlPoints } = require(path.join(build, 'domain/sourcePwl.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
   const artifact = createNetlistArtifact(createStarterProject())
@@ -63,6 +64,12 @@ test('PWL voltage sources emit ordered time-voltage pairs and diagnose invalid o
   const invalid = createNetlistArtifact(project)
   assert.equal(invalid.diagnostics[0].severity, 'error')
   assert.match(invalid.diagnostics[0].message, /strictly increasing/)
+})
+
+test('PWL editor validation reports malformed, negative, and non-increasing times by field', () => {
+  assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '2 ms', voltage: '5 V' }]), [null, null, null, null])
+  assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '0', voltage: 'bad' }]), [null, null, 'Time must be later than the previous point.', 'Enter a numeric voltage such as 3.3 or -5 V.'])
+  assert.deepEqual(validateSourcePwlPoints([{ time: '-1m', voltage: '0' }, { time: 'x', voltage: '1' }]), ['Time must be zero or greater.', null, 'Enter a time such as 2m or 2 ms.', null])
 })
 
 test('zero-volt pulse initial level is valid', () => {
