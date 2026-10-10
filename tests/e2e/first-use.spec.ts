@@ -632,6 +632,18 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(l_c)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'I(l1)', exact: true })).toBeVisible()
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  const finalSample = Number(await slider.getAttribute('max'))
+  await slider.fill(String(Math.floor(finalSample * 0.15)))
+  const inductor = page.locator('.circuit-part[data-part-id="rlc-l1"]')
+  const inductorTitle = inductor.locator('title')
+  await expect(inductorTitle).toContainText(/magnetic field energy E = ½ L I² = [\d.e+-]+ J/)
+  await expect(inductorTitle).toContainText(/from pin [12] toward pin [12]/)
+  const arrow = inductor.locator('.inductor-current-arrow')
+  await expect.poll(async () => Number(await arrow.getAttribute('opacity'))).toBeGreaterThan(0)
+  const titleText = await inductorTitle.textContent()
+  const arrowPath = await arrow.getAttribute('d')
+  expect(arrowPath?.startsWith(titleText?.includes('from pin 1 toward pin 2') ? 'M-10' : 'M10')).toBe(true)
 })
 
 test('PWL waveform example opens with editable points and solves the RC response', async ({ page }) => {
