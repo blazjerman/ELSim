@@ -34,6 +34,7 @@ export type RunMetadata = {
   engineVersion: string
   projectVersion: number
   netlistHash: string
+  modelAssets?: { id: string; filename: string; sha256: string }[]
   settings: Record<string, string | number | boolean>
 }
 
@@ -133,6 +134,19 @@ function isOrderedAxis(value: ArrayLike<number>): boolean {
   return true
 }
 
+function isRunModelAssets(value: unknown): value is RunMetadata['modelAssets'] {
+  if (!Array.isArray(value) || value.length > 16) return false
+  const ids = new Set<string>()
+  return value.every((asset) => {
+    if (!isRecord(asset) || typeof asset.id !== 'string' || !asset.id.trim()
+      || typeof asset.filename !== 'string' || !asset.filename.trim()
+      || typeof asset.sha256 !== 'string' || !/^[a-f\d]{64}$/i.test(asset.sha256)
+      || ids.has(asset.id)) return false
+    ids.add(asset.id)
+    return true
+  })
+}
+
 function isCompletedMetadata(value: unknown): value is RunMetadata & { completedAt: string } {
   if (!isRecord(value)) return false
   return typeof value.runId === 'string' && value.runId.length > 0
@@ -142,6 +156,7 @@ function isCompletedMetadata(value: unknown): value is RunMetadata & { completed
     && typeof value.engineVersion === 'string' && value.engineVersion.length > 0
     && Number.isInteger(value.projectVersion) && Number(value.projectVersion) >= 1
     && typeof value.netlistHash === 'string' && value.netlistHash.length > 0
+    && isRunModelAssets(value.modelAssets ?? [])
     && isRecord(value.settings) && Object.values(value.settings).every((setting) => typeof setting === 'string' || typeof setting === 'boolean' || (typeof setting === 'number' && Number.isFinite(setting)))
 }
 
@@ -302,6 +317,7 @@ export function engineResponseIssue(value: unknown): string {
       if (typeof metadata.engineVersion !== 'string' || !metadata.engineVersion) return 'engine version is invalid in metadata'
       if (!Number.isInteger(metadata.projectVersion) || Number(metadata.projectVersion) < 1) return 'project version is invalid in metadata'
       if (typeof metadata.netlistHash !== 'string' || !metadata.netlistHash) return 'netlist hash is missing from metadata'
+      if (!isRunModelAssets(metadata.modelAssets ?? [])) return 'imported model fingerprints are invalid in metadata'
       if (!isRecord(metadata.settings)) return 'simulation settings are missing from metadata'
       if (!Object.values(metadata.settings).every((setting) => typeof setting === 'string' || typeof setting === 'boolean' || (typeof setting === 'number' && Number.isFinite(setting)))) return 'simulation settings contain unsupported values'
       return 'run metadata is incomplete or invalid'
@@ -335,7 +351,7 @@ export function isEngineRequest(value: unknown): value is EngineRequest {
   const artifact = value.artifact
   const metadata = value.metadata
   if (typeof artifact.text !== 'string' || !Array.isArray(artifact.sourceMap) || !artifact.sourceMap.every(isSource) || !Array.isArray(artifact.diagnostics) || !artifact.diagnostics.every(isDiagnostic)) return false
-  if (typeof metadata.runId !== 'string' || !metadata.runId || typeof metadata.startedAt !== 'string' || !Number.isFinite(Date.parse(metadata.startedAt)) || typeof metadata.engine !== 'string' || !metadata.engine || typeof metadata.engineVersion !== 'string' || !metadata.engineVersion || !Number.isInteger(metadata.projectVersion) || Number(metadata.projectVersion) < 1 || typeof metadata.netlistHash !== 'string' || !metadata.netlistHash || !isRecord(metadata.settings)) return false
+  if (typeof metadata.runId !== 'string' || !metadata.runId || typeof metadata.startedAt !== 'string' || !Number.isFinite(Date.parse(metadata.startedAt)) || typeof metadata.engine !== 'string' || !metadata.engine || typeof metadata.engineVersion !== 'string' || !metadata.engineVersion || !Number.isInteger(metadata.projectVersion) || Number(metadata.projectVersion) < 1 || typeof metadata.netlistHash !== 'string' || !metadata.netlistHash || !isRunModelAssets(metadata.modelAssets ?? []) || !isRecord(metadata.settings)) return false
   if (!Object.values(metadata.settings).every((setting) => typeof setting === 'string' || typeof setting === 'boolean' || (typeof setting === 'number' && Number.isFinite(setting)))) return false
   if (value.parameterSweep !== undefined && (!Array.isArray(value.parameterSweep) || value.parameterSweep.length < 1 || value.parameterSweep.length > 10 || !value.parameterSweep.every(isParameterSweepRun))) return false
   if (value.measurements !== undefined && (!Array.isArray(value.measurements) || value.measurements.length > 12 || !value.measurements.every(isTransientMeasurement))) return false

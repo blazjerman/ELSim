@@ -55,7 +55,18 @@
         "engineVersion": { "type": "string" },
         "projectVersion": { "type": "integer", "minimum": 1 },
         "netlistHash": { "type": "string" },
+        "modelAssets": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/modelAssetFingerprint" } },
         "settings": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } }
+      }
+    },
+    "modelAssetFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "filename", "sha256"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "filename": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" }
       }
     },
     "trace": {

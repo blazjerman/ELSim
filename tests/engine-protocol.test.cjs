@@ -5,7 +5,7 @@ const path = require('node:path')
 const { engineResponseIssue, isEngineRequest, isEngineResponse, normalizeTraceAxes, resampleTraceVector, transferableTraceBuffers } = require(path.join(process.env.ELSIM_TEST_BUILD, 'engine/contract.js'))
 
 const artifact = { text: '.tran 1u 1m', sourceMap: [], diagnostics: [] }
-const metadata = { runId: 'run-1', startedAt: '2026-10-10T12:00:00.000Z', engine: 'fixture', engineVersion: '1', projectVersion: 7, netlistHash: 'abc123', settings: { analysis: 'tran' } }
+const metadata = { runId: 'run-1', startedAt: '2026-10-10T12:00:00.000Z', engine: 'fixture', engineVersion: '1', projectVersion: 7, netlistHash: 'abc123', modelAssets: [], settings: { analysis: 'tran' } }
 const completedMetadata = { ...metadata, completedAt: '2026-10-10T12:00:01.000Z' }
 const trace = { id: 'v(out)', label: 'V(out)', unit: 'V', axisLabel: 'Time', axisUnit: 's', axis: new Float64Array([0, 1e-3]), values: new Float64Array([0, 5]) }
 
@@ -13,6 +13,11 @@ test('independent request producer satisfies run and control request contracts',
   assert.equal(isEngineRequest({ type: 'initialize', requestId: 'init-1' }), true)
   assert.equal(isEngineRequest({ type: 'dispose', requestId: 'dispose-1' }), true)
   assert.equal(isEngineRequest({ type: 'cancel', requestId: 'cancel-1', runId: 'run-1' }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, modelAssets: [{ id: 'model-1', filename: 'custom.lib', sha256: 'a'.repeat(64) }] } }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, modelAssets: [{ id: 'model-1', filename: 'custom.lib', sha256: 'bad' }] } }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, modelAssets: undefined } }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, modelAssets: [{ id: 'same', filename: 'one.lib', sha256: 'a'.repeat(64) }, { id: 'same', filename: 'two.lib', sha256: 'b'.repeat(64) }] } }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, modelAssets: Array.from({ length: 17 }, (_, index) => ({ id: `model-${index}`, filename: `${index}.lib`, sha256: 'a'.repeat(64) })) } }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'riseDelay', operation: 'delay', vector: 'v(in)', threshold: '0.5', targetVector: 'v(out)', targetThreshold: '4.5', edge: 'rise', targetEdge: 'rise' }] }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '2m', to: '8m' }] }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, settings: { analysis: 'ac', acSweep: { scale: 'dec' } } } }), false)
@@ -61,6 +66,7 @@ test('response consumer rejects malformed or incomplete worker messages', () => 
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'peak', operation: 'max', vector: 'v(out)', value: Number.POSITIVE_INFINITY, unit: 'V' }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '8m', to: '2m', value: 2.5, unit: 'V' }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, metadata: { ...completedMetadata, completedAt: 'not-a-date' } } }), false)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, metadata: { ...completedMetadata, modelAssets: [{ id: 'model-1', filename: 'custom.lib', sha256: 'bad' }] } } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'peak', operation: 'delay', vector: 'v(in)', value: 0.1, unit: 'V' }] } }), false)
   assert.equal(isEngineResponse({ type: 'unknown', requestId: 'run-1' }), false)
 })
