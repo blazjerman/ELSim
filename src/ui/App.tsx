@@ -439,16 +439,36 @@ function patchMeasurement(current: TransientMeasurement, patch: Partial<Transien
   return { ...current, ...patch } as TransientMeasurement
 }
 
-function TransientMeasurementEditor({ measurements, onAdd, onChange, onRemove }: { measurements: TransientMeasurement[]; onAdd: () => void; onChange: (index: number, patch: Partial<TransientMeasurement>) => void; onRemove: (index: number) => void }) {
+function measurementVectorChoices(project: Project) {
+  const nodes = [...new Map(project.netLabels.filter((label) => label.name.trim() && label.name !== '0').map((label) => [label.name.toLowerCase(), label.name])).values()].sort((left, right) => left.localeCompare(right))
+  const currentParts = project.parts.filter((part) => ['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind))
+  const currents = currentParts.map((part) => ({
+    value: part.kind === 'currentSource' ? `i(@${part.ref}[current])` : `I(${part.ref})`,
+    label: `${part.ref} · ${kindNames[part.kind]}`,
+  }))
+  return { nodes: nodes.map((name) => ({ value: `V(${name})`, label: name })), currents }
+}
+
+function TransientMeasurementEditor({ project, measurements, onAdd, onChange, onRemove }: { project: Project; measurements: TransientMeasurement[]; onAdd: () => void; onChange: (index: number, patch: Partial<TransientMeasurement>) => void; onRemove: (index: number) => void }) {
+  const choices = measurementVectorChoices(project)
+  const knownChoice = (value: string) => [...choices.nodes, ...choices.currents].find((choice) => choice.value.toLowerCase() === value.toLowerCase())
+  const vectorPicker = (label: string, pickerLabel: string, value: string, onVectorChange: (vector: string) => void) => <>
+    <label className="field-label">{label}<select aria-label={pickerLabel} value={knownChoice(value)?.value ?? `custom:${value}`} onChange={(event) => { if (!event.target.value.startsWith('custom:')) onVectorChange(event.target.value) }}>
+      <option value={`custom:${value}`}>{knownChoice(value) ? 'Choose a signal…' : `Custom vector · ${value || 'enter below'}`}</option>
+      <optgroup label="Node voltage">{choices.nodes.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</optgroup>
+      <optgroup label="Component current">{choices.currents.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</optgroup>
+    </select></label>
+    <label className="field-label">{label} expression<input placeholder="V(out) or I(R1)" value={value} onChange={(event) => onVectorChange(event.target.value)}/></label>
+  </>
   return <div className="form-section measurement-editor">
     <div className="form-section-title">TRANSIENT MEASUREMENTS</div>
-    <p className="field-hint">Calculate peak, minimum, average, or RMS values, or measure delay between two voltage/current threshold crossings.</p>
+    <p className="field-hint">Choose a labeled node or component current, or enter an advanced vector expression. Calculate peak, minimum, average, RMS, or delay between threshold crossings.</p>
     {measurements.map((measurement, index) => <div className="measurement-card" key={`${measurement.id}-${index}`}>
       <div className="parameter-sweep-heading"><strong>Measurement {index + 1}</strong><button type="button" aria-label={`Remove measurement ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
       <label className="field-label">Name<input maxLength={24} value={measurement.id} onChange={(event) => onChange(index, { id: event.target.value })}/></label>
       <label className="field-label">Calculate<select value={measurement.operation} onChange={(event) => onChange(index, event.target.value === 'delay' ? { operation: 'delay', vector: measurement.vector, threshold: '2.5', targetVector: 'V(vout)', targetThreshold: '2.5', edge: 'rise', targetEdge: 'rise' } : { operation: event.target.value as 'max' | 'min' | 'avg' | 'rms', vector: measurement.vector })}><option value="max">Maximum</option><option value="min">Minimum</option><option value="avg">Average</option><option value="rms">RMS</option><option value="delay">Propagation delay</option></select></label>
-      <label className="field-label">Vector<input placeholder="V(out) or I(R1)" value={measurement.vector} onChange={(event) => onChange(index, { vector: event.target.value })}/></label>
-      {measurement.operation === 'delay' && <><label className="field-label">Trigger threshold<input value={measurement.threshold} onChange={(event) => onChange(index, { threshold: event.target.value })}/></label><label className="field-label">Trigger edge<select value={measurement.edge} onChange={(event) => onChange(index, { edge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either</option></select></label><label className="field-label">Target vector<input placeholder="V(out)" value={measurement.targetVector} onChange={(event) => onChange(index, { targetVector: event.target.value })}/></label><label className="field-label">Target threshold<input value={measurement.targetThreshold} onChange={(event) => onChange(index, { targetThreshold: event.target.value })}/></label><label className="field-label">Target edge<select value={measurement.targetEdge} onChange={(event) => onChange(index, { targetEdge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either</option></select></label></>}
+      {vectorPicker('Vector', `Choose vector for measurement ${index + 1}`, measurement.vector, (vector) => onChange(index, { vector }))}
+      {measurement.operation === 'delay' && <><label className="field-label">Trigger threshold<input value={measurement.threshold} onChange={(event) => onChange(index, { threshold: event.target.value })}/></label><label className="field-label">Trigger edge<select value={measurement.edge} onChange={(event) => onChange(index, { edge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either</option></select></label>{vectorPicker('Target vector', `Choose target vector for measurement ${index + 1}`, measurement.targetVector, (targetVector) => onChange(index, { targetVector }))}<label className="field-label">Target threshold<input value={measurement.targetThreshold} onChange={(event) => onChange(index, { targetThreshold: event.target.value })}/></label><label className="field-label">Target edge<select value={measurement.targetEdge} onChange={(event) => onChange(index, { targetEdge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either</option></select></label></>}
     </div>)}
     <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={measurements.length >= 12}>Add measurement</button>
     {measurements.length > 0 && <div className="field-hint">Measurements are calculated for each parameter sweep case. Delay values are reported in seconds.</div>}
@@ -1758,7 +1778,7 @@ export default function App() {
           </div>
     <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
     {project.simulation.analysis === 'tran' && <>
-      <TransientMeasurementEditor measurements={project.simulation.transientMeasurements ?? []} onAdd={addMeasurement} onChange={updateMeasurement} onRemove={removeMeasurement}/>
+      <TransientMeasurementEditor project={project} measurements={project.simulation.transientMeasurements ?? []} onAdd={addMeasurement} onChange={updateMeasurement} onRemove={removeMeasurement}/>
       <InitialConditionEditor conditions={project.simulation.initialConditions ?? []} nodes={[...new Set(project.netLabels.map((label) => label.name).filter((node) => node !== '0'))]} inductors={project.parts.filter((part) => part.kind === 'inductor').map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAdd={addInitialCondition} onAddCurrent={addInductorInitialCondition} onChange={updateInitialCondition} onRemove={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/>
     </>}
           <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : `${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'ac' ? 'AC frequency-domain' : 'Transient'} analysis runs locally in a Web Worker. Results are tied to the circuit revision.`}</p><button onClick={() => setNotice(engineAssetAvailable === false ? 'Build the pinned engine with tools/build-ngspice-wasm.sh; see engine/wasm/README.md.' : 'ngspice 47 · Emscripten WebAssembly · transient, DC operating-point, and AC analyses')}>Engine status <ArrowUp size={13}/></button><a className="engine-notice-link" href="/THIRD_PARTY_NOTICES.md" target="_blank" rel="noreferrer">Third-party notices</a></div>

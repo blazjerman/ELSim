@@ -460,6 +460,27 @@ test('voltage source inspector edits DC, pulse, and validated PWL transient beha
   await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 PWL(0 0 2m 3.3)')
 })
 
+test('transient measurements offer labeled nodes and common component currents', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.simulation.transientMeasurements = [{ id: 'SignalDelay', operation: 'delay', vector: 'V(vin)', threshold: '2.5', edge: 'rise', targetVector: 'V(vout)', targetThreshold: '2.5', targetEdge: 'rise' }]
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Escape')
+
+  const vector = page.getByRole('combobox', { name: 'Choose vector for measurement 1' })
+  await expect(vector).toHaveValue('V(vin)')
+  await expect(vector.locator('optgroup[label="Node voltage"]')).toContainText(/vin.*vout/)
+  await expect(vector.locator('optgroup[label="Component current"]')).toContainText(/R1 · Resistor.*C1 · Capacitor/)
+  await vector.selectOption('I(R1)')
+  await page.getByRole('combobox', { name: 'Choose target vector for measurement 1' }).selectOption('V(vout)')
+  await expect(page.getByRole('textbox', { name: 'Vector expression', exact: true })).toHaveValue('I(R1)')
+  await expect(page.getByLabel('Target vector expression')).toHaveValue('V(vout)')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0])).toMatchObject({ vector: 'I(R1)', targetVector: 'V(vout)' })
+})
+
 test('lamp palette item exposes resistance and nominal animation power', async ({ page }) => {
   await page.goto('/')
   await page.getByTitle('Add Lamp').click()
