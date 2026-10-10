@@ -50,6 +50,17 @@ test('reports missing symbol files and unsupported directives instead of silentl
   assert.match(warnings[1], /directive \.save.*not translated/)
 })
 
+test('reports a missing SYMATTR ModelFile dependency and accepts an imported matching library filename', () => {
+  const modelFileSymbol = { ...symbol, id: 'symbol-model-file', filename: 'res.asy', content: `${symbol.content}\nSYMATTR ModelFile vendor-resistors.lib` }
+  const asc = ['Version 4', 'SYMBOL res 0 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k'].join('\n')
+  const missing = parseLtspiceSchematic(asc, 'model-path.asc', [modelFileSymbol])
+  assert.ok(missing.warnings.some((warning) => /references missing model file “vendor-resistors\.lib”/.test(warning)))
+  const content = '.MODEL R_VENDOR RES(R=1k)\n'
+  const modelAsset = { id: 'model-vendor-resistors', filename: 'vendor-resistors.lib', sha256: 'c'.repeat(64), content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }
+  const present = parseLtspiceSchematic(asc, 'model-path.asc', [modelFileSymbol], [modelAsset])
+  assert.equal(present.warnings.some((warning) => /references missing model file/.test(warning)), false)
+})
+
 test('import diagnostics quote bounded source records and skipped symbol attributes', () => {
   const unknownSymbol = { ...symbol, id: 'symbol-unknown', filename: 'unknown.asy', content: symbol.content.replace('Prefix R', 'Prefix Z') }
   const longUnknownRecord = `CUSTOM_RECORD ${'x'.repeat(1_000)}`

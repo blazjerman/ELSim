@@ -90,6 +90,7 @@ export function parseLtspiceSymbol(text: string, filename = 'Imported symbol.asy
         if (tokens.length < 2) throw new Error('SYMATTR requires a name and value.')
         const attribute = tokens[0].toLowerCase()
         const value = tokens.slice(1).join(' ')
+        result.attributes[attribute] = value
         if (attribute === 'prefix') result.prefix = value
         else if (attribute === 'value') result.value = value
         else if (attribute === 'description') result.description = value
