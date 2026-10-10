@@ -22,7 +22,7 @@ function buildValues(project: Project, sweep: ParameterSweep) {
 export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
   const settings = project.simulation.parameterSweeps
   if (!settings?.length) return []
-  if (settings.length > 2) throw new Error('Parameter stepping supports at most two components.')
+  if (settings.length > 3) throw new Error('Parameter stepping supports at most three components.')
   let combinations: { values: { component: string; value: string }[]; label: string }[] = [{ values: [], label: '' }]
   for (const sweep of settings) {
     const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())

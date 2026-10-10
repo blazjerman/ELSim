@@ -178,7 +178,7 @@ function isTransientMeasurement(value: unknown): boolean {
 
 function isParameterSweepRun(value: unknown): boolean {
   if (!isRecord(value) || typeof value.label !== 'string' || !Array.isArray(value.values)
-    || value.values.length < 1 || value.values.length > 2) return false
+    || value.values.length < 1 || value.values.length > 3) return false
   const components = new Set<string>()
   return value.values.every((entry) => {
     if (!isRecord(entry) || typeof entry.component !== 'string' || !entry.component.trim()

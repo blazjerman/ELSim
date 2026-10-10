@@ -16,6 +16,7 @@ test('independent request producer satisfies run and control request contracts',
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'riseDelay', operation: 'delay', vector: 'v(in)', threshold: '0.5', targetVector: 'v(out)', targetThreshold: '4.5', edge: 'rise', targetEdge: 'rise' }] }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, settings: { analysis: 'ac', acSweep: { scale: 'dec' } } } }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '1000' }], label: 'R1=1 kΩ' }], measurements: [{ id: 'peak', operation: 'max', vector: 'v(out)' }] }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '1000' }, { component: 'C1', value: '1e-5' }, { component: 'V1', value: '5' }], label: 'R1=1 kΩ, C1=10 µF, V1=5 V' }] }), true)
 })
 
 test('request consumer rejects malformed payloads before engine execution', () => {
@@ -26,6 +27,7 @@ test('request consumer rejects malformed payloads before engine execution', () =
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [null] }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: 'NaN' }], label: 'bad' }] }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '100' }, { component: 'r1', value: '200' }], label: 'duplicate' }] }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '100' }, { component: 'C1', value: '1e-5' }, { component: 'V1', value: '5' }, { component: 'L1', value: '1e-3' }], label: 'too many' }] }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'peak', operation: 'nonsense', vector: 'v(out)' }] }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'delay', operation: 'delay', vector: 'v(in)', threshold: '0', targetVector: 'v(out)', targetThreshold: 'NaN', edge: 'rise', targetEdge: 'rise' }] }), false)
 })
@@ -89,6 +91,7 @@ test('worker response validation accepts shared axes and still rejects non-finit
 
 test('published JSON schema describes delay measurements and seconds', () => {
   const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'engine-protocol.schema.json'), 'utf8'))
+  assert.equal(schema.$defs.parameterSweepRun.properties.values.maxItems, 3)
   assert.deepEqual(schema.$defs.measurement.properties.operation.enum, ['max', 'min', 'avg', 'rms', 'delay'])
   assert.deepEqual(schema.$defs.measurement.properties.unit.enum, ['V', 'A', 's'])
   const variants = schema.$defs.transientMeasurement.oneOf

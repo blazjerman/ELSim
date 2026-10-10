@@ -450,7 +450,7 @@ function ParameterSweepEditor({ parts, sweeps, onAdd, onChange, onRemove }: { pa
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
-    <p className="field-hint">Compare results while changing one or two passive values or scalar DC source levels.</p>
+    <p className="field-hint">Compare results while changing up to three passive values or scalar DC source levels.</p>
     {sweeps.map((sweep, index) => {
       const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
       const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
@@ -467,7 +467,7 @@ function ParameterSweepEditor({ parts, sweeps, onAdd, onChange, onRemove }: { pa
         <label className="field-label">Number of values<input aria-label={`Parameter ${index + 1} number of values`} type="number" min="2" max={maxPoints} value={sweep.points} onChange={(event) => onChange(index, { points: Number(event.target.value) })}/></label>
       </div>
     })}
-    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= 2 || eligible.length <= sweeps.length || combinations * 2 > 10}>{sweeps.length ? 'Add a second parameter' : 'Add parameter stepping'}</button>
+    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= 3 || eligible.length <= sweeps.length || combinations * 2 > 10}>{sweeps.length ? 'Add another parameter' : 'Add parameter stepping'}</button>
     <div className="field-hint">{combinations} simulation case{combinations === 1 ? '' : 's'} selected · maximum 10 · each result is plotted as a separate trace.</div>
   </div>
 }
@@ -1700,8 +1700,9 @@ export default function App() {
         if (hierarchyWalkthroughStep === 0) {
           setHierarchyWalkthroughStep(1)
           setNotice('Simulation complete. Continue the nested-block walkthrough in the guide.')
-        } else if (response.result.analysis === 'tran' && transientSamples > 1) setNotice(prefersReducedMotionRef.current ? `Transient analysis complete · animation paused for reduced motion · ${response.result.traces.length} result vectors` : `Transient analysis complete · playing solved animation · ${response.result.traces.length} result vectors`)
-        else setNotice(parameterSweep.length ? `Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors` : `Analysis complete · ${response.result.traces.length} result vectors`)
+        } else if (parameterSweep.length) setNotice(`Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors${response.result.analysis === 'tran' && transientSamples > 1 ? prefersReducedMotionRef.current ? ' · animation paused for reduced motion' : ' · playing solved animation' : ''}`)
+        else if (response.result.analysis === 'tran' && transientSamples > 1) setNotice(prefersReducedMotionRef.current ? `Transient analysis complete · animation paused for reduced motion · ${response.result.traces.length} result vectors` : `Transient analysis complete · playing solved animation · ${response.result.traces.length} result vectors`)
+        else setNotice(`Analysis complete · ${response.result.traces.length} result vectors`)
         setAnalysisTab('waveforms')
         worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
@@ -1763,9 +1764,12 @@ export default function App() {
   const addParameterSweep = () => {
     const configured = project.simulation.parameterSweeps ?? []
     if (configured.reduce((total, sweep) => total * sweep.points, 1) * 2 > 10) { setNotice('Reduce the number of values before adding another parameter. A sweep can run at most 10 cases.'); return }
-    const parts = project.parts.filter((part) => ['resistor', 'capacitor', 'inductor'].includes(part.kind) && !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase()))
+    const parts = project.parts.filter((part) => ['resistor', 'capacitor', 'inductor'].includes(part.kind)
+      || (part.kind === 'source' && part.sourceMode === 'dc')
+      || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined)))
+      .filter((part) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase()))
     const part = parts[0]
-    if (!part || configured.length >= 2) { setNotice('Parameter stepping supports up to two distinct resistors, capacitors, or inductors.'); return }
+    if (!part || configured.length >= 3) { setNotice('Parameter stepping supports up to three distinct scalar DC sources or R/C/L parts.'); return }
     const sweep: ParameterSweep = { component: part.ref, start: part.value, stop: defaultSweepStop(part), points: 3 }
     setProject((current) => ({ ...current, simulation: { ...current.simulation, parameterSweeps: [...(current.simulation.parameterSweeps ?? []), sweep] } }))
   }

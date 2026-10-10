@@ -1014,6 +1014,33 @@ test('DC sweep waveform supports source cursor and persistent drag-pan', async (
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.ranges.dc.start)).not.toBe(zoomedRange.start)
 })
 
+test('three-parameter sweep runs all eight bounded cases in the browser engine', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    const source = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    source.sourceMode = 'dc'
+    source.value = '5 V'
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    project.simulation.parameterSweeps = [
+      { component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 2 },
+      { component: 'C1', start: '10 µF', stop: '20 µF', points: 2 },
+      { component: source.ref, start: '4 V', stop: '5 V', points: 2 },
+    ]
+    localStorage.setItem(key, JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.parameter-sweep-card')).toHaveCount(3)
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 8 cases/)).toBeVisible({ timeout: 60_000 })
+  const labels = await page.locator('.trace-toggles button').evaluateAll((buttons) => [...new Set(buttons.map((button) => button.textContent?.split('·').slice(1).join('·').trim()).filter(Boolean))])
+  expect(labels).toHaveLength(8)
+  expect(labels).toContain('R1=1000 Ω, C1=0.00001 F, V1=4 V')
+  expect(labels).toContain('R1=2000 Ω, C1=0.00002 F, V1=5 V')
+})
+
 test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {
   await page.goto('/')
   const content = '.MODEL USER_D D(Is=1e-14)\n'

@@ -35,6 +35,26 @@ test('single and nested parameter sweeps produce deterministic, bounded combinat
   assert.match(control, /alter R1 1\.00000000e\+3\nalter C1 1\.00000000e-5\nrun\nwrite \/result-0\.raw all/)
 })
 
+test('three distinct parameters produce bounded Cartesian combinations and protocol commands', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.kind === 'source')
+  source.sourceMode = 'dc'
+  project.simulation.parameterSweeps = [
+    { component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 2 },
+    { component: 'C1', start: '10 µF', stop: '20 µF', points: 2 },
+    { component: source.ref, start: '1 V', stop: '2 V', points: 2 },
+  ]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 8)
+  assert.deepEqual(runs[0].values.map(({ component }) => component), ['R1', 'C1', 'V1'])
+  assert.deepEqual(runs.at(-1).values.map(({ value }) => Number(value)), [2000, 20e-6, 2])
+  assert.match(runs.at(-1).label, /R1=2000 Ω, C1=0\.00002 F, V1=2 V/)
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.equal((control.match(/write \/result-\d+\.raw all/g) ?? []).length, 8)
+  assert.match(control, /alter V1 2\.00000000e\+0\nrun\nwrite \/result-7\.raw all/)
+})
+
 test('scalar DC voltage and current sources are stepped in signed native units', () => {
   const project = createStarterProject()
   const voltage = project.parts.find((part) => part.kind === 'source')
