@@ -44,8 +44,18 @@ test('measure a million-sample transient through the browser ngspice worker and 
   await expect(trace).toBeVisible()
   if (!(await trace.getAttribute('class'))?.includes('selected')) await trace.click()
   await expect(trace).toHaveClass(/selected/)
+  const traceButtons = page.locator('.trace-toggles button')
+  const availableTraceCount = await traceButtons.count()
+  expect(availableTraceCount).toBeGreaterThanOrEqual(4)
+  const requestedTraceCount = Math.min(5, availableTraceCount)
+  for (let index = 0; index < requestedTraceCount; index += 1) {
+    const traceButton = traceButtons.nth(index)
+    if (!(await traceButton.getAttribute('class'))?.includes('selected')) await traceButton.click()
+  }
+  const selectedTraceCount = await page.locator('.trace-toggles button.selected').count()
+  expect(selectedTraceCount).toBeGreaterThanOrEqual(4)
   const renderedTraceCount = await page.locator('.waveform-chart polyline').count()
-  expect(renderedTraceCount).toBeGreaterThan(0)
+  expect(renderedTraceCount).toBe(selectedTraceCount)
   const scrubStarted = performance.now()
   await slider.press('End')
   await expect(page.locator('.cursor-readout')).toContainText('V(vout)')
@@ -62,7 +72,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
     }
   })
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-million-sample-transient-v1', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, resultReadyMs: Number(completedMs.toFixed(2)), finalSampleScrubMs: Number(scrubMs.toFixed(2)), heapBefore: before, heapAfter: after }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-million-sample-multi-trace-transient-v2', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), finalSampleScrubMs: Number(scrubMs.toFixed(2)), heapBefore: before, heapAfter: after }, null, 2))
 })
 
 test('record large-project editor render and selection timings', async ({ page, browserName }) => {
