@@ -160,6 +160,27 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     if (conditions.length) project.simulation.initialConditions = conditions
     return
   }
+  if (command === '.meas' || command === '.measure') {
+    const [analysis, id, operationText, vectorText, ...options] = tokens
+    const operation = operationText?.toLowerCase()
+    const vector = vectorText?.match(/^([vi])\(\s*([A-Za-z_][A-Za-z0-9_.$]*)\s*\)$/i)
+    const vectorKind = vector?.[1].toLowerCase()
+    const target = vector?.[2]
+    const validId = typeof id === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(id) && !['__proto__', 'constructor', 'prototype'].includes(id.toLowerCase())
+    const validOperation = operation === 'max' || operation === 'min' || operation === 'avg' || operation === 'rms'
+    const knownVector = vectorKind === 'v'
+      ? project.netLabels.some((label) => label.name.toLowerCase() === target?.toLowerCase())
+      : vectorKind === 'i' && project.parts.some((part) => part.ref.toLowerCase() === target?.toLowerCase() && part.kind !== 'ground' && part.kind !== 'subcircuit')
+    const measurements = project.simulation.transientMeasurements ?? []
+    const duplicate = measurements.some((measurement) => measurement.id.toLowerCase() === id?.toLowerCase())
+    if (analysis?.toLowerCase() !== 'tran' || !validId || !validOperation || !vector || !knownVector || options.length || duplicate || measurements.length >= 12) {
+      warnings.push(`Line ${line}: ${command} ${recordExcerpt(tokens.join(' '))} is not a supported scalar transient measurement; use MAX, MIN, AVG, or RMS on a labeled node or placed component.`)
+      return
+    }
+    measurements.push({ id, operation, vector: `${vectorKind}(${target!.toLowerCase()})` })
+    project.simulation.transientMeasurements = measurements
+    return
+  }
   if (command.startsWith('.')) warnings.push(`Line ${line}: directive ${command} is retained as an import warning but is not translated yet.`)
 }
 
@@ -462,6 +483,10 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   if (project.simulation.analysis !== 'tran' && hasImportedInitialConditions) {
     warnings.push('Imported .ic initial conditions require transient analysis; they were skipped because the imported analysis is not transient.')
     delete project.simulation.initialConditions
+  }
+  if (project.simulation.analysis !== 'tran' && project.simulation.transientMeasurements) {
+    warnings.push('Imported .meas tran settings require transient analysis; they were skipped because the imported analysis is not transient.')
+    delete project.simulation.transientMeasurements
   }
 
   const points = [

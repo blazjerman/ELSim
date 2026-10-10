@@ -80,6 +80,29 @@ test('warns and skips unresolved, malformed, or non-transient .ic directives', (
   assert.ok(nonTransient.warnings.some((warning) => /require transient analysis/.test(warning)))
 })
 
+test('imports supported scalar transient measurements and warns on unsupported forms', () => {
+  const asc = [
+    'Version 4', 'FLAG 0 0 OUT', 'SYMBOL res 32 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'TEXT 0 100 Left 2 !.tran 0 5m 0 10u',
+    'TEXT 0 120 Left 2 !.meas tran VPEAK MAX V(OUT)',
+    'TEXT 0 140 Left 2 !.measure tran IRMS RMS I(r1)',
+  ].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'measurements.asc', [symbol])
+  assert.deepEqual(project.simulation.transientMeasurements, [
+    { id: 'VPEAK', operation: 'max', vector: 'v(out)' },
+    { id: 'IRMS', operation: 'rms', vector: 'i(r1)' },
+  ])
+  assert.deepEqual(warnings, [])
+  const netlist = createNetlistArtifact(project)
+  assert.match(netlist.text, /^\.meas tran ELSIM_VPEAK max v\(out\)$/m)
+  assert.match(netlist.text, /^\.meas tran ELSIM_IRMS rms i\(r1\)$/m)
+  assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+
+  const unsupported = parseLtspiceSchematic(['Version 4', 'FLAG 0 0 OUT', 'TEXT 0 100 Left 2 !.meas tran VPEAK MAX V(out) FROM=1m'].join('\n'), 'qualified-measure.asc')
+  assert.equal(unsupported.project.simulation.transientMeasurements, undefined)
+  assert.match(unsupported.warnings[0], /not a supported scalar transient measurement/)
+})
+
 test('preserves untranslated component SYMATTR records in a bounded LTspice extension', () => {
   const asc = ['Version 4', 'SYMBOL res 32 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k', 'SYMATTR SpiceLine temp=40', 'SYMATTR VendorTag keep this value'].join('\n')
   const imported = parseLtspiceSchematic(asc, 'extended.asc', [symbol])

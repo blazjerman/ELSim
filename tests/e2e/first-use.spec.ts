@@ -361,6 +361,7 @@ test('imported LTspice .ic node and inductor values run through ngspice', async 
     'SYMBOL ind 112 0 R0', 'SYMATTR InstName L1', 'SYMATTR Value 10m',
     'TEXT 0 100 Left 2 !.ic V(N1)=0 I(L1)=2mA',
     'TEXT 0 120 Left 2 !.tran 0 10m 0 10u uic',
+    'TEXT 0 140 Left 2 !.meas tran IPEAK MAX I(L1)',
   ].join('\n')
   const symbol = (prefix: string) => [
     'Version 4', `SYMATTR Prefix ${prefix}`,
@@ -379,6 +380,7 @@ test('imported LTspice .ic node and inductor values run through ngspice', async 
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(n1)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'I(l1)', exact: true })).toBeVisible()
+  await expect(page.locator('.measurement-results')).toContainText('IPEAK')
 })
 
 test('show source-line guidance for a known unsupported LTspice model construct', async ({ page }) => {
