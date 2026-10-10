@@ -104,6 +104,43 @@ test('imports scalar LTspice current sources with ampere values and ordered pins
   assert.match(createNetlist(currentPwl.project), /^I3 .* .* PWL\(0 0 2m 1m 4m -2m\)$/m)
 })
 
+test('imports linear LTspice F/H current-controlled sources from Value and Value2', () => {
+  const controlledSymbol = (prefix, name) => ({
+    ...symbol,
+    id: `symbol-${name}`,
+    filename: `${name}.asy`,
+    content: ['Version 4', `SYMATTR Prefix ${prefix}`, 'LINE Normal -16 0 16 0', 'PIN -16 0 R', 'PINATTR PinName +', 'PINATTR SpiceOrder 1', 'PIN 16 0 L', 'PINATTR PinName -', 'PINATTR SpiceOrder 2'].join('\n'),
+  })
+  const voltageSymbol = { ...symbol, id: 'symbol-voltage', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
+  for (const [prefix, name, kind, coefficient] of [['F', 'f', 'cccs', '2'], ['H', 'h', 'ccvs', '2k']]) {
+    const asc = ['Version 4', `SYMBOL ${name} 0 0 R0`, `SYMATTR InstName ${prefix}1`, 'SYMATTR Value Vprobe', `SYMATTR Value2 ${coefficient}`, 'SYMBOL voltage 80 0 R0', 'SYMATTR InstName Vprobe', 'SYMATTR Value 0'].join('\n')
+    const { project, warnings } = parseLtspiceSchematic(asc, `${name}.asc`, [controlledSymbol(prefix, name), voltageSymbol])
+    const part = project.parts.find(({ ref }) => ref === `${prefix}1`)
+    assert.equal(part.kind, kind)
+    assert.equal(part.controlSource, 'Vprobe')
+    assert.equal(part.value, coefficient)
+    assert.deepEqual(part.extensions, undefined)
+    assert.deepEqual(warnings, [])
+    assert.match(createNetlist(project), new RegExp(`^${prefix}1 \\S+ \\S+ Vprobe ${coefficient.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}$`, 'm'))
+  }
+})
+
+test('skips current-controlled LTspice sources with missing or malformed control metadata', () => {
+  const controlledSymbol = { ...symbol, id: 'symbol-cccs', filename: 'f.asy', content: symbol.content.replace('Prefix R', 'Prefix F') }
+  const missingGain = ['Version 4', 'SYMBOL f 0 0 R0', 'SYMATTR InstName F1', 'SYMATTR Value V1'].join('\n')
+  const imported = parseLtspiceSchematic(missingGain, 'missing-gain.asc', [controlledSymbol])
+  assert.equal(imported.project.parts.length, 0)
+  assert.match(imported.warnings[0], /F1 needs a gain\/transresistance in Value2/)
+  const invalidSense = ['Version 4', 'SYMBOL f 0 0 R0', 'SYMATTR InstName F1', 'SYMATTR Value R1', 'SYMATTR Value2 2'].join('\n')
+  const invalid = parseLtspiceSchematic(invalidSense, 'invalid-sense.asc', [controlledSymbol])
+  assert.equal(invalid.project.parts.length, 0)
+  assert.match(invalid.warnings[0], /F1 needs a voltage-source reference in Value/)
+  const absentSense = ['Version 4', 'SYMBOL f 0 0 R0', 'SYMATTR InstName F1', 'SYMATTR Value Vmissing', 'SYMATTR Value2 2'].join('\n')
+  const absent = parseLtspiceSchematic(absentSense, 'absent-sense.asc', [controlledSymbol])
+  assert.equal(absent.project.parts.length, 0)
+  assert.match(absent.warnings[0], /F1 references missing current-sense voltage source Vmissing in this sheet/)
+})
+
 test('reports missing symbol files and unsupported directives instead of silently importing an incomplete part', () => {
   const asc = ['Version 4', 'SYMBOL res 0 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k', 'TEXT 0 80 Left 2 !.save V(out)'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'missing.asc')

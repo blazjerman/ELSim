@@ -47,6 +47,7 @@ This matrix describes the importer as implemented today. “Supported” means E
 | `I` | Independent current source | Scalar DC, seven-argument PULSE, and scalar-pair PWL waveforms |
 | `S` | Switch | ELSim on/off educational switch semantics, not the full LTspice switch dialect |
 | `E`, `G` | VCVS, VCCS | Linear four-terminal form |
+| `F`, `H` | CCCS, CCVS | Linear two-terminal form; `Value` must name an existing voltage-source current sensor in the same sheet and `Value2` supplies the gain/transresistance. Behavioral `POLY` and other nonlinear forms are not translated. |
 | `D` | Diode or LED | Device model must be supplied in a compatible imported library |
 | `Q` | NPN or PNP | Device model must be supplied in a compatible imported library |
 | `X` with imported `.SUBCKT` | Imported subcircuit instance | Pin names/order must match the model |

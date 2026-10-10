@@ -122,6 +122,8 @@ function partKind(symbol: AscSymbol, prefix: string, modelValue: string, subcirc
   if (key === 'S') return { kind: 'switch' }
   if (key === 'E') return { kind: 'vcvs' }
   if (key === 'G') return { kind: 'vccs' }
+  if (key === 'F') return { kind: 'cccs' }
+  if (key === 'H') return { kind: 'ccvs' }
   if (key === 'D') return { kind: name === 'led' || name === 'elsim_led' ? 'led' : 'diode', ...(deviceModels.has(modelValue.toLowerCase()) ? { deviceModel: modelValue } : {}) }
   if (key === 'Q') {
     const type = deviceModels.get(modelValue.toLowerCase())
@@ -255,8 +257,8 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
 
   for (const symbol of symbols) {
     const identity = symbol.attributes.INSTNAME
-    const rawValue = symbol.attributes.VALUE ?? symbol.attributes.VALUE2 ?? ''
     const sourcePrefix = symbol.attributes.INSTNAME?.[0]?.toUpperCase()
+    const rawValue = symbol.attributes.VALUE ?? symbol.attributes.VALUE2 ?? ''
     const valueAc = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceAc(rawValue) : null
     const value2Ac = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceAc(symbol.attributes.VALUE2) : null
     const representedValueAttribute = valueAc && symbol.attributes.VALUE2 !== undefined ? 'VALUE2' : symbol.attributes.VALUE !== undefined ? 'VALUE' : 'VALUE2'
@@ -328,6 +330,21 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     if (pins.length !== expectedPinCount) { warnings.push(`Line ${symbol.line}: ${symbol.name} has ${pins.length} pins but ${identity} requires ${expectedPinCount}; it was skipped.`); continue }
     if (expectedPinNames && pins.some((pin, index) => pin.name.toLowerCase() !== expectedPinNames[index]?.toLowerCase())) { warnings.push(`Line ${symbol.line}: ${symbol.name} SpiceOrder pin names do not match ${mapped.modelName}; it was skipped.`); continue }
     const kind = mapped.kind
+    const isCurrentControlled = kind === 'cccs' || kind === 'ccvs'
+    const controlSource = isCurrentControlled ? symbol.attributes.VALUE?.trim() : undefined
+    const coefficient = isCurrentControlled ? symbol.attributes.VALUE2?.trim() ?? '' : value
+    if (isCurrentControlled && (!controlSource || !/^V[A-Za-z0-9_]*$/i.test(controlSource))) {
+      warnings.push(`Line ${symbol.line}: ${identity} needs a voltage-source reference in Value; it was skipped.`)
+      continue
+    }
+    if (isCurrentControlled && !coefficient) {
+      warnings.push(`Line ${symbol.line}: ${identity} needs a gain/transresistance in Value2; it was skipped.`)
+      continue
+    }
+    if (isCurrentControlled && !validScalar(coefficient) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(coefficient)) {
+      warnings.push(`Line ${symbol.line}: Value2 “${recordExcerpt(coefficient)}” on ${identity} is outside the supported scalar syntax; it was skipped.`)
+      continue
+    }
     const defaultValue = kind === 'switch' ? (/^(?:on|1|true)$/i.test(value) ? 'On' : 'Off') : kind === 'diode' ? 'Default diode' : kind === 'led' ? 'Default LED' : kind === 'npn' || kind === 'pnp' ? '100' : kind === 'vcvs' ? '1' : kind === 'vccs' ? '1 mS' : value
     if (kind === 'source' && rawValue.includes('(') && value === rawValue) warnings.push(`Line ${symbol.line}: source waveform on ${identity} is not translated yet; check its value before running.`)
     if (kind === 'currentSource' && rawValue.includes('(') && !['pulse', 'pwl'].includes(parsedSource.mode ?? '')) warnings.push(`Line ${symbol.line}: current-source waveform on ${identity} is not translated yet; only PULSE and scalar-pair PWL waveforms are supported.`)
@@ -335,7 +352,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
     if ((prefix.toUpperCase() === 'D' || prefix.toUpperCase() === 'Q') && value && !deviceModels.has(value.toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${value}” for ${identity} is missing; the educational default model will be used.`)
     const offsets = pins.map(({ x, y }) => [x, y] as [number, number])
-    const representedAttributes = ['INSTNAME', representedValueAttribute, ...(valueAc || value2Ac ? ['VALUE', 'VALUE2'] : [])]
+    const representedAttributes = ['INSTNAME', ...(isCurrentControlled ? ['VALUE', 'VALUE2'] : [representedValueAttribute, ...(valueAc || value2Ac ? ['VALUE', 'VALUE2'] : [])])]
     const extensionAttributes = Object.fromEntries(Object.entries(symbol.attributes).filter(([key]) => !representedAttributes.includes(key)).slice(0, 16).map(([key, attribute]) => [key, attribute.slice(0, 512)]))
     const unmappedAttributes = Object.entries(symbol.attributes).filter(([key]) => !representedAttributes.includes(key))
     const omittedAttributes = unmappedAttributes.length - Math.min(unmappedAttributes.length, 16) + unmappedAttributes.slice(0, 16).filter(([, attribute]) => attribute.length > 512).length
@@ -347,12 +364,13 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ? importedSubcircuitComponentDefinition(importedModel.model, { assetId: importedModel.asset.id, filename: importedModel.asset.filename, sha256: importedModel.asset.sha256 }).id
       : componentDefinitionByKind[kind].id
     const part: Part = {
-      id: `asc-part-${project.parts.length + 1}`, kind, componentDefinitionId, ref: identity, value: defaultValue,
+      id: `asc-part-${project.parts.length + 1}`, kind, componentDefinitionId, ref: identity, value: isCurrentControlled ? coefficient : defaultValue,
       x: symbol.x, y: symbol.y, rotation: symbol.rotation as Part['rotation'], flipX: symbol.flipX,
       symbolAssetId: sidecar.asset.id, symbolPinOffsets: offsets,
       ...(Object.keys(extensionAttributes).length ? { extensions: { ltspice: { attributes: extensionAttributes } } } : {}),
       ...(kind === 'subcircuit' ? { modelName: mapped.modelName, modelPins: [...pins.map((pin) => pin.name)], ...(childSheet ? { sheetId: childSheet.id, sheetPortLayout: childSheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })) } : {}) } : {}),
       ...(mapped.deviceModel ? { deviceModel: mapped.deviceModel } : {}),
+      ...(isCurrentControlled ? { controlSource } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
       ...((kind === 'source' || kind === 'currentSource') && (valueAc ?? value2Ac) ? { acMagnitude: (valueAc ?? value2Ac)!.magnitude, acPhase: (valueAc ?? value2Ac)!.phase } : {}),
@@ -367,6 +385,15 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     else if (/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(flag.name)) project.netLabels.push({ id: `asc-label-${project.netLabels.length + 1}`, name: flag.name, x: flag.x, y: flag.y, visible: true })
     else warnings.push(`A FLAG name at ${flag.x},${flag.y} is not supported and was skipped.`)
   }
+  const availableVoltageSources = new Set(project.parts.filter((part) => part.kind === 'source').map((part) => part.ref.toLowerCase()))
+  const validParts = project.parts.filter((part) => {
+    if ((part.kind !== 'cccs' && part.kind !== 'ccvs') || !part.controlSource || availableVoltageSources.has(part.controlSource.toLowerCase())) return true
+    const symbol = symbols.find((item) => item.attributes.INSTNAME?.toLowerCase() === part.ref.toLowerCase())
+    warnings.push(`Line ${symbol?.line ?? '?'}: ${part.ref} references missing current-sense voltage source ${part.controlSource} in this sheet; it was skipped.`)
+    return false
+  })
+  project.parts = validParts
+  project.sheets[0].parts = project.parts
   const ports = [] as NonNullable<Project['sheets'][number]['ports']>
   const portNames = new Set<string>()
   for (const ioPin of ioPins) {
