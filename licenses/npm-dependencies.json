@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-09",
+  "generatedAt": "2026-10-10",
   "source": "package-lock.json and installed node_modules",
   "auditTool": "license-checker",
   "packages": [
@@ -177,6 +177,13 @@
       "license": "MIT",
       "repository": "https://github.com/jridgewell/sourcemaps",
       "licenseFile": "node_modules/@jridgewell/trace-mapping/LICENSE"
+    },
+    {
+      "name": "@playwright/test",
+      "version": "1.55.1",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/microsoft/playwright",
+      "licenseFile": "node_modules/@playwright/test/LICENSE"
     },
     {
       "name": "@rolldown/pluginutils",
@@ -403,6 +410,20 @@
       "licenseFile": "node_modules/picomatch/LICENSE"
     },
     {
+      "name": "playwright",
+      "version": "1.55.1",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/microsoft/playwright",
+      "licenseFile": "node_modules/playwright/LICENSE"
+    },
+    {
+      "name": "playwright-core",
+      "version": "1.55.1",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/microsoft/playwright",
+      "licenseFile": "node_modules/playwright-core/LICENSE"
+    },
+    {
       "name": "postcss",
       "version": "8.5.29",
       "license": "MIT",
@@ -481,7 +502,7 @@
     },
     {
       "name": "vite",
-      "version": "6.4.1",
+      "version": "6.4.4",
       "license": "MIT",
       "repository": "https://github.com/vitejs/vite",
       "licenseFile": "node_modules/vite/LICENSE.md"

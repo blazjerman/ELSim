@@ -3,6 +3,8 @@ dist/
 build/
 public/engine/
 coverage/
+test-results/
+playwright-report/
 .vite/
 *.log
 .DS_Store

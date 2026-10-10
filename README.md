@@ -19,6 +19,10 @@ npm run dev
 
 Use Save to download a portable `.elsim` archive, or Open to restore one. Existing `.elsim.json` documents can still be opened. The archive format and safety limits are documented in [PROJECT_FORMAT.md](PROJECT_FORMAT.md). A working copy is also kept in this browser's local storage.
 
+## Tests
+
+Run `npm test` for domain and netlist tests. For the browser first-use test, build the pinned ngspice WASM engine as described in [the WASM build notes](engine/wasm/README.md), install Playwright's Chromium once with `npx playwright install chromium`, then run `npm run test:e2e`. The browser test opens the RC starter at an 854 px viewport, runs the real local engine, selects `V(vout)`, and scrubs to the final result sample.
+
 ## Engine and licensing
 
 ELSim uses ngspice as its numerical engine. The generated bundle is excluded from source control; build it locally with the pinned recipe. Complete the ngspice source and linked-library license audit before publishing a hosted app or distributing generated binaries. Imported vendor models remain user-provided assets unless redistribution permission is documented.
