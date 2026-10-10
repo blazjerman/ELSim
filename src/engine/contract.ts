@@ -161,6 +161,35 @@ function isMeasurementResult(value: unknown): value is MeasurementResult {
   return value.operation === 'delay' ? typeof value.targetVector === 'string' && value.unit === 's' : value.unit === 'V' || value.unit === 'A'
 }
 
+const measurementVectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQB][A-Za-z0-9_]*\))$/i
+const measurementIdPattern = /^[A-Za-z][A-Za-z0-9_]{0,23}$/
+
+function isTransientMeasurement(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.id !== 'string' || !measurementIdPattern.test(value.id)
+    || typeof value.vector !== 'string' || !measurementVectorPattern.test(value.vector.trim())) return false
+  if (['max', 'min', 'avg', 'rms'].includes(String(value.operation))) return true
+  return value.operation === 'delay'
+    && typeof value.threshold === 'string' && Number.isFinite(Number(value.threshold))
+    && typeof value.targetVector === 'string' && measurementVectorPattern.test(value.targetVector.trim())
+    && typeof value.targetThreshold === 'string' && Number.isFinite(Number(value.targetThreshold))
+    && ['rise', 'fall', 'either'].includes(String(value.edge))
+    && ['rise', 'fall', 'either'].includes(String(value.targetEdge))
+}
+
+function isParameterSweepRun(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.label !== 'string' || !Array.isArray(value.values)
+    || value.values.length < 1 || value.values.length > 2) return false
+  const components = new Set<string>()
+  return value.values.every((entry) => {
+    if (!isRecord(entry) || typeof entry.component !== 'string' || !entry.component.trim()
+      || typeof entry.value !== 'string' || !Number.isFinite(Number(entry.value)) || Number(entry.value) <= 0) return false
+    const key = entry.component.toLowerCase()
+    if (components.has(key)) return false
+    components.add(key)
+    return true
+  })
+}
+
 /** Runtime boundary check for messages received from a worker implementation. */
 export function isEngineResponse(value: unknown): value is EngineResponse {
   if (!isRecord(value)) return false
@@ -227,7 +256,7 @@ export function engineResponseIssue(value: unknown): string {
 
 /** Runtime boundary check for independently implemented request producers. */
 export function isEngineRequest(value: unknown): value is EngineRequest {
-  if (!isRecord(value) || typeof value.requestId !== 'string') return false
+  if (!isRecord(value) || typeof value.requestId !== 'string' || !value.requestId) return false
   if (value.type === 'initialize' || value.type === 'dispose') return true
   if (value.type === 'cancel') return typeof value.runId === 'string'
   if (value.type !== 'run' || !isRecord(value.artifact) || !isRecord(value.metadata)) return false
@@ -236,8 +265,8 @@ export function isEngineRequest(value: unknown): value is EngineRequest {
   if (typeof artifact.text !== 'string' || !Array.isArray(artifact.sourceMap) || !artifact.sourceMap.every(isSource) || !Array.isArray(artifact.diagnostics) || !artifact.diagnostics.every(isDiagnostic)) return false
   if (typeof metadata.runId !== 'string' || !metadata.runId || typeof metadata.startedAt !== 'string' || !Number.isFinite(Date.parse(metadata.startedAt)) || typeof metadata.engine !== 'string' || !metadata.engine || typeof metadata.engineVersion !== 'string' || !metadata.engineVersion || !Number.isInteger(metadata.projectVersion) || Number(metadata.projectVersion) < 1 || typeof metadata.netlistHash !== 'string' || !metadata.netlistHash || !isRecord(metadata.settings)) return false
   if (!Object.values(metadata.settings).every((setting) => typeof setting === 'string' || typeof setting === 'boolean' || (typeof setting === 'number' && Number.isFinite(setting)))) return false
-  if (value.parameterSweep !== undefined && !Array.isArray(value.parameterSweep)) return false
-  if (value.measurements !== undefined && !Array.isArray(value.measurements)) return false
+  if (value.parameterSweep !== undefined && (!Array.isArray(value.parameterSweep) || value.parameterSweep.length < 1 || value.parameterSweep.length > 10 || !value.parameterSweep.every(isParameterSweepRun))) return false
+  if (value.measurements !== undefined && (!Array.isArray(value.measurements) || value.measurements.length > 12 || !value.measurements.every(isTransientMeasurement))) return false
   return true
 }
 

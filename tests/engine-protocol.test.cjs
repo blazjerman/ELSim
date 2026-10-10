@@ -15,6 +15,7 @@ test('independent request producer satisfies run and control request contracts',
   assert.equal(isEngineRequest({ type: 'cancel', requestId: 'cancel-1', runId: 'run-1' }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'riseDelay', operation: 'delay', vector: 'v(in)', threshold: '0.5', targetVector: 'v(out)', targetThreshold: '4.5', edge: 'rise', targetEdge: 'rise' }] }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, settings: { analysis: 'ac', acSweep: { scale: 'dec' } } } }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '1000' }], label: 'R1=1 kΩ' }], measurements: [{ id: 'peak', operation: 'max', vector: 'v(out)' }] }), true)
 })
 
 test('request consumer rejects malformed payloads before engine execution', () => {
@@ -22,6 +23,11 @@ test('request consumer rejects malformed payloads before engine execution', () =
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact: { ...artifact, diagnostics: [null] }, metadata }), false)
   assert.equal(isEngineRequest({ type: 'cancel', requestId: 'cancel-1' }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, settings: [] } }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [null] }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: 'NaN' }], label: 'bad' }] }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '100' }, { component: 'r1', value: '200' }], label: 'duplicate' }] }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'peak', operation: 'nonsense', vector: 'v(out)' }] }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'delay', operation: 'delay', vector: 'v(in)', threshold: '0', targetVector: 'v(out)', targetThreshold: 'NaN', edge: 'rise', targetEdge: 'rise' }] }), false)
 })
 
 test('independent worker response producer satisfies response contract', () => {
