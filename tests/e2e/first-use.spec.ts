@@ -542,6 +542,25 @@ test('imported LTspice .ic node and inductor values run through ngspice', async 
   await expect(page.locator('.measurement-results')).toContainText('IPEAK')
 })
 
+test('LTspice import shows skipped records and preserves the original source', async ({ page }) => {
+  await page.goto('/')
+  const source = ['Version 4', 'CUSTOM_VENDOR_RECORD keep-this-note', ''].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles({
+    name: 'vendor.asc',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(source),
+  })
+
+  await expect(page.getByRole('status')).toContainText('Imported vendor with 0 parts and 0 wires')
+  const diagnostics = page.getByRole('region', { name: 'LTspice import diagnostics' })
+  await expect(diagnostics).toBeVisible()
+  await expect(diagnostics).toContainText('1 item could not be fully translated')
+  await expect(diagnostics).toContainText('Line 2: unsupported .asc record was skipped')
+  await expect(diagnostics).toContainText('CUSTOM_VENDOR_RECORD keep-this-note')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).importedSchematicSource.originalText)).toBe(source)
+})
+
 test('show source-line guidance for a known unsupported LTspice model construct', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
