@@ -345,3 +345,19 @@ test('blocks schematic devices without a tested mapping rather than silently dro
   assert.equal(output.files.length, 0)
   assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'unsupported-behavioral' && /no verified LTspice schematic mapping/.test(blocker.message)))
 })
+
+test('blocks fractional coordinates without returning rounded LTspice files', async () => {
+  const partProject = createStarterProject()
+  partProject.parts[0].x += 0.5
+  partProject.sheets[0].parts = partProject.parts
+  const partOutput = await exportLtspiceProject(partProject)
+  assert.equal(partOutput.files.length, 0)
+  assert.ok(partOutput.blockers.some((blocker) => blocker.sourceId === partProject.parts[0].id && /Coordinate .* is not a supported integer/.test(blocker.message)))
+
+  const wireProject = createStarterProject()
+  wireProject.wires[0].points[0][0] += 0.5
+  wireProject.sheets[0].wires = wireProject.wires
+  const wireOutput = await exportLtspiceProject(wireProject)
+  assert.equal(wireOutput.files.length, 0)
+  assert.ok(wireOutput.blockers.some((blocker) => blocker.sourceId === wireProject.wires[0].id && /Coordinate .* is not a supported integer/.test(blocker.message)))
+})
