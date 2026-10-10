@@ -49,6 +49,6 @@ The **Export LTspice** action generates a separate ZIP from the current edited p
 
 ## Reader limits
 
-The browser reader accepts only ZIP stored entries with UTF-8 names, a single disk, no encryption, and no ZIP64. It rejects absolute paths, drive paths, backslashes, `.`/`..` path segments, duplicate names, mismatched local/central headers, overlapping entries, CRC failures, and unknown archive contents. Archives are limited to 50 MiB total, 20 MiB per entry, and 64 entries. These limits apply before project JSON is parsed. The writer uses fixed ZIP timestamps and stable entry ordering for deterministic output.
+The browser reader accepts only ZIP stored entries with UTF-8 names, a single disk, no encryption, and no ZIP64. It rejects absolute paths, drive paths, backslashes, `.`/`..` path segments, duplicate names, mismatched local/central headers, overlapping entries, CRC failures, and unknown archive contents. Archives are limited to 50 MiB total, 49 MiB per entry, and 64 entries. The project entry may use the larger limit because v1 stores imported model, symbol, and original schematic text inside `project.json`; the total archive limit still applies before project JSON is parsed. The writer uses fixed ZIP timestamps and stable entry ordering for deterministic output.
 
 CRC-32 detects accidental corruption; it is not an authenticity or security signature. Future embedded assets must have recorded provenance and licenses. A user having a model file does not imply permission to redistribute it.

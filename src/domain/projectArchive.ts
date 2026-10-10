@@ -3,7 +3,7 @@ import type { Project } from './project'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
-const MAX_ENTRY_BYTES = 20 * 1024 * 1024
+const MAX_ENTRY_BYTES = MAX_ARCHIVE_BYTES - 1024 * 1024
 const MAX_ENTRIES = 64
 const MANIFEST_PATH = 'manifest.json'
 const PROJECT_PATH = 'project.json'

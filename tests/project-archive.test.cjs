@@ -37,6 +37,19 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926)
 })
 
+test('project ZIP archives round-trip valid project JSON entries larger than 20 MiB', () => {
+  const project = createStarterProject()
+  const source = 'X'.repeat(7 * 1024 * 1024)
+  project.importedSchematicSource = { format: 'ltspice-asc', filename: 'large-root.asc', originalText: source }
+  project.importedChildSchematicSources = [
+    { format: 'ltspice-asc', filename: 'large-child-a.asc', originalText: source },
+    { format: 'ltspice-asc', filename: 'large-child-b.asc', originalText: source },
+  ]
+  const archive = createProjectArchive(project)
+  assert.ok(archive.length > 20 * 1024 * 1024)
+  assert.deepEqual(readProjectArchive(archive), project)
+})
+
 test('v2 projects migrate to a root sheet and validate nested sheet ownership', () => {
   const current = createStarterProject()
   const old = structuredClone(current)
