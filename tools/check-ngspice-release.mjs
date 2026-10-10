@@ -11,7 +11,11 @@ const requiredArtifacts = [
   'ngspice.wasm',
   'ngspice-COPYING.txt',
   'ngspice-link.map',
+  'THIRD_PARTY_NOTICES.md',
+  'ngspice-build-info.txt',
+  'ngspice-SHA256SUMS.txt',
 ];
+const checksumCoveredArtifacts = requiredArtifacts.filter((name) => name !== 'ngspice-SHA256SUMS.txt');
 
 function fail(message) {
   console.error(`ngspice release check failed: ${message}`);
@@ -64,6 +68,27 @@ async function main() {
     } catch {
       fail(`required generated artifact is missing: public/engine/${name}`);
     }
+  }
+
+  try {
+    const lines = (await readFile(path.join(engineDir, 'ngspice-SHA256SUMS.txt'), 'utf8')).split(/\r?\n/).filter(Boolean);
+    const listed = new Map();
+    for (const line of lines) {
+      const match = line.match(/^([a-f\d]{64})\s+\*?(.+)$/i);
+      if (!match || listed.has(match[2])) {
+        fail('ngspice-SHA256SUMS.txt contains a malformed or duplicate entry');
+        break;
+      }
+      listed.set(match[2], match[1].toLowerCase());
+    }
+    for (const name of checksumCoveredArtifacts) {
+      const expected = listed.get(name);
+      if (!expected || expected !== (await sha256(path.join(engineDir, name)))) {
+        fail(`ngspice-SHA256SUMS.txt is missing or has an incorrect digest for ${name}`);
+      }
+    }
+  } catch {
+    fail('ngspice-SHA256SUMS.txt is absent or could not be verified');
   }
 
   if (process.exitCode) {

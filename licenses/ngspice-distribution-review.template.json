@@ -19,6 +19,9 @@
     "ngspice.mjs": "",
     "ngspice.wasm": "",
     "ngspice-COPYING.txt": "",
-    "ngspice-link.map": ""
+    "ngspice-link.map": "",
+    "THIRD_PARTY_NOTICES.md": "",
+    "ngspice-build-info.txt": "",
+    "ngspice-SHA256SUMS.txt": ""
   }
 }

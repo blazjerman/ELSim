@@ -91,9 +91,9 @@ cp "$LINK_MAP" "$ROOT_DIR/public/engine/ngspice-link.map"
   printf 'Emscripten: %s\n' "$(emcc --version | head -n 1)"
   printf 'Build flags: --disable-shared --enable-static --enable-xspice --disable-cider --disable-osdi --disable-openmp --disable-klu --with-readline=no --with-editline=no --without-x\n'
   printf 'Linked-input inventory: ngspice-link.map (Emscripten linker map; inspect archive members and object paths against the pinned source COPYING file)\n'
-  printf 'License review: incomplete; generated browser artifacts are not cleared for redistribution.\n'
+  printf 'Redistribution: check licenses/ngspice-distribution-review.json; do not distribute unless it approves these exact generated artifacts.\n'
   printf 'See adjacent THIRD_PARTY_NOTICES.md, ngspice-COPYING.txt, ngspice-link.map, and ngspice-SHA256SUMS.txt.\n'
 } > "$ROOT_DIR/public/engine/ngspice-build-info.txt"
-sha256sum "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice-COPYING.txt" "$ROOT_DIR/public/engine/ngspice-link.map" > "$ROOT_DIR/public/engine/ngspice-SHA256SUMS.txt"
+(cd "$ROOT_DIR/public/engine" && sha256sum ngspice.mjs ngspice.wasm ngspice-COPYING.txt ngspice-link.map THIRD_PARTY_NOTICES.md ngspice-build-info.txt > ngspice-SHA256SUMS.txt)
 cat "$ROOT_DIR/public/engine/ngspice-SHA256SUMS.txt"
 du -h "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"

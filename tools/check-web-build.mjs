@@ -1,0 +1,31 @@
+import { access, readdir } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const output = path.join(root, 'dist')
+const forbiddenEngineFiles = new Set([
+  'ngspice.mjs',
+  'ngspice.wasm',
+  'ngspice-COPYING.txt',
+  'ngspice-link.map',
+  'ngspice-build-info.txt',
+  'ngspice-SHA256SUMS.txt',
+])
+
+async function visit(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const target = path.join(directory, entry.name)
+    if (entry.isDirectory()) await visit(target)
+    else if (forbiddenEngineFiles.has(entry.name)) throw new Error(`Standard web build contains unapproved ngspice artifact: ${path.relative(output, target)}`)
+  }
+}
+
+try {
+  await access(path.join(output, 'index.html'))
+  await access(path.join(output, 'THIRD_PARTY_NOTICES.md'))
+  await visit(output)
+} catch (error) {
+  console.error(error instanceof Error ? error.message : 'Standard web build verification failed.')
+  process.exitCode = 1
+}
