@@ -22,6 +22,21 @@ test('quick tour explains the current workspace and project save flow', async ({
   await expect(dialog).toHaveCount(0)
 })
 
+test('quick tour can run the open circuit directly from its simulation step', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Open quick tour' }).click()
+  const dialog = page.locator('.tour-dialog[role="dialog"]')
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await expect(dialog.getByRole('heading', { name: 'Run a simulation' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Run this circuit now' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V\(vout\)', exact: true })).toBeVisible()
+})
+
 test('component categories filter the library and search crosses categories', async ({ page }) => {
   await page.goto('/')
   const cards = page.locator('.component-card')
