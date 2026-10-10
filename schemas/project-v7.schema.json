@@ -87,7 +87,9 @@
     "importedChildSchematicSources": {
       "type": "array",
       "maxItems": 63,
-      "items": { "$ref": "#/$defs/ltspiceSchematicSource" }
+      "items": {
+        "$ref": "#/$defs/ltspiceSchematicSource"
+      }
     },
     "rootSheetId": {
       "type": "string",
@@ -159,6 +161,8 @@
             "behavioral",
             "npn",
             "pnp",
+            "nmos",
+            "pmos",
             "subcircuit"
           ]
         },
@@ -209,7 +213,11 @@
         "sheetParameters": {
           "type": "object",
           "maxProperties": 32,
-          "additionalProperties": {"type": "string", "maxLength": 64, "pattern": "^\\{?[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:meg|[tgkmunpf])?\\}?$"}
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^\\{?[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:meg|[tgkmunpf])?\\}?$"
+          }
         },
         "modelParameters": {
           "type": "object",
@@ -229,10 +237,17 @@
           "pattern": "^V[A-Za-z0-9_]*$"
         },
         "behavioralOutput": {
-          "enum": ["voltage", "current"]
+          "enum": [
+            "voltage",
+            "current"
+          ]
         },
         "sourceMode": {
-          "enum": ["pulse", "dc", "pwl"],
+          "enum": [
+            "pulse",
+            "dc",
+            "pwl"
+          ],
           "description": "For transient analysis, voltage and independent current sources support pulse, DC, or PWL. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
         },
         "acMagnitude": {
@@ -248,14 +263,39 @@
         "pulse": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["initial", "delay", "rise", "fall", "width", "period"],
+          "required": [
+            "initial",
+            "delay",
+            "rise",
+            "fall",
+            "width",
+            "period"
+          ],
           "properties": {
-            "initial": { "type": "string", "maxLength": 64 },
-            "delay": { "type": "string", "maxLength": 64 },
-            "rise": { "type": "string", "maxLength": 64 },
-            "fall": { "type": "string", "maxLength": 64 },
-            "width": { "type": "string", "maxLength": 64 },
-            "period": { "type": "string", "maxLength": 64 }
+            "initial": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "delay": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "rise": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "fall": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "width": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "period": {
+              "type": "string",
+              "maxLength": 64
+            }
           },
           "description": "Optional LTspice-compatible voltage or current pulse level and timing; omitted fields use the ELSim default pulse."
         },
@@ -266,10 +306,19 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["time", "voltage"],
+            "required": [
+              "time",
+              "voltage"
+            ],
             "properties": {
-              "time": { "type": "string", "maxLength": 64 },
-              "voltage": { "type": "string", "maxLength": 64 }
+              "time": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "voltage": {
+                "type": "string",
+                "maxLength": 64
+              }
             }
           },
           "description": "Piecewise-linear voltage source points in strictly increasing time order."
@@ -281,10 +330,19 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["time", "current"],
+            "required": [
+              "time",
+              "current"
+            ],
             "properties": {
-              "time": { "type": "string", "maxLength": 64 },
-              "current": { "type": "string", "maxLength": 64 }
+              "time": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "current": {
+                "type": "string",
+                "maxLength": 64
+              }
             }
           },
           "description": "Piecewise-linear independent current source points in strictly increasing time order."
@@ -300,8 +358,13 @@
                 "attributes": {
                   "type": "object",
                   "maxProperties": 16,
-                  "propertyNames": { "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
-                  "additionalProperties": { "type": "string", "maxLength": 512 }
+                  "propertyNames": {
+                    "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 512
+                  }
                 }
               }
             }
@@ -350,10 +413,27 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["side", "direction"],
+            "required": [
+              "side",
+              "direction"
+            ],
             "properties": {
-              "side": {"enum": ["auto", "left", "right", "top", "bottom"]},
-              "direction": {"enum": ["input", "output", "inout"]}
+              "side": {
+                "enum": [
+                  "auto",
+                  "left",
+                  "right",
+                  "top",
+                  "bottom"
+                ]
+              },
+              "direction": {
+                "enum": [
+                  "input",
+                  "output",
+                  "inout"
+                ]
+              }
             }
           }
         }
@@ -482,11 +562,24 @@
     "ltspiceSchematicSource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["format", "filename", "originalText"],
+      "required": [
+        "format",
+        "filename",
+        "originalText"
+      ],
       "properties": {
-        "format": { "const": "ltspice-asc" },
-        "filename": { "type": "string", "minLength": 1 },
-        "originalText": { "type": "string", "minLength": 1, "maxLength": 10485760 }
+        "format": {
+          "const": "ltspice-asc"
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1
+        },
+        "originalText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10485760
+        }
       }
     },
     "wire": {
@@ -603,12 +696,33 @@
         "detachedWindow": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["x", "y", "width", "height"],
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
           "properties": {
-            "x": { "type": "number", "minimum": -100000, "maximum": 100000 },
-            "y": { "type": "number", "minimum": -100000, "maximum": 100000 },
-            "width": { "type": "number", "minimum": 280, "maximum": 4000 },
-            "height": { "type": "number", "minimum": 160, "maximum": 3000 }
+            "x": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000
+            },
+            "y": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000
+            },
+            "width": {
+              "type": "number",
+              "minimum": 280,
+              "maximum": 4000
+            },
+            "height": {
+              "type": "number",
+              "minimum": 160,
+              "maximum": 3000
+            }
           }
         }
       }
@@ -751,11 +865,30 @@
                 "type": "string",
                 "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$"
               },
-              "threshold": { "type": "string" },
-              "targetVector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" },
-              "targetThreshold": { "type": "string" },
-              "edge": { "enum": ["rise", "fall", "either"] },
-              "targetEdge": { "enum": ["rise", "fall", "either"] }
+              "threshold": {
+                "type": "string"
+              },
+              "targetVector": {
+                "type": "string",
+                "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$"
+              },
+              "targetThreshold": {
+                "type": "string"
+              },
+              "edge": {
+                "enum": [
+                  "rise",
+                  "fall",
+                  "either"
+                ]
+              },
+              "targetEdge": {
+                "enum": [
+                  "rise",
+                  "fall",
+                  "either"
+                ]
+              }
             }
           }
         },
@@ -767,19 +900,37 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["node", "voltage"],
+                "required": [
+                  "node",
+                  "voltage"
+                ],
                 "properties": {
-                  "node": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.$]*$" },
-                  "voltage": { "type": "string", "minLength": 1 }
+                  "node": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.$]*$"
+                  },
+                  "voltage": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 }
               },
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["element", "current"],
+                "required": [
+                  "element",
+                  "current"
+                ],
                 "properties": {
-                  "element": { "type": "string", "pattern": "^L[A-Za-z0-9_]+$" },
-                  "current": { "type": "string", "minLength": 1 }
+                  "element": {
+                    "type": "string",
+                    "pattern": "^L[A-Za-z0-9_]+$"
+                  },
+                  "current": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 }
               }
             ]
@@ -904,8 +1055,22 @@
                 "type": "string",
                 "pattern": "^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$"
               },
-              "side": {"enum": ["auto", "left", "right", "top", "bottom"]},
-              "direction": {"enum": ["input", "output", "inout"]}
+              "side": {
+                "enum": [
+                  "auto",
+                  "left",
+                  "right",
+                  "top",
+                  "bottom"
+                ]
+              },
+              "direction": {
+                "enum": [
+                  "input",
+                  "output",
+                  "inout"
+                ]
+              }
             }
           }
         },
@@ -915,11 +1080,25 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "name", "defaultValue"],
+            "required": [
+              "id",
+              "name",
+              "defaultValue"
+            ],
             "properties": {
-              "id": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"},
-              "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
-              "defaultValue": {"type": "string", "maxLength": 64, "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:meg|[tgkmunpf])?$"}
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "defaultValue": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:meg|[tgkmunpf])?$"
+              }
             }
           }
         }

@@ -377,3 +377,19 @@ test('blocks fractional coordinates without returning rounded LTspice files', as
   assert.equal(wireOutput.files.length, 0)
   assert.ok(wireOutput.blockers.some((blocker) => blocker.sourceId === wireProject.wires[0].id && /Coordinate .* is not a supported integer/.test(blocker.message)))
 })
+
+test('native MOSFETs export as M devices with generated educational models', async () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'm-export', kind: 'nmos', ref: 'M1', value: '', x: 520, y: 400, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName M1\nSYMATTR Value ELSIM_MODEL_SHEET_MAIN_M1/)
+  assert.match(asc.content, /!\.model ELSIM_MODEL_SHEET_MAIN_M1 NMOS \(LEVEL=1 VTO=2 KP=20u LAMBDA=0\.02\)/)
+  const symbols = exported.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `mos-export-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const { project: imported, warnings } = parseLtspiceSchematic(asc.content, asc.path, symbols)
+  assert.equal(imported.parts.find((part) => part.ref === 'M1')?.kind, 'nmos')
+  assert.equal(imported.parts.find((part) => part.ref === 'M1')?.deviceModel, undefined)
+  assert.ok(warnings.some((warning) => /ELSIM_MODEL_SHEET_MAIN_M1/.test(warning)))
+})

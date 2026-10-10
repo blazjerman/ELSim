@@ -22,6 +22,7 @@ function spiceScalar(value: string, unit: string): string | null {
 }
 
 function spiceNumber(value: string, kind: PartKind): string | null {
+  if (kind === 'nmos' || kind === 'pmos') return '0'
   const unit = kind === 'source' ? 'v' : kind === 'currentSource' ? 'a' : kind === 'capacitor' ? 'f' : kind === 'inductor' ? 'h' : ''
   return spiceScalar(value, unit)
 }
@@ -141,7 +142,7 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
 }
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
@@ -220,11 +221,11 @@ function hierarchicalSaveVectors(project: Project): string[] {
     }
     if (path.length) for (const part of sheet.parts) {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-    const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
+    const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'nmos' || part.kind === 'pmos' ? 'm' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
       if (part.kind === 'source') saves.add(`.save i(${type}.${device})`)
       else {
-        const current = part.kind === 'currentSource' ? 'current' : part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
+        const current = part.kind === 'currentSource' ? 'current' : part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : part.kind === 'nmos' || part.kind === 'pmos' ? 'id' : 'i'
         saves.add(`.save @${type}.${device}[${current}]`)
       }
     }
@@ -246,6 +247,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   let usesDiode = false
   let usesSwitch = false
   const transistorModels: { part: Part; name: string }[] = []
+  const mosfetModels: { part: Part; name: string }[] = []
   const importedDeviceModels = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).models)
   const usedReferences = new Set(project.parts.map((part) => part.ref.toLowerCase()))
   const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.map((label) => label.name)].map((name) => name.toLowerCase()))
@@ -394,6 +396,20 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       append(`${part.ref} ${positive} ${base} ${emitter} ${model}`, part.id, 'component')
       if (!part.deviceModel) transistorModels.push({ part, name: model })
     }
+    else if (part.kind === 'nmos' || part.kind === 'pmos') {
+      const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2), bulk = pinNet(connectivity, part, 3)
+      const expectedModelType = part.kind
+      const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
+      if (part.deviceModel && (!importedModel || importedModel.type.toLowerCase() !== expectedModelType)) {
+        const message = `${part.ref} device model ${part.deviceModel} is missing or is not a ${part.kind.toUpperCase()} model.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
+      append(`${part.ref} ${positive} ${gate} ${source} ${bulk} ${model}`, part.id, 'component')
+      if (!part.deviceModel) mosfetModels.push({ part, name: model })
+    }
     else if (part.kind === 'subcircuit') {
       const generatedDefinitions = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary).subcircuits : []
       const definition = [...(project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits), ...generatedDefinitions].find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
@@ -468,6 +484,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
   if (usesSwitch) append('.model ELSIM_INTERNAL_SW SW(Ron=1m Roff=1T Vt=2.5 Vh=0)', 'model:ELSIM_INTERNAL_SW', 'model')
   for (const { part, name } of transistorModels) append(`.model ${name} ${part.kind === 'npn' ? 'NPN' : 'PNP'}(IS=1e-14 BF=${part.value} VAF=100 CJE=10p CJC=5p TF=300p TR=10n)`, `model:${name}`, 'model')
+  for (const { part, name } of mosfetModels) append(`.model ${name} ${part.kind === 'nmos' ? 'NMOS' : 'PMOS'} (LEVEL=1 VTO=${part.kind === 'nmos' ? '2' : '-2'} KP=20u LAMBDA=0.02)`, `model:${name}`, 'model')
   if (generatedSheetLibrary) for (const line of generatedSheetLibrary.split('\n').filter(Boolean)) append(line, 'hierarchy:generated', 'model')
   if (project.simulation.analysis === 'op') {
     append('.op', 'analysis:op', 'analysis')
@@ -551,7 +568,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 }
 
 export function nextRef(parts: Part[], kind: Part['kind']): string {
-  const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[kind]
+  const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[kind]
   const used = new Set(parts.map((part) => part.ref.toLowerCase()))
   let index = 1
   while (used.has(`${prefix}${index}`.toLowerCase())) index += 1

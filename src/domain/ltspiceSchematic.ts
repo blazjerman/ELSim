@@ -230,6 +230,11 @@ function partKind(symbol: AscSymbol, prefix: string, modelValue: string, subcirc
     const kind = type === 'pnp' || name === 'pnp' || name === 'elsim_pnp' ? 'pnp' : 'npn'
     return { kind, ...(deviceModels.has(modelValue.toLowerCase()) ? { deviceModel: modelValue } : {}) }
   }
+  if (key === 'M') {
+    const type = deviceModels.get(modelValue.toLowerCase())
+    if (type === 'nmos' || type === 'pmos') return { kind: type, deviceModel: modelValue }
+    if (!type) return { kind: name.toLowerCase().includes('pmos') ? 'pmos' : 'nmos' }
+  }
   if (key === 'X') {
     const modelName = subcircuits.has(modelValue.toLowerCase()) ? modelValue : name
     return subcircuits.has(modelName.toLowerCase()) ? { kind: 'subcircuit', modelName } : {}
@@ -422,11 +427,11 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     }
     const modelFile = sidecar.parsed.attributes.modelfile
     if (modelFile && !knownLibraries.has(baseName(modelFile))) warnings.push(`Line ${symbol.line}: ${symbol.name} references missing model file “${modelFile}”; import it separately if required.`)
-    const mapped = childSheet ? { kind: 'subcircuit' as const, modelName: sheetModelName(childSheet.id) } : partKind(symbol, prefix, value, subcircuits, deviceModels)
+    const mapped = childSheet ? { kind: 'subcircuit' as const, modelName: sheetModelName(childSheet.id) } : partKind(symbol, prefix, prefix.toUpperCase() === 'M' ? (symbol.attributes.SPICEMODEL ?? value) : value, subcircuits, deviceModels)
     if (!mapped.kind) { warnings.push(`Line ${symbol.line}: ${symbol.name} (${identity}) is unsupported or refers to missing subcircuit model ${value}; symbol was skipped: “${recordExcerpt(symbol.rawRecords.join(' | '))}”.`); continue }
     const pins = sidecar.parsed.pins
     const expectedPinNames = childSheet ? childSheet.ports.map((port) => port.name) : mapped.kind === 'subcircuit' ? subcircuits.get(mapped.modelName!.toLowerCase()) ?? [] : null
-    const expectedPinCount = expectedPinNames?.length ?? ({ source: 2, currentSource: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3, subcircuit: 0 } satisfies Record<PartKind, number>)[mapped.kind]
+    const expectedPinCount = expectedPinNames?.length ?? ({ source: 2, currentSource: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3, nmos: 4, pmos: 4, subcircuit: 0 } satisfies Record<PartKind, number>)[mapped.kind]
     if (pins.length !== expectedPinCount) { warnings.push(`Line ${symbol.line}: ${symbol.name} has ${pins.length} pins but ${identity} requires ${expectedPinCount}; it was skipped.`); continue }
     if (expectedPinNames && pins.some((pin, index) => pin.name.toLowerCase() !== expectedPinNames[index]?.toLowerCase())) { warnings.push(`Line ${symbol.line}: ${symbol.name} SpiceOrder pin names do not match ${mapped.modelName}; it was skipped.`); continue }
     const kind = mapped.kind
@@ -445,14 +450,14 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       warnings.push(`Line ${symbol.line}: Value2 “${recordExcerpt(coefficient)}” on ${identity} is outside the supported scalar syntax; it was skipped.`)
       continue
     }
-    const defaultValue = kind === 'switch' ? (/^(?:on|1|true)$/i.test(value) ? 'On' : 'Off') : kind === 'diode' ? 'Default diode' : kind === 'led' ? 'Default LED' : kind === 'npn' || kind === 'pnp' ? '100' : kind === 'vcvs' ? '1' : kind === 'vccs' ? '1 mS' : value
+    const defaultValue = kind === 'switch' ? (/^(?:on|1|true)$/i.test(value) ? 'On' : 'Off') : kind === 'diode' ? 'Default diode' : kind === 'led' ? 'Default LED' : kind === 'npn' || kind === 'pnp' ? '100' : kind === 'nmos' || kind === 'pmos' ? '0' : kind === 'vcvs' ? '1' : kind === 'vccs' ? '1 mS' : value
     if (kind === 'source' && rawValue.includes('(') && value === rawValue) warnings.push(`Line ${symbol.line}: source waveform on ${identity} is not translated yet; check its value before running.`)
     if (kind === 'currentSource' && rawValue.includes('(') && !['pulse', 'pwl'].includes(parsedSource.mode ?? '')) warnings.push(`Line ${symbol.line}: current-source waveform on ${identity} is not translated yet; only PULSE and scalar-pair PWL waveforms are supported.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !value) warnings.push(`Line ${symbol.line}: ${identity} has no value; set one in the inspector before running.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
-    if ((prefix.toUpperCase() === 'D' || prefix.toUpperCase() === 'Q') && value && !deviceModels.has(value.toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${value}” for ${identity} is missing; the educational default model will be used.`)
+    if ((prefix.toUpperCase() === 'D' || prefix.toUpperCase() === 'Q' || prefix.toUpperCase() === 'M') && (mapped.deviceModel ?? value) && !deviceModels.has((mapped.deviceModel ?? value).toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${mapped.deviceModel ?? value}” for ${identity} is missing; the educational default model will be used.`)
     const offsets = pins.map(({ x, y }) => [x, y] as [number, number])
-    const representedAttributes = ['INSTNAME', ...(isCurrentControlled ? ['VALUE', 'VALUE2'] : [representedValueAttribute, ...(valueAc || value2Ac ? ['VALUE', 'VALUE2'] : [])])]
+    const representedAttributes = ['INSTNAME', ...(isCurrentControlled || kind === 'nmos' || kind === 'pmos' ? ['VALUE', 'VALUE2'] : [representedValueAttribute, ...(valueAc || value2Ac ? ['VALUE', 'VALUE2'] : [])])]
     const extensionAttributes = Object.fromEntries(Object.entries(symbol.attributes).filter(([key]) => !representedAttributes.includes(key)).slice(0, 16).map(([key, attribute]) => [key, attribute.slice(0, 512)]))
     const unmappedAttributes = Object.entries(symbol.attributes).filter(([key]) => !representedAttributes.includes(key))
     const omittedAttributes = unmappedAttributes.length - Math.min(unmappedAttributes.length, 16) + unmappedAttributes.slice(0, 16).filter(([, attribute]) => attribute.length > 512).length

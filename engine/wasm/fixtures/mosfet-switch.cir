@@ -1,0 +1,10 @@
+NMOS Level 1 educational switch
+VDD vdd 0 DC 5
+VG gate 0 DC 5
+RLOAD vdd drain 1k
+M1 drain gate 0 0 ELSIM_NMOS
+.model ELSIM_NMOS NMOS (LEVEL=1 VTO=2 KP=20u LAMBDA=0.02)
+.op
+.print op v(drain) i(RLOAD)
+.save v(drain) i(@m1[id])
+.end

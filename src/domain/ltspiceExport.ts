@@ -22,10 +22,10 @@ export type LtspiceExportResult = {
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
   source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'R',
-  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', nmos: 'M', pmos: 'M', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', nmos: 'M', pmos: 'M', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -71,6 +71,11 @@ function localPinOffsets(part: Part): [number, number][] {
 function pinDirection([x, y]: [number, number]): 'R' | 'L' | 'U' | 'D' {
   if (Math.abs(x) >= Math.abs(y)) return x < 0 ? 'R' : 'L'
   return y < 0 ? 'D' : 'U'
+}
+
+function generatedPinOffsets(part: Part): [number, number][] {
+  if (part.kind === 'nmos' || part.kind === 'pmos') return [[0, -52], [-52, 0], [0, 52], [52, 0]]
+  return localPinOffsets(part)
 }
 
 function genericSymbol(prefix: string, pins: { name: string; offset: [number, number] }[], block = false): string {
@@ -241,6 +246,7 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   }
   if (part.kind === 'diode' || part.kind === 'led') return { value: part.deviceModel ?? 'DDEFAULT' }
   if (part.kind === 'npn' || part.kind === 'pnp') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
+  if (part.kind === 'nmos' || part.kind === 'pmos') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
   if (part.kind === 'vcvs' || part.kind === 'vccs') { const value = scalar(part.value, part.kind === 'vccs' ? 's' : ''); return value ? { value } : null }
   if (part.kind === 'cccs' || part.kind === 'ccvs') {
     const coefficient = scalar(part.value, part.kind === 'ccvs' ? 'ohm' : '')
@@ -350,6 +356,13 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
         addDirective(`.model ${modelName} ${candidate.part.kind === 'npn' ? 'NPN' : 'PNP'}(IS=1e-14 BF=${beta} VAF=100 CJE=10p CJC=5p TF=300p TR=10n)`)
       }
     }
+    for (const candidate of project.sheets.flatMap((item) => item.parts.map((part) => ({ sheet: item, part })))) {
+      if ((candidate.part.kind !== 'nmos' && candidate.part.kind !== 'pmos') || candidate.part.deviceModel) continue
+      const type = candidate.part.kind === 'nmos' ? 'NMOS' : 'PMOS'
+      const threshold = candidate.part.kind === 'nmos' ? '2' : '-2'
+      const modelName = `ELSIM_MODEL_${spiceIdentifier(candidate.sheet.id).toUpperCase()}_${candidate.part.ref}`
+      addDirective(`.model ${modelName} ${type} (LEVEL=1 VTO=${threshold} KP=20u LAMBDA=0.02)`)
+    }
     if (simulation.analysis === 'op') addDirective('.op')
     else if (simulation.analysis === 'ac') {
       const sweep = simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
@@ -391,8 +404,9 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
 function generatedPartSymbol(part: Part): { name: string; content: string } {
   const key = part.kind === 'subcircuit' ? safeStem(part.modelName ?? part.ref, part.ref) : part.kind.toUpperCase()
   const name = `ELSIM_${key.toUpperCase()}`
-  const offsets = localPinOffsets(part)
+  const offsets = generatedPinOffsets(part)
   const labels = part.kind === 'npn' || part.kind === 'pnp' ? ['C', 'B', 'E']
+    : part.kind === 'nmos' || part.kind === 'pmos' ? ['D', 'G', 'S', 'B']
     : part.kind === 'vcvs' || part.kind === 'vccs' ? ['OUT+', 'OUT-', 'IN+', 'IN-']
       : part.kind === 'subcircuit' ? (part.modelPins ?? offsets.map((_, index) => `P${index + 1}`))
         : offsets.map((_, index) => `P${index + 1}`)

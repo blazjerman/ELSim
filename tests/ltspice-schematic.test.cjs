@@ -40,6 +40,25 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
   assert.notEqual(positive, pinNet(connectivity, pins, 1))
 })
 
+test('imports a user-supplied LTspice M device with D-G-S-B SpiceOrder mapping', () => {
+  const mosSymbol = {
+    id: 'symbol-nmos', filename: 'nmos.asy', sha256: 'b'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+    content: ['Version 4', 'SYMATTR Prefix M', 'LINE Normal -16 -16 16 16', 'PIN 0 -32 U', 'PINATTR PinName D', 'PINATTR SpiceOrder 1', 'PIN -32 0 L', 'PINATTR PinName G', 'PINATTR SpiceOrder 2', 'PIN 0 32 D', 'PINATTR PinName S', 'PINATTR SpiceOrder 3', 'PIN 32 0 R', 'PINATTR PinName B', 'PINATTR SpiceOrder 4'].join('\n'),
+  }
+  const content = '.MODEL NMOS_TEST NMOS (LEVEL=1 VTO=2 KP=20u)'
+  const model = { id: 'mos-library', filename: 'user-mos.lib', sha256: 'c'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(), content }
+  const asc = ['Version 4', 'SHEET 1 880 680', 'SYMBOL nmos 32 32 R0', 'SYMATTR InstName M1', 'SYMATTR Value NMOS_TEST'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'mos.asc', [mosSymbol], [model])
+  assert.equal(project.parts[0].kind, 'nmos')
+  assert.equal(project.parts[0].deviceModel, 'NMOS_TEST')
+  assert.deepEqual(project.parts[0].symbolPinOffsets, [[0, -32], [-32, 0], [0, 32], [32, 0]])
+  assert.deepEqual(warnings, [])
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^M1 .* NMOS_TEST$/m)
+  assert.doesNotMatch(artifact.text, /^\.model ELSIM_MODEL_M1/m)
+})
+
 test('imports named-node and placed-component .save vectors as plot selections', () => {
   const asc = [
     'Version 4', 'FLAG 48 0 Out', 'SYMBOL res 32 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',

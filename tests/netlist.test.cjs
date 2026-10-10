@@ -458,6 +458,34 @@ test('NPN and PNP parts create separate educational BJT models in C-B-E pin orde
   assert.throws(() => validateProject(project), /integer from 1 to 1000/)
 })
 
+test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin order', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'm-n1', kind: 'nmos', ref: 'M1', value: '0', x: 700, y: 300, rotation: 0 },
+    { id: 'm-p1', kind: 'pmos', ref: 'M2', value: '0', x: 820, y: 400, rotation: 0 },
+  )
+  project.netLabels.push(
+    { id: 'm1-d', name: 'm1drain', x: 700, y: 248, visible: false },
+    { id: 'm1-g', name: 'm1gate', x: 648, y: 300, visible: false },
+    { id: 'm1-s', name: 'm1source', x: 700, y: 352, visible: false },
+    { id: 'm1-b', name: 'm1bulk', x: 752, y: 300, visible: false },
+    { id: 'm2-d', name: 'm2drain', x: 820, y: 348, visible: false },
+    { id: 'm2-g', name: 'm2gate', x: 768, y: 400, visible: false },
+    { id: 'm2-s', name: 'm2source', x: 820, y: 452, visible: false },
+    { id: 'm2-b', name: 'm2bulk', x: 872, y: 400, visible: false },
+  )
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^M1 m1drain m1gate m1source m1bulk ELSIM_MODEL_M1$/m)
+  assert.match(artifact.text, /^\.model ELSIM_MODEL_M1 NMOS \(LEVEL=1 VTO=2 KP=20u LAMBDA=0\.02\)$/m)
+  assert.match(artifact.text, /^M2 m2drain m2gate m2source m2bulk ELSIM_MODEL_M2$/m)
+  assert.match(artifact.text, /^\.model ELSIM_MODEL_M2 PMOS \(LEVEL=1 VTO=-2 KP=20u LAMBDA=0\.02\)$/m)
+  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'M1')).map(({ x, y }) => [x - 700, y - 300]), [[0, -52], [-52, 0], [0, 52], [52, 0]])
+  project.modelAssets = [{ id: 'mos-model', filename: 'user.lib', sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(), content: '.model WRONG PMOS (LEVEL=1 VTO=-2 KP=20u)' }]
+  project.parts.find((part) => part.ref === 'M1').deviceModel = 'WRONG'
+  assert.match(createNetlistArtifact(project).diagnostics.map(({ message }) => message).join('\n'), /not a NMOS model/i)
+})
+
 test('imported subcircuits place ordered pins and generate X-device netlists with model source mapping', () => {
   const project = createStarterProject()
   const content = '.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN=2\nE1 OUT 0 IN 0 {GAIN}\n.ENDS gain\n'
