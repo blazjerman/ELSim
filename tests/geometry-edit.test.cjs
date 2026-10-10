@@ -47,6 +47,24 @@ test('flip state validates while older project records remain valid', () => {
   assert.equal(validateProject(project).parts[1].flipX, undefined)
 })
 
+test('imported symbol pin offsets drive electrical pin locations for built-in part kinds', () => {
+  const project = createStarterProject()
+  const imported = {
+    id: 'imported-source', kind: 'source', ref: 'V2', value: '1', x: 100, y: 100, rotation: 0,
+    symbolAssetId: 'symbol-voltage', symbolPinOffsets: [[-16, 0], [16, 0]],
+  }
+  project.parts = [imported]
+  project.wires = []
+  project.netLabels = [
+    { id: 'label-in', name: 'VIN', x: 84, y: 100, visible: true },
+    { id: 'label-ground', name: '0', x: 116, y: 100, visible: true },
+  ]
+  assert.deepEqual(componentPins(imported).map(({ x, y }) => [x, y]), [[84, 100], [116, 100]])
+  const connectivity = analyzeConnectivity(project)
+  assert.equal(connectivity.pinNets.get('imported-source:0'), 'VIN')
+  assert.equal(connectivity.pinNets.get('imported-source:1'), '0')
+})
+
 test('dragging a free orthogonal segment moves it while preserving adjacent orthogonality', () => {
   const project = createStarterProject()
   project.wires.push({ id: 'free', points: [[700, 600], [750, 600], [750, 650]] })

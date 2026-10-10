@@ -31,15 +31,15 @@ export function subcircuitPinOffsets(count: number, layout?: Part['sheetPortLayo
 }
 
 export function componentPins(part: Part): PinLocation[] {
-  const local: [number, number][] = part.kind === 'subcircuit' ? part.symbolPinOffsets ?? subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout)
-    : part.kind === 'vcvs' || part.kind === 'vccs'
-    ? [[-52, 0], [52, 0], [0, -52], [0, 52]]
-    : part.kind === 'npn' || part.kind === 'pnp'
-      ? [[35, -52], [-52, 0], [35, 52]]
-    : part.kind === 'ground' ? [[0, -22]]
-      : part.kind === 'source' ? [[0, -52], [0, 52]]
-        : part.kind === 'capacitor' ? [[-50, 0], [50, 0]]
-          : [[-52, 0], [52, 0]]
+  let local: [number, number][]
+  if (part.symbolPinOffsets) local = part.symbolPinOffsets
+  else if (part.kind === 'subcircuit') local = subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout)
+  else if (part.kind === 'vcvs' || part.kind === 'vccs') local = [[-52, 0], [52, 0], [0, -52], [0, 52]]
+  else if (part.kind === 'npn' || part.kind === 'pnp') local = [[35, -52], [-52, 0], [35, 52]]
+  else if (part.kind === 'ground') local = [[0, -22]]
+  else if (part.kind === 'source') local = [[0, -52], [0, 52]]
+  else if (part.kind === 'capacitor') local = [[-50, 0], [50, 0]]
+  else local = [[-52, 0], [52, 0]]
   const angle = part.rotation * Math.PI / 180
   return local.map(([x, y], index) => ({
     partId: part.id,
