@@ -74,6 +74,18 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return output
 }
 
+function canonicalizeJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeJson)
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return Object.fromEntries(
+      Object.keys(record).sort((left, right) => left < right ? -1 : left > right ? 1 : 0)
+        .map((key) => [key, canonicalizeJson(record[key])]),
+    )
+  }
+  return value
+}
+
 function zipStored(files: { path: string; bytes: Uint8Array }[], maxEntries = MAX_ENTRIES, maxBytes = MAX_ARCHIVE_BYTES): Uint8Array {
   if (files.length > maxEntries) throw new Error('Archive contains too many files.')
   let offset = 0
@@ -105,7 +117,7 @@ export function createFilesZip(files: { path: string; content: string }[]): Uint
 }
 
 export function createProjectArchive(project: Project): Uint8Array {
-  const projectBytes = encoder.encode(JSON.stringify(project, null, 2))
+  const projectBytes = encoder.encode(JSON.stringify(canonicalizeJson(project), null, 2))
   const manifest: ProjectArchiveManifest = {
     format: 'elsim-archive', version: 1,
     project: { path: PROJECT_PATH, crc32: crc32(projectBytes), size: projectBytes.length },

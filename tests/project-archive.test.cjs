@@ -28,6 +28,13 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   const first = createProjectArchive(project)
   const second = createProjectArchive(project)
   assert.deepEqual(first, second)
+
+  const reverseObjectKeys = (value) => {
+    if (Array.isArray(value)) return value.map(reverseObjectKeys)
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).reverse().map(([key, child]) => [key, reverseObjectKeys(child)]))
+    return value
+  }
+  assert.deepEqual(createProjectArchive(reverseObjectKeys(project)), first, 'object insertion order must not change serialized archive bytes')
   assert.equal(isProjectArchive(first), true)
   const restored = validateProject(readProjectArchive(first))
   project.parts[4].componentDefinitionId = 'elsim.current-source'
