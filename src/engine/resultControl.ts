@@ -29,7 +29,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const commands = ['.control', 'set filetype=ascii']
   if (parameterSweep.length) {
     parameterSweep.forEach((run, index) => {
-      run.values.forEach(({ component, value }) => commands.push(`alter ${component} ${value}`))
+      run.values.forEach(({ component, value, parameter, model }) => commands.push(parameter ? `altermod ${model} ${parameter}=${value}` : `alter ${component} ${value}`))
       commands.push('run', ...measurements.map((measurement) => measurementCommand(measurement, `_${index}`)).filter((command): command is string => Boolean(command)), `write /result-${index}.raw all`)
     })
   } else commands.push(analysisCommand, ...(/^(?:tran)\b/i.test(analysisCommand) ? measurements.map((measurement) => measurementCommand(measurement)).filter((command): command is string => Boolean(command)) : []), 'write /result.raw all')

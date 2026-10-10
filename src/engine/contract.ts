@@ -188,6 +188,9 @@ function isParameterSweepRun(value: unknown): boolean {
   return value.values.every((entry) => {
     if (!isRecord(entry) || typeof entry.component !== 'string' || !entry.component.trim()
       || typeof entry.value !== 'string' || !Number.isFinite(Number(entry.value))) return false
+    const hasModelTarget = entry.parameter !== undefined || entry.model !== undefined
+    if (hasModelTarget && (typeof entry.parameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter)
+      || typeof entry.model !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(entry.model))) return false
     const key = entry.component.toLowerCase()
     if (components.has(key)) return false
     components.add(key)

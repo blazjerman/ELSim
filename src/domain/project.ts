@@ -49,7 +49,7 @@ export type PlotSettings = {
   ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>>
   detachedWindow?: { x: number; y: number; width: number; height: number }
 }
-export type ParameterSweep = { component: string; start: string; stop: string; points: number }
+export type ParameterSweep = { component: string; parameter?: string; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
 export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string }
@@ -386,7 +386,11 @@ export function validateProject(input: unknown): Project {
     for (const sweep of simulation.parameterSweeps) {
       if (!sweep || typeof sweep.component !== 'string' || !sweep.component.trim()) throw new Error('Parameter stepping settings are malformed.')
       const component = data.parts.find((part) => (part as Part).ref.toLowerCase() === sweep.component.toLowerCase()) as Part | undefined
-      if (!component || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component.kind) || (component.kind === 'source' && component.sourceMode !== 'dc') || (component.kind === 'currentSource' && component.sourceMode !== 'dc' && component.sourceMode !== undefined) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct DC voltage/current sources or R/C/L parts and 2–10 steps.')
+      const modelSweep = typeof sweep.parameter === 'string'
+      const supportedDevice = ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(component?.kind ?? '')
+      const selectedModel = component?.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === component.deviceModel!.toLowerCase()) : undefined
+      const modelParameter = modelSweep && selectedModel?.parameters.find((parameter) => parameter.name.toLowerCase() === sweep.parameter!.toLowerCase())
+      if (!component || (modelSweep ? !supportedDevice || !selectedModel || !modelParameter || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.parameter!) : !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component.kind)) || (!modelSweep && component.kind === 'source' && component.sourceMode !== 'dc') || (!modelSweep && component.kind === 'currentSource' && component.sourceMode !== 'dc' && component.sourceMode !== undefined) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct scalar DC sources, R/C/L parts, or numeric parameters on selected imported device models, with 2–10 steps.')
       const parseComponentValue = (value: string): number | null => {
         const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/[ΩΩ]|ohms?|[vVaAfFhH]$/gi, '')
         const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
@@ -397,7 +401,7 @@ export function validateProject(input: unknown): Project {
       }
       const start = parseComponentValue(sweep.start)
       const stop = parseComponentValue(sweep.stop)
-      if (start === null || stop === null || start === stop || (!['source', 'currentSource'].includes(component.kind) && (start <= 0 || stop <= 0))) throw new Error(`${component.ref} needs valid, different parameter start and stop values; passive values must be positive.`)
+      if (start === null || stop === null || start === stop || (!sweep.parameter && !['source', 'currentSource'].includes(component.kind) && (start <= 0 || stop <= 0))) throw new Error(`${component.ref} needs valid, different parameter start and stop values; passive values must be positive.`)
       sweepRefs.add(sweep.component.toLowerCase())
       combinations *= sweep.points
     }

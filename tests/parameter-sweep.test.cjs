@@ -74,6 +74,28 @@ test('scalar DC voltage and current sources are stepped in signed native units',
   assert.match(addResultControl(createNetlistArtifact(project).text, runs), /alter V1 -1\.00000000e\+0\nalter I1 1\.00000000e-3/)
 })
 
+test('imported device model parameters are validated and emitted with altermod', () => {
+  const project = createStarterProject()
+  const part = { id: 'sweep-q1', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 400, rotation: 0, deviceModel: 'USER_NPN' }
+  project.parts.push(part)
+  project.sheets[0].parts = project.parts
+  const content = '.model USER_NPN NPN (IS=1e-14 BF=120 VAF=80)'
+  project.modelAssets = [{ id: 'sweep-model', filename: 'device.lib', sha256: 'a'.repeat(64), content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.simulation.parameterSweeps = [{ component: 'Q1', parameter: 'BF', start: '80', stop: '160', points: 3 }]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => run.values[0]), [
+    { component: 'Q1', value: '8.00000000e+1', parameter: 'BF', model: 'USER_NPN' },
+    { component: 'Q1', value: '1.20000000e+2', parameter: 'BF', model: 'USER_NPN' },
+    { component: 'Q1', value: '1.60000000e+2', parameter: 'BF', model: 'USER_NPN' },
+  ])
+  assert.match(runs[0].label, /Q1\.BF=80/)
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /altermod USER_NPN BF=8\.00000000e\+1\nrun/)
+  project.simulation.parameterSweeps[0].parameter = 'UNSAFE'
+  assert.throws(() => validateProject(project), /numeric parameters on selected imported device models/)
+})
+
 test('parameter sweep rejects duplicate parts, equal endpoints, and more than ten combinations', () => {
   const project = createStarterProject()
   project.simulation.parameterSweeps = [{ component: 'R1', start: '1 kΩ', stop: '1 kΩ', points: 3 }]
@@ -91,7 +113,7 @@ test('parameter sweep rejects duplicate parts, equal endpoints, and more than te
   project.simulation.analysis = 'tran'
   project.parts.find((part) => part.ref === 'V1').sourceMode = 'pulse'
   project.simulation.parameterSweeps = [{ component: 'V1', start: '1 V', stop: '2 V', points: 3 }]
-  assert.throws(() => validateProject(project), /DC voltage\/current sources or R\/C\/L parts/)
+  assert.throws(() => validateProject(project), /scalar DC sources, R\/C\/L parts/)
 })
 
 test('node-voltage initial conditions require labeled nodes and emit optional UIC', () => {

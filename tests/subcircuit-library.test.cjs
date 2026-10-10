@@ -30,7 +30,7 @@ test('parses ordered subcircuit pins, parameters, continuations, shared models, 
 test('imports .MODEL-only libraries, including numeric-leading model names and continuations', () => {
   const parsed = parseSubcircuitLibrary('Vendor device cards\n.MODEL 1N4148 D(Is=2n N=1.8)\n+ Rs=1\n')
   assert.deepEqual(parsed.subcircuits, [])
-  assert.deepEqual(parsed.models, [{ name: '1N4148', type: 'D', startLine: 2, endLine: 3 }])
+  assert.deepEqual(parsed.models, [{ name: '1N4148', type: 'D', parameters: [{ name: 'Is', defaultValue: '2n' }, { name: 'N', defaultValue: '1.8' }, { name: 'Rs', defaultValue: '1' }], startLine: 2, endLine: 3 }])
   assert.match(parsed.modelText, /\.MODEL 1N4148 D/)
   assert.match(parsed.modelText, /\+ Rs=1/)
 })

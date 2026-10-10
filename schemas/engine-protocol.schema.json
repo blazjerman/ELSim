@@ -107,7 +107,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["component", "value"],
-            "properties": { "component": { "type": "string", "minLength": 1 }, "value": { "type": "string", "pattern": "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" } }
+            "properties": { "component": { "type": "string", "minLength": 1 }, "value": { "type": "string", "pattern": "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" }, "parameter": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }, "model": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*$" } }
           }
         },
         "label": { "type": "string" }

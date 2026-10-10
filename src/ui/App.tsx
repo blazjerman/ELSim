@@ -457,24 +457,34 @@ function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, on
   </div>
 }
 
-function ParameterSweepEditor({ parts, sweeps, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
-  const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined)) || (part.kind === 'source' && part.sourceMode === 'dc'))
+function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string }[] }[]; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
+  const modelFor = (part?: Part) => models.find((model) => model.name.toLowerCase() === part?.deviceModel?.toLowerCase())
+  const modelRange = (value: string) => { const magnitude = componentMagnitude(value, 'resistor'); return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` } }
+  const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined)) || (part.kind === 'source' && part.sourceMode === 'dc') || modelFor(part)?.parameters.length)
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
-    <p className="field-hint">Compare results while changing up to three passive values or scalar DC source levels.</p>
+    <p className="field-hint">Compare up to 10 transient cases while changing passive values, scalar DC sources, or numeric parameters from imported device models.</p>
     {sweeps.map((sweep, index) => {
       const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
       const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
       return <div className="parameter-sweep-card" key={`${sweep.component}-${index}`}>
         <div className="parameter-sweep-heading"><strong>Parameter {index + 1}</strong><button type="button" aria-label={`Remove parameter ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
-        <label className="field-label">Component<select aria-label={`Parameter ${index + 1} component`} value={sweep.component} onChange={(event) => {
+        <label className="field-label">Component or device<select aria-label={`Parameter ${index + 1} component`} value={sweep.component} onChange={(event) => {
           const nextPart = eligible.find((item) => item.ref === event.target.value)
           if (!nextPart) return
+          const parameters = modelFor(nextPart)?.parameters ?? []
+          if (parameters.length) {
+            const parameter = parameters[0]
+            const { start, stop } = modelRange(parameter.defaultValue)
+            onChange(index, { component: nextPart.ref, parameter: parameter.name, start, stop })
+            return
+          }
           const magnitude = componentMagnitude(nextPart.value, nextPart.kind)
           const unit = nextPart.kind === 'source' ? 'V' : nextPart.kind === 'currentSource' ? 'A' : nextPart.kind === 'resistor' || nextPart.kind === 'lamp' ? 'Ω' : nextPart.kind === 'capacitor' ? 'F' : 'H'
-          onChange(index, { component: nextPart.ref, start: nextPart.value, stop: magnitude === null ? nextPart.value : `${(magnitude * 2).toExponential(5)} ${unit}` })
+          onChange(index, { component: nextPart.ref, parameter: undefined, start: nextPart.value, stop: magnitude === null ? nextPart.value : `${(magnitude * 2).toExponential(5)} ${unit}` })
         }}>{eligible.map((item) => <option key={item.id} value={item.ref} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && other.component.toLowerCase() === item.ref.toLowerCase())}>{item.ref} · {kindNames[item.kind]}</option>)}</select></label>
+        {modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())) && <label className="field-label">Imported model parameter<select aria-label={`Parameter ${index + 1} model parameter`} value={sweep.parameter ?? ''} onChange={(event) => { const parameter = modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase()))?.parameters.find((item) => item.name === event.target.value); if (!parameter) return; const { start, stop } = modelRange(parameter.defaultValue); onChange(index, { parameter: parameter.name, start, stop }) }}>{modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase()))?.parameters.map((parameter) => <option key={parameter.name} value={parameter.name}>{parameter.name} · default {parameter.defaultValue}</option>)}</select></label>}
         <div className="parameter-sweep-inputs"><label className="field-label">Start<input aria-label={`Parameter ${index + 1} start value`} value={sweep.start} onChange={(event) => onChange(index, { start: event.target.value })}/></label><label className="field-label">Stop<input aria-label={`Parameter ${index + 1} stop value`} value={sweep.stop} onChange={(event) => onChange(index, { stop: event.target.value })}/></label></div>
         <label className="field-label">Number of values<input aria-label={`Parameter ${index + 1} number of values`} type="number" min="2" max={maxPoints} value={sweep.points} onChange={(event) => onChange(index, { points: Number(event.target.value) })}/></label>
       </div>
@@ -2003,7 +2013,7 @@ export default function App() {
               <label className="field-label">Step<input data-analysis-setting="dcStep" aria-invalid={Boolean(analysisSettingError('dcStep'))} aria-describedby={analysisSettingError('dcStep') ? 'analysis-error-dcStep' : undefined} value={project.simulation.dcSweep?.step ?? '0.1 V'} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, dcSweep: { ...(current.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), step: event.target.value } } }))}/>{analysisSettingError('dcStep') && <small id="analysis-error-dcStep" className="field-error" role="alert">{analysisSettingError('dcStep')}</small>}</label>
             </>}
           </div>
-    <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
+    <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} models={importedDeviceModels} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
     {project.simulation.analysis === 'tran' && <>
       <TransientMeasurementEditor project={project} measurements={project.simulation.transientMeasurements ?? []} onAdd={addMeasurement} onChange={updateMeasurement} onRemove={removeMeasurement}/>
       <InitialConditionEditor conditions={project.simulation.initialConditions ?? []} nodes={[...new Set(project.netLabels.map((label) => label.name).filter((node) => node !== '0'))]} inductors={project.parts.filter((part) => part.kind === 'inductor').map((part) => part.ref)} capacitors={project.parts.filter((part) => part.kind === 'capacitor').map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAdd={addInitialCondition} onAddCurrent={addInductorInitialCondition} onAddCapacitorVoltage={addCapacitorInitialCondition} onChange={updateInitialCondition} onRemove={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/>

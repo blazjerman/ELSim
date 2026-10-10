@@ -1,7 +1,7 @@
 export type SubcircuitParameter = { name: string; defaultValue: string }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; parameters: SubcircuitParameter[]; startLine: number; endLine: number }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
 export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
@@ -210,7 +210,13 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
         if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
         if (seenModelNames.has(name.toLowerCase())) throw new Error(`Line ${line.start}: model card ${name} is declared more than once.`)
         seenModelNames.add(name.toLowerCase())
-        models.push({ name, type, startLine: line.start, endLine: line.end })
+        const parameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/^\s*\(/, '').replace(/\)\s*$/, '')
+        const parameters: SubcircuitParameter[] = []
+        for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|[^\s,)]+)/g)) {
+          const value = match[2].replace(/^\{(.*)\}$/, '$1')
+          if (isSafeSubcircuitParameterValue(value) && !parameters.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) parameters.push({ name: match[1], defaultValue: value })
+        }
+        models.push({ name, type, parameters, startLine: line.start, endLine: line.end })
       }
       sawTopLevelRecord = true
       continue

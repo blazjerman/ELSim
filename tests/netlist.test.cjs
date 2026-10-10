@@ -145,7 +145,7 @@ test('independent current source pulse mode emits validated PULSE current levels
   assert.match(createNetlistArtifact(project).diagnostics[0].message, /pulse current levels and timing/)
   current.pulse.period = '10m'
   project.simulation.parameterSweeps = [{ component: 'I1', start: '1mA', stop: '2mA', points: 2 }]
-  assert.throws(() => validateProject(project), /DC voltage\/current sources or R\/C\/L parts/)
+  assert.throws(() => validateProject(project), /scalar DC sources, R\/C\/L parts/)
 })
 
 test('independent current source PWL mode emits validated transient current points', () => {
@@ -160,7 +160,7 @@ test('independent current source PWL mode emits validated transient current poin
   artifact = createNetlistArtifact(project)
   assert.match(artifact.diagnostics[0].message, /PWL current source needs 2–32 points/)
   project.simulation.parameterSweeps = [{ component: 'I1', start: '1mA', stop: '2mA', points: 2 }]
-  assert.throws(() => validateProject(project), /DC voltage\/current sources or R\/C\/L parts/)
+  assert.throws(() => validateProject(project), /scalar DC sources, R\/C\/L parts/)
 })
 
 test('current-source beginner example predicts the expected one-volt load result', () => {
