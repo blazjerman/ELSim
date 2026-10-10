@@ -57,7 +57,7 @@ export type PlotSettings = {
   detachedWindow?: { x: number; y: number; width: number; height: number }
   panels?: PlotPanel[]
 }
-export type SourceSweepParameter = 'pulse.initial' | 'pulse.high' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pwl.scale' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
+export type SourceSweepParameter = 'pulse.initial' | 'pulse.high' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pwl.scale' | `pwl.point.${number}` | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
 export type ParameterSweep = { component: string; parameter?: string; sourceParameter?: SourceSweepParameter; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
@@ -408,7 +408,10 @@ export function validateProject(input: unknown): Project {
       const modelSweep = typeof sweep.parameter === 'string'
       const sourceFieldSweep = sweep.sourceParameter !== undefined
       const sourceMode = component?.sourceMode ?? (component?.kind === 'source' ? 'pulse' : 'dc')
-      const validSourceTarget = (component?.kind === 'source' || component?.kind === 'currentSource') && (sweep.sourceParameter === 'pwl.scale' ? sourceMode === 'pwl' : typeof sweep.sourceParameter === 'string' && sweep.sourceParameter.startsWith(`${sourceMode}.`))
+      const pwlPointIndex = typeof sweep.sourceParameter === 'string' && sweep.sourceParameter.startsWith('pwl.point.') ? Number(sweep.sourceParameter.slice('pwl.point.'.length)) : null
+      const pwlPointCount = component?.kind === 'currentSource' ? component.currentPwl?.length : component?.pwl?.length
+      const validPwlPoint = sourceMode === 'pwl' && pwlPointIndex !== null && Number.isInteger(pwlPointIndex) && pwlPointIndex >= 1 && pwlPointIndex <= (pwlPointCount ?? 0)
+      const validSourceTarget = (component?.kind === 'source' || component?.kind === 'currentSource') && (sweep.sourceParameter === 'pwl.scale' ? sourceMode === 'pwl' : validPwlPoint || (sourceMode !== 'pwl' && typeof sweep.sourceParameter === 'string' && sweep.sourceParameter.startsWith(`${sourceMode}.`)))
       const supportedDevice = ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(component?.kind ?? '')
       const selectedModel = component?.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === component.deviceModel!.toLowerCase()) : undefined
       const modelParameter = modelSweep && selectedModel?.parameters.find((parameter) => parameter.name.toLowerCase() === sweep.parameter!.toLowerCase())

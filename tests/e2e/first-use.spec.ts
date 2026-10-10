@@ -1430,7 +1430,7 @@ test('pulse source high levels can be swept in the browser ngspice engine', asyn
   expect(labels.some((label) => label.includes('V1=4 V'))).toBe(true)
 })
 
-test('PWL source amplitude scale can be swept in the browser ngspice engine', async ({ page }) => {
+test('PWL source point can be swept in the browser ngspice engine', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -1449,11 +1449,16 @@ test('PWL source amplitude scale can be swept in the browser ngspice engine', as
   await page.reload()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('V1')
+  const sourceParameter = page.getByRole('combobox', { name: 'Parameter 1 source parameter' })
+  await expect(sourceParameter).toHaveValue('pwl.scale')
+  await sourceParameter.selectOption('pwl.point.2')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 V')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('3 V')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
   const labels = await page.locator('.trace-toggles button').allTextContents()
-  expect(labels.some((label) => label.includes('V1=1×'))).toBe(true)
-  expect(labels.some((label) => label.includes('V1=2×'))).toBe(true)
+  expect(labels.some((label) => label.includes('V1.pwl.point.2=1 V'))).toBe(true)
+  expect(labels.some((label) => label.includes('V1.pwl.point.2=3 V'))).toBe(true)
 })
 
 test('SINE source amplitude can be swept in the browser ngspice engine', async ({ page }) => {

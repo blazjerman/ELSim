@@ -126,6 +126,30 @@ test('voltage and current PWL levels are scaled together through alterparam', ()
   assert.match(control, /alterparam ELSIM_SWEEP_PWL_V1_SCALE=2\.00000000e\+0\nalterparam ELSIM_SWEEP_PWL_I1_SCALE=3\.00000000e\+0\nreset\nrun/)
 })
 
+test('individual voltage and current PWL points can be swept without changing other points', () => {
+  const project = createStarterProject()
+  const voltage = project.parts.find((part) => part.kind === 'source')
+  voltage.sourceMode = 'pwl'
+  voltage.pwl = [{ time: '0', voltage: '0 V' }, { time: '1m', voltage: '2 V' }, { time: '2m', voltage: '0 V' }]
+  const current = { id: 'sweep-pwl-current-point', kind: 'currentSource', ref: 'I1', value: '1 mA', sourceMode: 'pwl', currentPwl: [{ time: '0', current: '0 A' }, { time: '1m', current: '2 mA' }, { time: '2m', current: '0 A' }], x: 700, y: 600, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [
+    { component: 'V1', sourceParameter: 'pwl.point.2', start: '2 V', stop: '4 V', points: 2 },
+    { component: 'I1', sourceParameter: 'pwl.point.2', start: '2 mA', stop: '4 mA', points: 2 },
+  ]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 4)
+  assert.match(runs[0].label, /V1\.pwl\.point\.2=2 V, I1\.pwl\.point\.2=0\.002 A/)
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /PWL\(0 0 1m \{ELSIM_SWEEP_SOURCE_V1_PWL_POINT_2\} 2m 0\)/)
+  assert.match(control, /PWL\(0 0 1m \{ELSIM_SWEEP_SOURCE_I1_PWL_POINT_2\} 2m 0\)/)
+  assert.match(control, /alterparam ELSIM_SWEEP_SOURCE_V1_PWL_POINT_2=2\.00000000e\+0\nalterparam ELSIM_SWEEP_SOURCE_I1_PWL_POINT_2=2\.00000000e-3\nreset\nrun/)
+  project.simulation.parameterSweeps[0].sourceParameter = 'pwl.point.4'
+  assert.throws(() => validateProject(project), /Parameter stepping settings are malformed/)
+})
+
 test('SINE, EXP, and SFFM amplitudes are parameter stepped without changing timing', () => {
   const project = createStarterProject()
   const sine = project.parts.find((part) => part.kind === 'source')

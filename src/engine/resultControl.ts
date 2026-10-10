@@ -62,7 +62,8 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     const sourceParameter = target.slice(separator + 1)
     const line = rows.findIndex((row) => row.trim().match(new RegExp(`^${component}\\s`, 'i')))
     if (line < 0) throw new Error(`Waveform source ${component} is missing from the generated netlist.`)
-    const [mode, field] = sourceParameter.split('.')
+    const [mode, ...fieldParts] = sourceParameter.split('.')
+    const field = mode === 'pwl' && fieldParts[0] === 'point' ? `point${fieldParts[1] ?? ''}` : fieldParts.at(-1) ?? ''
     const waveformName = ({ pulse: 'PULSE', pwl: 'PWL', sine: 'SIN', exp: 'EXP', sffm: 'SFFM' } as Record<string, string>)[mode]
     if (!waveformName) throw new Error(`Source parameter ${sourceParameter} has no generated waveform.`)
     const waveformPattern = new RegExp(`${waveformName}\\(([^()]*)\\)`, 'i')
@@ -71,6 +72,11 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
       if (field === 'scale') {
         if (values.length < 4 || values.length % 2 !== 0) throw new Error(`PWL source ${component} has an invalid generated waveform.`)
         for (let index = 1; index < values.length; index += 2) values[index] = `{${values[index]}*${parameter}}`
+      } else if (mode === 'pwl' && field.startsWith('point')) {
+        const pointIndex = Number(field.slice('point'.length))
+        const valueIndex = (pointIndex - 1) * 2 + 1
+        if (!Number.isInteger(pointIndex) || pointIndex < 1 || values.length <= valueIndex || values.length % 2 !== 0) throw new Error(`PWL source ${component} has an invalid generated point ${pointIndex}.`)
+        values[valueIndex] = `{${parameter}}`
       } else {
         const fieldIndex = ({ initial: 0, high: 1, delay: mode === 'pulse' ? 2 : 3, rise: 3, fall: 4, width: 5, period: 6, offset: 0, amplitude: 1, frequency: 2, damping: 4, phase: 5, pulsed: 1, riseDelay: 2, riseTau: 3, fallDelay: 4, fallTau: 5, carrierFrequency: 2, modulationIndex: 3, signalFrequency: 4 } as Record<string, number>)[field]
         if (fieldIndex === undefined || values.length <= fieldIndex) throw new Error(`Waveform source ${component} has an invalid generated field ${field}.`)
