@@ -297,7 +297,7 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
       }
       if (!valid) return null
       const pointList = mapped.map((point) => `${point.time} ${point.voltage}`).join(' ')
-      const output = part.pwlRepeat === 'forever' ? `PWL REPEAT FOREVER (${pointList}) ENDREPEAT` : `PWL(${pointList})`
+      const output = part.pwlRepeat === 'forever' ? `PWL REPEAT FOREVER (${pointList}) ENDREPEAT` : part.pwlRepeatCount !== undefined ? `PWL REPEAT FOR ${part.pwlRepeatCount} (${pointList}) ENDREPEAT` : `PWL(${pointList})`
       const acMagnitude = part.acMagnitude ?? (project.simulation.analysis === 'ac' ? project.simulation.sourceAcMagnitude ?? '1 V' : undefined)
       const acScalar = acMagnitude === undefined ? undefined : scalar(acMagnitude, 'v')
       const phaseScalar = acMagnitude === undefined ? '0' : scalar(part.acPhase ?? '0', '')

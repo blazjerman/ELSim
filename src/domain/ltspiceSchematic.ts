@@ -31,7 +31,16 @@ function recordExcerpt(raw: string): string {
   return compact.length > MAX_UNSUPPORTED_RECORD_CHARS ? `${compact.slice(0, MAX_UNSUPPORTED_RECORD_CHARS - 1)}…` : compact
 }
 
-function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp' | 'sffm'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; pwlRepeat?: 'forever'; sine?: SourceSine; exp?: SourceExp; sffm?: SourceSffm } {
+function scalarMagnitude(value: string): number | null {
+  const match = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?(?:v|a|s|hz)?$/i)
+  if (!match) return null
+  const suffix = match[2]?.toLowerCase() ?? ''
+  const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[suffix] ?? 1
+  const result = Number(match[1]) * scale
+  return Number.isFinite(result) ? result : null
+}
+
+function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp' | 'sffm'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; pwlRepeat?: 'forever'; pwlRepeatCount?: number; sine?: SourceSine; exp?: SourceExp; sffm?: SourceSffm } {
   const trimmed = value.trim()
   const generatedSffm = trimmed.match(/^SFFM\(\s*([^()]*)\s*\)$/i)
   if (generatedSffm) {
@@ -66,13 +75,23 @@ function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'p
     return { value: high, mode: 'pulse', pulse: { initial, delay, rise, fall, width, period, ...(cycleCount === undefined ? {} : { cycleCount }) } }
   }
   const repeatedPwl = trimmed.match(/^PWL\s+REPEAT\s+FOREVER\s*\(\s*([^()]*)\s*\)\s*ENDREPEAT$/i)
-  const generatedPwl = repeatedPwl ? null : trimmed.match(/^PWL\(\s*([^()]*)\s*\)$/i)
-  const pwlBody = repeatedPwl?.[1] ?? generatedPwl?.[1]
+  const finiteRepeatedPwl = trimmed.match(/^PWL\s+REPEAT\s+FOR\s+(\d+)\s*\(\s*([^()]*)\s*\)\s*ENDREPEAT$/i)
+  const generatedPwl = repeatedPwl || finiteRepeatedPwl ? null : trimmed.match(/^PWL\(\s*([^()]*)\s*\)$/i)
+  const pwlBody = repeatedPwl?.[1] ?? finiteRepeatedPwl?.[2] ?? generatedPwl?.[1]
   if (pwlBody !== undefined) {
     const values = pwlBody.trim().split(/[\s,]+/).filter(Boolean)
     if (values.length >= 4 && values.length <= 64 && values.length % 2 === 0 && values.every((entry) => validScalar(entry))) {
       const pwl = Array.from({ length: values.length / 2 }, (_, index) => ({ time: values[index * 2], voltage: values[index * 2 + 1] }))
-      return { value: pwl.at(-1)!.voltage, mode: 'pwl', pwl, ...(repeatedPwl ? { pwlRepeat: 'forever' as const } : {}) }
+      if (finiteRepeatedPwl) {
+        const repeatCount = Number(finiteRepeatedPwl[1])
+        const expandedCount = pwl.length + (repeatCount - 1) * (pwl.length - 1)
+        const startVoltage = scalarMagnitude(pwl[0].voltage), endVoltage = scalarMagnitude(pwl.at(-1)!.voltage)
+        if (repeatCount >= 1 && repeatCount <= 31 && expandedCount <= 32 && (repeatCount === 1 || startVoltage !== null && startVoltage === endVoltage)) {
+          return { value: pwl.at(-1)!.voltage, mode: 'pwl', pwl, pwlRepeatCount: repeatCount }
+        }
+      } else {
+        return { value: pwl.at(-1)!.voltage, mode: 'pwl', pwl, ...(repeatedPwl ? { pwlRepeat: 'forever' as const } : {}) }
+      }
     }
   }
   if (validScalar(trimmed)) return { value: trimmed, mode: 'dc' }
@@ -549,9 +568,10 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...((kind === 'source' || kind === 'currentSource') && (valueAc ?? value2Ac) ? { acMagnitude: (valueAc ?? value2Ac)!.magnitude, acPhase: (valueAc ?? value2Ac)!.phase } : {}),
       ...(kind === 'source' && parsedSource.pwl ? { pwl: parsedSource.pwl } : {}),
       ...(kind === 'source' && parsedSource.pwlRepeat ? { pwlRepeat: parsedSource.pwlRepeat } : {}),
+      ...(kind === 'source' && parsedSource.pwlRepeatCount !== undefined ? { pwlRepeatCount: parsedSource.pwlRepeatCount } : {}),
       ...(kind === 'currentSource' && parsedSource.pwl ? { currentPwl: parsedSource.pwl.map(({ time, voltage: current }) => ({ time, current })) } : {}),
     }
-    if (kind === 'currentSource' && parsedSource.pwlRepeat) warnings.push(`Line ${symbol.line}: repeated PWL current on ${identity} is not supported by the pinned ngspice engine; the source points were imported once without repetition.`)
+    if (kind === 'currentSource' && (parsedSource.pwlRepeat || parsedSource.pwlRepeatCount !== undefined)) warnings.push(`Line ${symbol.line}: repeated PWL current on ${identity} is not supported by the pinned ngspice engine; the source points were imported once without repetition.`)
     project.parts.push(part)
     warnings.push(...sidecar.parsed.warnings.map((warning) => `${identity}: ${warning}`))
   }

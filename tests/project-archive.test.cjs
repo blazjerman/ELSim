@@ -17,6 +17,7 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   project.parts[1].flipX = true
   project.parts[0].pulse = { initial: '0', delay: '2m', rise: '4u', fall: '5u', width: '10m', period: '20m' }
   project.parts[0].sourceMode = 'pwl'
+  project.parts[0].pwlRepeatCount = 3
   project.parts[0].pwl = [{ time: '0', voltage: '0' }, { time: '5m', voltage: '3.3' }, { time: '10m', voltage: '0' }]
   project.parts.push({ id: 'archive-i-pwl', kind: 'currentSource', ref: 'I1', value: '1m', sourceMode: 'pwl', currentPwl: [{ time: '0', current: '0' }, { time: '5m', current: '1m' }], x: 800, y: 500, rotation: 0 })
   project.sheets[0].parts = project.parts
@@ -192,6 +193,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc', 'pwl', 'sine', 'exp', 'sffm'])
   assert.deepEqual(schema.$defs.part.properties.sine.required, ['offset', 'amplitude', 'frequency', 'delay', 'damping', 'phase'])
   assert.equal(schema.$defs.part.properties.pwl.maxItems, 32)
+  assert.equal(schema.$defs.part.properties.pwlRepeatCount.maximum, 31)
   assert.deepEqual(schema.$defs.part.properties.pulse.required, ['initial', 'delay', 'rise', 'fall', 'width', 'period'])
   assert.deepEqual(schema.$defs.sheet.properties.ports.items.properties.side.enum, ['auto', 'left', 'right', 'top', 'bottom'])
   assert.ok(schema.$defs.part.properties.sheetPortLayout)

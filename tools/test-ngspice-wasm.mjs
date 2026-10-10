@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'pwl-repeat-forever', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
+const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -63,6 +63,13 @@ for (const fixture of fixtures) {
     assert.match(wasmResult.stdout, /v\(in\)/i, 'pwl-repeat-forever: input voltage was not printed')
     assert.ok(wasmRows.some((row) => { const [time, input] = row.trim().split(/\s+/).slice(1).map(Number); return time > 0.0029 && time < 0.0031 && input > 4.9 }), 'pwl-repeat-forever: source did not repeat its high point on the second cycle')
     assert.ok(wasmRows.some((row) => { const [time, input] = row.trim().split(/\s+/).slice(1).map(Number); return time > 0.0039 && time < 0.0041 && input < 0.1 }), 'pwl-repeat-forever: source did not return low during the repeated cycle')
+  }
+
+  if (fixture === 'pwl-repeat-finite') {
+    assert.match(wasmResult.stdout, /v\(in\)/i, 'pwl-repeat-finite: input voltage was not printed')
+    assert.ok(wasmRows.some((row) => { const [time, input] = row.trim().split(/\s+/).slice(1).map(Number); return time > 0.0059 && time < 0.0061 && input > 4.9 }), 'pwl-repeat-finite: source did not reach the high point in its third cycle')
+    assert.ok(wasmRows.some((row) => { const [time, input] = row.trim().split(/\s+/).slice(1).map(Number); return time > 0.0119 && time < 0.0121 && input < 0.1 }), 'pwl-repeat-finite: source did not return low at the end of its final cycle')
+    assert.ok(wasmRows.some((row) => { const [time, input] = row.trim().split(/\s+/).slice(1).map(Number); return time > 0.0129 && time < 0.0131 && input < 0.1 }), 'pwl-repeat-finite: source did not remain low after the requested repeat count')
   }
 
   if (fixture === 'pwl-transient') {

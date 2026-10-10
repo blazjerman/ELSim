@@ -337,6 +337,21 @@ test('exports a repeating PWL source using LTspice repeat syntax and reimports i
   assert.deepEqual(restored.pwl, [{ time: '0', voltage: '0' }, { time: '2m', voltage: '5' }])
 })
 
+test('exports a finite repeated PWL source using LTspice repeat syntax and reimports it', async () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.kind === 'source')
+  source.sourceMode = 'pwl'
+  source.pwlRepeatCount = 3
+  source.pwl = [{ time: '0', voltage: '0 V' }, { time: '2m', voltage: '5 V' }, { time: '4m', voltage: '0 V' }]
+  const output = await exportLtspiceProject(project)
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR Value PWL REPEAT FOR 3 \(0 0 2m 5 4m 0\) ENDREPEAT/)
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `finite-pwl-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project.parts.find((part) => part.ref === 'V1')
+  assert.equal(restored.pwlRepeatCount, 3)
+  assert.deepEqual(restored.pwl, [{ time: '0', voltage: '0' }, { time: '2m', voltage: '5' }, { time: '4m', voltage: '0' }])
+})
+
 test('exports and reimports per-source AC magnitude and phase', async () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'

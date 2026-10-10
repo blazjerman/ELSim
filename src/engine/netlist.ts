@@ -50,6 +50,15 @@ function spiceTimeMagnitude(value: string): number | null {
   return Number.isFinite(magnitude) ? magnitude : null
 }
 
+function spiceValueMagnitude(value: string): number | null {
+  const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replace(/[va]$/i, '')
+  const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+  if (!match) return null
+  const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
+  const magnitude = Number(match[1]) * scale
+  return Number.isFinite(magnitude) ? magnitude : null
+}
+
 function spiceFrequency(value: string): string | null {
   let result = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
   if (result.toLowerCase().endsWith('hz')) result = result.slice(0, -2)
@@ -466,7 +475,22 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
           continue
         }
-        transientValue = `PWL(${normalized.map((point) => `${point.time} ${point.voltage}`).join(' ')})${part.pwlRepeat === 'forever' ? ' r=0' : ''}`
+        let outputPoints = normalized
+        if (part.pwlRepeatCount !== undefined) {
+          const count = part.pwlRepeatCount
+          const period = normalized.at(-1)!.timeMagnitude! - normalized[0].timeMagnitude!
+          const startLevel = spiceValueMagnitude(normalized[0].voltage!), endLevel = spiceValueMagnitude(normalized.at(-1)!.voltage!)
+          if (!Number.isInteger(count) || count < 1 || count > 31 || normalized.length + (count - 1) * (normalized.length - 1) > 32 || period <= 0 || count > 1 && (startLevel === null || startLevel !== endLevel)) {
+            const message = `${part.ref} finite PWL repeat must be an integer count whose expanded table has at most 32 points and whose first and last voltages match.`
+            append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+            diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+            continue
+          }
+          outputPoints = Array.from({ length: count }, (_, cycle) => normalized
+            .filter((_, index) => cycle === 0 || index > 0)
+            .map((point) => ({ ...point, time: cycle === 0 ? point.time : String(point.timeMagnitude! + cycle * period), timeMagnitude: point.timeMagnitude! + cycle * period }))).flat()
+        }
+        transientValue = `PWL(${outputPoints.map((point) => `${point.time} ${point.voltage}`).join(' ')})${part.pwlRepeat === 'forever' ? ' r=0' : ''}`
       } else if (part.sourceMode === 'pulse' || part.sourceMode === undefined) {
         const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
         const initial = spiceNumber(pulse.initial, 'source')

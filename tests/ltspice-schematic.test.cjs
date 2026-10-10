@@ -253,6 +253,12 @@ test('imports scalar LTspice voltage sources as DC and preserves PULSE levels an
   assert.equal(importedRepeatedPwl.project.parts[0].pwlRepeat, 'forever')
   assert.deepEqual(importedRepeatedPwl.warnings, [])
   assert.match(createNetlist(importedRepeatedPwl.project), /^V4 .* PWL\(0 0 2m 5 4m -1\) r=0$/m)
+  const finite = parseLtspiceSchematic(['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V5', 'SYMATTR Value PWL REPEAT FOR 3 (0 0, 2m 5, 4m 0) ENDREPEAT'].join('\n'), 'pwl-repeat-count.asc', [sourceSymbol])
+  assert.deepEqual(finite.warnings, [])
+  assert.equal(finite.project.parts[0].pwlRepeatCount, 3)
+  assert.match(createNetlist(finite.project), /^V5 .* PWL\(0 0 2m 5 4m 0 0\.006 5 0\.008 0 0\.01 5 0\.012 0\)$/m)
+  const mismatchedBoundary = parseLtspiceSchematic(['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V6', 'SYMATTR Value PWL REPEAT FOR 3 (0 0, 2m 5, 4m 1) ENDREPEAT'].join('\n'), 'pwl-repeat-mismatch.asc', [sourceSymbol])
+  assert.ok(mismatchedBoundary.warnings.some((warning) => warning.includes('waveform') && warning.includes('V6')))
 })
 
 test('imports scalar LTspice current sources with ampere values and ordered pins', () => {
