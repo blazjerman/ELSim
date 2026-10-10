@@ -1573,6 +1573,31 @@ test('circuit checks can select the affected component and orphan wire', async (
   await expect(page.locator('.wire-line.selected')).toHaveCount(1)
 })
 
+test('circuit checks distinguish a behavioral node from a same-named component', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.push(
+      { id: 'resistor-with-node-like-name', kind: 'resistor', ref: 'R2', value: '1k', x: 760, y: 600, rotation: 0 },
+      { id: 'behavioral-with-wrong-kind-reference', kind: 'behavioral', ref: 'B1', value: 'V(vin)', behavioralOutput: 'voltage', x: 900, y: 600, rotation: 0 },
+    )
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const behavioralPart = page.getByRole('button', { name: /^B1, Behavioral source/ })
+  await behavioralPart.focus()
+  await page.keyboard.press('Enter')
+  await page.getByRole('textbox', { name: 'Expression' }).fill('V(R2)')
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  const issue = report.getByRole('listitem').filter({ hasText: 'B1 references an unknown node or component' })
+  await expect(issue).toContainText('Behavioral source refers to unknown node “R2”')
+  await expect(issue).toContainText('Add a net label first')
+  await issue.getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="behavioral-with-wrong-kind-reference"].selected')).toHaveCount(1)
+})
+
 test('circuit checks explain missing transitive model dependencies and select the affected block', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(async () => {

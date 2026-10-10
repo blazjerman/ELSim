@@ -4,6 +4,7 @@ import { componentPins } from './geometry'
 import type { Project } from './project'
 import { componentMagnitude } from './componentValue'
 import { analyzeModelDependencies } from './subcircuitLibrary'
+import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 
 export type ElectricalIssue = {
   id: string
@@ -83,17 +84,20 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       })
     }
     if (part.kind === 'behavioral') {
-      const referenced = [...part.value.matchAll(/\b(?:V|I)\s*\(\s*([A-Za-z_][A-Za-z0-9_.$]*)/gi)].map((match) => match[1].toLowerCase())
-      const knownNodes = new Set(project.netLabels.map((label) => label.name.toLowerCase()))
-      const knownParts = new Set(project.parts.map((candidate) => candidate.ref.toLowerCase()))
-      const unknown = referenced.filter((name) => !knownNodes.has(name) && !knownParts.has(name) && name !== '0')
-      if (unknown.length) issues.push({
-        id: `behavioral-reference:${part.id}`,
-        severity: 'warning',
-        title: `${part.ref} references an unknown node or component`,
-        detail: `Add a net label or component for ${[...new Set(unknown)].join(', ')} before running.`,
-        partId: part.id,
-      })
+      try {
+        const parsed = parseBehavioralExpression(part.value)
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref))
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'The expression is unsupported.'
+        const isUnknownReference = /unknown node|unknown component/i.test(detail)
+        issues.push({
+          id: `behavioral-reference:${part.id}`,
+          severity: 'warning',
+          title: isUnknownReference ? `${part.ref} references an unknown node or component` : `${part.ref} has an invalid behavioral expression`,
+          detail,
+          partId: part.id,
+        })
+      }
     }
   }
 

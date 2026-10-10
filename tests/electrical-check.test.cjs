@@ -164,3 +164,22 @@ test('warns when behavioral expressions reference unlabeled unknown nodes', () =
   assert.equal(issue?.partId, behavioral.id)
   assert.match(issue?.detail, /vmissing/i)
 })
+
+test('checks behavioral node and component references in their own namespaces and reports invalid syntax', () => {
+  const project = createStarterProject()
+  const sameNameComponent = { id: 'same-name-component', kind: 'resistor', ref: 'R2', value: '1k', x: 800, y: 600, rotation: 0 }
+  const behavioral = { id: 'behavioral-namespaces', kind: 'behavioral', ref: 'B1', value: 'V(R2) + I(vin)', behavioralOutput: 'voltage', x: 900, y: 600, rotation: 0 }
+  project.parts.push(sameNameComponent, behavioral)
+  project.sheets[0].parts = project.parts
+  let issue = checkCircuit(project).find((item) => item.id === `behavioral-reference:${behavioral.id}`)
+  assert.match(issue?.detail, /unknown node “R2”/)
+
+  behavioral.value = 'V(vin) + I(vin)'
+  issue = checkCircuit(project).find((item) => item.id === `behavioral-reference:${behavioral.id}`)
+  assert.match(issue?.detail, /unknown component “vin”/)
+
+  behavioral.value = 'V(vin) + table(V(vin), 0, 1)'
+  issue = checkCircuit(project).find((item) => item.id === `behavioral-reference:${behavioral.id}`)
+  assert.match(issue?.title, /invalid behavioral expression/)
+  assert.match(issue?.detail, /Function “table” is not supported/)
+})
