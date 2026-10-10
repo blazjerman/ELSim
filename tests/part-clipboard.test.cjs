@@ -40,6 +40,14 @@ test('single-part clipboard retains attached geometry as an open stub and ignore
   assert.deepEqual(clipboard.wires.map((wire) => wire.id), ['inside'])
 })
 
+test('selected wire paths can be copied without copying connected components', () => {
+  const project = connectedPartsProject()
+  const clipboard = createPartClipboard(project, [], [], ['inside'])
+  assert.deepEqual(clipboard.parts, [])
+  assert.deepEqual(clipboard.wires, [{ id: 'inside', points: [[1052, 500], [1148, 500]] }])
+  assert.deepEqual(clipboard.junctions, [])
+})
+
 test('global net labels are copied only when selected explicitly', () => {
   const project = connectedPartsProject()
   project.netLabels = [{ id: 'label-vin', name: 'vin', x: 1052, y: 500, visible: true }]

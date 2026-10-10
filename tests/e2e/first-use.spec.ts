@@ -206,6 +206,26 @@ test('copy and paste an explicitly selected net label with its global connection
   await expect(page.locator('.canvas-label').filter({ hasText: 'vout' })).toHaveCount(2)
 })
 
+test('copy and paste a selected wire path without connected parts', async ({ page }) => {
+  await page.goto('/')
+  const wire = page.locator('.wire-line').first()
+  const point = await wire.locator('polyline').first().evaluate((element) => {
+    const path = element as SVGPolylineElement
+    const point = path.getPointAtLength(path.getTotalLength() / 2)
+    const screen = new DOMPoint(point.x, point.y).matrixTransform(path.getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
+  await page.mouse.click(point.x, point.y)
+  await page.keyboard.press('Control+c')
+  await expect(page.locator('.toast')).toContainText('Copied 1 wire path')
+  await page.keyboard.press('Control+v')
+  await expect(page.locator('.toast')).toContainText('Pasted 1 wire path')
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return { parts: project.parts.length, wires: project.wires.length, points: project.wires.at(-1).points }
+  })).toEqual({ parts: 4, wires: 4, points: [[225, 353], [225, 330], [353, 330]] })
+})
+
 test('fit schematic view frames distant parts, wires, and labels', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
