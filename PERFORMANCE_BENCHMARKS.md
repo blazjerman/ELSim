@@ -153,6 +153,19 @@ These are results from the v2 Playwright benchmark in `npm run benchmark:browser
 
 SVG element counts remain unchanged because the complete schematic stays in the DOM for visibility and keyboard access. This change lowers selection update cost but does not solve first-render cost or very large-circuit accessibility/performance; those remain open.
 
+### Routed-wire selection update (2026-10-10)
+
+`CanvasWire` now memoizes each wire's SVG subtree, while its event handlers stay current through stable wrappers. Selection changes no longer rebuild every wire path or recalculate segment-drag hit regions. A new Playwright benchmark loads 1,000 resistors and 1,200 three-point wire paths, then measures synthetic part selection through the next animation frame. A controlled run used the same test and host against the committed renderer and the memoized renderer; each value below is a single local run, not a release budget.
+
+| Browser | Renderer | Selection median / max-of-7 (ms) | Editor render (ms) |
+| --- | --- | ---: | ---: |
+| Chromium | Before | 1,261 / 1,290 | 4,256 |
+| Chromium | After | 67 / 242 | 2,046 |
+| Firefox | Before | 2,054 / 2,104 | 6,775 |
+| Firefox | After | 57 / 70 | 2,891 |
+
+The comparison shows much lower selection latency for this wire-heavy case. The max-of-seven value is noisy and the initial-render timing is not attributed to memoization. All wire paths remain in the SVG with their existing button role, keyboard selection, probing, and segment-drag behavior.
+
 
 ### Browser waveform transport check
 
