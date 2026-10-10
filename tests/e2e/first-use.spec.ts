@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect } from '@playwright/test'
@@ -385,6 +385,20 @@ test('first use: run the RC starter and inspect its solved waveform', async ({ p
   await expect(outputTrace).toBeVisible()
   if (!(await outputTrace.getAttribute('class'))?.includes('selected')) await outputTrace.click()
   await expect(outputTrace).toHaveClass(/selected/)
+  const inputTrace = page.getByRole('button', { name: 'V(vin)', exact: true })
+  await expect(inputTrace).toHaveClass(/selected/)
+  const csvDownloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export CSV' }).click()
+  const csvDownload = await csvDownloadPromise
+  expect(csvDownload.suggestedFilename()).toMatch(/\.csv$/)
+  const csvPath = await csvDownload.path()
+  expect(csvPath).not.toBeNull()
+  const csv = readFileSync(csvPath!, 'utf8')
+  const csvHeader = csv.split(/\r?\n/, 1)[0]
+  expect(csvHeader).toContain('"Time (s)"')
+  expect(csvHeader).toContain('"V(vin) (V)"')
+  expect(csvHeader).toContain('"V(vout) (V)"')
+  expect(csv.split(/\r?\n/).length).toBeGreaterThan(3)
 
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   await expect(timeSlider).toBeVisible()
