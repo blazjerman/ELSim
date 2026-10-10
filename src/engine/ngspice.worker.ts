@@ -38,10 +38,11 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
   const stderr: string[] = []
   try {
     worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.05, message: 'Loading ngspice WebAssembly' } satisfies EngineResponse)
-    const loaded = await import(/* @vite-ignore */ new URL('/engine/ngspice.mjs', worker.location.origin).href) as { default: NgspiceFactory }
+    const engineBaseUrl = new URL(import.meta.env.BASE_URL, worker.location.origin)
+    const loaded = await import(/* @vite-ignore */ new URL('engine/ngspice.mjs', engineBaseUrl).href) as { default: NgspiceFactory }
     const module = await loaded.default({
       noInitialRun: true,
-      locateFile: (file) => new URL(`/engine/${file}`, worker.location.origin).href,
+      locateFile: (file) => new URL(`engine/${file}`, engineBaseUrl).href,
       print: (...parts) => stdout.push(parts.join(' ')),
       printErr: (...parts) => stderr.push(parts.join(' ')),
     })

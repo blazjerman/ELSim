@@ -55,6 +55,9 @@ jobs:
       - name: Run Firefox compatibility regressions
         run: npm run test:e2e:compat
 
+      - name: Verify GitHub Pages project-subpath build
+        run: npm run check:pages-base
+
       - name: Upload browser traces on failure
         if: failure()
         uses: actions/upload-artifact@v5
@@ -141,6 +144,9 @@ jobs:
 
       - name: Run ngspice-backed Chromium workflows
         run: npm run test:e2e:engine
+
+      - name: Run ngspice-backed GitHub Pages subpath workflow
+        run: npm run test:e2e:engine:pages-base
 
       - name: Run ngspice-backed Firefox workflows
         run: npm run test:e2e:engine:firefox

@@ -30,10 +30,15 @@ const securityHeaders = {
 }
 
 export default defineConfig(({ command, mode }) => {
+  const base = process.env.VITE_BASE_PATH?.trim() || '/'
+  if (!base.startsWith('/') || !base.endsWith('/') || base.startsWith('//') || base.includes('..') || /[?#]/.test(base)) {
+    throw new Error('VITE_BASE_PATH must be a safe absolute URL path that starts and ends with /, such as / or /ELSim/.')
+  }
   if (command === 'build' && mode === 'release') {
     execFileSync(process.execPath, ['tools/check-ngspice-release.mjs'], { stdio: 'inherit' })
   }
   return {
+    base,
     plugins: [react(), {
       name: 'emit-offline-app-shell',
       apply: 'build',

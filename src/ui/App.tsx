@@ -1333,7 +1333,8 @@ export default function App() {
   }, [project.modelAssets, project.symbolAssets])
   useEffect(() => {
     let mounted = true
-    fetch('/engine/ngspice.mjs', { method: 'HEAD' }).then((response) => { if (mounted) setEngineAssetAvailable(response.ok) }).catch(() => { if (mounted) setEngineAssetAvailable(false) })
+    const engineModuleUrl = new URL(`${import.meta.env.BASE_URL}engine/ngspice.mjs`, window.location.origin)
+    fetch(engineModuleUrl, { method: 'HEAD' }).then((response) => { if (mounted) setEngineAssetAvailable(response.ok) }).catch(() => { if (mounted) setEngineAssetAvailable(false) })
     return () => { mounted = false; activeWorkerRef.current?.terminate(); activeWorkerRef.current = null }
   }, [])
   const setProject = (fn: (current: Project) => Project) => setProjectState((current) => {
