@@ -40,6 +40,20 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
   assert.notEqual(positive, pinNet(connectivity, pins, 1))
 })
 
+test('imports numeric LTspice parameters with whitespace and braced values without truncating expressions', () => {
+  const asc = ['Version 4', 'TEXT 0 100 Left 2 !.param RLOAD = 10k CLOAD={1u} GAIN={RLOAD * 2} MIXED={if(RLOAD > 1k, {2k}, 1k)}'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'parameters.asc')
+  assert.deepEqual(project.sheets[0].parameters, [
+    { id: 'asc-param-1', name: 'RLOAD', defaultValue: '10k' },
+    { id: 'asc-param-2', name: 'CLOAD', defaultValue: '{1u}' },
+  ])
+  assert.deepEqual(warnings, [
+    'Line 2: .param GAIN uses an expression or value outside ELSim’s supported numeric parameter syntax; it was preserved in the original schematic but not imported.',
+    'Line 2: .param MIXED uses an expression or value outside ELSim’s supported numeric parameter syntax; it was preserved in the original schematic but not imported.',
+  ])
+  assert.equal(project.importedSchematicSource.originalText, asc)
+})
+
 test('imports supported LTspice B-source voltage and current expressions as behavioral sources', () => {
   const behavioralSymbol = { ...symbol, id: 'symbol-behavioral', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
   const resistorSymbol = { ...symbol, id: 'symbol-resistor-load', filename: 'res.asy' }

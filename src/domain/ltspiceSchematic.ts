@@ -1,6 +1,6 @@
 import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourceExp, type SourcePulse, type SourcePwlPoint, type SourceSffm, type SourceSine, type SymbolAsset, type Wire } from './project'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
-import { parseSubcircuitLibrary } from './subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
 import { componentCurrentVector } from './probe'
 import { analyzeConnectivity, pinNet } from './connectivity'
@@ -207,14 +207,61 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     return
   }
   if (command === '.param') {
-    const assignments = tokens.map((item) => item.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/)).filter((item): item is RegExpMatchArray => Boolean(item))
-    for (const assignment of assignments) {
-      const [, name, defaultValue] = assignment
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || !defaultValue) continue
+    const body = directive.trim().replace(/^\.param\b/i, '').trim()
+    const assignments: { name: string; value: string }[] = []
+    let offset = 0
+    while (offset < body.length) {
+      while (/\s/.test(body[offset] ?? '')) offset += 1
+      if (offset >= body.length) break
+      const name = body.slice(offset).match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=/)
+      if (!name) {
+        const invalid = body.slice(offset).match(/^\S+/)?.[0] ?? body[offset]
+        warnings.push(`Line ${line}: could not interpret .param token “${recordExcerpt(invalid)}”.`)
+        offset += invalid.length
+        continue
+      }
+      offset += name[0].length
+      while (/\s/.test(body[offset] ?? '')) offset += 1
+      const valueStart = offset
+      if (body[offset] === '{') {
+        let depth = 0
+        let quote = ''
+        for (; offset < body.length; offset += 1) {
+          const character = body[offset]
+          if (quote) { if (character === quote) quote = ''; continue }
+          if (character === '"' || character === "'") quote = character
+          else if (character === '{') depth += 1
+          else if (character === '}' && --depth === 0) { offset += 1; break }
+        }
+      } else if (body[offset] === '"' || body[offset] === "'") {
+        const quote = body[offset++]
+        while (offset < body.length && body[offset] !== quote) offset += 1
+        if (offset < body.length) offset += 1
+      } else {
+        while (offset < body.length && !/\s/.test(body[offset])) offset += 1
+      }
+      const value = body.slice(valueStart, offset)
+      if (!value || (value.startsWith('{') && !value.endsWith('}'))) {
+        warnings.push(`Line ${line}: .param ${name[1]} has an incomplete value and was not imported.`)
+      } else assignments.push({ name: name[1], value })
+    }
+    for (const { name, value: defaultValue } of assignments) {
       const activeSheet = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
       if (!activeSheet) continue
       activeSheet.parameters ??= []
-      if (!activeSheet.parameters.some((item) => item.name.toLowerCase() === name.toLowerCase())) activeSheet.parameters.push({ id: `asc-param-${activeSheet.parameters.length + 1}`, name, defaultValue })
+      if (!isSafeSubcircuitParameterValue(defaultValue)) {
+        warnings.push(`Line ${line}: .param ${name} uses an expression or value outside ELSim’s supported numeric parameter syntax; it was preserved in the original schematic but not imported.`)
+        continue
+      }
+      if (activeSheet.parameters.some((item) => item.name.toLowerCase() === name.toLowerCase())) {
+        warnings.push(`Line ${line}: duplicate .param ${name} was ignored; the first value remains active.`)
+        continue
+      }
+      if (activeSheet.parameters.length >= 32) {
+        warnings.push(`Line ${line}: .param ${name} exceeds ELSim’s 32-parameter per-sheet limit and was not imported.`)
+        continue
+      }
+      activeSheet.parameters.push({ id: `asc-param-${activeSheet.parameters.length + 1}`, name, defaultValue })
     }
     if (!assignments.length) warnings.push(`Line ${line}: could not interpret .param settings.`)
     return
