@@ -273,6 +273,13 @@ assert.ok(Math.abs(sourceSweepFinalValues[2].currentOutput - 1) < 1e-9 && Math.a
 assert.ok(Math.abs(sourceSweepFinalValues[2].current - 0.001) < 1e-9 && Math.abs(sourceSweepFinalValues[3].current - 0.002) < 1e-9, 'stepped current-source branch vectors should preserve amperes')
 process.stdout.write('PASS scalar-source-parameter-sweep\n')
 
+const importedModelSweepResult = await runInWorker(path.join(root, 'engine/wasm/fixtures', 'imported-model-parameter-sweep.cir'), false, ['/result-0.raw', '/result-1.raw'])
+assert.equal(importedModelSweepResult.status, 0, `imported-model-parameter-sweep: ngspice exited with a nonzero status: ${importedModelSweepResult.stderr}`)
+assert.equal(importedModelSweepResult.rawFiles.length, 2)
+const modelSweepCollector = importedModelSweepResult.rawFiles.map((raw) => realRawVector(raw, 'v(collector)')[0])
+assert.ok(modelSweepCollector[0] > modelSweepCollector[1] + 0.01, `increasing imported model BF should lower collector voltage; got ${modelSweepCollector.join(', ')}`)
+process.stdout.write('PASS imported-model-parameter-sweep\n')
+
 const currentPulsePath = path.join(root, 'engine/wasm/fixtures', 'current-source-pulse.cir')
 const currentPulseResult = await runInWorker(currentPulsePath, true)
 assert.equal(currentPulseResult.status, 0, `current-source-pulse: ngspice exited with a nonzero status: ${currentPulseResult.stderr}`)

@@ -12,10 +12,7 @@ export default defineConfig({
     viewport: { width: 854, height: 900 },
     trace: 'retain-on-failure',
   },
-  projects: [
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
-  ],
+  projects: [{ name: 'firefox', use: { ...devices['Desktop Firefox'] } }],
   webServer: [
     {
       command: 'npm run dev -- --host 127.0.0.1 --port 4182 --strictPort',

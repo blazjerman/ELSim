@@ -1,0 +1,19 @@
+ELSim imported BJT model parameter stepping
+VCC vcc 0 5
+VIN base 0 0.7
+RC vcc collector 1k
+RE emitter 0 100
+Q1 collector base emitter USER_NPN
+.model USER_NPN NPN (IS=1e-14 BF=10 VAF=100)
+.op
+.save all @q1[ic]
+.control
+set filetype=ascii
+op
+write /result-0.raw all
+altermod USER_NPN BF=200
+op
+write /result-1.raw all
+quit
+.endc
+.end

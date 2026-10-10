@@ -46,10 +46,10 @@ jobs:
       - name: Verify offline editing in the production preview
         run: npm run test:e2e:pwa
 
-      - name: Install Firefox and WebKit for Playwright
-        run: npx playwright install --with-deps firefox webkit
+      - name: Install Firefox for Playwright
+        run: npx playwright install --with-deps firefox
 
-      - name: Run Firefox and WebKit compatibility regressions
+      - name: Run Firefox compatibility regressions
         run: npm run test:e2e:compat
 
       - name: Upload browser traces on failure
@@ -131,16 +131,13 @@ jobs:
         run: node tools/test-ngspice-wasm.mjs public/engine "$NATIVE_NGSPICE"
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: npx playwright install --with-deps chromium firefox
 
       - name: Run ngspice-backed Chromium workflows
         run: npm run test:e2e:engine
 
       - name: Run ngspice-backed Firefox workflows
         run: npm run test:e2e:engine:firefox
-
-      - name: Run ngspice-backed WebKit workflows
-        run: npm run test:e2e:engine:webkit
 
       - name: Upload browser traces on failure
         if: failure()

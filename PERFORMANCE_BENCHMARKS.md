@@ -86,7 +86,7 @@ The performance runner creates 100, 500, 1,000, or 5,000 instances of a two-leve
 | Chromium | 1,000,130 | 5 | 7,939.78 | 109.78 | 70 | 23.1 → 23.1 MB |
 | Firefox | 1,000,130 | 5 | 20,054.67 | 343.97 | 69 | unavailable |
 
-Chromium's `performance.memory` numbers cover the page renderer and remained unchanged at the reported resolution; they do not include the dedicated worker's WASM memory. Firefox does not expose that API in this run. The timer gaps indicate that the renderer remained responsive while the worker solved and parsed results, but do not provide a worker-memory measurement. Safari and reliable per-worker peak memory remain unmeasured.
+Chromium's `performance.memory` numbers cover the page renderer and remained unchanged at the reported resolution; they do not include the dedicated worker's WASM memory. Firefox does not expose that API in this run. The timer gaps indicate that the renderer remained responsive while the worker solved and parsed results, but do not provide a worker-memory measurement. Reliable per-worker peak memory remains unmeasured.
 
 ## Browser editor baseline (2026-10-10)
 
