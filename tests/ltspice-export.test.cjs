@@ -578,13 +578,51 @@ test('blocks switch export when the saved state is invalid', async () => {
   assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'invalid-switch' && /state must be On or Off/.test(blocker.message)))
 })
 
-test('blocks schematic devices without a tested mapping rather than silently dropping them', async () => {
+test('exports supported behavioral sources as LTspice B devices and restores their expressions', async () => {
   const project = createStarterProject()
-  project.parts.push({ id: 'unsupported-behavioral', kind: 'behavioral', ref: 'B1', value: 'V(vin)', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 })
+  project.parts.push(
+    { id: 'behavioral-voltage', kind: 'behavioral', ref: 'B1', value: '2*V(vin)', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 },
+    { id: 'behavioral-current', kind: 'behavioral', ref: 'B2', value: 'V(vin)/1k', behavioralOutput: 'current', x: 1000, y: 600, rotation: 0 },
+  )
+  project.sheets[0].parts = project.parts
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  assert.ok(output.losses.some((loss) => loss.sourceId === 'behavioral-voltage' && loss.severity === 'warning' && /passed through/.test(loss.title)))
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName B1\nSYMATTR Value V=\{2\*V\(vin\)\}/)
+  assert.match(asc.content, /SYMATTR InstName B2\nSYMATTR Value I=\{V\(vin\)\/1k\}/)
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `export-symbol-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const imported = parseLtspiceSchematic(asc.content, asc.path, symbols).project
+  assert.deepEqual(imported.parts.filter((part) => part.kind === 'behavioral').map(({ ref, value, behavioralOutput }) => ({ ref, value, behavioralOutput })), [
+    { ref: 'B1', value: '2*V(vin)', behavioralOutput: 'voltage' },
+    { ref: 'B2', value: 'V(vin)/1k', behavioralOutput: 'current' },
+  ])
+})
+
+test('blocks behavioral export when an expression has incompatible LTspice operator semantics or unknown references', async () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'unsupported-behavioral', kind: 'behavioral', ref: 'B1', value: 'V(vin)^2', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 })
   project.sheets[0].parts = project.parts
   const output = await exportLtspiceProject(project)
   assert.equal(output.files.length, 0)
-  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'unsupported-behavioral' && /no verified LTspice schematic mapping/.test(blocker.message)))
+  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'unsupported-behavioral' && /LTspice treats as boolean XOR/.test(blocker.message)))
+
+  const unknownReferenceProject = createStarterProject()
+  unknownReferenceProject.parts.push({ id: 'unknown-behavioral', kind: 'behavioral', ref: 'B1', value: 'V(missing)', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 })
+  unknownReferenceProject.sheets[0].parts = unknownReferenceProject.parts
+  const unknownReferenceOutput = await exportLtspiceProject(unknownReferenceProject)
+  assert.equal(unknownReferenceOutput.files.length, 0)
+  assert.ok(unknownReferenceOutput.blockers.some((blocker) => /unknown node/.test(blocker.message)))
+
+  const switchReferenceProject = createStarterProject()
+  switchReferenceProject.parts.push(
+    { id: 'referenced-switch', kind: 'switch', ref: 'S1', value: 'On', x: 800, y: 500, rotation: 0 },
+    { id: 'switch-current-behavioral', kind: 'behavioral', ref: 'B1', value: 'I(S1)', behavioralOutput: 'voltage', x: 920, y: 600, rotation: 0 },
+  )
+  switchReferenceProject.sheets[0].parts = switchReferenceProject.parts
+  const switchReferenceOutput = await exportLtspiceProject(switchReferenceProject)
+  assert.equal(switchReferenceOutput.files.length, 0)
+  assert.ok(switchReferenceOutput.blockers.some((blocker) => /current through S1.*generated resistor references/.test(blocker.message)))
 })
 
 test('blocks fractional coordinates without returning rounded LTspice files', async () => {

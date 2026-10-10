@@ -2,6 +2,7 @@ import { componentPins, pointOnSegment, subcircuitPinOffsets } from './geometry'
 import { analyzeConnectivity, pinNet } from './connectivity'
 import { validateProject, type Part, type PartKind, type Project, type ProjectSheet } from './project'
 import { analyzeModelDependencies, requiredModelAssetIds } from './subcircuitLibrary'
+import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 
 export type LtspiceExportLoss = {
   severity: 'info' | 'warning'
@@ -26,7 +27,7 @@ const refPrefix: Record<PartKind, string> = {
   vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -328,6 +329,7 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
     if (!coefficient || !part.controlSource || !/^V[A-Za-z0-9_]*$/i.test(part.controlSource) || !sheet.parts.some((candidate) => candidate.kind === 'source' && candidate.ref.toLowerCase() === part.controlSource!.toLowerCase())) return null
     return { value: part.controlSource, value2: coefficient }
   }
+  if (part.kind === 'behavioral') return { value: `${part.behavioralOutput === 'current' ? 'I' : 'V'}={${part.value.trim()}}` }
   if (part.kind === 'subcircuit') {
     if (part.sheetId) return { value: sheetSymbolNames.get(part.sheetId) ?? part.value }
     if (!part.modelName || !(project.modelAssets ?? []).some((asset) => asset.content.toLowerCase().includes(`.subckt ${part.modelName!.toLowerCase()} `))) return null
@@ -593,7 +595,19 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
   for (const sheet of sheets) {
     if (sheet.ports.length > 0 && sheet.ports.some((port) => !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase()))) blockers.push({ sourceId: sheet.id, message: `${sheet.name} has a port without a matching named label.` })
     for (const part of sheet.parts) {
-      if (part.kind === 'behavioral') blockers.push({ sourceId: part.id, message: `${part.ref} (${part.kind}) has no verified LTspice schematic mapping yet.` })
+      if (part.kind === 'behavioral') {
+        try {
+          if (part.value.includes('^')) throw new Error('uses ^, which LTspice treats as boolean XOR while this ngspice engine treats it as exponentiation; rewrite it explicitly before export.')
+          const parsed = parseBehavioralExpression(part.value)
+          validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref))
+          const renamedSwitchReference = parsed.references.components.find((reference) => sheet.parts.some((candidate) => candidate.kind === 'switch' && candidate.ref.toLowerCase() === reference.toLowerCase()))
+          if (renamedSwitchReference) throw new Error(`references current through ${renamedSwitchReference}, but fixed-state switches export under generated resistor references, so that current reference would change.`)
+          losses.push({ severity: 'warning', sourceId: part.id, title: 'Behavioral expression passed through to LTspice', explanation: 'The B-source output and validated expression are preserved directly. Review LTspice function and operator semantics for this expression before relying on numeric equivalence.' })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'the expression is unsupported.'
+          blockers.push({ sourceId: part.id, message: `${part.ref} behavioral source cannot be exported: ${message}` })
+        }
+      }
       if (part.kind === 'lamp') losses.push({ severity: 'info', sourceId: part.id, title: 'Lamp exported as a fixed resistor', explanation: 'Electrical resistance is preserved, but ELSim nominal power and voltage-current glow animation are ELSim-only and are not carried into LTspice.' })
       if (part.kind === 'switch') {
         if (!['on', 'off'].includes(part.value.trim().toLowerCase())) blockers.push({ sourceId: part.id, message: `${part.ref} state must be On or Off before LTspice export.` })
