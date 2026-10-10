@@ -32,7 +32,7 @@ Only dependencies actually referenced by placed parts should be included. An exp
 | Fixed-state ELSim switch | Two-terminal resistor at `1m` when On or `1T` when Off, matching the current ELSim switch model's `Ron` / `Roff`; the generated instance gets an `R_` reference |
 | Child sheet block | A no-prefix block `.asy` named after its child `.asc`; ordered `PIN` / `PINATTR PinName` / `PINATTR SpiceOrder` records derive from the child sheet's ports |
 | Child sheet port | `IOPIN x y In/Out/BiDir` at the matching current label coordinate, with a same-coordinate `FLAG` |
-| Analysis settings | Generated `TEXT` directives for supported `.tran`, `.op`, `.ac`, or `.dc` settings |
+| Analysis settings | Generated `TEXT` directives for supported `.tran`, `.op`, `.ac`, or `.dc` settings; capacitor initial voltages map to `.ic V(node+,node-)=value`, creating unique `FLAG`s at capacitor pins for otherwise unnamed nets |
 | Imported model dependency | Relative `.include` directive plus the original unchanged model text, if included and accepted by the user |
 | Project name | Safe basename for output files; sanitized collisions are reported and disambiguated deterministically |
 
@@ -41,6 +41,8 @@ New coordinates snap to the LTspice grid before output. Existing imported intege
 Diagonal `.asc` `WIRE` records are supported by the current mapping. Fixtures round-trip two crossing diagonal segments both without a junction (separate nets) and with an explicit junction (one net). This verifies ELSim's parser/topology behavior; opening and simulating the generated diagonal-wire fixture in LTspice remains part of the manual release gate below.
 
 Transient scalar measurements (`MAX`, `MIN`, `AVG`, `RMS`) export as `.meas tran` directives. Delay measurements export as trigger/target directives with `RISE=1`, `FALL=1`, or `CROSS=1`. Project validation restricts names, vectors, and thresholds before serialization. These mappings have exporter fixture coverage; the generated directives still need an open/simulate check in native LTspice before release compatibility is claimed.
+
+Capacitor voltage initial conditions export as two-node `.ic V(...)` directives using the capacitor's ordered positive and negative pins. Existing labels and ground are reused; unnamed terminal nets receive deterministic `ELSIM_IC_<reference>_P/N` flags at the pin coordinates. A condition whose two capacitor terminals are on the same net blocks export because it cannot be represented without changing the circuit. The exporter/parser round-trip fixture checks the directive, generated flags, and restored capacitor condition; native LTspice open/simulate verification remains part of the release gate.
 
 Component geometry should use repository-authored `.asy` definitions for ELSim built-ins. Imported user symbols can be copied only as explicit dependencies and with their original pin order; otherwise generate a simple original block symbol and report the visual substitution. No LTspice-installed symbols or vendor artwork should be copied into the repository or silently bundled.
 

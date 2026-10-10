@@ -1,4 +1,5 @@
 import { componentPins, pointOnSegment, subcircuitPinOffsets } from './geometry'
+import { analyzeConnectivity, pinNet } from './connectivity'
 import { validateProject, type Part, type PartKind, type Project, type ProjectSheet } from './project'
 import { analyzeModelDependencies, requiredModelAssetIds } from './subcircuitLibrary'
 
@@ -354,6 +355,27 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       const asset = project.modelAssets?.find((item) => item.id === assetId)
       if (asset) addDirective(`.include "${path}"`)
     }
+    const connectivity = analyzeConnectivity({ ...project, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels })
+    const existingLabelNames = new Set(sheet.netLabels.map((label) => label.name.toLowerCase()))
+    const generatedLabelByNet = new Map<string, string>()
+    const labelForCapacitorPin = (part: Part, pinIndex: number): string => {
+      const net = pinNet(connectivity, part, pinIndex)
+      if (net === '0' || (connectivity.pinLabels.get(`${part.id}:${pinIndex}`)?.length ?? 0) > 0) return net
+      const prior = generatedLabelByNet.get(net)
+      if (prior) return prior
+      const base = `ELSIM_IC_${spiceIdentifier(part.ref)}_${pinIndex === 0 ? 'P' : 'N'}`
+      let label = base, suffix = 2
+      while (existingLabelNames.has(label.toLowerCase())) label = `${base}_${suffix++}`
+      existingLabelNames.add(label.toLowerCase())
+      generatedLabelByNet.set(net, label)
+      const pin = componentPins(part)[pinIndex]
+      if (!pin) {
+        blockers.push({ sourceId: part.id, message: `${part.ref} is missing capacitor terminal ${pinIndex + 1}.` })
+        return label
+      }
+      rows.push(`FLAG ${checkCoordinate(pin.x, part.id, blockers)} ${checkCoordinate(pin.y, part.id, blockers)} ${label}`)
+      return label
+    }
     for (const condition of project.simulation.initialConditions ?? []) {
       if ('node' in condition) {
         const voltage = scalar(condition.voltage, 'v')
@@ -361,7 +383,21 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
         else blockers.push({ sourceId: `initial:${condition.node}`, message: 'Initial node voltage is not a supported scalar.' })
       }
       else if ('current' in condition) losses.push({ severity: 'warning', sourceId: `initial:${condition.element}`, title: 'Inductor initial current omitted', explanation: 'This exporter version does not yet map ELSim’s inductor IC attribute to LTspice schematic syntax.' })
-      else losses.push({ severity: 'warning', sourceId: `initial:${condition.element}`, title: 'Capacitor initial voltage omitted', explanation: 'This exporter version does not yet map ELSim’s capacitor IC attribute to a two-node LTspice .ic directive.' })
+      else {
+        const capacitor = sheet.parts.find((part) => part.kind === 'capacitor' && part.ref.toLowerCase() === condition.element.toLowerCase())
+        const voltage = scalar(condition.voltage, 'v')
+        if (!capacitor || !voltage) {
+          blockers.push({ sourceId: `initial:${condition.element}`, message: 'Capacitor initial voltage needs a placed capacitor and a supported scalar voltage.' })
+          continue
+        }
+        const positive = labelForCapacitorPin(capacitor, 0)
+        const negative = labelForCapacitorPin(capacitor, 1)
+        if (positive.toLowerCase() === negative.toLowerCase()) {
+          blockers.push({ sourceId: `initial:${condition.element}`, message: `${condition.element} has both terminals on the same net, so its capacitor voltage initial condition cannot be represented in LTspice.` })
+          continue
+        }
+        addDirective(`.ic V(${positive},${negative})=${voltage}`)
+      }
     }
     const simulation = project.simulation
     if (simulation.analysis === 'op') addDirective('.op')
@@ -482,7 +518,6 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
     }
   }
   if (project.simulation.initialConditions?.some((condition) => 'element' in condition && 'current' in condition)) losses.push({ severity: 'warning', sourceId: 'analysis:initial-conditions', title: 'Inductor initial currents are not fully mapped', explanation: 'Those inductor conditions are omitted. Node-voltage initial conditions are written as .ic directives.' })
-  if (project.simulation.initialConditions?.some((condition) => 'element' in condition && 'voltage' in condition)) losses.push({ severity: 'warning', sourceId: 'analysis:initial-conditions', title: 'Capacitor initial voltages are not fully mapped', explanation: 'Those capacitor conditions are omitted. Node-voltage initial conditions are written as .ic directives.' })
   losses.push({ severity: 'info', sourceId: 'elsim-ui-state', title: 'ELSim-only interface state omitted', explanation: 'Editor view state, animation presentation, selections, plot windows, and saved waveform display choices have no LTspice schematic equivalent.' })
   if (project.importedSchematicSource || project.importedChildSchematicSources?.length) losses.push({ severity: 'info', sourceId: 'provenance:asc', title: 'Original schematic text not replayed', explanation: 'Export is generated from current ELSim sheets; original LTspice comments, unknown records, and source layout are preserved only in the ELSim project.' })
   if (project.plotSettings?.selectedTraceIds.length || Object.keys(project.plotSettings?.ranges ?? {}).length) losses.push({ severity: 'info', sourceId: 'plot-settings', title: 'Plot presentation omitted', explanation: 'Selected traces and ELSim plot ranges do not have an LTspice schematic equivalent.' })

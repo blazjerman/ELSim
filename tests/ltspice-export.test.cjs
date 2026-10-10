@@ -126,6 +126,55 @@ test('exports scalar and trigger-target transient measurements as LTspice .meas 
   assert.match(asc, /\.meas tran RiseDelay TRIG V\(vin\) VAL=2\.5 RISE=1 TARG V\(vout\) VAL=2\.5 CROSS=1/)
 })
 
+test('exports capacitor voltage initial conditions and round-trips generated labels for unnamed nets', async () => {
+  const labeledProject = createStarterProject()
+  labeledProject.simulation.initialConditions = [{ element: 'C1', voltage: '2.5 V' }]
+  const labeledOutput = await exportLtspiceProject(labeledProject)
+  assert.deepEqual(labeledOutput.blockers, [])
+  const labeledAsc = labeledOutput.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(labeledAsc.content, /\.ic V\(vout,0\)=2\.5/)
+  assert.doesNotMatch(labeledAsc.content, /FLAG .* ELSIM_IC_C1_/)
+
+  const project = createStarterProject()
+  project.simulation.initialConditions = [{ element: 'C1', voltage: '2.5 V' }]
+  project.parts = project.parts.filter((part) => part.kind === 'capacitor')
+  project.wires = []
+  project.junctions = []
+  project.netLabels = []
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: [] }
+
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  assert.equal(output.losses.some((loss) => /Capacitor initial voltage/.test(loss.title)), false)
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /\.ic V\(ELSIM_IC_C1_P,ELSIM_IC_C1_N\)=2\.5/)
+  assert.match(asc.content, /FLAG .* ELSIM_IC_C1_P/)
+  assert.match(asc.content, /FLAG .* ELSIM_IC_C1_N/)
+
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({
+    id: `capacitor-ic-symbol-${index}`, filename: file.path, sha256: sha256(file.content),
+    content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+  }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project
+  assert.deepEqual(restored.simulation.initialConditions, [{ element: 'C1', voltage: '2.5' }])
+  const originalCap = project.parts.find((part) => part.ref === 'C1')
+  const restoredCap = restored.parts.find((part) => part.ref === 'C1')
+  const originalNets = analyzeConnectivity(project), restoredNets = analyzeConnectivity(restored)
+  assert.notEqual(originalNets.pinNets.get(`${originalCap.id}:0`), originalNets.pinNets.get(`${originalCap.id}:1`))
+  assert.equal(restoredNets.pinNets.get(`${restoredCap.id}:0`), 'ELSIM_IC_C1_P')
+  assert.equal(restoredNets.pinNets.get(`${restoredCap.id}:1`), 'ELSIM_IC_C1_N')
+})
+
+test('blocks capacitor voltage IC export when both capacitor pins share one net', async () => {
+  const project = createStarterProject()
+  project.simulation.initialConditions = [{ element: 'C1', voltage: '2.5' }]
+  project.wires.push({ id: 'short-capacitor', points: [[540, 355], [540, 455]] })
+  project.sheets[0].wires = project.wires
+  const output = await exportLtspiceProject(project)
+  assert.equal(output.files.length, 0)
+  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'initial:C1' && /both terminals on the same net/.test(blocker.message)))
+})
+
 test('reports retained imported LTspice attributes omitted from generated schematics', async () => {
   const project = createStarterProject()
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'original-value' } } }

@@ -3,6 +3,7 @@ import type { Part, Project } from './project'
 
 export type Connectivity = {
   pinNets: Map<string, string>
+  pinLabels: Map<string, string[]>
   wireNets: Map<string, string>
   diagnostics: { severity: 'warning' | 'error'; message: string }[]
 }
@@ -215,10 +216,14 @@ export function analyzeConnectivity(project: Project): Connectivity {
   }
 
   const pinNets = new Map<string, string>()
+  const pinLabels = new Map<string, string[]>()
   for (const part of project.parts) {
     for (const pin of componentPins(part)) {
       const token = pinToken(part.id, pin.index)
-      pinNets.set(`${part.id}:${pin.index}`, nameByRoot.get(dsu.find(token)) ?? `n${autoIndex++}`)
+      const root = dsu.find(token)
+      const key = `${part.id}:${pin.index}`
+      pinNets.set(key, nameByRoot.get(root) ?? `n${autoIndex++}`)
+      pinLabels.set(key, labelsByRoot.get(root) ?? [])
     }
   }
   const wireNets = new Map<string, string>()
@@ -228,7 +233,7 @@ export function analyzeConnectivity(project: Project): Connectivity {
     const segment = firstSegmentByWire.get(wire.id)
     if (segment) wireNets.set(wire.id, nameByRoot.get(dsu.find(segment.token)) ?? `n${autoIndex++}`)
   }
-  return { pinNets, wireNets, diagnostics }
+  return { pinNets, pinLabels, wireNets, diagnostics }
 }
 
 export function pinNet(connectivity: Connectivity, part: Part, pinIndex: number): string {
