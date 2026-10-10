@@ -1,0 +1,20 @@
+Version 4
+SYMATTR Prefix X
+LINE Normal -24 -32 24 0
+LINE Normal 24 0 -24 32
+LINE Normal -24 32 -24 -32
+PIN -16 0 R
+PINATTR PinName INP
+PINATTR SpiceOrder 1
+PIN -16 16 R
+PINATTR PinName INM
+PINATTR SpiceOrder 2
+PIN 0 -16 U
+PINATTR PinName VPOS
+PINATTR SpiceOrder 3
+PIN 0 32 D
+PINATTR PinName VNEG
+PINATTR SpiceOrder 4
+PIN 24 8 L
+PINATTR PinName OUT
+PINATTR SpiceOrder 5

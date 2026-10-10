@@ -738,7 +738,7 @@ test('LTspice import shows skipped records and preserves the original source', a
     buffer: Buffer.from(source),
   })
 
-  await expect(page.getByRole('status')).toContainText('Imported vendor with 0 parts and 0 wires')
+  await expect(page.getByRole('status')).toContainText('Imported vendor with 0 parts, 0 wires')
   const diagnostics = page.getByRole('region', { name: 'LTspice import diagnostics' })
   await expect(diagnostics).toBeVisible()
   await expect(diagnostics).toContainText('1 item could not be fully translated')
@@ -1363,6 +1363,37 @@ test('one LTspice import loads its schematic, symbol, and user IC model together
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByRole('table')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()
+})
+
+test('user-provided op-amp IC model imports and simulates with ordered pins', async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/')
+  const makeSymbol = (prefix: string, pins: Array<[string, number, number, string]>) => [
+    'Version 4', `SYMATTR Prefix ${prefix}`,
+    ...pins.flatMap(([name, x, y, orientation], index) => [`PIN ${x} ${y} ${orientation}`, `PINATTR PinName ${name}`, `PINATTR SpiceOrder ${index + 1}`]),
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'user-opamp.asc', mimeType: 'text/plain', buffer: readFileSync(path.resolve('examples/user-opamp/user-opamp.asc')) },
+    { name: 'user_opamp.asy', mimeType: 'text/plain', buffer: readFileSync(path.resolve('examples/user-opamp/user_opamp.asy')) },
+    { name: 'user-opamp.lib', mimeType: 'text/plain', buffer: readFileSync(path.resolve('examples/user-opamp/user-opamp.lib')) },
+    { name: 'voltage.asy', mimeType: 'text/plain', buffer: Buffer.from(makeSymbol('V', [['PLUS', -16, 0, 'R'], ['MINUS', 16, 0, 'L']])) },
+    { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(makeSymbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
+  ])
+  await expect(page.getByText(/Imported user-opamp with 4 parts, 0 wires and 1 model library/)).toBeVisible()
+  const modelInstance = page.locator('.circuit-part[data-part-id]')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets[0].parts.find((part: { ref: string }) => part.ref === 'XU1')?.modelPins)).toEqual(['INP', 'INM', 'VPOS', 'VNEG', 'OUT'])
+  await expect(page.getByRole('button', { name: /Add to schematic/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByRole('table')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('row', { name: /V\(out\)/ })).toContainText('0.9999900')
+  await expect(page.getByRole('row', { name: /I\(rload\)/ })).toContainText('0.00009999900')
+  expect(await modelInstance.count()).toBeGreaterThan(0)
+  expect(pageErrors).toEqual([])
 })
 
 test('current-controlled sources example shows CCCS gain and CCVS transresistance', async ({ page }) => {

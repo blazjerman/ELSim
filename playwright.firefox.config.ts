@@ -1,9 +1,13 @@
 import { defineConfig, devices } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+
+const engineTestPattern = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).scripts['test:e2e:engine'].match(/--grep "([^"]+)"/)?.[1]
+if (!engineTestPattern) throw new Error('The engine browser test filter is missing from package.json.')
 
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: ['first-use.spec.ts', 'pwa.spec.ts'],
-  grepInvert: /three-parameter sweep runs all eight bounded cases in the browser engine|imported device model parameters can be stepped through the browser ngspice engine|AC source validation focuses its inspector field before simulation|first use: run the RC starter|voltage source SINE waveform is editable and runs in the browser ngspice engine|LTspice voltage EXP waveform is editable and simulates in the browser engine|LTspice current-source SINE waveform edits and simulates in the browser engine|voltage SFFM waveform preserves LTspice fields and runs in the browser engine|first use: reduced-motion preference pauses result animation but keeps manual playback|import, place, and simulate a user-supplied IC|capacitor initial voltage editor starts the transient at the requested voltage|RLC example opens and solves|PWL waveform example opens with editable points and solves|current-source example demonstrates|controlled-source example opens and solves|transistor switch example demonstrates|MOSFET switch example demonstrates|PMOS switch example demonstrates|N-JFET example demonstrates|import a user NJF model|current-controlled sources example shows|stop terminates an active ngspice run/,
+  grepInvert: new RegExp(engineTestPattern),
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
