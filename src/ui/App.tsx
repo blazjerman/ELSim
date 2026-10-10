@@ -503,8 +503,9 @@ function FloatingPlotPanel({ panel, index, onBoundsChange, onClose, onActivate, 
 
 function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string }[] }[]; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
   const modelFor = (part?: Part) => models.find((model) => model.name.toLowerCase() === part?.deviceModel?.toLowerCase())
+  const numericModelParameters = (part?: Part) => modelFor(part)?.parameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) ?? []
   const modelRange = (value: string) => { const magnitude = componentMagnitude(value, 'resistor'); return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` } }
-  const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined)) || (part.kind === 'source' && part.sourceMode === 'dc') || modelFor(part)?.parameters.length)
+  const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined)) || (part.kind === 'source' && part.sourceMode === 'dc') || numericModelParameters(part).length > 0)
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
@@ -517,7 +518,7 @@ function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove
         <label className="field-label">Component or device<select aria-label={`Parameter ${index + 1} component`} value={sweep.component} onChange={(event) => {
           const nextPart = eligible.find((item) => item.ref === event.target.value)
           if (!nextPart) return
-          const parameters = modelFor(nextPart)?.parameters ?? []
+          const parameters = numericModelParameters(nextPart)
           if (parameters.length) {
             const parameter = parameters[0]
             const { start, stop } = modelRange(parameter.defaultValue)
@@ -528,7 +529,7 @@ function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove
           const unit = nextPart.kind === 'source' ? 'V' : nextPart.kind === 'currentSource' ? 'A' : nextPart.kind === 'resistor' || nextPart.kind === 'lamp' ? 'Ω' : nextPart.kind === 'capacitor' ? 'F' : 'H'
           onChange(index, { component: nextPart.ref, parameter: undefined, start: nextPart.value, stop: magnitude === null ? nextPart.value : `${(magnitude * 2).toExponential(5)} ${unit}` })
         }}>{eligible.map((item) => <option key={item.id} value={item.ref} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && other.component.toLowerCase() === item.ref.toLowerCase())}>{item.ref} · {kindNames[item.kind]}</option>)}</select></label>
-        {modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())) && <label className="field-label">Imported model parameter<select aria-label={`Parameter ${index + 1} model parameter`} value={sweep.parameter ?? ''} onChange={(event) => { const parameter = modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase()))?.parameters.find((item) => item.name === event.target.value); if (!parameter) return; const { start, stop } = modelRange(parameter.defaultValue); onChange(index, { parameter: parameter.name, start, stop }) }}>{modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase()))?.parameters.map((parameter) => <option key={parameter.name} value={parameter.name}>{parameter.name} · default {parameter.defaultValue}</option>)}</select></label>}
+        {modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())) && <label className="field-label">Imported model parameter<select aria-label={`Parameter ${index + 1} model parameter`} value={sweep.parameter ?? ''} onChange={(event) => { const parameter = numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).find((item) => item.name === event.target.value); if (!parameter) return; const { start, stop } = modelRange(parameter.defaultValue); onChange(index, { parameter: parameter.name, start, stop }) }}>{numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).map((parameter) => <option key={parameter.name} value={parameter.name}>{parameter.name} · default {parameter.defaultValue}</option>)}</select></label>}
         <div className="parameter-sweep-inputs"><label className="field-label">Start<input aria-label={`Parameter ${index + 1} start value`} value={sweep.start} onChange={(event) => onChange(index, { start: event.target.value })}/></label><label className="field-label">Stop<input aria-label={`Parameter ${index + 1} stop value`} value={sweep.stop} onChange={(event) => onChange(index, { stop: event.target.value })}/></label></div>
         <label className="field-label">Number of values<input aria-label={`Parameter ${index + 1} number of values`} type="number" min="2" max={maxPoints} value={sweep.points} onChange={(event) => onChange(index, { points: Number(event.target.value) })}/></label>
       </div>
@@ -1869,10 +1870,19 @@ export default function App() {
     if (configured.reduce((total, sweep) => total * sweep.points, 1) * 2 > 10) { setNotice('Reduce the number of values before adding another parameter. A sweep can run at most 10 cases.'); return }
     const parts = project.parts.filter((part) => ['resistor', 'capacitor', 'inductor'].includes(part.kind)
       || (part.kind === 'source' && part.sourceMode === 'dc')
-      || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined)))
+      || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined))
+      || importedDeviceModels.some((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)))
       .filter((part) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase()))
-    const part = parts[0]
-    if (!part || configured.length >= 3) { setNotice('Parameter stepping supports up to three distinct scalar DC sources or R/C/L parts.'); return }
+    const part = parts.find((candidate) => importedDeviceModels.some((model) => model.name.toLowerCase() === candidate.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null))) ?? parts[0]
+    if (!part || configured.length >= 3) { setNotice('Parameter stepping supports up to three distinct R/C/L values, scalar DC sources, or numeric parameters on imported device models.'); return }
+    const model = importedDeviceModels.find((candidate) => candidate.name.toLowerCase() === part.deviceModel?.toLowerCase())
+    const modelParameter = model?.parameters.find((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)
+    if (modelParameter) {
+      const magnitude = componentMagnitude(modelParameter.defaultValue, 'resistor')!
+      const sweep: ParameterSweep = { component: part.ref, parameter: modelParameter.name, start: modelParameter.defaultValue, stop: `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}`, points: 3 }
+      setProject((current) => ({ ...current, simulation: { ...current.simulation, parameterSweeps: [...(current.simulation.parameterSweeps ?? []), sweep] } }))
+      return
+    }
     const sweep: ParameterSweep = { component: part.ref, start: part.value, stop: defaultSweepStop(part), points: 3 }
     setProject((current) => ({ ...current, simulation: { ...current.simulation, parameterSweeps: [...(current.simulation.parameterSweeps ?? []), sweep] } }))
   }

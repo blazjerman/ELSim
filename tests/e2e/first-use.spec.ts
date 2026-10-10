@@ -1263,6 +1263,42 @@ test('three-parameter sweep runs all eight bounded cases in the browser engine',
   expect(labels).toContain('R1=2000 Ω, C1=0.00002 F, V1=1 V')
 })
 
+test('imported device model parameters can be stepped through the browser ngspice engine', async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const modelLibrary = '.MODEL USER_NPN NPN (IS=1e-14 BF=10 VAF=100)\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'user-npn.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from user-npn\.lib/)).toBeVisible()
+  await page.locator('.circuit-part[aria-label^="Q1,"]').click()
+  await page.getByLabel('Device model').selectOption('USER_NPN')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  const component = page.getByRole('combobox', { name: 'Parameter 1 component' })
+  await expect(component).toHaveValue('Q1')
+  const modelParameter = page.getByRole('combobox', { name: 'Parameter 1 model parameter' })
+  await modelParameter.selectOption('BF')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('10')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('200')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  const labels = await page.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('Q1.BF=10'))).toBe(true)
+  expect(labels.some((label) => label.includes('Q1.BF=200'))).toBe(true)
+})
+
 test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
