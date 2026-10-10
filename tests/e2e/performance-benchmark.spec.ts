@@ -278,6 +278,10 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 90_000 })
   const resultReadyMs = performance.now() - started
+  const sampleSlider = page.getByRole('slider', { name: 'Simulation time' })
+  await expect(sampleSlider).toBeVisible()
+  const solvedSamples = Number(await sampleSlider.getAttribute('max')) + 1
+  expect(solvedSamples).toBeGreaterThanOrEqual(9_000)
   const traceButtons = page.locator('.trace-toggles button')
   const availableTraceCount = await traceButtons.count()
   expect(availableTraceCount).toBeGreaterThanOrEqual(40)
@@ -294,7 +298,10 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
   await expect(page.locator('.waveform-chart polyline')).toHaveCount(selection.selectedCount)
   expect(selection.selectedCount).toBeGreaterThanOrEqual(40)
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-24-section-40-trace-transient-v1', browser: browserName, sections: 24, availableTraces: availableTraceCount, plottedTraces: selection.selectedCount, resultReadyMs: Number(resultReadyMs.toFixed(2)), selectAndRenderNextFrameMs: Number(selection.elapsedMs.toFixed(2)) }, null, 2))
+  const plottedPoints = await page.locator('.waveform-chart polyline').evaluateAll((lines) => lines.map((line) => (line as SVGPolylineElement).points.numberOfItems))
+  expect(plottedPoints.length).toBe(selection.selectedCount)
+  expect(Math.max(...plottedPoints)).toBeLessThanOrEqual(902)
+  console.log(JSON.stringify({ benchmark: 'browser-24-section-40-trace-transient-v2', browser: browserName, sections: 24, solvedSamples, availableTraces: availableTraceCount, plottedTraces: selection.selectedCount, maxRenderedPointsPerTrace: Math.max(...plottedPoints), resultReadyMs: Number(resultReadyMs.toFixed(2)), selectAndRenderNextFrameMs: Number(selection.elapsedMs.toFixed(2)) }, null, 2))
 })
 
 test('record large-project editor render and selection input-to-frame timings', async ({ page, browserName }) => {
