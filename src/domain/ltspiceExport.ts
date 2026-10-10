@@ -108,6 +108,7 @@ function sheetWireRecords(sheet: ProjectSheet, blockers: LtspiceExportBlocker[])
     ...sheet.junctions.map(({ x, y }) => [x, y] as [number, number]),
     ...sheet.wires.flatMap((wire) => wire.points),
   ]
+  const splitPointsByX = [...new Map(splitPoints.map(([x, y]) => [`${x},${y}`, [x, y] as [number, number]])).values()].sort((left, right) => left[0] - right[0])
   const rowIndex = new Map<number, [number, number][]>()
   const columnIndex = new Map<number, [number, number][]>()
   for (const point of splitPoints) {
@@ -131,7 +132,22 @@ function sheetWireRecords(sheet: ProjectSheet, blockers: LtspiceExportBlocker[])
       const horizontal = Math.abs(a[1] - b[1]) <= 1e-4
       const vertical = Math.abs(a[0] - b[0]) <= 1e-4
       if (!horizontal && !vertical) {
-        blockers.push({ sourceId: wire.id, message: 'Diagonal wire segments do not have a verified LTspice connection mapping.' })
+        const minimumX = Math.min(a[0], b[0]), maximumX = Math.max(a[0], b[0])
+        let low = 0, high = splitPointsByX.length
+        while (low < high) { const middle = (low + high) >>> 1; if (splitPointsByX[middle][0] < minimumX - 1e-4) low = middle + 1; else high = middle }
+        const diagonalPoints: [number, number][] = [a]
+        for (let index = low; index < splitPointsByX.length && splitPointsByX[index][0] <= maximumX + 1e-4; index += 1) {
+          const point = splitPointsByX[index]
+          if (Math.hypot(point[0] - a[0], point[1] - a[1]) <= 1e-4 || Math.hypot(point[0] - b[0], point[1] - b[1]) <= 1e-4) continue
+          if (pointOnSegment({ x: point[0], y: point[1] }, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }, 1e-4)) diagonalPoints.push(point)
+        }
+        diagonalPoints.push(b)
+        const dx = b[0] - a[0], dy = b[1] - a[1]
+        diagonalPoints.sort((left, right) => dx * (left[0] - right[0]) + dy * (left[1] - right[1]))
+        for (let index = 0; index < diagonalPoints.length - 1; index += 1) {
+          const first = diagonalPoints[index], second = diagonalPoints[index + 1]
+          records.push(`WIRE ${checkCoordinate(first[0], wire.id, blockers)} ${checkCoordinate(first[1], wire.id, blockers)} ${checkCoordinate(second[0], wire.id, blockers)} ${checkCoordinate(second[1], wire.id, blockers)}`)
+        }
         continue
       }
       const candidates = horizontal

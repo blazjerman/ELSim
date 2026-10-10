@@ -208,6 +208,56 @@ test('exports nested sheets and generated block symbols, then reimports the topo
   for (let a = 0; a < oldPins.length; a += 1) for (let b = 0; b < oldPins.length; b += 1) assert.equal(oldPins[a].split('=')[1] === oldPins[b].split('=')[1], newPins[a].split('=')[1] === newPins[b].split('=')[1], `Connectivity differs between ${oldPins[a]} and ${oldPins[b]}`)
 })
 
+test('exports diagonal wires and preserves pin, label, endpoint, and explicit-junction connectivity', async () => {
+  const project = createStarterProject()
+  project.name = 'Diagonal wire test'
+  project.parts = [
+    { id: 'diagonal-r1', kind: 'resistor', componentDefinitionId: 'elsim.resistor', ref: 'R1', value: '1k', x: 400, y: 400, rotation: 0 },
+    { id: 'diagonal-r2', kind: 'resistor', componentDefinitionId: 'elsim.resistor', ref: 'R2', value: '2k', x: 600, y: 500, rotation: 0 },
+  ]
+  project.wires = [
+    { id: 'diagonal-link', points: [[452, 400], [548, 500]] },
+    { id: 'diagonal-cross', points: [[452, 500], [548, 400]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    { id: 'link-start', name: 'LINK', x: 452, y: 400, visible: true }, { id: 'link-end', name: 'LINK', x: 548, y: 500, visible: true },
+    { id: 'cross-start', name: 'CROSS', x: 452, y: 500, visible: true }, { id: 'cross-end', name: 'CROSS', x: 548, y: 400, visible: true },
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels }]
+  const roundTrip = async (source) => {
+    const output = await exportLtspiceProject(source)
+    assert.deepEqual(output.blockers, [])
+    const asc = output.files.find((file) => file.path.endsWith('.asc'))
+    if (source.junctions.length) {
+      assert.match(asc.content, /WIRE 452 400 500 450/)
+      assert.match(asc.content, /WIRE 452 500 500 450/)
+    } else {
+      assert.match(asc.content, /WIRE 452 400 548 500/)
+      assert.match(asc.content, /WIRE 452 500 548 400/)
+    }
+    const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `diagonal-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+    const restored = parseLtspiceSchematic(asc.content, asc.path, symbols)
+    assert.deepEqual(restored.warnings, [])
+    return restored.project
+  }
+  let restored = await roundTrip(project)
+  let beforeConnectivity = analyzeConnectivity(project), afterConnectivity = analyzeConnectivity(restored)
+  const byRef = (parts, ref) => parts.find((part) => part.ref === ref)
+  assert.equal(pinNet(beforeConnectivity, byRef(project.parts, 'R1'), 1), pinNet(beforeConnectivity, byRef(project.parts, 'R2'), 0))
+  assert.equal(pinNet(afterConnectivity, byRef(restored.parts, 'R1'), 1), pinNet(afterConnectivity, byRef(restored.parts, 'R2'), 0))
+  assert.notEqual(pinNet(afterConnectivity, byRef(restored.parts, 'R1'), 0), pinNet(afterConnectivity, byRef(restored.parts, 'R2'), 1))
+  const netForLabel = (circuit, connectivity, name) => connectivity.wireNets.get(circuit.wires.find((wire) => wire.points.some(([x, y]) => circuit.netLabels.some((label) => label.name === name && label.x === x && label.y === y)))?.id)
+  assert.notEqual(netForLabel(restored, afterConnectivity, 'LINK'), netForLabel(restored, afterConnectivity, 'CROSS'))
+
+  project.junctions = [{ x: 500, y: 450 }]
+  project.sheets[0].junctions = project.junctions
+  restored = await roundTrip(project)
+  beforeConnectivity = analyzeConnectivity(project); afterConnectivity = analyzeConnectivity(restored)
+  assert.equal(netForLabel(project, beforeConnectivity, 'LINK'), netForLabel(project, beforeConnectivity, 'CROSS'))
+  assert.equal(netForLabel(restored, afterConnectivity, 'LINK'), netForLabel(restored, afterConnectivity, 'CROSS'))
+})
+
 test('includes only referenced model dependencies and signals the unknown-license gate', async () => {
   const project = createStarterProject()
   const content = '.SUBCKT USER_BLOCK IN OUT\nR1 IN OUT 1k\n.ENDS USER_BLOCK\n'

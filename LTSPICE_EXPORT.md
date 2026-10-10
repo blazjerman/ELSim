@@ -26,7 +26,7 @@ Only dependencies actually referenced by placed parts should be included. An exp
 
 | ELSim data | LTspice output |
 | --- | --- |
-| Each wire polyline | One `WIRE` record for each adjacent point pair |
+| Each wire polyline | `WIRE` records for each adjacent segment; diagonal segments are retained as diagonal coordinates and split at pins, labels, wire endpoints, and explicit junctions to preserve electrical joins |
 | Named net label | `FLAG x y name` at the current label coordinate |
 | Built-in or imported part | `SYMBOL name x y orientation`, then safe `SYMATTR InstName` and `SYMATTR Value` records; scalar current sources use the `I` prefix |
 | Fixed-state ELSim switch | Two-terminal resistor at `1m` when On or `1T` when Off, matching the current ELSim switch model's `Ron` / `Roff`; the generated instance gets an `R_` reference |
@@ -37,6 +37,8 @@ Only dependencies actually referenced by placed parts should be included. An exp
 | Project name | Safe basename for output files; sanitized collisions are reported and disambiguated deterministically |
 
 New coordinates snap to the LTspice grid before output. Existing imported coordinates are preserved if legal and within format bounds. The exporter must not silently alter topology when a point is off-grid: it reports the item and either emits exact supported coordinates or blocks export when LTspice would change the connection. `SHEET` bounds are derived from all emitted geometry with a margin. Emit only ASCII text and use `u` in generated numeric values; preserve user model text byte-for-byte rather than normalizing it.
+
+Diagonal `.asc` `WIRE` records are supported by the current mapping. Fixtures round-trip two crossing diagonal segments both without a junction (separate nets) and with an explicit junction (one net). This verifies ELSim's parser/topology behavior; opening and simulating the generated diagonal-wire fixture in LTspice remains part of the manual release gate below.
 
 Component geometry should use repository-authored `.asy` definitions for ELSim built-ins. Imported user symbols can be copied only as explicit dependencies and with their original pin order; otherwise generate a simple original block symbol and report the visual substitution. No LTspice-installed symbols or vendor artwork should be copied into the repository or silently bundled.
 
