@@ -89,3 +89,22 @@ test('accepts common SI-prefixed passive values', () => {
   const project = createStarterProject()
   assert.equal(checkCircuit(project).some((item) => item.id.startsWith('invalid-value:') || item.id.startsWith('nonpositive-value:')), false)
 })
+
+test('accepts declared sheet parameters in passive and current-source values but flags unknown parameters', () => {
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.id === 'p-r1')
+  resistor.value = '{RLOAD}'
+  project.parts.push({ id: 'parameter-current', kind: 'currentSource', ref: 'I1', value: '{IBIAS}', x: 700, y: 600, rotation: 0 })
+  project.sheets[0].parameters = [
+    { id: 'parameter-rload', name: 'RLOAD', defaultValue: '1k' },
+    { id: 'parameter-ibias', name: 'IBIAS', defaultValue: '1m' },
+  ]
+  project.sheets[0].parts = project.parts
+  let issues = checkCircuit(project)
+  assert.equal(issues.some((item) => item.id === 'invalid-value:p-r1'), false)
+  assert.equal(issues.some((item) => item.id === 'invalid-value:parameter-current'), false)
+
+  resistor.value = '{UNKNOWN}'
+  issues = checkCircuit(project)
+  assert.ok(issues.some((item) => item.id === 'invalid-value:p-r1'))
+})

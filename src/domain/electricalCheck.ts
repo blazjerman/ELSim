@@ -17,6 +17,11 @@ export type ElectricalIssue = {
  * preventing ngspice from running a circuit that may intentionally be open. */
 export function checkCircuit(project: Project, connectivity: Connectivity = analyzeConnectivity(project)): ElectricalIssue[] {
   const issues: ElectricalIssue[] = []
+  const parameterNames = new Set((project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name.toLowerCase()))
+  const isDeclaredParameter = (value: string) => {
+    const expression = value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
+    return Boolean(expression && parameterNames.has(expression[1].toLowerCase()))
+  }
   if (project.parts.length === 0) {
     return [{ id: 'empty', severity: 'info', title: 'Circuit is empty', detail: 'Add a component before running a simulation.' }]
   }
@@ -40,14 +45,14 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   }
 
   for (const part of project.parts) {
-    if (part.kind === 'currentSource' && componentMagnitude(part.value, part.kind) === null) {
+    if (part.kind === 'currentSource' && componentMagnitude(part.value, part.kind) === null && !isDeclaredParameter(part.value)) {
       issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid current`, detail: 'Enter a numeric current with an optional SI prefix, such as 1 mA or -250 µA.', partId: part.id })
     }
     if (['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) {
       const magnitude = componentMagnitude(part.value, part.kind)
-      if (magnitude === null) {
+      if (magnitude === null && !isDeclaredParameter(part.value)) {
         issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid value`, detail: 'Enter a numeric value with an optional SI prefix, such as 1 kΩ, 10 µF, or 2 mH.', partId: part.id })
-      } else if (magnitude <= 0) {
+      } else if (magnitude !== null && magnitude <= 0) {
         issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
       }
     }
