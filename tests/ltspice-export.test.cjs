@@ -208,6 +208,9 @@ test('exports scalar and trigger-target transient measurements as LTspice .meas 
   assert.match(asc, /\.meas tran VoutMax MAX V\(vout\) FROM=2m TO=8m/)
   assert.match(asc, /\.meas tran R1Rms RMS I\(R1\)/)
   assert.match(asc, /\.meas tran RiseDelay TRIG V\(vin\) VAL=2\.5 RISE=1 TARG V\(vout\) VAL=2\.5 CROSS=1/)
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `measurement-symbol-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const imported = parseLtspiceSchematic(asc, 'measurements.asc', symbols).project
+  assert.deepEqual(imported.simulation.transientMeasurements, project.simulation.transientMeasurements.map((measurement) => ({ ...measurement, vector: measurement.vector.toLowerCase(), ...('targetVector' in measurement ? { targetVector: measurement.targetVector.toLowerCase() } : {}) })))
 })
 
 test('exports capacitor voltage initial conditions and round-trips generated labels for unnamed nets', async () => {
