@@ -14,13 +14,13 @@ test('accepts only bounded numeric SPICE parameter arithmetic without executable
 })
 
 test('parses ordered subcircuit pins, parameters, continuations, shared models, and multiple definitions', () => {
-  const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10 R=20k\nR1 INP OUT\n+ 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
+  const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10 R=20k TWICE={GAIN * 2}\nR1 INP OUT\n+ 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
   const parsed = parseSubcircuitLibrary(source)
   assert.deepEqual(parsed.subcircuits.map(({ name, pins }) => ({ name, pins })), [
     { name: 'amp', pins: ['INP', 'INM', 'VCC', 'VEE', 'OUT'] },
     { name: 'buffer', pins: ['IN', 'OUT'] },
   ])
-  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: '10' }, { name: 'R', defaultValue: '20k' }])
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: '10' }, { name: 'R', defaultValue: '20k' }, { name: 'TWICE', defaultValue: '{GAIN * 2}' }])
   assert.match(parsed.modelText, /\.model DFAST D/)
   assert.match(parsed.modelText, /\+ 10k/)
   assert.match(parsed.modelText, /\.ends/)

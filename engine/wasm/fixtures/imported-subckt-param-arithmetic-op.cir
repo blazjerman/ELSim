@@ -1,0 +1,10 @@
+ELSim imported subcircuit parameter arithmetic operating point
+V1 IN 0 5
+XDEFAULT IN OUT_DEFAULT AMP2
+XOVERRIDE IN OUT_OVERRIDE AMP2 PARAMS: SCALE=3
+.SUBCKT AMP2 IN OUT PARAMS: SCALE=2 GAIN={SCALE * 2}
+EGAIN OUT 0 IN 0 {GAIN}
+.ENDS AMP2
+.op
+.print op v(out_default) v(out_override)
+.end
