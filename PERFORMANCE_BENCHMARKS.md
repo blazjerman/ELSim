@@ -10,27 +10,27 @@ Measured on 2026-10-10 with Node 18.20.4, Linux x64, and an Intel Core i7-12700F
 
 | Resistor sections | Parts | Labels | Connectivity p95 | Netlist p95 | Netlist bytes |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 101 | 202 | 2.247 | 1.818 | 1,607 |
-| 500 | 501 | 1,002 | 21.872 | 20.319 | 8,807 |
-| 1,000 | 1,001 | 2,002 | 57.837 | 59.815 | 17,809 |
-| 5,000 | 5,001 | 10,002 | 1,373.983 | 1,321.016 | 101,809 |
+| 100 | 101 | 202 | 1.997 | 1.343 | 1,607 |
+| 500 | 501 | 1,002 | 5.482 | 4.654 | 8,807 |
+| 1,000 | 1,001 | 2,002 | 8.454 | 8.066 | 17,809 |
+| 5,000 | 5,001 | 10,002 | 48.196 | 54.436 | 101,809 |
 
 | Input samples | Input bytes (Float64) | Output points | Reducer p95 |
 | ---: | ---: | ---: | ---: |
-| 100,000 | 800,000 | 901 | 2.754 |
-| 1,000,000 | 8,000,000 | 902 | 1.035 |
+| 100,000 | 800,000 | 901 | 2.816 |
+| 1,000,000 | 8,000,000 | 902 | 0.983 |
 
 The optional local ngspice 47 WebAssembly build was available for this run. Solver timings below are a single cold-worker observation per circuit size; parser and Node structured-clone estimates use the repeated-run statistics described above.
 
 | Resistor sections | Module load | OP solve | Worker round trip | Raw bytes | Vector bytes | Raw parse p95 | Clone estimate p95 |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 38.962 | 3.784 | 74.158 | 4,461 | 816 | 0.176 | 0.096 |
-| 1,000 | 36.207 | 13.041 | 80.696 | 44,064 | 8,016 | 2.689 | 0.818 |
-| 5,000 | 35.185 | 36.922 | 104.775 | 228,064 | 40,016 | 4.202 | 6.822 |
+| 100 | 38.925 | 3.824 | 73.229 | 4,461 | 816 | 0.077 | 0.092 |
+| 1,000 | 38.499 | 12.759 | 94.366 | 44,064 | 8,016 | 1.384 | 0.851 |
+| 5,000 | 37.200 | 38.794 | 111.656 | 228,064 | 40,016 | 4.785 | 6.840 |
 
 These are one-point operating-point results; vector payload size is small compared with long transient traces. The clone observation uses Node `structuredClone`, not a browser `Worker.postMessage` transfer.
 
-The timings show a scaling cliff between 1,000 and 5,000 sections in both connectivity and netlist generation. Plot reduction remains bounded in output size. These results are from one local host; compare repeated runs on the same environment and keep numeric/topology checks intact when optimizing.
+A 64-pixel spatial broadphase now narrows pin/label/segment candidate searches while retaining the exact existing geometry predicates. The measured 5,000-section connectivity p95 fell from 1,373.983 ms to 48.196 ms, and netlist p95 fell from 1,321.016 ms to 54.436 ms; both now meet the 500 ms working target. The 1,000-section measurements also remain within the 75 ms targets. Plot reduction remains bounded in output size. These results are from one local host; compare repeated runs on the same environment and keep numeric/topology checks intact when optimizing.
 
 ## Initial local budgets
 
@@ -45,6 +45,7 @@ These are working engineering targets for this fixture, not heterogeneous-CI pas
 ## Not yet measured
 
 The browser editor benchmark below measures reload readiness and click-to-selection completion, but not pointer-to-paint latency, animation update cost, large transient trace parsing/transport, actual browser worker structured-clone/transfer behavior, or reliable peak browser memory. The one-point OP solve is not a large-trace simulator benchmark. Record hardware/runtime details before setting browser budgets. Add a wire-segment-heavy layout and a nested-sheet fixture before treating the resistor chain as representative of all schematics.
+
 ## Browser editor baseline (2026-10-10)
 
 Playwright benchmark: `npm run benchmark:browser` (Chromium and Firefox). The generated project contains one resistor and two net labels per component. `editorReadyMs` measures reload through rendered component count; selection timings include the browser click and React update. These are local measurements, not CI thresholds.

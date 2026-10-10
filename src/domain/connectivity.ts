@@ -34,6 +34,50 @@ class DisjointSet {
 }
 
 type Segment = { wireId: string; index: number; a: [number, number]; b: [number, number]; token: string }
+type Bounds = { minX: number; minY: number; maxX: number; maxY: number }
+
+/** A broadphase only: callers still apply the existing exact geometry predicates. */
+class SpatialGrid<T> {
+  private readonly cells = new Map<string, T[]>()
+  private readonly boundsByItem = new Map<T, Bounds>()
+  private readonly overflow: T[] = []
+  private readonly cellSize = 64
+
+  add(item: T, bounds: Bounds) {
+    this.boundsByItem.set(item, bounds)
+    const minX = Math.floor(bounds.minX / this.cellSize), maxX = Math.floor(bounds.maxX / this.cellSize)
+    const minY = Math.floor(bounds.minY / this.cellSize), maxY = Math.floor(bounds.maxY / this.cellSize)
+    if ((maxX - minX + 1) * (maxY - minY + 1) > 256) { this.overflow.push(item); return }
+    for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
+      const key = `${x}:${y}`
+      const bucket = this.cells.get(key)
+      if (bucket) bucket.push(item)
+      else this.cells.set(key, [item])
+    }
+  }
+
+  query(bounds: Bounds): T[] {
+    const minX = Math.floor(bounds.minX / this.cellSize), maxX = Math.floor(bounds.maxX / this.cellSize)
+    const minY = Math.floor(bounds.minY / this.cellSize), maxY = Math.floor(bounds.maxY / this.cellSize)
+    const found = new Set<T>(this.overflow)
+    if ((maxX - minX + 1) * (maxY - minY + 1) > 256) {
+      for (const item of this.boundsByItem.keys()) found.add(item)
+      return [...found]
+    }
+    for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
+      for (const item of this.cells.get(`${x}:${y}`) ?? []) found.add(item)
+    }
+    return [...found]
+  }
+}
+
+function segmentBounds(segment: Segment, padding = 0): Bounds {
+  return { minX: Math.min(segment.a[0], segment.b[0]) - padding, minY: Math.min(segment.a[1], segment.b[1]) - padding,
+    maxX: Math.max(segment.a[0], segment.b[0]) + padding, maxY: Math.max(segment.a[1], segment.b[1]) + padding }
+}
+function pointBounds(x: number, y: number, padding = 0): Bounds {
+  return { minX: x - padding, minY: y - padding, maxX: x + padding, maxY: y + padding }
+}
 
 function pointToken(wireId: string, index: number) { return `wire:${wireId}:${index}` }
 function pinToken(partId: string, index: number) { return `pin:${partId}:${index}` }
@@ -82,20 +126,31 @@ function connectedTokens(project: Project): { dsu: DisjointSet; segments: Segmen
     }
   }
 
+  const segmentGrid = new SpatialGrid<Segment>()
+  for (const segment of segments) segmentGrid.add(segment, segmentBounds(segment))
+  const pinGrid = new SpatialGrid<{ part: Part; pin: ReturnType<typeof componentPins>[number] }>()
+  for (const entry of pins) pinGrid.add(entry, pointBounds(entry.pin.x, entry.pin.y))
+  const junctionGrid = new SpatialGrid<{ x: number; y: number }>()
+  for (const junction of project.junctions) junctionGrid.add(junction, pointBounds(junction.x, junction.y))
+
   // A pin that lies on a conductor is electrically connected even if the
   // segment does not happen to contain a stored vertex at that exact point.
   for (const { part, pin } of pins) {
     const token = pinToken(part.id, pin.index)
-    for (const segment of segments) {
+    for (const segment of segmentGrid.query(pointBounds(pin.x, pin.y, 1e-4))) {
       if (belongsToSegment(pin, segment)) dsu.union(token, segment.token)
     }
   }
 
   // Endpoint-on-wire T connections are joins. A crossing in the middle of
   // two segments stays separate unless the document has an explicit junction.
+  const segmentIndex = new Map(segments.map((segment, index) => [segment, index]))
   for (let left = 0; left < segments.length; left += 1) {
-    for (let right = left + 1; right < segments.length; right += 1) {
-      const a = segments[left], b = segments[right]
+    const a = segments[left]
+    const extent = Math.max(Math.abs(a.b[0] - a.a[0]), Math.abs(a.b[1] - a.a[1]))
+    for (const b of segmentGrid.query(segmentBounds(a, 1e-4 + extent * 1e-6))) {
+      const right = segmentIndex.get(b)!
+      if (right <= left) continue
       if (a.wireId === b.wireId) continue
       const endpointsOverlap = [a.a, a.b].some((point) => pointOnSegment({ x: point[0], y: point[1] }, { x: b.a[0], y: b.a[1] }, { x: b.b[0], y: b.b[1] }, 1e-4))
         || [b.a, b.b].some((point) => pointOnSegment({ x: point[0], y: point[1] }, { x: a.a[0], y: a.a[1] }, { x: a.b[0], y: a.b[1] }, 1e-4))
@@ -103,7 +158,7 @@ function connectedTokens(project: Project): { dsu: DisjointSet; segments: Segmen
       const intersection = segmentIntersection(a, b)
       if (!intersection) continue
       const atEndpoint = intersection.t < 1e-6 || intersection.t > 1 - 1e-6 || intersection.u < 1e-6 || intersection.u > 1 - 1e-6
-      const isJunction = project.junctions.some((junction) => samePoint(junction, intersection))
+      const isJunction = junctionGrid.query(pointBounds(intersection.x, intersection.y, 1e-5)).some((junction) => samePoint(junction, intersection))
       if (atEndpoint || isJunction) dsu.union(a.token, b.token)
     }
   }
@@ -112,8 +167,8 @@ function connectedTokens(project: Project): { dsu: DisjointSet; segments: Segmen
     const token = `label:${label.id}`
     dsu.add(token)
     if (label.name.trim().toLowerCase() === '0') dsu.union(token, groundToken)
-    const pinsWithin = pins.filter(({ pin }) => Math.hypot(pin.x - label.x, pin.y - label.y) <= 8)
-    const segmentsWithin = segments.filter((segment) => belongsToSegment(label, segment))
+    const pinsWithin = pinGrid.query(pointBounds(label.x, label.y, 8)).filter(({ pin }) => Math.hypot(pin.x - label.x, pin.y - label.y) <= 8)
+    const segmentsWithin = segmentGrid.query(pointBounds(label.x, label.y, 1e-4)).filter((segment) => belongsToSegment(label, segment))
     for (const { part, pin } of pinsWithin) dsu.union(token, pinToken(part.id, pin.index))
     for (const segment of segmentsWithin) dsu.union(token, segment.token)
   }

@@ -134,3 +134,21 @@ test('endpoint T connections join automatically and are not junction-toggle targ
   const connectivity = analyzeConnectivity(project)
   assert.equal(connectivity.wireNets.get('tee-h'), connectivity.wireNets.get('tee-v'))
 })
+
+test('connectivity broadphase preserves crossings on long overflow segments', () => {
+  const project = createStarterProject()
+  project.parts = []
+  project.netLabels = []
+  project.wires = [
+    { id: 'long-horizontal', points: [[-20_000, 0], [20_000, 0]] },
+    { id: 'long-vertical', points: [[0, -20_000], [0, 20_000]] },
+    { id: 'tee', points: [[100, 0], [100, 32]] },
+  ]
+  project.junctions = []
+  let connectivity = analyzeConnectivity(project)
+  assert.notEqual(connectivity.wireNets.get('long-horizontal'), connectivity.wireNets.get('long-vertical'))
+  assert.equal(connectivity.wireNets.get('long-horizontal'), connectivity.wireNets.get('tee'))
+  project.junctions = [{ x: 0, y: 0 }]
+  connectivity = analyzeConnectivity(project)
+  assert.equal(connectivity.wireNets.get('long-horizontal'), connectivity.wireNets.get('long-vertical'))
+})
