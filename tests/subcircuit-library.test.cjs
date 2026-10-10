@@ -90,6 +90,22 @@ test('pinpoints LTspice behavioral forms and options, including continuation rec
   assert.equal(source.includes('Laplace=1/(1+s)'), true)
 })
 
+test('dialect warnings retain continuation line numbers and ignore dollar signs inside quotes', () => {
+  const source = [
+    '.SUBCKT compat IN OUT',
+    'B1 OUT 0 V=V(IN)',
+    '+ Laplace="models/$filter"',
+    'B2 OUT 0 V=V(IN)',
+    '+ tripdv=1m',
+    '.ENDS compat',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature, excerpt }) => [sourceLine, feature, excerpt]), [
+    [3, 'LTspice behavioral Laplace option', 'B1 OUT 0 V=V(IN) Laplace="models/$filter"'],
+    [5, 'LTspice behavioral-source option', 'B2 OUT 0 V=V(IN) tripdv=1m'],
+  ])
+})
+
 test('rejects executable, external-file, and whole-circuit directives', () => {
   for (const directive of ['.include evil.lib', '.lib "evil.lib" tt', '.control', '.endc', '.end', '.exec command', '.shell command', '.cm plugin']) {
     assert.throws(() => parseSubcircuitLibrary(`.SUBCKT x A\nR1 A 0 1k\n${directive}\n.ENDS`), /not allowed/)
