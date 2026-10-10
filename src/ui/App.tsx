@@ -1471,6 +1471,18 @@ export default function App() {
     setProject((current) => ({ ...current, netLabels: current.netLabels.map((label) => label.id === selectedLabel.id ? { ...label, name: value } : label) }))
   }
   useEffect(() => {
+    // Space is both a documented canvas gesture and an activation key for
+    // focusable SVG objects. Capture it before those object handlers consume it.
+    const onSpaceKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      const target = event.target
+      const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+      const modalOpen = tourStep !== null || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || Boolean(ltspiceExport) || ltspiceExportBusy
+      if (editingText || modalOpen) return
+      event.preventDefault()
+      setSpacePan(true)
+    }
+    const onSpaceKeyUp = (event: KeyboardEvent) => { if (event.code === 'Space') setSpacePan(false) }
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target
       if (event.key === 'Escape' && electricalCheckOpen) { setElectricalCheckOpen(false); return }
@@ -1499,7 +1511,6 @@ export default function App() {
           return
         }
       }
-      if (event.code === 'Space') { event.preventDefault(); setSpacePan(true); return }
       const key = event.key.toLowerCase()
       if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
       if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedParts.length) {
@@ -1545,10 +1556,12 @@ export default function App() {
     }
     const onKeyUp = (event: KeyboardEvent) => { if (event.code === 'Space') setSpacePan(false) }
     const onBlur = () => setSpacePan(false)
+    window.addEventListener('keydown', onSpaceKeyDown, true)
+    window.addEventListener('keyup', onSpaceKeyUp, true)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
-    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
+    return () => { window.removeEventListener('keydown', onSpaceKeyDown, true); window.removeEventListener('keyup', onSpaceKeyUp, true); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
   }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, project, tourStep, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, ltspiceExport, ltspiceExportBusy])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
