@@ -37,6 +37,35 @@ test('quick tour can run the open circuit directly from its simulation step', as
   await expect(page.getByRole('button', { name: 'V\(vout\)', exact: true })).toBeVisible()
 })
 
+test('toggling an interactive switch reruns a current circuit automatically', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.push({ id: 'p-interactive-switch', kind: 'switch', ref: 'S1', value: 'Off', x: 365, y: 190, rotation: 0 })
+    project.wires.push(
+      { id: 'w-switch-left', points: [[313, 290], [313, 190]] },
+      { id: 'w-switch-right', points: [[417, 190], [417, 290]] },
+    )
+    project.sheets[0].parts = project.parts
+    project.sheets[0].wires = project.wires
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  const plot = page.locator('.analysis-panel')
+  await expect(plot.getByText('Transient results')).toBeVisible({ timeout: 60_000 })
+  const switchPart = page.getByRole('button', { name: /^S1, Switch/ })
+  await switchPart.click()
+  await expect(switchPart).toHaveAttribute('aria-label', /switch on/)
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled({ timeout: 60_000 })
+  await expect(plot.getByText('Transient results')).toBeVisible()
+  await expect(plot.locator('.stale-note[role="status"]')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'S1')?.value)).toBe('On')
+})
+
 test('component categories filter the library and search crosses categories', async ({ page }) => {
   await page.goto('/')
   const cards = page.locator('.component-card')
@@ -230,6 +259,7 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await page.keyboard.press('Space')
   await expect(switchPart).toHaveAttribute('aria-pressed', 'true')
   await expect(switchPart).toHaveAttribute('aria-label', /switch on/)
+  await expect(page.getByText('S1 switched on. Run simulation to calculate the updated circuit.')).toBeVisible()
 })
 
 test('schematic wire paths and net labels can be selected from the keyboard', async ({ page }) => {

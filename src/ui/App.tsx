@@ -671,7 +671,7 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
   </div>
 }
 
-function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, setNotice, beginEdit, endEdit, onProbe, simulationResult, sampleIndex, onSampleChange }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
+function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, setNotice, beginEdit, endEdit, onProbe, onSwitchChanged, simulationResult, sampleIndex, onSampleChange }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
   const drag = useRef<{ kind: 'part' | 'wire' | 'segment' | 'label' | 'pan'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; segmentIndex?: number; group?: { id: string; x: number; y: number }[] } | null>(null)
@@ -699,7 +699,9 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     beginEdit()
     setProject((current) => ({ ...current, parts: current.parts.map((candidate) => candidate.id === id ? { ...candidate, value } : candidate) }))
     endEdit()
-    setNotice(`${part.ref} switched ${value.toLowerCase()}. Run simulation to calculate the updated circuit.`)
+    setNotice(onSwitchChanged()
+      ? `${part.ref} switched ${value.toLowerCase()}. Recalculating the circuit.`
+      : `${part.ref} switched ${value.toLowerCase()}. Run simulation to calculate the updated circuit.`)
   }
   const voltageAtNode = (name: string): number | undefined => name === '0' ? 0 : resultValue(`v(${name})`)
   const componentSample = (part: Part) => {
@@ -1006,6 +1008,7 @@ export default function App() {
   const plotWindowRef = useRef<HTMLElement>(null)
   const plotDrag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
+  const [switchSolveQueued, setSwitchSolveQueued] = useState(false)
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   const [sampleIndex, setSampleIndex] = useState<number | null>(null)
   const [playbackRunning, setPlaybackRunning] = useState(false)
@@ -1966,6 +1969,17 @@ export default function App() {
       setNotice(error instanceof Error ? error.message : 'Could not prepare the ngspice run.')
     }
   }
+  const requestSwitchSolve = () => {
+    const resultMatchesProject = simulationResult?.metadata.settings.projectUpdatedAt === project.updatedAt
+    if (!resultMatchesProject || runState !== 'idle' || engineAssetAvailable !== true) return false
+    setSwitchSolveQueued(true)
+    return true
+  }
+  useEffect(() => {
+    if (!switchSolveQueued) return
+    setSwitchSolveQueued(false)
+    void startSimulation()
+  }, [switchSolveQueued])
   const stopSimulation = () => {
     const worker = activeWorkerRef.current
     if (!worker) { setNotice('No simulation is running.'); return }
@@ -2154,7 +2168,7 @@ export default function App() {
 
       <main className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => setSheetSettingsOpen(true)}><SlidersHorizontal size={15}/></button></div>
-        <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
+        <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <><button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button><button className="subtle-icon" title="Add independent plot panel" aria-label="Add independent plot panel" onClick={addPlotPanel} disabled={!simulationResult || additionalPlotPanels.length >= 8}><Plus size={15}/></button></>}</div></div>
           <div className="analysis-content">
