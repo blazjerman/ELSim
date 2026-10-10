@@ -144,6 +144,7 @@
           "enum": [
             "source",
             "resistor",
+            "lamp",
             "capacitor",
             "ground",
             "inductor",
@@ -222,6 +223,12 @@
         },
         "behavioralOutput": {
           "enum": ["voltage", "current"]
+        },
+        "animationNominalPower": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "description": "Nominal electrical power in watts used only to scale lamp brightness."
         },
         "symbolAssetId": {
           "type": "string",

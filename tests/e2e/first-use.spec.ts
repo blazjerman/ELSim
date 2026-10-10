@@ -79,6 +79,7 @@ test('shift selection moves, copies, pastes, and deletes a group of parts', asyn
   await page.keyboard.press('Control+v')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial + 2)
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wiresBeforeCopy + 3)
+  await expect(page.getByRole('status')).toContainText('Ends at unselected parts stay open')
   await expect(page.locator('.circuit-part.selected')).toHaveCount(2)
   await page.keyboard.press('Delete')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial)
@@ -311,6 +312,15 @@ test('circuit checks can select the affected component and orphan wire', async (
   await expect(report).toContainText('Wire is not attached to a component or label')
   await report.getByRole('button', { name: 'Select wire' }).click()
   await expect(page.locator('.wire-line.selected')).toHaveCount(1)
+})
+
+test('lamp palette item exposes resistance and nominal animation power', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTitle('Add Lamp').click()
+  await expect(page.getByRole('heading', { name: 'R2' })).toBeVisible()
+  await expect(page.getByLabel('Resistance (Ω)')).toHaveValue('12 Ω')
+  await expect(page.getByLabel('Nominal lamp power (W)')).toHaveValue('10')
+  await expect(page.getByText(/no thermal filament behavior is simulated/i)).toBeVisible()
 })
 
 test('phone-width workspace switches panels without horizontal page scrolling', async ({ page }) => {

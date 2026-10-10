@@ -52,7 +52,7 @@ export function hierarchyComponentCurrentVector(project: Project, sheetId: strin
   if (!part || part.kind === 'ground' || part.kind === 'subcircuit') return null
   const currentName = part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
   if (!refs.length) return `i(@${part.ref.toLowerCase()}[${currentName}])`
-  const deviceType = part.kind === 'source' ? 'v' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : 'g'
+  const deviceType = part.kind === 'source' ? 'v' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : 'g'
   const device = [...refs, part.ref.toLowerCase()]
   return part.kind === 'source' ? `i(${deviceType}.${device.join('.')})` : `i(@${deviceType}.${device.join('.')}[${currentName}])`
 }

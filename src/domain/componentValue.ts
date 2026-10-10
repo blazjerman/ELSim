@@ -17,7 +17,7 @@ function spiceNumber(value: string, kind: PartKind): string | null {
 
 /** Parse a passive component value with SPICE SI suffixes into base units. */
 export function componentMagnitude(value: string, kind: PartKind): number | null {
-  if (!['resistor', 'capacitor', 'inductor'].includes(kind)) return null
+  if (!['resistor', 'lamp', 'capacitor', 'inductor'].includes(kind)) return null
   const normalized = spiceNumber(value, kind)
   const match = normalized?.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
   if (!match) return null

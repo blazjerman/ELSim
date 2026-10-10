@@ -71,6 +71,18 @@ test('LED instances netlist as diode devices and retain D reference designators'
   assert.equal(artifact.sourceMap.find((item) => item.sourceId === 'p-led1')?.role, 'component')
 })
 
+test('lamp uses resistor electrical behavior and keeps its animation setting in the project', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-lamp1', kind: 'lamp', ref: 'R2', value: '12 Ω', animationNominalPower: 6, x: 700, y: 400, rotation: 0 })
+  const valid = validateProject(JSON.parse(JSON.stringify(project)))
+  const artifact = createNetlistArtifact(valid)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^R2 n\d+ n\d+ 12$/m)
+  assert.equal(valid.parts.find((part) => part.id === 'p-lamp1').animationNominalPower, 6)
+  valid.parts.find((part) => part.id === 'p-lamp1').animationNominalPower = 0
+  assert.throws(() => validateProject(valid), /nominal power/i)
+})
+
 test('DC operating point emits steady DC source values and no transient directive', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'op'

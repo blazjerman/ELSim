@@ -21,11 +21,11 @@ export type LtspiceExportResult = {
 
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
-  source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'R',
+  source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'R',
   vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', resistor: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+  source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -148,7 +148,7 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
     const state = part.value.trim().toLowerCase()
     return state === 'on' ? { value: '1m' } : state === 'off' ? { value: '1T' } : null
   }
-  if (part.kind === 'resistor') { const value = scalar(part.value); return value ? { value } : null }
+  if (part.kind === 'resistor' || part.kind === 'lamp') { const value = scalar(part.value); return value ? { value } : null }
   if (part.kind === 'capacitor') { const value = scalar(part.value, 'f'); return value ? { value } : null }
   if (part.kind === 'inductor') { const value = scalar(part.value, 'h'); return value ? { value } : null }
   if (part.kind === 'source') {
@@ -355,6 +355,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
     if (sheet.ports.length > 0 && sheet.ports.some((port) => !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase()))) blockers.push({ sourceId: sheet.id, message: `${sheet.name} has a port without a matching named label.` })
     for (const part of sheet.parts) {
       if (part.kind === 'behavioral' || part.kind === 'cccs' || part.kind === 'ccvs') blockers.push({ sourceId: part.id, message: `${part.ref} (${part.kind}) has no verified LTspice schematic mapping yet.` })
+      if (part.kind === 'lamp') losses.push({ severity: 'info', sourceId: part.id, title: 'Lamp exported as a fixed resistor', explanation: 'Electrical resistance is preserved, but ELSim nominal power and voltage-current glow animation are ELSim-only and are not carried into LTspice.' })
       if (part.kind === 'switch') {
         if (!['on', 'off'].includes(part.value.trim().toLowerCase())) blockers.push({ sourceId: part.id, message: `${part.ref} state must be On or Off before LTspice export.` })
         else losses.push({ severity: 'warning', sourceId: part.id, title: 'Fixed-state switch exported as a resistor', explanation: `The saved ${part.value.trim()} state is exported as a fixed 1 mΩ or 1 TΩ resistor, matching ELSim's current switch Ron/Roff settings. It will not be toggleable in LTspice; replace it with a voltage-controlled switch if dynamic control is needed.` })

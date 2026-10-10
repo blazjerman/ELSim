@@ -3,7 +3,7 @@ import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcir
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 
-export type PartKind = 'source' | 'resistor' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'subcircuit'
+export type PartKind = 'source' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
 
 export type Part = {
@@ -22,6 +22,7 @@ export type Part = {
   deviceModel?: string
   controlSource?: string
   behavioralOutput?: 'voltage' | 'current'
+  animationNominalPower?: number
   symbolAssetId?: string
   symbolPinOffsets?: [number, number][]
   sheetId?: string
@@ -300,7 +301,7 @@ export function validateProject(input: unknown): Project {
   if (data.version !== 7 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
     throw new Error('This project format is not supported. Expected ELSim project version 7.')
   }
-  const allowed = new Set<PartKind>(['source', 'resistor', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'subcircuit'])
+  const allowed = new Set<PartKind>(['source', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'subcircuit'])
   const refs = new Set<string>()
   const partIds = new Set<string>()
   for (const candidate of data.parts as Part[]) {
@@ -308,7 +309,8 @@ export function validateProject(input: unknown): Project {
       throw new Error('Project contains a malformed component.')
     }
     partIds.add(candidate.id)
-    const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[candidate.kind]
+    const prefix = ({ source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[candidate.kind]
+    if (candidate.animationNominalPower !== undefined && (candidate.kind !== 'lamp' || !Number.isFinite(candidate.animationNominalPower) || candidate.animationNominalPower <= 0 || candidate.animationNominalPower > 100_000)) throw new Error(`${candidate.ref} has an invalid animation nominal power.`)
     if (!candidate.ref.startsWith(prefix) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(candidate.ref)) throw new Error(`The reference designator ${candidate.ref} is invalid for ${candidate.kind}.`)
     if (refs.has(candidate.ref.toLowerCase())) throw new Error(`The reference designator ${candidate.ref} is used more than once.`)
     refs.add(candidate.ref.toLowerCase())
@@ -405,7 +407,7 @@ export function validateProject(input: unknown): Project {
       const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
       if (!symbolAsset) throw new Error(`${part.ref} refers to a missing imported symbol.`)
       const symbol = parseLtspiceSymbol(symbolAsset.content, symbolAsset.filename)
-      const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, resistor: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3 } as const)[part.kind]
+      const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3 } as const)[part.kind]
       if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
     }
     if (part.kind === 'subcircuit' && !part.sheetId) {
@@ -448,7 +450,7 @@ export function validateProject(input: unknown): Project {
     for (const sweep of simulation.parameterSweeps) {
       if (!sweep || typeof sweep.component !== 'string' || !sweep.component.trim()) throw new Error('Parameter stepping settings are malformed.')
       const component = data.parts.find((part) => (part as Part).ref.toLowerCase() === sweep.component.toLowerCase()) as Part | undefined
-      if (!component || !['resistor', 'capacitor', 'inductor'].includes(component.kind) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct resistors, capacitors, or inductors and 2–10 steps.')
+      if (!component || !['resistor', 'lamp', 'capacitor', 'inductor'].includes(component.kind) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct resistors, lamps, capacitors, or inductors and 2–10 steps.')
       const parseComponentValue = (value: string): number | null => {
         const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/[ΩΩ]|ohms?|[fFhH]$/gi, '')
         const match = normalized.match(/^([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
@@ -576,10 +578,10 @@ export function validateProject(input: unknown): Project {
 }
 
 export const kindNames: Record<PartKind, string> = {
-  source: 'Voltage source', resistor: 'Resistor', capacitor: 'Capacitor',
+  source: 'Voltage source', resistor: 'Resistor', lamp: 'Lamp', capacitor: 'Capacitor',
   ground: 'Ground', inductor: 'Inductor', diode: 'Diode', led: 'LED', switch: 'Switch', vcvs: 'Voltage-controlled voltage source', vccs: 'Voltage-controlled current source', cccs: 'Current-controlled current source', ccvs: 'Current-controlled voltage source', behavioral: 'Behavioral source', npn: 'NPN transistor', pnp: 'PNP transistor', subcircuit: 'Imported subcircuit',
 }
 
 export const kindPrefix: Record<PartKind, string> = {
-  source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+  source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }

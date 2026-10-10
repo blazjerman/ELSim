@@ -166,6 +166,19 @@ test('exports fixed-state switches as explicit resistor transformations with rou
   assert.equal(restoredConnectivity.pinNets.get(`${restoredOnSwitch.id}:1`), 'SW_ON_OUT')
 })
 
+test('exports lamp resistance and reports omitted ELSim glow metadata', async () => {
+  const project = createStarterProject()
+  const lamp = { id: 'lamp1', kind: 'lamp', ref: 'R2', value: '12 Ω', animationNominalPower: 6, x: 800, y: 600, rotation: 0 }
+  project.parts.push(lamp)
+  project.netLabels.push({ id: 'lamp-left', name: 'LAMP_IN', x: 748, y: 600, visible: true }, { id: 'lamp-right', name: 'LAMP_OUT', x: 852, y: 600, visible: true })
+  project.sheets[0].parts = project.parts
+  project.sheets[0].netLabels = project.netLabels
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  assert.match(output.files.find((file) => file.path.endsWith('.asc')).content, /SYMATTR InstName R2\nSYMATTR Value 12/)
+  assert.ok(output.losses.some((loss) => loss.sourceId === lamp.id && /Lamp exported as a fixed resistor/.test(loss.title) && /glow animation/.test(loss.explanation)))
+})
+
 test('blocks switch export when the saved state is invalid', async () => {
   const project = createStarterProject()
   project.parts.push({ id: 'invalid-switch', kind: 'switch', ref: 'S1', value: 'Maybe', x: 800, y: 600, rotation: 0 })

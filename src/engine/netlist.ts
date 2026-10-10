@@ -94,7 +94,7 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
 }
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
@@ -173,7 +173,7 @@ function hierarchicalSaveVectors(project: Project): string[] {
     }
     if (path.length) for (const part of sheet.parts) {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-    const type = part.kind === 'source' ? 'v' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
+    const type = part.kind === 'source' ? 'v' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
       if (part.kind === 'source') saves.add(`.save i(${type}.${device})`)
       else {
@@ -231,7 +231,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : project.simulation.analysis === 'dc' ? `DC ${value}` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`}`, part.id, 'component')
     }
-    else if (part.kind === 'resistor' || part.kind === 'capacitor' || part.kind === 'inductor') {
+    else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const currentCondition = part.kind === 'inductor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined
       const initialCurrent = currentCondition && 'current' in currentCondition ? spiceScalar(currentCondition.current.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/a$/i, ''), '') : null
       if (currentCondition && !initialCurrent) {
@@ -424,7 +424,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 }
 
 export function nextRef(parts: Part[], kind: Part['kind']): string {
-  const prefix = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[kind]
+  const prefix = ({ source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[kind]
   const used = new Set(parts.map((part) => part.ref.toLowerCase()))
   let index = 1
   while (used.has(`${prefix}${index}`.toLowerCase())) index += 1

@@ -4,12 +4,12 @@ import { componentMagnitude } from '../domain/componentValue'
 export type ParameterSweepRun = { values: { component: string; value: string }[]; label: string }
 
 function componentUnit(kind: string): string {
-  return kind === 'resistor' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
+  return kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
 }
 
 function buildValues(project: Project, sweep: ParameterSweep) {
   const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
-  if (!part || !['resistor', 'capacitor', 'inductor'].includes(part.kind)) throw new Error(`Choose a resistor, capacitor, or inductor for parameter stepping.`)
+  if (!part || !['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error(`Choose a resistor, lamp, capacitor, or inductor for parameter stepping.`)
   const start = componentMagnitude(sweep.start, part.kind)
   const stop = componentMagnitude(sweep.stop, part.kind)
   if (start === null || stop === null || start === stop) throw new Error(`${part.ref} needs valid, different start and stop values.`)
