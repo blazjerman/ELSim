@@ -4,6 +4,7 @@
  */
 export type SymbolPrimitive =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number }
+  | { kind: 'polyline'; points: [number, number][] }
   | { kind: 'rectangle'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'circle'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'arc'; x1: number; y1: number; x2: number; y2: number; startX: number; startY: number; endX: number; endY: number }
@@ -72,6 +73,14 @@ export function parseLtspiceSymbol(text: string, filename = 'Imported symbol.asy
       } else if (upper === 'LINE') {
         if (tokens.length < 5) throw new Error('LINE expects style and two coordinate pairs.')
         result.primitives.push({ kind: 'line', x1: numberToken(tokens[1], lineNo), y1: numberToken(tokens[2], lineNo), x2: numberToken(tokens[3], lineNo), y2: numberToken(tokens[4], lineNo) })
+      } else if (upper === 'POLYLINE') {
+        const coordinateTokens = tokens.slice(1)
+        if (coordinateTokens.length < 4 || coordinateTokens.length % 2 !== 0 || coordinateTokens.length > 512) throw new Error('POLYLINE expects 2–256 coordinate pairs after its style.')
+        const points: [number, number][] = []
+        for (let point = 0; point < coordinateTokens.length; point += 2) {
+          points.push([numberToken(coordinateTokens[point], lineNo), numberToken(coordinateTokens[point + 1], lineNo)])
+        }
+        result.primitives.push({ kind: 'polyline', points })
       } else if (upper === 'RECTANGLE') {
         if (tokens.length < 5) throw new Error('RECTANGLE expects style and two coordinate pairs.')
         result.primitives.push({ kind: 'rectangle', x1: numberToken(tokens[1], lineNo), y1: numberToken(tokens[2], lineNo), x2: numberToken(tokens[3], lineNo), y2: numberToken(tokens[4], lineNo) })

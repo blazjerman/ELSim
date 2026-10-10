@@ -29,6 +29,13 @@ test('reads LTspice ARC bounding boxes and start/end points', () => {
   assert.throws(() => parseLtspiceSymbol('ARC Normal -20 -10 20 10 -10 0 0 -10\nPIN 20 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 1', 'invalid-arc.asy'), /lie on its bounding ellipse/)
 })
 
+test('reads and renders polyline geometry used by imported LTspice symbols', () => {
+  const symbol = parseLtspiceSymbol('POLYLINE Normal -20 0 -8 -12 8 12 20 0\nPIN 20 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 1', 'polyline.asy')
+  assert.deepEqual(symbol.primitives, [{ kind: 'polyline', points: [[-20, 0], [-8, -12], [8, 12], [20, 0]] }])
+  assert.throws(() => parseLtspiceSymbol('POLYLINE Normal 0 0 10\nPIN 20 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 1', 'broken-polyline.asy'), /2–256 coordinate pairs/)
+  assert.throws(() => parseLtspiceSymbol(`POLYLINE Normal ${Array(514).fill('0').join(' ')}\nPIN 20 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 1`, 'oversized-polyline.asy'), /2–256 coordinate pairs/)
+})
+
 test('skips unknown non-executable records with a diagnostic', () => {
   const symbol = parseLtspiceSymbol('FUTURE foo\nPIN 0 0 R\nPINATTR PinName A\nPINATTR SpiceOrder 1', 'future.asy')
   assert.deepEqual(symbol.warnings, ['Line 1: unsupported .asy record FUTURE was skipped.'])
