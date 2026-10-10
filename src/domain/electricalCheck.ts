@@ -3,6 +3,7 @@ import type { Connectivity } from './connectivity'
 import { componentPins } from './geometry'
 import type { Project } from './project'
 import { componentMagnitude } from './componentValue'
+import { analyzeModelDependencies } from './subcircuitLibrary'
 
 export type ElectricalIssue = {
   id: string
@@ -55,6 +56,59 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       } else if (magnitude !== null && magnitude <= 0) {
         issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
       }
+    }
+    if ((part.kind === 'diode' || part.kind === 'led' || part.kind === 'npn' || part.kind === 'pnp' || part.kind === 'nmos' || part.kind === 'pmos') && part.deviceModel) {
+      let foundModel = false
+      for (const asset of project.modelAssets ?? []) {
+        try { if (analyzeModelDependencies([asset]).deviceModelAssets.has(part.deviceModel.toLowerCase())) foundModel = true }
+        catch { /* Invalid library syntax has its own importer diagnostic. */ }
+      }
+      if (!foundModel) issues.push({
+        id: `missing-device-model:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} needs device model ${part.deviceModel}`,
+        detail: 'This model is not in the imported project libraries. Import the library that defines it or select a compatible model before running.',
+        partId: part.id,
+      })
+    }
+    if (part.kind === 'behavioral') {
+      const referenced = [...part.value.matchAll(/\b(?:V|I)\s*\(\s*([A-Za-z_][A-Za-z0-9_.$]*)/gi)].map((match) => match[1].toLowerCase())
+      const knownNodes = new Set(project.netLabels.map((label) => label.name.toLowerCase()))
+      const knownParts = new Set(project.parts.map((candidate) => candidate.ref.toLowerCase()))
+      const unknown = referenced.filter((name) => !knownNodes.has(name) && !knownParts.has(name) && name !== '0')
+      if (unknown.length) issues.push({
+        id: `behavioral-reference:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} references an unknown node or component`,
+        detail: `Add a net label or component for ${[...new Set(unknown)].join(', ')} before running.`,
+        partId: part.id,
+      })
+    }
+  }
+
+  if (project.modelAssets?.length) {
+    try {
+      const dependencies = analyzeModelDependencies(project.modelAssets)
+      const placed = project.sheets.flatMap((sheet) => sheet.parts.map((part) => ({ kind: part.kind, modelName: part.modelName, deviceModel: part.deviceModel })))
+      const usedSubcircuits = new Set(placed.filter((part) => part.kind === 'subcircuit').map((part) => part.modelName?.toLowerCase()).filter((name): name is string => Boolean(name)))
+      const usedDevices = new Set(placed.flatMap((part) => part.deviceModel ? [part.deviceModel.toLowerCase()] : []))
+      const assets = new Map(project.modelAssets.map((asset) => [asset.id, asset.filename]))
+      for (const missing of dependencies.missing) {
+        if (missing.kind === 'subcircuit' ? !usedSubcircuits.has(missing.owner.toLowerCase()) : !usedDevices.has(missing.owner.toLowerCase())) continue
+        issues.push({
+          id: `missing-model-dependency:${missing.assetId}:${missing.sourceLine}:${missing.modelName.toLowerCase()}`,
+          severity: 'warning',
+          title: `${missing.owner} needs missing ${missing.kind} ${missing.modelName}`,
+          detail: `Import the library that defines ${missing.modelName}; this dependency is referenced by ${assets.get(missing.assetId) ?? 'an imported model'} at line ${missing.sourceLine}.`,
+        })
+      }
+      for (const chain of dependencies.recursiveChains) {
+        const chainNames = new Set(chain.map((name) => name.toLowerCase()))
+        if (!([...usedSubcircuits].some((name) => chainNames.has(name)) || [...placed].some((part) => part.kind === 'subcircuit' && part.modelName && chainNames.has(part.modelName.toLowerCase())))) continue
+        issues.push({ id: `recursive-model:${chain.map((name) => name.toLowerCase()).join(':')}`, severity: 'warning', title: 'A used subcircuit has a recursive model chain', detail: `${chain.join(' → ')}. ngspice cannot instantiate a recursive subcircuit chain.` })
+      }
+    } catch {
+      // Invalid library syntax has its own importer and project-validation diagnostics.
     }
   }
 

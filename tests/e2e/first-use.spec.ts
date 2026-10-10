@@ -862,6 +862,23 @@ test('circuit checks can select the affected component and orphan wire', async (
   await expect(page.locator('.wire-line.selected')).toHaveCount(1)
 })
 
+test('circuit checks explain missing device models and select the affected component', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.push({ id: 'missing-diode', kind: 'diode', ref: 'D2', value: 'D_CUSTOM', deviceModel: 'D_CUSTOM', x: 760, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  await expect(report).toContainText('D2 needs device model D_CUSTOM')
+  await expect(report).toContainText('Import the library that defines it')
+  await report.getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('D2')
+})
+
 test('voltage source inspector edits DC, pulse, and validated PWL transient behavior', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: /^V1, Voltage source/ }).click()

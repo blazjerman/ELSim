@@ -108,3 +108,48 @@ test('accepts declared sheet parameters in passive and current-source values but
   issues = checkCircuit(project)
   assert.ok(issues.some((item) => item.id === 'invalid-value:p-r1'))
 })
+
+test('reports missing imported device models on the affected component', () => {
+  const project = createStarterProject()
+  const diode = { id: 'user-diode', kind: 'diode', ref: 'D2', value: 'D_CUSTOM', deviceModel: 'D_CUSTOM', x: 760, y: 600, rotation: 0 }
+  project.parts.push(diode)
+  project.sheets[0].parts = project.parts
+  const issue = checkCircuit(project).find((item) => item.id === 'missing-device-model:user-diode')
+  assert.equal(issue?.severity, 'warning')
+  assert.equal(issue?.partId, diode.id)
+  assert.match(issue?.detail, /import the library/i)
+})
+
+test('reports recursive model chains used by a placed subcircuit', () => {
+  const project = createStarterProject()
+  const asset = (id, filename, content) => ({ id, filename, sha256: '0'.repeat(64), content, licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' })
+  project.modelAssets = [
+    asset('model-a', 'amp.lib', '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n'),
+    asset('model-b', 'core.lib', '.SUBCKT CORE IN OUT\nXAMP IN OUT AMP\n.ENDS CORE\n'),
+  ]
+  const instance = { id: 'amp-instance', kind: 'subcircuit', ref: 'X1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 }
+  project.parts.push(instance)
+  project.sheets[0].parts = project.parts
+
+  const issues = checkCircuit(project)
+  assert.ok(issues.some((item) => item.id.startsWith('recursive-model:') && /recursive/i.test(item.title)))
+})
+
+test('reports missing transitive dependencies of an instantiated model', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'amp-lib', filename: 'amp.lib', sha256: '0'.repeat(64), content: '.SUBCKT AMP IN OUT\nXCORE IN OUT MISSING_CORE\n.ENDS AMP\n', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
+  const instance = { id: 'amp-instance', kind: 'subcircuit', ref: 'X1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 }
+  project.parts.push(instance)
+  project.sheets[0].parts = project.parts
+  assert.ok(checkCircuit(project).some((item) => item.id.startsWith('missing-model-dependency:') && /MISSING_CORE/.test(item.title)))
+})
+
+test('warns when behavioral expressions reference unlabeled unknown nodes', () => {
+  const project = createStarterProject()
+  const behavioral = { id: 'behavioral-missing', kind: 'behavioral', ref: 'B1', value: 'V(VMISSING) * 2', behavioralOutput: 'voltage', x: 760, y: 600, rotation: 0 }
+  project.parts.push(behavioral)
+  project.sheets[0].parts = project.parts
+  const issue = checkCircuit(project).find((item) => item.id === 'behavioral-reference:behavioral-missing')
+  assert.equal(issue?.partId, behavioral.id)
+  assert.match(issue?.detail, /vmissing/i)
+})
