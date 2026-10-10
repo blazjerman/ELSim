@@ -232,3 +232,28 @@ test('phone-width workspace switches panels without horizontal page scrolling', 
   await expect(page.getByText(/Transient results/)).toBeVisible()
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
 })
+
+test('waveform click moves the cursor while drag pans and persists the plot range', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const chart = page.getByRole('img', { name: /Transient waveforms from/ })
+  await expect(chart).toBeVisible()
+  await page.getByLabel('Plot navigation').getByRole('button', { name: 'Zoom in' }).click()
+  const zoomedRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.ranges.tran)
+  expect(zoomedRange.end - zoomedRange.start).toBeLessThan(1)
+
+  const box = await chart.boundingBox()
+  expect(box).not.toBeNull()
+  await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.55)
+  await page.mouse.down()
+  await page.mouse.move(box!.x + box!.width * 0.58, box!.y + box!.height * 0.55, { steps: 5 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.ranges.tran.start)).not.toBe(zoomedRange.start)
+  const pannedRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.ranges.tran)
+  expect(pannedRange.end - pannedRange.start).toBeCloseTo(zoomedRange.end - zoomedRange.start, 5)
+
+  await chart.click({ position: { x: box!.width * 0.5, y: box!.height * 0.45 } })
+  await expect(page.getByText(/^t = /)).toBeVisible()
+  await expect(page.locator('.plot-cursor')).toBeAttached()
+})
