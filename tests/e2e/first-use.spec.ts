@@ -534,6 +534,22 @@ test('first use: run the RC starter and inspect its solved waveform', async ({ p
   expect(tiledBounds.primary.y).toBe(tiledBounds.secondary.y)
   await expect(page.getByRole('dialog', { name: 'Detached waveform panel' })).toHaveCSS('left', `${tiledBounds.primary.x}px`)
   await expect(independentPanel).toHaveCSS('left', `${tiledBounds.secondary.x}px`)
+  const primaryBox = await page.getByRole('dialog', { name: 'Detached waveform panel' }).boundingBox()
+  const panelTitleBox = await independentPanel.locator('.plot-window-title').boundingBox()
+  expect(primaryBox).not.toBeNull()
+  expect(panelTitleBox).not.toBeNull()
+  await page.mouse.move(panelTitleBox!.x + 80, panelTitleBox!.y + 16)
+  await page.mouse.down()
+  await page.mouse.move(primaryBox!.x + primaryBox!.width / 2, primaryBox!.y + 4)
+  await page.mouse.up()
+  await expect(page.getByText(/Placed Plot panel 1 (top|bottom) of Waveforms/)).toBeVisible()
+  const dockedBounds = await page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings
+    return { primary: settings.detachedWindow, secondary: settings.panels[0].bounds }
+  })
+  expect(dockedBounds.primary.x).toBe(dockedBounds.secondary.x)
+  expect(dockedBounds.primary.width).toBe(dockedBounds.secondary.width)
+  expect(dockedBounds.primary.y + dockedBounds.primary.height <= dockedBounds.secondary.y || dockedBounds.secondary.y + dockedBounds.secondary.height <= dockedBounds.primary.y).toBe(true)
   const independentTrace = independentPanel.locator('.trace-toggles button[aria-pressed="true"]').first()
   await independentTrace.click()
   const plotPreferences = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings)

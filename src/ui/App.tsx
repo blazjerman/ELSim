@@ -466,7 +466,7 @@ function ResultPlot({ result, selectedIds, onToggle, stale, onExport, ranges, on
   return <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} sampleIndex={sampleIndex} onSampleChange={onSampleChange} onExport={onExport} stale={stale} measurements={result.measurements}/>
 }
 
-function FloatingPlotPanel({ panel, index, onBoundsChange, onClose, onDock, onActivate, children }: { panel: PlotPanel; index: number; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onDock: () => void; onActivate: () => void; children: ReactNode }) {
+function FloatingPlotPanel({ panel, index, onBoundsChange, onClose, onDock, onDockDrop, onActivate, children }: { panel: PlotPanel; index: number; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onDock: () => void; onDockDrop: (sourceId: string, targetId: string, edge: 'left' | 'right' | 'top' | 'bottom') => void; onActivate: () => void; children: ReactNode }) {
   const ref = useRef<HTMLElement>(null)
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   useEffect(() => {
@@ -490,15 +490,35 @@ function FloatingPlotPanel({ panel, index, onBoundsChange, onClose, onDock, onAc
       const { x, y, left, top } = drag.current
       onBoundsChange(clamp({ ...panel.bounds, x: left + event.clientX - x, y: top + event.clientY - y }))
     }
-    const up = () => { drag.current = null }
+    const up = (event: globalThis.PointerEvent) => {
+      if (drag.current) {
+        const target = document.elementsFromPoint(event.clientX, event.clientY)
+          .map((element) => element.closest<HTMLElement>('[data-plot-panel-id]'))
+          .find((candidate) => candidate?.dataset.plotPanelId !== panel.id)
+        const targetId = target?.dataset.plotPanelId
+        const targetRect = target?.getBoundingClientRect()
+        if (targetId && targetId !== panel.id && targetRect) {
+          const distances = [
+            { edge: 'left' as const, distance: Math.abs(event.clientX - targetRect.left) },
+            { edge: 'right' as const, distance: Math.abs(targetRect.right - event.clientX) },
+            { edge: 'top' as const, distance: Math.abs(event.clientY - targetRect.top) },
+            { edge: 'bottom' as const, distance: Math.abs(targetRect.bottom - event.clientY) },
+          ]
+          const nearest = distances.sort((a, b) => a.distance - b.distance)[0]
+          const edgeLimit = nearest.edge === 'left' || nearest.edge === 'right' ? targetRect.width * 0.3 : targetRect.height * 0.3
+          if (nearest.distance <= edgeLimit) onDockDrop(panel.id, targetId, nearest.edge)
+        }
+      }
+      drag.current = null
+    }
     const resize = () => onBoundsChange(clamp(panel.bounds))
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('resize', resize)
     return () => { observer.disconnect(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('resize', resize) }
   }, [panel.bounds, onBoundsChange])
-  return <section ref={ref} className="plot-window additional-plot-window" role="dialog" aria-label={`Plot panel ${index + 1}`} style={{ left: panel.bounds.x, top: panel.bounds.y, width: panel.bounds.width, height: panel.bounds.height, zIndex: 9 + index }} onPointerDownCapture={onActivate}>
-    <div className="plot-window-title" onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> Plot panel {index + 1}</span><span><button aria-label={`Dock plot panel ${index + 1} into Waveforms`} title="Dock into the main Waveforms pane" onClick={onDock}><ArrowDown size={14}/></button><button aria-label={`Close plot panel ${index + 1}`} title="Close plot panel" onClick={onClose}><X size={14}/></button></span></div>
+  return <section ref={ref} data-plot-panel-id={panel.id} className="plot-window additional-plot-window" role="dialog" aria-label={`Plot panel ${index + 1}`} style={{ left: panel.bounds.x, top: panel.bounds.y, width: panel.bounds.width, height: panel.bounds.height, zIndex: 9 + index }} onPointerDownCapture={onActivate}>
+    <div className="plot-window-title" title="Drag this title to a plot window edge to split the available space" onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> Plot panel {index + 1}</span><span><button aria-label={`Dock plot panel ${index + 1} into Waveforms`} title="Dock into the main Waveforms pane" onClick={onDock}><ArrowDown size={14}/></button><button aria-label={`Close plot panel ${index + 1}`} title="Close plot panel" onClick={onClose}><X size={14}/></button></span></div>
     <div className="plot-window-content">{children}</div>
   </section>
 }
@@ -1209,6 +1229,37 @@ export default function App() {
     setWaveformDetached(false)
     setAnalysisTab('waveforms')
     setNotice('Docked this plot into the main Waveforms pane. Its trace selection and zoom range are now the primary plot settings.')
+  }
+  const dockPlotPanelsTogether = (sourceId: string, targetId: string, edge: 'left' | 'right' | 'top' | 'bottom') => {
+    const source = additionalPlotPanels.find((panel) => panel.id === sourceId)
+    const target = targetId === 'primary' ? null : additionalPlotPanels.find((panel) => panel.id === targetId)
+    const targetBounds = targetId === 'primary' ? plotBounds : target?.bounds
+    if (!source || !targetBounds || (targetId !== 'primary' && !target)) return
+    const gap = 8
+    let splitEdge = edge
+    let horizontal = splitEdge === 'left' || splitEdge === 'right'
+    if (horizontal && targetBounds.width < 2 * 280 + gap) {
+      if (targetBounds.height < 2 * 160 + gap) { setNotice('This plot window is too small to split. Enlarge it, then drag a plot title to one of its edges.'); return }
+      splitEdge = edge === 'left' ? 'top' : 'bottom'
+      horizontal = false
+    } else if (!horizontal && targetBounds.height < 2 * 160 + gap) {
+      if (targetBounds.width < 2 * 280 + gap) { setNotice('This plot window is too small to split. Enlarge it, then drag a plot title to one of its edges.'); return }
+      splitEdge = edge === 'top' ? 'left' : 'right'
+      horizontal = true
+    }
+    const extent = horizontal ? targetBounds.width : targetBounds.height
+    const half = Math.floor((extent - gap) / 2)
+    const second = half
+    const sourceFirst = splitEdge === 'left' || splitEdge === 'top'
+    const sourceBounds: PlotPanel['bounds'] = horizontal
+      ? { ...targetBounds, x: sourceFirst ? targetBounds.x : targetBounds.x + half + gap, width: half }
+      : { ...targetBounds, y: sourceFirst ? targetBounds.y : targetBounds.y + half + gap, height: half }
+    const targetNext: PlotPanel['bounds'] = horizontal
+      ? { ...targetBounds, x: sourceFirst ? targetBounds.x + half + gap : targetBounds.x, width: second }
+      : { ...targetBounds, y: sourceFirst ? targetBounds.y + half + gap : targetBounds.y, height: second }
+    saveAdditionalPlotPanels(additionalPlotPanels.map((panel) => panel.id === sourceId ? { ...panel, bounds: sourceBounds } : panel.id === targetId ? { ...panel, bounds: targetNext } : panel))
+    if (targetId === 'primary') setPlotBounds(targetNext)
+    setNotice(`Placed Plot panel ${additionalPlotPanels.findIndex((panel) => panel.id === sourceId) + 1} ${splitEdge} of ${targetId === 'primary' ? 'Waveforms' : `Plot panel ${additionalPlotPanels.findIndex((panel) => panel.id === targetId) + 1}`}. Both panels keep independent traces and zoom.`)
   }
   const addPlotPanel = () => {
     if (additionalPlotPanels.length >= 8) { setNotice('A project can open up to eight additional plot panels.'); return }
@@ -2202,12 +2253,12 @@ export default function App() {
         </section>
       </main>
 
-      {waveformDetached && <section ref={plotWindowRef} className="plot-window" role="dialog" aria-label="Detached waveform panel" style={{ left: plotBounds.x, top: plotBounds.y, width: plotBounds.width, height: plotBounds.height }}>
+      {waveformDetached && <section ref={plotWindowRef} data-plot-panel-id="primary" className="plot-window" role="dialog" aria-label="Detached waveform panel" style={{ left: plotBounds.x, top: plotBounds.y, width: plotBounds.width, height: plotBounds.height }}>
         <div className="plot-window-title" onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; plotDrag.current = { x: event.clientX, y: event.clientY, left: plotBounds.x, top: plotBounds.y } }}><span><Activity size={14}/> Waveforms</span><button aria-label="Restore waveform panel" title="Restore waveform panel" onClick={() => setWaveformDetached(false)}><ArrowDown size={14}/></button></div>
         <div className="plot-window-content">{simulationResult ? simulationResult.analysis === 'op' ? <OperatingPointView traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'ac' ? <AcPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.ac} onRangeChange={(range) => changePlotRange('ac', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : simulationResult.analysis === 'dc' ? <DcSweepPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.dc} onRangeChange={(range) => changePlotRange('dc', range)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt}/> : <WaveformPlot traces={simulationResult.traces} selectedIds={selectedTraceIds} onToggle={changeTraceSelection} range={project.plotSettings?.ranges.tran} onRangeChange={(range) => changePlotRange('tran', range)} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt} measurements={simulationResult.measurements}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this panel.</p></div></div>}</div>
       </section>}
 
-      {additionalPlotPanels.map((panel, index) => <FloatingPlotPanel key={panel.id} panel={panel} index={index} onBoundsChange={(bounds) => updatePlotPanel(panel.id, (current) => ({ ...current, bounds }))} onClose={() => saveAdditionalPlotPanels(additionalPlotPanels.filter((item) => item.id !== panel.id))} onDock={() => dockPlotPanel(panel)} onActivate={() => { if (index !== additionalPlotPanels.length - 1) saveAdditionalPlotPanels([...additionalPlotPanels.filter((item) => item.id !== panel.id), panel]) }}>
+      {additionalPlotPanels.map((panel, index) => <FloatingPlotPanel key={panel.id} panel={panel} index={index} onBoundsChange={(bounds) => updatePlotPanel(panel.id, (current) => ({ ...current, bounds }))} onClose={() => saveAdditionalPlotPanels(additionalPlotPanels.filter((item) => item.id !== panel.id))} onDock={() => dockPlotPanel(panel)} onDockDrop={dockPlotPanelsTogether} onActivate={() => { if (index !== additionalPlotPanels.length - 1) saveAdditionalPlotPanels([...additionalPlotPanels.filter((item) => item.id !== panel.id), panel]) }}>
         {simulationResult ? <ResultPlot result={simulationResult} selectedIds={panel.selectedTraceIds} onToggle={(traceId) => togglePlotPanelTrace(panel.id, traceId)} onExport={exportWaveformCsv} stale={simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt} ranges={panel.ranges} onRangeChange={(analysis, range) => changePlotPanelRange(panel.id, analysis, range)} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this panel.</p></div></div>}
       </FloatingPlotPanel>)}
 
