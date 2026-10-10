@@ -1,0 +1,24 @@
+{
+  "status": "not-approved",
+  "upstreamCommit": "a80f6e3e95d51534905b1f23410a951802666656",
+  "reviewer": {
+    "name": "",
+    "qualification": "",
+    "reviewedAt": ""
+  },
+  "linkedComponents": [
+    {
+      "sourcePath": "",
+      "license": "",
+      "obligations": ""
+    }
+  ],
+  "sourceAndRelinkingMaterials": false,
+  "noticesVerified": false,
+  "artifactSha256": {
+    "ngspice.mjs": "",
+    "ngspice.wasm": "",
+    "ngspice-COPYING.txt": "",
+    "ngspice-link.map": ""
+  }
+}
