@@ -5,9 +5,9 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 
-const { createNetlistArtifact, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
+const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createLedExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createLedExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { validateSourcePwlPoints } = require(path.join(build, 'domain/sourcePwl.js'))
 
@@ -49,6 +49,29 @@ test('source waveform mode chooses a constant DC source or the backward-compatib
   assert.match(artifact.text, /^V1 vin 0 PULSE\(0 5 0 1u 1u 50m 100m\)$/m)
   source.kind = 'resistor'
   assert.throws(() => validateProject(project), /invalid source waveform mode/i)
+})
+
+test('independent current sources netlist in amperes and receive I designators', () => {
+  const project = createStarterProject()
+  project.parts = [
+    { id: 'i-source', kind: 'currentSource', ref: 'I1', value: '2 mA', x: 300, y: 300, rotation: 0 },
+    { id: 'r-load', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 500, y: 300, rotation: 0 },
+  ]
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^I1 .* .* 2m$/m)
+  assert.equal(nextRef(project.parts, 'currentSource'), 'I2')
+  assert.throws(() => validateProject({ ...project, parts: [{ ...project.parts[0], ref: 'V1' }, project.parts[1]], sheets: [{ ...project.sheets[0], parts: [{ ...project.parts[0], ref: 'V1' }, project.parts[1]] }] }), /invalid for currentSource/i)
+})
+
+test('current-source beginner example predicts the expected one-volt load result', () => {
+  const project = createCurrentSourceExampleProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^I1 0 OUT 1m$/m)
+  assert.match(artifact.text, /^R1 OUT 0 1k$/m)
+  assert.equal(project.simulation.analysis, 'op')
 })
 
 test('source pulse levels and timing are editable and validated before netlisting', () => {

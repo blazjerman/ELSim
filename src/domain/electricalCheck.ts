@@ -40,6 +40,9 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   }
 
   for (const part of project.parts) {
+    if (part.kind === 'currentSource' && componentMagnitude(part.value, part.kind) === null) {
+      issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid current`, detail: 'Enter a numeric current with an optional SI prefix, such as 1 mA or -250 µA.', partId: part.id })
+    }
     if (['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) {
       const magnitude = componentMagnitude(part.value, part.kind)
       if (magnitude === null) {
@@ -68,7 +71,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     })
   }
 
-  const twoTerminalKinds = new Set(['source', 'resistor', 'lamp', 'capacitor', 'inductor', 'diode', 'led', 'switch'])
+  const twoTerminalKinds = new Set(['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor', 'diode', 'led', 'switch'])
   for (const part of project.parts) {
     if (!twoTerminalKinds.has(part.kind)) continue
     const first = connectivity.pinNets.get(`${part.id}:0`), second = connectivity.pinNets.get(`${part.id}:1`)

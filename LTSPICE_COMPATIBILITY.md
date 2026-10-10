@@ -18,6 +18,8 @@ This matrix describes the importer as implemented today. “Supported” means E
 | `.include`, `.inc`, `.lib` | Dependency presence is checked by imported filename; directive itself is not emitted | Missing dependency warning; library content is supplied separately |
 | `.param NAME=value` | Supported for conservative single-token scalar/expression defaults in the active sheet | Nested exported sheet parameters and `{NAME}` values round-trip in `tests/ltspice-export.test.cjs`; broader LTspice parameter syntax is unverified |
 | Scalar voltage source values | Supported as constant DC sources | Import regression verifies DC source mode |
+| Scalar `I` current sources | Supported as constant DC current sources; current probe uses ngspice `@i[current]` | Hand-written import/export fixture, importer diagnostic for unsupported current waveforms, and 1 mA into 1 kΩ WASM operating-point/current-vector fixture |
+| Current-source PULSE/PWL expressions | Not translated; scalar current remains visible and a warning asks for review | The current-source waveform warning is covered by importer behavior; animation and waveform-specific current settings are not modeled yet |
 | Seven-argument `PULSE(low high delay rise fall width period)` voltage values | Supported for scalar levels and timing values | Pulse level/timing import and editable transient source behavior are tested |
 | Scalar-pair `PWL(time voltage ...)` voltage values | Supported for 2–32 strictly increasing, nonnegative time points | Import, netlist, project archive, and LTspice export round-trip fixtures cover PWL points |
 | Other dot directives | Not translated | A warning names the directive; `.save` is covered by a test |
@@ -40,6 +42,7 @@ This matrix describes the importer as implemented today. “Supported” means E
 | --- | --- | --- |
 | `R`, `C`, `L` | Resistor, capacitor, inductor | Scalar values only |
 | `V` | Voltage source | Scalar, seven-argument PULSE, and scalar-pair PWL values are supported; other waveform expressions remain unverified and prompt a warning |
+| `I` | Independent current source | Scalar DC current; current-source transient waveforms are not yet modeled |
 | `S` | Switch | ELSim on/off educational switch semantics, not the full LTspice switch dialect |
 | `E`, `G` | VCVS, VCCS | Linear four-terminal form |
 | `D` | Diode or LED | Device model must be supplied in a compatible imported library |

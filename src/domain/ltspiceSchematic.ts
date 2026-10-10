@@ -108,6 +108,7 @@ function partKind(symbol: AscSymbol, prefix: string, modelValue: string, subcirc
   const name = baseName(symbol.name)
   const key = prefix.toUpperCase()
   if (key === 'R') return { kind: 'resistor' }
+  if (key === 'I') return { kind: 'currentSource' }
   if (key === 'C') return { kind: 'capacitor' }
   if (key === 'L') return { kind: 'inductor' }
   if (key === 'V' || key === 'B') return { kind: 'source' }
@@ -311,12 +312,13 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     if (!mapped.kind) { warnings.push(`Line ${symbol.line}: ${symbol.name} (${identity}) is unsupported or refers to missing subcircuit model ${value}; symbol was skipped: “${recordExcerpt(symbol.rawRecords.join(' | '))}”.`); continue }
     const pins = sidecar.parsed.pins
     const expectedPinNames = childSheet ? childSheet.ports.map((port) => port.name) : mapped.kind === 'subcircuit' ? subcircuits.get(mapped.modelName!.toLowerCase()) ?? [] : null
-    const expectedPinCount = expectedPinNames?.length ?? ({ source: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3, subcircuit: 0 } satisfies Record<PartKind, number>)[mapped.kind]
+    const expectedPinCount = expectedPinNames?.length ?? ({ source: 2, currentSource: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3, subcircuit: 0 } satisfies Record<PartKind, number>)[mapped.kind]
     if (pins.length !== expectedPinCount) { warnings.push(`Line ${symbol.line}: ${symbol.name} has ${pins.length} pins but ${identity} requires ${expectedPinCount}; it was skipped.`); continue }
     if (expectedPinNames && pins.some((pin, index) => pin.name.toLowerCase() !== expectedPinNames[index]?.toLowerCase())) { warnings.push(`Line ${symbol.line}: ${symbol.name} SpiceOrder pin names do not match ${mapped.modelName}; it was skipped.`); continue }
     const kind = mapped.kind
     const defaultValue = kind === 'switch' ? (/^(?:on|1|true)$/i.test(value) ? 'On' : 'Off') : kind === 'diode' ? 'Default diode' : kind === 'led' ? 'Default LED' : kind === 'npn' || kind === 'pnp' ? '100' : kind === 'vcvs' ? '1' : kind === 'vccs' ? '1 mS' : value
     if (kind === 'source' && rawValue.includes('(') && value === rawValue) warnings.push(`Line ${symbol.line}: source waveform on ${identity} is not translated yet; check its value before running.`)
+    if (kind === 'currentSource' && rawValue.includes('(')) warnings.push(`Line ${symbol.line}: current-source waveform on ${identity} is not translated yet; scalar DC current is supported.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !value) warnings.push(`Line ${symbol.line}: ${identity} has no value; set one in the inspector before running.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
     if ((prefix.toUpperCase() === 'D' || prefix.toUpperCase() === 'Q') && value && !deviceModels.has(value.toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${value}” for ${identity} is missing; the educational default model will be used.`)

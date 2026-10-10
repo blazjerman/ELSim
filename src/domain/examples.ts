@@ -28,6 +28,31 @@ export function createPwlExampleProject(): Project {
   return project
 }
 
+/** A one-milliamp source feeding a one-kilohm load for a first current-source lesson. */
+export function createCurrentSourceExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'isource-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 300, y: 360, rotation: 0 }
+  const load: Part = { id: 'isource-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 520, y: 360, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Current source and load'
+  project.parts = [source, load]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('isource-ground-source', '0', source, 0), labelAt('isource-output', 'OUT', source, 1),
+    labelAt('isource-output-load', 'OUT', load, 0), labelAt('isource-ground-load', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: [], ranges: {} }
+  project.view = { zoom: 1, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A driven series RLC circuit whose ringing is visible in the capacitor voltage. */
 export function createRlcExampleProject(): Project {
   const project = createStarterProject()

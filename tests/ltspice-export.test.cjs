@@ -40,6 +40,22 @@ test('packages generated export files as a deterministic, path-safe ZIP', () => 
   assert.throws(() => createFilesZip(Array.from({ length: 257 }, (_, index) => ({ path: `file-${index}.asc`, content: '' }))), /too many files/i)
 })
 
+test('current sources export and reimport as I devices with ampere values', async () => {
+  const project = createStarterProject()
+  const currentSource = { id: 'current-source', kind: 'currentSource', ref: 'I1', value: '2 mA', x: 520, y: 400, rotation: 0 }
+  project.parts.push(currentSource)
+  project.sheets[0].parts = project.parts
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName I1\nSYMATTR Value 2m/)
+  const symbols = exported.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `export-symbol-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const { project: imported } = parseLtspiceSchematic(asc.content, asc.path, symbols)
+  const restored = imported.parts.find((part) => part.ref === 'I1')
+  assert.equal(restored.kind, 'currentSource')
+  assert.equal(restored.value, '2m')
+})
+
 test('exports a deterministic portable file tree for the beginner circuit', async () => {
   const project = createStarterProject()
   const first = await exportLtspiceProject(project)

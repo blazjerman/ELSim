@@ -21,7 +21,7 @@ function spiceScalar(value: string, unit: string): string | null {
 }
 
 function spiceNumber(value: string, kind: PartKind): string | null {
-  const unit = kind === 'source' ? 'v' : kind === 'capacitor' ? 'f' : kind === 'inductor' ? 'h' : ''
+  const unit = kind === 'source' ? 'v' : kind === 'currentSource' ? 'a' : kind === 'capacitor' ? 'f' : kind === 'inductor' ? 'h' : ''
   return spiceScalar(value, unit)
 }
 
@@ -103,7 +103,7 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
 }
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
@@ -182,11 +182,11 @@ function hierarchicalSaveVectors(project: Project): string[] {
     }
     if (path.length) for (const part of sheet.parts) {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-    const type = part.kind === 'source' ? 'v' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
+    const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'led' ? 'd' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
       if (part.kind === 'source') saves.add(`.save i(${type}.${device})`)
       else {
-        const current = part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
+        const current = part.kind === 'currentSource' ? 'current' : part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
         saves.add(`.save @${type}.${device}[${current}]`)
       }
     }
@@ -230,7 +230,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
       continue
     }
-    if (part.kind === 'source') {
+    if (part.kind === 'currentSource') {
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `AC ${value} 0` : value}`, part.id, 'component')
+    }
+    else if (part.kind === 'source') {
       const acMagnitude = spiceNumber(project.simulation.sourceAcMagnitude ?? '1 V', 'source')
       if (project.simulation.analysis === 'ac' && !acMagnitude) {
         const message = 'AC source magnitude must be a valid voltage value.'
@@ -466,7 +469,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 }
 
 export function nextRef(parts: Part[], kind: Part['kind']): string {
-  const prefix = ({ source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[kind]
+  const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[kind]
   const used = new Set(parts.map((part) => part.ref.toLowerCase()))
   let index = 1
   while (used.has(`${prefix}${index}`.toLowerCase())) index += 1

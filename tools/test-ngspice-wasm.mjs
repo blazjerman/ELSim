@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'pwl-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op']
+const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -51,13 +51,13 @@ function realRawVector(raw, name) {
 
 for (const fixture of fixtures) {
   const deckPath = path.join(root, 'engine/wasm/fixtures', `${fixture}.cir`)
-  const wasmResult = await runInWorker(deckPath, fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op', undefined, fixture === 'ltspice-uplim-op')
+  const wasmResult = await runInWorker(deckPath, fixture === 'current-source-op' || fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op', undefined, fixture === 'ltspice-uplim-op')
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
   const wasmRows = numericRows(wasmResult.stdout)
   if (fixture === 'hierarchical-parameter') { assert.match(wasmResult.stdout, /in\s+5\.000000e\+00/i); assert.match(wasmResult.stdout, /in2\s+1\.000000e\+01/i); assert.match(wasmResult.stdout, /resistance\s+2000\s+1000/i); assert.match(wasmResult.stdout, /\bi\s+0\.005\s+0\.005/i) }
-  if (fixture !== 'hierarchical-parameter' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
+  if (fixture !== 'hierarchical-parameter' && fixture !== 'current-source-op' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
 
   if (fixture === 'pwl-transient') {
     assert.match(wasmResult.stdout, /v\(in\)/i, 'pwl-transient: input voltage was not printed')
@@ -68,7 +68,12 @@ for (const fixture of fixtures) {
   }
 
   if (fixture.endsWith('-op')) {
-    assert.match(wasmResult.stdout, /Voltage|v\(out\)/i, `${fixture}: no operating-point result was printed`)
+    if (fixture !== 'current-source-op') assert.match(wasmResult.stdout, /Voltage|v\(out\)/i, `${fixture}: no operating-point result was printed`)
+    if (fixture === 'current-source-op') {
+      assert.ok(Math.abs(realRawVector(wasmResult.raw, 'v(out)')[0] - 1) < 1e-9, 'current-source-op: 1 mA into 1 kΩ should produce 1 V')
+      assert.match(wasmResult.raw, /^\s*\d+\s+i\(@i1\[current\]\)\s+current$/mi, 'current-source-op: independent source current vector is missing')
+      assert.ok(Math.abs(realRawVector(wasmResult.raw, 'i(@i1[current])')[0] - 0.001) < 1e-9, 'current-source-op: source current should be 1 mA in its positive reference direction')
+    }
     if (fixture === 'imported-subckt-op') assert.match(wasmResult.stdout, /out\s+1\.000000e\+01/i, 'imported-subckt-op: four-pin model did not produce the expected 10 V output')
     if (fixture === 'imported-subckt-params-op') assert.match(wasmResult.stdout, /out\s+1\.500000e\+01/i, 'imported-subckt-params-op: GAIN=3 override did not produce the expected 15 V output')
     if (fixture === 'imported-diode-model-op') assert.match(wasmResult.stdout, /out\s+6\.790709e-01/i, 'imported-diode-model-op: 1N4148 model did not produce the expected 0.679 V operating point')
@@ -91,7 +96,7 @@ for (const fixture of fixtures) {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)
   }
 
-  if (nativeNgspice && fixture !== 'ltspice-uplim-op') {
+  if (nativeNgspice && fixture !== 'ltspice-uplim-op' && fixture !== 'current-source-op') {
     const native = spawnSync(nativeNgspice, ['-b', deckPath], { encoding: 'utf8', timeout: 60_000 })
     assert.equal(native.status, 0, `${fixture}: native ngspice failed: ${native.stderr}`)
     assert.match(native.stdout, /Circuit:/, `${fixture}: native ngspice did not parse the deck`)

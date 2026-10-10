@@ -28,7 +28,7 @@ Only dependencies actually referenced by placed parts should be included. An exp
 | --- | --- |
 | Each wire polyline | One `WIRE` record for each adjacent point pair |
 | Named net label | `FLAG x y name` at the current label coordinate |
-| Built-in or imported part | `SYMBOL name x y orientation`, then safe `SYMATTR InstName` and `SYMATTR Value` records |
+| Built-in or imported part | `SYMBOL name x y orientation`, then safe `SYMATTR InstName` and `SYMATTR Value` records; scalar current sources use the `I` prefix |
 | Fixed-state ELSim switch | Two-terminal resistor at `1m` when On or `1T` when Off, matching the current ELSim switch model's `Ron` / `Roff`; the generated instance gets an `R_` reference |
 | Child sheet block | A no-prefix block `.asy` named after its child `.asc`; ordered `PIN` / `PINATTR PinName` / `PINATTR SpiceOrder` records derive from the child sheet's ports |
 | Child sheet port | `IOPIN x y In/Out/BiDir` at the matching current label coordinate, with a same-coordinate `FLAG` |

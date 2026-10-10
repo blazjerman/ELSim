@@ -21,11 +21,11 @@ export type LtspiceExportResult = {
 
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
-  source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'R',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'R',
   vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -160,6 +160,11 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   if (part.kind === 'resistor' || part.kind === 'lamp') { const value = scalar(part.value); return value ? { value } : null }
   if (part.kind === 'capacitor') { const value = scalar(part.value, 'f'); return value ? { value } : null }
   if (part.kind === 'inductor') { const value = scalar(part.value, 'h'); return value ? { value } : null }
+  if (part.kind === 'currentSource') {
+    const value = scalar(part.value, 'a')
+    if (!value) return null
+    return { value, ...(project.simulation.analysis === 'ac' ? { spiceLine: `AC ${value} 0` } : {}) }
+  }
   if (part.kind === 'source') {
     const value = scalar(part.value, 'v')
     if (!value) return null

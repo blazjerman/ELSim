@@ -11,6 +11,16 @@ test('starter project passes the common wiring checks', () => {
   assert.deepEqual(checkCircuit(createStarterProject()), [])
 })
 
+test('current sources accept signed SI-prefix currents and flag malformed values', () => {
+  const project = createStarterProject()
+  const source = { id: 'current-source', kind: 'currentSource', ref: 'I1', value: '-250 µA', x: 700, y: 600, rotation: 0 }
+  project.parts.push(source)
+  project.sheets[0].parts = project.parts
+  assert.equal(checkCircuit(project).some((issue) => issue.id === 'invalid-value:current-source'), false)
+  source.value = 'one milliamp'
+  assert.match(checkCircuit(project).find((issue) => issue.id === 'invalid-value:current-source').detail, /numeric current/)
+})
+
 test('reports floating terminals on the component a beginner needs to wire', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'loose-r', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 700, y: 600, rotation: 0 })

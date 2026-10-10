@@ -5,11 +5,20 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { createStarterProject, validateProject, sheetModelName } = require(path.join(build, 'domain/project.js'))
-const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createCurrentSourceExampleProject, createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
 const { preferredSheetInstancePath } = require(path.join(build, 'domain/hierarchyNavigation.js'))
+
+test('current-source probes use ngspice current parameters in root and nested sheets', () => {
+  const project = createCurrentSourceExampleProject()
+  assert.equal(hierarchyComponentCurrentVector(project, project.rootSheetId, [], 'isource-i1'), 'i(@i1[current])')
+  const hierarchical = createBlockProject()
+  const current = { id: 'child-current', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 300, y: 300, rotation: 0 }
+  hierarchical.sheets[1].parts.push(current)
+  assert.equal(hierarchyComponentCurrentVector(hierarchical, 'sheet-load', ['root-block'], 'child-current'), 'i(@i.xload.i1[current])')
+})
 
 function createBlockProject() {
   const project = createStarterProject()

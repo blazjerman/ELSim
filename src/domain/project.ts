@@ -3,7 +3,7 @@ import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcir
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 
-export type PartKind = 'source' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'subcircuit'
+export type PartKind = 'source' | 'currentSource' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
 export type SourcePulse = { initial: string; delay: string; rise: string; fall: string; width: string; period: string }
 export type SourcePwlPoint = { time: string; voltage: string }
@@ -202,7 +202,7 @@ export function validateProject(input: unknown): Project {
   if (data.version !== 7 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
     throw new Error('This project format is not supported. Expected ELSim project version 7.')
   }
-  const allowed = new Set<PartKind>(['source', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'subcircuit'])
+  const allowed = new Set<PartKind>(['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'subcircuit'])
   const refs = new Set<string>()
   const partIds = new Set<string>()
   for (const candidate of data.parts as Part[]) {
@@ -210,7 +210,7 @@ export function validateProject(input: unknown): Project {
       throw new Error('Project contains a malformed component.')
     }
     partIds.add(candidate.id)
-    const prefix = ({ source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[candidate.kind]
+    const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[candidate.kind]
     if (candidate.sourceMode !== undefined && (candidate.kind !== 'source' || !['pulse', 'dc', 'pwl'].includes(candidate.sourceMode))) throw new Error(`${candidate.ref} has an invalid source waveform mode.`)
     if (candidate.pulse !== undefined && (candidate.kind !== 'source' || !candidate.pulse || ['initial', 'delay', 'rise', 'fall', 'width', 'period'].some((key) => typeof candidate.pulse?.[key as keyof typeof candidate.pulse] !== 'string'))) throw new Error(`${candidate.ref} has malformed pulse settings.`)
     if (candidate.pwl !== undefined && (candidate.kind !== 'source' || !Array.isArray(candidate.pwl) || candidate.pwl.length < 2 || candidate.pwl.length > 32 || candidate.pwl.some((point) => !point || typeof point !== 'object' || Array.isArray(point) || Object.keys(point).some((key) => key !== 'time' && key !== 'voltage') || typeof point.time !== 'string' || point.time.length > 64 || typeof point.voltage !== 'string' || point.voltage.length > 64))) throw new Error(`${candidate.ref} has malformed PWL source points.`)
@@ -320,7 +320,7 @@ export function validateProject(input: unknown): Project {
       const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
       if (!symbolAsset) throw new Error(`${part.ref} refers to a missing imported symbol.`)
       const symbol = parseLtspiceSymbol(symbolAsset.content, symbolAsset.filename)
-      const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3 } as const)[part.kind]
+      const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, currentSource: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3 } as const)[part.kind]
       if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
     }
     if (part.kind === 'subcircuit' && !part.sheetId) {
@@ -491,10 +491,10 @@ export function validateProject(input: unknown): Project {
 }
 
 export const kindNames: Record<PartKind, string> = {
-  source: 'Voltage source', resistor: 'Resistor', lamp: 'Lamp', capacitor: 'Capacitor',
+  source: 'Voltage source', currentSource: 'Current source', resistor: 'Resistor', lamp: 'Lamp', capacitor: 'Capacitor',
   ground: 'Ground', inductor: 'Inductor', diode: 'Diode', led: 'LED', switch: 'Switch', vcvs: 'Voltage-controlled voltage source', vccs: 'Voltage-controlled current source', cccs: 'Current-controlled current source', ccvs: 'Current-controlled voltage source', behavioral: 'Behavioral source', npn: 'NPN transistor', pnp: 'PNP transistor', subcircuit: 'Imported subcircuit',
 }
 
 export const kindPrefix: Record<PartKind, string> = {
-  source: 'V', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }

@@ -309,6 +309,20 @@ test('PWL waveform example opens with editable points and solves the RC response
   await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
 })
 
+test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Current source and load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Current source and load')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByRole('table')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByRole('row', { name: /V\(out\).*1\.000000 V/i })).toBeVisible()
+})
+
 test('controlled-source example opens and solves with input and output probes', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

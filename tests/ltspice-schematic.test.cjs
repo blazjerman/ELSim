@@ -75,6 +75,20 @@ test('imports scalar LTspice voltage sources as DC and preserves PULSE levels an
   assert.deepEqual(importedPwl.pwl, [{ time: '0', voltage: '0' }, { time: '2m', voltage: '5' }, { time: '4m', voltage: '-1' }])
 })
 
+test('imports scalar LTspice current sources with ampere values and ordered pins', () => {
+  const currentSymbol = { ...symbol, id: 'symbol-current-source', filename: 'current.asy', content: symbol.content.replace('Prefix R', 'Prefix I') }
+  const asc = ['Version 4', 'SYMBOL current 0 0 R0', 'SYMATTR InstName I1', 'SYMATTR Value 1mA'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'current-source.asc', [currentSymbol])
+  assert.equal(project.parts[0].kind, 'currentSource')
+  assert.equal(project.parts[0].ref, 'I1')
+  assert.equal(project.parts[0].value, '1mA')
+  assert.deepEqual(warnings, [])
+  assert.match(createNetlist(project), /^I1 .* .* 1m$/m)
+  const waveform = ['Version 4', 'SYMBOL current 0 0 R0', 'SYMATTR InstName I2', 'SYMATTR Value PULSE(0 1m 0 1u 1u 5m 10m)'].join('\n')
+  const unsupported = parseLtspiceSchematic(waveform, 'current-waveform.asc', [currentSymbol])
+  assert.ok(unsupported.warnings.some((warning) => /current-source waveform on I2 is not translated yet/.test(warning)))
+})
+
 test('reports missing symbol files and unsupported directives instead of silently importing an incomplete part', () => {
   const asc = ['Version 4', 'SYMBOL res 0 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k', 'TEXT 0 80 Left 2 !.save V(out)'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'missing.asc')

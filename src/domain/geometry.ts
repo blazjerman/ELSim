@@ -38,6 +38,7 @@ export function componentPins(part: Part): PinLocation[] {
   else if (part.kind === 'npn' || part.kind === 'pnp') local = [[35, -52], [-52, 0], [35, 52]]
   else if (part.kind === 'ground') local = [[0, -22]]
   else if (part.kind === 'source') local = [[0, -52], [0, 52]]
+  else if (part.kind === 'currentSource') local = [[-52, 0], [52, 0]]
   else if (part.kind === 'capacitor') local = [[-50, 0], [50, 0]]
   else local = [[-52, 0], [52, 0]]
   const angle = part.rotation * Math.PI / 180
