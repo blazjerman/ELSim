@@ -147,6 +147,38 @@ export function createTransistorSwitchExampleProject(): Project {
   return project
 }
 
+/** A high-side PNP switch that demonstrates active-low base control. */
+export function createPnpSwitchExampleProject(): Project {
+  const project = createStarterProject()
+  const drive: Part = { id: 'pnp-switch-vdrive', kind: 'source', ref: 'VDRIVE', value: '0 V', pulse: { initial: '5 V', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m' }, x: 180, y: 600, rotation: 0 }
+  const baseResistor: Part = { id: 'pnp-switch-rbase', kind: 'resistor', ref: 'RBASE', value: '10 kΩ', x: 390, y: 500, rotation: 0 }
+  const transistor: Part = { id: 'pnp-switch-q1', kind: 'pnp', ref: 'Q1', value: '100', x: 640, y: 500, rotation: 0 }
+  const supply: Part = { id: 'pnp-switch-vcc', kind: 'source', ref: 'VCC', value: '5 V', sourceMode: 'dc', x: 880, y: 220, rotation: 0 }
+  const load: Part = { id: 'pnp-switch-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 880, y: 390, rotation: 90 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'PNP high-side switch'
+  project.parts = [drive, baseResistor, transistor, supply, load]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('pnp-switch-vin-drive', 'VIN', drive, 0), labelAt('pnp-switch-vin-rbase', 'VIN', baseResistor, 0),
+    labelAt('pnp-switch-base-rbase', 'BASE', baseResistor, 1), labelAt('pnp-switch-base-q1', 'BASE', transistor, 1),
+    labelAt('pnp-switch-ground-drive', '0', drive, 1), labelAt('pnp-switch-vcc-source', 'VCC', supply, 0),
+    labelAt('pnp-switch-vcc-emitter', 'VCC', transistor, 2), labelAt('pnp-switch-ground-vcc', '0', supply, 1),
+    labelAt('pnp-switch-collector-load', 'COLLECTOR', load, 0), labelAt('pnp-switch-ground-load', '0', load, 1),
+    labelAt('pnp-switch-collector-q1', 'COLLECTOR', transistor, 0),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(BASE)', 'V(COLLECTOR)', 'I(Q1)'], ranges: {} }
+  project.view = { zoom: 0.8, panX: -70, panY: -20 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A low-side NMOS switch that illustrates voltage-controlled drain current. */
 export function createMosfetSwitchExampleProject(): Project {
   const project = createStarterProject()
