@@ -47,6 +47,43 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(switchPart).toHaveAttribute('aria-label', /switch on/)
 })
 
+test('shift selection moves, copies, pastes, and deletes a group of parts', async ({ page }) => {
+  await page.goto('/')
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const capacitor = page.locator('.circuit-part[data-part-id="p-c1"]')
+  await resistor.click()
+  await capacitor.click({ modifiers: ['Shift'] })
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(2)
+
+  const before = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return Object.fromEntries(project.parts.filter((part: { id: string }) => ['p-r1', 'p-c1'].includes(part.id)).map((part: { id: string; x: number; y: number }) => [part.id, { x: part.x, y: part.y }]))
+  }) as Record<string, { x: number; y: number }>
+  const box = await resistor.boundingBox()
+  expect(box).not.toBeNull()
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box!.x + box!.width / 2 + 40, box!.y + box!.height / 2 + 20, { steps: 3 })
+  await page.mouse.up()
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(2)
+  const moved = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return Object.fromEntries(project.parts.filter((part: { id: string }) => ['p-r1', 'p-c1'].includes(part.id)).map((part: { id: string; x: number; y: number }) => [part.id, { x: part.x, y: part.y }]))
+  }) as Record<string, { x: number; y: number }>
+  expect(moved['p-r1'].x - before['p-r1'].x).toBe(moved['p-c1'].x - before['p-c1'].x)
+  expect(moved['p-r1'].y - before['p-r1'].y).toBe(moved['p-c1'].y - before['p-c1'].y)
+
+  const initial = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)
+  const wiresBeforeCopy = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)
+  await page.keyboard.press('Control+c')
+  await page.keyboard.press('Control+v')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial + 2)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wiresBeforeCopy)
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(2)
+  await page.keyboard.press('Delete')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial)
+})
+
 test('fit schematic view frames distant parts, wires, and labels', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
