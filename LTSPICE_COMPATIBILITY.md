@@ -18,11 +18,11 @@ This matrix describes the importer as implemented today. “Supported” means E
 | `.include`, `.inc`, `.lib` | Dependency presence is checked by imported filename; directive itself is not emitted | Missing dependency warning; library content is supplied separately |
 | `.param NAME=value` | Supported for conservative single-token scalar/expression defaults in the active sheet | Nested exported sheet parameters and `{NAME}` values round-trip in `tests/ltspice-export.test.cjs`; broader LTspice parameter syntax is unverified |
 | Scalar voltage source values | Supported as constant DC sources | Import regression verifies DC source mode |
-| Voltage-source `SINE(VOFF VAMPL FREQ [TD [THETA [PHASE]]])` | Supported for transient analysis; omitted optional fields default to zero and frequency must be positive | Import, editable parameter validation, netlist, LTspice export round trip, and numerical WASM transient fixture cover the six standard fields |
 | Source `Value2 AC magnitude [phase]` | Supported for voltage/current sources | Per-source magnitude/phase netlist, import, and export round-trip tests; phase defaults to zero |
-| Scalar `I` current sources | Supported as constant DC current sources; current probe uses ngspice `@i[current]` | Hand-written import/export fixture, importer diagnostic for unsupported current waveforms, and 1 mA into 1 kΩ WASM operating-point/current-vector fixture |
+| Scalar `I` current sources | Supported as constant DC current sources; current probe uses ngspice `@i[current]` | Hand-written import/export fixture, current waveform import/export fixtures, and 1 mA into 1 kΩ WASM operating-point/current-vector fixture |
 | Current-source `PULSE(low high delay rise fall width period)` | Supported for transient analysis; low/high values and timing are editable | Hand-written import/export round trip and `current-source-pulse.cir` WASM fixture verify 1 mA into 1 kΩ produces a 1 V pulse |
 | Current-source `PWL(time current ...)` expressions | Supported for 2–32 scalar time/current pairs; times must be nonnegative and strictly increasing | `tests/ltspice-schematic.test.cjs` verifies imported mode, point mapping, no warning, and generated PWL current-source netlist; current waveform values use their own editor fields |
+| Voltage- and current-source `SINE(VOFF VAMPL FREQ [TD [THETA [PHASE]]])` | Supported for transient analysis; omitted optional fields default to zero and frequency must be positive | Import, editable quantity-specific parameter validation, netlist, LTspice export round trip, project archive, and numeric WASM transient fixtures cover voltage and current waveforms |
 | Seven-argument `PULSE(low high delay rise fall width period)` voltage values | Supported for scalar levels and timing values | Pulse level/timing import and editable transient source behavior are tested |
 | Scalar-pair `PWL(time voltage ...)` voltage values | Supported for 2–32 strictly increasing, nonnegative time points | Import, netlist, project archive, and LTspice export round-trip fixtures cover PWL points |
 | `.save V(named_node)` and `.save I(placed_component)` | Supported as persisted plot-trace selections; selected vectors are not solver restrictions because ELSim manages result vectors itself | Named labels and placed current-bearing components are matched case-insensitively; unknown nodes/components and other `.save` expressions produce a warning |
@@ -49,7 +49,7 @@ This matrix describes the importer as implemented today. “Supported” means E
 | --- | --- | --- |
 | `R`, `C`, `L` | Resistor, capacitor, inductor | Scalar values only |
 | `V` | Voltage source | Scalar, SINE, seven-argument PULSE, and scalar-pair PWL values are supported; other waveform expressions remain unverified and prompt a warning |
-| `I` | Independent current source | Scalar DC, seven-argument PULSE, and scalar-pair PWL waveforms |
+| `I` | Independent current source | Scalar DC, SINE, seven-argument PULSE, and scalar-pair PWL waveforms |
 | `S` | Switch | ELSim on/off educational switch semantics, not the full LTspice switch dialect |
 | `E`, `G` | VCVS, VCCS | Linear four-terminal form |
 | `F`, `H` | CCCS, CCVS | Linear two-terminal form; `Value` must name an existing voltage-source current sensor in the same sheet and `Value2` supplies the gain/transresistance. Behavioral `POLY` and other nonlinear forms are not translated. |

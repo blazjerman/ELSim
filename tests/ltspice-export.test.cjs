@@ -71,6 +71,14 @@ test('current sources export and reimport as I devices with ampere values', asyn
   assert.match(pwlAsc.content, /SYMATTR InstName I1\nSYMATTR Value PWL\(0 0 2m 3m\)/)
   const pwlRestored = parseLtspiceSchematic(pwlAsc.content, pwlAsc.path, symbols).project.parts.find((part) => part.ref === 'I1')
   assert.deepEqual(pwlRestored.currentPwl, [{ time: '0', current: '0' }, { time: '2m', current: '3m' }])
+  currentSource.sourceMode = 'sine'
+  currentSource.sine = { offset: '1mA', amplitude: '3mA', frequency: '2kHz', delay: '4u', damping: '5', phase: '90' }
+  const sineExport = await exportLtspiceProject(project)
+  assert.deepEqual(sineExport.blockers, [])
+  const sineAsc = sineExport.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(sineAsc.content, /SYMATTR InstName I1\nSYMATTR Value SINE\(1m 3m 2k 4u 5 90\)/)
+  const sineRestored = parseLtspiceSchematic(sineAsc.content, sineAsc.path, symbols).project.parts.find((part) => part.ref === 'I1')
+  assert.deepEqual(sineRestored.sine, { offset: '1m', amplitude: '3m', frequency: '2k', delay: '4u', damping: '5', phase: '90' })
 })
 
 test('voltage SINE sources export and reimport with all waveform fields', async () => {

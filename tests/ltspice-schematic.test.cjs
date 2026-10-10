@@ -248,6 +248,12 @@ test('imports scalar LTspice current sources with ampere values and ordered pins
   assert.deepEqual(currentPwl.project.parts[0].currentPwl, [{ time: '0', current: '0' }, { time: '2m', current: '1mA' }, { time: '4m', current: '-2mA' }])
   assert.deepEqual(currentPwl.warnings, [])
   assert.match(createNetlist(currentPwl.project), /^I3 .* .* PWL\(0 0 2m 1m 4m -2m\)$/m)
+  const currentSine = parseLtspiceSchematic(['Version 4', 'SYMBOL current 0 0 R0', 'SYMATTR InstName I4', 'SYMATTR Value SINE(1mA 2mA 1kHz 3m 4 90)'].join('\n'), 'current-sine.asc', [currentSymbol])
+  assert.equal(currentSine.project.parts[0].sourceMode, 'sine')
+  assert.equal(currentSine.project.parts[0].value, '2mA')
+  assert.deepEqual(currentSine.project.parts[0].sine, { offset: '1mA', amplitude: '2mA', frequency: '1kHz', delay: '3m', damping: '4', phase: '90' })
+  assert.deepEqual(currentSine.warnings, [])
+  assert.match(createNetlist(currentSine.project), /^I4 .* .* SIN\(1m 2m 1k 3m 4 90\)$/m)
 })
 
 test('imports linear LTspice F/H current-controlled sources from Value and Value2', () => {

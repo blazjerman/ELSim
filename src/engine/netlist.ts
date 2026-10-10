@@ -93,10 +93,11 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
         if (invalid) add(`pulse.${key}`, `${part.ref} ${key} must be a valid ${key === 'period' ? 'positive' : 'nonnegative'} time value.`, part.id)
       }
     }
-    for (const part of project.parts.filter((item) => item.kind === 'source' && item.sourceMode === 'sine')) {
+    for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'sine')) {
+      const quantity = part.kind === 'source' ? 'voltage' : 'current'
       const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
-      if (spiceNumber(sine.offset, 'source') === null) add('sine.offset', `${part.ref} sine offset must be a valid voltage.`, part.id, 'sine.offset')
-      if (spiceNumber(sine.amplitude, 'source') === null) add('sine.amplitude', `${part.ref} sine amplitude must be a valid voltage.`, part.id, 'sine.amplitude')
+      if (spiceNumber(sine.offset, part.kind) === null) add('sine.offset', `${part.ref} sine offset must be a valid ${quantity}.`, part.id, 'sine.offset')
+      if (spiceNumber(sine.amplitude, part.kind) === null) add('sine.amplitude', `${part.ref} sine amplitude must be a valid ${quantity}.`, part.id, 'sine.amplitude')
       const frequency = spiceMagnitude(sine.frequency, 'frequency')
       if (frequency === null || frequency <= 0) add('sine.frequency', `${part.ref} sine frequency must be positive.`, part.id, 'sine.frequency')
       const delay = spiceTimeMagnitude(sine.delay)
@@ -303,6 +304,17 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           continue
         }
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period})`
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
+        const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
+        const offset = spiceNumber(sine.offset, 'currentSource'), amplitude = spiceNumber(sine.amplitude, 'currentSource')
+        const frequency = spiceFrequency(sine.frequency), delay = spiceTime(sine.delay), damping = spiceScalar(sine.damping, ''), phase = spiceScalar(sine.phase, '')
+        if (offset === null || amplitude === null || frequency === null || (spiceMagnitude(sine.frequency, 'frequency') ?? 0) <= 0 || delay === null || (spiceTimeMagnitude(sine.delay) ?? -1) < 0 || damping === null || Number(damping) < 0 || phase === null) {
+          const message = `${part.ref} sine source settings must contain valid currents, positive frequency, nonnegative delay/damping, and numeric phase.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `SIN(${offset} ${amplitude} ${frequency} ${delay} ${damping} ${phase})`
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'pwl') {
         const points = part.currentPwl ?? []
         const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), current: spiceNumber(point.current, 'currentSource') }))

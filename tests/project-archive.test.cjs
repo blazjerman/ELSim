@@ -204,6 +204,15 @@ test('capacitor initial voltage survives project archive round-trip', () => {
   assert.deepEqual(restored.simulation.initialConditions, [{ element: 'C1', voltage: '2.5 V' }])
 })
 
+test('current-source SINE settings survive project archive round-trip', () => {
+  const project = createStarterProject()
+  const source = { id: 'archive-sine-i1', kind: 'currentSource', ref: 'I1', value: '2m', sourceMode: 'sine', sine: { offset: '1m', amplitude: '2m', frequency: '1k', delay: '0', damping: '0', phase: '90' }, x: 700, y: 500, rotation: 0 }
+  project.parts.push(source)
+  project.sheets[0].parts = project.parts
+  const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  assert.deepEqual(restored.parts.find((part) => part.id === source.id).sine, source.sine)
+})
+
 test('LTspice source provenance validates its format, filename, and UTF-8 size limit', () => {
   const project = createStarterProject()
   project.importedSchematicSource = { format: 'ltspice-asc', filename: 'safe.asc', originalText: 'Version 4\nUNKNOWN keep-me\n' }

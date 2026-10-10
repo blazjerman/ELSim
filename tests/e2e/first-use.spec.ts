@@ -808,6 +808,30 @@ test('PWL waveform example opens with editable points and solves the RC response
   await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
 })
 
+
+test('LTspice current-source SINE waveform edits and simulates in the browser engine', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Current source and load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: /^I1, Current source/ }).click()
+  await page.getByLabel('Analysis type').selectOption('tran')
+  await page.getByRole('combobox', { name: 'Current source waveform' }).selectOption('sine')
+  await page.getByLabel('Offset (A)').fill('1m')
+  await page.getByLabel('Amplitude (A)').fill('2m')
+  await page.getByLabel('Frequency').fill('1k')
+  await page.getByLabel('Delay').fill('0')
+  await page.getByLabel('Damping factor').fill('0')
+  await page.getByLabel('Phase (°)').fill('0')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText(/I1 0 OUT SIN\(1m 2m 1k 0 0 0\)/)
+})
+
 test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

@@ -163,6 +163,18 @@ test('independent current source PWL mode emits validated transient current poin
   assert.throws(() => validateProject(project), /scalar DC sources, R\/C\/L parts/)
 })
 
+test('independent current source SINE mode emits current-valued fields and validates quantity', () => {
+  const project = createStarterProject()
+  const current = { id: 'i-sine', kind: 'currentSource', ref: 'I1', value: '2m', sourceMode: 'sine', sine: { offset: '1mA', amplitude: '2mA', frequency: '1kHz', delay: '3m', damping: '4', phase: '90' }, x: 700, y: 500, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^I1 .* .* SIN\(1m 2m 1k 3m 4 90\)$/m)
+  current.sine.offset = '1V'
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['sine.offset'])
+})
+
 test('current-source beginner example predicts the expected one-volt load result', () => {
   const project = createCurrentSourceExampleProject()
   const artifact = createNetlistArtifact(project)

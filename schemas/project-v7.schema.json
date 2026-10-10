@@ -251,7 +251,7 @@
             "pwl",
             "sine"
           ],
-          "description": "For transient analysis, voltage sources support pulse, DC, PWL, or SINE. Independent current sources support pulse, DC, or PWL. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
+          "description": "For transient analysis, voltage and independent current sources support pulse, DC, PWL, or SINE. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
         },
         "acMagnitude": {
           "type": "string",
@@ -314,7 +314,7 @@
             "damping": { "type": "string", "maxLength": 64 },
             "phase": { "type": "string", "maxLength": 64 }
           },
-          "description": "Optional voltage-source transient SINE settings: offset, amplitude, frequency, delay, damping factor, and phase degrees."
+          "description": "Optional voltage/current-source transient SINE settings: offset and amplitude in the source quantity, frequency, delay, damping factor, and phase degrees."
         },
         "pwl": {
           "type": "array",
