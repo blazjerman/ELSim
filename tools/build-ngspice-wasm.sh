@@ -49,7 +49,7 @@ cd "$BUILD_DIR"
   --without-x \
   ac_cv_exeext=.js \
   CFLAGS=-O2 \
-  'LDFLAGS=-O2 -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createNgspiceModule -sENVIRONMENT=web,worker,node -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sINVOKE_RUN=0 -sSTACK_SIZE=2097152 -sEXPORTED_FUNCTIONS=_main -sEXPORTED_RUNTIME_METHODS=FS,callMain -Wl,--allow-multiple-definition' \
+  "LDFLAGS=-O2 -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createNgspiceModule -sENVIRONMENT=web,worker,node -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sINVOKE_RUN=0 -sSTACK_SIZE=2097152 -sEXPORTED_FUNCTIONS=_main -sEXPORTED_RUNTIME_METHODS=FS,callMain -Wl,--allow-multiple-definition -Wl,-Map,ngspice-link.map" \
   build_alias="$(gcc -dumpmachine)" \
   host_alias=wasm32-unknown-emscripten \
   CC="$(command -v emcc)" \
@@ -70,18 +70,30 @@ if text.count(old) != 1:
 makefile.write_text(text.replace(old, new))
 PY
 
+# Make sure the link map describes the binary emitted by this invocation, not a
+# previous link left in a reused build directory.
+make clean
+find "$BUILD_DIR" -type f -name ngspice-link.map -delete
 make -j"$JOBS"
 mkdir -p "$ROOT_DIR/public/engine"
 cp "$BUILD_DIR/src/ngspice.js" "$ROOT_DIR/public/engine/ngspice.mjs"
 cp "$BUILD_DIR/src/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice.wasm"
 cp "$NGSPICE_SOURCE/COPYING" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"
 cp "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$ROOT_DIR/public/engine/THIRD_PARTY_NOTICES.md"
+LINK_MAP="$(find "$BUILD_DIR" -type f -name ngspice-link.map -print -quit)"
+if [[ -z "$LINK_MAP" || ! -s "$LINK_MAP" ]]; then
+  echo "Expected a non-empty Emscripten linker map under $BUILD_DIR; refusing to emit an incomplete engine inventory" >&2
+  exit 2
+fi
+cp "$LINK_MAP" "$ROOT_DIR/public/engine/ngspice-link.map"
 {
   printf 'ngspice source commit: %s\n' "$PINNED_COMMIT"
   printf 'Emscripten: %s\n' "$(emcc --version | head -n 1)"
   printf 'Build flags: --disable-shared --enable-static --enable-xspice --disable-cider --disable-osdi --disable-openmp --disable-klu --with-readline=no --with-editline=no --without-x\n'
+  printf 'Linked-input inventory: ngspice-link.map (Emscripten linker map; inspect archive members and object paths against the pinned source COPYING file)\n'
   printf 'License review: incomplete; generated browser artifacts are not cleared for redistribution.\n'
-  printf 'See ELSim THIRD_PARTY_NOTICES.md and the adjacent ngspice-COPYING.txt.\n'
+  printf 'See adjacent THIRD_PARTY_NOTICES.md, ngspice-COPYING.txt, ngspice-link.map, and ngspice-SHA256SUMS.txt.\n'
 } > "$ROOT_DIR/public/engine/ngspice-build-info.txt"
-sha256sum "$ROOT_DIR/public/engine/ngspice.wasm"
+sha256sum "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice-COPYING.txt" "$ROOT_DIR/public/engine/ngspice-link.map" > "$ROOT_DIR/public/engine/ngspice-SHA256SUMS.txt"
+cat "$ROOT_DIR/public/engine/ngspice-SHA256SUMS.txt"
 du -h "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"
