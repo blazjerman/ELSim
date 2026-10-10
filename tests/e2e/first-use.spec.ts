@@ -653,6 +653,38 @@ test('imported LTspice .ic node and inductor values run through ngspice', async 
   await expect(page.locator('.measurement-results')).toContainText('IPEAK')
 })
 
+test('LTspice capacitor SpiceLine IC starts the ngspice transient at its imported voltage', async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  const source = [
+    'Version 4',
+    'FLAG 84 100 OUT', 'FLAG 116 100 0',
+    'SYMBOL cap 100 100 R0', 'SYMATTR InstName C1', 'SYMATTR Value 10u', 'SYMATTR SpiceLine IC=2V',
+    'SYMBOL res 100 200 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'WIRE 84 100 84 200', 'WIRE 116 100 116 200',
+    'TEXT 0 240 Left 2 !.tran 0 5m 0 10u uic', 'TEXT 0 260 Left 2 !.save V(OUT)',
+  ].join('\n')
+  const symbol = (prefix: string) => [
+    'Version 4', `SYMATTR Prefix ${prefix}`,
+    'PIN -16 0 R', 'PINATTR PinName A', 'PINATTR SpiceOrder 1',
+    'PIN 16 0 L', 'PINATTR PinName B', 'PINATTR SpiceOrder 2',
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'capacitor-ic.asc', mimeType: 'text/plain', buffer: Buffer.from(source) },
+    { name: 'cap.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('C')) },
+    { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R')) },
+  ])
+  await expect(page.getByText(/Imported capacitor-ic with 2 parts/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.initialConditions)).toEqual([{ element: 'C1', voltage: '2V' }])
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByRole('button', { name: 'V(out)', exact: true })).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Rewind result playback to the first solved sample' }).click()
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(out\) = 2(?:\.0+)? V/)
+})
+
 test('capacitor initial voltage editor starts the transient at the requested voltage', async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

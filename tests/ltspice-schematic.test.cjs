@@ -156,6 +156,34 @@ test('imports supported node-voltage and inductor-current .ic values', () => {
   assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
 })
 
+test('maps capacitor and inductor SpiceLine IC values into transient initial conditions', () => {
+  const asset = (filename, prefix) => ({
+    id: `symbol-${prefix.toLowerCase()}`, filename, sha256: 'c'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+    content: ['Version 4', `SYMATTR Prefix ${prefix}`, 'PIN -16 0 R', 'PINATTR PinName A', 'PINATTR SpiceOrder 1', 'PIN 16 0 L', 'PINATTR PinName B', 'PINATTR SpiceOrder 2'].join('\n'),
+  })
+  const capacitor = asset('cap.asy', 'C'), inductor = asset('ind.asy', 'L')
+  const asc = [
+    'Version 4', 'SYMBOL cap 32 0 R0', 'SYMATTR InstName C1', 'SYMATTR Value 10u', 'SYMATTR SpiceLine IC=2.5V Rser=1',
+    'SYMBOL ind 96 0 R0', 'SYMATTR InstName L1', 'SYMATTR Value 4m', 'SYMATTR SpiceLine IC=3mA',
+    'TEXT 0 100 Left 2 !.tran 0 5m 0 10u',
+  ].join('\n')
+  const imported = parseLtspiceSchematic(asc, 'instance-initials.asc', [capacitor, inductor])
+  assert.deepEqual(imported.project.simulation.initialConditions, [
+    { element: 'C1', voltage: '2.5V' },
+    { element: 'L1', current: '3mA' },
+  ])
+  assert.deepEqual(imported.warnings, ['Line 2: SpiceLine options “Rser=1” on C1 are retained but not translated; only its IC value was applied.'])
+  assert.equal(imported.project.parts.find((part) => part.ref === 'C1').extensions.ltspice.attributes.SPICELINE, 'IC=2.5V Rser=1')
+  const deck = createNetlistArtifact(imported.project)
+  assert.match(deck.text, /^C1 .* 10u IC=2\.5$/m)
+  assert.match(deck.text, /^L1 .* 4m IC=3m$/m)
+  assert.match(deck.text, /^\.tran .* uic$/m)
+
+  const invalid = parseLtspiceSchematic(asc.replace('IC=2.5V', 'IC=4mA').replace('IC=3mA', 'IC=2V'), 'invalid-instance-initials.asc', [capacitor, inductor])
+  assert.equal(invalid.project.simulation.initialConditions, undefined)
+  assert.equal(invalid.warnings.filter((warning) => /IC=.*retained as an attribute but not applied/.test(warning)).length, 2)
+})
+
 test('maps two-node LTspice voltage initial conditions to matching capacitor terminals', () => {
   const capacitor = {
     id: 'symbol-capacitor', filename: 'cap.asy', sha256: 'd'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),

@@ -41,6 +41,28 @@ function scalarMagnitude(value: string): number | null {
   return Number.isFinite(result) ? result : null
 }
 
+function importInstanceInitialCondition(project: Project, kind: PartKind, ref: string, spiceLine: string | undefined, line: number, warnings: string[]): void {
+  if (!spiceLine || (kind !== 'capacitor' && kind !== 'inductor')) return
+  const match = spiceLine.match(/(?:^|\s)IC\s*=\s*(?:"([^"]+)"|'([^']+)'|(\S+))/i)
+  if (!match) {
+    if (/\bIC\s*=/i.test(spiceLine)) warnings.push(`Line ${line}: IC setting on ${ref} is not a supported numeric scalar; it was retained as an attribute but not applied.`)
+    else if (spiceLine.trim()) warnings.push(`Line ${line}: SpiceLine options on ${ref} are retained as attributes but are not translated by ELSim.`)
+    return
+  }
+  const remainingOptions = spiceLine.replace(match[0], '').trim()
+  if (remainingOptions) warnings.push(`Line ${line}: SpiceLine options “${recordExcerpt(remainingOptions)}” on ${ref} are retained but not translated; only its IC value was applied.`)
+  const value = (match[1] ?? match[2] ?? match[3] ?? '').replaceAll('µ', 'u').replaceAll('μ', 'u')
+  const wrongUnit = kind === 'capacitor' ? /a$/i.test(value) : /v$/i.test(value)
+  const conditions = project.simulation.initialConditions ?? []
+  const duplicate = conditions.some((condition) => 'element' in condition && condition.element.toLowerCase() === ref.toLowerCase())
+  if (!validScalar(value) || wrongUnit || duplicate || conditions.length >= 8) {
+    warnings.push(`Line ${line}: IC=${recordExcerpt(value)} on ${ref} needs a unique ${kind === 'capacitor' ? 'voltage' : 'current'} scalar and room within the eight-condition project limit; it was retained as an attribute but not applied.`)
+    return
+  }
+  const initialConditions = [...conditions, kind === 'capacitor' ? { element: ref, voltage: value } : { element: ref, current: value }]
+  project.simulation.initialConditions = initialConditions
+}
+
 function sourceValue(value: string, pwlFiles: { filename: string; content: string }[] = []): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp' | 'sffm'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; pwlFileName?: string; pwlRepeat?: 'forever'; pwlRepeatCount?: number; sine?: SourceSine; exp?: SourceExp; sffm?: SourceSffm } {
   const trimmed = value.trim()
   const generatedSffm = trimmed.match(/^SFFM\(\s*([^()]*)\s*\)$/i)
@@ -596,6 +618,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...(kind === 'source' && parsedSource.pwlRepeatCount !== undefined ? { pwlRepeatCount: parsedSource.pwlRepeatCount } : {}),
       ...(kind === 'currentSource' && parsedSource.pwl ? { currentPwl: parsedSource.pwl.map(({ time, voltage: current }) => ({ time, current })) } : {}),
     }
+    importInstanceInitialCondition(project, kind, identity, symbol.attributes.SPICELINE, symbol.line, warnings)
     if (kind === 'currentSource' && (parsedSource.pwlRepeat || parsedSource.pwlRepeatCount !== undefined)) warnings.push(`Line ${symbol.line}: repeated PWL current on ${identity} is not supported by the pinned ngspice engine; the source points were imported once without repetition.`)
     project.parts.push(part)
     warnings.push(...sidecar.parsed.warnings.map((warning) => `${identity}: ${warning}`))
@@ -628,7 +651,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   for (const record of textRecords) for (const directive of record.text.split(/\n|!\s+(?=\.)/).map((item) => item.trim()).filter(Boolean)) applyDirective(project, directive, warnings, record.line, knownLibraries)
   const hasImportedInitialConditions = (project.simulation.initialConditions ?? []).length > 0
   if (project.simulation.analysis !== 'tran' && hasImportedInitialConditions) {
-    warnings.push('Imported .ic initial conditions require transient analysis; they were skipped because the imported analysis is not transient.')
+    warnings.push('Imported instance or .ic initial conditions require transient analysis; they were skipped because the imported analysis is not transient.')
     delete project.simulation.initialConditions
   }
   if (project.simulation.analysis !== 'tran' && project.simulation.transientMeasurements) {
