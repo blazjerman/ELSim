@@ -59,6 +59,48 @@ function spiceSweepValue(value: string): string | null {
   return spiceScalar(result, '')
 }
 
+function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage'): number | null {
+  const normalized = quantity === 'time' ? spiceTime(value) : quantity === 'frequency' ? spiceFrequency(value) : spiceSweepValue(value)
+  const match = normalized?.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+  if (!match) return null
+  const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
+  const result = Number(match[1]) * scale
+  return Number.isFinite(result) ? result : null
+}
+
+export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep'
+export type AnalysisSettingError = { field: AnalysisSettingField; message: string }
+
+export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
+  const errors: AnalysisSettingError[] = []
+  const add = (field: AnalysisSettingField, message: string) => errors.push({ field, message })
+  if (project.simulation.analysis === 'tran') {
+    const stop = spiceMagnitude(project.simulation.stopTime, 'time')
+    const step = spiceMagnitude(project.simulation.maxStep, 'time')
+    if (stop === null || stop <= 0) add('stopTime', 'Enter a positive stop time, such as 100 ms.')
+    if (step === null || step <= 0) add('maxStep', 'Enter a positive maximum step, such as 100 µs.')
+  } else if (project.simulation.analysis === 'ac') {
+    const sweep = project.simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
+    if (!['dec', 'oct', 'lin'].includes(sweep.scale)) add('acScale', 'Choose a supported sweep scale.')
+    if (!Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000) add('acPoints', 'Enter from 1 to 10,000 points per scale.')
+    const start = spiceMagnitude(sweep.startFrequency, 'frequency')
+    const stop = spiceMagnitude(sweep.stopFrequency, 'frequency')
+    if (start === null || start <= 0) add('acStartFrequency', 'Enter a positive start frequency, such as 10 Hz.')
+    if (stop === null || stop <= 0 || (start !== null && stop <= start)) add('acStopFrequency', 'Stop frequency must be greater than the start frequency.')
+  } else if (project.simulation.analysis === 'dc') {
+    const sweep = project.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
+    if (!project.parts.some((part) => part.kind === 'source' && part.ref.toLowerCase() === sweep.source.toLowerCase())) add('dcSource', 'Choose an existing voltage source.')
+    const start = spiceMagnitude(sweep.start, 'voltage')
+    const stop = spiceMagnitude(sweep.stop, 'voltage')
+    const step = spiceMagnitude(sweep.step, 'voltage')
+    if (start === null) add('dcStart', 'Enter a valid start voltage, such as 0 V.')
+    if (stop === null) add('dcStop', 'Enter a valid stop voltage, such as 5 V.')
+    if (step === null || step === 0) add('dcStep', 'Enter a nonzero voltage step.')
+    else if (start !== null && stop !== null && (stop - start) * step < 0) add('dcStep', 'Step direction must lead from the start voltage to the stop voltage.')
+  }
+  return errors
+}
+
 function validReference(part: Part): boolean {
   const expected = ({ source: 'V', resistor: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)

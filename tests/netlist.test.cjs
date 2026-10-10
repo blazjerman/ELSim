@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 
-const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
+const { createNetlistArtifact, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createLedExampleProject, createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
@@ -16,6 +16,27 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^R1 vin vout 1k$/m)
   assert.match(artifact.text, /^C1 vout 0 10u$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
+})
+
+test('analysis settings validation identifies invalid transient fields', () => {
+  const project = createStarterProject()
+  project.simulation.stopTime = '0 s'
+  project.simulation.maxStep = 'not a time'
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['stopTime', 'maxStep'])
+})
+
+test('analysis settings validation identifies invalid AC sweep fields', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'ac'
+  project.simulation.acSweep = { scale: 'dec', points: 0, startFrequency: '0 Hz', stopFrequency: '0 Hz' }
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['acPoints', 'acStartFrequency', 'acStopFrequency'])
+})
+
+test('analysis settings validation checks DC source and sweep direction', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'dc'
+  project.simulation.dcSweep = { source: 'R1', start: '0 V', stop: '5 V', step: '-1 V' }
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['dcSource', 'dcStep'])
 })
 
 test('LED pulse example is a runnable transient circuit with a diode-current trace selected', () => {
