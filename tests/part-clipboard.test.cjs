@@ -40,6 +40,18 @@ test('single-part clipboard retains attached geometry as an open stub and ignore
   assert.deepEqual(clipboard.wires.map((wire) => wire.id), ['inside'])
 })
 
+test('copying a part does not pull distant wires in through same-name global labels', () => {
+  const project = connectedPartsProject()
+  project.wires.push({ id: 'remote-labeled', points: [[500, 500], [700, 500]] })
+  project.netLabels = [
+    { id: 'local-bus', name: 'shared_bus', x: 1052, y: 500, visible: true },
+    { id: 'remote-bus', name: 'SHARED_BUS', x: 500, y: 500, visible: true },
+  ]
+  project.sheets[0] = { ...project.sheets[0], wires: project.wires, netLabels: project.netLabels }
+  const clipboard = createPartClipboard(project, ['r1'])
+  assert.deepEqual(clipboard.wires.map((wire) => wire.id), ['inside'])
+})
+
 test('selected wire paths can be copied without copying connected components', () => {
   const project = connectedPartsProject()
   const clipboard = createPartClipboard(project, [], [], ['inside'])

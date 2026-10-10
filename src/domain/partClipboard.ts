@@ -1,4 +1,3 @@
-import { analyzeConnectivity } from './connectivity'
 import { componentPins, pointOnSegment } from './geometry'
 import type { Part, Project } from './project'
 
@@ -18,21 +17,14 @@ export function createPartClipboard(project: Project, selectedPartIds: readonly 
   const netLabels = project.netLabels.filter((label) => selectedLabelIds.includes(label.id)).map((label) => ({ ...label }))
   if (!parts.length && !selectedWireIds.length) return { parts: [], wires: [], junctions: [], netLabels }
 
-  const connectivity = analyzeConnectivity(project)
-  const selectedNets = new Set<string>()
-  for (const part of project.parts) {
-    for (let pin = 0; pin < componentPins(part).length; pin += 1) {
-      const net = connectivity.pinNets.get(`${part.id}:${pin}`)
-      if (!net) continue
-      if (selected.has(part.id)) selectedNets.add(net)
-    }
-  }
-
   const selectedWires = new Set(selectedWireIds)
   const wires = project.wires.filter((wire) => {
     if (selectedWires.has(wire.id)) return true
-    const net = connectivity.wireNets.get(wire.id)
-    return Boolean(net && selectedNets.has(net))
+    // Copy only conductor paths physically attached to selected pins. Net
+    // identity can also come from global labels, which must not pull distant
+    // schematic branches into a local copy operation.
+    return parts.some((part) => componentPins(part).some((pin) => wire.points.slice(1).some((point, index) =>
+      pointOnSegment(pin, { x: wire.points[index][0], y: wire.points[index][1] }, { x: point[0], y: point[1] }))))
   }).map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x, y] as [number, number]) }))
   const copiedWireIds = new Set(wires.map((wire) => wire.id))
   const junctions = project.junctions.filter((junction) => {
