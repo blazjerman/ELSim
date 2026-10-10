@@ -1,0 +1,8 @@
+Behavioral source basic functions
+V1 IN 0 2
+BMIN NMIN 0 V=min(V(IN),1)
+BMAX NMAX 0 V=max(V(IN),3)
+BURAMP NRAMP 0 V=uramp(V(IN)-3)
+.op
+.print op v(nmin) v(nmax) v(nramp)
+.end

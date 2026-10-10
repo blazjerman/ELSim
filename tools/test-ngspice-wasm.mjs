@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
+const fixtures = ['bsource-basic-functions-op', 'rc-transient', 'current-source-op', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -58,6 +58,12 @@ for (const fixture of fixtures) {
   const wasmRows = numericRows(wasmResult.stdout)
   if (fixture === 'hierarchical-parameter') { assert.match(wasmResult.stdout, /in\s+5\.000000e\+00/i); assert.match(wasmResult.stdout, /in2\s+1\.000000e\+01/i); assert.match(wasmResult.stdout, /resistance\s+2000\s+1000/i); assert.match(wasmResult.stdout, /\bi\s+0\.005\s+0\.005/i) }
   if (fixture !== 'hierarchical-parameter' && fixture !== 'current-source-op' && fixture !== 'imported-mosfet-model-op' && fixture !== 'jfet-model-op' && fixture !== 'pjfet-model-op' && fixture !== 'jfet-switch' && fixture !== 'mosfet-switch' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
+
+  if (fixture === 'bsource-basic-functions-op') {
+    assert.match(wasmResult.stdout, /nmin\s+1\.000000e\+00/i, 'min() should clamp the 2 V input to 1 V')
+    assert.match(wasmResult.stdout, /nmax\s+3\.000000e\+00/i, 'max() should raise the 2 V input to 3 V')
+    assert.match(wasmResult.stdout, /nramp\s+0\.000000e\+00/i, 'uramp() should return zero for a negative input')
+  }
 
   if (fixture === 'pwl-repeat-forever') {
     assert.match(wasmResult.stdout, /v\(in\)/i, 'pwl-repeat-forever: input voltage was not printed')

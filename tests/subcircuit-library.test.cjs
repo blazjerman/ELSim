@@ -116,6 +116,14 @@ test('flags LTspice table() expressions rejected by the pinned browser ngspice e
   assert.equal(source.includes('table(V(IN)'), true)
 })
 
+test('flags if() expressions rejected by the pinned browser ngspice engine', () => {
+  const source = '.SUBCKT conditional IN OUT\nB1 OUT 0 V=if(V(IN)>1,5,0)\n.ENDS conditional'
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'LTspice if() behavioral function'])
+  assert.match(warning.impact, /no such function/)
+  assert.match(warning.suggestion, /does not rewrite/)
+})
+
 test('flags LTspice idt() behavioral functions rejected by the pinned browser ngspice engine', () => {
   const source = '.SUBCKT integrator IN OUT\nB1 OUT 0 V=idt(V(IN))\n.ENDS integrator'
   const [warning] = analyzeLtspiceModelDialect(source)
