@@ -17,6 +17,7 @@ test('independent request producer satisfies run and control request contracts',
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, settings: { analysis: 'ac', acSweep: { scale: 'dec' } } } }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '1000' }], label: 'R1=1 kΩ' }], measurements: [{ id: 'peak', operation: 'max', vector: 'v(out)' }] }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '1000' }, { component: 'C1', value: '1e-5' }, { component: 'V1', value: '5' }], label: 'R1=1 kΩ, C1=10 µF, V1=5 V' }] }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'V1', value: '-1.00000000e+0' }, { component: 'I1', value: '0.00000000e+0' }], label: 'V1=-1 V, I1=0 A' }] }), true)
 })
 
 test('request consumer rejects malformed payloads before engine execution', () => {

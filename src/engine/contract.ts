@@ -182,7 +182,7 @@ function isParameterSweepRun(value: unknown): boolean {
   const components = new Set<string>()
   return value.values.every((entry) => {
     if (!isRecord(entry) || typeof entry.component !== 'string' || !entry.component.trim()
-      || typeof entry.value !== 'string' || !Number.isFinite(Number(entry.value)) || Number(entry.value) <= 0) return false
+      || typeof entry.value !== 'string' || !Number.isFinite(Number(entry.value))) return false
     const key = entry.component.toLowerCase()
     if (components.has(key)) return false
     components.add(key)

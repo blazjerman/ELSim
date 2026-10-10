@@ -1026,7 +1026,7 @@ test('three-parameter sweep runs all eight bounded cases in the browser engine',
     project.simulation.parameterSweeps = [
       { component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 2 },
       { component: 'C1', start: '10 µF', stop: '20 µF', points: 2 },
-      { component: source.ref, start: '4 V', stop: '5 V', points: 2 },
+      { component: source.ref, start: '-1 V', stop: '1 V', points: 2 },
     ]
     localStorage.setItem(key, JSON.stringify(project))
   })
@@ -1037,8 +1037,8 @@ test('three-parameter sweep runs all eight bounded cases in the browser engine',
   await expect(page.getByText(/Parameter sweep complete · 8 cases/)).toBeVisible({ timeout: 60_000 })
   const labels = await page.locator('.trace-toggles button').evaluateAll((buttons) => [...new Set(buttons.map((button) => button.textContent?.split('·').slice(1).join('·').trim()).filter(Boolean))])
   expect(labels).toHaveLength(8)
-  expect(labels).toContain('R1=1000 Ω, C1=0.00001 F, V1=4 V')
-  expect(labels).toContain('R1=2000 Ω, C1=0.00002 F, V1=5 V')
+  expect(labels).toContain('R1=1000 Ω, C1=0.00001 F, V1=-1 V')
+  expect(labels).toContain('R1=2000 Ω, C1=0.00002 F, V1=1 V')
 })
 
 test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {

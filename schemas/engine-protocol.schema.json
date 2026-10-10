@@ -107,7 +107,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["component", "value"],
-            "properties": { "component": { "type": "string" }, "value": { "type": "string" } }
+            "properties": { "component": { "type": "string", "minLength": 1 }, "value": { "type": "string", "pattern": "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" } }
           }
         },
         "label": { "type": "string" }
