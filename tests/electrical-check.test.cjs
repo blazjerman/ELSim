@@ -144,6 +144,17 @@ test('reports missing transitive dependencies of an instantiated model', () => {
   assert.ok(checkCircuit(project).some((item) => item.id.startsWith('missing-model-dependency:') && /MISSING_CORE/.test(item.title)))
 })
 
+test('reports current-controlled sources with missing or invalid voltage-source references', () => {
+  const project = createStarterProject()
+  const cccs = { id: 'missing-cccs-control', kind: 'cccs', ref: 'F1', value: '2', x: 760, y: 600, rotation: 0 }
+  const ccvs = { id: 'invalid-ccvs-control', kind: 'ccvs', ref: 'H1', value: '2 kΩ', controlSource: 'R1', x: 820, y: 600, rotation: 0 }
+  project.parts.push(cccs, ccvs)
+  project.sheets[0].parts = project.parts
+  const issues = checkCircuit(project).filter((item) => item.id.startsWith('missing-control-source:'))
+  assert.deepEqual(issues.map((item) => item.partId).sort(), [cccs.id, ccvs.id].sort())
+  assert.ok(issues.every((item) => item.severity === 'warning' && /independent voltage source/i.test(item.detail)))
+})
+
 test('warns when behavioral expressions reference unlabeled unknown nodes', () => {
   const project = createStarterProject()
   const behavioral = { id: 'behavioral-missing', kind: 'behavioral', ref: 'B1', value: 'V(VMISSING) * 2', behavioralOutput: 'voltage', x: 760, y: 600, rotation: 0 }

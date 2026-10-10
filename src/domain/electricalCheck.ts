@@ -46,6 +46,17 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   }
 
   for (const part of project.parts) {
+    if (part.kind === 'cccs' || part.kind === 'ccvs') {
+      const controlSource = part.controlSource?.trim().toLowerCase()
+      const sourceExists = controlSource && project.parts.some((candidate) => candidate.kind === 'source' && candidate.ref.toLowerCase() === controlSource)
+      if (!sourceExists) issues.push({
+        id: `missing-control-source:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} needs a controlling voltage source`,
+        detail: 'Choose a placed independent voltage source. Current-controlled sources measure the current through that voltage source; other components cannot provide this control current.',
+        partId: part.id,
+      })
+    }
     if (part.kind === 'currentSource' && componentMagnitude(part.value, part.kind) === null && !isDeclaredParameter(part.value)) {
       issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid current`, detail: 'Enter a numeric current with an optional SI prefix, such as 1 mA or -250 µA.', partId: part.id })
     }

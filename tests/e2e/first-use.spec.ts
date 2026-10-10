@@ -1433,6 +1433,22 @@ test('circuit checks explain missing transitive model dependencies and select th
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('XAMP1 · AMP')
 })
 
+test('circuit checks explain and select a current-controlled source with no control source', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.locator('.example-list article').filter({ hasText: 'Current-controlled sources' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.locator('.circuit-part[data-part-id="current-f1"]').click()
+  await page.getByLabel('Controlling voltage source').selectOption('')
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  const missingControl = report.getByRole('listitem').filter({ hasText: 'F1 needs a controlling voltage source' })
+  await expect(missingControl).toContainText('Choose a placed independent voltage source')
+  await missingControl.getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="current-f1"].selected')).toHaveCount(1)
+})
+
 test('creating a child sheet can be undone and redone', async ({ page }) => {
   await page.goto('/')
   const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })
