@@ -16,7 +16,7 @@ test('AC source validation focuses its inspector field before simulation', async
   await expect(page.locator('.toast')).toContainText('AC phase must be a finite numeric value in degrees.')
   await phase.fill('45')
   await page.getByRole('button', { name: 'Run simulation' }).click()
-  await expect(page.getByText(/AC analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText('AC frequency response')).toBeVisible({ timeout: 60_000 })
 })
 
 test('wire current animation respects the operating system reduced-motion preference', async ({ page }) => {
@@ -205,7 +205,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
   await page.goto('/')
 
   const modelLibrary = '.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
-  const expectedDefinitionId = `user.${createHash('sha256').update(modelLibrary).digest('hex').slice(0, 12)}.user-double`
+  const expectedDefinitionId = `user.${createHash('sha256').update(modelLibrary).digest('hex')}.user-double`
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-double.lib',
@@ -238,7 +238,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', async ({ 
   const importedDefinition = page.locator(`[data-component-definition-id="${expectedDefinitionId}"]`)
   await expect(importedDefinition).toBeVisible()
   await expect(importedDefinition).toContainText('Add to schematic')
-  await expect(page.locator('.imported-model')).toContainText('Parameters: gain=2')
+  await expect(page.locator('.imported-model').filter({ has: importedDefinition })).toContainText('Parameters: gain=2')
   await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled()
   await page.getByRole('button', { name: 'Run simulation' }).click()
 
