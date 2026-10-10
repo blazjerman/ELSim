@@ -87,6 +87,8 @@ Acceptance: all six journeys have runnable example projects and automated measur
 
 **M1.5 Beginner experience.** Onboarding, searchable components, example circuits, hover explanations, sensible simulation presets, and accessible colors/keyboard operations. Acceptance: scripted first-use test reaches a working circuit without knowledge of netlists.
 
+Current slice: the toolbar wraps at browser widths up to 1165 px so Run and analysis controls remain reachable without horizontal page scrolling. At 854 px, the component cards wrap their labels and the RC starter runs in-browser; the waveform plot, solved-time cursor, current flow, and capacitor charge animation update from ngspice vectors. This was manually checked in Chromium; an automated browser first-use test and broader keyboard/accessibility pass remain.
+
 ### M2 — Project system and deeper simulation
 
 **M2.1 `.elsim` specification.** Versioned manifest and ZIP layout; schema validation, migration, asset hashes, relative paths, safe extraction limits, and deterministic serialization. Archive v1 stores project JSON only; user model source is held in optional project-v2 `modelAssets` with SHA-256 and unknown redistribution status. Project v2 also persists selected trace IDs and normalized horizontal ranges for transient, AC, and DC sweep plots. Hierarchy data remains future document-model work. Acceptance: round trip preserves connectivity, layout, models, plots, and hierarchy; malformed archives cannot read arbitrary local files. See `PROJECT_FORMAT.md` for current format and limits.
