@@ -3,6 +3,25 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect } from '@playwright/test'
 
+test('quick tour explains the current workspace and project save flow', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Open quick tour' }).click()
+  const dialog = page.locator('.tour-dialog[role="dialog"]')
+  await expect(dialog.getByLabel('Step 1 of 5')).toBeVisible()
+  await expect(dialog).toContainText('Your open circuit is on the center canvas.')
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await expect(dialog.getByRole('heading', { name: 'Change a component value' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await expect(dialog.getByRole('heading', { name: 'Run a simulation' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await expect(dialog.getByRole('heading', { name: 'Explore waveforms and animation' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Next' }).click()
+  await expect(dialog.getByRole('heading', { name: 'Save and reopen your project' })).toBeVisible()
+  await expect(dialog).toContainText('.elsim project file')
+  await dialog.getByRole('button', { name: 'Finish' }).click()
+  await expect(dialog).toHaveCount(0)
+})
+
 test('component categories filter the library and search crosses categories', async ({ page }) => {
   await page.goto('/')
   const cards = page.locator('.component-card')
