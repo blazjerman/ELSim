@@ -224,6 +224,24 @@ test('exports nested sheets and generated block symbols, then reimports the topo
   for (let a = 0; a < oldPins.length; a += 1) for (let b = 0; b < oldPins.length; b += 1) assert.equal(oldPins[a].split('=')[1] === oldPins[b].split('=')[1], newPins[a].split('=')[1] === newPins[b].split('=')[1], `Connectivity differs between ${oldPins[a]} and ${oldPins[b]}`)
 })
 
+test('keeps generated semiconductor models beside the sheet that owns their instances', async () => {
+  const project = createHierarchicalExampleProject()
+  const child = project.sheets.find((sheet) => sheet.id !== project.rootSheetId)
+  assert.ok(child)
+  const childDiode = { id: 'child-diode', kind: 'diode', ref: 'DCHILD', value: 'Default diode', x: 720, y: 640, rotation: 0 }
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  assert.ok(core)
+  core.parts.push(childDiode)
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  const rootFile = exported.files.find((file) => file.path.startsWith('Nested_') && file.path.endsWith('.asc'))
+  const childFile = exported.files.find((file) => file.path === `${core.name.replace(/[^A-Za-z0-9_-]+/g, '_')}.asc`)
+  assert.ok(rootFile && childFile)
+  assert.doesNotMatch(rootFile.content, /\.model DDEFAULT D/)
+  assert.match(childFile.content, /\.model DDEFAULT D/)
+  assert.match(childFile.content, /SYMATTR Value DDEFAULT/)
+})
+
 test('exports diagonal wires and preserves pin, label, endpoint, and explicit-junction connectivity', async () => {
   const project = createStarterProject()
   project.name = 'Diagonal wire test'

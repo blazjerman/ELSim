@@ -332,6 +332,23 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
     if (part.symbolAssetId) losses.push({ severity: 'warning', sourceId: part.id, title: 'Imported artwork replaced', explanation: 'The circuit uses an original generated symbol with the same ordered pins; user-provided .asy artwork is not included.' })
   }
   for (const parameter of sheet.parameters ?? []) addDirective(`.param ${parameter.name}=${parameter.defaultValue}`)
+  if (sheet.parts.some((part) => (part.kind === 'diode' || part.kind === 'led') && !part.deviceModel)) addDirective('.model DDEFAULT D')
+  for (const part of sheet.parts) {
+    if ((part.kind === 'npn' || part.kind === 'pnp') && !part.deviceModel) {
+      const beta = scalar(part.value)
+      if (!beta) blockers.push({ sourceId: part.id, message: `${part.ref} needs a numeric forward beta to generate its ELSim transistor model.` })
+      else {
+        const modelName = `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}`
+        addDirective(`.model ${modelName} ${part.kind === 'npn' ? 'NPN' : 'PNP'}(IS=1e-14 BF=${beta} VAF=100 CJE=10p CJC=5p TF=300p TR=10n)`)
+      }
+    }
+    if ((part.kind === 'nmos' || part.kind === 'pmos') && !part.deviceModel) {
+      const type = part.kind === 'nmos' ? 'NMOS' : 'PMOS'
+      const threshold = part.kind === 'nmos' ? '2' : '-2'
+      const modelName = `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}`
+      addDirective(`.model ${modelName} ${type} (LEVEL=1 VTO=${threshold} KP=20u LAMBDA=0.02)`)
+    }
+  }
   if (sheet.id === project.rootSheetId) {
     for (const [assetId, path] of modelPaths) {
       const asset = project.modelAssets?.find((item) => item.id === assetId)
@@ -346,23 +363,6 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       else losses.push({ severity: 'warning', sourceId: `initial:${condition.element}`, title: 'Inductor initial current omitted', explanation: 'This exporter version does not yet map LTspice inductor initial-current attributes.' })
     }
     const simulation = project.simulation
-    if (project.sheets.some((candidate) => candidate.parts.some((part) => (part.kind === 'diode' || part.kind === 'led') && !part.deviceModel))) addDirective('.model DDEFAULT D')
-    for (const candidate of project.sheets.flatMap((item) => item.parts.map((part) => ({ sheet: item, part })))) {
-      if ((candidate.part.kind !== 'npn' && candidate.part.kind !== 'pnp') || candidate.part.deviceModel) continue
-      const beta = scalar(candidate.part.value)
-      if (!beta) blockers.push({ sourceId: candidate.part.id, message: `${candidate.part.ref} needs a numeric forward beta to generate its ELSim transistor model.` })
-      else {
-        const modelName = `ELSIM_MODEL_${spiceIdentifier(candidate.sheet.id).toUpperCase()}_${candidate.part.ref}`
-        addDirective(`.model ${modelName} ${candidate.part.kind === 'npn' ? 'NPN' : 'PNP'}(IS=1e-14 BF=${beta} VAF=100 CJE=10p CJC=5p TF=300p TR=10n)`)
-      }
-    }
-    for (const candidate of project.sheets.flatMap((item) => item.parts.map((part) => ({ sheet: item, part })))) {
-      if ((candidate.part.kind !== 'nmos' && candidate.part.kind !== 'pmos') || candidate.part.deviceModel) continue
-      const type = candidate.part.kind === 'nmos' ? 'NMOS' : 'PMOS'
-      const threshold = candidate.part.kind === 'nmos' ? '2' : '-2'
-      const modelName = `ELSIM_MODEL_${spiceIdentifier(candidate.sheet.id).toUpperCase()}_${candidate.part.ref}`
-      addDirective(`.model ${modelName} ${type} (LEVEL=1 VTO=${threshold} KP=20u LAMBDA=0.02)`)
-    }
     if (simulation.analysis === 'op') addDirective('.op')
     else if (simulation.analysis === 'ac') {
       const sweep = simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
