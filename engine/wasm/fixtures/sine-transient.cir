@@ -1,0 +1,6 @@
+ELSim ngspice WebAssembly SINE transient example
+V1 in 0 SIN(1 2 1k 0 0 0)
+R1 in 0 1k
+.tran 25u 250u
+.print tran time V(in)
+.end

@@ -73,6 +73,22 @@ test('current sources export and reimport as I devices with ampere values', asyn
   assert.deepEqual(pwlRestored.currentPwl, [{ time: '0', current: '0' }, { time: '2m', current: '3m' }])
 })
 
+test('voltage SINE sources export and reimport with all waveform fields', async () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.kind === 'source')
+  source.sourceMode = 'sine'
+  source.sine = { offset: '1', amplitude: '2', frequency: '1k', delay: '3m', damping: '4', phase: '90' }
+  source.value = '2'
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName V1\nSYMATTR Value SINE\(1 2 1k 3m 4 90\)/)
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `sine-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project.parts.find((part) => part.ref === 'V1')
+  assert.equal(restored.sourceMode, 'sine')
+  assert.deepEqual(restored.sine, source.sine)
+})
+
 test('linear CCCS and CCVS export as LTspice F/H symbols and reimport with their sensor and coefficient', async () => {
   const project = createStarterProject()
   const f = { id: 'export-cccs', kind: 'cccs', ref: 'F1', value: '2', controlSource: 'V1', x: 760, y: 520, rotation: 0 }

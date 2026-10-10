@@ -71,7 +71,7 @@ function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage
   return Number.isFinite(result) ? result : null
 }
 
-export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period'
+export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
@@ -83,7 +83,7 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
     if (stop === null || stop <= 0) add('stopTime', 'Enter a positive stop time, such as 100 ms.')
     if (step === null || step <= 0) add('maxStep', 'Enter a positive maximum step, such as 100 µs.')
     for (const part of project.parts.filter((item) => item.kind === 'source' || (item.kind === 'currentSource' && item.sourceMode === 'pulse'))) {
-      if (part.kind === 'source' && (part.sourceMode === 'dc' || part.sourceMode === 'pwl')) continue
+      if (part.kind === 'source' && part.sourceMode !== undefined && part.sourceMode !== 'pulse') continue
       const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
       const level = spiceNumber(pulse.initial, part.kind)
       if (level === null) add('pulse.initial', `${part.ref} initial pulse level must be a valid SPICE value.`, part.id)
@@ -92,6 +92,18 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
         const invalid = magnitude === null || magnitude < 0 || (key === 'period' && magnitude <= 0)
         if (invalid) add(`pulse.${key}`, `${part.ref} ${key} must be a valid ${key === 'period' ? 'positive' : 'nonnegative'} time value.`, part.id)
       }
+    }
+    for (const part of project.parts.filter((item) => item.kind === 'source' && item.sourceMode === 'sine')) {
+      const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
+      if (spiceNumber(sine.offset, 'source') === null) add('sine.offset', `${part.ref} sine offset must be a valid voltage.`, part.id, 'sine.offset')
+      if (spiceNumber(sine.amplitude, 'source') === null) add('sine.amplitude', `${part.ref} sine amplitude must be a valid voltage.`, part.id, 'sine.amplitude')
+      const frequency = spiceMagnitude(sine.frequency, 'frequency')
+      if (frequency === null || frequency <= 0) add('sine.frequency', `${part.ref} sine frequency must be positive.`, part.id, 'sine.frequency')
+      const delay = spiceTimeMagnitude(sine.delay)
+      if (delay === null || delay < 0) add('sine.delay', `${part.ref} sine delay must be a nonnegative time.`, part.id, 'sine.delay')
+      const damping = spiceScalar(sine.damping, '')
+      if (damping === null || Number(damping) < 0) add('sine.damping', `${part.ref} sine damping must be nonnegative.`, part.id, 'sine.damping')
+      if (spiceScalar(sine.phase, '') === null) add('sine.phase', `${part.ref} sine phase must be a numeric angle in degrees.`, part.id, 'sine.phase')
     }
     for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'pwl')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
@@ -328,7 +340,18 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       let transientValue = `DC ${value}`
-      if (part.sourceMode === 'pwl') {
+      if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
+        const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
+        const offset = spiceNumber(sine.offset, 'source'), amplitude = spiceNumber(sine.amplitude, 'source')
+        const frequency = spiceFrequency(sine.frequency), delay = spiceTime(sine.delay), damping = spiceScalar(sine.damping, ''), phase = spiceScalar(sine.phase, '')
+        if (offset === null || amplitude === null || frequency === null || (spiceMagnitude(sine.frequency, 'frequency') ?? 0) <= 0 || delay === null || (spiceTimeMagnitude(sine.delay) ?? -1) < 0 || damping === null || Number(damping) < 0 || phase === null) {
+          const message = `${part.ref} sine source settings must contain valid voltages, positive frequency, nonnegative delay/damping, and numeric phase.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `SIN(${offset} ${amplitude} ${frequency} ${delay} ${damping} ${phase})`
+      } else if (part.sourceMode === 'pwl') {
         const points = part.pwl ?? []
         const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), voltage: spiceNumber(point.voltage, 'source') }))
         let previousTime = -Infinity
@@ -344,7 +367,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           continue
         }
         transientValue = `PWL(${normalized.map((point) => `${point.time} ${point.voltage}`).join(' ')})`
-      } else if (part.sourceMode !== 'dc') {
+      } else if (part.sourceMode === 'pulse' || part.sourceMode === undefined) {
         const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
         const initial = spiceNumber(pulse.initial, 'source')
         const delay = spiceTime(pulse.delay)

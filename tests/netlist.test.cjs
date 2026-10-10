@@ -198,6 +198,20 @@ test('PWL voltage sources emit ordered time-voltage pairs and diagnose invalid o
   assert.match(invalid.diagnostics[0].message, /strictly increasing/)
 })
 
+test('voltage SINE sources netlist all standard fields and map invalid values before simulation', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.ref === 'V1')
+  source.sourceMode = 'sine'
+  source.sine = { offset: '1 V', amplitude: '2 V', frequency: '1 kHz', delay: '3 ms', damping: '4', phase: '90' }
+  let artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 SIN\(1 2 1k 3m 4 90\)$/m)
+  source.sine.frequency = '0 Hz'
+  artifact = createNetlistArtifact(project)
+  assert.match(artifact.diagnostics[0].message, /positive frequency/i)
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['sine.frequency'])
+})
+
 test('PWL editor validation reports malformed, negative, and non-increasing times by field', () => {
   assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '2 ms', voltage: '5 V' }]), [null, null, null, null])
   assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '0', voltage: 'bad' }]), [null, null, 'Time must be later than the previous point.', 'Enter a numeric voltage such as 3.3 or -5 V.'])

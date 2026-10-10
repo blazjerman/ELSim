@@ -214,6 +214,16 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   if (part.kind === 'source') {
     const value = scalar(part.value, 'v')
     if (!value) return null
+    if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
+      const sine = { offset: '0', amplitude: part.value.replace(/\s*v$/i, ''), frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
+      const values = [scalar(sine.offset, 'v'), scalar(sine.amplitude, 'v'), scalar(sine.frequency, 'hz'), scalar(sine.delay, 's'), scalar(sine.damping), scalar(sine.phase)]
+      if (values.some((entry) => entry === null) || scalarMagnitude(sine.frequency, 'hz')! <= 0 || scalarMagnitude(sine.delay, 's')! < 0 || Number(values[4]) < 0) return null
+      const acMagnitude = part.acMagnitude
+      const acScalar = acMagnitude === undefined ? undefined : scalar(acMagnitude, 'v')
+      const phaseScalar = acMagnitude === undefined ? '0' : scalar(part.acPhase ?? '0', '')
+      if ((acMagnitude !== undefined && acScalar === null) || phaseScalar === null) return null
+      return { value: `SINE(${values.join(' ')})`, ...(acScalar === undefined ? {} : { value2: `AC ${acScalar} ${phaseScalar}` }) }
+    }
     const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
     const pulseValues = [pulse.initial, pulse.delay, pulse.rise, pulse.fall, pulse.width, pulse.period].map((entry) => scalar(entry, entry === pulse.initial ? 'v' : 's'))
     const isTransient = project.simulation.analysis === 'tran'

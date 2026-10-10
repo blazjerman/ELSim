@@ -768,6 +768,28 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   expect(arrowPath?.startsWith(titleText?.includes('from pin 1 toward pin 2') ? 'M-10' : 'M10')).toBe(true)
 })
 
+
+test('voltage source SINE waveform is editable and runs in the browser ngspice engine', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('sine')
+  await page.getByLabel('Offset (V)').fill('1')
+  await page.getByLabel('Amplitude (V)').fill('2')
+  await page.getByLabel('Frequency').fill('1k')
+  await page.getByLabel('Delay').fill('0')
+  await page.getByLabel('Damping factor').fill('0')
+  await page.getByLabel('Phase (°)').fill('90')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText(/V1 vin 0 SIN\(1 2 1k 0 0 90\)/)
+  await page.getByRole('slider', { name: 'Simulation time' }).press('End')
+  const source = page.locator('.circuit-part[data-part-id="p-v1"]')
+  await expect(source.locator('title')).toContainText(/V = 3(?:\.0+)? V/)
+})
+
 test('PWL waveform example opens with editable points and solves the RC response', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

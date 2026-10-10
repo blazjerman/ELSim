@@ -40,6 +40,19 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
   assert.notEqual(positive, pinNet(connectivity, pins, 1))
 })
 
+test('imports an LTspice voltage SINE waveform with optional delay, damping, and phase', () => {
+  const voltageSymbol = { ...symbol, id: 'symbol-voltage-sine', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
+  const asc = ['Version 4', 'SHEET 1 880 680', 'SYMBOL voltage 32 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value SINE(1 2 1k 3m 4 90)', 'TEXT 0 100 Left 2 !.tran 0 10m 0 10u'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'sine-source.asc', [voltageSymbol])
+  assert.deepEqual(warnings, [])
+  assert.equal(project.parts[0].sourceMode, 'sine')
+  assert.equal(project.parts[0].value, '2')
+  assert.deepEqual(project.parts[0].sine, { offset: '1', amplitude: '2', frequency: '1k', delay: '3m', damping: '4', phase: '90' })
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 .* SIN\(1 2 1k 3m 4 90\)$/m)
+})
+
 test('imports a user-supplied LTspice M device with D-G-S-B SpiceOrder mapping', () => {
   const mosSymbol = {
     id: 'symbol-nmos', filename: 'nmos.asy', sha256: 'b'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),

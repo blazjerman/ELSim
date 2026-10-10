@@ -1,4 +1,4 @@
-import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourcePulse, type SourcePwlPoint, type SymbolAsset, type Wire } from './project'
+import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourcePulse, type SourcePwlPoint, type SourceSine, type SymbolAsset, type Wire } from './project'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseSubcircuitLibrary } from './subcircuitLibrary'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
@@ -14,6 +14,11 @@ const MAX_ASC_WIRES = 2_000
 const MAX_ASC_SYMBOLS = 1_000
 const MAX_UNSUPPORTED_RECORD_CHARS = 240
 const validScalar = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?$/i.test(value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u'))
+const positiveFrequency = (value: string) => {
+  const match = value.trim().toLowerCase().replace(/hz$/, '').match(/^([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/)
+  const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match?.[2] ?? ''] ?? 1
+  return Boolean(match && Number(match[1]) * scale > 0)
+}
 
 function negateInitialScalar(value: string): string {
   const match = value.match(/^([+-]?)(\d+(?:\.\d*)?|\.\d+)([eE][+-]?\d+)?(meg|[tgkmunpf])?(v)?$/i)
@@ -26,8 +31,16 @@ function recordExcerpt(raw: string): string {
   return compact.length > MAX_UNSUPPORTED_RECORD_CHARS ? `${compact.slice(0, MAX_UNSUPPORTED_RECORD_CHARS - 1)}…` : compact
 }
 
-function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'pwl'; pulse?: SourcePulse; pwl?: SourcePwlPoint[] } {
+function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; sine?: SourceSine } {
   const trimmed = value.trim()
+  const generatedSine = trimmed.match(/^SINE\(\s*([^()]*)\s*\)$/i)
+  if (generatedSine) {
+    const values = generatedSine[1].trim().split(/[\s,]+/).filter(Boolean)
+    if (values.length >= 3 && values.length <= 6 && values.every((entry) => validScalar(entry)) && validScalar(values[0]) && validScalar(values[1]) && positiveFrequency(values[2]) && (values[3] === undefined || validScalar(values[3])) && (values[4] === undefined || /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(values[4])) && (values[5] === undefined || /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(values[5]))) {
+      const [offset, amplitude, frequency, delay = '0', damping = '0', phase = '0'] = values
+      return { value: amplitude, mode: 'sine', sine: { offset, amplitude, frequency, delay, damping, phase } }
+    }
+  }
   const generatedPulse = trimmed.match(/^PULSE\(\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\)$/i)
   if (generatedPulse && generatedPulse.slice(1).every((entry) => validScalar(entry))) {
     const [, initial, high, delay, rise, fall, width, period] = generatedPulse
@@ -399,7 +412,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const value2Ac = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceAc(symbol.attributes.VALUE2) : null
     const representedValueAttribute = valueAc && symbol.attributes.VALUE2 !== undefined ? 'VALUE2' : symbol.attributes.VALUE !== undefined ? 'VALUE' : 'VALUE2'
     const fallbackSourceValue = valueAc ? (symbol.attributes.VALUE2 && !value2Ac ? symbol.attributes.VALUE2 : '0') : rawValue
-    const parsedWaveform = sourcePrefix === 'V' || sourcePrefix === 'I' ? valueAc ? { ...sourceValue(fallbackSourceValue), mode: 'dc' as const } : sourceValue(rawValue) : { value: rawValue }
+    const parsedWaveform = sourcePrefix === 'V' || sourcePrefix === 'I' ? valueAc ? { ...sourceValue(fallbackSourceValue), mode: 'dc' as const } : sourcePrefix === 'I' && /^SINE\s*\(/i.test(rawValue.trim()) ? { value: rawValue } : sourceValue(rawValue) : { value: rawValue }
     const parsedSource = parsedWaveform
     const value = parsedSource.value
     if (!identity || !/^[A-Za-z][A-Za-z0-9_]*$/.test(identity)) { warnings.push(`Line ${symbol.line}: ${symbol.name} is missing a valid SYMATTR InstName and was skipped.`); continue }
@@ -509,6 +522,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...(isCurrentControlled ? { controlSource } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
+      ...(kind === 'source' && parsedSource.sine ? { sine: parsedSource.sine } : {}),
       ...((kind === 'source' || kind === 'currentSource') && (valueAc ?? value2Ac) ? { acMagnitude: (valueAc ?? value2Ac)!.magnitude, acPhase: (valueAc ?? value2Ac)!.phase } : {}),
       ...(kind === 'source' && parsedSource.pwl ? { pwl: parsedSource.pwl } : {}),
       ...(kind === 'currentSource' && parsedSource.pwl ? { currentPwl: parsedSource.pwl.map(({ time, voltage: current }) => ({ time, current })) } : {}),

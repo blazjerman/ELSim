@@ -7,6 +7,7 @@ import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from
 export type PartKind = 'source' | 'currentSource' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'njfet' | 'pjfet' | 'nmos' | 'pmos' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
 export type SourcePulse = { initial: string; delay: string; rise: string; fall: string; width: string; period: string }
+export type SourceSine = { offset: string; amplitude: string; frequency: string; delay: string; damping: string; phase: string }
 export type SourcePwlPoint = { time: string; voltage: string }
 export type CurrentSourcePwlPoint = { time: string; current: string }
 
@@ -27,10 +28,11 @@ export type Part = {
   deviceModel?: string
   controlSource?: string
   behavioralOutput?: 'voltage' | 'current'
-  sourceMode?: 'pulse' | 'dc' | 'pwl'
+  sourceMode?: 'pulse' | 'dc' | 'pwl' | 'sine'
   acMagnitude?: string
   acPhase?: string
   pulse?: SourcePulse
+  sine?: SourceSine
   pwl?: SourcePwlPoint[]
   currentPwl?: CurrentSourcePwlPoint[]
   extensions?: { ltspice?: { attributes?: Record<string, string> } }
@@ -229,9 +231,10 @@ export function validateProject(input: unknown): Project {
     }
     partIds.add(candidate.id)
     const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[candidate.kind]
-    if (candidate.sourceMode !== undefined && ((candidate.kind !== 'source' && candidate.kind !== 'currentSource') || !['pulse', 'dc', 'pwl'].includes(candidate.sourceMode))) throw new Error(`${candidate.ref} has an invalid source waveform mode.`)
+    if (candidate.sourceMode !== undefined && ((candidate.kind !== 'source' && candidate.kind !== 'currentSource') || !['pulse', 'dc', 'pwl', 'sine'].includes(candidate.sourceMode) || candidate.sourceMode === 'sine' && candidate.kind !== 'source')) throw new Error(`${candidate.ref} has an invalid source waveform mode.`)
     if ((candidate.acMagnitude !== undefined && (candidate.kind !== 'source' && candidate.kind !== 'currentSource' || typeof candidate.acMagnitude !== 'string' || candidate.acMagnitude.length > 64)) || (candidate.acPhase !== undefined && (candidate.kind !== 'source' && candidate.kind !== 'currentSource' || typeof candidate.acPhase !== 'string' || candidate.acPhase.length > 64))) throw new Error(`${candidate.ref} has malformed AC source settings.`)
     if (candidate.pulse !== undefined && ((candidate.kind !== 'source' && candidate.kind !== 'currentSource') || !candidate.pulse || ['initial', 'delay', 'rise', 'fall', 'width', 'period'].some((key) => typeof candidate.pulse?.[key as keyof typeof candidate.pulse] !== 'string'))) throw new Error(`${candidate.ref} has malformed pulse settings.`)
+    if (candidate.sine !== undefined && (candidate.kind !== 'source' || !candidate.sine || typeof candidate.sine !== 'object' || Array.isArray(candidate.sine) || Object.keys(candidate.sine).some((key) => !['offset', 'amplitude', 'frequency', 'delay', 'damping', 'phase'].includes(key)) || ['offset', 'amplitude', 'frequency', 'delay', 'damping', 'phase'].some((key) => typeof candidate.sine?.[key as keyof typeof candidate.sine] !== 'string' || candidate.sine[key as keyof typeof candidate.sine]!.length > 64))) throw new Error(`${candidate.ref} has malformed sine settings.`)
     if (candidate.pwl !== undefined && (candidate.kind !== 'source' || !Array.isArray(candidate.pwl) || candidate.pwl.length < 2 || candidate.pwl.length > 32 || candidate.pwl.some((point) => !point || typeof point !== 'object' || Array.isArray(point) || Object.keys(point).some((key) => key !== 'time' && key !== 'voltage') || typeof point.time !== 'string' || point.time.length > 64 || typeof point.voltage !== 'string' || point.voltage.length > 64))) throw new Error(`${candidate.ref} has malformed PWL source points.`)
     if (candidate.currentPwl !== undefined && (candidate.kind !== 'currentSource' || !Array.isArray(candidate.currentPwl) || candidate.currentPwl.length < 2 || candidate.currentPwl.length > 32 || candidate.currentPwl.some((point) => !point || typeof point !== 'object' || Array.isArray(point) || Object.keys(point).some((key) => key !== 'time' && key !== 'current') || typeof point.time !== 'string' || point.time.length > 64 || typeof point.current !== 'string' || point.current.length > 64))) throw new Error(`${candidate.ref} has malformed PWL current points.`)
     if (candidate.extensions !== undefined) {
