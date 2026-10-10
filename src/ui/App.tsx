@@ -1014,6 +1014,7 @@ export default function App() {
   const [analysisTab, setAnalysisTab] = useState<'waveforms' | 'netlist'>('waveforms')
   const [examplesOpen, setExamplesOpen] = useState(false)
   const [pendingExample, setPendingExample] = useState<'rc' | 'led' | 'rlc' | 'controlled' | 'current-controlled' | 'transistor' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | null>(null)
+  const [exampleLesson, setExampleLesson] = useState<{ title: string; guidance: string } | null>(null)
   const [hierarchyWalkthroughStep, setHierarchyWalkthroughStep] = useState<number | null>(null)
   const [sheetSettingsOpen, setSheetSettingsOpen] = useState(false)
   const [sheetInstancePath, setSheetInstancePath] = useState<string[]>([])
@@ -1501,6 +1502,7 @@ export default function App() {
       if (!window.confirm(`Open “${parsed.name}”? This will replace the circuit in this tab. Save your current circuit first if you want to keep it.`)) { event.target.value = ''; return }
       setSheetInstancePath(findSheetInstancePath(parsed.activeSheetId, parsed.rootSheetId, [], new Set(), parsed) ?? [])
       setProjectState(parsed)
+    setExampleLesson(null)
       setImportWarnings([])
       setCompatibilityDiagnostic(null)
       setSelectedTraceIds(parsed.plotSettings?.selectedTraceIds ?? [])
@@ -1622,6 +1624,7 @@ export default function App() {
       const pwlFiles = await Promise.all(textCandidates.map(async (file) => ({ filename: file.name, content: new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()) })))
       const imported = parseLtspiceSchematic(source, ascFile.name, symbols, modelAssets, childSchematics, [], pwlFiles)
       setProjectState(imported.project)
+    setExampleLesson(null)
       setImportWarnings(imported.warnings)
       setSelectedTraceIds([])
       setSimulationResult(null)
@@ -2146,6 +2149,7 @@ export default function App() {
     const starter = createStarterProject()
     setSheetInstancePath([])
     setProjectState(starter)
+    setExampleLesson(null)
     setImportWarnings([])
     setCompatibilityDiagnostic(null)
     setSelectedTraceIds(starter.plotSettings?.selectedTraceIds ?? [])
@@ -2173,6 +2177,23 @@ export default function App() {
     setSampleIndex(null)
     setSheetInstancePath([])
     setProjectState(next)
+    const lessons = {
+      rc: { title: 'Watch the capacitor charge', guidance: 'Run the transient, then scrub time. Change R1 or C1 and compare how the charging time changes.' },
+      led: { title: 'Current makes the LED glow', guidance: 'Run the pulse response and scrub between on and off. The glow follows solved LED current; it is not a thermal model.' },
+      rlc: { title: 'See energy move between L and C', guidance: 'Run the transient and compare capacitor voltage with inductor current as the circuit rings and loses energy in R1.' },
+      controlled: { title: 'Compare voltage and current control', guidance: 'Run the transient. E1 scales the input voltage; G1 converts the same input voltage into output current.' },
+      'current-controlled': { title: 'Compare two current-controlled outputs', guidance: 'Run the transient and compare F1 current gain with H1 transresistance. Both respond to current through VSENSE.' },
+      transistor: { title: 'A small base current controls a larger load', guidance: 'Run the transient and scrub the base pulse. Compare V(BASE), V(COLLECTOR), and I(Q1) in the on and off states.' },
+      pnp: { title: 'A PNP switch uses active-low control', guidance: 'Run the transient. Pulling the base below the 5 V emitter turns the high-side switch on; returning it to 5 V turns it off.' },
+      pjfet: { title: 'A P-JFET conducts at zero gate bias', guidance: 'Run the transient. Raising the gate above the source cuts off the channel, so the drain returns to the 5 V rail.' },
+      mosfet: { title: 'Gate voltage controls drain current', guidance: 'Run the transient and compare V(GATE) with V(DRAIN). This teaching model has partial conduction, not an ideal switch.' },
+      pmos: { title: 'A PMOS high-side switch is active-low', guidance: 'Run the transient. A gate near 0 V turns it on; a gate near the 5 V source turns it off.' },
+      jfet: { title: 'An N-JFET conducts at zero gate bias', guidance: 'Run the transient. A negative gate voltage pinches off the channel and returns the drain toward the supply.' },
+      hierarchy: { title: 'Reuse one block in two places', guidance: 'Run the circuit, open X2, then open XCORE. Compare the parameter override and probe the inner resistor current.' },
+      pwl: { title: 'Shape the source with PWL points', guidance: 'Run the transient and inspect V(IN) and V(OUT). Edit a point in the source properties to change the response.' },
+      'current-source': { title: 'A current source sets load current', guidance: 'Run the operating point. The 1 mA through 1 kΩ produces 1 V; probe the load to confirm.' },
+    } as const
+    setExampleLesson(lessons[example])
     setSelectedTraceIds(next.plotSettings?.selectedTraceIds ?? [])
     setImportWarnings([])
     setCompatibilityDiagnostic(null)
@@ -2243,6 +2264,7 @@ export default function App() {
 
       <main className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => setSheetSettingsOpen(true)}><SlidersHorizontal size={15}/></button></div>
+        {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p></div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
         <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div><div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <><button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button><button className="subtle-icon" title="Tile open plot windows" aria-label="Tile open plot windows" onClick={tilePlotWindows} disabled={(waveformDetached ? 1 : 0) + additionalPlotPanels.length < 2}><Grid2X2 size={15}/></button><button className="subtle-icon" title="Add independent plot panel" aria-label="Add independent plot panel" onClick={addPlotPanel} disabled={!simulationResult || additionalPlotPanels.length >= 8}><Plus size={15}/></button></>}</div></div>

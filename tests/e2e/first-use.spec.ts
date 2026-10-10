@@ -1335,6 +1335,9 @@ test('P-JFET example demonstrates zero-bias conduction and positive-gate cutoff'
   await dialog.locator('.example-list article').filter({ hasText: 'P-JFET positive-rail switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('P-JFET positive-rail switch')
+  const lesson = page.getByRole('complementary', { name: 'Guided example' })
+  await expect(lesson).toContainText('A P-JFET conducts at zero gate bias')
+  await expect(lesson).toContainText('Raising the gate above the source cuts off the channel')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(gate)', exact: true })).toBeVisible()
@@ -1352,6 +1355,8 @@ test('P-JFET example demonstrates zero-bias conduction and positive-gate cutoff'
   await expect(page.locator('.cursor-readout')).toContainText(/V\(gate\) = 5\.0+/)
   await expect(page.locator('.cursor-readout')).toContainText(/V\(drain\) = 5\.0+/)
   await expect.poll(async () => Number(await transistor.locator('.transistor-current-indicator').getAttribute('opacity'))).toBeLessThan(0.05)
+  await lesson.getByRole('button', { name: 'Dismiss example guidance' }).click()
+  await expect(lesson).toHaveCount(0)
 })
 
 test('import a user NJF model and LTspice symbol, then simulate it in the browser', async ({ page }) => {
