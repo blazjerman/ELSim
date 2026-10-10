@@ -106,11 +106,11 @@ function BlockParameterOverride({ name, defaultValue, value, onCommit }: { name:
   const [error, setError] = useState('')
   useEffect(() => { if (!error) setDraft(effectiveValue) }, [effectiveValue, error])
   const commit = () => {
-    if (!isSafeSubcircuitParameterValue(draft)) { setError('Enter a numeric SPICE value such as 1k, 220n, or 2.2.'); return }
+    if (!isSafeSubcircuitParameterValue(draft)) { setError('Enter a numeric SPICE value or a basic braced expression such as {RLOAD * 2}.'); return }
     setError('')
     onCommit(draft)
   }
-  return <label className="field-label">{name}<input aria-label={`${name} block value`} aria-invalid={Boolean(error)} aria-describedby={error ? `block-parameter-error-${name}` : undefined} value={draft} onChange={(event) => { const nextValue = event.target.value; setDraft(nextValue); setError(''); if (isSafeSubcircuitParameterValue(nextValue)) onCommit(nextValue) }} onBlur={commit}/>{error && <small id={`block-parameter-error-${name}`} className="field-error" role="alert">{error}</small>}<small className="field-hint">Default: {defaultValue} · numeric SPICE values only</small></label>
+  return <label className="field-label">{name}<input aria-label={`${name} block value`} aria-invalid={Boolean(error)} aria-describedby={error ? `block-parameter-error-${name}` : undefined} value={draft} onChange={(event) => { const nextValue = event.target.value; setDraft(nextValue); setError(''); if (isSafeSubcircuitParameterValue(nextValue)) onCommit(nextValue) }} onBlur={commit}/>{error && <small id={`block-parameter-error-${name}`} className="field-error" role="alert">{error}</small>}<small className="field-hint">Default: {defaultValue} · numeric SPICE value or basic arithmetic expression</small></label>
 }
 
 type PlotWindow = { start: number; end: number }
@@ -1389,7 +1389,7 @@ export default function App() {
     const name = parameterNameDraft.trim()
     if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name.toLowerCase())) { setParameterFormError('Use a name that starts with a letter or underscore and contains only letters, numbers, and underscores.'); return }
     if (activeSheet.parameters?.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase())) { setParameterFormError(`A parameter named ${name} already exists on this sheet.`); return }
-    if (!isSafeSubcircuitParameterValue(parameterValueDraft)) { setParameterFormError('Enter a numeric SPICE value such as 1k, 220n, or 2.2.'); return }
+    if (!isSafeSubcircuitParameterValue(parameterValueDraft)) { setParameterFormError('Enter a numeric SPICE value or a basic braced expression such as {RLOAD * 2}.'); return }
     const parameter = { id: `param-${crypto.randomUUID()}`, name, defaultValue: parameterValueDraft.trim() }
     setProject((current) => ({ ...current, sheets: current.sheets.map((sheet) => sheet.id === current.activeSheetId ? { ...sheet, parameters: [...(sheet.parameters ?? []), parameter] } : sheet) }))
     setParameterNameDraft('')
@@ -1398,7 +1398,7 @@ export default function App() {
   }
   const updateSheetParameterDefault = (parameterId: string, defaultValue: string) => {
     if (!activeSheet) return
-    if (!isSafeSubcircuitParameterValue(defaultValue)) { setParameterFormError('Block parameter defaults must be numeric SPICE values such as 1k, 220n, or 2.2.'); setParameterDefaultDrafts((drafts) => { const next = { ...drafts }; delete next[parameterId]; return next }); return }
+    if (!isSafeSubcircuitParameterValue(defaultValue)) { setParameterFormError('Block parameter defaults must be numeric SPICE values or basic braced arithmetic expressions such as {RLOAD * 2}.'); setParameterDefaultDrafts((drafts) => { const next = { ...drafts }; delete next[parameterId]; return next }); return }
     const parameters = (activeSheet.parameters ?? []).map((parameter) => parameter.id === parameterId ? { ...parameter, defaultValue: defaultValue.trim() } : parameter)
     setProject((current) => updateSheetDefinition(current, activeSheet.id, activeSheet.ports, parameters))
     setParameterFormError('')

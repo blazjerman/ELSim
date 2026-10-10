@@ -97,7 +97,62 @@ function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): 
 export function isSafeSubcircuitParameterValue(value: string): boolean {
   if (typeof value !== 'string' || value.length > 64) return false
   const scalar = value.trim().replace(/^\{(.*)\}$/, '$1')
-  return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i.test(scalar)
+  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i.test(scalar)) return true
+
+  // Accept only numeric arithmetic and parameter names inside an optional
+  // brace pair. This preserves SPICE expressions without evaluating code.
+  const expression = value.trim().replace(/^\{([\s\S]*)\}$/, '$1')
+  if (!expression || expression.length > 64) return false
+  const tokens: string[] = []
+  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?|[A-Za-z_][A-Za-z0-9_]*|[()+*/^\-]/iy
+  let offset = 0
+  while (offset < expression.length) {
+    tokenPattern.lastIndex = offset
+    const match = tokenPattern.exec(expression)
+    if (!match) return false
+    offset = tokenPattern.lastIndex
+    if (!/^\s+$/.test(match[0])) tokens.push(match[0])
+    if (tokens.length > 64) return false
+  }
+  let index = 0
+  let depth = 0
+  const primary = (): boolean => {
+    const token = tokens[index]
+    if (!token) return false
+    if (token === '(') {
+      if (++depth > 16) return false
+      index += 1
+      const valid = sum() && tokens[index] === ')'
+      index += valid ? 1 : 0
+      depth -= 1
+      return valid
+    }
+    if (token === ')' || /^[+*/^\-]$/.test(token)) return false
+    index += 1
+    return true
+  }
+  const power = (): boolean => primary() && (tokens[index] !== '^' || (index += 1, unary()))
+  const unary = (): boolean => {
+    while (tokens[index] === '+' || tokens[index] === '-') index += 1
+    return power()
+  }
+  const product = (): boolean => {
+    if (!unary()) return false
+    while (tokens[index] === '*' || tokens[index] === '/') {
+      index += 1
+      if (!unary()) return false
+    }
+    return true
+  }
+  const sum = (): boolean => {
+    if (!product()) return false
+    while (tokens[index] === '+' || tokens[index] === '-') {
+      index += 1
+      if (!product()) return false
+    }
+    return true
+  }
+  return sum() && index === tokens.length
 }
 
 /** Find compatibility-mode features and known gaps in the current WASM build. */

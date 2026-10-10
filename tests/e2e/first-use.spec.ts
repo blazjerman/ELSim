@@ -41,13 +41,15 @@ test('quick tour explains the current workspace and project save flow', async ({
   await expect(dialog).toHaveCount(0)
 })
 
-test('LTspice parameter expressions are preserved and reported when not supported', async ({ page }) => {
+test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
-  const source = ['Version 4', 'TEXT 0 100 Left 2 !.param RLOAD={VDD * 2}'].join('\n')
+  const source = ['Version 4', 'TEXT 0 100 Left 2 !.param VDD=5 RLOAD={VDD * 2} GAIN={RLOAD / 1k} BAD={if(VDD > 1, 2, 1)}'].join('\n')
   await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles({ name: 'parameter-expression.asc', mimeType: 'text/plain', buffer: Buffer.from(source) })
-  await expect(page.getByLabel('LTspice import diagnostics')).toContainText(/\.param RLOAD uses an expression or value outside ELSim’s supported numeric parameter syntax/)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets[0].parameters)).toEqual([])
+  await expect(page.getByLabel('LTspice import diagnostics')).toContainText(/\.param BAD uses an expression or value outside ELSim’s supported numeric parameter syntax/)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets[0].parameters.map((parameter: { name: string; defaultValue: string }) => [parameter.name, parameter.defaultValue]))).toEqual([
+    ['VDD', '5'], ['RLOAD', '{VDD * 2}'], ['GAIN', '{RLOAD / 1k}'],
+  ])
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).importedSchematicSource.originalText)).toBe(source)
 })
 

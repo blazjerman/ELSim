@@ -1,0 +1,9 @@
+LTspice parameter arithmetic compatibility fixture
+.param RBASE=1k
+.param RLOAD={RBASE * 2}
+V1 in 0 5
+R1 in out {RLOAD}
+R2 out 0 1k
+.op
+.print op v(out) @r1[i]
+.end
