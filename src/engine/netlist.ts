@@ -229,7 +229,23 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      const transientValue = part.sourceMode === 'dc' ? `DC ${value}` : `PULSE(0 ${value} 0 1u 1u 50m 100m)`
+      let transientValue = `DC ${value}`
+      if (part.sourceMode !== 'dc') {
+        const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
+        const initial = spiceNumber(pulse.initial, 'source')
+        const delay = spiceTime(pulse.delay)
+        const rise = spiceTime(pulse.rise)
+        const fall = spiceTime(pulse.fall)
+        const width = spiceTime(pulse.width)
+        const period = spiceTime(pulse.period)
+        if (!initial || [delay, rise, fall, width, period].some((time) => time === null || Number(time) < 0) || Number(period) <= 0) {
+          const message = `${part.ref} pulse levels and timing must be valid SPICE values (period must be positive).`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period})`
+      }
       append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : project.simulation.analysis === 'dc' ? `DC ${value}` : transientValue}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {

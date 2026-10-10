@@ -1,4 +1,4 @@
-import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SymbolAsset, type Wire } from './project'
+import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourcePulse, type SymbolAsset, type Wire } from './project'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseSubcircuitLibrary } from './subcircuitLibrary'
 
@@ -17,9 +17,15 @@ function recordExcerpt(raw: string): string {
   return compact.length > MAX_UNSUPPORTED_RECORD_CHARS ? `${compact.slice(0, MAX_UNSUPPORTED_RECORD_CHARS - 1)}…` : compact
 }
 
-function scalarSourceValue(value: string): string {
-  const generatedPulse = value.trim().match(/^PULSE\(\s*0\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?)\s+0\s+1u\s+1u\s+50m\s+100m\s*\)$/i)
-  return generatedPulse?.[1] ?? value
+function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc'; pulse?: SourcePulse } {
+  const trimmed = value.trim()
+  const generatedPulse = trimmed.match(/^PULSE\(\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\)$/i)
+  if (generatedPulse && generatedPulse.slice(1).every((entry) => validScalar(entry))) {
+    const [, initial, high, delay, rise, fall, width, period] = generatedPulse
+    return { value: high, mode: 'pulse', pulse: { initial, delay, rise, fall, width, period } }
+  }
+  if (validScalar(trimmed)) return { value: trimmed, mode: 'dc' }
+  return { value: trimmed }
 }
 
 function coordinate(value: string, line: number): number {
@@ -234,7 +240,8 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   for (const symbol of symbols) {
     const identity = symbol.attributes.INSTNAME
     const rawValue = symbol.attributes.VALUE ?? symbol.attributes.VALUE2 ?? ''
-    const value = symbol.attributes.INSTNAME?.[0]?.toUpperCase() === 'V' ? scalarSourceValue(rawValue) : rawValue
+    const parsedSource = symbol.attributes.INSTNAME?.[0]?.toUpperCase() === 'V' ? sourceValue(rawValue) : { value: rawValue }
+    const value = parsedSource.value
     if (!identity || !/^[A-Za-z][A-Za-z0-9_]*$/.test(identity)) { warnings.push(`Line ${symbol.line}: ${symbol.name} is missing a valid SYMATTR InstName and was skipped.`); continue }
     const sidecar = symbolByName.get(baseName(symbol.name))
     if (!sidecar) { warnings.push(`Line ${symbol.line}: symbol ${symbol.name} (${identity}) is missing its .asy sidecar and was skipped.`); continue }
@@ -311,6 +318,8 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       symbolAssetId: sidecar.asset.id, symbolPinOffsets: offsets,
       ...(kind === 'subcircuit' ? { modelName: mapped.modelName, modelPins: [...pins.map((pin) => pin.name)], ...(childSheet ? { sheetId: childSheet.id, sheetPortLayout: childSheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })) } : {}) } : {}),
       ...(mapped.deviceModel ? { deviceModel: mapped.deviceModel } : {}),
+      ...(kind === 'source' && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
+      ...(kind === 'source' && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
     }
     project.parts.push(part)
     warnings.push(...sidecar.parsed.warnings.map((warning) => `${identity}: ${warning}`))

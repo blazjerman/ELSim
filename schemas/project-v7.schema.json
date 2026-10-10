@@ -228,6 +228,20 @@
           "enum": ["pulse", "dc"],
           "description": "For transient analysis, choose the standard pulse source or a constant DC source. Omitted means pulse for backward compatibility."
         },
+        "pulse": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["initial", "delay", "rise", "fall", "width", "period"],
+          "properties": {
+            "initial": { "type": "string", "maxLength": 64 },
+            "delay": { "type": "string", "maxLength": 64 },
+            "rise": { "type": "string", "maxLength": 64 },
+            "fall": { "type": "string", "maxLength": 64 },
+            "width": { "type": "string", "maxLength": 64 },
+            "period": { "type": "string", "maxLength": 64 }
+          },
+          "description": "Optional LTspice-compatible pulse levels and timing; omitted fields use the ELSim default pulse."
+        },
         "animationNominalPower": {
           "type": "number",
           "exclusiveMinimum": 0,

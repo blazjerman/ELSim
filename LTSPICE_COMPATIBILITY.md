@@ -16,7 +16,8 @@ This matrix describes the importer as implemented today. “Supported” means E
 | `.tran`, `.op`, `.ac`, `.dc` in `TEXT` | Supported for the parsed scalar/sweep settings | AC, DC, and transient fixture coverage in `tests/ltspice-schematic.test.cjs` |
 | `.include`, `.inc`, `.lib` | Dependency presence is checked by imported filename; directive itself is not emitted | Missing dependency warning; library content is supplied separately |
 | `.param NAME=value` | Supported for conservative single-token scalar/expression defaults in the active sheet | Nested exported sheet parameters and `{NAME}` values round-trip in `tests/ltspice-export.test.cjs`; broader LTspice parameter syntax is unverified |
-| Exporter-generated default `PULSE(0 value 0 1u 1u 50m 100m)` | Collapsed back to the original scalar source value | Exact-pattern normalization test in `tests/ltspice-export.test.cjs`; arbitrary pulse shapes remain unsupported |
+| Scalar voltage source values | Supported as constant DC sources | Import regression verifies DC source mode |
+| Seven-argument `PULSE(low high delay rise fall width period)` voltage values | Supported for scalar levels and timing values | Pulse level/timing import and editable transient source behavior are tested |
 | Other dot directives | Not translated | A warning names the directive; `.save` is covered by a test |
 | Unknown or unsupported record | Skipped with bounded source excerpt | Warning is covered by a test |
 | `.asc` source preservation | Supported for root and supplied child files | Project validation and archive round-trip in `tests/project-archive.test.cjs` |
@@ -36,7 +37,7 @@ This matrix describes the importer as implemented today. “Supported” means E
 | LTspice prefix / symbol family | ELSim mapping | Limits |
 | --- | --- | --- |
 | `R`, `C`, `L` | Resistor, capacitor, inductor | Scalar values only |
-| `V`, `B` | Voltage source | Waveform expressions are not imported; a warning asks the user to review them |
+| `V` | Voltage source | Scalar and seven-argument PULSE values are supported; other waveform expressions remain unverified and prompt a warning |
 | `S` | Switch | ELSim on/off educational switch semantics, not the full LTspice switch dialect |
 | `E`, `G` | VCVS, VCCS | Linear four-terminal form |
 | `D` | Diode or LED | Device model must be supplied in a compatible imported library |

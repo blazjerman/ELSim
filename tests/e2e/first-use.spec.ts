@@ -412,7 +412,10 @@ test('voltage source inspector selects steady DC or pulse transient behavior', a
   await page.getByRole('button', { name: 'Netlist', exact: true }).click()
   await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 DC 5')
   await waveform.selectOption('pulse')
-  await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 PULSE(0 5 0 1u 1u 50m 100m)')
+  await page.getByLabel('Period', { exact: true }).fill('20m')
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText('V1 vin 0 PULSE(0 5 0 1u 1u 50m 20m)')
+  await expect(page.getByLabel('Initial voltage (V)')).toHaveValue('0')
 })
 
 test('lamp palette item exposes resistance and nominal animation power', async ({ page }) => {

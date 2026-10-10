@@ -154,7 +154,12 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   if (part.kind === 'source') {
     const value = scalar(part.value, 'v')
     if (!value) return null
-    const output = project.simulation.analysis === 'tran' ? `PULSE(0 ${value} 0 1u 1u 50m 100m)` : value
+    const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
+    const pulseValues = [pulse.initial, pulse.delay, pulse.rise, pulse.fall, pulse.width, pulse.period].map((entry) => scalar(entry, entry === pulse.initial ? 'v' : 's'))
+    if (project.simulation.analysis === 'tran' && part.sourceMode !== 'dc' && pulseValues.some((entry) => entry === null)) return null
+    const output = project.simulation.analysis === 'tran' && part.sourceMode !== 'dc'
+      ? `PULSE(${pulseValues[0]} ${value} ${pulseValues[1]} ${pulseValues[2]} ${pulseValues[3]} ${pulseValues[4]} ${pulseValues[5]})`
+      : value
     const spiceLine = project.simulation.analysis === 'ac' ? `AC ${scalar(project.simulation.sourceAcMagnitude ?? '1 V', 'v') ?? '1'}` : undefined
     return { value: output, ...(spiceLine ? { spiceLine } : {}) }
   }

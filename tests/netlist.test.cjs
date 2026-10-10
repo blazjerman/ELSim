@@ -39,6 +39,18 @@ test('source waveform mode chooses a constant DC source or the backward-compatib
   assert.throws(() => validateProject(project), /invalid source waveform mode/i)
 })
 
+test('source pulse levels and timing are editable and validated before netlisting', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.ref === 'V1')
+  source.pulse = { initial: '1 V', delay: '2 ms', rise: '3 us', fall: '4 us', width: '5 ms', period: '10 ms' }
+  let artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 PULSE\(1 5 2m 3u 4u 5m 10m\)$/m)
+  source.pulse.period = '0'
+  artifact = createNetlistArtifact(project)
+  assert.match(artifact.diagnostics[0].message, /period must be positive/i)
+})
+
 test('analysis settings validation identifies invalid AC sweep fields', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'
