@@ -1083,6 +1083,10 @@ test('three-parameter sweep runs all eight bounded cases in the browser engine',
 
 test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  await page.locator('.example-list article').filter({ hasText: 'Nested reusable divider' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('alert').getByRole('button', { name: 'Replace and open' }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)).toBe('Nested reusable divider')
   const content = '.MODEL USER_D D(Is=1e-14)\n'
   const sha256 = createHash('sha256').update(content).digest('hex')
   const symbolContent = 'Version 4\nSYMATTR Prefix X\nPIN 0 0 R\nPINATTR PinName IN\nPINATTR SpiceOrder 1\n'
@@ -1119,18 +1123,24 @@ test('portable export names imported files and asks before including unknown-lic
 
   page.once('dialog', (dialog) => dialog.accept())
   await page.locator('input[accept^=".elsim,.json"]').setInputFiles(archivePath!)
-  await expect(page.getByText('Opened RC step response')).toBeVisible()
+  await expect(page.getByText('Opened Nested reusable divider')).toBeVisible()
   await expect.poll(() => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return {
       model: project.modelAssets.find((asset: { filename: string }) => asset.filename === 'user-diode.lib')?.content,
       symbol: project.symbolAssets.find((asset: { filename: string }) => asset.filename === 'user-device.asy')?.content,
       originalSource: project.importedSchematicSource?.originalText,
+      nestedSheets: project.sheets.filter((sheet: { id: string }) => ['sheet-divider', 'sheet-core'].includes(sheet.id)).map((sheet: { id: string; name: string }) => [sheet.id, sheet.name]),
+      nestedInstance: project.sheets.find((sheet: { id: string }) => sheet.id === 'sheet-divider')?.parts.find((part: { ref: string }) => part.ref === 'XCORE')?.sheetId,
+      instanceOverride: project.parts.find((part: { ref: string }) => part.ref === 'X2')?.sheetParameters?.RINPUT,
     }
   })).toEqual({
     model: content,
     symbol: symbolContent,
     originalSource: 'Version 4\nSHEET 1 880 680\n',
+    nestedSheets: [['sheet-divider', 'Parameterized divider'], ['sheet-core', 'Core resistor']],
+    nestedInstance: 'sheet-core',
+    instanceOverride: '2k',
   })
 })
 
