@@ -40,6 +40,8 @@ New coordinates snap to the LTspice grid before output. Existing imported intege
 
 Diagonal `.asc` `WIRE` records are supported by the current mapping. Fixtures round-trip two crossing diagonal segments both without a junction (separate nets) and with an explicit junction (one net). This verifies ELSim's parser/topology behavior; opening and simulating the generated diagonal-wire fixture in LTspice remains part of the manual release gate below.
 
+Transient scalar measurements (`MAX`, `MIN`, `AVG`, `RMS`) export as `.meas tran` directives. Delay measurements export as trigger/target directives with `RISE=1`, `FALL=1`, or `CROSS=1`. Project validation restricts names, vectors, and thresholds before serialization. These mappings have exporter fixture coverage; the generated directives still need an open/simulate check in native LTspice before release compatibility is claimed.
+
 Component geometry should use repository-authored `.asy` definitions for ELSim built-ins. Imported user symbols can be copied only as explicit dependencies and with their original pin order; otherwise generate a simple original block symbol and report the visual substitution. No LTspice-installed symbols or vendor artwork should be copied into the repository or silently bundled.
 
 ## Hierarchy

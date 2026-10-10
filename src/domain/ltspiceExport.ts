@@ -370,7 +370,20 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       else blockers.push({ sourceId: 'analysis:tran', message: 'Transient stop time and maximum step must be supported scalar time values.' })
     }
     if (simulation.parameterSweeps?.length) losses.push({ severity: 'warning', sourceId: 'analysis:parameter-sweep', title: 'Parameter sweep omitted', explanation: 'The schematic exports its current nominal component values; the ELSim parameter sweep is not translated.' })
-    if (simulation.transientMeasurements?.length) losses.push({ severity: 'warning', sourceId: 'analysis:measurements', title: 'Transient measurements omitted', explanation: 'Configured ELSim measurements are not emitted as LTspice .MEAS directives yet.' })
+    for (const measurement of simulation.transientMeasurements ?? []) {
+      if (measurement.operation !== 'delay') {
+        addDirective(`.meas tran ${measurement.id} ${measurement.operation.toUpperCase()} ${measurement.vector}`)
+        continue
+      }
+      const threshold = scalar(measurement.threshold), targetThreshold = scalar(measurement.targetThreshold)
+      if (!threshold || !targetThreshold) {
+        blockers.push({ sourceId: `measurement:${measurement.id}`, message: 'Delay measurement thresholds must be supported numeric scalars.' })
+        continue
+      }
+      const edge = measurement.edge === 'either' ? 'CROSS' : measurement.edge.toUpperCase()
+      const targetEdge = measurement.targetEdge === 'either' ? 'CROSS' : measurement.targetEdge.toUpperCase()
+      addDirective(`.meas tran ${measurement.id} TRIG ${measurement.vector} VAL=${threshold} ${edge}=1 TARG ${measurement.targetVector} VAL=${targetThreshold} ${targetEdge}=1`)
+    }
   }
   return `${rows.join('\n')}\n`
 }
