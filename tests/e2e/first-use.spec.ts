@@ -172,3 +172,18 @@ test('wire segment drag reroutes its path and viewport gestures preserve the cir
   })
   await expect.poll(async () => Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))).toBeGreaterThan(beforeZoom)
 })
+
+test('global editor shortcuts stay inactive while an app dialog is open', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('w')
+  await expect(page.locator('svg.schematic')).not.toHaveClass(/wire-mode/)
+  await page.keyboard.press('Space')
+  await expect(page.locator('svg.schematic')).not.toHaveClass(/wire-mode/)
+  await expect(dialog).toBeVisible()
+  await page.getByRole('button', { name: 'Close examples' }).click()
+  await page.keyboard.press('w')
+  await expect(page.locator('svg.schematic')).toHaveClass(/wire-mode/)
+})

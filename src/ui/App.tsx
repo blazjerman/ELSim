@@ -1183,10 +1183,12 @@ export default function App() {
       const target = event.target
       if (event.key === 'Escape' && electricalCheckOpen) { setElectricalCheckOpen(false); return }
       if (event.key === 'Escape' && tourStep !== null) { setTourStep(null); return }
-      if (event.key === '/' && !(target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)))) { event.preventDefault(); componentSearchRef.current?.focus(); return }
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-      if (event.code === 'Space' && !editingText) { event.preventDefault(); setSpacePan(true); return }
+      const modalOpen = tourStep !== null || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen
+      if (event.key === '/' && !modalOpen && !editingText) { event.preventDefault(); componentSearchRef.current?.focus(); return }
       if (editingText) return
+      if (modalOpen) return
+      if (event.code === 'Space') { event.preventDefault(); setSpacePan(true); return }
       const key = event.key.toLowerCase()
       if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
       if ((event.ctrlKey || event.metaKey) && key === 'c' && selected) {
@@ -1224,7 +1226,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, project, tourStep, electricalCheckOpen])
+  }, [tool, selection, selected, project, tourStep, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
     try { await navigator.clipboard.writeText(netlist); setNotice('Generated netlist copied') }
