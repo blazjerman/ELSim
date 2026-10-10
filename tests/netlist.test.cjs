@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createLedExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createLedExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { validateSourcePwlPoints } = require(path.join(build, 'domain/sourcePwl.js'))
 
@@ -18,6 +18,17 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^R1 vin vout 1k$/m)
   assert.match(artifact.text, /^C1 vout 0 10u$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
+})
+
+test('PWL waveform example generates an editable four-point RC response', () => {
+  const project = createPwlExampleProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'PWL waveform response')
+  assert.match(artifact.text, /^V1 vin 0 PWL\(0 0 2m 5 4m 2 6m 0\)$/m)
+  assert.match(artifact.text, /^R1 vin vout 1k$/m)
+  assert.match(artifact.text, /^C1 vout 0 10u$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(vin)', 'V(vout)'])
 })
 
 test('analysis settings validation identifies invalid transient fields', () => {

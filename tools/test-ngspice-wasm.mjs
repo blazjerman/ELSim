@@ -64,6 +64,7 @@ for (const fixture of fixtures) {
     assert.ok(wasmRows.length > 10, 'pwl-transient: expected multiple transient samples')
     assert.ok(wasmRows.some((row) => { const values = row.trim().split(/\s+/).slice(1).map(Number); return Math.abs(values[1] - 5) < 1e-6 }), 'pwl-transient: source never reached 5 V')
     assert.ok(wasmRows.some((row) => { const values = row.trim().split(/\s+/).slice(1).map(Number); return values[1] < 1e-6 }), 'pwl-transient: source never returned to 0 V')
+    assert.ok(wasmRows.some((row) => { const values = row.trim().split(/\s+/).slice(1).map(Number); return Math.abs(values[1] - 2) < 1e-6 }), 'pwl-transient: source never reached its middle 2 V level')
   }
 
   if (fixture.endsWith('-op')) {

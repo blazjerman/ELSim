@@ -291,6 +291,24 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   await expect(page.getByRole('button', { name: 'I(l1)', exact: true })).toBeVisible()
 })
 
+test('PWL waveform example opens with editable points and solves the RC response', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'PWL waveform response' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('PWL waveform response')
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await expect(page.getByRole('combobox', { name: 'Source waveform' })).toHaveValue('pwl')
+  await expect(page.getByLabel('PWL point 3 voltage')).toHaveValue('2')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(vin)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
+})
+
 test('controlled-source example opens and solves with input and output probes', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

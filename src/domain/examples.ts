@@ -10,6 +10,24 @@ export function createLedExampleProject(): Project {
   return project
 }
 
+/** A beginner RC circuit driven by a hand-edited piecewise-linear source. */
+export function createPwlExampleProject(): Project {
+  const project = createStarterProject()
+  project.name = 'PWL waveform response'
+  project.parts = project.parts.map((part) => part.kind === 'source'
+    ? { ...part, value: '0 V', sourceMode: 'pwl' as const, pwl: [
+      { time: '0', voltage: '0' },
+      { time: '2m', voltage: '5' },
+      { time: '4m', voltage: '2' },
+      { time: '6m', voltage: '0' },
+    ] }
+    : part)
+  project.sheets[0].parts = project.parts
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '12 ms', maxStep: '50 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(vin)', 'V(vout)'], ranges: {} }
+  return project
+}
+
 /** A driven series RLC circuit whose ringing is visible in the capacitor voltage. */
 export function createRlcExampleProject(): Project {
   const project = createStarterProject()
