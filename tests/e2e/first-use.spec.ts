@@ -28,6 +28,17 @@ test('component categories filter the library and search crosses categories', as
   await expect(categories).toBeVisible()
 })
 
+test('component cards explain behavior on hover and keyboard focus', async ({ page }) => {
+  await page.goto('/')
+  const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
+  await expect(resistor).toHaveAttribute('aria-label', /Limits current/)
+  await expect(resistor).toHaveAttribute('data-help', /larger resistance/)
+  await resistor.hover()
+  await expect.poll(() => resistor.evaluate((element) => getComputedStyle(element, '::after').opacity)).toBe('1')
+  await resistor.focus()
+  await expect.poll(() => resistor.evaluate((element) => getComputedStyle(element, '::after').visibility)).toBe('visible')
+})
+
 test('AC source validation focuses its inspector field before simulation', async ({ page }) => {
   await page.goto('/')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')

@@ -35,24 +35,24 @@ type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = 'all' | 'basics' | 'semiconductors' | 'controlled'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
-const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: string }[] = [
-  { kind: 'resistor', label: 'Resistor', Icon: Minus, subtitle: 'R' },
-  { kind: 'lamp', label: 'Lamp', Icon: Lightbulb, subtitle: 'R · power glow' },
-  { kind: 'capacitor', label: 'Capacitor', Icon: Activity, subtitle: 'C' },
-  { kind: 'inductor', label: 'Inductor', Icon: CircleHelp, subtitle: 'L' },
-  { kind: 'source', label: 'Voltage source', Icon: Zap, subtitle: 'V' },
-  { kind: 'currentSource', label: 'Current source', Icon: Activity, subtitle: 'I · amperes' },
-  { kind: 'diode', label: 'Diode', Icon: Waypoints, subtitle: 'D' },
-  { kind: 'led', label: 'LED', Icon: Lightbulb, subtitle: 'D' },
-  { kind: 'switch', label: 'Switch', Icon: GitBranch, subtitle: 'S' },
-  { kind: 'vcvs', label: 'VCVS', Icon: Zap, subtitle: 'E · voltage gain' },
-  { kind: 'vccs', label: 'VCCS', Icon: Activity, subtitle: 'G · transconductance' },
-  { kind: 'cccs', label: 'CCCS', Icon: Activity, subtitle: 'F · current gain' },
-  { kind: 'ccvs', label: 'CCVS', Icon: Zap, subtitle: 'H · transresistance' },
-  { kind: 'behavioral', label: 'Behavioral source', Icon: SlidersHorizontal, subtitle: 'B · expression output' },
-  { kind: 'npn', label: 'NPN transistor', Icon: GitBranch, subtitle: 'Q · switch/amplifier' },
-  { kind: 'pnp', label: 'PNP transistor', Icon: GitBranch, subtitle: 'Q · switch/amplifier' },
-  { kind: 'ground', label: 'Ground', Icon: ArrowDown, subtitle: 'GND' },
+const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: string; help: string }[] = [
+  { kind: 'resistor', label: 'Resistor', Icon: Minus, subtitle: 'R', help: 'Limits current. A larger resistance gives less current for the same voltage.' },
+  { kind: 'lamp', label: 'Lamp', Icon: Lightbulb, subtitle: 'R · power glow', help: 'Acts as a resistor; its glow follows simulated electrical power, not filament temperature.' },
+  { kind: 'capacitor', label: 'Capacitor', Icon: Activity, subtitle: 'C', help: 'Stores electric charge. Its voltage changes over time as it charges or discharges.' },
+  { kind: 'inductor', label: 'Inductor', Icon: CircleHelp, subtitle: 'L', help: 'Stores energy in a magnetic field. Its current changes over time as the field builds or collapses.' },
+  { kind: 'source', label: 'Voltage source', Icon: Zap, subtitle: 'V', help: 'Sets a voltage between its positive and negative pins. Choose DC, pulse, or PWL in Properties.' },
+  { kind: 'currentSource', label: 'Current source', Icon: Activity, subtitle: 'I · amperes', help: 'Sets current direction and magnitude. Use a DC, pulse, or PWL value in Properties.' },
+  { kind: 'diode', label: 'Diode', Icon: Waypoints, subtitle: 'D', help: 'Lets current flow mainly from anode to cathode. Reverse the pins to change its direction.' },
+  { kind: 'led', label: 'LED', Icon: Lightbulb, subtitle: 'D', help: 'A diode that glows from its simulated forward current. The glow is visual, not a thermal model.' },
+  { kind: 'switch', label: 'Switch', Icon: GitBranch, subtitle: 'S', help: 'An ideal on/off connection. Toggle it on the schematic, then rerun to calculate the new circuit.' },
+  { kind: 'vcvs', label: 'VCVS', Icon: Zap, subtitle: 'E · voltage gain', help: 'Creates an output voltage proportional to the voltage across its two control pins.' },
+  { kind: 'vccs', label: 'VCCS', Icon: Activity, subtitle: 'G · transconductance', help: 'Creates an output current proportional to the voltage across its two control pins.' },
+  { kind: 'cccs', label: 'CCCS', Icon: Activity, subtitle: 'F · current gain', help: 'Creates an output current proportional to current through a selected sensing voltage source.' },
+  { kind: 'ccvs', label: 'CCVS', Icon: Zap, subtitle: 'H · transresistance', help: 'Creates an output voltage proportional to current through a selected sensing voltage source.' },
+  { kind: 'behavioral', label: 'Behavioral source', Icon: SlidersHorizontal, subtitle: 'B · expression output', help: 'Defines a voltage or current with an expression using circuit values and math functions.' },
+  { kind: 'npn', label: 'NPN transistor', Icon: GitBranch, subtitle: 'Q · switch/amplifier', help: 'A simple transistor model. A small base current can control a larger collector current.' },
+  { kind: 'pnp', label: 'PNP transistor', Icon: GitBranch, subtitle: 'Q · switch/amplifier', help: 'A simple transistor model with polarity opposite to an NPN transistor.' },
+  { kind: 'ground', label: 'Ground', Icon: ArrowDown, subtitle: 'GND', help: 'Sets the circuit reference node to 0 volts. Most circuits need at least one ground.' },
 ]
 const componentCategoryKinds: Record<Exclude<ComponentCategory, 'all'>, PartKind[]> = {
   basics: ['resistor', 'lamp', 'capacitor', 'inductor', 'source', 'currentSource', 'switch', 'ground'],
@@ -1841,7 +1841,7 @@ export default function App() {
           <button className={`category${componentCategory === 'controlled' ? ' active' : ''}`} aria-pressed={componentCategory === 'controlled'} onClick={() => setComponentCategory('controlled')}><Activity size={14}/> Controlled sources</button>
         </div>
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'all' ? 'ALL COMPONENTS' : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
-        {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, label, Icon, subtitle }) => <button key={kind} className="component-card" onClick={() => addPart(kind)} title={`Add ${label}`}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span></button>)}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
+        {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, label, Icon, subtitle, help }) => <button key={kind} className="component-card" onClick={() => addPart(kind)} title={`Add ${label}`} aria-label={`Add ${label}. ${help}`} data-help={help}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span></button>)}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
         {project.sheets.some((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)) && <div className="imported-models"><div className="component-list-label">PROJECT BLOCKS</div>{project.sheets.filter((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)).map((sheet) => <div className="imported-model" key={sheet.id}><div><strong>{sheet.name}</strong><span>{sheet.ports.length} ordered ports · {sheet.ports.map((port) => port.name).join(', ')}</span><small>Defined by this project</small><button className="place-model" onClick={() => placeSheetBlock(sheet)}>Place block</button></div><button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button></div>)}</div>}
         {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Model dependency report"><strong>MODEL DEPENDENCIES</strong>{modelDependencyAnalysis.missing.length > 0 && <><p>These references are not present in the imported project libraries. Import the library that defines each name before running a circuit that uses it.</p><ul>{modelDependencyAnalysis.missing.slice(0, 20).map((dependency, index) => <li key={`${dependency.assetId}:${dependency.sourceLine}:${index}`}><code>{dependency.modelName}</code> ({dependency.kind}) · {dependency.filename}:{dependency.sourceLine}, in {dependency.owner}</li>)}</ul>{modelDependencyAnalysis.missing.length > 20 && <p>{modelDependencyAnalysis.missing.length - 20} additional missing references are omitted.</p>}</>}{modelDependencyAnalysis.recursiveChains.length > 0 && <><p>A circuit that instantiates one of these recursive call chains will fail in ngspice.</p><ul>{modelDependencyAnalysis.recursiveChains.map((chain) => <li key={chain.join(':')}>{chain.join(' → ')}</li>)}</ul></>}</div>}
         {modelDialectWarnings.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="LTspice model compatibility warnings"><strong>LTSPICE COMPATIBILITY CHECKS</strong><p>These source-line checks identify known LTspice constructs that are only partly translated or unavailable in this browser engine. Imported model text is preserved unchanged; review the suggested next step before editing or replacing a model.</p><ul>{modelDialectWarnings.slice(0, 20).map((warning, index) => <li key={`${warning.assetId}:${warning.sourceLine}:${index}`}><code>{warning.feature}</code> · {warning.filename}:{warning.sourceLine}<br/><code>{warning.excerpt}</code><p>{warning.impact}</p><small>Next step: {warning.suggestion}</small></li>)}</ul>{modelDialectWarnings.length > 20 && <p>{modelDialectWarnings.length - 20} additional warnings are omitted.</p>}</div>}
