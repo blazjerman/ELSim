@@ -81,7 +81,19 @@ function spiceExponential(part: Part): string | null {
   return `EXP(${initial} ${pulsed} ${times.join(' ')})`
 }
 
-export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau'
+function spiceSffm(part: Part): string | null {
+  if (part.kind !== 'source' && part.kind !== 'currentSource') return null
+  const sffm = { offset: '0', amplitude: part.value, carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100', ...part.sffm }
+  const offset = spiceNumber(sffm.offset, part.kind), amplitude = spiceNumber(sffm.amplitude, part.kind)
+  const carrier = spiceFrequency(sffm.carrierFrequency), signal = spiceFrequency(sffm.signalFrequency), index = spiceScalar(sffm.modulationIndex, '')
+  const carrierMagnitude = spiceMagnitude(sffm.carrierFrequency, 'frequency'), signalMagnitude = spiceMagnitude(sffm.signalFrequency, 'frequency')
+  const modulationIndex = index === null ? null : Number(index)
+  if (offset === null || amplitude === null || carrier === null || signal === null || carrierMagnitude === null || carrierMagnitude <= 0 || signalMagnitude === null || signalMagnitude <= 0 || modulationIndex === null || !Number.isFinite(modulationIndex) || modulationIndex < 0 || modulationIndex > carrierMagnitude / signalMagnitude) return null
+  // ngspice accepts the same five core SFFM parameters as LTspice.
+  return `SFFM(${offset} ${amplitude} ${carrier} ${index} ${signal})`
+}
+
+export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
@@ -126,6 +138,17 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
       if (riseTau === null || riseTau <= 0) add('exp.riseTau', `${part.ref} EXP rise time constant must be positive.`, part.id, 'exp.riseTau')
       if (fallDelay === null || fallDelay < 0 || riseDelay !== null && fallDelay < riseDelay) add('exp.fallDelay', `${part.ref} EXP fall delay must be nonnegative and no earlier than its rise delay.`, part.id, 'exp.fallDelay')
       if (fallTau === null || fallTau <= 0) add('exp.fallTau', `${part.ref} EXP fall time constant must be positive.`, part.id, 'exp.fallTau')
+    }
+    for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'sffm')) {
+      const quantity = part.kind === 'source' ? 'voltage' : 'current'
+      const sffm = { offset: '0', amplitude: part.value, carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100', ...part.sffm }
+      if (spiceNumber(sffm.offset, part.kind) === null) add('sffm.offset', `${part.ref} SFFM offset must be a valid ${quantity}.`, part.id, 'sffm.offset')
+      if (spiceNumber(sffm.amplitude, part.kind) === null) add('sffm.amplitude', `${part.ref} SFFM amplitude must be a valid ${quantity}.`, part.id, 'sffm.amplitude')
+      const carrier = spiceMagnitude(sffm.carrierFrequency, 'frequency'), signal = spiceMagnitude(sffm.signalFrequency, 'frequency'), index = spiceScalar(sffm.modulationIndex, '')
+      if (carrier === null || carrier <= 0) add('sffm.carrierFrequency', `${part.ref} SFFM carrier frequency must be positive.`, part.id, 'sffm.carrierFrequency')
+      if (signal === null || signal <= 0) add('sffm.signalFrequency', `${part.ref} SFFM modulating frequency must be positive.`, part.id, 'sffm.signalFrequency')
+      const modulationIndex = index === null ? null : Number(index)
+      if (modulationIndex === null || !Number.isFinite(modulationIndex) || modulationIndex < 0 || carrier !== null && carrier > 0 && signal !== null && signal > 0 && modulationIndex > carrier / signal) add('sffm.modulationIndex', `${part.ref} SFFM modulation index must be from zero through carrier/modulating frequency.`, part.id, 'sffm.modulationIndex')
     }
     for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'pwl')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
@@ -334,6 +357,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           continue
         }
         transientValue = exponential
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sffm') {
+        const waveform = spiceSffm(part)
+        if (!waveform) {
+          const message = `${part.ref} SFFM settings must contain valid currents, positive carrier/modulating frequencies, and a valid modulation index.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = waveform
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
         const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
         const offset = spiceNumber(sine.offset, 'currentSource'), amplitude = spiceNumber(sine.amplitude, 'currentSource')
@@ -391,6 +423,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           continue
         }
         transientValue = exponential
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sffm') {
+        const waveform = spiceSffm(part)
+        if (!waveform) {
+          const message = `${part.ref} SFFM settings must contain valid voltages, positive carrier/modulating frequencies, and a valid modulation index.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = waveform
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
         const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
         const offset = spiceNumber(sine.offset, 'source'), amplitude = spiceNumber(sine.amplitude, 'source')

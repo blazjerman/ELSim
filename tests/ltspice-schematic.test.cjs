@@ -53,6 +53,16 @@ test('imports an LTspice voltage SINE waveform with optional delay, damping, and
   assert.match(artifact.text, /^V1 .* SIN\(1 2 1k 3m 4 90\)$/m)
 })
 
+test('imports LTspice SFFM source parameters without reordering in project data', () => {
+  const voltageSymbol = { ...symbol, id: 'symbol-voltage-sffm', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
+  const asc = ['Version 4', 'SYMBOL voltage 32 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value SFFM(0 1 1k 5 100)'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'sffm-source.asc', [voltageSymbol])
+  assert.deepEqual(warnings, [])
+  assert.equal(project.parts[0].sourceMode, 'sffm')
+  assert.deepEqual(project.parts[0].sffm, { offset: '0', amplitude: '1', carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100' })
+  assert.match(createNetlist(project), /^V1 .* .* SFFM\(0 1 1k 5 100\)$/m)
+})
+
 test('imports engineering-suffixed SINE damping and defaults omitted optional fields', () => {
   const voltageSymbol = { ...symbol, id: 'symbol-voltage-sine-suffix', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
   const asc = ['Version 4', 'SHEET 1 880 680', 'SYMBOL voltage 32 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value SINE(0 5 2k 1m 4k)', 'TEXT 0 100 Left 2 !.tran 0 10m 0 10u'].join('\n')

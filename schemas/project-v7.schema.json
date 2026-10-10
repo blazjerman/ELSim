@@ -250,7 +250,8 @@
             "dc",
             "pwl",
             "sine",
-            "exp"
+            "exp",
+            "sffm"
           ],
           "description": "For transient analysis, voltage and independent current sources support pulse, DC, PWL, or SINE. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
         },
@@ -330,6 +331,19 @@
             "fallTau": { "type": "string", "maxLength": 64 }
           },
           "description": "Optional transient EXP source settings: initial and pulsed source quantity, rise delay/time constant, and fall delay/time constant."
+        },
+        "sffm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["offset", "amplitude", "carrierFrequency", "modulationIndex", "signalFrequency"],
+          "properties": {
+            "offset": { "type": "string", "maxLength": 64 },
+            "amplitude": { "type": "string", "maxLength": 64 },
+            "carrierFrequency": { "type": "string", "maxLength": 64 },
+            "modulationIndex": { "type": "string", "maxLength": 64 },
+            "signalFrequency": { "type": "string", "maxLength": 64 }
+          },
+          "description": "LTspice SFFM source settings: offset, amplitude, carrier frequency, modulation index, and modulating signal frequency."
         },
         "pwl": {
           "type": "array",

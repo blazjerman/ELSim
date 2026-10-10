@@ -656,3 +656,19 @@ test('imported diode, BJT, and MOSFET .MODEL cards connect to compatible devices
   assert.throws(() => validateProject({ ...validated, parts: validated.parts.map((part) => part.id === 'p-q1' ? { ...part, deviceModel: '1N4148' } : part) }), /missing or incompatible imported device model/)
 })
 
+
+
+test('SFFM source order converts LTspice fields to ngspice fields for voltage and current', () => {
+  const project = createStarterProject()
+  const voltage = project.parts.find((part) => part.kind === 'source')
+  voltage.sourceMode = 'sffm'
+  voltage.sffm = { offset: '0', amplitude: '1', carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100' }
+  project.parts.push({ id: 'sffm-i1', kind: 'currentSource', ref: 'I1', value: '2m', sourceMode: 'sffm', sffm: { offset: '1m', amplitude: '2m', carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100' }, x: 700, y: 500, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 SFFM\(0 1 1k 5 100\)$/m)
+  assert.match(artifact.text, /^I1 .* .* SFFM\(1m 2m 1k 5 100\)$/m)
+  voltage.sffm.modulationIndex = '20'
+  assert.ok(validateAnalysisSettings(project).some((error) => error.field === 'sffm.modulationIndex'))
+})

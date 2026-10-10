@@ -55,9 +55,9 @@ function scalarMagnitude(value: string, unit = ''): number | null {
 
 function frequencyScalar(value: string): string | null {
   const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
-  const withUnit = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])hz$/i)
+  const withUnit = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?hz$/i)
   if (!withUnit) return scalar(normalized)
-  const suffix = withUnit[2] === 'M' ? 'meg' : withUnit[2]
+  const suffix = withUnit[2] === 'M' ? 'meg' : (withUnit[2] ?? '')
   return scalar(`${withUnit[1]}${suffix}`)
 }
 
@@ -69,6 +69,18 @@ function exponentialSourceValue(part: Part): string | null {
   const riseDelay = scalarMagnitude(exp.riseDelay, 's'), riseTau = scalarMagnitude(exp.riseTau, 's'), fallDelay = scalarMagnitude(exp.fallDelay, 's'), fallTau = scalarMagnitude(exp.fallTau, 's')
   if (values.some((value) => value === null) || riseDelay === null || riseDelay < 0 || riseTau === null || riseTau <= 0 || fallDelay === null || fallDelay < riseDelay || fallTau === null || fallTau <= 0) return null
   return `EXP(${values.join(' ')})`
+}
+
+function sffmSourceValue(part: Part): string | null {
+  if (part.kind !== 'source' && part.kind !== 'currentSource') return null
+  const unit = part.kind === 'source' ? 'v' : 'a'
+  const sffm = { offset: '0', amplitude: part.value.replace(new RegExp(`\\s*${unit}$`, 'i'), ''), carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100', ...part.sffm }
+  const offset = scalar(sffm.offset, unit), amplitude = scalar(sffm.amplitude, unit)
+  const carrier = frequencyScalar(sffm.carrierFrequency), signal = frequencyScalar(sffm.signalFrequency), index = scalar(sffm.modulationIndex)
+  const carrierMagnitude = scalarMagnitude(sffm.carrierFrequency, 'hz'), signalMagnitude = scalarMagnitude(sffm.signalFrequency, 'hz')
+  const modulationIndex = index === null ? null : Number(index)
+  if (offset === null || amplitude === null || carrier === null || signal === null || carrierMagnitude === null || carrierMagnitude <= 0 || signalMagnitude === null || signalMagnitude <= 0 || modulationIndex === null || !Number.isFinite(modulationIndex) || modulationIndex < 0 || modulationIndex > carrierMagnitude / signalMagnitude) return null
+  return `SFFM(${offset} ${amplitude} ${carrier} ${index} ${signal})`
 }
 
 function spiceIdentifier(value: string): string {
@@ -211,6 +223,10 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
     const phaseScalar = acMagnitude === undefined ? '0' : scalar(part.acPhase ?? '0', '')
     if ((acMagnitude !== undefined && acScalar === null) || phaseScalar === null) return null
     const value2 = acScalar === undefined ? undefined : `AC ${acScalar} ${phaseScalar}`
+    if (project.simulation.analysis === 'tran' && part.sourceMode === 'sffm') {
+      const waveform = sffmSourceValue(part)
+      return waveform ? { value: waveform, ...(value2 ? { value2 } : {}) } : null
+    }
     if (project.simulation.analysis === 'tran' && part.sourceMode === 'exp') {
       const waveform = exponentialSourceValue(part)
       return waveform ? { value: waveform, ...(value2 ? { value2 } : {}) } : null
@@ -238,6 +254,14 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   if (part.kind === 'source') {
     const value = scalar(part.value, 'v')
     if (!value) return null
+    if (project.simulation.analysis === 'tran' && part.sourceMode === 'sffm') {
+      const waveform = sffmSourceValue(part)
+      if (!waveform) return null
+      const acScalar = part.acMagnitude === undefined ? undefined : scalar(part.acMagnitude, 'v')
+      const phaseScalar = part.acMagnitude === undefined ? '0' : scalar(part.acPhase ?? '0', '')
+      if ((part.acMagnitude !== undefined && acScalar === null) || phaseScalar === null) return null
+      return { value: waveform, ...(acScalar === undefined ? {} : { value2: `AC ${acScalar} ${phaseScalar}` }) }
+    }
     if (project.simulation.analysis === 'tran' && part.sourceMode === 'exp') {
       const waveform = exponentialSourceValue(part)
       if (!waveform) return null

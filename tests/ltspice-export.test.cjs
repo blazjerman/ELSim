@@ -97,6 +97,22 @@ test('voltage SINE sources export and reimport with all waveform fields', async 
   assert.deepEqual(restored.sine, source.sine)
 })
 
+test('voltage SFFM source exports LTspice argument order and reimports unchanged', async () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'tran'
+  const source = project.parts.find((part) => part.kind === 'source')
+  source.sourceMode = 'sffm'
+  source.sffm = { offset: '1', amplitude: '2', carrierFrequency: '2kHz', modulationIndex: '4', signalFrequency: '100Hz' }
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName V1\nSYMATTR Value SFFM\(1 2 2k 4 100\)/)
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `sffm-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project.parts.find((part) => part.ref === 'V1')
+  assert.equal(restored.sourceMode, 'sffm')
+  assert.deepEqual(restored.sffm, { offset: '1', amplitude: '2', carrierFrequency: '2k', modulationIndex: '4', signalFrequency: '100' })
+})
+
 test('voltage and current EXP sources export and reimport all delay and time-constant fields', async () => {
   const project = createStarterProject()
   const voltage = project.parts.find((part) => part.kind === 'source')

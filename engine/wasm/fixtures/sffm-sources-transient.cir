@@ -1,0 +1,8 @@
+ELSim LTspice SFFM voltage and current source order conversion regression
+V1 vin 0 SFFM(0 1 100 1 10)
+R1 vin 0 1k
+I1 0 iout SFFM(1m 2m 100 1 10)
+R2 iout 0 1k
+.tran 10u 100m
+.print tran time V(vin) V(iout)
+.end

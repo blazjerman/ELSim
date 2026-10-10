@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
+const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -78,6 +78,15 @@ for (const fixture of fixtures) {
     assert.ok(Math.abs(loadVoltage[0] - 1) < 1e-6, `EXP current source should start at 1 mA through 1 kΩ, got ${loadVoltage[0]} V`)
     assert.ok(Math.max(...loadVoltage) > 2.99, 'EXP current source should rise close to 3 mA through 1 kΩ')
     assert.ok(Math.abs(loadVoltage.at(-1) - 1) < 0.01, `EXP current source should return close to 1 mA through 1 kΩ, got ${loadVoltage.at(-1)} V`)
+  }
+
+  if (fixture === 'sffm-sources-transient') {
+    assert.ok(wasmRows.length > 100, 'sffm-sources-transient: expected transient samples')
+    const samples = wasmRows.map((row) => row.trim().split(/\s+/).map(Number))
+    const sample = samples.reduce((best, row) => Math.abs(row[1] - 0.025) < Math.abs(best[1] - 0.025) ? row : best)
+    const expected = Math.sin(2 * Math.PI * 100 * sample[1] + Math.sin(2 * Math.PI * 10 * sample[1]))
+    assert.ok(Math.abs(sample[2] - expected) < 1e-4, `SFFM voltage expected ${expected} at ${sample[1]} s, got ${sample[2]}`)
+    assert.ok(Math.abs(sample[3] - (0.001 + 0.002 * expected) * 1000) < 1e-3, `SFFM current load voltage should follow ngspice's mapped carrier/modulating frequencies, got ${sample[3]} V`)
   }
 
   if (fixture === 'sine-current-transient') {
