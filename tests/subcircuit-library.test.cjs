@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeModelDependencies, decodeModelLibrary, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, decodeModelLibrary, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('parses ordered subcircuit pins, parameters, continuations, shared models, and multiple definitions', () => {
   const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10 R=20k\nR1 INP OUT\n+ 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
@@ -138,6 +138,29 @@ test('dialect warnings retain continuation line numbers and ignore dollar signs 
     [3, 'LTspice behavioral Laplace option', 'B1 OUT 0 V=V(IN) Laplace="models/$filter"'],
     [5, 'LTspice behavioral-source option', 'B2 OUT 0 V=V(IN) tripdv=1m'],
   ])
+})
+
+test('schematic compatibility checks attribute unresolved dependencies and untranslated directives', () => {
+  const source = [
+    'Version 4',
+    'TEXT 0 0 Left 2 !.include "models\\missing.lib"',
+    'TEXT 0 20 Left 2 !.lib known.lib typical',
+    'TEXT 0 40 Left 2 !.option plotwinsize=0 reltol=1e-4',
+    'TEXT 0 60 Left 2 !.save V(out) I(R1)',
+    'TEXT 0 80 Left 2 !.save @m1[id]',
+    'TEXT 0 100 Left 2 !.control',
+    'TEXT 0 120 Left 2 !.tran 0 1m',
+  ].join('\n')
+  const warnings = analyzeLtspiceSchematicCompatibility(source, ['known.lib'])
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [2, 'Unresolved .include model dependency'],
+    [4, 'LTspice simulation options are not applied'],
+    [6, 'Partially supported .save vectors'],
+    [7, 'Unsupported .control schematic directive'],
+  ])
+  assert.match(warnings[0].suggestion, /filename matches the directive/)
+  assert.match(warnings[2].impact, /placed-component current/)
+  assert.deepEqual(analyzeLtspiceSchematicCompatibility(source, ['missing.lib', 'known.lib']).map(({ sourceLine }) => sourceLine), [4, 6, 7])
 })
 
 test('rejects executable, external-file, and whole-circuit directives', () => {

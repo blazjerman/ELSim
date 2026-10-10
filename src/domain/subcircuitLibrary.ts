@@ -5,6 +5,7 @@ export type SpiceModelDefinition = { name: string; type: string; parameters: Sub
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
 export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
+export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string }
 export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
 
@@ -131,6 +132,43 @@ export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[
       return [{ sourceLine: featureLine, feature: name, excerpt: line.slice(0, 160), impact, suggestion }]
     })
   })
+}
+
+/** Report known LTspice schematic directives that ELSim does not apply or cannot resolve. */
+export function analyzeLtspiceSchematicCompatibility(source: string, availableLibraryFilenames: string[] = []): SchematicCompatibilityWarning[] {
+  const knownLibraries = new Set(availableLibraryFilenames.map((filename) => filename.replace(/\\/g, '/').split('/').pop()?.toLowerCase()).filter((name): name is string => Boolean(name)))
+  const warnings: SchematicCompatibilityWarning[] = []
+  const physicalLines = source.replace(/^\uFEFF/, '').split(/\r?\n/)
+  for (let index = 0; index < physicalLines.length; index += 1) {
+    const raw = physicalLines[index]
+    const textRecord = raw.match(/^\s*TEXT\s+.*?\s+!\s*(.*)$/i)
+    if (!textRecord) continue
+    const directive = textRecord[1].trim()
+    if (!directive.startsWith('.')) continue
+    const command = directive.match(/^\.([A-Za-z][A-Za-z0-9_]*)/)?.[1]?.toLowerCase()
+    if (!command) continue
+    if (['include', 'inc', 'lib'].includes(command)) {
+      const argument = directive.slice(command.length + 1).trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/)?.slice(1).find(Boolean)
+      const filename = argument?.replace(/\\/g, '/').split('/').pop()?.toLowerCase()
+      if (filename && knownLibraries.has(filename)) continue
+      warnings.push({ sourceLine: index + 1, feature: `Unresolved .${command} model dependency`, excerpt: directive.slice(0, 160), impact: 'This external model file was not selected with the schematic. ELSim keeps the original directive for reference, but the missing model may prevent simulation or cause an educational fallback model to be used.', suggestion: 'Import the referenced plain-text model library with Import LTspice, and check that its filename matches the directive.' })
+      continue
+    }
+    if (command === 'option' || command === 'opts') {
+      warnings.push({ sourceLine: index + 1, feature: 'LTspice simulation options are not applied', excerpt: directive.slice(0, 160), impact: 'ELSim does not translate this .option record into its simulation settings; the original remains available in the imported schematic source.', suggestion: 'Set the equivalent analysis controls in ELSim’s simulation settings and compare results against the source simulator.' })
+      continue
+    }
+    if (command === 'save') {
+      const body = directive.slice(command.length + 1).trim()
+      if (/^(?:all|none|@)/i.test(body) || /(?:^|\s)[@](?:m|d|q|j|c|l|r|v|i)\[/i.test(body) || /\b(?:onoise|inoise|pwr|power)\b/i.test(body)) {
+        warnings.push({ sourceLine: index + 1, feature: 'Partially supported .save vectors', excerpt: directive.slice(0, 160), impact: 'ELSim restores only named-node voltage and placed-component current selections from .save. Other vector-selection forms are not translated.', suggestion: 'Select the needed voltage or component-current traces in the analysis panel after import.' })
+      }
+      continue
+    }
+    if (['param', 'tran', 'ac', 'dc', 'op', 'ic', 'meas', 'measure', 'global'].includes(command)) continue
+    warnings.push({ sourceLine: index + 1, feature: `Unsupported .${command} schematic directive`, excerpt: directive.slice(0, 160), impact: 'ELSim preserved the original schematic text but did not apply this directive to the project or generated netlist.', suggestion: 'Check the compatibility matrix for supported syntax. Set an equivalent ELSim option or remove the directive only if the model author confirms it is not needed.' })
+  }
+  return warnings
 }
 
 export function needsLtspiceFullDeckTranslation(source: string): boolean {

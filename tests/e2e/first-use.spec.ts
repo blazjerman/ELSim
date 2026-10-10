@@ -664,6 +664,25 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await expect(warnings).toContainText('external .cm modules')
 })
 
+test('show schematic compatibility diagnostics for unresolved LTspice directives', async ({ page }) => {
+  await page.goto('/')
+  const source = [
+    'Version 4',
+    'TEXT 0 0 Left 2 !.include "models\\missing.lib"',
+    'TEXT 0 20 Left 2 !.option plotwinsize=0',
+    'TEXT 0 40 Left 2 !.save @m1[id]',
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles({ name: 'compatibility.asc', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  const diagnostics = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
+  await expect(diagnostics).toBeVisible()
+  await expect(diagnostics).toContainText('Unresolved .include model dependency')
+  await expect(diagnostics).toContainText('compatibility.asc:2')
+  await expect(diagnostics).toContainText('LTspice simulation options are not applied')
+  await expect(diagnostics).toContainText('Partially supported .save vectors')
+  await expect(diagnostics).toContainText('Import the referenced plain-text model library')
+})
+
 test('junction tool toggles a crossing connection in the schematic', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
