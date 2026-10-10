@@ -171,12 +171,12 @@ The comparison shows much lower selection latency for this wire-heavy case. The 
 
 The editor benchmark now also opens a 5,000-resistor schematic with 10,000 net labels and measures synthetic selection input through the next animation frame. This isolates UI update work from Playwright locator/actionability time. The full SVG remains keyboard accessible and contains 80,010 elements at this size.
 
-| Browser | Parts | Editor ready (ms) | Selection median (ms) | Selection max-of-5 (ms) | SVG elements |
+| Browser | Parts | Editor ready (ms) | Selection median before → after (ms) | Selection max-of-5 after (ms) | SVG elements |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Chromium | 5,000 | 3,498.35 | 531.7 | 557.3 | 80,010 |
-| Firefox | 5,000 | 4,001.17 | 308 | 336 | 80,010 |
+| Chromium | 5,000 | 3,498 → 3,442 | 531.7 → 365.2 | 378.3 | 80,010 |
+| Firefox | 5,000 | 4,001 → 4,165 | 308 → 74 | 76 | 80,010 |
 
-This establishes that the editor can load the large sheet in both tested browsers, but selection exceeds a 16 ms frame and remains a user-visible bottleneck. The next renderer work should lower selection latency while retaining keyboard access to every component; these single-run timings are a baseline, not a release budget. Browser heap metrics are omitted because the available readings did not vary reliably with project size.
+`CircuitPartLayer` now memoizes the 5,000-item SVG element list across selection-only app updates. Individual parts subscribe to a small external UI-state store; only the parts whose selected or roving-tab-stop state changed rerender. The store preserves the editor's selection precedence and keeps every part in the SVG for keyboard navigation. This reduced the single-run 5,000-part selection median by 31% in Chromium and 76% in Firefox. Selection is still above a 16 ms frame in both browsers and remains open optimization work; these measurements are not release budgets. Browser heap metrics are omitted because the available readings did not vary reliably with project size.
 
 ### Browser waveform transport check
 
