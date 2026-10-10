@@ -3,6 +3,22 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect } from '@playwright/test'
 
+test('AC source validation focuses its inspector field before simulation', async ({ page }) => {
+  await page.goto('/')
+  const source = page.locator('.circuit-part[data-part-id="p-v1"]')
+  await source.click()
+  await page.getByLabel('Analysis type').selectOption('ac')
+  const phase = page.getByLabel('AC phase', { exact: true })
+  await phase.fill('not-a-phase')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(source).toHaveClass(/selected/)
+  await expect(phase).toBeFocused()
+  await expect(page.locator('.toast')).toContainText('AC phase must be a finite numeric value in degrees.')
+  await phase.fill('45')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/AC analysis complete/)).toBeVisible({ timeout: 60_000 })
+})
+
 test('wire current animation respects the operating system reduced-motion preference', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')

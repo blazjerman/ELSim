@@ -160,11 +160,18 @@ test('zero-volt pulse initial level is valid', () => {
   assert.match(artifact.text, /^V1 vin 0 PULSE\(0 5 0 1u 1u 50m 100m\)$/m)
 })
 
-test('analysis settings validation identifies invalid AC sweep fields', () => {
+test('analysis settings validation identifies invalid AC sweep and source fields', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'
   project.simulation.acSweep = { scale: 'dec', points: 0, startFrequency: '0 Hz', stopFrequency: '0 Hz' }
-  assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['acPoints', 'acStartFrequency', 'acStopFrequency'])
+  project.parts[0].acMagnitude = '-1V'
+  project.parts[0].acPhase = 'nan'
+  const errors = validateAnalysisSettings(project)
+  assert.deepEqual(errors.map(({ field }) => field), ['partAcMagnitude', 'partAcPhase', 'acPoints', 'acStartFrequency', 'acStopFrequency'])
+  assert.equal(errors[0].sourceId, project.parts[0].id)
+  project.parts[0].acMagnitude = '1 V'
+  project.parts[0].acPhase = '45'
+  assert.deepEqual(validateAnalysisSettings(project).filter(({ field }) => field.startsWith('partAc')), [])
 })
 
 test('analysis settings validation checks DC source and sweep direction', () => {

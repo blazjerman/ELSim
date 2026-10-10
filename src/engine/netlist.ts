@@ -69,18 +69,27 @@ function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage
   return Number.isFinite(result) ? result : null
 }
 
-export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep'
-export type AnalysisSettingError = { field: AnalysisSettingField; message: string }
+export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase'
+export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string }
 
 export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
   const errors: AnalysisSettingError[] = []
-  const add = (field: AnalysisSettingField, message: string) => errors.push({ field, message })
+  const add = (field: AnalysisSettingField, message: string, sourceId?: string) => errors.push({ field, message, ...(sourceId ? { sourceId } : {}) })
   if (project.simulation.analysis === 'tran') {
     const stop = spiceMagnitude(project.simulation.stopTime, 'time')
     const step = spiceMagnitude(project.simulation.maxStep, 'time')
     if (stop === null || stop <= 0) add('stopTime', 'Enter a positive stop time, such as 100 ms.')
     if (step === null || step <= 0) add('maxStep', 'Enter a positive maximum step, such as 100 µs.')
   } else if (project.simulation.analysis === 'ac') {
+    for (const part of project.parts.filter((item) => item.kind === 'source' || item.kind === 'currentSource')) {
+      const unit = part.kind === 'source' ? 'source' : 'currentSource'
+      const magnitudeText = part.acMagnitude ?? (part.kind === 'source' ? project.simulation.sourceAcMagnitude ?? '1 V' : part.value)
+      const magnitude = spiceNumber(magnitudeText, unit)
+      const magnitudeValue = spiceMagnitude(magnitudeText, 'voltage')
+      if (magnitude === null || magnitudeValue === null || magnitudeValue < 0) add('partAcMagnitude', `${part.ref} AC magnitude must be a valid nonnegative ${part.kind === 'source' ? 'voltage' : 'current'} value.`, part.id)
+      const phase = spiceScalar(part.acPhase ?? '0', '')
+      if (phase === null || !Number.isFinite(Number(phase))) add('partAcPhase', `${part.ref} AC phase must be a finite numeric value in degrees.`, part.id)
+    }
     const sweep = project.simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
     if (!['dec', 'oct', 'lin'].includes(sweep.scale)) add('acScale', 'Choose a supported sweep scale.')
     if (!Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000) add('acPoints', 'Enter from 1 to 10,000 points per scale.')
