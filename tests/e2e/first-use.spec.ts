@@ -291,6 +291,26 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   await expect(page.getByRole('button', { name: 'I(l1)', exact: true })).toBeVisible()
 })
 
+test('controlled-source example opens and solves with input and output probes', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Voltage-controlled amplifier' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Voltage-controlled amplifier')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(vin)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'I(rload)', exact: true })).toBeVisible()
+  const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  const finalSample = Number(await timeSlider.getAttribute('max'))
+  await timeSlider.fill(String(Math.floor(finalSample / 4)))
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(vout\) = 2\.0+/)
+})
+
 test('global editor shortcuts stay inactive while an app dialog is open', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

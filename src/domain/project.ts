@@ -194,6 +194,34 @@ export function createRlcExampleProject(): Project {
   return project
 }
 
+/** A pulse-driven voltage-controlled amplifier with an explicit load. */
+export function createControlledSourceExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'amp-v1', kind: 'source', ref: 'V1', value: '1 V', x: 190, y: 440, rotation: 0 }
+  const amplifier: Part = { id: 'amp-e1', kind: 'vcvs', ref: 'E1', value: '2', x: 500, y: 360, rotation: 0 }
+  const load: Part = { id: 'amp-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 790, y: 360, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Voltage-controlled amplifier'
+  project.parts = [source, amplifier, load]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('amp-in-source', 'VIN', source, 0), labelAt('amp-in-control', 'VIN', amplifier, 2),
+    labelAt('amp-source-ground', '0', source, 1), labelAt('amp-control-ground', '0', amplifier, 3),
+    labelAt('amp-output', 'VOUT', amplifier, 0), labelAt('amp-load-in', 'VOUT', load, 0),
+    labelAt('amp-output-ground', '0', amplifier, 1), labelAt('amp-load-ground', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'I(RLOAD)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -20, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A two-level reusable block example with two differently parameterized instances. */
 export function createHierarchicalExampleProject(): Project {
   const project = createStarterProject()
