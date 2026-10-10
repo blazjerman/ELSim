@@ -1479,13 +1479,19 @@ test('LTspice model compatibility check warns about limit() clamp semantics', as
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'ltspice-clamp.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.SUBCKT CLAMP IN OUT\nB1 OUT 0 V=limit(V(IN),0,3)\n.ENDS CLAMP\n'),
+    buffer: Buffer.from('.SUBCKT CLAMP IN OUT\nB1 OUT 0 V=limit(V(IN),0,3)\nB2 OUT 0 V=V(IN)^2\nB3 OUT 0 V=delay(V(IN),1u)\n.ENDS CLAMP\n'),
   })
   const warning = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
   await expect(warning).toContainText('LTspice limit() clamp semantics are unsupported')
   await expect(warning).toContainText('ltspice-clamp.lib:2')
   await expect(warning).toContainText('returns 0 instead of 3')
   await expect(warning).toContainText('min(max(x, low), high)')
+  await expect(warning).toContainText('ltspice-clamp.lib:3')
+  await expect(warning).toContainText('LTspice B-source ^ operator semantics')
+  await expect(warning).toContainText('interprets it as exponentiation')
+  await expect(warning).toContainText('ltspice-clamp.lib:4')
+  await expect(warning).toContainText('LTspice B-source function unavailable in browser ngspice')
+  await expect(warning).toContainText('no such function')
 })
 
 test('creating a child sheet can be undone and redone', async ({ page }) => {

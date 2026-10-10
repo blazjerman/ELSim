@@ -1,11 +1,14 @@
 Behavioral source basic functions
 V1 IN 0 2
 VLIMIT LIMITIN 0 4
+VPOWER POWERIN 0 3
 BMIN NMIN 0 V=min(V(IN),1)
 BMAX NMAX 0 V=max(V(IN),3)
 BURAMP NRAMP 0 V=uramp(V(IN)-3)
 BRAW NRAW 0 V=limit(V(LIMITIN),0,3)
 BCLAMP NCLAMP 0 V=min(max(V(LIMITIN),0),3)
+BCARET NCARET 0 V=V(POWERIN)^2
+BPOW NPOW 0 V=pow(V(POWERIN),2)
 .op
-.print op v(nmin) v(nmax) v(nramp) v(nraw) v(nclamp)
+.print op v(nmin) v(nmax) v(nramp) v(nraw) v(nclamp) v(ncaret) v(npow)
 .end

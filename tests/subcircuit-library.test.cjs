@@ -133,6 +133,20 @@ test('flags LTspice idt() behavioral functions rejected by the pinned browser ng
   assert.match(warning.suggestion, /capacitor-based circuit/)
 })
 
+test('warns for verified LTspice behavioral functions and caret operator mismatch', () => {
+  const source = '.SUBCKT compat IN OUT\nB1 OUT 0 V=delay(V(IN),1u)\nB2 OUT 0 V=V(IN)^2\n.ENDS compat'
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [2, 'LTspice B-source function unavailable in browser ngspice'],
+    [3, 'LTspice B-source ^ operator semantics'],
+  ])
+  assert.match(warnings[0].impact, /no such function/)
+  assert.match(warnings[0].suggestion, /does not rewrite/)
+  assert.match(warnings[1].impact, /interprets it as exponentiation/)
+  assert.match(warnings[1].suggestion, /pow\(a,b\)/)
+  assert.equal(source.includes('V(IN)^2'), true)
+})
+
 test('dialect warnings retain continuation line numbers and ignore dollar signs inside quotes', () => {
   const source = [
     '.SUBCKT compat IN OUT',

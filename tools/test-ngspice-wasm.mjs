@@ -65,6 +65,8 @@ for (const fixture of fixtures) {
     assert.match(wasmResult.stdout, /nramp\s+0\.000000e\+00/i, 'uramp() should return zero for a negative input')
     assert.match(wasmResult.stdout, /nraw\s+0\.000000e\+00/i, 'ngspice limit() does not clamp 4 V to its 3 V upper bound')
     assert.match(wasmResult.stdout, /nclamp\s+3\.000000e\+00/i, 'min(max()) should reproduce LTspice upper clamp semantics')
+    assert.match(wasmResult.stdout, /ncaret\s+9\.000000e\+00/i, 'the pinned ngspice engine interprets ^ as exponentiation')
+    assert.match(wasmResult.stdout, /npow\s+9\.000000e\+00/i, 'pow() should provide the explicit exponentiation equivalent')
     const ltaResult = await runInWorker(deckPath, false, undefined, true)
     assert.equal(ltaResult.status, 0, 'limit() comparison should also run in lta compatibility mode')
     assert.match(ltaResult.stdout, /nraw\s+0\.000000e\+00/i, 'lta mode does not fix limit() clamp semantics')
