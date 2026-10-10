@@ -244,6 +244,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     rows.push(text)
     sourceMap.push({ line: rows.length, sourceId, role, ...sourceExtra })
   }
+  const sheetParameters = (project as Project & { _netlistSheetParameters?: Project['sheets'][number]['parameters'] })._netlistSheetParameters
+    ?? (includeHierarchyProbes ? project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters : undefined)
+    ?? []
+  if (includeHierarchyProbes) for (const parameter of sheetParameters) append(`.param ${parameter.name}=${parameter.defaultValue}`, `parameter:${parameter.id}`, 'generated')
   let usesDiode = false
   let usesSwitch = false
   const transistorModels: { part: Part; name: string }[] = []
@@ -262,7 +266,6 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
-    const sheetParameters = (project as Project & { _netlistSheetParameters?: Project['sheets'][number]['parameters'] })._netlistSheetParameters ?? []
     const value = part.kind === 'behavioral' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
     if (part.kind !== 'diode' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && value === null) {
       const message = `${part.ref} has an invalid numeric value.`

@@ -20,6 +20,26 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
 })
 
+test('active sheet parameters are emitted as source-mapped SPICE declarations', () => {
+  const project = createStarterProject()
+  project.sheets[0].parameters = [{ id: 'param-rload', name: 'RLOAD', defaultValue: '1k' }]
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  resistor.value = '{RLOAD}'
+  project.sheets[0].parts = project.parts
+
+  const artifact = createNetlistArtifact(validateProject(project))
+
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.param RLOAD=1k$/m)
+  assert.match(artifact.text, /^R1 vin vout \{RLOAD\}$/m)
+  const parameterLine = artifact.text.split('\n').indexOf('.param RLOAD=1k') + 1
+  assert.deepEqual(artifact.sourceMap.find((entry) => entry.line === parameterLine), {
+    line: parameterLine,
+    sourceId: 'parameter:param-rload',
+    role: 'generated',
+  })
+})
+
 test('PWL waveform example generates an editable four-point RC response', () => {
   const project = createPwlExampleProject()
   const artifact = createNetlistArtifact(project)
