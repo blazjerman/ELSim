@@ -498,11 +498,6 @@ export function validateProject(input: unknown): Project {
   return syncActiveSheet(data as unknown as Project)
 }
 
-export const kindNames: Record<PartKind, string> = {
-  source: 'Voltage source', currentSource: 'Current source', resistor: 'Resistor', lamp: 'Lamp', capacitor: 'Capacitor',
-  ground: 'Ground', inductor: 'Inductor', diode: 'Diode', led: 'LED', switch: 'Switch', vcvs: 'Voltage-controlled voltage source', vccs: 'Voltage-controlled current source', cccs: 'Current-controlled current source', ccvs: 'Current-controlled voltage source', behavioral: 'Behavioral source', npn: 'NPN transistor', pnp: 'PNP transistor', subcircuit: 'Imported subcircuit',
-}
+export const kindNames: Record<PartKind, string> = Object.fromEntries(Object.entries(componentDefinitionByKind).map(([kind, definition]) => [kind, definition.name])) as Record<PartKind, string>
 
-export const kindPrefix: Record<PartKind, string> = {
-  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
-}
+export const kindPrefix: Record<PartKind, string> = Object.fromEntries(Object.entries(componentDefinitionByKind).map(([kind, definition]) => [kind, definition.electricalType])) as Record<PartKind, string>

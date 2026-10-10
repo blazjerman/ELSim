@@ -5,8 +5,8 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { componentDefinitions, componentDefinitionFor } = require(path.join(build, 'domain/componentDefinitions.js'))
-const { createStarterProject } = require(path.join(build, 'domain/project.js'))
+const { componentDefinitions, componentDefinitionFor, componentDefaultValue } = require(path.join(build, 'domain/componentDefinitions.js'))
+const { createStarterProject, kindNames, kindPrefix } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('built-in component definitions have stable identities, ordered unique SPICE pins, and instance pin counts', () => {
@@ -26,7 +26,14 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     assert.ok(definition.pins.every((pin) => schema.properties.pins.items.properties.direction.enum.includes(pin.direction)))
   }
   const project = createStarterProject()
+  for (const definition of componentDefinitions) {
+    assert.equal(kindNames[definition.kind], definition.name)
+    assert.equal(kindPrefix[definition.kind], definition.electricalType)
+    assert.equal(componentDefaultValue(definition.kind), definition.properties.find((property) => property.key === 'value')?.defaultValue ?? '')
+  }
   for (const part of project.parts) assert.equal(componentDefinitionFor(part.kind).pins.length, componentPins(part).length, `${part.ref} definition pin count`)
+  assert.deepEqual(componentDefinitionFor('source').pins.map(({ name }) => name), ['positive', 'negative'])
+  assert.deepEqual(componentDefinitionFor('pnp').pins.map(({ name }) => name), ['collector', 'base', 'emitter'])
   assert.ok(componentDefinitionFor('capacitor').animationChannels.includes('charge.voltage'))
   assert.ok(componentDefinitionFor('inductor').animationChannels.includes('field.current'))
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
