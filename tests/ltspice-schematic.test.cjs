@@ -295,6 +295,44 @@ test('imports scalar LTspice current sources with ampere values and ordered pins
   assert.match(createNetlist(currentExp.project), /^I5 .* .* EXP\(0 2m 1m 10u 4m 20u\)$/m)
 })
 
+test('imports voltage and current PWL FILE sources from bundled two-column text data', () => {
+  const voltageSymbol = { ...symbol, id: 'symbol-voltage-pwl-file', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
+  const currentSymbol = { ...symbol, id: 'symbol-current-pwl-file', filename: 'current.asy', content: symbol.content.replace('Prefix R', 'Prefix I') }
+  const asc = [
+    'Version 4',
+    'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value PWL FILE="drive.txt"',
+    'SYMBOL current 200 0 R0', 'SYMATTR InstName I1', 'SYMATTR Value PWL FILE=load.csv',
+  ].join('\n')
+  const pwlFiles = [
+    { filename: 'drive.txt', content: '0, 0\n1m\t5\n2m, 0\n' },
+    { filename: 'load.csv', content: '0 0\n1m 2m\n2m 0\n' },
+  ]
+  const imported = parseLtspiceSchematic(asc, 'pwl-files.asc', [voltageSymbol, currentSymbol], [], [], [], pwlFiles)
+  assert.deepEqual(imported.warnings, [])
+  const voltage = imported.project.parts.find((part) => part.ref === 'V1')
+  const current = imported.project.parts.find((part) => part.ref === 'I1')
+  assert.equal(voltage.sourceMode, 'pwl')
+  assert.equal(voltage.pwlFileName, 'drive.txt')
+  assert.deepEqual(voltage.pwl, [{ time: '0', voltage: '0' }, { time: '1m', voltage: '5' }, { time: '2m', voltage: '0' }])
+  assert.equal(current.sourceMode, 'pwl')
+  assert.equal(current.pwlFileName, 'load.csv')
+  assert.deepEqual(current.currentPwl, [{ time: '0', current: '0' }, { time: '1m', current: '2m' }, { time: '2m', current: '0' }])
+  const deck = createNetlist(imported.project)
+  assert.match(deck, /^V1 .* PWL\(0 0 1m 5 2m 0\)$/m)
+  assert.match(deck, /^I1 .* PWL\(0 0 1m 2m 2m 0\)$/m)
+})
+
+test('reports missing, ambiguous, and malformed LTspice PWL FILE data', () => {
+  const voltageSymbol = { ...symbol, id: 'symbol-voltage-pwl-missing', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
+  const asc = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value PWL FILE=wave.txt'].join('\n')
+  const missing = parseLtspiceSchematic(asc, 'missing-pwl.asc', [voltageSymbol])
+  assert.ok(missing.warnings.some((warning) => warning.includes('PWL data file for V1 could not be loaded')))
+  const duplicated = parseLtspiceSchematic(asc, 'ambiguous-pwl.asc', [voltageSymbol], [], [], [], [{ filename: 'wave.txt', content: '0 0\n1m 1\n' }, { filename: 'WAVE.TXT', content: '0 0\n1m 2\n' }])
+  assert.ok(duplicated.warnings.some((warning) => warning.includes('PWL data file for V1 could not be loaded')))
+  const malformed = parseLtspiceSchematic(asc, 'malformed-pwl.asc', [voltageSymbol], [], [], [], [{ filename: 'wave.txt', content: 'time voltage\n0 0\n' }])
+  assert.ok(malformed.warnings.some((warning) => warning.includes('PWL data file for V1 could not be loaded')))
+})
+
 test('imports linear LTspice F/H current-controlled sources from Value and Value2', () => {
   const controlledSymbol = (prefix, name) => ({
     ...symbol,

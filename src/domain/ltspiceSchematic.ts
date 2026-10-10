@@ -12,6 +12,7 @@ const MAX_ASC_BYTES = 10 * 1024 * 1024
 const MAX_ASC_LINES = 100_000
 const MAX_ASC_WIRES = 2_000
 const MAX_ASC_SYMBOLS = 1_000
+const MAX_PWL_FILE_BYTES = 1024 * 1024
 const MAX_UNSUPPORTED_RECORD_CHARS = 240
 const validScalar = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?$/i.test(value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u'))
 const positiveFrequency = (value: string) => {
@@ -40,7 +41,7 @@ function scalarMagnitude(value: string): number | null {
   return Number.isFinite(result) ? result : null
 }
 
-function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp' | 'sffm'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; pwlRepeat?: 'forever'; pwlRepeatCount?: number; sine?: SourceSine; exp?: SourceExp; sffm?: SourceSffm } {
+function sourceValue(value: string, pwlFiles: { filename: string; content: string }[] = []): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp' | 'sffm'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; pwlFileName?: string; pwlRepeat?: 'forever'; pwlRepeatCount?: number; sine?: SourceSine; exp?: SourceExp; sffm?: SourceSffm } {
   const trimmed = value.trim()
   const generatedSffm = trimmed.match(/^SFFM\(\s*([^()]*)\s*\)$/i)
   if (generatedSffm) {
@@ -73,6 +74,27 @@ function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'p
   if ((pulseValues.length === 7 || pulseValues.length === 8) && pulseValues.slice(0, 7).every(validScalar) && (pulseValues[7] === undefined || /^(?:0|[1-9]\d*)$/.test(pulseValues[7]))) {
     const [initial, high, delay, rise, fall, width, period, cycleCount] = pulseValues
     return { value: high, mode: 'pulse', pulse: { initial, delay, rise, fall, width, period, ...(cycleCount === undefined ? {} : { cycleCount }) } }
+  }
+  const pwlFile = trimmed.match(/^PWL\s+FILE\s*=\s*(?:"([^"]+)"|'([^']+)'|(\S+))$/i)
+  if (pwlFile) {
+    const requestedName = pwlFile[1] ?? pwlFile[2] ?? pwlFile[3]
+    const matchingFiles = pwlFiles.filter((file) => baseName(file.filename).toLowerCase() === baseName(requestedName).toLowerCase())
+    if (matchingFiles.length === 1 && new TextEncoder().encode(matchingFiles[0].content).length <= MAX_PWL_FILE_BYTES) {
+      const rows: SourcePwlPoint[] = []
+      let previousTime = -Infinity
+      let valid = true
+      for (const rawLine of matchingFiles[0].content.replace(/^\uFEFF/, '').split(/\r?\n/)) {
+        const line = rawLine.trim()
+        if (!line || /^[*#;]/.test(line)) continue
+        const fields = line.split(/[\s,]+/).filter(Boolean)
+        if (fields.length !== 2 || fields.some((field) => !validScalar(field))) { valid = false; break }
+        const time = scalarMagnitude(fields[0])
+        if (time === null || time < 0 || time <= previousTime || rows.length >= 32) { valid = false; break }
+        previousTime = time
+        rows.push({ time: fields[0], voltage: fields[1] })
+      }
+      if (valid && rows.length >= 2) return { value: rows.at(-1)!.voltage, mode: 'pwl', pwl: rows, pwlFileName: matchingFiles[0].filename.replace(/\\/g, '/').split('/').at(-1) }
+    }
   }
   const repeatedPwl = trimmed.match(/^PWL\s+REPEAT\s+FOREVER\s*\(\s*([^()]*)\s*\)\s*ENDREPEAT$/i)
   const finiteRepeatedPwl = trimmed.match(/^PWL\s+REPEAT\s+FOR\s+(\d+)\s*\(\s*([^()]*)\s*\)\s*ENDREPEAT$/i)
@@ -335,7 +357,7 @@ function partKind(symbol: AscSymbol, prefix: string, modelValue: string, subcirc
 }
 
 /** Import a bounded subset of ordinary LTspice .asc schematics using user-provided .asy sidecars. */
-export function parseLtspiceSchematic(source: string, filename: string, symbolAssets: SymbolAsset[] = [], modelAssets: Project['modelAssets'] = [], childSchematics: { filename: string; content: string }[] = [], ancestors: string[] = []): LtspiceSchematicImport {
+export function parseLtspiceSchematic(source: string, filename: string, symbolAssets: SymbolAsset[] = [], modelAssets: Project['modelAssets'] = [], childSchematics: { filename: string; content: string }[] = [], ancestors: string[] = [], pwlFiles: { filename: string; content: string }[] = []): LtspiceSchematicImport {
   if (typeof source !== 'string' || source.length === 0 || new TextEncoder().encode(source).length > MAX_ASC_BYTES) throw new Error(`${filename} must contain between 1 byte and 10 MiB of text.`)
   const lines = source.replace(/^\uFEFF/, '').split(/\r?\n/)
   if (lines.length > MAX_ASC_LINES) throw new Error(`${filename} contains too many records.`)
@@ -452,7 +474,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const value2Ac = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceAc(symbol.attributes.VALUE2) : null
     const representedValueAttribute = valueAc && symbol.attributes.VALUE2 !== undefined ? 'VALUE2' : symbol.attributes.VALUE !== undefined ? 'VALUE' : 'VALUE2'
     const fallbackSourceValue = valueAc ? (symbol.attributes.VALUE2 && !value2Ac ? symbol.attributes.VALUE2 : '0') : rawValue
-    const parsedWaveform = sourcePrefix === 'V' || sourcePrefix === 'I' ? valueAc ? { ...sourceValue(fallbackSourceValue), mode: 'dc' as const } : sourceValue(rawValue) : { value: rawValue }
+    const parsedWaveform = sourcePrefix === 'V' || sourcePrefix === 'I' ? valueAc ? { ...sourceValue(fallbackSourceValue, pwlFiles), mode: 'dc' as const } : sourceValue(rawValue, pwlFiles) : { value: rawValue }
     const parsedSource = parsedWaveform
     const value = parsedSource.value
     if (!identity || !/^[A-Za-z][A-Za-z0-9_]*$/.test(identity)) { warnings.push(`Line ${symbol.line}: ${symbol.name} is missing a valid SYMATTR InstName and was skipped.`); continue }
@@ -468,7 +490,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       childSheet = importedChildren.get(childKey)
       if (!childSheet) {
         if (project.sheets.length >= 64) { warnings.push(`Line ${symbol.line}: project sheet limit reached; ${identity} was skipped.`); continue }
-        const parsedChild = parseLtspiceSchematic(childSource.content, childSource.filename, symbolAssets, modelAssets, childSchematics, currentAncestry)
+        const parsedChild = parseLtspiceSchematic(childSource.content, childSource.filename, symbolAssets, modelAssets, childSchematics, currentAncestry, pwlFiles)
         warnings.push(...parsedChild.warnings.map((warning) => `${childSource.filename}: ${warning}`))
         if (project.sheets.length + parsedChild.project.sheets.length - 1 > 64) { warnings.push(`Line ${symbol.line}: importing ${childSource.filename} would exceed the 64-sheet project limit; ${identity} was skipped.`); continue }
         const childRoot = parsedChild.project.sheets[0]
@@ -535,10 +557,12 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       continue
     }
     const defaultValue = kind === 'switch' ? (/^(?:on|1|true)$/i.test(value) ? 'On' : 'Off') : kind === 'diode' ? 'Default diode' : kind === 'led' ? 'Default LED' : kind === 'npn' || kind === 'pnp' ? '100' : kind === 'njfet' || kind === 'pjfet' ? '' : kind === 'nmos' || kind === 'pmos' ? '0' : kind === 'vcvs' ? '1' : kind === 'vccs' ? '1 mS' : value
+    const requestsPwlFile = /^PWL\s+FILE\s*=/i.test(rawValue.trim())
+    if ((kind === 'source' || kind === 'currentSource') && requestsPwlFile && !parsedSource.pwl) warnings.push(`Line ${symbol.line}: PWL data file for ${identity} could not be loaded. Include one unambiguous plain-text file with 2–32 strictly increasing time/value pairs and no header; each file is limited to 1 MiB.`)
     if (kind === 'source' && rawValue.includes('(') && value === rawValue) warnings.push(`Line ${symbol.line}: source waveform on ${identity} is not translated yet; check its value before running.`)
     if (kind === 'currentSource' && rawValue.includes('(') && !['pulse', 'pwl', 'sine', 'exp', 'sffm'].includes(parsedSource.mode ?? '')) warnings.push(`Line ${symbol.line}: current-source waveform on ${identity} is not translated yet; only PULSE, SINE, EXP, SFFM, and scalar-pair PWL waveforms are supported.`)
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !value) warnings.push(`Line ${symbol.line}: ${identity} has no value; set one in the inspector before running.`)
-    else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
+    else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !requestsPwlFile && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
     if ((['D', 'Q', 'M', 'J'].includes(prefix.toUpperCase())) && (mapped.deviceModel ?? value) && !deviceModels.has((mapped.deviceModel ?? value).toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${mapped.deviceModel ?? value}” for ${identity} is missing; the educational default model will be used.`)
     const offsets = pins.map(({ x, y }) => [x, y] as [number, number])
     const representedAttributes = ['INSTNAME', ...(isCurrentControlled || ['njfet', 'pjfet', 'nmos', 'pmos'].includes(kind) ? ['VALUE', 'VALUE2'] : [representedValueAttribute, ...(valueAc || value2Ac ? ['VALUE', 'VALUE2'] : [])])]
@@ -567,6 +591,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.sffm ? { sffm: parsedSource.sffm } : {}),
       ...((kind === 'source' || kind === 'currentSource') && (valueAc ?? value2Ac) ? { acMagnitude: (valueAc ?? value2Ac)!.magnitude, acPhase: (valueAc ?? value2Ac)!.phase } : {}),
       ...(kind === 'source' && parsedSource.pwl ? { pwl: parsedSource.pwl } : {}),
+      ...((kind === 'source' || kind === 'currentSource') && parsedSource.pwlFileName ? { pwlFileName: parsedSource.pwlFileName } : {}),
       ...(kind === 'source' && parsedSource.pwlRepeat ? { pwlRepeat: parsedSource.pwlRepeat } : {}),
       ...(kind === 'source' && parsedSource.pwlRepeatCount !== undefined ? { pwlRepeatCount: parsedSource.pwlRepeatCount } : {}),
       ...(kind === 'currentSource' && parsedSource.pwl ? { currentPwl: parsedSource.pwl.map(({ time, voltage: current }) => ({ time, current })) } : {}),

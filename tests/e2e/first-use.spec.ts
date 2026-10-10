@@ -899,6 +899,39 @@ test('finite PWL repeat count is editable and runs in the browser ngspice engine
   await expect(page.getByRole('button', { name: 'V\(vin\)', exact: true })).toBeVisible()
 })
 
+test('LTspice PWL file source imports its table and simulates in the browser engine', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  const source = [
+    'Version 4', 'SHEET 1 640 240', 'FLAG -16 0 VIN', 'FLAG 16 0 0', 'FLAG 48 0 VIN', 'FLAG 80 0 0',
+    'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value PWL FILE=wave.dat',
+    'SYMBOL res 64 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'TEXT 0 120 Left 2 !.tran 100u 3m', 'TEXT 0 140 Left 2 !.save V(VIN)',
+  ].join('\n')
+  const symbol = (prefix: string, pins: Array<[string, number, number, string]>) => [
+    'Version 4', `SYMATTR Prefix ${prefix}`,
+    ...pins.flatMap(([name, x, y, orientation], index) => [`PIN ${x} ${y} ${orientation}`, `PINATTR PinName ${name}`, `PINATTR SpiceOrder ${index + 1}`]),
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'file-pwl.asc', mimeType: 'text/plain', buffer: Buffer.from(source) },
+    { name: 'voltage.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('V', [['PLUS', -16, 0, 'R'], ['MINUS', 16, 0, 'L']])) },
+    { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
+    { name: 'wave.dat', mimeType: 'text/plain', buffer: Buffer.from('0 0\n1m 5\n2m 0\n') },
+  ])
+  await expect(page.getByText(/Imported file-pwl with 2 parts and 0 wires/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const source = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'V1')
+    return { mode: source.sourceMode, file: source.pwlFileName, points: source.pwl }
+  })).toEqual({ mode: 'pwl', file: 'wave.dat', points: [{ time: '0', voltage: '0' }, { time: '1m', voltage: '5' }, { time: '2m', voltage: '0' }] })
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await expect(page.getByText(/Imported from wave\.dat; the waveform points are stored in this project/)).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(vin)', exact: true })).toBeVisible()
+})
+
 
 test('LTspice current-source SINE waveform edits and simulates in the browser engine', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

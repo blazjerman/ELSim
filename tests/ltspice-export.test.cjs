@@ -311,11 +311,14 @@ test('pulse cycle counts survive LTspice export and reimport for both source kin
 test('exports and reimports supported PWL source points', async () => {
   const project = createStarterProject()
   project.parts[0].sourceMode = 'pwl'
+  project.parts[0].pwlFileName = 'drive.csv'
   project.parts[0].pwl = [{ time: '0', voltage: '0' }, { time: '2 ms', voltage: '5 V' }, { time: '4 ms', voltage: '-1 V' }]
   const output = await exportLtspiceProject(project)
   assert.deepEqual(output.blockers, [])
   const root = output.files.find((file) => file.path.endsWith('.asc'))
   assert.match(root.content, /PWL\(0 0 2m 5 4m -1\)/)
+  assert.doesNotMatch(root.content, /PWL FILE=/i)
+  assert.equal(output.files.some((file) => file.path.endsWith('drive.csv')), false)
   const assets = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `pwl-asset-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
   const restored = parseLtspiceSchematic(root.content, root.path, assets).project.parts.find((part) => part.ref === 'V1')
   assert.equal(restored.sourceMode, 'pwl')

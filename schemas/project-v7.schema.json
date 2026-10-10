@@ -374,6 +374,12 @@
           },
           "description": "Piecewise-linear voltage source points in strictly increasing time order."
         },
+        "pwlFileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Filename from a user-provided LTspice PWL data file; its parsed point values are stored in the project."
+        },
         "pwlRepeat": {
           "enum": ["forever"],
           "description": "Repeat the voltage-source PWL point sequence forever."
