@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10",
+  "generatedAt": "2026-10-11",
   "source": "package-lock.json and installed node_modules",
   "auditTool": "license-checker",
   "packages": [
@@ -202,6 +202,15 @@
       "repository": "https://github.com/jridgewell/sourcemaps",
       "licenseFile": "node_modules/@jridgewell/trace-mapping/LICENSE",
       "licenseFileSha256": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c"
+    },
+    {
+      "name": "@napi-rs/lzma-linux-x64-gnu",
+      "version": "1.5.1",
+      "license": "MIT",
+      "repository": "https://github.com/Brooooooklyn/lzma",
+      "licenseFile": "node_modules/@napi-rs/lzma-linux-x64-gnu/package.json",
+      "licenseFileSha256": "578e2a50ae69cd627c2953f8fa677efbf89f3087efeafff2db65aa31b81dc136",
+      "licenseEvidence": "package-metadata"
     },
     {
       "name": "@playwright/test",
