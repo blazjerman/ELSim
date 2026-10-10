@@ -25,7 +25,7 @@ const refPrefix: Record<PartKind, string> = {
   vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', npn: 'Q', pnp: 'Q', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', npn: 'Q', pnp: 'Q', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -226,6 +226,11 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   if (part.kind === 'diode' || part.kind === 'led') return { value: part.deviceModel ?? 'DDEFAULT' }
   if (part.kind === 'npn' || part.kind === 'pnp') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
   if (part.kind === 'vcvs' || part.kind === 'vccs') { const value = scalar(part.value, part.kind === 'vccs' ? 's' : ''); return value ? { value } : null }
+  if (part.kind === 'cccs' || part.kind === 'ccvs') {
+    const coefficient = scalar(part.value, part.kind === 'ccvs' ? 'ohm' : '')
+    if (!coefficient || !part.controlSource || !/^V[A-Za-z0-9_]*$/i.test(part.controlSource) || !sheet.parts.some((candidate) => candidate.kind === 'source' && candidate.ref.toLowerCase() === part.controlSource!.toLowerCase())) return null
+    return { value: part.controlSource, value2: coefficient }
+  }
   if (part.kind === 'subcircuit') {
     if (part.sheetId) return { value: sheetSymbolNames.get(part.sheetId) ?? part.value }
     if (!part.modelName || !(project.modelAssets ?? []).some((asset) => asset.content.toLowerCase().includes(`.subckt ${part.modelName!.toLowerCase()} `))) return null
@@ -422,7 +427,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
   for (const sheet of sheets) {
     if (sheet.ports.length > 0 && sheet.ports.some((port) => !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase()))) blockers.push({ sourceId: sheet.id, message: `${sheet.name} has a port without a matching named label.` })
     for (const part of sheet.parts) {
-      if (part.kind === 'behavioral' || part.kind === 'cccs' || part.kind === 'ccvs') blockers.push({ sourceId: part.id, message: `${part.ref} (${part.kind}) has no verified LTspice schematic mapping yet.` })
+      if (part.kind === 'behavioral') blockers.push({ sourceId: part.id, message: `${part.ref} (${part.kind}) has no verified LTspice schematic mapping yet.` })
       if (part.kind === 'lamp') losses.push({ severity: 'info', sourceId: part.id, title: 'Lamp exported as a fixed resistor', explanation: 'Electrical resistance is preserved, but ELSim nominal power and voltage-current glow animation are ELSim-only and are not carried into LTspice.' })
       if (part.kind === 'switch') {
         if (!['on', 'off'].includes(part.value.trim().toLowerCase())) blockers.push({ sourceId: part.id, message: `${part.ref} state must be On or Off before LTspice export.` })

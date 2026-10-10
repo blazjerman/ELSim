@@ -73,6 +73,28 @@ test('current sources export and reimport as I devices with ampere values', asyn
   assert.deepEqual(pwlRestored.currentPwl, [{ time: '0', current: '0' }, { time: '2m', current: '3m' }])
 })
 
+test('linear CCCS and CCVS export as LTspice F/H symbols and reimport with their sensor and coefficient', async () => {
+  const project = createStarterProject()
+  const f = { id: 'export-cccs', kind: 'cccs', ref: 'F1', value: '2', controlSource: 'V1', x: 760, y: 520, rotation: 0 }
+  const h = { id: 'export-ccvs', kind: 'ccvs', ref: 'H1', value: '2 kΩ', controlSource: 'V1', x: 920, y: 520, rotation: 0 }
+  project.parts.push(f, h)
+  project.sheets[0].parts = project.parts
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName F1\nSYMATTR Value V1\nSYMATTR Value2 2/)
+  assert.match(asc.content, /SYMATTR InstName H1\nSYMATTR Value V1\nSYMATTR Value2 2k/)
+  const symbolAssets = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({
+    id: `roundtrip-symbol-${index}`, filename: file.path.split('/').at(-1), sha256: file.sha256,
+    content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+  }))
+  const imported = parseLtspiceSchematic(asc.content, 'controlled.asc', symbolAssets).project
+  assert.deepEqual(imported.parts.filter((part) => part.ref === 'F1' || part.ref === 'H1').map(({ ref, kind, value, controlSource }) => ({ ref, kind, value, controlSource })), [
+    { ref: 'F1', kind: 'cccs', value: '2', controlSource: 'V1' },
+    { ref: 'H1', kind: 'ccvs', value: '2k', controlSource: 'V1' },
+  ])
+})
+
 test('exports a deterministic portable file tree for the beginner circuit', async () => {
   const project = createStarterProject()
   const first = await exportLtspiceProject(project)
