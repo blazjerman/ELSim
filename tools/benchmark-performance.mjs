@@ -78,21 +78,45 @@ function makeChain(createStarterProject, componentPins, count) {
   return project
 }
 
-function runWasm(moduleUrl, deck) {
+function runWasm(moduleUrl, deck, options = {}) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(path.join(root, 'tests/wasm/ngspice-benchmark-worker.mjs'), { workerData: { moduleUrl, deck } })
+    const worker = new Worker(path.join(root, 'tests/wasm/ngspice-benchmark-worker.mjs'), { workerData: { moduleUrl, deck, ...options } })
     const started = performance.now()
+    const baselineRssBytes = process.memoryUsage.rss()
+    let peakRssBytes = baselineRssBytes
+    const memorySampler = setInterval(() => { peakRssBytes = Math.max(peakRssBytes, process.memoryUsage.rss()) }, 10)
     const timeout = setTimeout(() => {
+      clearInterval(memorySampler)
       void worker.terminate()
       reject(new Error('ngspice benchmark exceeded its 90-second timeout.'))
     }, 90_000)
     worker.once('message', (message) => {
+      clearInterval(memorySampler)
       clearTimeout(timeout)
       if (message.error) reject(new Error(message.error))
-      else resolve({ ...message, workerRoundTripMs: performance.now() - started })
+      else resolve({ ...message, baselineRssBytes, peakRssBytes, workerRoundTripMs: performance.now() - started })
     })
-    worker.once('error', (error) => { clearTimeout(timeout); reject(error) })
+    worker.once('error', (error) => { clearInterval(memorySampler); clearTimeout(timeout); reject(error) })
   })
+}
+
+function makeTransientDeck(sampleCount) {
+  const stopTime = `${sampleCount}u`
+  return [
+    'ELSim large transient benchmark',
+    'V1 in 0 PULSE(0 5 0 1n 1n 0.5m 1m)',
+    'R1 in out 1k',
+    'C1 out 0 1u',
+    `.tran 1u ${stopTime} 0 1u`,
+    '.save v(out)',
+    '.control',
+    'set filetype=ascii',
+    'run',
+    'write /result.raw all',
+    'quit',
+    '.endc',
+    '.end',
+  ].join('\n')
 }
 
 try {
@@ -145,6 +169,7 @@ try {
   }
 
   let simulationResults = null
+  let transientResults = null
   const engineModule = path.join(root, 'public/engine/ngspice.mjs')
   if (existsSync(engineModule)) {
     simulationResults = []
@@ -174,15 +199,43 @@ try {
         structuredCloneEstimate: { medianMs: cloning.medianMs, p95Ms: cloning.p95Ms },
       })
     }
+
+    transientResults = []
+    for (const sampleCount of [100_000, 1_000_000]) {
+      const solved = await runWasm(pathToFileURL(engineModule).href, makeTransientDeck(sampleCount), { summaryOnly: true, rawParserPath: path.join(output, 'engine/raw.js') })
+      if (solved.status !== 0) throw new Error(`ngspice failed its ${sampleCount}-sample transient benchmark (status ${solved.status}).`)
+      if (solved.points < sampleCount * 0.95) throw new Error(`The ${sampleCount}-sample transient produced only ${solved.points} adaptive samples.`)
+      if (solved.variables !== 2) throw new Error(`The ${sampleCount}-sample transient should preserve time and one voltage vector; got ${solved.variables} variables.`)
+      if (solved.traceNames?.length !== 1 || solved.traceNames[0].toLowerCase() !== 'v(out)') throw new Error(`The ${sampleCount}-sample transient did not preserve its expected V(out) trace.`)
+      if (solved.vectorBytes !== solved.points * 2 * Float64Array.BYTES_PER_ELEMENT) throw new Error(`The ${sampleCount}-sample transient vector byte count does not match its time and voltage samples.`)
+      if (!Number.isFinite(solved.finalAxisValue) || !Number.isFinite(solved.finalTraceValue) || solved.finalTraceValue < -1e-6 || solved.finalTraceValue > 5 + 1e-6) throw new Error(`The ${sampleCount}-sample transient returned an invalid final V(out) value.`)
+      transientResults.push({
+        requestedSamples: sampleCount,
+        solvedSamples: solved.points,
+        finalTimeSeconds: solved.finalAxisValue,
+        finalOutputVolts: solved.finalTraceValue,
+        variablesIncludingAxis: solved.variables,
+        rawBytes: solved.rawBytes,
+        vectorBytes: solved.vectorBytes,
+        rawParsingMs: Number(solved.parsingMs.toFixed(3)),
+        baselineProcessRssBytes: solved.baselineRssBytes,
+        sampledPeakProcessRssBytes: solved.peakRssBytes,
+        sampledPeakRssIncreaseBytes: solved.peakRssBytes - solved.baselineRssBytes,
+        solverModuleLoadMs: Number(solved.moduleLoadMs.toFixed(3)),
+        solverAndRawWriteMs: Number(solved.simulationMs.toFixed(3)),
+        workerRoundTripMs: Number(solved.workerRoundTripMs.toFixed(3)),
+      })
+    }
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 1,
+    benchmarkVersion: 2,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
     plotResults,
     simulationResults: simulationResults ?? 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations',
+    transientResults: transientResults ?? 'skipped: build the optional local ngspice WASM runtime to include large transient and process-memory observations',
   }, null, 2))
 } finally {
   rmSync(output, { recursive: true, force: true })
