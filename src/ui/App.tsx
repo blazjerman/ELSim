@@ -8,12 +8,13 @@ import {
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
+import { createPartClipboard, type PartClipboard } from '../domain/partClipboard'
 import { fitEditorView } from '../domain/editorView'
 import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeModelDependencies, decodeModelLibrary, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
-import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, projectPinLocations, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, pointOnSegment, projectPinLocations, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
@@ -714,7 +715,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
       <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project))}><Scan size={15}/></IconButton></div>
-      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Shift-click parts to select several · drag to move · Ctrl/⌘+C/V copies unwired parts · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
+      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Shift-click parts to select several · drag to move · Ctrl/⌘+C/V copies parts and internal wires · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
     <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Focus a component, use arrow keys to move, then press Enter or Space to select or activate it." viewBox={viewBox} onPointerDown={beginPan} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onWheel={(event) => {
       if (!event.ctrlKey && !event.metaKey) return
@@ -806,13 +807,13 @@ export default function App() {
   const modelFileInput = useRef<HTMLInputElement>(null)
   const symbolFileInput = useRef<HTMLInputElement>(null)
   const componentSearchRef = useRef<HTMLInputElement>(null)
-  const copiedParts = useRef<Part[]>([])
+  const copiedParts = useRef<PartClipboard | null>(null)
   const activeWorkerRef = useRef<Worker | null>(null)
   const projectRef = useRef(project)
   projectRef.current = project
   const clipboardProjectRef = useRef(project.rootSheetId)
   useEffect(() => {
-    if (clipboardProjectRef.current !== project.rootSheetId) copiedParts.current = []
+    if (clipboardProjectRef.current !== project.rootSheetId) copiedParts.current = null
     clipboardProjectRef.current = project.rootSheetId
   }, [project.rootSheetId])
   useEffect(() => {
@@ -1248,10 +1249,12 @@ export default function App() {
   }
   const rotateSelected = () => selected && updateSelected({ rotation: ((selected.rotation + 90) % 360) as Part['rotation'] })
   const flipSelected = () => selected && updateSelected({ flipX: !selected.flipX })
-  const duplicateSelected = () => selectedParts.length && pasteParts(selectedParts, 80, 60)
-  const pasteParts = (sources = copiedParts.current, offsetX = 40, offsetY = 40) => {
-    if (!sources.length) return
+  const duplicateSelected = () => selectedParts.length && pasteParts(createPartClipboard(project, selectedParts.map((part) => part.id)), 80, 60)
+  const pasteParts = (clipboard = copiedParts.current, offsetX = 40, offsetY = 40) => {
+    if (!clipboard?.parts.length) return
+    const sources = clipboard.parts
     const pastedIds = sources.map(() => `p-${crypto.randomUUID()}`)
+    const pastedWires = clipboard.wires.map((wire) => ({ id: `w-${crypto.randomUUID()}`, points: wire.points.map(([x, y]) => [x + offsetX, y + offsetY] as [number, number]) }))
     setProject((current) => {
       let parts = [...current.parts]
       sources.forEach((source, index) => {
@@ -1269,18 +1272,22 @@ export default function App() {
         }
         parts = [...parts, pasted]
       })
-      return { ...current, parts }
+      return { ...current, parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))] }
     })
     const lastId = pastedIds.at(-1)!
     setSelectedPartIds(pastedIds)
     setSelection({ kind: 'part', id: lastId })
-    setNotice(`Pasted ${sources.length} ${sources.length === 1 ? kindNames[sources[0].kind].toLowerCase() : 'components'}. Connect their pins before running a simulation.`)
+    setNotice(`Pasted ${sources.length} ${sources.length === 1 ? kindNames[sources[0].kind].toLowerCase() : 'components'} and ${pastedWires.length} internal wires. External connections and net labels are not included.`)
   }
   const deleteSelected = () => {
     if (!selected) return
     const selectedIds = new Set(selectedParts.map((part) => part.id))
     const pins = selectedParts.flatMap(componentPins)
-    setProject((current) => ({ ...current, parts: current.parts.filter((part) => !selectedIds.has(part.id)), wires: current.wires.filter((wire) => !wire.points.some(([x, y]) => pins.some((pin) => Math.abs(pin.x - x) < .5 && Math.abs(pin.y - y) < .5))) }))
+    setProject((current) => {
+      const wires = current.wires.filter((wire) => !wire.points.some(([x, y]) => pins.some((pin) => Math.abs(pin.x - x) < .5 && Math.abs(pin.y - y) < .5)))
+      const junctions = current.junctions.filter((junction) => wires.filter((wire) => wire.points.slice(1).some((point, index) => pointOnSegment({ x: junction.x, y: junction.y }, { x: wire.points[index][0], y: wire.points[index][1] }, { x: point[0], y: point[1] }))).length >= 2)
+      return { ...current, parts: current.parts.filter((part) => !selectedIds.has(part.id)), wires, junctions }
+    })
     setSelection(null)
     setSelectedPartIds([])
   }
@@ -1319,18 +1326,18 @@ export default function App() {
       if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
       if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedParts.length) {
         event.preventDefault()
-        copiedParts.current = selectedParts.map((part) => ({ ...part }))
-        setNotice(`Copied ${selectedParts.length} ${selectedParts.length === 1 ? selectedParts[0].ref : 'components'}. Paste creates unwired parts; wires are not included.`)
+        copiedParts.current = createPartClipboard(project, selectedParts.map((part) => part.id))
+        setNotice(`Copied ${selectedParts.length} ${selectedParts.length === 1 ? selectedParts[0].ref : 'components'} and ${copiedParts.current.wires.length} internal wires. External connections and net labels are not included.`)
         return
       }
-      if ((event.ctrlKey || event.metaKey) && key === 'v' && copiedParts.current.length) {
+      if ((event.ctrlKey || event.metaKey) && key === 'v' && copiedParts.current?.parts.length) {
         event.preventDefault()
-        const unavailableSheet = copiedParts.current.find((source) => source.sheetId && !project.sheets.some((sheet) => sheet.id === source.sheetId))
+        const unavailableSheet = copiedParts.current.parts.find((source) => source.sheetId && !project.sheets.some((sheet) => sheet.id === source.sheetId))
         if (unavailableSheet) {
           setNotice('This copied block belongs to a different project and its sheet definition is unavailable.')
           return
         }
-        pasteParts()
+        pasteParts(copiedParts.current)
         return
       }
       if ((event.ctrlKey || event.metaKey) && key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return }
