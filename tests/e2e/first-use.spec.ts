@@ -909,6 +909,32 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   expect(arrowPath?.startsWith(titleText?.includes('from pin 1 toward pin 2') ? 'M-10' : 'M10')).toBe(true)
 })
 
+test('diode rectifier example clips the negative half-cycle in the browser engine', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Diode half-wave rectifier' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Diode half-wave rectifier')
+  await expect(page.getByLabel('Guided example')).toContainText('positive half-cycles')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(vin)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  await scrubToTime(slider, 0.005)
+  const positive = await page.locator('.cursor-readout').innerText()
+  expect(positive).toMatch(/V\(vin\) = 4\./i)
+  expect(positive).toMatch(/V\(vout\) = [34]\./i)
+  await scrubToTime(slider, 0.015)
+  const negative = await page.locator('.cursor-readout').innerText()
+  expect(negative).toMatch(/V\(vin\) = -4\./i)
+  const blockedOutput = Number(negative.match(/V\(vout\) = ([\d.e+-]+)/i)?.[1])
+  expect(Math.abs(blockedOutput)).toBeLessThan(0.01)
+})
+
 
 test('voltage source SINE waveform is editable and runs in the browser ngspice engine', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createJfetSwitchExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createJfetSwitchExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
 
@@ -18,6 +18,17 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^R1 vin vout 1k$/m)
   assert.match(artifact.text, /^C1 vout 0 10u$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
+})
+
+test('diode rectifier example generates an AC-driven half-wave transient', () => {
+  const project = createDiodeRectifierExampleProject()
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'Diode half-wave rectifier')
+  assert.match(artifact.text, /^V1 VIN 0 SIN\(0 5 50 0 0 0\)$/m)
+  assert.match(artifact.text, /^D1 VIN VOUT DDEFAULT$/m)
+  assert.match(artifact.text, /^R1 VOUT 0 1k$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)', 'I(D1)'])
 })
 
 test('active sheet parameters are emitted as source-mapped SPICE declarations', () => {

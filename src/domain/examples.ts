@@ -10,6 +10,33 @@ export function createLedExampleProject(): Project {
   return project
 }
 
+/** A beginner half-wave rectifier showing an AC input and clipped output. */
+export function createDiodeRectifierExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'rectifier-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'sine', sine: { offset: '0', amplitude: '5', frequency: '50 Hz', delay: '0', damping: '0', phase: '0' }, x: 280, y: 360, rotation: 0 }
+  const diode: Part = { id: 'rectifier-d1', kind: 'diode', ref: 'D1', value: 'Default diode', x: 500, y: 360, rotation: 0 }
+  const load: Part = { id: 'rectifier-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 720, y: 360, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Diode half-wave rectifier'
+  project.parts = [source, diode, load]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('rectifier-vin-source', 'VIN', source, 0), labelAt('rectifier-vin-diode', 'VIN', diode, 0),
+    labelAt('rectifier-vout-diode', 'VOUT', diode, 1), labelAt('rectifier-vout-load', 'VOUT', load, 0),
+    labelAt('rectifier-ground-source', '0', source, 1), labelAt('rectifier-ground-load', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '40 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'I(D1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -10, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A beginner RC circuit driven by a hand-edited piecewise-linear source. */
 export function createPwlExampleProject(): Project {
   const project = createStarterProject()
