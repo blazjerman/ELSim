@@ -24,7 +24,24 @@ test('result control saves device currents needed for probes and visualizations'
   ].join('\n')
   const instrumented = addResultControl(netlist)
   assert.match(instrumented, /^\.save all @R1\[i\] @C1\[i\] @L1\[i\] @D1\[id\] @S1\[i\] @F1\[i\] @H1\[i\] @B1\[i\]$/m)
-  assert.match(instrumented, /\.control\nset filetype=ascii\nrun\nwrite \/result\.raw all\nquit\n\.endc\n\.end\n$/)
+  assert.match(instrumented, /\.control\nset filetype=ascii\ntran 1u 1m\nwrite \/result\.raw all\nquit\n\.endc\n\.end\n$/)
+})
+
+test('result control executes the selected AC and DC analyses instead of the default transient run', () => {
+  const ac = addResultControl('V1 in 0 AC 1\nR1 in 0 1k\n.ac dec 20 10 1meg\n.end')
+  assert.match(ac, /\.control\nset filetype=ascii\nac dec 20 10 1meg\nwrite \/result\.raw all/)
+  assert.doesNotMatch(ac, /\nrun\n/)
+
+  const dc = addResultControl('V1 in 0 DC 0\nR1 in 0 1k\n.dc V1 0 5 0.1\n.end')
+  assert.match(dc, /\.control\nset filetype=ascii\ndc V1 0 5 0\.1\nwrite \/result\.raw all/)
+  assert.doesNotMatch(dc, /\nrun\n/)
+})
+
+test('AC result control avoids unsupported capacitor and inductor branch-current saves', () => {
+  const ac = addResultControl('V1 in 0 AC 1\nR1 in out 1k\nL1 out node 1m\nC1 node 0 1u\n.ac dec 20 10 1meg\n.end')
+  assert.doesNotMatch(ac, /^\.save\b/m)
+  assert.doesNotMatch(ac, /^\.meas\s+tran\b/m)
+  assert.match(ac, /ac dec 20 10 1meg\nwrite \/result\.raw all/)
 })
 
 test('result control rejects netlists with no end directive', () => {
