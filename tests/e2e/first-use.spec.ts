@@ -382,7 +382,7 @@ test('hierarchical block parameter overrides validate before saving and update t
   await page.reload()
   await page.locator('.circuit-part[data-part-id="parameter-block"]').click()
   const value = page.getByLabel('RLOAD block value')
-  await value.fill('not-a-value')
+  await value.fill('not a value')
   await value.blur()
   await expect(page.getByRole('alert')).toContainText('Enter a numeric SPICE value')
   await expect(value).toHaveAttribute('aria-invalid', 'true')
