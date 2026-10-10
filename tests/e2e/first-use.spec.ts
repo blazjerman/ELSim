@@ -335,6 +335,7 @@ test('first use: run the RC starter and inspect its solved waveform', async ({ p
 
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByText(/Transient results/)).toBeVisible()
+  await expect(page.locator('button[title^="Pause result playback"]')).toBeVisible()
   const outputTrace = page.getByRole('button', { name: 'V(vout)', exact: true })
   await expect(outputTrace).toBeVisible()
   if (!(await outputTrace.getAttribute('class'))?.includes('selected')) await outputTrace.click()
@@ -364,6 +365,21 @@ test('first use: run the RC starter and inspect its solved waveform', async ({ p
   await expect(detached).toHaveCSS('width', `${savedBounds.width}px`)
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 854)
   expect(pageErrors).toEqual([])
+})
+
+test('first use: reduced-motion preference pauses result animation but keeps manual playback', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('animation paused for reduced motion', { timeout: 60_000 })
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  await expect(slider).toBeVisible()
+  const play = page.locator('button[title^="Play result animation"]')
+  await expect(play).toBeEnabled()
+  await page.waitForTimeout(180)
+  expect(Number(await slider.inputValue())).toBe(0)
+  await play.click()
+  await expect.poll(async () => Number(await slider.inputValue())).toBeGreaterThan(0)
 })
 
 test('import, place, and simulate a user-supplied IC with its symbol', async ({ page }) => {

@@ -873,6 +873,7 @@ export default function App() {
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   const [sampleIndex, setSampleIndex] = useState<number | null>(null)
   const [playbackRunning, setPlaybackRunning] = useState(false)
+  const prefersReducedMotionRef = useRef(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [electricalCheckOpen, setElectricalCheckOpen] = useState(false)
   const [spacePan, setSpacePan] = useState(false)
   const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>(() => project.plotSettings?.selectedTraceIds ?? [])
@@ -892,6 +893,16 @@ export default function App() {
   const activeWorkerRef = useRef<Worker | null>(null)
   const projectRef = useRef(project)
   projectRef.current = project
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const updatePreference = () => {
+      prefersReducedMotionRef.current = preference.matches
+      if (preference.matches) setPlaybackRunning(false)
+    }
+    updatePreference()
+    preference.addEventListener('change', updatePreference)
+    return () => preference.removeEventListener('change', updatePreference)
+  }, [])
   const clipboardProjectRef = useRef(project.rootSheetId)
   useEffect(() => {
     if (clipboardProjectRef.current !== project.rootSheetId) copiedParts.current = null
@@ -1634,7 +1645,7 @@ export default function App() {
         setSimulationResult(response.result)
         const transientSamples = response.result.analysis === 'tran' ? response.result.traces[0]?.axis.length ?? 1 : 0
         setSampleIndex(response.result.analysis === 'tran' ? 0 : null)
-        setPlaybackRunning(response.result.analysis === 'tran' && transientSamples > 1)
+        setPlaybackRunning(!prefersReducedMotionRef.current && response.result.analysis === 'tran' && transientSamples > 1)
         const savedTraceIds = projectRef.current.plotSettings?.selectedTraceIds ?? []
         const restoredTraces = savedTraceIds.filter((id) => response.result.traces.some((trace) => trace.id === id))
         let initialTraces = restoredTraces
@@ -1660,7 +1671,7 @@ export default function App() {
         if (hierarchyWalkthroughStep === 0) {
           setHierarchyWalkthroughStep(1)
           setNotice('Simulation complete. Continue the nested-block walkthrough in the guide.')
-        } else if (response.result.analysis === 'tran' && transientSamples > 1) setNotice(`Transient analysis complete · playing solved animation · ${response.result.traces.length} result vectors`)
+        } else if (response.result.analysis === 'tran' && transientSamples > 1) setNotice(prefersReducedMotionRef.current ? `Transient analysis complete · animation paused for reduced motion · ${response.result.traces.length} result vectors` : `Transient analysis complete · playing solved animation · ${response.result.traces.length} result vectors`)
         else setNotice(parameterSweep.length ? `Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors` : `Analysis complete · ${response.result.traces.length} result vectors`)
         setAnalysisTab('waveforms')
         worker.terminate()
