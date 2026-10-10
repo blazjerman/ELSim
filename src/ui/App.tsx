@@ -272,7 +272,7 @@ function usePartUiState(id: string): number {
   return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
-const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, voltage, current, symbol }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; voltage?: number; current?: number; symbol?: ImportedSymbol }) {
+const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, voltage, current, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; voltage?: number; current?: number; symbol?: ImportedSymbol; detailed?: boolean }) {
   const uiState = usePartUiState(part.id)
   const selected = (uiState & 1) !== 0
   const focusable = (uiState & 2) !== 0
@@ -303,7 +303,8 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const accessibilityLabel = isInteractiveSwitch
     ? `${part.ref}, ${kindNames[part.kind]}, switch ${part.value.toLowerCase()}${selected ? ', selected' : ''}`
     : `${part.ref}, ${kindNames[part.kind]}, ${part.value || 'no value'}${selected ? ', selected' : ''}`
-  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} role="button" tabIndex={focusable ? 0 : -1} aria-label={accessibilityLabel} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onKeyDown={(event) => {
+  const showDetails = detailed || Boolean(symbol)
+  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} data-visual-detail={showDetails ? 'full' : 'compact'} role="button" tabIndex={focusable ? 0 : -1} aria-label={accessibilityLabel} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onKeyDown={(event) => {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); onNavigate(part.id, event.key); return }
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
@@ -312,7 +313,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   }} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); onSelect(part.id, event.shiftKey); if (isInteractiveSwitch && !event.shiftKey) onSwitchToggle(part.id) } }}>
     {(voltage !== undefined || current !== undefined) && <title>{`${part.ref}: ${part.kind === 'lamp' ? `illustrative brightness follows solved electrical power; nominal ${part.animationNominalPower ?? 10} W; ` : part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'illustrative channel indicator follows solved drain current; ' : part.kind === 'capacitor' ? `illustrative plate charge follows voltage; ${Number.isFinite(capacitorCharge) ? `Q = C × V = ${capacitorCharge!.toPrecision(4)} C; ` : ''}` : part.kind === 'inductor' ? `illustrative coil glow follows current; ${Number.isFinite(inductorEnergy) ? `magnetic field energy E = ½ L I² = ${inductorEnergy!.toPrecision(4)} J; ` : ''}` : ''}${voltage === undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${part.kind === 'inductor' ? `from pin ${inductorCurrentForward === !part.flipX ? 1 : 2} toward pin ${inductorCurrentForward === !part.flipX ? 2 : 1}` : part.kind === 'npn' || part.kind === 'pnp' ? `conventional current ${current >= 0 ? 'into' : 'out of'} the collector terminal` : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'njfet' || part.kind === 'pjfet' ? `conventional current ${current >= 0 ? 'into' : 'out of'} the drain terminal` : 'positive from pin 1 to pin 2'}`}`}</title>}
     <rect x={symbolBounds ? symbolBounds.minX - 14 : part.kind === 'subcircuit' ? -customWidth / 2 - 20 : -40} y={symbolBounds ? symbolBounds.minY - 24 : part.kind === 'subcircuit' ? -customHeight / 2 - 22 : -38} width={symbolBounds ? Math.max(80, symbolBounds.maxX - symbolBounds.minX + 28) : part.kind === 'subcircuit' ? customWidth + 40 : 80} height={symbolBounds ? Math.max(76, symbolBounds.maxY - symbolBounds.minY + 48) : part.kind === 'subcircuit' ? customHeight + 44 : 76} rx="9" className="part-hit" />
-    <g transform={part.flipX ? 'scale(-1 1)' : undefined}>
+    {detailed || symbol ? <><g transform={part.flipX ? 'scale(-1 1)' : undefined}>
     {part.kind === 'resistor' && <><line x1="-52" y1="0" x2="-23" y2="0" {...common}/><rect x="-23" y="-12" width="46" height="24" rx="3" {...common}/><line x1="23" y1="0" x2="52" y2="0" {...common}/></>}
     {part.kind === 'lamp' && <><line x1="-52" y1="0" x2="-19" y2="0" {...common}/><line x1="19" y1="0" x2="52" y2="0" {...common}/><circle cx="0" cy="0" r="19" fill="#ffd36d" opacity={lampGlow * .82} stroke="none" pointerEvents="none"/><circle cx="0" cy="0" r="19" {...common} style={{ filter: lampGlow > 0 ? `drop-shadow(0 0 ${lampGlow * 15}px #ffd36d)` : undefined }}/><path d="M-9 -9L-5 -3L5 -3L9 -9M-5 -3L-5 7M5 -3L5 7M-7 7H7" fill="none" stroke={lampGlow > .05 ? '#ffe6a8' : common.stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></>}
     {part.kind === 'behavioral' && <><line x1="-52" y1="0" x2="-24" y2="0" {...common}/><line x1="24" y1="0" x2="52" y2="0" {...common}/><path d="M0 -24L24 0L0 24L-24 0Z" {...common}/>{part.behavioralOutput === 'current' ? <><line x1="0" y1="12" x2="0" y2="-10" {...common}/><path d="M0 -10L-6 -2H6Z" fill={common.stroke}/></> : <><line x1="-6" y1="-7" x2="6" y2="-7" {...common}/><line x1="0" y1="-13" x2="0" y2="-1" {...common}/><line x1="-6" y1="8" x2="6" y2="8" {...common}/></>}</>}
@@ -332,11 +333,11 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     {part.kind === 'ground' && <><line x1="0" y1="-22" x2="0" y2="0" {...common}/><line x1="-18" y1="0" x2="18" y2="0" {...common}/><line x1="-12" y1="7" x2="12" y2="7" {...common}/><line x1="-6" y1="14" x2="6" y2="14" {...common}/></>}
     </g>
     <text className="part-ref" x="0" y={part.kind === 'subcircuit' ? -customHeight / 2 - 9 : part.kind === 'ground' ? 34 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp','njfet','pjfet','nmos','pmos'].includes(part.kind) ? -68 : -29}>{part.kind === 'subcircuit' ? `${part.ref} · ${part.value || part.modelName}` : part.ref}</text>
-    {part.value && part.kind !== 'subcircuit' && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp','njfet','pjfet','nmos','pmos'].includes(part.kind) ? 76 : 43}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.kind === 'behavioral' ? `${part.behavioralOutput === 'current' ? 'I' : 'V'}=f(...)` : part.value}</text>}
+    {part.value && part.kind !== 'subcircuit' && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp','njfet','pjfet','nmos','pmos'].includes(part.kind) ? 76 : 43}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.kind === 'behavioral' ? `${part.behavioralOutput === 'current' ? 'I' : 'V'}=f(...)` : part.value}</text>}</> : <title>{accessibilityLabel}</title>}
   </g>
 })
 
-const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, tool, animationRevision, componentSample, onSelect, onPointerDown, onNavigate, onProbe, onSwitchToggle }: {
+const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, tool, animationRevision, componentSample, onSelect, onPointerDown, onNavigate, onProbe, onSwitchToggle, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
   parts: Part[]
   symbolsById: Map<string, ImportedSymbol>
   tool: ToolMode
@@ -347,9 +348,18 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void
   onProbe: (id: string) => void
   onSwitchToggle: (id: string) => void
+  viewportLeft: number
+  viewportTop: number
+  viewportRight: number
+  viewportBottom: number
 }) {
   void animationRevision
-  return <>{parts.map((part) => <CircuitPart key={part.id} part={part} symbol={part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined} onSelect={onSelect} onPointerDown={onPointerDown} onNavigate={onNavigate} tool={tool} onProbe={onProbe} onSwitchToggle={onSwitchToggle} {...componentSample(part)}/>)}</>
+  return <>{parts.map((part) => {
+    const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
+    const margin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
+    const detailed = part.x >= viewportLeft - margin && part.x <= viewportRight + margin && part.y >= viewportTop - margin && part.y <= viewportBottom + margin
+    return <CircuitPart key={part.id} part={part} symbol={symbol} detailed={detailed} onSelect={onSelect} onPointerDown={onPointerDown} onNavigate={onNavigate} tool={tool} onProbe={onProbe} onSwitchToggle={onSwitchToggle} {...componentSample(part)}/>
+  })}</>
 })
 
 function TraceToggles({ traces, selectedIds, onToggle, ariaLabel, colorFor }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; ariaLabel: string; colorFor: (index: number) => string }) {
@@ -1124,7 +1134,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       <CanvasNetLabelLayer labels={project.netLabels} selectedId={selection?.kind === 'label' ? selection.id : undefined} tool={tool} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
-      <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart}/>
+      <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       <g className="canvas-label"><text x="138" y="238">INPUT</text><text x="567" y="265">OUTPUT</text></g>
     </svg>
     {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}

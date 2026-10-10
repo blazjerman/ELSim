@@ -169,14 +169,14 @@ The comparison shows much lower selection latency for this wire-heavy case. The 
 
 ### 5,000-part browser schematic (2026-10-11)
 
-The editor benchmark now also opens a 5,000-resistor schematic with 10,000 net labels and measures synthetic selection input through the next animation frame. This isolates UI update work from Playwright locator/actionability time. The full SVG remains keyboard accessible and contains 80,010 elements at this size. The benchmark now rechecks all 10,000 label nodes after each interaction series.
+The editor benchmark now also opens a 5,000-resistor schematic with 10,000 net labels and measures synthetic selection input through the next animation frame. This isolates UI update work from Playwright locator/actionability time. The SVG retains every part as a focusable named control and all 10,000 net labels. Component symbol details are drawn for parts within the visible view plus a margin; offscreen parts keep their accessible control and hit target. The benchmark verifies offscreen keyboard selection and rechecks all 10,000 label nodes after each interaction series.
 
-| Browser | Parts | Editor ready (ms) | Selection median before → after (ms) | Selection max-of-5 after (ms) | SVG elements |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Chromium | 5,000 | 3,498 → 3,442 | 531.7 → 365.2 → 221.8 | 378.3 → 244.8 | 80,010 |
-| Firefox | 5,000 | 4,001 → 4,165 | 308 → 74 → 15.0 | 76 → 30.0 | 80,010 |
+| Browser | Parts | Editor ready (ms) | Selection median progression (ms) | Selection max-of-5 progression (ms) | SVG elements progression | Detailed parts in view |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Chromium | 5,000 | 3,498 → 3,442 → 2,534 | 531.7 → 365.2 → 221.8 → 142.1 | 378.3 → 244.8 → 150.6 | 80,010 → 55,370 | 72 |
+| Firefox | 5,000 | 4,001 → 4,165 → 3,152 | 308 → 74 → 15.0 → 14.0 | 76 → 30.0 → 18.0 | 80,010 → 55,370 | 72 |
 
-`CircuitPartLayer` memoizes the 5,000-item SVG element list across selection-only app updates. Individual parts subscribe to a small external UI-state store; only parts whose selected or roving-tab-stop state changed rerender. `CanvasNetLabelLayer` now memoizes all 10,000 label elements when a component selection changes; the label nodes remain present and accessible. A same-host rerun reduced the 5,000-part selection median from 365.2 to 221.8 ms in Chromium (p95 from 378.3 to 244.8 ms) and from 74 to 15 ms in Firefox (max-of-five from 76 to 30 ms). All 80,010 SVG elements and 10,000 labels remain present. Chromium selection still exceeds a 16 ms frame, and SVG first-render time is unchanged; further optimization remains open. These measurements are local observations, not release budgets. Browser heap metrics are omitted because available readings did not vary reliably with project size.
+`CircuitPartLayer` memoizes the part list across selection-only updates; individual parts subscribe to a small external selection/focus store. `CanvasNetLabelLayer` skips rebuilding 10,000 labels when component selection changes. The latest change renders full symbol artwork only near the viewport while retaining every offscreen part as a named focusable control and keeping its hit target; imported symbols always retain their full artwork. A same-host run changed the 5,000-part editor load from 3.44 to 2.53 s in Chromium and 4.17 to 3.15 s in Firefox. Selection median changed from 221.8 to 142.1 ms in Chromium and 15 to 14 ms in Firefox. The SVG shrank from 80,010 to 55,370 elements while all parts and labels remained present; 72 parts had full artwork in the initial view. Chromium selection still exceeds a 16 ms frame. These measurements are local observations, not release budgets. Browser heap metrics are omitted because available readings did not vary reliably with project size.
 
 ### Browser waveform transport check
 

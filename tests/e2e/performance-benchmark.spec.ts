@@ -369,8 +369,11 @@ test('record large-project editor render and selection input-to-frame timings', 
         usedHeapBytes: perf.memory?.usedJSHeapSize ?? null,
         totalHeapBytes: perf.memory?.totalJSHeapSize ?? null,
         svgElementCount: document.querySelectorAll('svg.schematic *').length,
+        detailedPartCount: document.querySelectorAll('.circuit-part[data-visual-detail="full"]').length,
       }
     })
+    expect(browserMetrics.detailedPartCount).toBeGreaterThan(0)
+    expect(browserMetrics.detailedPartCount).toBeLessThanOrEqual(count)
 
     const interactionSamples = []
     for (let index = 0; index < 5; index += 1) {
@@ -398,6 +401,15 @@ test('record large-project editor render and selection input-to-frame timings', 
       ...browserMetrics,
     })
   }
+
+  const offscreenPart = page.locator('.circuit-part[data-part-id="bench-part-5000"]')
+  await expect(offscreenPart).toHaveAttribute('data-visual-detail', 'compact')
+  await expect(offscreenPart).toHaveAttribute('aria-label', 'R5000, Resistor, 1k')
+  await offscreenPart.focus()
+  await offscreenPart.press('Enter')
+  await expect(offscreenPart).toHaveClass(/selected/)
+  await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(5_000)
+  await expect(page.locator('svg.schematic [data-net-label-id]')).toHaveCount(10_000)
 
   const transport = await page.evaluate(async () => {
     const sampleCount = 100_000, traceCount = 6
