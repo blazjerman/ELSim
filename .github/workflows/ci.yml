@@ -60,3 +60,93 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  engine-browsers:
+    name: ngspice WASM parity and browser workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out ELSim source
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install ngspice build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y autoconf automake bison flex gperf libtool
+
+      - name: Set up pinned Emscripten
+        uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: 5.0.7
+          actions-cache-folder: emsdk-cache
+
+      - name: Check out pinned ngspice source
+        env:
+          NGSPICE_SOURCE: ${{ runner.temp }}/ngspice
+        run: |
+          git clone https://git.code.sf.net/p/ngspice/ngspice "$NGSPICE_SOURCE"
+          git -C "$NGSPICE_SOURCE" checkout --detach "$(cat engine/wasm/UPSTREAM_COMMIT)"
+
+      - name: Build the local ngspice WASM runtime
+        env:
+          NGSPICE_SOURCE: ${{ runner.temp }}/ngspice
+          JOBS: 2
+        run: ./tools/build-ngspice-wasm.sh
+
+      - name: Build native ngspice from the same source commit
+        env:
+          NGSPICE_SOURCE: ${{ runner.temp }}/ngspice
+          NATIVE_BUILD: ${{ runner.temp }}/ngspice-native
+        run: |
+          mkdir -p "$NATIVE_BUILD"
+          cd "$NATIVE_BUILD"
+          "$NGSPICE_SOURCE/configure" \
+            --disable-shared \
+            --enable-static \
+            --enable-xspice \
+            --disable-cider \
+            --disable-osdi \
+            --disable-openmp \
+            --disable-klu \
+            --with-readline=no \
+            --with-editline=no \
+            --disable-debug \
+            --without-x \
+            CFLAGS=-O2 \
+            LDFLAGS=-O2
+          make -j2
+
+      - name: Compare WASM fixtures with native ngspice
+        env:
+          NATIVE_NGSPICE: ${{ runner.temp }}/ngspice-native/src/ngspice
+        run: node tools/test-ngspice-wasm.mjs public/engine "$NATIVE_NGSPICE"
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Run ngspice-backed Chromium workflows
+        run: npm run test:e2e:engine
+
+      - name: Run ngspice-backed Firefox workflows
+        run: npm run test:e2e:engine:firefox
+
+      - name: Run ngspice-backed WebKit workflows
+        run: npm run test:e2e:engine:webkit
+
+      - name: Upload browser traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ngspice-browser-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
