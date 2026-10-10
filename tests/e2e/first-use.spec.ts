@@ -879,6 +879,22 @@ test('circuit checks explain missing device models and select the affected compo
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('D2')
 })
 
+test('creating a child sheet can be undone and redone', async ({ page }) => {
+  await page.goto('/')
+  const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })
+  const redo = page.getByRole('button', { name: 'Redo (Ctrl/⌘+Shift+Z)' })
+  await expect(undo).toBeDisabled()
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await expect(page.getByRole('button', { name: /Block 1/ })).toBeVisible()
+  await expect(undo).toBeEnabled()
+  await undo.click()
+  await expect(page.getByRole('button', { name: /Block 1/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^RC step response/ })).toBeVisible()
+  await expect(redo).toBeEnabled()
+  await redo.click()
+  await expect(page.getByRole('button', { name: /Block 1/ })).toBeVisible()
+})
+
 test('voltage source inspector edits DC, pulse, and validated PWL transient behavior', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: /^V1, Voltage source/ }).click()

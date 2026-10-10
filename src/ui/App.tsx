@@ -1077,8 +1077,8 @@ export default function App() {
     const siblings = project.sheets.filter((sheet) => sheet.parentSheetId === parent?.id)
     const name = `Block ${siblings.length + 1}`
     const sheet = { id: `sheet-${crypto.randomUUID()}`, name, parentSheetId: parent?.id ?? null, parts: [] as Part[], wires: [] as Project['wires'], junctions: [] as Project['junctions'], netLabels: [] as Project['netLabels'], view: { zoom: 1, panX: 0, panY: 0 }, ports: [] as { id: string; name: string }[], parameters: [] as NonNullable<Project['sheets'][number]['parameters']> }
+    history.current = { past: [...history.current.past, structuredClone(projectRef.current)].slice(-100), future: [] }
     setProjectState((current) => ({ ...current, sheets: [...current.sheets, sheet], activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, updatedAt: new Date().toISOString() }))
-    history.current = { past: [], future: [] }
     setSelection(null)
     setSimulationResult(null)
     setSampleIndex(null)
