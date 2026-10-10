@@ -97,3 +97,78 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await expect(warnings).toContainText('not translated by ELSim’s current compatibility path')
   await expect(warnings).toContainText('Use a tested ngspice-compatible transfer model')
 })
+
+test('junction tool toggles a crossing connection in the schematic', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = []
+    project.wires = [
+      { id: 'cross-h', points: [[300, 300], [400, 300]] },
+      { id: 'cross-v', points: [[350, 250], [350, 350]] },
+    ]
+    project.junctions = []
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: [], wires: project.wires, junctions: [], netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const svg = page.locator('svg.schematic')
+  const box = await svg.boundingBox()
+  expect(box).not.toBeNull()
+  const coordinate = (x: number, y: number) => ({ x: box!.x + x / 760 * box!.width, y: box!.y + y / 600 * box!.height })
+  const crossing = coordinate(350, 300)
+
+  await page.getByRole('button', { name: 'Toggle a wire crossing junction (J)' }).click()
+  await svg.click({ position: { x: crossing.x - box!.x, y: crossing.y - box!.y } })
+  await expect(page.getByText('Junction added. The crossing wires are now connected.')).toBeVisible()
+  await expect(svg.locator('title', { hasText: 'Connected wire junction' })).toBeAttached()
+  await svg.click({ position: { x: crossing.x - box!.x, y: crossing.y - box!.y } })
+  await expect(page.getByText('Junction removed. The crossing wires are now separate nets.')).toBeVisible()
+  await expect(svg.locator('title', { hasText: 'Connected wire junction' })).toHaveCount(0)
+})
+
+test('wire segment drag reroutes its path and viewport gestures preserve the circuit', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = []
+    project.wires = [{ id: 'editable-wire', points: [[300, 300], [400, 300], [400, 350]] }]
+    project.junctions = []
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: [], wires: project.wires, junctions: [], netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const svg = page.locator('svg.schematic')
+  const box = await svg.boundingBox()
+  expect(box).not.toBeNull()
+  const toScreen = (x: number, y: number) => ({ x: box!.x + x / 760 * box!.width, y: box!.y + y / 600 * box!.height })
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
+  const start = toScreen(350, 300), end = toScreen(350, 330)
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).not.toEqual(before)
+  const rerouted = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
+  expect(rerouted).toEqual([[300, 330], [400, 330], [400, 350]])
+
+  await page.keyboard.down('Space')
+  const panStart = toScreen(600, 500)
+  await page.mouse.move(panStart.x, panStart.y)
+  await page.mouse.down()
+  await page.mouse.move(panStart.x + 40, panStart.y + 25, { steps: 3 })
+  await page.mouse.up()
+  await page.keyboard.up('Space')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view.panX)).not.toBe(0)
+  const afterPan = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
+  expect(afterPan).toEqual(rerouted)
+
+  const beforeZoom = Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))
+  await page.locator('svg.schematic').evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }))
+  })
+  await expect.poll(async () => Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))).toBeGreaterThan(beforeZoom)
+})
