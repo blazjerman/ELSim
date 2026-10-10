@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: ['first-use.spec.ts', 'pwa.spec.ts'],
-  grepInvert: /AC source validation focuses its inspector field before simulation|first use: run the RC starter|first use: reduced-motion preference pauses result animation but keeps manual playback|import, place, and simulate a user-supplied IC|RLC example opens and solves|PWL waveform example opens with editable points and solves|current-source example demonstrates|controlled-source example opens and solves|transistor switch example demonstrates|current-controlled sources example shows|stop terminates an active ngspice run/,
+  grepInvert: /AC source validation focuses its inspector field before simulation|first use: run the RC starter|first use: reduced-motion preference pauses result animation but keeps manual playback|import, place, and simulate a user-supplied IC|RLC example opens and solves|PWL waveform example opens with editable points and solves|current-source example demonstrates|controlled-source example opens and solves|transistor switch example demonstrates|MOSFET switch example demonstrates|current-controlled sources example shows|stop terminates an active ngspice run/,
   fullyParallel: false,
   workers: 1,
   reporter: 'list',

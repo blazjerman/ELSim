@@ -1,5 +1,5 @@
 NMOS Level 1 educational switch
-VDD vdd 0 DC 5
+VDD vdd 0 DC 10
 VG gate 0 DC 5
 RLOAD vdd drain 1k
 M1 drain gate 0 0 ELSIM_NMOS
