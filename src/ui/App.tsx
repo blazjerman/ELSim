@@ -230,7 +230,7 @@ const CircuitPart = memo(function CircuitPart({ part, selected, focusable, onSel
 })
 
 function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange, sampleIndex, onSampleChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; sampleIndex: number | null; onSampleChange: (index: number | null) => void; measurements: MeasurementResult[] }) {
-  const shown = traces.filter((trace) => selectedIds.includes(trace.id))
+  const shown = useMemo(() => traces.filter((trace) => selectedIds.includes(trace.id)), [traces, selectedIds])
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const width = 760, height = 112, left = 42, right = 748, top = 8, bottom = 91
   const axis = shown[0]?.axis ?? traces[0]?.axis
@@ -249,7 +249,8 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
     if (min === max) { min -= 1; max += 1 }
     return [min, max] as [number, number]
   }
-  const voltageAxis = useValueWindow(rangeFor('V')), currentAxis = useValueWindow(rangeFor('A'))
+  const [voltageDomain, currentDomain] = useMemo(() => [rangeFor('V'), rangeFor('A')], [shown, minTime, maxTime])
+  const voltageAxis = useValueWindow(voltageDomain), currentAxis = useValueWindow(currentDomain)
   const voltageRange: [number, number] = [voltageAxis.range.min, voltageAxis.range.max]
   const currentRange: [number, number] = [currentAxis.range.min, currentAxis.range.max]
   const hasVoltage = shown.some((trace) => trace.unit === 'V'), hasCurrent = shown.some((trace) => trace.unit === 'A')
