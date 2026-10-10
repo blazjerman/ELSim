@@ -29,7 +29,7 @@ import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef, vali
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
 import { extremaIndices, valueRange } from '../engine/plot'
-import { engineResponseIssue, isEngineResponse, type MeasurementResult, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
+import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type MeasurementResult, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = 'all' | 'basics' | 'semiconductors' | 'controlled'
@@ -1680,6 +1680,18 @@ export default function App() {
         if (response.message) setNotice(response.message)
       } else if (response.type === 'result') {
         setCompatibilityDiagnostic(null)
+        if (response.result.analysis === 'tran' || response.result.analysis === 'ac' || response.result.analysis === 'dc') {
+          try {
+            response.result.traces = normalizeTraceAxes(response.result.traces)
+          } catch (error) {
+            setPlaybackRunning(false)
+            setRunState('error')
+            setNotice(error instanceof Error ? `The engine returned incompatible waveform axes: ${error.message}` : 'The engine returned incompatible waveform axes.')
+            worker.terminate()
+            if (activeWorkerRef.current === worker) activeWorkerRef.current = null
+            return
+          }
+        }
         setSimulationResult(response.result)
         const transientSamples = response.result.analysis === 'tran' ? response.result.traces[0]?.axis.length ?? 1 : 0
         setSampleIndex(response.result.analysis === 'tran' ? 0 : null)

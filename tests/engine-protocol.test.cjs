@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { engineResponseIssue, isEngineRequest, isEngineResponse, transferableTraceBuffers } = require(path.join(process.env.ELSIM_TEST_BUILD, 'engine/contract.js'))
+const { engineResponseIssue, isEngineRequest, isEngineResponse, normalizeTraceAxes, resampleTraceVector, transferableTraceBuffers } = require(path.join(process.env.ELSIM_TEST_BUILD, 'engine/contract.js'))
 
 const artifact = { text: '.tran 1u 1m', sourceMap: [], diagnostics: [] }
 const metadata = { runId: 'run-1', startedAt: '2026-10-10T12:00:00.000Z', engine: 'fixture', engineVersion: '1', projectVersion: 7, netlistHash: 'abc123', settings: { analysis: 'tran' } }
@@ -88,6 +88,24 @@ test('worker response validation accepts shared axes and still rejects non-finit
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-shared-axis', result }), true)
   sharedAxis[1] = Number.NaN
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-shared-axis', result }), false)
+})
+
+test('independent result axes align on their common range for a shared cursor', () => {
+  const voltage = { ...trace, axis: Float64Array.from([0, 0.5, 1]), values: Float64Array.from([0, 5, 10]) }
+  const current = { ...trace, id: 'i(r1)', label: 'I(R1)', unit: 'A', axis: Float64Array.from([0.25, 0.75, 1.25]), values: Float64Array.from([0, 10, 20]), imaginaryValues: Float64Array.from([0, 2, 4]) }
+  const normalized = normalizeTraceAxes([voltage, current])
+  assert.deepEqual([...normalized[0].axis], [0.5, 1])
+  assert.equal(normalized[0].axis, normalized[1].axis)
+  assert.deepEqual([...normalized[0].values], [5, 10])
+  assert.deepEqual([...normalized[1].values], [5, 15])
+  assert.deepEqual([...normalized[1].imaginaryValues], [1, 3])
+  assert.deepEqual([...resampleTraceVector([0, 1], [0, 10], [0.25, 0.75])], [2.5, 7.5])
+  assert.throws(() => normalizeTraceAxes([voltage, { ...current, axis: Float64Array.from([2, 3, 4]) }]), /do not share a common axis range/)
+})
+
+test('worker result validation rejects unordered waveform axes', () => {
+  const result = { metadata: completedMetadata, netlist: artifact.text, sourceMap: [], traces: [{ ...trace, axis: Float64Array.from([0, 2, 1]) }], diagnostics: [], analysis: 'tran', measurements: [] }
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-unordered-axis', result }), false)
 })
 
 test('published JSON schema describes delay measurements and seconds', () => {

@@ -126,6 +126,11 @@ function isFiniteVector(value: unknown, validatedVectors?: WeakSet<Float64Array>
   return true
 }
 
+function isOrderedAxis(value: ArrayLike<number>): boolean {
+  for (let index = 1; index < value.length; index += 1) if (value[index] <= value[index - 1]) return false
+  return true
+}
+
 function isCompletedMetadata(value: unknown): value is RunMetadata & { completedAt: string } {
   if (!isRecord(value)) return false
   return typeof value.runId === 'string' && value.runId.length > 0
@@ -141,7 +146,7 @@ function isCompletedMetadata(value: unknown): value is RunMetadata & { completed
 function isTrace(value: unknown, validatedVectors?: WeakSet<Float64Array>): value is Trace {
   if (!isRecord(value)) return false
   if (typeof value.id !== 'string' || !value.id || typeof value.label !== 'string' || typeof value.unit !== 'string' || typeof value.axisLabel !== 'string' || typeof value.axisUnit !== 'string') return false
-  if (!isFiniteVector(value.axis, validatedVectors) || !isFiniteVector(value.values, validatedVectors) || value.axis.length === 0 || value.axis.length !== value.values.length) return false
+  if (!isFiniteVector(value.axis, validatedVectors) || !isOrderedAxis(value.axis) || !isFiniteVector(value.values, validatedVectors) || value.axis.length === 0 || value.axis.length !== value.values.length) return false
   if (value.imaginaryValues !== undefined && (!isFiniteVector(value.imaginaryValues, validatedVectors) || value.imaginaryValues.length !== value.values.length)) return false
   if (value.baseId !== undefined && typeof value.baseId !== 'string') return false
   if (value.sweep !== undefined && (!isRecord(value.sweep) || typeof value.sweep.label !== 'string' || !Number.isInteger(value.sweep.index) || Number(value.sweep.index) < 0)) return false
@@ -187,6 +192,51 @@ function isParameterSweepRun(value: unknown): boolean {
     if (components.has(key)) return false
     components.add(key)
     return true
+  })
+}
+
+/** Sample a finite vector on a monotonic source axis at each target-axis point. */
+export function resampleTraceVector(sourceAxis: ArrayLike<number>, sourceValues: ArrayLike<number>, targetAxis: ArrayLike<number>): Float64Array {
+  if (sourceAxis.length !== sourceValues.length || sourceAxis.length === 0) throw new Error('Trace axis and value lengths must match and contain at least one sample.')
+  for (let index = 1; index < sourceAxis.length; index += 1) {
+    if (!Number.isFinite(sourceAxis[index]) || sourceAxis[index] <= sourceAxis[index - 1]) throw new Error('Trace axes must be finite and strictly ordered from lowest to highest.')
+  }
+  if (!Number.isFinite(sourceAxis[0])) throw new Error('Trace axes must contain only finite values.')
+  for (let index = 0; index < sourceValues.length; index += 1) if (!Number.isFinite(sourceValues[index])) throw new Error('Trace samples must be finite.')
+  const result = new Float64Array(targetAxis.length)
+  let lower = 0
+  for (let index = 0; index < targetAxis.length; index += 1) {
+    const point = targetAxis[index]
+    if (!Number.isFinite(point) || point < sourceAxis[0] || point > sourceAxis[sourceAxis.length - 1]) throw new Error('Target axis must stay within the source trace range.')
+    if (index > 0 && point <= targetAxis[index - 1]) throw new Error('Target axis must be strictly ordered from lowest to highest.')
+    while (lower + 1 < sourceAxis.length && sourceAxis[lower + 1] < point) lower += 1
+    if (point === sourceAxis[0] || sourceAxis.length === 1) result[index] = sourceValues[0]
+    else if (point === sourceAxis[sourceAxis.length - 1]) result[index] = sourceValues[sourceValues.length - 1]
+    else {
+      const upper = lower + 1
+      const fraction = (point - sourceAxis[lower]) / (sourceAxis[upper] - sourceAxis[lower])
+      result[index] = sourceValues[lower] + (sourceValues[upper] - sourceValues[lower]) * fraction
+    }
+  }
+  return result
+}
+
+/** Normalize independent solver axes to one shared cursor/scrubber axis. */
+export function normalizeTraceAxes<T extends { axis: Float64Array; values: Float64Array; imaginaryValues?: Float64Array }>(traces: T[]): T[] {
+  if (traces.length < 2) return traces
+  const first = Math.max(...traces.map((trace) => trace.axis[0]))
+  const last = Math.min(...traces.map((trace) => trace.axis[trace.axis.length - 1]))
+  const primaryAxis = traces[0].axis
+  const targetAxis = first === primaryAxis[0] && last === primaryAxis[primaryAxis.length - 1]
+    ? primaryAxis
+    : primaryAxis.filter((point) => point >= first && point <= last)
+  if (!targetAxis.length) throw new Error('Waveform traces do not share a common axis range.')
+  return traces.map((trace) => {
+    if (trace.axis === targetAxis) return trace
+    if (trace.axis.length === targetAxis.length && targetAxis.every((point, index) => trace.axis[index] === point)) return { ...trace, axis: targetAxis }
+    const values = resampleTraceVector(trace.axis, trace.values, targetAxis)
+    const imaginaryValues = trace.imaginaryValues ? resampleTraceVector(trace.axis, trace.imaginaryValues, targetAxis) : undefined
+    return { ...trace, axis: targetAxis, values, ...(imaginaryValues ? { imaginaryValues } : {}) }
   })
 }
 
