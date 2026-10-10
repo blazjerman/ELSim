@@ -3,6 +3,22 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect } from '@playwright/test'
 
+test('wire current animation respects the operating system reduced-motion preference', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  const schematic = page.locator('svg.schematic')
+  await expect(schematic).toBeVisible()
+  const animationName = await schematic.evaluate((svg) => {
+    const probe = document.createElementNS('http://www.w3.org/2000/svg', 'polyline')
+    probe.classList.add('wire-current-flow')
+    svg.append(probe)
+    return getComputedStyle(probe).animationName
+  })
+  expect(animationName).toBe('none')
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await expect.poll(() => schematic.evaluate((svg) => getComputedStyle(svg.querySelector('.wire-current-flow')!).animationName)).toBe('wire-current-flow')
+})
+
 test('first use: run the RC starter and inspect its solved waveform', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
