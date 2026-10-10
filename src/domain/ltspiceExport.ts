@@ -31,7 +31,8 @@ const genericPrefix: Partial<Record<PartKind, string>> = {
 function safeStem(value: string, fallback: string): string {
   const stem = value.trim().replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? ''
   const safe = stem.normalize('NFKD').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^[-_]+|[-_]+$/g, '').slice(0, 48)
-  return safe || fallback
+  const result = safe || fallback
+  return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(result) ? `_${result}` : result
 }
 
 function scalar(value: string, unit = ''): string | null {

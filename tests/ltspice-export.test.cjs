@@ -67,6 +67,20 @@ test('splits supported orthogonal wires at explicit junctions', async () => {
   assert.match(asc, /WIRE 800 500 800 600\nWIRE 800 600 800 700/)
 })
 
+test('sanitizes Windows device names in portable export paths', async () => {
+  const project = createStarterProject()
+  project.name = 'CON'
+  const content = '.MODEL DTEST D\n'
+  project.modelAssets = [{ id: 'reserved-model', filename: 'CON.lib', content, sha256: sha256(content), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'reserved-diode', kind: 'diode', ref: 'D1', value: 'Default diode', deviceModel: 'DTEST', x: 700, y: 500, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  assert.ok(output.files.some((file) => file.path === '_CON.asc'))
+  assert.ok(output.files.some((file) => file.path === 'models/_CON.lib'))
+  assert.ok(output.files.every((file) => !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])\./i.test(file.path.split('/').at(-1))))
+})
+
 test('exports nested sheets and generated block symbols, then reimports the topology', async () => {
   const project = createHierarchicalExampleProject()
   const exported = await exportLtspiceProject(project)
