@@ -435,7 +435,10 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
   if (sheet.id === project.rootSheetId) {
     for (const [assetId, path] of modelPaths) {
       const asset = project.modelAssets?.find((item) => item.id === assetId)
-      if (asset) addDirective(`.include "${path}"`)
+      if (asset) {
+        if (asset.selectedSections?.length) for (const section of asset.selectedSections) addDirective(`.lib "${path}" ${section}`)
+        else addDirective(`.include "${path}"`)
+      }
     }
     const connectivity = analyzeConnectivity({ ...project, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels })
     const existingLabelNames = new Set(sheet.netLabels.map((label) => label.name.toLowerCase()))
@@ -578,7 +581,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
     generatedSymbols.set(symbol.name, symbol.content)
   }
   const modelParts = sheets.flatMap((sheet) => sheet.parts)
-  const modelAnalysis = analyzeModelDependencies((project.modelAssets ?? []).map(({ id, filename, content }) => ({ id, filename, content })))
+  const modelAnalysis = analyzeModelDependencies((project.modelAssets ?? []).map(({ id, filename, content, selectedSections }) => ({ id, filename, content, selectedSections })))
   const requiredAssets = requiredModelAssetIds(modelAnalysis, modelParts)
   const modelPaths = new Map<string, string>()
   const usedModelPaths = new Set<string>()

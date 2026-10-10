@@ -120,9 +120,9 @@ test('v3 migration and active child-sheet scene round-trip', () => {
 
 test('user model libraries round-trip inside project data with digest and license provenance', async () => {
   const project = createStarterProject()
-  const content = '.SUBCKT user_amp IN OUT VCC VEE\nR1 IN OUT 1k\n.ENDS user_amp\n'
+  const content = '.LIB typical\n.SUBCKT user_amp IN OUT VCC VEE\nR1 IN OUT 1k\n.ENDS user_amp\n.ENDL typical\n'
   const digest = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(content)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-  project.modelAssets = [{ id: 'model-1', filename: 'user-amp.lib', sha256: digest, content, licenseStatus: 'unknown', importedAt: new Date().toISOString(), sourceUrl: 'https://example.test/user-amp.lib', licenseReference: 'Supplier terms section 4', rightsNotes: 'Received from the project owner; redistribution not confirmed.' }]
+  project.modelAssets = [{ id: 'model-1', filename: 'user-amp.lib', sha256: digest, content, selectedSections: ['typical'], licenseStatus: 'unknown', importedAt: new Date().toISOString(), sourceUrl: 'https://example.test/user-amp.lib', licenseReference: 'Supplier terms section 4', rightsNotes: 'Received from the project owner; redistribution not confirmed.' }]
   project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'user_amp', modelName: 'user_amp', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], x: 700, y: 400, rotation: 0 })
   const restored = validateProject(readProjectArchive(createProjectArchive(project)))
   project.parts.at(-1).componentDefinitionId = `user.${digest}.user-amp`
@@ -134,6 +134,7 @@ test('user model libraries round-trip inside project data with digest and licens
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], filename: '../user-amp.lib' }] }), /malformed imported model library/)
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], rightsNotes: 'x'.repeat(1001) }] }), /malformed imported model library/)
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], licenseReference: 42 }] }), /malformed imported model library/)
+  assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], selectedSections: ['missing'] }] }), /section names that exist/)
 })
 
 test('.MODEL-only libraries and device model assignments round-trip in project archives', async () => {

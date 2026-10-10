@@ -47,6 +47,55 @@ function logicalLines(source: string): LogicalLine[] {
   return result
 }
 
+function inspectLibrarySections(source: string): { sections: string[]; lines: { line: LogicalLine; section: string | null }[] } {
+  const sourceLines = logicalLines(source)
+  if (sourceLines.length > MAX_LIBRARY_LINES) throw new Error('Model libraries are limited to 100,000 lines.')
+  const sections: string[] = []
+  const lines: { line: LogicalLine; section: string | null }[] = []
+  let activeSection: string | null = null
+  let activeSubcircuit = false
+  for (const line of sourceLines) {
+    const text = withoutInlineComment(line.text)
+    if (!text || text.startsWith('*')) { lines.push({ line, section: activeSection }); continue }
+    const tokens = text.split(/\s+/), directive = tokens[0].toLowerCase()
+    if (directive === '.lib') {
+      const section = tokens[1]
+      if (activeSubcircuit) throw new Error(`Line ${line.start}: .LIB directives are not allowed inside a .SUBCKT.`)
+      if (activeSection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
+      if (tokens.length !== 2 || !section || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) throw new Error(`Line ${line.start}: external .LIB file references are not allowed inside an imported library.`)
+      if (sections.some((known) => known.toLowerCase() === section.toLowerCase())) throw new Error(`Line ${line.start}: .LIB section ${section} is declared more than once.`)
+      sections.push(section)
+      activeSection = section
+      continue
+    }
+    if (directive === '.endl') {
+      const closingSection = tokens[1]
+      if (activeSubcircuit) throw new Error(`Line ${line.start}: .ENDL directives are not allowed inside a .SUBCKT.`)
+      if (!activeSection) throw new Error(`Line ${line.start}: .ENDL has no matching .LIB section.`)
+      if (closingSection && closingSection.toLowerCase() !== activeSection.toLowerCase()) throw new Error(`Line ${line.start}: .ENDL ${closingSection} does not match .LIB ${activeSection}.`)
+      activeSection = null
+      continue
+    }
+    if (directive === '.subckt') {
+      if (activeSubcircuit) throw new Error(`Line ${line.start}: nested .SUBCKT definitions are not supported.`)
+      activeSubcircuit = true
+    } else if (directive === '.ends') {
+      if (!activeSubcircuit) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
+      activeSubcircuit = false
+    }
+    lines.push({ line, section: activeSection })
+  }
+  if (activeSection) throw new Error(`.LIB ${activeSection} has no matching .ENDL.`)
+  return { sections, lines }
+}
+
+/** List safe, named .LIB sections without interpreting model contents. */
+export function listModelLibrarySections(source: string): string[] {
+  if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
+  if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
+  return inspectLibrarySections(source).sections
+}
+
 function withoutInlineComment(line: string): string {
   let quote = ''
   for (let index = 0; index < line.length; index += 1) {
@@ -194,8 +243,12 @@ export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[
 }
 
 /** Report known LTspice schematic directives that ELSim does not apply or cannot resolve. */
-export function analyzeLtspiceSchematicCompatibility(source: string, availableLibraryFilenames: string[] = []): SchematicCompatibilityWarning[] {
-  const knownLibraries = new Set(availableLibraryFilenames.map((filename) => filename.replace(/\\/g, '/').split('/').pop()?.toLowerCase()).filter((name): name is string => Boolean(name)))
+export function analyzeLtspiceSchematicCompatibility(source: string, availableLibraryFilenames: (string | { filename: string; selectedSections?: string[]; sections?: string[] })[] = []): SchematicCompatibilityWarning[] {
+  const knownLibraries = new Map(availableLibraryFilenames.map((asset) => {
+    const filename = typeof asset === 'string' ? asset : asset.filename
+    const name = filename.replace(/\\/g, '/').split('/').pop()?.toLowerCase()
+    return [name, typeof asset === 'string' ? null : new Set((asset.selectedSections ?? asset.sections ?? []).map((section) => section.toLowerCase()))] as const
+  }).filter(([name]) => Boolean(name)))
   const warnings: SchematicCompatibilityWarning[] = []
   const physicalLines = source.replace(/^\uFEFF/, '').split(/\r?\n/)
   for (let index = 0; index < physicalLines.length; index += 1) {
@@ -207,9 +260,15 @@ export function analyzeLtspiceSchematicCompatibility(source: string, availableLi
     const command = directive.match(/^\.([A-Za-z][A-Za-z0-9_]*)/)?.[1]?.toLowerCase()
     if (!command) continue
     if (['include', 'inc', 'lib'].includes(command)) {
-      const argument = directive.slice(command.length + 1).trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/)?.slice(1).find(Boolean)
+      const argumentsMatch = directive.slice(command.length + 1).trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))(?:\s+([A-Za-z_][A-Za-z0-9_-]*))?$/)
+      const argument = argumentsMatch?.[1] ?? argumentsMatch?.[2] ?? argumentsMatch?.[3]
+      const requestedSection = command === 'lib' ? argumentsMatch?.[4] : undefined
       const filename = argument?.replace(/\\/g, '/').split('/').pop()?.toLowerCase()
-      if (filename && knownLibraries.has(filename)) continue
+      const sections = filename ? knownLibraries.get(filename) : undefined
+      if (filename && knownLibraries.has(filename)) {
+        if (requestedSection && sections && !sections.has(requestedSection.toLowerCase())) warnings.push({ sourceLine: index + 1, feature: 'Unresolved .lib model section', excerpt: directive.slice(0, 160), impact: `The file ${argument} is imported, but its selected sections do not include “${requestedSection}”.`, suggestion: 'Select this section when importing the referenced library. The original directive remains preserved.' })
+        else continue
+      }
       warnings.push({ sourceLine: index + 1, feature: `Unresolved .${command} model dependency`, excerpt: directive.slice(0, 160), impact: 'This external model file was not selected with the schematic. ELSim keeps the original directive for reference, but the missing model may prevent simulation or cause an educational fallback model to be used.', suggestion: 'Import the referenced plain-text model library with Import LTspice, and check that its filename matches the directive.' })
       continue
     }
@@ -243,16 +302,19 @@ export function needsLtspiceFullDeckTranslation(source: string): boolean {
 }
 
 /** Parse self-contained SPICE model libraries without executing file directives. */
-export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary {
+export function parseSubcircuitLibrary(source: string, selectedSections?: string[]): ParsedSubcircuitLibrary {
   if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
   if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
-  const lines = logicalLines(source)
-  if (lines.length > MAX_LIBRARY_LINES) throw new Error('Model libraries are limited to 100,000 lines.')
-  const sectionStarts = lines.filter(({ text }) => /^\s*\.lib\s+[A-Za-z_][A-Za-z0-9_-]*\s*$/i.test(withoutInlineComment(text)))
-  if (lines.some(({ text }) => /^\s*\.lib\b/i.test(withoutInlineComment(text)) && !/^\s*\.lib\s+[A-Za-z_][A-Za-z0-9_-]*\s*$/i.test(withoutInlineComment(text)))) {
-    throw new Error('External .LIB file references are not allowed inside an imported library. Import each plain-text dependency separately.')
-  }
-  if (sectionStarts.length > 1) throw new Error('Model libraries with multiple .LIB sections need section selection and cannot be imported yet; provide a single-section library copy.')
+  const inspected = inspectLibrarySections(source)
+  const logical = logicalLines(source)
+  if (logical.length > MAX_LIBRARY_LINES) throw new Error('Model libraries are limited to 100,000 lines.')
+  let selected = selectedSections
+  if (inspected.sections.length > 1 && !selected) throw new Error('This model library contains multiple .LIB sections. Select the section or sections referenced by your schematic before importing it.')
+  if (inspected.sections.length === 1 && !selected) selected = inspected.sections
+  if (inspected.sections.length === 0 && selected?.length) throw new Error('This model library has no .LIB sections to select.')
+  if (selected && (!selected.length || selected.length > inspected.sections.length || new Set(selected.map((section) => section.toLowerCase())).size !== selected.length || selected.some((section) => !inspected.sections.some((available) => available.toLowerCase() === section.toLowerCase())))) throw new Error('Choose one or more section names that exist in this model library.')
+  const selectedNames = new Set(selected?.map((section) => section.toLowerCase()) ?? [])
+  const lines = inspected.sections.length ? inspected.lines.filter(({ section }) => section === null || section !== null && selectedNames.has(section.toLowerCase())).map(({ line }) => line) : logical
 
   const subcircuits: SubcircuitDefinition[] = []
   const models: SpiceModelDefinition[] = []
@@ -358,8 +420,8 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
 }
 
 /** Resolve references between imported libraries and report missing cards and recursive .SUBCKT chains. */
-export function analyzeModelDependencies(assets: { id: string; filename: string; content: string }[]): ModelDependencyAnalysis {
-  const parsedAssets = assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) }))
+export function analyzeModelDependencies(assets: { id: string; filename: string; content: string; selectedSections?: string[] }[]): ModelDependencyAnalysis {
+  const parsedAssets = assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections) }))
   const subcircuits = new Map<string, string>()
   const subcircuitAssets = new Map<string, string>()
   const deviceModelAssets = new Map<string, string>()
@@ -432,8 +494,8 @@ export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: 
 
 /** Reject a model-library replacement only when it newly breaks a dependency used by placed parts. */
 export function validateModelLibraryReplacement(
-  previousAssets: { id: string; filename: string; content: string }[],
-  nextAssets: { id: string; filename: string; content: string }[],
+  previousAssets: { id: string; filename: string; content: string; selectedSections?: string[] }[],
+  nextAssets: { id: string; filename: string; content: string; selectedSections?: string[] }[],
   parts: { kind: string; modelName?: string; deviceModel?: string }[],
 ): void {
   const previous = analyzeModelDependencies(previousAssets)

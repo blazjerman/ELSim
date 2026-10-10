@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, decodeModelLibrary, isSafeSubcircuitParameterValue, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('accepts only bounded numeric SPICE parameter arithmetic without executable syntax', () => {
   for (const value of ['1k', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}']) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
@@ -206,11 +206,38 @@ test('imports and flattens an unambiguous single-section model library', () => {
   assert.doesNotMatch(parsed.modelText, /\.LIB|\.ENDL/i)
 })
 
+test('selects one or more named sections while excluding unselected model definitions', () => {
+  const library = [
+    '.MODEL DCOMMON D(IS=1n)',
+    '.LIB typical', '.MODEL D_TYP D(IS=2n)',
+    '.ENDL typical',
+    '.LIB power', '.MODEL D_PWR D(IS=3n)',
+    '.ENDL power',
+  ].join('\n')
+  assert.deepEqual(listModelLibrarySections(library), ['typical', 'power'])
+  assert.throws(() => parseSubcircuitLibrary(library), /Select the section or sections referenced/)
+  const typical = parseSubcircuitLibrary(library, ['typical'])
+  assert.deepEqual(typical.models.map(({ name }) => name), ['DCOMMON', 'D_TYP'])
+  assert.doesNotMatch(typical.modelText, /D_PWR/)
+  const both = parseSubcircuitLibrary(library, ['typical', 'power'])
+  assert.deepEqual(both.models.map(({ name }) => name), ['DCOMMON', 'D_TYP', 'D_PWR'])
+  assert.throws(() => parseSubcircuitLibrary(library, ['missing']), /section names that exist/)
+})
+
+test('reports a loaded library when its requested .LIB section is not selected', () => {
+  const schematic = 'TEXT 0 0 Left 2 !.lib "known.lib" typical'
+  const library = { filename: 'known.lib', selectedSections: ['slow'], sections: ['typical', 'slow'] }
+  const warnings = analyzeLtspiceSchematicCompatibility(schematic, [library])
+  assert.equal(warnings[0].feature, 'Unresolved .lib model section')
+  assert.match(warnings[0].suggestion, /Select this section/)
+  assert.deepEqual(analyzeLtspiceSchematicCompatibility(schematic, [{ ...library, selectedSections: ['typical'] }]), [])
+})
+
 test('rejects ambiguous or malformed model-library section wrappers explicitly', () => {
-  assert.throws(() => parseSubcircuitLibrary('.LIB fast\n.MODEL D1 D\n.ENDL fast\n.LIB slow\n.MODEL D2 D\n.ENDL slow'), /multiple \.LIB sections.*section selection/i)
+  assert.throws(() => parseSubcircuitLibrary('.LIB fast\n.MODEL D1 D\n.ENDL fast\n.LIB slow\n.MODEL D2 D\n.ENDL slow'), /multiple \.LIB sections.*Select the section/i)
   assert.throws(() => parseSubcircuitLibrary('.LIB typical\n.MODEL D1 D\n.ENDL other'), /does not match/)
   assert.throws(() => parseSubcircuitLibrary('.MODEL D1 D\n.ENDL typical'), /no matching \.LIB/)
-  assert.throws(() => parseSubcircuitLibrary('.LIB models.lib typical'), /External \.LIB file references are not allowed/)
+  assert.throws(() => parseSubcircuitLibrary('.LIB models.lib typical'), /external \.LIB file references are not allowed/i)
 })
 
 test('rejects executable, external-file, and whole-circuit directives', () => {

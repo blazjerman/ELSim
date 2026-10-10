@@ -320,7 +320,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const transistorModels: { part: Part; name: string }[] = []
   const jfetModels: { part: Part; name: string }[] = []
   const mosfetModels: { part: Part; name: string }[] = []
-  const importedDeviceModels = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).models)
+  const importedDeviceModels = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models)
   const usedReferences = new Set(project.parts.map((part) => part.ref.toLowerCase()))
   const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.map((label) => label.name)].map((name) => name.toLowerCase()))
 
@@ -585,7 +585,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     else if (part.kind === 'subcircuit') {
       const generatedDefinitions = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary).subcircuits : []
-      const definition = [...(project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits), ...generatedDefinitions].find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
+      const definition = [...(project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).subcircuits), ...generatedDefinitions].find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
       if (!definition || !part.modelPins || definition.pins.length !== part.modelPins.length || definition.pins.some((pin, index) => pin.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) {
         const message = `${part.ref} refers to a missing or pin-incompatible imported subcircuit ${part.modelName ?? ''}.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -650,7 +650,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   }
 
   for (const asset of project.modelAssets ?? []) {
-    const modelRecords = parseSubcircuitLibrary(asset.content).modelRecords
+    const modelRecords = parseSubcircuitLibrary(asset.content, asset.selectedSections).modelRecords
     for (const record of modelRecords) if (record.text.trim()) append(record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
   }
   if (includeHierarchyProbes) for (const directive of hierarchicalSaveVectors(project)) append(directive, 'hierarchy:probe', 'generated')

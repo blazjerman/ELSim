@@ -41,7 +41,7 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (sweep.parameter) {
-    const model = project.modelAssets?.flatMap((asset) => parseSubcircuitLibrary(asset.content).models)
+    const model = project.modelAssets?.flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models)
       .find((candidate) => candidate.name.toLowerCase() === part?.deviceModel?.toLowerCase())
     const parameter = model?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
     if (!part || !parameter) throw new Error(`${sweep.component}.${sweep.parameter} is not a numeric parameter on its selected imported device model.`)

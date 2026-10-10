@@ -65,7 +65,7 @@ export type ParameterSweep = { component: string; parameter?: string; sourcePara
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
 export type AssetProvenance = { sourceUrl?: string; licenseReference?: string; rightsNotes?: string }
-export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
+export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; selectedSections?: string[]; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
 export type SymbolAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
 export type LtspiceSchematicSource = { format: 'ltspice-asc'; filename: string; originalText: string }
 export type ProjectSheet = {
@@ -307,7 +307,8 @@ export function validateProject(input: unknown): Project {
       if (size > 4 * 1024 * 1024) throw new Error(`${candidate.filename} exceeds the 4 MiB model library limit.`)
       totalBytes += size
       if (totalBytes > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
-      const parsed = parseSubcircuitLibrary(candidate.content)
+      if (candidate.selectedSections !== undefined && (!Array.isArray(candidate.selectedSections) || candidate.selectedSections.length > 32 || candidate.selectedSections.some((section) => typeof section !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) || new Set(candidate.selectedSections.map((section) => section.toLowerCase())).size !== candidate.selectedSections.length)) throw new Error(`${candidate.filename} has invalid selected .LIB sections.`)
+      const parsed = parseSubcircuitLibrary(candidate.content, candidate.selectedSections)
       for (const subcircuit of parsed.subcircuits) {
         const key = subcircuit.name.toLowerCase()
         if (modelNames.has(key)) throw new Error(`Imported subcircuit ${subcircuit.name} is declared more than once in this project.`)
@@ -351,14 +352,14 @@ export function validateProject(input: unknown): Project {
       if (totalBytes > 50 * 1024 * 1024) throw new Error('Original LTspice schematic sources exceed the 50 MiB project limit.')
     }
   }
-  const importedDefinitions = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits) ?? []
-  const importedDeviceModels = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).models) ?? []
+  const importedDefinitions = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).subcircuits) ?? []
+  const importedDeviceModels = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models) ?? []
   for (const part of data.parts as Part[]) {
     const expectedDefinitionId = part.kind !== 'subcircuit' || part.sheetId
       ? componentDefinitionByKind[part.kind].id
       : (() => {
           const asset = (data.modelAssets as ModelLibraryAsset[] | undefined)?.find((candidate) =>
-            parseSubcircuitLibrary(candidate.content).subcircuits.some((model) => model.name.toLowerCase() === part.modelName?.toLowerCase()),
+            parseSubcircuitLibrary(candidate.content, candidate.selectedSections).subcircuits.some((model) => model.name.toLowerCase() === part.modelName?.toLowerCase()),
           )
           const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
           return asset && definition ? importedSubcircuitComponentDefinition(definition, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256 }).id : undefined
@@ -578,7 +579,7 @@ export function validateProject(input: unknown): Project {
         ? componentDefinitionByKind[part.kind].id
         : (() => {
             const asset = (project.modelAssets ?? []).find((candidate) =>
-              parseSubcircuitLibrary(candidate.content).subcircuits.some((model) => model.name.toLowerCase() === part.modelName?.toLowerCase()),
+              parseSubcircuitLibrary(candidate.content, candidate.selectedSections).subcircuits.some((model) => model.name.toLowerCase() === part.modelName?.toLowerCase()),
             )
             const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
             return asset && definition ? importedSubcircuitComponentDefinition(definition, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256 }).id : undefined

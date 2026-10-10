@@ -579,6 +579,15 @@
           "type": "string",
           "maxLength": 4194304
         },
+        "selectedSections": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
+          }
+        },
         "licenseStatus": {
           "const": "unknown"
         },

@@ -821,6 +821,46 @@ test('show schematic compatibility diagnostics for unresolved LTspice directives
   await expect(diagnostics).not.toContainText('Unresolved .include model dependency')
 })
 
+test('selects the .LIB section requested by an imported LTspice schematic', async ({ page }) => {
+  await page.goto('/')
+  const source = ['Version 4', 'TEXT 0 0 Left 2 !.lib "models.lib" slow', 'SYMBOL diode 0 0 R0', 'SYMATTR InstName D1', 'SYMATTR Value D_SLOW'].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles({ name: 'sectioned.asc', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  const diagnostics = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
+  await expect(diagnostics).toContainText('Unresolved .lib model dependency')
+  await diagnostics.getByRole('button', { name: 'Select referenced model library' }).click()
+  const library = [
+    '.LIB fast', '.MODEL D_FAST D(IS=1n)', '.ENDL fast',
+    '.LIB slow', '.MODEL D_SLOW D(IS=2n)', '.ENDL slow',
+  ].join('\n')
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'models.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from models\.lib \(slow\)/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets[0].selectedSections)).toEqual(['slow'])
+  await expect(page.getByText('D_SLOW', { exact: true })).toBeVisible()
+  await expect(diagnostics).toHaveCount(0)
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  const netlist = page.locator('.netlist-panel pre')
+  await expect(netlist).toContainText('.MODEL D_SLOW')
+  await expect(netlist).not.toContainText('D_FAST')
+})
+
+test('lets users choose sections when importing a library without a schematic reference', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const library = ['.LIB typical', '.MODEL D_TYP D(IS=1n)', '.ENDL typical', '.LIB power', '.MODEL D_PWR D(IS=2n)', '.ENDL power'].join('\n')
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'choices.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
+  const dialog = page.getByRole('dialog', { name: 'Choose model sections' })
+  await expect(dialog.getByRole('checkbox', { name: 'Include section typical' })).not.toBeChecked()
+  await expect(dialog.getByRole('button', { name: 'Import selected sections' })).toBeDisabled()
+  await dialog.getByRole('checkbox', { name: 'Include section power' }).check()
+  await dialog.getByRole('button', { name: 'Import selected sections' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from choices\.lib \(power\)/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets[0].selectedSections)).toEqual(['power'])
+  await expect(page.getByText('D_PWR', { exact: true })).toBeVisible()
+  await expect(page.getByText('D_TYP', { exact: true })).toHaveCount(0)
+})
+
 test('junction tool toggles a crossing connection in the schematic', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
