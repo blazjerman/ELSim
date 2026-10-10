@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "ELSim Circuit Workbench",
+  "short_name": "ELSim",
+  "description": "Design and simulate circuits in your browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101412",
+  "theme_color": "#101412",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
