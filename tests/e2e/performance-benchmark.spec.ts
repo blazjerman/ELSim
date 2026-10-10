@@ -405,6 +405,7 @@ test('record large-project editor render and selection input-to-frame timings', 
   const offscreenPart = page.locator('.circuit-part[data-part-id="bench-part-5000"]')
   await expect(offscreenPart).toHaveAttribute('data-visual-detail', 'compact')
   await expect(offscreenPart).toHaveAttribute('aria-label', 'R5000, Resistor, 1k')
+  await expect(offscreenPart.locator('title')).toHaveCount(0)
   await offscreenPart.focus()
   await offscreenPart.press('Enter')
   await expect(offscreenPart).toHaveClass(/selected/)

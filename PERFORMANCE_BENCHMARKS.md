@@ -187,6 +187,15 @@ The latest label-rendering change replaces each label's separate transparent rec
 
 These values are local single-run measurements from the same large-project benchmark and host, not release budgets. The primary gain is a smaller SVG and faster initial editor load; selection update time changes little because the remaining cost is elsewhere in the schematic.
 
+The 2026-10-11 repeat run found a duplicate accessible-name `<title>` inside compact offscreen component controls: each control already exposes the same text through `aria-label`. Removing that duplicate retained the focusable named control and hit target and reduced the 5,000-part DOM by 4,928 SVG elements. Timing changes stayed within the run-to-run noise. This is a same-session before/after run, not a controlled release benchmark.
+
+| Browser | Parts | Editor ready (ms) | Selection median / p95 (ms) | SVG elements before / after |
+| --- | ---: | ---: | ---: | ---: |
+| Chromium | 5,000 | 2,068.9 / 2,020.1 | 142.3 / 151.6 → 133.0 / 147.1 | 35,370 / 30,442 |
+| Firefox | 5,000 | 2,699.3 / 2,645.1 | 15.0 / 18.0 → 16.0 / 22.0 | 35,370 / 30,442 |
+
+The Chromium selection result varied between 133.0 and 147.1 ms after the change, so this is not evidence of a selection-speed improvement; it still exceeds a 16 ms frame. Larger gains will require profiling and restructuring the remaining editor update/render path rather than removing more accessible labels.
+
 ### Browser waveform transport check
 
 The worker now shares one parsed axis across all traces and transfers unique axis/value buffers to the UI, avoiding per-trace axis copies and a structured-clone copy of result vectors. The UI validates shared typed vectors once per response. A Playwright `MessageChannel` check used six 100,000-sample traces (5.6 MB total including one shared axis); both clone and transfer preserved values and shared-axis identity, and transfer detached the sender buffers as expected.

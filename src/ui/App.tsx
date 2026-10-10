@@ -333,7 +333,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     {part.kind === 'ground' && <><line x1="0" y1="-22" x2="0" y2="0" {...common}/><line x1="-18" y1="0" x2="18" y2="0" {...common}/><line x1="-12" y1="7" x2="12" y2="7" {...common}/><line x1="-6" y1="14" x2="6" y2="14" {...common}/></>}
     </g>
     <text className="part-ref" x="0" y={part.kind === 'subcircuit' ? -customHeight / 2 - 9 : part.kind === 'ground' ? 34 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp','njfet','pjfet','nmos','pmos'].includes(part.kind) ? -68 : -29}>{part.kind === 'subcircuit' ? `${part.ref} · ${part.value || part.modelName}` : part.ref}</text>
-    {part.value && part.kind !== 'subcircuit' && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp','njfet','pjfet','nmos','pmos'].includes(part.kind) ? 76 : 43}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.kind === 'behavioral' ? `${part.behavioralOutput === 'current' ? 'I' : 'V'}=f(...)` : part.value}</text>}</> : <title>{accessibilityLabel}</title>}
+    {part.value && part.kind !== 'subcircuit' && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp','njfet','pjfet','nmos','pmos'].includes(part.kind) ? 76 : 43}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.kind === 'behavioral' ? `${part.behavioralOutput === 'current' ? 'I' : 'V'}=f(...)` : part.value}</text>}</> : null}
   </g>
 })
 
