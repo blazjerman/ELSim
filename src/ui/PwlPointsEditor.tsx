@@ -1,11 +1,13 @@
 import type { CurrentSourcePwlPoint, SourcePwlPoint } from '../domain/project'
 import { validateSourcePwlPoints } from '../domain/sourcePwl'
 
-export default function PwlPointsEditor({ points, onChange, quantity = 'voltage' }: { points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined; onChange: (points: (SourcePwlPoint | CurrentSourcePwlPoint)[]) => void; quantity?: 'voltage' | 'current' }) {
+export default function PwlPointsEditor({ points, onChange, partId, validationMessage, quantity = 'voltage' }: { points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined; onChange: (points: (SourcePwlPoint | CurrentSourcePwlPoint)[]) => void; partId: string; validationMessage?: string; quantity?: 'voltage' | 'current' }) {
   const valueKey = quantity === 'voltage' ? 'voltage' : 'current'
   const rows = (points ?? [{ time: '0', [valueKey]: '0' }, { time: '10m', [valueKey]: quantity === 'voltage' ? '5' : '5m' }]) as (SourcePwlPoint | CurrentSourcePwlPoint)[]
   const errors = validateSourcePwlPoints(rows, quantity)
   const pointValue = (point: SourcePwlPoint | CurrentSourcePwlPoint) => 'voltage' in point ? point.voltage : point.current
+  const fieldPrefix = quantity === 'voltage' ? 'pwl' : 'currentPwl'
+  const countErrorId = `pwl-point-count-error-${partId}`
   const updateRows = (next: { time: string; value: string }[]) => onChange(next.map(({ time, value }) => quantity === 'voltage' ? { time, voltage: value } : { time, current: value }))
   const addPoint = () => {
     const lastTime = rows.at(-1)?.time ?? '0'
@@ -17,11 +19,12 @@ export default function PwlPointsEditor({ points, onChange, quantity = 'voltage'
   }
   return <div className="pwl-points-editor">
     <div className="pwl-point-heading"><span>Time (s)</span><span>{quantity === 'voltage' ? 'Voltage (V)' : 'Current (A)'}</span><span className="sr-only">Actions</span></div>
+    {validationMessage && <div className="field-error" id={countErrorId} role="alert">{validationMessage}</div>}
     {rows.map((point, index) => <div className="pwl-point-row" key={index}>
-      <label><span className="sr-only">PWL point {index + 1} time</span><input aria-label={`PWL point ${index + 1} time`} aria-invalid={Boolean(errors?.[index * 2])} aria-describedby={errors?.[index * 2] ? `pwl-point-${index + 1}-time-error` : undefined} value={point.time} onChange={(event) => onChange(rows.map((item, itemIndex) => itemIndex === index ? { ...item, time: event.target.value } : item))}/>{errors?.[index * 2] && <span className="field-error" id={`pwl-point-${index + 1}-time-error`}>{errors[index * 2]}</span>}</label>
-      <label><span className="sr-only">PWL point {index + 1} {quantity}</span><input aria-label={`PWL point ${index + 1} ${quantity}`} aria-invalid={Boolean(errors?.[index * 2 + 1])} aria-describedby={errors?.[index * 2 + 1] ? `pwl-point-${index + 1}-value-error` : undefined} value={pointValue(point)} onChange={(event) => updateRows(rows.map((item, itemIndex) => ({ time: item.time, value: itemIndex === index ? event.target.value : pointValue(item) })))}/>{errors?.[index * 2 + 1] && <span className="field-error" id={`pwl-point-${index + 1}-value-error`}>{errors[index * 2 + 1]}</span>}</label>
+      <label><span className="sr-only">PWL point {index + 1} time</span><input data-part-setting={`${partId}:${fieldPrefix}.${index}.time`} aria-label={`PWL point ${index + 1} time`} aria-invalid={Boolean(errors?.[index * 2])} aria-describedby={errors?.[index * 2] ? `pwl-point-${partId}-${index + 1}-time-error` : undefined} value={point.time} onChange={(event) => onChange(rows.map((item, itemIndex) => itemIndex === index ? { ...item, time: event.target.value } : item))}/>{errors?.[index * 2] && <span className="field-error" id={`pwl-point-${partId}-${index + 1}-time-error`} role="alert">{errors[index * 2]}</span>}</label>
+      <label><span className="sr-only">PWL point {index + 1} {quantity}</span><input data-part-setting={`${partId}:${fieldPrefix}.${index}.${quantity}`} aria-label={`PWL point ${index + 1} ${quantity}`} aria-invalid={Boolean(errors?.[index * 2 + 1])} aria-describedby={errors?.[index * 2 + 1] ? `pwl-point-${partId}-${index + 1}-value-error` : undefined} value={pointValue(point)} onChange={(event) => updateRows(rows.map((item, itemIndex) => ({ time: item.time, value: itemIndex === index ? event.target.value : pointValue(item) })))}/>{errors?.[index * 2 + 1] && <span className="field-error" id={`pwl-point-${partId}-${index + 1}-value-error`} role="alert">{errors[index * 2 + 1]}</span>}</label>
       <button type="button" aria-label={`Remove PWL point ${index + 1}`} disabled={rows.length <= 2} onClick={() => onChange(rows.filter((_, itemIndex) => itemIndex !== index))}>×</button>
     </div>)}
-    <button type="button" className="add-pwl-point" disabled={rows.length >= 32} onClick={addPoint}>+ Add point</button>
+    <button type="button" className="add-pwl-point" data-part-setting={`${partId}:${fieldPrefix}.points`} aria-invalid={Boolean(validationMessage)} aria-describedby={validationMessage ? countErrorId : undefined} disabled={rows.length >= 32} onClick={addPoint}>+ Add point</button>
   </div>
 }

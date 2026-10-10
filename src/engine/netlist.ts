@@ -2,6 +2,7 @@ import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type PartKind, type Project } from '../domain/project'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
+import { validateSourcePwlPoints } from '../domain/sourcePwl'
 import type { NetlistArtifact, NetlistSource } from './contract'
 
 export { componentMagnitude } from '../domain/componentValue'
@@ -69,12 +70,12 @@ function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage
   return Number.isFinite(result) ? result : null
 }
 
-export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period'
-export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string }
+export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period'
+export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
   const errors: AnalysisSettingError[] = []
-  const add = (field: AnalysisSettingField, message: string, sourceId?: string) => errors.push({ field, message, ...(sourceId ? { sourceId } : {}) })
+  const add = (field: AnalysisSettingField, message: string, sourceId?: string, settingPath?: string) => errors.push({ field, message, ...(sourceId ? { sourceId } : {}), ...(settingPath ? { settingPath } : {}) })
   if (project.simulation.analysis === 'tran') {
     const stop = spiceMagnitude(project.simulation.stopTime, 'time')
     const step = spiceMagnitude(project.simulation.maxStep, 'time')
@@ -89,6 +90,23 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
         const magnitude = spiceTimeMagnitude(pulse[key])
         const invalid = magnitude === null || magnitude < 0 || (key === 'period' && magnitude <= 0)
         if (invalid) add(`pulse.${key}`, `${part.ref} ${key} must be a valid ${key === 'period' ? 'positive' : 'nonnegative'} time value.`, part.id)
+      }
+    }
+    for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'pwl')) {
+      const quantity = part.kind === 'source' ? 'voltage' : 'current'
+      const points = part.kind === 'source' ? part.pwl : part.currentPwl
+      if (!points || points.length < 2 || points.length > 32) {
+        const settingPath = points && points.length > 32 ? `${part.kind === 'source' ? 'pwl' : 'currentPwl'}.0.time` : `${part.kind === 'source' ? 'pwl' : 'currentPwl'}.points`
+        add('pwlPoints', `${part.ref} PWL source needs between 2 and 32 points.`, part.id, settingPath)
+        continue
+      }
+      const pointErrors = validateSourcePwlPoints(points, quantity)
+      const errorIndex = pointErrors?.findIndex((error) => error !== null) ?? -1
+      if (errorIndex >= 0) {
+        const pointIndex = Math.floor(errorIndex / 2)
+        const valueField = errorIndex % 2 === 1
+        const fieldName = part.kind === 'source' ? 'pwl' : 'currentPwl'
+        add('pwlPoints', `${part.ref} ${pointErrors![errorIndex]}`, part.id, `${fieldName}.${pointIndex}.${valueField ? quantity : 'time'}`)
       }
     }
   } else if (project.simulation.analysis === 'ac') {

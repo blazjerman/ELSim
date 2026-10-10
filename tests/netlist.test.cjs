@@ -59,6 +59,16 @@ test('analysis settings validation maps invalid pulse current level to its sourc
   assert.deepEqual(validateAnalysisSettings(project).map(({ field, sourceId }) => ({ field, sourceId })), [{ field: 'pulse.initial', sourceId: source.id }])
 })
 
+test('analysis settings validation maps malformed PWL point values to their exact source field', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.kind === 'source')
+  source.sourceMode = 'pwl'
+  source.pwl = [{ time: '0', voltage: '0' }, { time: '0', voltage: '5' }]
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field, settingPath }) => ({ field, settingPath })), [{ field: 'pwlPoints', settingPath: 'pwl.1.time' }])
+  source.pwl = [{ time: '0', voltage: '0' }]
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field, settingPath }) => ({ field, settingPath })), [{ field: 'pwlPoints', settingPath: 'pwl.points' }])
+})
+
 test('source waveform mode chooses a constant DC source or the backward-compatible pulse', () => {
   const project = createStarterProject()
   const source = project.parts.find((part) => part.ref === 'V1')

@@ -71,6 +71,28 @@ test('invalid pulse timing selects its source and focuses the exact setting', as
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
+test('invalid PWL points focus the exact source field before simulation', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const source = project.parts.find((part: { id: string }) => part.id === 'p-v1')
+    source.sourceMode = 'pwl'
+    source.pwl = [{ time: '0', voltage: '0' }, { time: '0', voltage: '5' }]
+    project.sheets[0].parts = project.parts
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const source = page.locator('.circuit-part[data-part-id="p-v1"]')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  const time = page.locator('[data-part-setting="p-v1:pwl.1.time"]')
+  await expect(source).toHaveClass(/selected/)
+  await expect(time).toBeFocused()
+  await expect(time).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByRole('alert')).toContainText('Time must be later than the previous point.')
+  await time.fill('2m')
+  await expect(time).toHaveAttribute('aria-invalid', 'false')
+})
+
 test('invalid component values select and focus the value field before engine checks', async ({ page }) => {
   await page.goto('/')
   const value = page.locator('[data-part-setting="p-r1:value"]')
