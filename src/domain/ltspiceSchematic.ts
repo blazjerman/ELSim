@@ -2,14 +2,20 @@ import { createStarterProject, validateProject, type Part, type PartKind, type P
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseSubcircuitLibrary } from './subcircuitLibrary'
 
-type AscSymbol = { name: string; x: number; y: number; rotation: number; flipX: boolean; attributes: Record<string, string>; line: number }
+type AscSymbol = { name: string; x: number; y: number; rotation: number; flipX: boolean; attributes: Record<string, string>; rawRecords: string[]; line: number }
 export type LtspiceSchematicImport = { project: Project; warnings: string[] }
 
 const MAX_ASC_BYTES = 10 * 1024 * 1024
 const MAX_ASC_LINES = 100_000
 const MAX_ASC_WIRES = 2_000
 const MAX_ASC_SYMBOLS = 1_000
+const MAX_UNSUPPORTED_RECORD_CHARS = 240
 const validScalar = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:meg|[tgkmunpf])?(?:s|hz)?$/i.test(value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u'))
+
+function recordExcerpt(raw: string): string {
+  const compact = raw.replace(/\s+/g, ' ').trim()
+  return compact.length > MAX_UNSUPPORTED_RECORD_CHARS ? `${compact.slice(0, MAX_UNSUPPORTED_RECORD_CHARS - 1)}…` : compact
+}
 
 function coordinate(value: string, line: number): number {
   const number = Number(value)
@@ -21,7 +27,7 @@ function baseName(value: string): string {
   return value.trim().replace(/^['"]|['"]$/g, '').replace(/\\/g, '/').split('/').pop()?.replace(/\.asy$/i, '').toLowerCase() ?? ''
 }
 
-function transform([x, y]: [number, number], symbol: AscSymbol): [number, number] {
+function transform([x, y]: [number, number], symbol: Pick<AscSymbol, 'x' | 'y' | 'rotation' | 'flipX'>): [number, number] {
   const mirroredX = symbol.flipX ? -x : x
   const angle = symbol.rotation * Math.PI / 180
   const clean = (value: number) => Math.round(value * 1e6) / 1e6
@@ -126,10 +132,11 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
         if (tokens.length < 4) throw new Error('SYMBOL expects a name, position, and R0/R90/R180/R270/M0/M90/M180/M270 orientation.')
         const orientation = tokens[3].toUpperCase().match(/^([RM])(0|90|180|270)$/)
         if (!orientation) throw new Error(`unsupported symbol orientation ${tokens[3]}.`)
-        current = { name: tokens[0], x: coordinate(tokens[1], lineNo), y: coordinate(tokens[2], lineNo), flipX: orientation[1] === 'M', rotation: Number(orientation[2]), attributes: {}, line: lineNo }
+        current = { name: tokens[0], x: coordinate(tokens[1], lineNo), y: coordinate(tokens[2], lineNo), flipX: orientation[1] === 'M', rotation: Number(orientation[2]), attributes: {}, rawRecords: [raw], line: lineNo }
       } else if (keyword === 'SYMATTR') {
         if (!current || tokens.length < 2) throw new Error('SYMATTR must follow a SYMBOL and include a value.')
         current.attributes[tokens[0].toUpperCase()] = tokens.slice(1).join(' ').replace(/^""$/, '')
+        current.rawRecords.push(raw)
       } else if (keyword === 'WIRE') {
         finish()
         if (tokens.length < 4) throw new Error('WIRE expects two coordinate pairs.')
@@ -149,7 +156,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
         // Presentation metadata only; the project uses its own page layout.
       } else {
         finish()
-        warnings.push(`Line ${lineNo}: unsupported .asc record ${command} was skipped.`)
+        warnings.push(`Line ${lineNo}: unsupported .asc record was skipped: “${recordExcerpt(raw)}”.`)
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'invalid record'
@@ -201,7 +208,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const modelFile = sidecar.parsed.attributes.modelfile
     if (modelFile && !knownLibraries.has(baseName(modelFile))) warnings.push(`Line ${symbol.line}: ${symbol.name} references missing model file “${modelFile}”; import it separately if required.`)
     const mapped = partKind(symbol, prefix, value, subcircuits, deviceModels)
-    if (!mapped.kind) { warnings.push(`Line ${symbol.line}: ${symbol.name} (${identity}) is unsupported or refers to missing subcircuit model ${value}; it was skipped.`); continue }
+    if (!mapped.kind) { warnings.push(`Line ${symbol.line}: ${symbol.name} (${identity}) is unsupported or refers to missing subcircuit model ${value}; symbol was skipped: “${recordExcerpt(symbol.rawRecords.join(' | '))}”.`); continue }
     const pins = sidecar.parsed.pins
     const expectedPinNames = mapped.kind === 'subcircuit' ? subcircuits.get(mapped.modelName!.toLowerCase()) ?? [] : null
     const expectedPinCount = expectedPinNames?.length ?? ({ source: 2, resistor: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3, subcircuit: 0 } satisfies Record<PartKind, number>)[mapped.kind]
@@ -234,7 +241,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   const points = [
     ...project.wires.flatMap((wire) => wire.points.map(([x, y]) => ({ x, y }))),
     ...project.netLabels.map(({ x, y }) => ({ x, y })),
-    ...project.parts.flatMap((part) => [{ x: part.x, y: part.y }, ...part.symbolPinOffsets!.map(([x, y]) => { const [pinX, pinY] = transform([x, y], { name: part.kind, x: part.x, y: part.y, rotation: part.rotation, flipX: Boolean(part.flipX), attributes: {}, line: 0 }); return { x: pinX, y: pinY } })]),
+    ...project.parts.flatMap((part) => [{ x: part.x, y: part.y }, ...part.symbolPinOffsets!.map(([x, y]) => { const [pinX, pinY] = transform([x, y], { x: part.x, y: part.y, rotation: part.rotation, flipX: Boolean(part.flipX) }); return { x: pinX, y: pinY } })]),
   ]
   if (points.length) {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity

@@ -47,6 +47,18 @@ test('reports missing symbol files and unsupported directives instead of silentl
   assert.match(warnings[1], /directive \.save.*not translated/)
 })
 
+test('import diagnostics quote bounded source records and skipped symbol attributes', () => {
+  const unknownSymbol = { ...symbol, id: 'symbol-unknown', filename: 'unknown.asy', content: symbol.content.replace('Prefix R', 'Prefix Z') }
+  const longUnknownRecord = `CUSTOM_RECORD ${'x'.repeat(1_000)}`
+  const asc = ['Version 4', longUnknownRecord, 'SYMBOL unknown 12 24 R90', 'SYMATTR InstName Z1', 'SYMATTR Value proprietary_model'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'losses.asc', [unknownSymbol])
+  assert.equal(project.parts.length, 0)
+  assert.match(warnings[0], /unsupported \.asc record was skipped: “CUSTOM_RECORD x+/)
+  assert.ok(warnings[0].length < 320)
+  assert.match(warnings[1], /unsupported or refers to missing subcircuit model proprietary_model; symbol was skipped/)
+  assert.match(warnings[1], /SYMBOL unknown 12 24 R90 \| SYMATTR InstName Z1 \| SYMATTR Value proprietary_model/)
+})
+
 test('parses AC and DC analysis directives and rejects malformed ASC records', () => {
   const ac = parseLtspiceSchematic('Version 4\nTEXT 0 0 Left 2 !.ac dec 20 10 1Meg', 'ac.asc').project
   assert.equal(ac.simulation.analysis, 'ac')
