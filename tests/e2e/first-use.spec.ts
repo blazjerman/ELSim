@@ -193,7 +193,7 @@ test('show source-line guidance for a known unsupported LTspice model construct'
 
   const warnings = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
   await expect(warnings).toBeVisible()
-  await expect(warnings).toContainText('laplace-model.lib:2')
+  await expect(warnings).toContainText('laplace-model.lib:3')
   await expect(warnings).toContainText('LTspice behavioral Laplace option')
   await expect(warnings).toContainText('not translated by ELSim’s current compatibility path')
   await expect(warnings).toContainText('Use a tested ngspice-compatible transfer model')
