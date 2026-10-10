@@ -25,3 +25,13 @@ export function componentMagnitude(value: string, kind: PartKind): number | null
   const result = Number(match[1]) * scale
   return Number.isFinite(result) ? result : null
 }
+
+/** Parse a SPICE time scalar such as `2m`, `5 us`, or `10ms` into seconds. */
+export function timeMagnitude(value: string): number | null {
+  const normalized = spiceScalar(value, 's')
+  const match = normalized?.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+  if (!match) return null
+  const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
+  const result = Number(match[1]) * scale
+  return Number.isFinite(result) ? result : null
+}

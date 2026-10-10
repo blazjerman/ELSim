@@ -14,6 +14,7 @@ test('independent request producer satisfies run and control request contracts',
   assert.equal(isEngineRequest({ type: 'dispose', requestId: 'dispose-1' }), true)
   assert.equal(isEngineRequest({ type: 'cancel', requestId: 'cancel-1', runId: 'run-1' }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'riseDelay', operation: 'delay', vector: 'v(in)', threshold: '0.5', targetVector: 'v(out)', targetThreshold: '4.5', edge: 'rise', targetEdge: 'rise' }] }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '2m', to: '8m' }] }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, settings: { analysis: 'ac', acSweep: { scale: 'dec' } } } }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '1000' }], label: 'R1=1 kΩ' }], measurements: [{ id: 'peak', operation: 'max', vector: 'v(out)' }] }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '1000' }, { component: 'C1', value: '1e-5' }, { component: 'V1', value: '5' }], label: 'R1=1 kΩ, C1=10 µF, V1=5 V' }] }), true)
@@ -33,6 +34,8 @@ test('request consumer rejects malformed payloads before engine execution', () =
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '100' }, { component: 'C1', value: '1e-5' }, { component: 'V1', value: '5' }, { component: 'L1', value: '1e-3' }], label: 'too many' }] }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'peak', operation: 'nonsense', vector: 'v(out)' }] }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'delay', operation: 'delay', vector: 'v(in)', threshold: '0', targetVector: 'v(out)', targetThreshold: 'NaN', edge: 'rise', targetEdge: 'rise' }] }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '8m', to: '2m' }] }), false)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '-2m' }] }), false)
 })
 
 test('independent worker response producer satisfies response contract', () => {
@@ -41,6 +44,7 @@ test('independent worker response producer satisfies response contract', () => {
   assert.equal(isEngineResponse({ type: 'cancelled', requestId: 'cancel-1', runId: 'run-1' }), true)
   assert.equal(isEngineResponse({ type: 'error', requestId: 'run-1', error: { severity: 'error', message: 'No ground reference' } }), true)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { metadata: completedMetadata, netlist: artifact.text, sourceMap: [{ line: 1, sourceId: 'part-r1', role: 'component' }], traces: [trace], diagnostics: [], analysis: 'tran', measurements: [{ id: 'riseDelay', operation: 'delay', vector: 'v(in)', targetVector: 'v(out)', value: 0.0004, unit: 's' }] } }), true)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { metadata: completedMetadata, netlist: artifact.text, sourceMap: [], traces: [trace], diagnostics: [], analysis: 'tran', measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '2m', to: '8m', value: 2.5, unit: 'V' }] } }), true)
 })
 
 test('response consumer rejects malformed or incomplete worker messages', () => {
@@ -55,6 +59,7 @@ test('response consumer rejects malformed or incomplete worker messages', () => 
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, traces: [{ ...trace, values: new Int32Array([0, 5]) }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, sourceMap: [{ line: 0, sourceId: '', role: 'oops' }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'peak', operation: 'max', vector: 'v(out)', value: Number.POSITIVE_INFINITY, unit: 'V' }] } }), false)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '8m', to: '2m', value: 2.5, unit: 'V' }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, metadata: { ...completedMetadata, completedAt: 'not-a-date' } } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'peak', operation: 'delay', vector: 'v(in)', value: 0.1, unit: 'V' }] } }), false)
   assert.equal(isEngineResponse({ type: 'unknown', requestId: 'run-1' }), false)
@@ -117,4 +122,8 @@ test('published JSON schema describes delay measurements and seconds', () => {
   assert.deepEqual(schema.$defs.measurement.properties.unit.enum, ['V', 'A', 's'])
   const variants = schema.$defs.transientMeasurement.oneOf
   assert.equal(variants.some((variant) => variant.properties?.operation?.const === 'delay'), true)
+  const scalar = variants.find((variant) => variant.properties?.operation?.enum?.includes('avg'))
+  assert.equal(scalar.properties.from.maxLength, 48)
+  assert.equal(scalar.properties.to.maxLength, 48)
+  assert.equal(schema.$defs.measurement.properties.from.maxLength, 48)
 })

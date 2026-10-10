@@ -23,6 +23,7 @@ import { updateSheetDefinition } from '../domain/sheetDefinition'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentDefaultValue, componentDefinitionFor, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
+import { timeMagnitude } from '../domain/componentValue'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
 import { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
@@ -401,7 +402,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
     {shown.some((trace) => trace.unit === 'A') && <div className="current-sign-note">{shown.some((trace) => /^I\(Q/i.test(trace.label)) ? 'Transistor collector current is positive into the collector terminal.' : 'Positive component current is from pin 1 to pin 2.'}</div>}
     {shown.length === 0 && <div className="stale-note">Choose a trace above or use Probe in the schematic.</div>}
     {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh the plot.</div>}
-    {measurements.length > 0 && <div className="measurement-results"><div className="form-section-title">MEASUREMENTS</div><table className="op-table"><thead><tr><th>Name</th><th>Operation</th><th>Value</th></tr></thead><tbody>{measurements.map((measurement) => <tr key={`${measurement.sweep?.index ?? 0}-${measurement.id}`}><td>{measurement.id}{measurement.sweep ? ` · ${measurement.sweep.label}` : ''}</td><td>{measurement.operation === 'delay' ? `DELAY ${measurement.vector} → ${measurement.targetVector ?? 'target'}` : `${measurement.operation.toUpperCase()} ${measurement.vector}`}</td><td>{measurement.value.toPrecision(7)} {measurement.unit}</td></tr>)}</tbody></table></div>}
+    {measurements.length > 0 && <div className="measurement-results"><div className="form-section-title">MEASUREMENTS</div><table className="op-table"><thead><tr><th>Name</th><th>Operation</th><th>Value</th></tr></thead><tbody>{measurements.map((measurement) => <tr key={`${measurement.sweep?.index ?? 0}-${measurement.id}`}><td>{measurement.id}{measurement.sweep ? ` · ${measurement.sweep.label}` : ''}</td><td>{measurement.operation === 'delay' ? `DELAY ${measurement.vector} → ${measurement.targetVector ?? 'target'}` : `${measurement.operation.toUpperCase()} ${measurement.vector}${measurement.from || measurement.to ? ` · ${measurement.from ? `from ${measurement.from}` : ''}${measurement.from && measurement.to ? ' ' : ''}${measurement.to ? `to ${measurement.to}` : ''}` : ''}`}</td><td>{measurement.value.toPrecision(7)} {measurement.unit}</td></tr>)}</tbody></table></div>}
   </div>
 }
 
@@ -647,6 +648,16 @@ function patchMeasurement(current: TransientMeasurement, patch: Partial<Transien
   return { ...current, ...patch } as TransientMeasurement
 }
 
+function MeasurementWindowFields({ measurement, index, onChange }: { measurement: Extract<TransientMeasurement, { operation: 'max' | 'min' | 'avg' | 'rms' }>; index: number; onChange: (patch: Partial<TransientMeasurement>) => void }) {
+  const from = measurement.from === undefined ? null : timeMagnitude(measurement.from)
+  const to = measurement.to === undefined ? null : timeMagnitude(measurement.to)
+  const invalidOrder = from !== null && to !== null && from >= to
+  const fromError = measurement.from === undefined ? '' : from === null ? 'Enter a numeric SPICE time such as 2m or 500u.' : from < 0 ? 'Measurement time must be zero or later.' : invalidOrder ? 'From time must be earlier than To time.' : ''
+  const toError = measurement.to === undefined ? '' : to === null ? 'Enter a numeric SPICE time such as 2m or 500u.' : to < 0 ? 'Measurement time must be zero or later.' : invalidOrder ? 'To time must be later than From time.' : ''
+  const fromId = `measurement-${measurement.id}-from-error`, toId = `measurement-${measurement.id}-to-error`
+  return <><label className="field-label">From time (optional)<input aria-label={`Measurement ${index + 1} from time`} aria-invalid={Boolean(fromError)} aria-describedby={fromError ? fromId : undefined} placeholder="Start of run" value={measurement.from ?? ''} onChange={(event) => onChange({ from: event.target.value || undefined })}/>{fromError && <small id={fromId} className="field-error" role="alert">{fromError}</small>}</label><label className="field-label">To time (optional)<input aria-label={`Measurement ${index + 1} to time`} aria-invalid={Boolean(toError)} aria-describedby={toError ? toId : undefined} placeholder="End of run" value={measurement.to ?? ''} onChange={(event) => onChange({ to: event.target.value || undefined })}/>{toError && <small id={toId} className="field-error" role="alert">{toError}</small>}</label><div className="field-hint">Limit this MAX, MIN, AVG, or RMS calculation to a time interval. Enter SPICE time values such as 2m or 500u.</div></>
+}
+
 function measurementVectorChoices(project: Project) {
   const nodes = [...new Map(project.netLabels.filter((label) => label.name.trim() && label.name !== '0').map((label) => [label.name.toLowerCase(), label.name])).values()].sort((left, right) => left.localeCompare(right))
   const currentParts = project.parts.filter((part) => ['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind))
@@ -700,6 +711,7 @@ function TransientMeasurementEditor({ project, measurements, onAdd, onChange, on
       <label className="field-label">Name<input maxLength={24} value={measurement.id} onChange={(event) => onChange(index, { id: event.target.value })}/></label>
       <label className="field-label">Calculate<select value={measurement.operation} onChange={(event) => onChange(index, event.target.value === 'delay' ? { operation: 'delay', vector: measurement.vector, threshold: '2.5', targetVector: 'V(vout)', targetThreshold: '2.5', edge: 'rise', targetEdge: 'rise' } : { operation: event.target.value as 'max' | 'min' | 'avg' | 'rms', vector: measurement.vector })}><option value="max">Maximum</option><option value="min">Minimum</option><option value="avg">Average</option><option value="rms">RMS</option><option value="delay">Propagation delay</option></select></label>
       {vectorPicker('Vector', `Choose vector for measurement ${index + 1}`, measurement.vector, (vector) => onChange(index, { vector }))}
+      {measurement.operation !== 'delay' && <MeasurementWindowFields measurement={measurement} index={index} onChange={(patch) => onChange(index, patch)}/>}
       {measurement.operation === 'delay' && <><label className="field-label">Trigger threshold<input value={measurement.threshold} onChange={(event) => onChange(index, { threshold: event.target.value })}/></label><label className="field-label">Trigger edge<select value={measurement.edge} onChange={(event) => onChange(index, { edge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either</option></select></label>{vectorPicker('Target vector', `Choose target vector for measurement ${index + 1}`, measurement.targetVector, (targetVector) => onChange(index, { targetVector }))}<label className="field-label">Target threshold<input value={measurement.targetThreshold} onChange={(event) => onChange(index, { targetThreshold: event.target.value })}/></label><label className="field-label">Target edge<select value={measurement.targetEdge} onChange={(event) => onChange(index, { targetEdge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either</option></select></label></>}
     </div>)}
     <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={measurements.length >= 12}>Add measurement</button>

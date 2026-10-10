@@ -270,22 +270,25 @@ test('imports supported scalar and trigger-target transient measurements and war
     'Version 4', 'FLAG 0 0 OUT', 'SYMBOL res 32 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
     'TEXT 0 100 Left 2 !.tran 0 5m 0 10u',
     'TEXT 0 120 Left 2 !.meas tran VPEAK MAX V(OUT)',
+    'TEXT 0 130 Left 2 !.meas tran VWINDOW AVG V(OUT) FROM=1m TO=4m',
     'TEXT 0 140 Left 2 !.measure tran IRMS RMS I(r1)',
     'TEXT 0 160 Left 2 !.meas tran TDELAY TRIG V(OUT) VAL=2.5 RISE=1 TARG I(R1) VAL=0 FALL=1',
   ].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'measurements.asc', [symbol])
   assert.deepEqual(project.simulation.transientMeasurements, [
     { id: 'VPEAK', operation: 'max', vector: 'v(out)' },
+    { id: 'VWINDOW', operation: 'avg', vector: 'v(out)', from: '1m', to: '4m' },
     { id: 'IRMS', operation: 'rms', vector: 'i(r1)' },
     { id: 'TDELAY', operation: 'delay', vector: 'v(out)', threshold: '2.5', edge: 'rise', targetVector: 'i(r1)', targetThreshold: '0', targetEdge: 'fall' },
   ])
   assert.deepEqual(warnings, [])
   const netlist = createNetlistArtifact(project)
   assert.match(netlist.text, /^\.meas tran ELSIM_VPEAK max v\(out\)$/m)
+  assert.match(netlist.text, /^\.meas tran ELSIM_VWINDOW avg v\(out\) FROM=1m TO=4m$/m)
   assert.match(netlist.text, /^\.meas tran ELSIM_IRMS rms i\(r1\)$/m)
   assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
 
-  const unsupported = parseLtspiceSchematic(['Version 4', 'FLAG 0 0 OUT', 'TEXT 0 100 Left 2 !.meas tran VPEAK MAX V(out) FROM=1m'].join('\n'), 'qualified-measure.asc')
+  const unsupported = parseLtspiceSchematic(['Version 4', 'FLAG 0 0 OUT', 'TEXT 0 100 Left 2 !.meas tran VPEAK MAX V(out) FROM=1m INVALID=2m'].join('\n'), 'qualified-measure.asc')
   assert.equal(unsupported.project.simulation.transientMeasurements, undefined)
   assert.match(unsupported.warnings[0], /not a supported scalar transient measurement/)
 })

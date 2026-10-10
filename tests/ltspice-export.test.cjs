@@ -197,7 +197,7 @@ test('exports a deterministic portable file tree for the beginner circuit', asyn
 test('exports scalar and trigger-target transient measurements as LTspice .meas directives', async () => {
   const project = createStarterProject()
   project.simulation.transientMeasurements = [
-    { id: 'VoutMax', operation: 'max', vector: 'V(vout)' },
+    { id: 'VoutMax', operation: 'max', vector: 'V(vout)', from: '2m', to: '8m' },
     { id: 'R1Rms', operation: 'rms', vector: 'I(R1)' },
     { id: 'RiseDelay', operation: 'delay', vector: 'V(vin)', threshold: '2.5', edge: 'rise', targetVector: 'V(vout)', targetThreshold: '2.5', targetEdge: 'either' },
   ]
@@ -205,7 +205,7 @@ test('exports scalar and trigger-target transient measurements as LTspice .meas 
   assert.deepEqual(output.blockers, [])
   assert.ok(!output.losses.some((item) => item.sourceId === 'analysis:measurements'))
   const asc = output.files.find((file) => file.path.endsWith('.asc')).content
-  assert.match(asc, /\.meas tran VoutMax MAX V\(vout\)/)
+  assert.match(asc, /\.meas tran VoutMax MAX V\(vout\) FROM=2m TO=8m/)
   assert.match(asc, /\.meas tran R1Rms RMS I\(R1\)/)
   assert.match(asc, /\.meas tran RiseDelay TRIG V\(vin\) VAL=2\.5 RISE=1 TARG V\(vout\) VAL=2\.5 CROSS=1/)
 })

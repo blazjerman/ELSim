@@ -187,6 +187,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.symbolAsset.properties.rightsNotes.maxLength, 1000)
   assert.ok(schema.$defs.part.properties.extensions.properties.ltspice.properties.attributes)
   assert.equal(schema.$defs.simulation.properties.parameterSweeps.maxItems, 3)
+  assert.equal(schema.$defs.simulation.properties.transientMeasurements.items.properties.from.maxLength, 48)
+  assert.equal(schema.$defs.simulation.properties.transientMeasurements.items.properties.to.maxLength, 48)
   assert.equal(schema.$defs.plotSettings.properties.panels.maxItems, 8)
   assert.equal(schema.$defs.plotPanel.required.includes('selectedTraceIds'), true)
   const initialConditions = schema.$defs.simulation.properties.initialConditions.items.oneOf

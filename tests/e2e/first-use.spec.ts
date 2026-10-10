@@ -604,6 +604,25 @@ test('first use: run the RC starter and inspect its solved waveform', async ({ p
   expect(pageErrors).toEqual([])
 })
 
+test('first use: run the RC starter and inspect its solved waveform with a time-windowed measurement', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before testing measurement windows').toEqual([])
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.simulation.transientMeasurements = [{ id: 'WindowAverage', operation: 'avg', vector: 'V(vout)', from: '2m', to: '8m' }]
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const measurement = page.locator('.measurement-results tbody tr').filter({ hasText: 'WindowAverage' })
+  await expect(measurement).toContainText('AVG V(vout) · from 2m to 8m')
+  const result = Number((await measurement.locator('td').nth(2).textContent())?.trim().split(/\s+/)[0])
+  expect(result).toBeGreaterThan(0)
+  expect(result).toBeLessThan(5)
+})
+
 test('first use: reduced-motion preference pauses result animation but keeps manual playback', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
@@ -1825,6 +1844,27 @@ test('transient measurements offer labeled nodes and common component currents',
   await expect(page.getByRole('textbox', { name: 'Vector expression', exact: true })).toHaveValue('I(R1)')
   await expect(page.getByLabel('Target vector expression')).toHaveValue('V(vout)')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0])).toMatchObject({ vector: 'I(R1)', targetVector: 'V(vout)' })
+})
+
+test('transient measurement time windows persist and appear in the netlist', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.simulation.transientMeasurements = [{ id: 'WindowPeak', operation: 'max', vector: 'V(vout)' }]
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Escape')
+  await page.getByLabel('Measurement 1 from time').fill('4m')
+  await page.getByLabel('Measurement 1 to time').fill('2m')
+  await expect(page.getByLabel('Measurement 1 from time')).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByText('From time must be earlier than To time.')).toBeVisible()
+  await page.getByLabel('Measurement 1 to time').fill('8m')
+  await expect(page.getByLabel('Measurement 1 from time')).toHaveAttribute('aria-invalid', 'false')
+  await page.getByLabel('Measurement 1 from time').fill('2m')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0])).toMatchObject({ id: 'WindowPeak', from: '2m', to: '8m' })
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText('.meas tran ELSIM_WindowPeak max V(vout) FROM=2m TO=8m')
 })
 
 test('lamp palette item exposes resistance and nominal animation power', async ({ page }) => {

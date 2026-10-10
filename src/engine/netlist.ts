@@ -3,6 +3,7 @@ import { sheetModelName, type Part, type PartKind, type Project } from '../domai
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { validateSourcePwlPoints } from '../domain/sourcePwl'
+import { timeMagnitude } from '../domain/componentValue'
 import type { NetlistArtifact, NetlistSource } from './contract'
 
 export { componentMagnitude } from '../domain/componentValue'
@@ -729,18 +730,25 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQBJ][A-Za-z0-9_]*\)|i\(@I[A-Za-z0-9_]+\[current\]\))$/i
     const delay = measurement.operation === 'delay' ? measurement : undefined
+    const scalarMeasurement = measurement.operation === 'delay' ? undefined : measurement
     const sourceCurrent = /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.vector.trim()) || (delay && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(delay.targetVector.trim()))
+    const from = scalarMeasurement?.from === undefined ? null : timeMagnitude(scalarMeasurement.from) ?? Number.NaN
+    const to = scalarMeasurement?.to === undefined ? null : timeMagnitude(scalarMeasurement.to) ?? Number.NaN
+    const rangeValid = !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)
     const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (delay
       ? vectorPattern.test(measurement.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && Number.isFinite(Number(delay.threshold)) && Number.isFinite(Number(delay.targetThreshold)) && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
-      : ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()))
+      : ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()) && rangeValid)
     if (!valid) {
       const message = `Transient measurement ${cleanComment(measurement.id)} has an unsupported name, operation, or vector.`
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       continue
     }
-    if (sourceCurrent) append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id} from the solved current-source samples.`, 'analysis:tran', 'analysis')
+    if (sourceCurrent) append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id}${scalarMeasurement ? `${scalarMeasurement.from ? ` from ${scalarMeasurement.from}` : ''}${scalarMeasurement.to ? ` to ${scalarMeasurement.to}` : ''}` : ''} from the solved current-source samples.`, 'analysis:tran', 'analysis')
     else if (delay) append(`.meas tran ELSIM_${delay.id} TRIG ${delay.vector.trim()} VAL=${delay.threshold} ${delay.edge.toUpperCase()}=1 TARG ${delay.targetVector.trim()} VAL=${delay.targetThreshold} ${delay.targetEdge.toUpperCase()}=1`, 'analysis:tran', 'analysis')
-    else append(`.meas tran ELSIM_${measurement.id} ${measurement.operation} ${measurement.vector.trim()}`, 'analysis:tran', 'analysis')
+    else {
+      const scalarMeasure = scalarMeasurement!
+      append(`.meas tran ELSIM_${scalarMeasure.id} ${scalarMeasure.operation} ${scalarMeasure.vector.trim()}${scalarMeasure.from ? ` FROM=${scalarMeasure.from}` : ''}${scalarMeasure.to ? ` TO=${scalarMeasure.to}` : ''}`, 'analysis:tran', 'analysis')
+    }
   }
   rows.push('.end')
   return { text: rows.join('\n'), sourceMap, diagnostics }

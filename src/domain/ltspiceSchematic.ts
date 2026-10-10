@@ -5,6 +5,7 @@ import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from
 import { componentCurrentVector } from './probe'
 import { analyzeConnectivity, pinNet } from './connectivity'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
+import { timeMagnitude } from './componentValue'
 
 type AscSymbol = { name: string; x: number; y: number; rotation: number; flipX: boolean; attributes: Record<string, string>; rawRecords: string[]; line: number }
 export type LtspiceSchematicImport = { project: Project; warnings: string[] }
@@ -344,6 +345,17 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     }
     const validOperation = ['max', 'min', 'avg', 'rms'].includes(operation ?? '')
     const scalarVector = validOperation ? resolveVector(measurementTokens[0]) : null
+    const range: { from?: string; to?: string } = {}
+    let rangeValid = true
+    for (const token of measurementTokens.slice(1)) {
+      const option = token.match(/^(from|to)=(.+)$/i)
+      const key = option?.[1].toLowerCase() as 'from' | 'to' | undefined
+      const value = option?.[2]
+      const magnitude = value ? timeMagnitude(value) : null
+      if (!key || !value || range[key] !== undefined || magnitude === null || magnitude < 0) { rangeValid = false; break }
+      range[key] = value
+    }
+    if (range.from !== undefined && range.to !== undefined && !(timeMagnitude(range.from)! < timeMagnitude(range.to)!)) rangeValid = false
     if (operation === 'trig') {
       const parseTrigger = (index: number) => {
         const vector = resolveVector(measurementTokens[index])
@@ -368,11 +380,11 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     }
     const measurements = project.simulation.transientMeasurements ?? []
     const duplicate = measurements.some((measurement) => measurement.id.toLowerCase() === id?.toLowerCase())
-    if (analysis?.toLowerCase() !== 'tran' || !validId || !validOperation || !scalarVector || measurementTokens.length !== 1 || duplicate || measurements.length >= 12) {
+    if (analysis?.toLowerCase() !== 'tran' || !validId || !validOperation || !scalarVector || !rangeValid || duplicate || measurements.length >= 12) {
       warnings.push(`Line ${line}: ${command} ${recordExcerpt(tokens.join(' '))} is not a supported scalar transient measurement; use MAX, MIN, AVG, or RMS on a labeled node or placed component.`)
       return
     }
-    measurements.push({ id, operation: operation as 'max' | 'min' | 'avg' | 'rms', vector: scalarVector })
+    measurements.push({ id, operation: operation as 'max' | 'min' | 'avg' | 'rms', vector: scalarVector, ...range })
     project.simulation.transientMeasurements = measurements
     return
   }

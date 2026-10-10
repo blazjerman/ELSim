@@ -512,7 +512,13 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
     if (simulation.parameterSweeps?.length) losses.push({ severity: 'warning', sourceId: 'analysis:parameter-sweep', title: 'Parameter sweep omitted', explanation: 'The schematic exports its current nominal component values; the ELSim parameter sweep is not translated.' })
     for (const measurement of simulation.transientMeasurements ?? []) {
       if (measurement.operation !== 'delay') {
-        addDirective(`.meas tran ${measurement.id} ${measurement.operation.toUpperCase()} ${measurement.vector}`)
+        const from = measurement.from === undefined ? undefined : scalar(measurement.from, 's')
+        const to = measurement.to === undefined ? undefined : scalar(measurement.to, 's')
+        if ((measurement.from !== undefined && from === null) || (measurement.to !== undefined && to === null)) {
+          blockers.push({ sourceId: `measurement:${measurement.id}`, message: 'Measurement FROM and TO values must be supported numeric time scalars.' })
+          continue
+        }
+        addDirective(`.meas tran ${measurement.id} ${measurement.operation.toUpperCase()} ${measurement.vector}${from === undefined ? '' : ` FROM=${from}`}${to === undefined ? '' : ` TO=${to}`}`)
         continue
       }
       const threshold = scalar(measurement.threshold), targetThreshold = scalar(measurement.targetThreshold)

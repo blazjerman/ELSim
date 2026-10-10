@@ -49,6 +49,27 @@ test('current-source measurements use the solved raw vector when ngspice has no 
   assert.deepEqual(stepped.results.map(({ value, sweep }) => ({ value, label: sweep.label })), [{ value: 0.5, label: 'I1=1 mA' }, { value: 1, label: 'I1=2 mA' }])
 })
 
+test('current-source scalar measurements clip and integrate only the requested time window', () => {
+  const trace = { id: 'i(@i1[current])', label: 'I(I1)', unit: 'A', axisLabel: 'Time', axisUnit: 's', axis: Float64Array.from([0, 1, 2, 3]), values: Float64Array.from([0, 2, 0, 2]) }
+  const measurements = [
+    { id: 'WindowMax', operation: 'max', vector: 'i(@I1[current])', from: '500m', to: '2500m' },
+    { id: 'WindowMin', operation: 'min', vector: 'i(@I1[current])', from: '500m', to: '2500m' },
+    { id: 'WindowAvg', operation: 'avg', vector: 'i(@I1[current])', from: '500m', to: '2500m' },
+    { id: 'WindowRms', operation: 'rms', vector: 'i(@I1[current])', from: '500m', to: '2500m' },
+  ]
+  const parsed = parseMeasurementOutput('', measurements, [], [[trace]])
+  assert.deepEqual(parsed.diagnostics, [])
+  assert.deepEqual(parsed.results.map(({ id, value, from, to }) => ({ id, value, from, to })), [
+    { id: 'WindowMax', value: 2, from: '500m', to: '2500m' },
+    { id: 'WindowMin', value: 0, from: '500m', to: '2500m' },
+    { id: 'WindowAvg', value: 1, from: '500m', to: '2500m' },
+    { id: 'WindowRms', value: Math.sqrt(1.75), from: '500m', to: '2500m' },
+  ])
+  const outside = parseMeasurementOutput('', [{ id: 'Outside', operation: 'avg', vector: 'i(@I1[current])', from: '4s', to: '5s' }], [], [[trace]])
+  assert.equal(outside.results.length, 0)
+  assert.equal(outside.diagnostics.length, 1)
+})
+
 test('missing or non-finite measurement results become warnings', () => {
   const measurement = [{ id: 'Mean', operation: 'avg', vector: 'V(missing)' }]
   const parsed = parseMeasurementOutput('elsim_mean = NaN', measurement)
@@ -61,17 +82,30 @@ test('project measurements validate, persist in project JSON, and enter the gene
   const project = createStarterProject()
   project.parts.push({ id: 'measurement-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 700, y: 600, rotation: 0 })
   project.sheets[0].parts = project.parts
-  project.simulation.transientMeasurements = [{ id: 'PeakOutput', operation: 'max', vector: 'V(vout)' }, { id: 'InputRms', operation: 'rms', vector: 'I(R1)' }, { id: 'SourceCurrent', operation: 'avg', vector: 'i(@I1[current])' }]
+  project.simulation.transientMeasurements = [{ id: 'PeakOutput', operation: 'max', vector: 'V(vout)', from: '2m', to: '8m' }, { id: 'InputRms', operation: 'rms', vector: 'I(R1)' }, { id: 'SourceCurrent', operation: 'avg', vector: 'i(@I1[current])' }]
   const reloaded = validateProject(JSON.parse(JSON.stringify(project)))
   const deck = createNetlistArtifact(reloaded).text
   const controlled = addResultControl(deck, [], reloaded.simulation.transientMeasurements)
-  assert.match(deck, /\.meas tran ELSIM_PeakOutput max V\(vout\)/)
+  assert.match(deck, /\.meas tran ELSIM_PeakOutput max V\(vout\) FROM=2m TO=8m/)
   assert.match(deck, /\.meas tran ELSIM_InputRms rms I\(R1\)/)
   assert.match(deck, /ELSim calculates AVG measurement SourceCurrent from the solved current-source samples/)
   assert.doesNotMatch(controlled, /\.meas tran ELSIM_SourceCurrent/)
+  assert.match(controlled, /meas tran ELSIM_PeakOutput max V\(vout\) FROM=2m TO=8m/i)
   assert.match(controlled, /\.save all .*@i1\[current\]/i)
   reloaded.simulation.analysis = 'ac'
   assert.throws(() => validateProject(reloaded), /require transient analysis/)
+})
+
+test('measurement time windows require nonnegative SPICE times in ascending order', () => {
+  const project = createStarterProject()
+  project.simulation.transientMeasurements = [{ id: 'Peak', operation: 'max', vector: 'V(vout)', from: '-1m', to: '2m' }]
+  assert.throws(() => validateProject(JSON.parse(JSON.stringify(project))), /Transient measurements/)
+  project.simulation.transientMeasurements[0].from = '4m'
+  project.simulation.transientMeasurements[0].to = '2m'
+  assert.throws(() => validateProject(JSON.parse(JSON.stringify(project))), /Transient measurements/)
+  project.simulation.transientMeasurements[0].from = '2m'
+  project.simulation.transientMeasurements[0].to = '4m'
+  assert.deepEqual(validateProject(JSON.parse(JSON.stringify(project))).simulation.transientMeasurements, project.simulation.transientMeasurements)
 })
 
 test('delay measurements validate and generate trigger/target clauses', () => {

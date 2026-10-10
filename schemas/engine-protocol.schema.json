@@ -89,6 +89,8 @@
         "operation": { "enum": ["max", "min", "avg", "rms", "delay"] },
         "vector": { "type": "string" },
         "targetVector": { "type": "string" },
+        "from": { "type": "string", "maxLength": 48 },
+        "to": { "type": "string", "maxLength": 48 },
         "value": { "type": "number" },
         "unit": { "enum": ["V", "A", "s"] },
         "sweep": { "type": "object", "additionalProperties": false, "required": ["label", "index"], "properties": { "label": { "type": "string" }, "index": { "type": "integer", "minimum": 0 } } }
@@ -121,7 +123,9 @@
           "properties": {
             "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$" },
             "operation": { "enum": ["max", "min", "avg", "rms"] },
-            "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" }
+            "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" },
+            "from": { "type": "string", "maxLength": 48 },
+            "to": { "type": "string", "maxLength": 48 }
           }
         },
         {
