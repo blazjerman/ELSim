@@ -165,6 +165,35 @@ export function createLedExampleProject(): Project {
   return project
 }
 
+/** A driven series RLC circuit whose ringing is visible in the capacitor voltage. */
+export function createRlcExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'rlc-v1', kind: 'source', ref: 'V1', value: '5 V', x: 180, y: 360, rotation: 0 }
+  const resistor: Part = { id: 'rlc-r1', kind: 'resistor', ref: 'R1', value: '5 Ω', x: 390, y: 300, rotation: 0 }
+  const inductor: Part = { id: 'rlc-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 590, y: 300, rotation: 0 }
+  const capacitor: Part = { id: 'rlc-c1', kind: 'capacitor', ref: 'C1', value: '100 µF', x: 790, y: 300, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'RLC ringing'
+  project.parts = [source, resistor, inductor, capacitor]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('rlc-in-source', 'VIN', source, 0), labelAt('rlc-in-r', 'VIN', resistor, 0),
+    labelAt('rlc-r-l', 'R_L', resistor, 1), labelAt('rlc-l-r', 'R_L', inductor, 0),
+    labelAt('rlc-l-c', 'L_C', inductor, 1), labelAt('rlc-c-l', 'L_C', capacitor, 0),
+    labelAt('rlc-c-out', '0', capacitor, 1), labelAt('rlc-source-ground', '0', source, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '40 ms', maxStep: '20 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(L_C)', 'I(L1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -30, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A two-level reusable block example with two differently parameterized instances. */
 export function createHierarchicalExampleProject(): Project {
   const project = createStarterProject()

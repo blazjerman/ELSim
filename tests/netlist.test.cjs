@@ -6,7 +6,7 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
-const { createLedExampleProject, createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
+const { createLedExampleProject, createRlcExampleProject, createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
@@ -48,6 +48,19 @@ test('LED pulse example is a runnable transient circuit with a diode-current tra
   assert.match(artifact.text, /^\.tran 100u 200m$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(vout)', 'I(D1)'])
   assert.equal(project.parts.some((part) => part.kind === 'capacitor'), false)
+})
+
+test('RLC ringing example is a complete series circuit with transient probes', () => {
+  const project = createRlcExampleProject()
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'RLC ringing')
+  assert.match(artifact.text, /^V1 VIN 0 PULSE\(0 5 0 1u 1u 50m 100m\)$/m)
+  assert.match(artifact.text, /^R1 VIN R_L 5$/m)
+  assert.match(artifact.text, /^L1 R_L L_C 10m$/m)
+  assert.match(artifact.text, /^C1 L_C 0 100u$/m)
+  assert.match(artifact.text, /^\.tran 20u 40m$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(L_C)', 'I(L1)'])
 })
 
 test('imported model cards keep source filename and original line in the netlist source map', () => {
