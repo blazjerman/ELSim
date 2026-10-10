@@ -7,8 +7,8 @@ BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build/ngspice-wasm}"
 JOBS="${JOBS:-2}"
 PINNED_COMMIT="$(tr -d '[:space:]' < "$ROOT_DIR/engine/wasm/UPSTREAM_COMMIT")"
 
-if [[ -z "$NGSPICE_SOURCE" || ! -f "$NGSPICE_SOURCE/configure" ]]; then
-  echo "Set NGSPICE_SOURCE to a checkout of ngspice $PINNED_COMMIT" >&2
+if [[ -z "$NGSPICE_SOURCE" || ! -d "$NGSPICE_SOURCE/.git" ]]; then
+  echo "Set NGSPICE_SOURCE to a Git checkout of ngspice $PINNED_COMMIT" >&2
   exit 2
 fi
 actual_commit="$(git -C "$NGSPICE_SOURCE" rev-parse HEAD)"
@@ -18,6 +18,18 @@ if [[ "$actual_commit" != "$PINNED_COMMIT" ]]; then
 fi
 if [[ -n "$(git -C "$NGSPICE_SOURCE" status --porcelain)" ]]; then
   echo "NGSPICE_SOURCE must be clean; local source changes make the binary unreviewable" >&2
+  exit 2
+fi
+if [[ ! -f "$NGSPICE_SOURCE/configure" ]]; then
+  if [[ ! -x "$NGSPICE_SOURCE/autogen.sh" ]]; then
+    echo "Pinned ngspice Git checkout has neither configure nor executable autogen.sh" >&2
+    exit 2
+  fi
+  echo "Bootstrapping configure from the pinned ngspice Git source"
+  (cd "$NGSPICE_SOURCE" && ./autogen.sh)
+fi
+if [[ ! -f "$NGSPICE_SOURCE/configure" ]]; then
+  echo "ngspice autogen.sh completed without generating configure" >&2
   exit 2
 fi
 if [[ ! -f "$NGSPICE_SOURCE/COPYING" ]]; then

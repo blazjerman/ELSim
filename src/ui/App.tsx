@@ -84,7 +84,7 @@ const CanvasNetLabel = memo(function CanvasNetLabel({ label, selected, tool, onP
     event.preventDefault(); event.stopPropagation(); onSelect(label.id)
   }} onPointerDown={(event) => onPointerDown(event, label.id)} onClick={(event) => {
     if (tool === 'select') { event.stopPropagation(); onSelect(label.id) }
-  }}><rect x={label.x - 3} y={label.y - 22} width={Math.max(34, label.name.length * 7 + 14)} height="26" fill="transparent"/><line x1={label.x} y1={label.y} x2={label.x + 7} y2={label.y - 8} stroke="#9cc4a8" strokeWidth="1"/><text x={label.x + 9} y={label.y - 9}>{label.name}</text></g>
+  }}><text x={label.x + 9} y={label.y - 9} stroke="transparent" strokeWidth="30" pointerEvents="all">{label.name}</text></g>
 })
 
 const CanvasNetLabelLayer = memo(function CanvasNetLabelLayer({ labels, selectedId, tool, onPointerDown, onSelect }: {

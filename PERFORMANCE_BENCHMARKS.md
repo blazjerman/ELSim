@@ -178,6 +178,15 @@ The editor benchmark now also opens a 5,000-resistor schematic with 10,000 net l
 
 `CircuitPartLayer` memoizes the part list across selection-only updates; individual parts subscribe to a small external selection/focus store. `CanvasNetLabelLayer` skips rebuilding 10,000 labels when component selection changes. The latest change renders full symbol artwork only near the viewport while retaining every offscreen part as a named focusable control and keeping its hit target; imported symbols always retain their full artwork. A same-host run changed the 5,000-part editor load from 3.44 to 2.53 s in Chromium and 4.17 to 3.15 s in Firefox. Selection median changed from 221.8 to 142.1 ms in Chromium and 15 to 14 ms in Firefox. The SVG shrank from 80,010 to 55,370 elements while all parts and labels remained present; 72 parts had full artwork in the initial view. Chromium selection still exceeds a 16 ms frame. These measurements are local observations, not release budgets. Browser heap metrics are omitted because available readings did not vary reliably with project size.
 
+The latest label-rendering change replaces each label's separate transparent rectangle, leader line, and text element with a single SVG text node using a wide transparent stroke for hit testing. The visible label remains clickable, selectable, and keyboard accessible; its focus indicator now outlines the text. This reduces 5,000-part SVG element count from 55,370 to 35,370.
+
+| Browser | Editor ready before / after (ms) | Selection median before / after (ms) | SVG elements before / after |
+| --- | ---: | ---: | ---: |
+| Chromium | 2,519.2 / 2,102.9 | 143.5 / 138.1 | 55,370 / 35,370 |
+| Firefox | 3,152 / 2,681 | 15 / 15 | 55,370 / 35,370 |
+
+These values are local single-run measurements from the same large-project benchmark and host, not release budgets. The primary gain is a smaller SVG and faster initial editor load; selection update time changes little because the remaining cost is elsewhere in the schematic.
+
 ### Browser waveform transport check
 
 The worker now shares one parsed axis across all traces and transfers unique axis/value buffers to the UI, avoiding per-trace axis copies and a structured-clone copy of result vectors. The UI validates shared typed vectors once per response. A Playwright `MessageChannel` check used six 100,000-sample traces (5.6 MB total including one shared axis); both clone and transfer preserved values and shared-axis identity, and transfer detached the sender buffers as expected.
