@@ -31,7 +31,7 @@ test('production app shell opens offline and preserves local project edits', asy
   await expect.poll(() => page.evaluate(async () => (await (await fetch('/manifest.webmanifest')).json()).name)).toBe('ELSim Circuit Workbench')
 
   await page.locator('svg.schematic .circuit-part').filter({ has: page.locator('.part-ref', { hasText: 'R1' }) }).click()
-  const valueField = page.getByLabel('Value', { exact: true })
+  const valueField = page.getByLabel('Resistance (Ω)', { exact: true })
   await expect(valueField).toBeVisible()
   await valueField.fill('2.2k')
   await valueField.press('Enter')

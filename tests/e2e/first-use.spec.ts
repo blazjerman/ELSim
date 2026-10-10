@@ -348,6 +348,24 @@ test('current-source inspector edits a repeating PULSE waveform', async ({ page 
   await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\)/)
 })
 
+test('stop terminates an active ngspice run and leaves the workspace responsive', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.locator('svg.schematic').click({ position: { x: 24, y: 24 } })
+  await page.getByLabel('Stop time').fill('100s')
+  await page.getByLabel('Maximum step').fill('1n')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  const stop = page.getByRole('button', { name: 'Stop simulation' })
+  await expect(stop).toBeEnabled()
+  await stop.click()
+  await expect(page.getByText('Simulation stopped. Any previous result is unchanged.')).toBeVisible()
+  await expect(stop).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Examples' }).click()
+  await expect(page.getByRole('dialog', { name: 'Open a working circuit' })).toBeVisible()
+})
+
 test('controlled-source example opens and solves with input and output probes', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
