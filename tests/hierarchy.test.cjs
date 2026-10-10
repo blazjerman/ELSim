@@ -9,6 +9,7 @@ const { createHierarchicalExampleProject } = require(path.join(build, 'domain/ex
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
+const { preferredSheetInstancePath } = require(path.join(build, 'domain/hierarchyNavigation.js'))
 
 function createBlockProject() {
   const project = createStarterProject()
@@ -212,4 +213,26 @@ test('nested divider walkthrough example validates, nets, and exposes deep probe
   assert.match(artifact.text, /RCORE A B \{RCORE\}/)
   assert.match(artifact.text, /^\.save @r\.x2\.xcore\.rcore\[i\]$/m)
   assert.equal(hierarchyComponentCurrentVector(project, 'sheet-core', ['example-x2', 'divider-core-instance'], 'core-r1'), 'i(@r.x2.xcore.rcore[i])')
+})
+
+test('hierarchy navigation preserves the selected repeated block instance when returning to an ancestor', () => {
+  const project = validateProject(createHierarchicalExampleProject())
+  const secondInstance = project.parts.find((part) => part.id === 'example-x2')
+  const divider = project.sheets.find((sheet) => sheet.id === secondInstance.sheetId)
+  const nestedInstance = divider.parts.find((part) => part.id === 'divider-core-instance')
+  assert.deepEqual(preferredSheetInstancePath(project, divider.id, [secondInstance.id, nestedInstance.id]), [secondInstance.id])
+  assert.deepEqual(preferredSheetInstancePath(project, nestedInstance.sheetId, [secondInstance.id, nestedInstance.id]), [secondInstance.id, nestedInstance.id])
+  assert.deepEqual(preferredSheetInstancePath(project, project.rootSheetId, [secondInstance.id, nestedInstance.id]), [])
+  assert.equal(preferredSheetInstancePath(project, divider.id, ['missing-instance']), null)
+})
+
+test('hierarchy navigation preserves the selected repeated block instance when returning to an ancestor', () => {
+  const project = validateProject(createHierarchicalExampleProject())
+  const secondInstance = project.parts.find((part) => part.id === 'example-x2')
+  const divider = project.sheets.find((sheet) => sheet.id === secondInstance.sheetId)
+  const nestedInstance = divider.parts.find((part) => part.id === 'divider-core-instance')
+  assert.deepEqual(preferredSheetInstancePath(project, divider.id, [secondInstance.id, nestedInstance.id]), [secondInstance.id])
+  assert.deepEqual(preferredSheetInstancePath(project, nestedInstance.sheetId, [secondInstance.id, nestedInstance.id]), [secondInstance.id, nestedInstance.id])
+  assert.deepEqual(preferredSheetInstancePath(project, project.rootSheetId, [secondInstance.id, nestedInstance.id]), [])
+  assert.equal(preferredSheetInstancePath(project, divider.id, ['missing-instance']), null)
 })

@@ -18,6 +18,7 @@ import { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, po
 import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
+import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { wireCurrentFlow } from '../domain/wireFlow'
 import { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import { exportLtspiceProject, type LtspiceExportResult } from '../domain/ltspiceExport'
@@ -940,7 +941,7 @@ export default function App() {
     const sheet = project.sheets.find((candidate) => candidate.id === sheetId)
     if (!sheet) return
     const viaPart = viaPartId ? project.parts.find((part) => part.id === viaPartId && part.sheetId === sheetId) : undefined
-    const path = sheet.id === project.rootSheetId ? [] : viaPart ? [...sheetInstancePath, viaPart.id] : findSheetInstancePath(sheet.id) ?? []
+    const path = sheet.id === project.rootSheetId ? [] : viaPart ? [...sheetInstancePath, viaPart.id] : preferredSheetInstancePath(project, sheet.id, sheetInstancePath) ?? findSheetInstancePath(sheet.id) ?? []
     setSheetInstancePath(path)
     setProjectState((current) => ({ ...current, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view }))
     history.current = { past: [], future: [] }

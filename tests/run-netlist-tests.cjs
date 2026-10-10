@@ -30,6 +30,7 @@ try {
     path.join(root, 'src/domain/electricalCheck.ts'),
     path.join(root, 'src/domain/probe.ts'),
     path.join(root, 'src/domain/hierarchyProbe.ts'),
+    path.join(root, 'src/domain/hierarchyNavigation.ts'),
     path.join(root, 'src/domain/project.ts'),
     path.join(root, 'src/domain/examples.ts'),
     path.join(root, 'src/domain/partClipboard.ts'),
