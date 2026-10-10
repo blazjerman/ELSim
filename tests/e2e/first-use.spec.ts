@@ -19,6 +19,18 @@ test('AC source validation focuses its inspector field before simulation', async
   await expect(page.getByText('AC frequency response')).toBeVisible({ timeout: 60_000 })
 })
 
+test('invalid component values select and focus the value field before engine checks', async ({ page }) => {
+  await page.goto('/')
+  const value = page.locator('[data-part-setting="p-r1:value"]')
+  await value.fill('not-a-resistance')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="p-r1"]')).toHaveClass(/selected/)
+  await expect(value).toBeFocused()
+  await expect(page.locator('.toast')).toContainText('R1 has an invalid numeric value.')
+  await value.fill('2k')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-r1').value)).toBe('2k')
+})
+
 test('wire current animation respects the operating system reduced-motion preference', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
