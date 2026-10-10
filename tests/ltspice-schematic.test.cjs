@@ -225,6 +225,17 @@ test('parses AC and DC analysis directives and rejects malformed ASC records', (
   assert.throws(() => parseLtspiceSchematic('Version 4\nSYMBOL res 0 0 R45', 'rotate.asc'), /unsupported symbol orientation/)
 })
 
+test('maps transient UIC and warns when LTspice startup ramp behavior cannot be preserved', () => {
+  const noOperatingPoint = parseLtspiceSchematic(['Version 4', 'TEXT 0 100 Left 2 !.tran 0 5m 0 10u UIC'].join('\n'), 'uic.asc')
+  assert.equal(noOperatingPoint.project.simulation.skipInitialOperatingPoint, true)
+  assert.deepEqual(noOperatingPoint.warnings, [])
+  assert.match(createNetlist(noOperatingPoint.project), /^\.tran 10u 5m uic$/m)
+
+  const startup = parseLtspiceSchematic(['Version 4', 'TEXT 0 100 Left 2 !.tran 0 5m 0 10u startup'].join('\n'), 'startup.asc')
+  assert.match(startup.warnings[0], /startup source ramp is not modeled/)
+  assert.equal(startup.project.simulation.skipInitialOperatingPoint, undefined)
+})
+
 test('recognizes LTspice IOPIN records and matches them to named FLAG nodes', () => {
   const asc = ['Version 4', 'IOPIN 0 0 In', 'FLAG 0 0 INPUT', 'IOPIN 80 0 Out', 'FLAG 80 0 OUTPUT'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'child.asc')

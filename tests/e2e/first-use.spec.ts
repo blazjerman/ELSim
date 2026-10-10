@@ -360,7 +360,7 @@ test('imported LTspice .ic node and inductor values run through ngspice', async 
     'SYMBOL res 64 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
     'SYMBOL ind 112 0 R0', 'SYMATTR InstName L1', 'SYMATTR Value 10m',
     'TEXT 0 100 Left 2 !.ic V(N1)=0 I(L1)=2mA',
-    'TEXT 0 120 Left 2 !.tran 0 10m 0 10u',
+    'TEXT 0 120 Left 2 !.tran 0 10m 0 10u uic',
   ].join('\n')
   const symbol = (prefix: string) => [
     'Version 4', `SYMATTR Prefix ${prefix}`,
@@ -374,6 +374,7 @@ test('imported LTspice .ic node and inductor values run through ngspice', async 
   ])
   await expect(page.getByText(/Imported initial-rl with 3 parts/)).toBeVisible()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.initialConditions)).toEqual([{ node: 'N1', voltage: '0' }, { element: 'L1', current: '2mA' }])
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.skipInitialOperatingPoint)).toBe(true)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(n1)', exact: true })).toBeVisible()

@@ -67,11 +67,16 @@ function applyDirective(project: Project, directive: string, warnings: string[],
   if (!command) return
   if (command === '.op') { project.simulation.analysis = 'op'; return }
   if (command === '.tran') {
-    const values = tokens.filter((value) => value && value.toLowerCase() !== 'startup')
+    const options = tokens.map((value) => value.toLowerCase())
+    const startup = options.includes('startup')
+    const uic = options.includes('uic')
+    const values = tokens.filter((value) => value && !['startup', 'uic'].includes(value.toLowerCase()))
     const stopTime = values.length >= 2 ? values[1] : values[0]
     if (!stopTime || !validScalar(stopTime)) { warnings.push(`Line ${line}: could not interpret .tran settings.`); return }
     project.simulation.analysis = 'tran'
     project.simulation.stopTime = stopTime
+    if (uic) project.simulation.skipInitialOperatingPoint = true
+    if (startup) warnings.push(`Line ${line}: .tran startup source ramp is not modeled by ELSim; its startup behavior was not preserved.`)
     const maxStep = values.length >= 4 ? values[3] : values.length >= 2 && values[0] !== '0' ? values[0] : project.simulation.maxStep
     if (maxStep && validScalar(maxStep)) project.simulation.maxStep = maxStep
     return
