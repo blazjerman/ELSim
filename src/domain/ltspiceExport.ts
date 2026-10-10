@@ -599,7 +599,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
         try {
           if (part.value.includes('^')) throw new Error('uses ^, which LTspice treats as boolean XOR while this ngspice engine treats it as exponentiation; rewrite it explicitly before export.')
           const parsed = parseBehavioralExpression(part.value)
-          validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref))
+          validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name))
           const renamedSwitchReference = parsed.references.components.find((reference) => sheet.parts.some((candidate) => candidate.kind === 'switch' && candidate.ref.toLowerCase() === reference.toLowerCase()))
           if (renamedSwitchReference) throw new Error(`references current through ${renamedSwitchReference}, but fixed-state switches export under generated resistor references, so that current reference would change.`)
           losses.push({ severity: 'warning', sourceId: part.id, title: 'Behavioral expression passed through to LTspice', explanation: 'The B-source output and validated expression are preserved directly. Review LTspice function and operator semantics for this expression before relying on numeric equivalence.' })

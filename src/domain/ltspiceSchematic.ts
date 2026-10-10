@@ -506,6 +506,12 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   const subcircuits = new Map<string, string[]>()
   const deviceModels = new Map<string, string>()
   const knownLibraries = new Set<string>()
+  const importedParameterNames = new Set<string>()
+  for (const record of textRecords) for (const directive of record.text.split(/\n|!\s+(?=\.)/).map((item) => item.trim())) {
+    const body = directive.replace(/^\.param\b/i, '')
+    if (body === directive) continue
+    for (const match of body.matchAll(/(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)\s*=/g)) importedParameterNames.add(match[1])
+  }
   for (const asset of modelAssets ?? []) {
     knownLibraries.add(baseName(asset.filename))
     const parsed = parseSubcircuitLibrary(asset.content)
@@ -623,7 +629,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       behavioralOutput = behavioralRecord[1].toUpperCase() === 'I' ? 'current' : 'voltage'
       try {
         const parsed = parseBehavioralExpression(behavioralExpression)
-        validateBehavioralReferences(parsed.references, flags.map((flag) => flag.name), symbols.flatMap((candidate) => candidate.attributes.INSTNAME ? [candidate.attributes.INSTNAME] : []))
+        validateBehavioralReferences(parsed.references, flags.map((flag) => flag.name), symbols.flatMap((candidate) => candidate.attributes.INSTNAME ? [candidate.attributes.INSTNAME] : []), [...importedParameterNames])
       } catch (error) {
         const message = error instanceof Error ? error.message : 'the expression or one of its references is unsupported.'
         warnings.push(`Line ${symbol.line}: LTspice behavioral source ${identity} was skipped: ${message} The original schematic source is preserved.`)

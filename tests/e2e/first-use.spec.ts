@@ -1494,9 +1494,9 @@ test('LTspice B-source voltage expression imports and solves in the browser engi
     'Version 4', 'SHEET 1 640 240',
     'FLAG -16 0 VIN', 'FLAG 16 0 0', 'FLAG 48 0 OUT', 'FLAG 80 0 0', 'FLAG 112 0 OUT', 'FLAG 144 0 0',
     'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 1',
-    'SYMBOL bv 64 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V={2*V(VIN)}',
+    'SYMBOL bv 64 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V={GAIN*V(VIN)}',
     'SYMBOL res 128 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
-    'TEXT 0 100 Left 2 !.op', 'TEXT 0 120 Left 2 !.save V(OUT) I(R1)',
+    'TEXT 0 100 Left 2 !.op', 'TEXT 0 120 Left 2 !.save V(OUT) I(R1)', 'TEXT 0 140 Left 2 !.param GAIN=2',
   ].join('\n')
   const symbol = (prefix: string, pins: Array<[string, number, number, string]>) => [
     'Version 4', `SYMATTR Prefix ${prefix}`,
@@ -1511,7 +1511,7 @@ test('LTspice B-source voltage expression imports and solves in the browser engi
   ])
   await expect(page.getByText(/Imported behavioral with 3 parts, 0 wires\./)).toBeVisible()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'B1')?.behavioralOutput)).toBe('voltage')
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'B1')?.value)).toBe('2*V(VIN)')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'B1')?.value)).toBe('GAIN*V(VIN)')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByRole('table')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()

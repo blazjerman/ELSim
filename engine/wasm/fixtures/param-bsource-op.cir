@@ -1,0 +1,8 @@
+ELSim declared parameter in behavioral source
+.param GAIN=2
+V1 IN 0 3
+B1 OUT 0 V={GAIN*V(IN)}
+R1 OUT 0 1k
+.op
+.print op v(out)
+.end

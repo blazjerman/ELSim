@@ -86,14 +86,14 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     if (part.kind === 'behavioral') {
       try {
         const parsed = parseBehavioralExpression(part.value)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref))
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name))
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'The expression is unsupported.'
-        const isUnknownReference = /unknown node|unknown component/i.test(detail)
+        const isUnknownReference = /unknown node|unknown component|unknown parameter/i.test(detail)
         issues.push({
           id: `behavioral-reference:${part.id}`,
           severity: 'warning',
-          title: isUnknownReference ? `${part.ref} references an unknown node or component` : `${part.ref} has an invalid behavioral expression`,
+          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter` : isUnknownReference ? `${part.ref} references an unknown node or component` : `${part.ref} has an invalid behavioral expression`,
           detail,
           partId: part.id,
         })

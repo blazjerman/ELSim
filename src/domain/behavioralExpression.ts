@@ -1,4 +1,4 @@
-export type BehavioralReferences = { nodes: string[]; components: string[] }
+export type BehavioralReferences = { nodes: string[]; components: string[]; parameters?: string[] }
 
 const functions = new Map<string, { min: number; max: number }>([
   ...['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh', 'exp', 'ln', 'log', 'log10', 'abs', 'sqrt', 'floor', 'ceil', 'u', 'u2', 'uramp'].map((name) => [name, { min: 1, max: 1 }] as const),
@@ -23,7 +23,7 @@ export function parseBehavioralExpression(expression: string): { references: Beh
     tokens.push({ kind, text })
   }
   let cursor = 0
-  const nodes = new Set<string>(), components = new Set<string>()
+  const nodes = new Set<string>(), components = new Set<string>(), parameters = new Set<string>()
   const peek = (text?: string) => text === undefined ? tokens[cursor] : tokens[cursor]?.text === text
   const take = (text?: string) => {
     const token = tokens[cursor]
@@ -38,7 +38,7 @@ export function parseBehavioralExpression(expression: string): { references: Beh
     if (token.kind !== 'identifier') throw new Error(`Expected a number, reference, or function near “${token.text}”.`)
     const name = token.text.toLowerCase()
     if (!peek('(')) {
-      if (!['pi', 'time', 'temper', 'hertz'].includes(name)) throw new Error(`Unknown symbol “${token.text}”. Use pi, time, temper, hertz, V(node), or I(component).`)
+      if (!['pi', 'time', 'temper', 'hertz'].includes(name)) parameters.add(token.text)
       return
     }
     take('(')
@@ -74,10 +74,11 @@ export function parseBehavioralExpression(expression: string): { references: Beh
   const parseConditional = (): void => { parseLogical(); if (peek('?')) { take('?'); parseConditional(); take(':'); parseConditional() } }
   parseConditional()
   if (cursor !== tokens.length) throw new Error(`Unexpected token “${tokens[cursor].text}”.`)
-  return { references: { nodes: [...nodes], components: [...components] } }
+  return { references: { nodes: [...nodes], components: [...components], ...(parameters.size ? { parameters: [...parameters] } : {}) } }
 }
 
-export function validateBehavioralReferences(references: BehavioralReferences, nodes: string[], componentRefs: string[]): void {
+export function validateBehavioralReferences(references: BehavioralReferences, nodes: string[], componentRefs: string[], parameterNames: string[] = []): void {
   for (const node of references.nodes) if (node !== '0' && !nodes.some((known) => known.toLowerCase() === node.toLowerCase())) throw new Error(`Behavioral source refers to unknown node “${node}”. Add a net label first.`)
   for (const component of references.components) if (!componentRefs.some((known) => known.toLowerCase() === component.toLowerCase())) throw new Error(`Behavioral source refers to unknown component “${component}”.`)
+  for (const parameter of references.parameters ?? []) if (!parameterNames.some((known) => known.toLowerCase() === parameter.toLowerCase())) throw new Error(`Behavioral source refers to unknown parameter “${parameter}”. Declare it with .param first.`)
 }

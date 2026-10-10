@@ -109,6 +109,20 @@ test('accepts declared sheet parameters in passive and current-source values but
   assert.ok(issues.some((item) => item.id === 'invalid-value:p-r1'))
 })
 
+test('accepts declared sheet parameters in behavioral source expressions and explains missing ones', () => {
+  const project = createStarterProject()
+  const behavioral = { id: 'parameter-behavioral', kind: 'behavioral', ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage', x: 700, y: 600, rotation: 0 }
+  project.parts.push(behavioral)
+  project.sheets[0].parts = project.parts
+  project.sheets[0].parameters = [{ id: 'parameter-gain', name: 'GAIN', defaultValue: '2' }]
+  assert.equal(checkCircuit(project).some((issue) => issue.id === 'behavioral-reference:parameter-behavioral'), false)
+
+  behavioral.value = 'MISSING*V(vin)'
+  const issue = checkCircuit(project).find((item) => item.id === 'behavioral-reference:parameter-behavioral')
+  assert.match(issue.title, /undeclared parameter/)
+  assert.match(issue.detail, /unknown parameter “MISSING”/)
+})
+
 test('reports missing imported device models on the affected component', () => {
   const project = createStarterProject()
   const diode = { id: 'user-diode', kind: 'diode', ref: 'D2', value: 'D_CUSTOM', deviceModel: 'D_CUSTOM', x: 760, y: 600, rotation: 0 }

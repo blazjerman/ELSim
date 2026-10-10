@@ -12,6 +12,13 @@ test('behavioral expression parser collects node and component references', () =
   assert.doesNotThrow(() => validateBehavioralReferences(parsed.references, ['in'], ['V1', 'R1']))
 })
 
+test('behavioral expressions can use declared sheet parameters and reject undeclared ones', () => {
+  const parsed = parseBehavioralExpression('GAIN * V(in) + OFFSET')
+  assert.deepEqual(parsed.references, { nodes: ['in'], components: [], parameters: ['GAIN', 'OFFSET'] })
+  assert.doesNotThrow(() => validateBehavioralReferences(parsed.references, ['in'], [], ['gain', 'offset']))
+  assert.throws(() => validateBehavioralReferences(parsed.references, ['in'], [], ['GAIN']), /unknown parameter “OFFSET”/)
+})
+
 test('behavioral expressions reject code injection and unknown references/functions', () => {
   for (const expression of ['V(in); quit', 'V(unknown) + 1', 'system(1)', 'V(in)\n.control', 'V(in) + {GAIN}']) {
     if (expression === 'V(unknown) + 1') {

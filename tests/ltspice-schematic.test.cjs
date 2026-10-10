@@ -58,13 +58,14 @@ test('imports LTspice parameters with whitespace and safe braced arithmetic with
 test('imports supported LTspice B-source voltage and current expressions as behavioral sources', () => {
   const behavioralSymbol = { ...symbol, id: 'symbol-behavioral', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
   const resistorSymbol = { ...symbol, id: 'symbol-resistor-load', filename: 'res.asy' }
-  const voltageAsc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V={2*V(IN)}'].join('\n')
+  const voltageAsc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V={GAIN*V(IN)}', 'TEXT 0 100 Left 2 !.param GAIN=2'].join('\n')
   const voltage = parseLtspiceSchematic(voltageAsc, 'behavioral-voltage.asc', [behavioralSymbol])
   assert.deepEqual(voltage.warnings, [])
   assert.equal(voltage.project.parts[0].kind, 'behavioral')
   assert.equal(voltage.project.parts[0].behavioralOutput, 'voltage')
-  assert.equal(voltage.project.parts[0].value, '2*V(IN)')
-  assert.match(createNetlist(voltage.project), /^B1\s+IN\s+OUT\s+V=\{2\*V\(IN\)\}$/m)
+  assert.equal(voltage.project.parts[0].value, 'GAIN*V(IN)')
+  assert.match(createNetlist(voltage.project), /^\.param GAIN=2$/m)
+  assert.match(createNetlist(voltage.project), /^B1\s+IN\s+OUT\s+V=\{GAIN\*V\(IN\)\}$/m)
 
   const currentAsc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value I={I(R1)}', 'SYMBOL res 120 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k'].join('\n')
   const current = parseLtspiceSchematic(currentAsc, 'behavioral-current.asc', [behavioralSymbol, resistorSymbol])
@@ -82,6 +83,15 @@ test('skips LTspice B sources outside the behavioral expression subset with a so
   assert.equal(project.importedSchematicSource.originalText, asc)
   assert.match(warnings[0], /LTspice behavioral source B1 was skipped: Function “table” is not supported/)
   assert.match(warnings[0], /original schematic source is preserved/)
+})
+
+test('skips an LTspice B source that references an undeclared parameter', () => {
+  const behavioralSymbol = { ...symbol, id: 'symbol-unknown-parameter-behavioral', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
+  const asc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V={GAIN*V(IN)}'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'undeclared-behavioral-parameter.asc', [behavioralSymbol])
+  assert.equal(project.parts.length, 0)
+  assert.match(warnings[0], /unknown parameter “GAIN”\. Declare it with \.param first/)
+  assert.equal(project.importedSchematicSource.originalText, asc)
 })
 
 test('imports an LTspice voltage SINE waveform with optional delay, damping, and phase', () => {
