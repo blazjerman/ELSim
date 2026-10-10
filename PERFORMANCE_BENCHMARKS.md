@@ -51,11 +51,11 @@ Playwright benchmark: `npm run benchmark:browser` (Chromium and Firefox). The ge
 
 | Browser | Parts | Editor ready (ms) | Selection median (ms) | Selection p95 (ms) | SVG elements |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Chromium | 100 | 303 | 74 | 102 | 1,610 |
-| Chromium | 500 | 613 | 207 | 333 | 8,010 |
-| Chromium | 1,000 | 1,015 | 415 | 516 | 16,010 |
-| Firefox | 100 | 403 | 95 | 100 | 1,610 |
-| Firefox | 500 | 667 | 248 | 257 | 8,010 |
-| Firefox | 1,000 | 1,130 | 387 | 489 | 16,010 |
+| Chromium | 100 | 296 | 102 | 107 | 1,610 |
+| Chromium | 500 | 585 | 174 | 296 | 8,010 |
+| Chromium | 1,000 | 933 | 324 | 482 | 16,010 |
+| Firefox | 100 | 403 | 83 | 128 | 1,610 |
+| Firefox | 500 | 624 | 192 | 209 | 8,010 |
+| Firefox | 1,000 | 1,032 | 309 | 379 | 16,010 |
 
-At 1,000 parts, selecting a component still takes roughly 0.4 seconds. This is the next profiling target; these figures are a baseline and should not be treated as release budgets. Heap readings from browser automation were inconsistent and are excluded from conclusions. SVG size grows linearly with parts and labels, so the next editor work should profile render cost and consider viewport culling or a canvas layer only if measured data supports it.
+`CircuitPart` now memoizes its SVG subtree and uses stable event wrappers that dispatch to the latest schematic handlers. Against the earlier recorded run, 1,000-part selection median improved from 415 to 324 ms in Chromium and 387 to 309 ms in Firefox. Selection still takes roughly 0.3 seconds, so it remains a profiling target; these figures are a baseline and should not be treated as release budgets. Heap readings from browser automation were inconsistent and are excluded from conclusions. SVG size grows linearly with parts and labels, so the next editor work should profile render cost and consider viewport culling or a canvas layer only if measured data supports it.

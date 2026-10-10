@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
   Activity, AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleDot, CircleHelp,
@@ -177,7 +177,7 @@ function symbolArcPath(primitive: Extract<ImportedSymbol['primitives'][number], 
   return `M ${primitive.startX} ${primitive.startY} A ${rx} ${ry} 0 ${largeArc} 0 ${primitive.endX} ${primitive.endY}`
 }
 
-function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, onSwitchToggle, voltage, current, symbol }: { part: Part; selected: boolean; onSelect: (id: string) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; voltage?: number; current?: number; symbol?: ImportedSymbol }) {
+const CircuitPart = memo(function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, onSwitchToggle, voltage, current, symbol }: { part: Part; selected: boolean; onSelect: (id: string) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; voltage?: number; current?: number; symbol?: ImportedSymbol }) {
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
   const currentGlow = Math.min(1, Math.abs(current ?? 0) / 0.02)
   const voltageGlow = Math.min(1, Math.abs(voltage ?? 0) / 5)
@@ -213,7 +213,7 @@ function CircuitPart({ part, selected, onSelect, onPointerDown, tool, onProbe, o
     <text className="part-ref" x="0" y={part.kind === 'subcircuit' ? -customHeight / 2 - 9 : part.kind === 'ground' ? 34 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp'].includes(part.kind) ? -68 : -29}>{part.kind === 'subcircuit' ? `${part.ref} · ${part.value || part.modelName}` : part.ref}</text>
     {part.value && part.kind !== 'subcircuit' && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp'].includes(part.kind) ? 76 : 43}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.kind === 'behavioral' ? `${part.behavioralOutput === 'current' ? 'I' : 'V'}=f(...)` : part.value}</text>}
   </g>
-}
+})
 
 function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange, sampleIndex, onSampleChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; sampleIndex: number | null; onSampleChange: (index: number | null) => void; measurements: MeasurementResult[] }) {
   const shown = traces.filter((trace) => selectedIds.includes(trace.id))
@@ -566,6 +566,12 @@ function Schematic({ project, selection, setSelection, setProject, setView, spac
     drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, points: wire?.points.map(([x,y]) => [x,y]) }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
+  const partEventHandlers = useRef({ beginDrag, probe: onProbe, toggleSwitch })
+  partEventHandlers.current = { beginDrag, probe: onProbe, toggleSwitch }
+  const selectPart = useCallback((id: string) => setSelection({ kind: 'part', id }), [setSelection])
+  const beginPartDrag = useCallback((event: PointerEvent<SVGGElement>, id: string) => partEventHandlers.current.beginDrag(event, 'part', id), [])
+  const probePart = useCallback((id: string) => partEventHandlers.current.probe({ kind: 'part', id }), [])
+  const togglePart = useCallback((id: string) => partEventHandlers.current.toggleSwitch(id), [])
   const beginSegmentDrag = (event: PointerEvent<SVGPolylineElement>, wireId: string, segmentIndex: number) => {
     if (tool !== 'select' || event.button !== 0 || spacePan) return
     const wire = project.wires.find((item) => item.id === wireId)
@@ -680,7 +686,7 @@ function Schematic({ project, selection, setSelection, setProject, setView, spac
       {project.netLabels.filter((label) => label.visible !== false).map((label) => <g key={label.id} className={`canvas-label${selection?.kind === 'label' && selection.id === label.id ? ' selected' : ''}`} onPointerDown={(event) => beginDrag(event, 'label', label.id)} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); setSelection({ kind: 'label', id: label.id }) } }}><rect x={label.x - 3} y={label.y - 22} width={Math.max(34, label.name.length * 7 + 14)} height="26" fill="transparent"/><line x1={label.x} y1={label.y} x2={label.x + 7} y2={label.y - 8} stroke="#9cc4a8" strokeWidth="1"/><text x={label.x + 9} y={label.y - 9}>{label.name}</text></g>)}
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
-      {project.parts.map((part) => <CircuitPart key={part.id} part={part} symbol={part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined} selected={selection?.kind === 'part' && part.id === selection.id} onSelect={(id) => setSelection({ kind: 'part', id })} onPointerDown={(event, id) => beginDrag(event, 'part', id)} tool={tool} onProbe={(id) => onProbe({ kind: 'part', id })} onSwitchToggle={toggleSwitch} {...componentSample(part)}/>)}
+      {project.parts.map((part) => <CircuitPart key={part.id} part={part} symbol={part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined} selected={selection?.kind === 'part' && part.id === selection.id} onSelect={selectPart} onPointerDown={beginPartDrag} tool={tool} onProbe={probePart} onSwitchToggle={togglePart} {...componentSample(part)}/>)}
       <g className="canvas-label"><text x="138" y="238">INPUT</text><text x="567" y="265">OUTPUT</text></g>
     </svg>
     {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}
