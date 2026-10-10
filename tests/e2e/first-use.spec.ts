@@ -41,6 +41,16 @@ test('quick tour explains the current workspace and project save flow', async ({
   await expect(dialog).toHaveCount(0)
 })
 
+test('LTspice parameter expressions are preserved and reported when not supported', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  const source = ['Version 4', 'TEXT 0 100 Left 2 !.param RLOAD={VDD * 2}'].join('\n')
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles({ name: 'parameter-expression.asc', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  await expect(page.getByLabel('LTspice import diagnostics')).toContainText(/\.param RLOAD uses an expression or value outside ELSim’s supported numeric parameter syntax/)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets[0].parameters)).toEqual([])
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).importedSchematicSource.originalText)).toBe(source)
+})
+
 test('quick tour can run the open circuit directly from its simulation step', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
