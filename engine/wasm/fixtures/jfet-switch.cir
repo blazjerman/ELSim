@@ -1,0 +1,16 @@
+ELSim beginner N-channel JFET low-side switch fixture
+VDRIVE vin 0 PULSE(0 -5 0 1u 1u 50m 100m)
+RGATE vin gate 100
+VCC vcc 0 DC 5
+RLOAD vcc drain 1k
+J1 drain gate 0 ELSIM_MODEL_J1
+.model ELSIM_MODEL_J1 NJF (VTO=-2 BETA=1m LAMBDA=0.02)
+.tran 100u 100m
+.save all @J1[id]
+.control
+set filetype=ascii
+tran 100u 100m
+write /result.raw all
+quit
+.endc
+.end

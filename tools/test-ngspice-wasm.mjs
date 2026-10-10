@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
+const fixtures = ['rc-transient', 'current-source-op', 'pwl-transient', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -51,13 +51,13 @@ function realRawVector(raw, name) {
 
 for (const fixture of fixtures) {
   const deckPath = path.join(root, 'engine/wasm/fixtures', `${fixture}.cir`)
-  const wasmResult = await runInWorker(deckPath, fixture === 'current-source-op' || fixture === 'imported-mosfet-model-op' || fixture === 'jfet-model-op' || fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op', undefined, fixture === 'ltspice-uplim-op')
+  const wasmResult = await runInWorker(deckPath, fixture === 'current-source-op' || fixture === 'imported-mosfet-model-op' || fixture === 'jfet-model-op' || fixture === 'jfet-switch' || fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op', undefined, fixture === 'ltspice-uplim-op')
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
   const wasmRows = numericRows(wasmResult.stdout)
   if (fixture === 'hierarchical-parameter') { assert.match(wasmResult.stdout, /in\s+5\.000000e\+00/i); assert.match(wasmResult.stdout, /in2\s+1\.000000e\+01/i); assert.match(wasmResult.stdout, /resistance\s+2000\s+1000/i); assert.match(wasmResult.stdout, /\bi\s+0\.005\s+0\.005/i) }
-  if (fixture !== 'hierarchical-parameter' && fixture !== 'current-source-op' && fixture !== 'imported-mosfet-model-op' && fixture !== 'jfet-model-op' && fixture !== 'mosfet-switch' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
+  if (fixture !== 'hierarchical-parameter' && fixture !== 'current-source-op' && fixture !== 'imported-mosfet-model-op' && fixture !== 'jfet-model-op' && fixture !== 'jfet-switch' && fixture !== 'mosfet-switch' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
 
   if (fixture === 'pwl-transient') {
     assert.match(wasmResult.stdout, /v\(in\)/i, 'pwl-transient: input voltage was not printed')
@@ -68,7 +68,7 @@ for (const fixture of fixtures) {
   }
 
   if (fixture.endsWith('-op')) {
-    if (fixture !== 'current-source-op' && fixture !== 'imported-mosfet-model-op' && fixture !== 'jfet-model-op') assert.match(wasmResult.stdout, /Voltage|v\(out\)/i, `${fixture}: no operating-point result was printed`)
+    if (fixture !== 'current-source-op' && fixture !== 'imported-mosfet-model-op' && fixture !== 'jfet-model-op' && fixture !== 'jfet-switch') assert.match(wasmResult.stdout, /Voltage|v\(out\)/i, `${fixture}: no operating-point result was printed`)
     if (fixture === 'current-source-op') {
       assert.ok(Math.abs(realRawVector(wasmResult.raw, 'v(out)')[0] - 1) < 1e-9, 'current-source-op: 1 mA into 1 kΩ should produce 1 V')
       assert.match(wasmResult.raw, /^\s*\d+\s+i\(@i1\[current\]\)\s+current$/mi, 'current-source-op: independent source current vector is missing')
@@ -91,6 +91,19 @@ for (const fixture of fixtures) {
       assert.ok(drain > 0 && drain < 5, `jfet-model-op: drain voltage should be between the rails, got ${drain} V`)
       assert.ok(drainCurrent > 0.0001, `jfet-model-op: expected positive drain current, got ${drainCurrent} A`)
     }
+  if (fixture === 'jfet-switch') {
+    assert.match(wasmResult.raw, /^\s*\d+\s+i\(@j1\[id\]\)\s+current$/mi, 'jfet-switch: drain-current vector was not emitted')
+    const time = realRawVector(wasmResult.raw, 'time')
+    const gate = realRawVector(wasmResult.raw, 'v(gate)')
+    const drain = realRawVector(wasmResult.raw, 'v(drain)')
+    const drainCurrent = realRawVector(wasmResult.raw, 'i(@j1[id])')
+    const atTime = (seconds) => time.reduce((best, value, index) => Math.abs(value - seconds) < Math.abs(time[best] - seconds) ? index : best, 0)
+    const on = atTime(0.025), off = atTime(0.075)
+    assert.ok(Math.abs(gate[on]) < 0.1, `jfet-switch: zero gate bias should conduct, got ${gate[on]} V`)
+    assert.ok(drain[on] < 4.5 && drainCurrent[on] > 0.0001, `jfet-switch: expected current at zero gate bias, got Vd=${drain[on]} V Id=${drainCurrent[on]} A`)
+    assert.ok(gate[off] < -4.5, `jfet-switch: negative gate drive should cut off, got ${gate[off]} V`)
+    assert.ok(drain[off] > 4.9 && Math.abs(drainCurrent[off]) < 0.0001, `jfet-switch: expected cutoff near the supply, got Vd=${drain[off]} V Id=${drainCurrent[off]} A`)
+  }
     if (fixture === 'ltspice-uplim-op') assert.match(wasmResult.stdout, /out\s+2\.000000e\+00/i, 'ltspice-uplim-op: lta compatibility mode did not apply the expected upper limit')
   if (fixture === 'mosfet-switch') {
     assert.match(wasmResult.stdout, /drain\s+\d+\.\d+e-\d+/i, 'mosfet-switch: drain should be pulled low by the conducting NMOS')
@@ -114,7 +127,7 @@ for (const fixture of fixtures) {
     }
     if (fixture.startsWith('hierarchical-repeat-')) hierarchyRepeatRaws.set(fixture, wasmResult.raw)
     if (fixture.startsWith('hierarchical-nested-')) hierarchyNestedRaws.set(fixture, wasmResult.raw)
-  } else if (fixture !== 'hierarchical-parameter' && fixture !== 'mosfet-switch' && !fixture.startsWith('hierarchical-nested-')) {
+  } else if (fixture !== 'hierarchical-parameter' && fixture !== 'mosfet-switch' && fixture !== 'jfet-switch' && !fixture.startsWith('hierarchical-nested-')) {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)
   }
 

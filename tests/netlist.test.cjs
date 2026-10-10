@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createJfetSwitchExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { validateSourcePwlPoints } = require(path.join(build, 'domain/sourcePwl.js'))
 
@@ -303,6 +303,19 @@ test('PMOS high-side example uses active-low gate drive and ties source and bulk
   assert.match(artifact.text, /^M1 DRAIN GATE VCC VCC ELSIM_MODEL_M1$/m)
   assert.match(artifact.text, /^RLOAD DRAIN 0 1k$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(GATE)', 'V(DRAIN)', 'I(M1)'])
+})
+
+test('N-JFET switch example uses zero-bias conduction and negative gate cutoff', () => {
+  const project = createJfetSwitchExampleProject()
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^VDRIVE VIN 0 PULSE\(0 -5 0 1u 1u 50m 100m\)$/m)
+  assert.match(artifact.text, /^RGATE VIN GATE 100$/m)
+  assert.match(artifact.text, /^VCC VCC 0 DC 5$/m)
+  assert.match(artifact.text, /^RLOAD VCC DRAIN 1k$/m)
+  assert.match(artifact.text, /^J1 DRAIN GATE 0 ELSIM_MODEL_J1$/m)
+  assert.match(artifact.text, /^\.model ELSIM_MODEL_J1 NJF \(VTO=-2 BETA=1m LAMBDA=0\.02\)$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(GATE)', 'V(DRAIN)', 'I(J1)'])
 })
 
 test('CCCS and CCVS example share a named voltage-source current sensor', () => {
