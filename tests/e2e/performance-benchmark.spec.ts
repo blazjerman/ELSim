@@ -3,6 +3,71 @@ import { performance } from 'node:perf_hooks'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
+test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
+  test.setTimeout(120_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the browser hierarchy benchmark').toEqual([])
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await page.getByRole('button', { name: 'Examples' }).click()
+  await page.locator('.example-list article').filter({ hasText: 'Nested reusable divider' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('alert').getByRole('button', { name: 'Replace and open' }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)).toBe('Nested reusable divider')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const root = project.sheets.find((sheet: { id: string }) => sheet.id === project.rootSheetId)
+    const source = root.parts.find((part: { kind: string; ref: string }) => part.kind === 'source' && part.ref === 'V1')
+    const ground = root.parts.find((part: { kind: string; ref: string }) => part.kind === 'ground' && part.ref === 'GND1')
+    const template = root.parts.find((part: { kind: string }) => part.kind === 'subcircuit')
+    const instances = Array.from({ length: 500 }, (_, index) => ({
+      ...template,
+      id: `browser-hierarchy-x-${index + 1}`,
+      ref: `X${index + 1}`,
+      x: 700 + (index % 25) * 180,
+      y: 180 + Math.floor(index / 25) * 120,
+    }))
+    const netLabels = [
+      { id: 'browser-hierarchy-vin', name: 'IN5', x: source.x, y: source.y - 52, visible: true },
+      { id: 'browser-hierarchy-source-ground', name: '0', x: source.x, y: source.y + 52, visible: true },
+    ]
+    instances.forEach((part, index) => {
+      netLabels.push({ id: `browser-hierarchy-label-${index}-in`, name: 'IN5', x: part.x - 80, y: part.y, visible: true })
+      netLabels.push({ id: `browser-hierarchy-label-${index}-out`, name: 'OUT5', x: part.x + 80, y: part.y, visible: true })
+      netLabels.push({ id: `browser-hierarchy-label-${index}-ground`, name: '0', x: part.x, y: part.y + 60, visible: true })
+    })
+    const parts = [source, ground, ...instances]
+    project.name = 'Browser benchmark · 500 nested divider instances'
+    project.parts = parts
+    project.netLabels = netLabels
+    project.wires = []
+    project.junctions = []
+    project.simulation.analysis = 'op'
+    project.plotSettings.selectedTraceIds = ['V(out5)']
+    root.parts = parts
+    root.netLabels = netLabels
+    root.wires = []
+    root.junctions = []
+    project.sheets = project.sheets.map((sheet: { id: string }) => sheet.id === root.id ? root : sheet)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  const started = performance.now()
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(502)
+  const editorReadyMs = performance.now() - started
+  const solveStarted = performance.now()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('Analysis complete', { timeout: 90_000 })
+  const solveReadyMs = performance.now() - solveStarted
+  const outputTrace = page.getByRole('button', { name: /^V\(out5\)$/i })
+  await expect(outputTrace).toBeVisible()
+  const output = await page.locator('.trace-toggles').innerText()
+  expect(output).toMatch(/V\(out5\)/i)
+  expect(pageErrors).toEqual([])
+  console.log(JSON.stringify({ benchmark: 'browser-500-instance-nested-hierarchy-v1', browser: browserName, hierarchyInstances: 500, renderedParts: 502, editorReadyMs: Number(editorReadyMs.toFixed(2)), operatingPointReadyMs: Number(solveReadyMs.toFixed(2)), outputTraceVisible: true }, null, 2))
+})
+
 test('measure a million-sample transient through the browser ngspice worker and plot UI', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

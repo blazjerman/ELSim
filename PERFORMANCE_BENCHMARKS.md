@@ -77,6 +77,17 @@ The performance runner creates 100, 500, 1,000, or 5,000 instances of a two-leve
 | 1,000 | 3,000 | 3,000 | 1,021 | 15.935 | 33.289 |
 | 5,000 | 15,000 | 15,000 | 5,101 | 138.603 | 217.649 |
 
+### Browser nested hierarchy
+
+The browser performance test opens the project-original two-level divider example, expands its root sheet to 500 instances of the nested block, then reloads the app from the validated `.elsim` project state. All 500 instances share the same named input, output, and ground nets. It verifies the rendered part count, runs the circuit through the actual browser ngspice worker, checks the returned output trace, and fails on page errors.
+
+| Browser | Hierarchy instances | Rendered parts | Editor reload-to-render (ms) | Run-to-result (ms) | Result vectors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Chromium | 500 | 502 | 655.93 | 421.49 | 1,003 |
+| Firefox | 500 | 502 | 698.93 | 781.09 | 1,003 |
+
+These measurements are local single runs and are not budgets. They confirm the repeated two-level hierarchy path works in both browsers at this size; much larger browser schematics, memory, and interactive editing latency remain unmeasured.
+
 ### Repeat run (2026-10-10)
 
 I reran the full benchmark on the same i7-12700F host with Node 18.20.4. The 5,000-instance nested hierarchy remained within the 500 ms domain target, with connectivity p95 199.797 ms and netlist p95 430.732 ms. The 5,000-part wire-heavy circuit measured 169.824 ms connectivity and 207.514 ms netlisting p95. Both show meaningful run-to-run variation from the earlier observations, so these are reference observations rather than a claim of a regression or improvement. The 1M-sample plot reducer returned 902 points at 1.1 ms p95.
