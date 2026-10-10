@@ -69,7 +69,10 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       })))
       : makeTraces(module.FS.readFile('/result.raw', { encoding: 'utf8' }))
     if (!traces.length) throw new Error('ngspice completed but produced no voltage or current vectors.')
-    const measurementOutput = parseMeasurementOutput(output, measurements, parameterSweep?.map((sweep) => sweep.label) ?? [])
+    const measurementTraces = parameterSweep?.length
+      ? parameterSweep.map((_, index) => traces.filter((trace) => trace.sweep?.index === index))
+      : [traces]
+    const measurementOutput = parseMeasurementOutput(output, measurements, parameterSweep?.map((sweep) => sweep.label) ?? [], measurementTraces)
     const result = {
       metadata: { ...metadata, completedAt: new Date().toISOString() },
       netlist: artifact.text,

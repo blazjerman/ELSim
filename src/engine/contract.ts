@@ -161,7 +161,7 @@ function isMeasurementResult(value: unknown): value is MeasurementResult {
   return value.operation === 'delay' ? typeof value.targetVector === 'string' && value.unit === 's' : value.unit === 'V' || value.unit === 'A'
 }
 
-const measurementVectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQB][A-Za-z0-9_]*\))$/i
+const measurementVectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQB][A-Za-z0-9_]*\)|i\(@I[A-Za-z0-9_]+\[current\]\))$/i
 const measurementIdPattern = /^[A-Za-z][A-Za-z0-9_]{0,23}$/
 
 function isTransientMeasurement(value: unknown): boolean {

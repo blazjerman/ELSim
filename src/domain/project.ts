@@ -385,7 +385,7 @@ export function validateProject(input: unknown): Project {
     if (simulation.analysis !== 'tran') throw new Error('Transient measurements require transient analysis.')
     const measurementIds = new Set<string>()
     for (const measurement of simulation.transientMeasurements) {
-      const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQB][A-Za-z0-9_]*\))$/i
+      const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQB][A-Za-z0-9_]*\)|i\(@I[A-Za-z0-9_]+\[current\]\))$/i
       const validDelay = measurement?.operation === 'delay' && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && typeof measurement.targetVector === 'string' && vectorPattern.test(measurement.targetVector.trim()) && typeof measurement.threshold === 'string' && Number.isFinite(Number(measurement.threshold)) && typeof measurement.targetThreshold === 'string' && Number.isFinite(Number(measurement.targetThreshold)) && ['rise', 'fall', 'either'].includes(measurement.edge) && ['rise', 'fall', 'either'].includes(measurement.targetEdge)
       const validScalar = measurement && ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim())
       if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !(validDelay || validScalar)) throw new Error('Transient measurements require a unique name, supported operation, and valid voltage or device-current vectors and thresholds.')

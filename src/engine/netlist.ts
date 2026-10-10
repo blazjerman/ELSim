@@ -451,8 +451,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       break
     }
-    const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQB][A-Za-z0-9_]*\))$/i
+    const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQB][A-Za-z0-9_]*\)|i\(@I[A-Za-z0-9_]+\[current\]\))$/i
     const delay = measurement.operation === 'delay' ? measurement : undefined
+    const sourceCurrent = /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.vector.trim()) || (delay && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(delay.targetVector.trim()))
     const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (delay
       ? vectorPattern.test(measurement.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && Number.isFinite(Number(delay.threshold)) && Number.isFinite(Number(delay.targetThreshold)) && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
       : ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()))
@@ -461,7 +462,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       continue
     }
-    if (delay) append(`.meas tran ELSIM_${delay.id} TRIG ${delay.vector.trim()} VAL=${delay.threshold} ${delay.edge.toUpperCase()}=1 TARG ${delay.targetVector.trim()} VAL=${delay.targetThreshold} ${delay.targetEdge.toUpperCase()}=1`, 'analysis:tran', 'analysis')
+    if (sourceCurrent) append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id} from the solved current-source samples.`, 'analysis:tran', 'analysis')
+    else if (delay) append(`.meas tran ELSIM_${delay.id} TRIG ${delay.vector.trim()} VAL=${delay.threshold} ${delay.edge.toUpperCase()}=1 TARG ${delay.targetVector.trim()} VAL=${delay.targetThreshold} ${delay.targetEdge.toUpperCase()}=1`, 'analysis:tran', 'analysis')
     else append(`.meas tran ELSIM_${measurement.id} ${measurement.operation} ${measurement.vector.trim()}`, 'analysis:tran', 'analysis')
   }
   rows.push('.end')
