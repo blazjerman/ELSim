@@ -222,8 +222,10 @@ export function analyzeConnectivity(project: Project): Connectivity {
     }
   }
   const wireNets = new Map<string, string>()
+  const firstSegmentByWire = new Map<string, Segment>()
+  for (const segment of segments) if (!firstSegmentByWire.has(segment.wireId)) firstSegmentByWire.set(segment.wireId, segment)
   for (const wire of project.wires) {
-    const segment = segments.find((item) => item.wireId === wire.id)
+    const segment = firstSegmentByWire.get(wire.id)
     if (segment) wireNets.set(wire.id, nameByRoot.get(dsu.find(segment.token)) ?? `n${autoIndex++}`)
   }
   return { pinNets, wireNets, diagnostics }

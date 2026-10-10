@@ -78,6 +78,45 @@ function makeChain(createStarterProject, componentPins, count) {
   return project
 }
 
+function makeWireGrid(createStarterProject, componentPins, count) {
+  const project = createStarterProject()
+  const columns = 50
+  const resistors = Array.from({ length: count }, (_, index) => ({
+    id: `wire-bench-r-${index + 1}`,
+    kind: 'resistor',
+    ref: `R${index + 1}`,
+    value: '1k',
+    x: 100 + (index % columns) * 320,
+    y: 200 + Math.floor(index / columns) * 180,
+    rotation: 0,
+  }))
+  const wires = []
+  for (let index = 0; index < resistors.length; index += 1) {
+    if (index % columns === columns - 1 || index + 1 >= resistors.length) continue
+    const [left, right] = componentPins(resistors[index])
+    const [nextLeft] = componentPins(resistors[index + 1])
+    const leadX = right.x, endX = nextLeft.x, y = right.y
+    const startX = leadX + 32
+    const middleX = leadX + 64
+    const farX = leadX + 96
+    wires.push({
+      id: `wire-bench-${index + 1}`,
+      points: [[leadX, y], [startX, y], [startX, y + 16], [middleX, y + 16], [middleX, y - 16], [farX, y - 16], [farX, y], [endX, y]],
+    })
+  }
+  project.name = `Benchmark multi-segment wire grid (${count} resistors)`
+  project.parts = resistors
+  project.wires = wires
+  project.junctions = []
+  project.netLabels = []
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.sheets = project.sheets.map((sheet) => sheet.id === project.rootSheetId
+    ? { ...sheet, parts: resistors, wires, junctions: [], netLabels: [] }
+    : sheet)
+  project.activeSheetId = project.rootSheetId
+  return project
+}
+
 function runWasm(moduleUrl, deck, options = {}) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(path.join(root, 'tests/wasm/ngspice-benchmark-worker.mjs'), { workerData: { moduleUrl, deck, ...options } })
@@ -150,6 +189,28 @@ try {
       nets: new Set(connectivity.value.pinNets.values()).size,
       netlistLines: artifact.text.trimEnd().split('\n').length,
       netlistBytes: Buffer.byteLength(artifact.text),
+      connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
+      netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
+    })
+  }
+
+  const wireResults = []
+  for (const count of [100, 500, 1_000, 5_000]) {
+    const project = makeWireGrid(createStarterProject, componentPins, count)
+    const connectivity = measure(() => analyzeConnectivity(project))
+    const netlist = measure(() => createNetlistArtifact(project))
+    const artifact = netlist.value
+    if (artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error(`Wire-heavy benchmark fixture ${count} produced netlist errors.`)
+    if (connectivity.value.pinNets.size !== count * 2) throw new Error(`Wire-heavy benchmark fixture ${count} lost one or more component pins in connectivity analysis.`)
+    const wireSegments = project.wires.reduce((sum, wire) => sum + wire.points.length - 1, 0)
+    if (wireSegments !== project.wires.length * 7) throw new Error(`Wire-heavy benchmark fixture ${count} does not have the expected routed segments.`)
+    wireResults.push({
+      resistors: count,
+      parts: project.parts.length,
+      wires: project.wires.length,
+      wireSegments,
+      nets: new Set(connectivity.value.pinNets.values()).size,
+      netlistLines: artifact.text.trimEnd().split('\n').length,
       connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
       netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
     })
@@ -229,10 +290,11 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 2,
+    benchmarkVersion: 3,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
+    wireResults,
     plotResults,
     simulationResults: simulationResults ?? 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations',
     transientResults: transientResults ?? 'skipped: build the optional local ngspice WASM runtime to include large transient and process-memory observations',
