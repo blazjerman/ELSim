@@ -1037,7 +1037,7 @@ export default function App() {
   }
   const placeSheetBlock = (sheet: Project['sheets'][number]) => {
     if (!sheet.ports.length) return
-    const part: Part = { id: `p-${crypto.randomUUID()}`, kind: 'subcircuit', ref: nextRef(project.parts, 'subcircuit'), value: sheet.name, modelName: sheetModelName(sheet.id), modelPins: sheet.ports.map((port) => port.name), sheetId: sheet.id, sheetPortLayout: sheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })), x: 680 + (project.parts.length % 3) * 130, y: 440 + Math.floor(project.parts.length / 3) * 100, rotation: 0 }
+    const part: Part = { id: `p-${crypto.randomUUID()}`, kind: 'subcircuit', componentDefinitionId: componentDefinitionFor('subcircuit').id, ref: nextRef(project.parts, 'subcircuit'), value: sheet.name, modelName: sheetModelName(sheet.id), modelPins: sheet.ports.map((port) => port.name), sheetId: sheet.id, sheetPortLayout: sheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })), x: 680 + (project.parts.length % 3) * 130, y: 440 + Math.floor(project.parts.length / 3) * 100, rotation: 0 }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
     setSelection({ kind: 'part', id: part.id })
     setNotice(`Placed ${sheet.name}. Connect its pins in the order shown in the inspector.`)
@@ -1245,7 +1245,7 @@ export default function App() {
     const id = `p-${crypto.randomUUID()}`
     const placeX = Math.max(190, Math.min(620, 260 + (project.parts.length % 4) * 90))
     const placeY = 375 + (Math.floor(project.parts.length / 4) % 2) * 90
-    const part: Part = { id, kind, ref: nextRef(project.parts, kind), value: componentDefaultValue(kind) || (kind === 'behavioral' ? 'V(vin) * 2' : kind === 'ground' || kind === 'subcircuit' ? '' : '1'), x: placeX, y: placeY, rotation: 0, ...(kind === 'behavioral' ? { behavioralOutput: 'voltage' as const } : {}), ...(kind === 'lamp' ? { animationNominalPower: Number(componentDefinitionFor(kind).properties.find((property) => property.key === 'animationNominalPower')?.defaultValue ?? 10) } : {}) }
+    const part: Part = { id, kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: nextRef(project.parts, kind), value: componentDefaultValue(kind) || (kind === 'behavioral' ? 'V(vin) * 2' : kind === 'ground' || kind === 'subcircuit' ? '' : '1'), x: placeX, y: placeY, rotation: 0, ...(kind === 'behavioral' ? { behavioralOutput: 'voltage' as const } : {}), ...(kind === 'lamp' ? { animationNominalPower: Number(componentDefinitionFor(kind).properties.find((property) => property.key === 'animationNominalPower')?.defaultValue ?? 10) } : {}) }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
     setSelection({ kind: 'part', id })
     setNotice(`${componentDefinitionFor(kind).name} added. Connect its pins before simulation.`)
@@ -1262,7 +1262,7 @@ export default function App() {
     }
     const id = `p-${crypto.randomUUID()}`
     const position = [{ x: 720, y: 520 }, { x: 880, y: 520 }, { x: 720, y: 700 }, { x: 880, y: 700 }].find(({ x, y }) => project.parts.every((part) => Math.hypot(part.x - x, part.y - y) > 150)) ?? { x: 900 + (project.parts.length % 3) * 170, y: 520 + Math.floor(project.parts.length / 3) * 170 }
-    const part: Part = { id, kind: model.definition.kind, ref: nextRef(project.parts, model.definition.kind), value: model.definition.name, modelName: model.definition.name, modelPins: orderedPins, ...(symbol ? { symbolAssetId: symbol.assetId, symbolPinOffsets: symbol.pins.map(({ x, y }) => [x, y] as [number, number]) } : {}), x: position.x, y: position.y, rotation: 0 }
+    const part: Part = { id, kind: model.definition.kind, componentDefinitionId: model.definition.id, ref: nextRef(project.parts, model.definition.kind), value: model.definition.name, modelName: model.definition.name, modelPins: orderedPins, ...(symbol ? { symbolAssetId: symbol.assetId, symbolPinOffsets: symbol.pins.map(({ x, y }) => [x, y] as [number, number]) } : {}), x: position.x, y: position.y, rotation: 0 }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
     setSelection({ kind: 'part', id })
     setNotice(`${model.name} added with ${model.pins.length} pins in the library’s declared order${symbol ? ` using ${symbol.name}` : ''}.`)

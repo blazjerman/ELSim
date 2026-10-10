@@ -2,7 +2,7 @@ import { componentPins } from './geometry'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
-import { componentDefinitionByKind } from './componentDefinitions'
+import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
 
 export type PartKind = 'source' | 'currentSource' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
@@ -18,6 +18,7 @@ export type Part = {
   x: number
   y: number
   rotation: Rotation
+  componentDefinitionId?: string
   flipX?: boolean
   modelName?: string
   modelPins?: string[]
@@ -163,6 +164,7 @@ function migrateV2(input: Record<string, unknown>): Project {
 
 export function createStarterProject(): Project {
   const project = structuredClone(starter)
+  for (const part of project.parts) part.componentDefinitionId = componentDefinitionByKind[part.kind].id
   project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view }
   return project
 }
@@ -324,6 +326,18 @@ export function validateProject(input: unknown): Project {
   const importedDefinitions = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits) ?? []
   const importedDeviceModels = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content).models) ?? []
   for (const part of data.parts as Part[]) {
+    const expectedDefinitionId = part.kind !== 'subcircuit' || part.sheetId
+      ? componentDefinitionByKind[part.kind].id
+      : (() => {
+          const asset = (data.modelAssets as ModelLibraryAsset[] | undefined)?.find((candidate) =>
+            parseSubcircuitLibrary(candidate.content).subcircuits.some((model) => model.name.toLowerCase() === part.modelName?.toLowerCase()),
+          )
+          const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
+          return asset && definition ? importedSubcircuitComponentDefinition(definition, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256 }).id : undefined
+        })()
+    if (!expectedDefinitionId) throw new Error(`${part.ref} has no matching component definition.`)
+    if (part.componentDefinitionId !== undefined && part.componentDefinitionId !== expectedDefinitionId) throw new Error(`${part.ref} component definition does not match its model.`)
+    part.componentDefinitionId = expectedDefinitionId
     if (part.symbolAssetId) {
       const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
       if (!symbolAsset) throw new Error(`${part.ref} refers to a missing imported symbol.`)
@@ -495,7 +509,24 @@ export function validateProject(input: unknown): Project {
     }
     if (part.sheetPortLayout !== undefined && (!Array.isArray(part.sheetPortLayout) || part.sheetPortLayout.length !== definition.ports.length || part.sheetPortLayout.some((entry, index) => entry.side !== (definition.ports[index].side ?? 'auto') || entry.direction !== (definition.ports[index].direction ?? 'inout')))) throw new Error(`${part.ref} block port layout does not match sheet ${definition.name}.`)
   }
-  return syncActiveSheet(data as unknown as Project)
+  const project = data as unknown as Project
+  for (const sheet of project.sheets) {
+    for (const part of sheet.parts) {
+      const expectedDefinitionId = part.kind !== 'subcircuit' || part.sheetId
+        ? componentDefinitionByKind[part.kind].id
+        : (() => {
+            const asset = (project.modelAssets ?? []).find((candidate) =>
+              parseSubcircuitLibrary(candidate.content).subcircuits.some((model) => model.name.toLowerCase() === part.modelName?.toLowerCase()),
+            )
+            const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
+            return asset && definition ? importedSubcircuitComponentDefinition(definition, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256 }).id : undefined
+          })()
+      if (!expectedDefinitionId) throw new Error(`${part.ref} has no matching component definition.`)
+      if (part.componentDefinitionId !== undefined && part.componentDefinitionId !== expectedDefinitionId) throw new Error(`${part.ref} component definition does not match its model.`)
+      part.componentDefinitionId = expectedDefinitionId
+    }
+  }
+  return syncActiveSheet(project)
 }
 
 export const kindNames: Record<PartKind, string> = Object.fromEntries(Object.entries(componentDefinitionByKind).map(([kind, definition]) => [kind, definition.name])) as Record<PartKind, string>

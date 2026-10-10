@@ -6,7 +6,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { componentDefinitions, componentDefinitionFor, componentDefaultValue, importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
-const { createStarterProject, kindNames, kindPrefix } = require(path.join(build, 'domain/project.js'))
+const { createStarterProject, kindNames, kindPrefix, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { parseSubcircuitLibrary } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
@@ -38,6 +38,19 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.ok(componentDefinitionFor('capacitor').animationChannels.includes('charge.voltage'))
   assert.ok(componentDefinitionFor('inductor').animationChannels.includes('field.current'))
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
+  assert.ok(project.parts.every((part) => part.componentDefinitionId === componentDefinitionFor(part.kind).id))
+})
+
+test('legacy projects backfill component definition IDs and reject mismatched references', () => {
+  const project = createStarterProject()
+  const legacy = structuredClone(project)
+  for (const part of legacy.parts) delete part.componentDefinitionId
+  for (const part of legacy.sheets[0].parts) delete part.componentDefinitionId
+  const upgraded = validateProject(legacy)
+  assert.ok(upgraded.parts.every((part) => part.componentDefinitionId === componentDefinitionFor(part.kind).id))
+  const malformed = structuredClone(upgraded)
+  malformed.parts[0].componentDefinitionId = 'elsim.resistor'
+  assert.throws(() => validateProject(malformed), /component definition does not match/)
 })
 
 test('imported subcircuits become content-addressed component definitions with ordered pins, parameters, and provenance', () => {
@@ -56,4 +69,11 @@ test('imported subcircuits become content-addressed component definitions with o
   assert.deepEqual(definition.provenance, provenance)
   assert.throws(() => importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'bad' }), /SHA-256/)
   assert.notEqual(importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'b'.repeat(64) }).id, definition.id)
+  const project = createStarterProject()
+  project.modelAssets = [{ id: provenance.assetId, filename: provenance.filename, sha256: provenance.sha256, content: library, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'amp', modelName: 'amp', modelPins: ['1', 'OUT'], x: 800, y: 500, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  const restored = validateProject(project)
+  assert.equal(restored.parts.at(-1).componentDefinitionId, definition.id)
+  assert.equal(restored.sheets[0].parts.at(-1).componentDefinitionId, definition.id)
 })

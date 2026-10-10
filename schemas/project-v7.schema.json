@@ -162,6 +162,12 @@
             "subcircuit"
           ]
         },
+        "componentDefinitionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Stable built-in or content-addressed component definition used by this instance. Older v7 projects may omit it and receive it during validation."
+        },
         "ref": {
           "type": "string",
           "pattern": "^[A-Za-z][A-Za-z0-9_]*$"

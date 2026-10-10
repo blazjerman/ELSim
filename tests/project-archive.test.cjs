@@ -28,6 +28,8 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   assert.deepEqual(first, second)
   assert.equal(isProjectArchive(first), true)
   const restored = validateProject(readProjectArchive(first))
+  project.parts[4].componentDefinitionId = 'elsim.current-source'
+  project.sheets[0].parts = project.parts
   assert.deepEqual(restored, project)
   assert.deepEqual(restored.parts[1].extensions, project.parts[1].extensions)
   assert.match(restored.importedSchematicSource.originalText, /UNKNOWN_VENDOR_RECORD keep-me/)
@@ -95,9 +97,10 @@ test('v3 migration and active child-sheet scene round-trip', () => {
   Object.assign(activeChild, { parts: child.parts, wires: child.wires, junctions: child.junctions, netLabels: child.netLabels, view: child.view })
   const restored = validateProject(readProjectArchive(createProjectArchive(activeChild)))
   assert.equal(restored.activeSheetId, child.id)
-  assert.deepEqual(restored.parts, child.parts)
+  assert.deepEqual(restored.parts, child.parts.map((part) => ({ ...part, componentDefinitionId: 'elsim.resistor' })))
   assert.deepEqual(restored.sheets[0].parts, current.parts)
-  assert.deepEqual(restored.sheets[1], child)
+  assert.deepEqual(restored.sheets[1], { ...child, parts: child.parts.map((part) => ({ ...part, componentDefinitionId: 'elsim.resistor' })) })
+  assert.deepEqual(restored.parts, child.parts.map((part) => ({ ...part, componentDefinitionId: 'elsim.resistor' })))
 })
 
 test('user model libraries round-trip inside project data with digest and license provenance', async () => {
@@ -107,6 +110,8 @@ test('user model libraries round-trip inside project data with digest and licens
   project.modelAssets = [{ id: 'model-1', filename: 'user-amp.lib', sha256: digest, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'user_amp', modelName: 'user_amp', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], x: 700, y: 400, rotation: 0 })
   const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  project.parts.at(-1).componentDefinitionId = `user.${digest}.user-amp`
+  project.sheets[0].parts = project.parts
   assert.deepEqual(restored.modelAssets, project.modelAssets)
   assert.deepEqual(restored.parts.at(-1), project.parts.at(-1))
   await verifyModelAssetHashes(restored.modelAssets)
@@ -121,6 +126,8 @@ test('.MODEL-only libraries and device model assignments round-trip in project a
   project.modelAssets = [{ id: 'model-diode', filename: '1n4148.model', sha256: digest, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push({ id: 'p-d1', kind: 'diode', ref: 'D1', value: 'Default diode', deviceModel: '1N4148', x: 700, y: 400, rotation: 0 })
   const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  project.parts.at(-1).componentDefinitionId = 'elsim.diode'
+  project.sheets[0].parts = project.parts
   assert.deepEqual(restored, project)
 })
 
@@ -141,8 +148,11 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const instance = { id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'user_amp', modelName: 'user_amp', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], symbolAssetId: 'symbol-amp', symbolPinOffsets: pinOffsets, x: 700, y: 400, rotation: 0 }
   project.parts.push(instance)
   const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  const definitionId = `user.${project.modelAssets[0].sha256}.user-amp`
+  project.parts.at(-1).componentDefinitionId = definitionId
+  project.sheets[0].parts = project.parts
   assert.deepEqual(restored.symbolAssets, project.symbolAssets)
-  assert.deepEqual(restored.parts.at(-1), instance)
+  assert.deepEqual(restored.parts.at(-1), { ...instance, componentDefinitionId: definitionId })
   assert.deepEqual(componentPins(restored.parts.at(-1)).map(({ x, y }) => [x, y]), [[652, 400], [748, 400], [700, 368], [700, 432]])
   await verifyModelAssetHashes(restored.symbolAssets)
   await assert.rejects(verifyModelAssetHashes([{ ...restored.symbolAssets[0], content: `${symbolContent}\\n` }]), /does not match/)
@@ -154,6 +164,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.properties.importedSchematicSource.$ref, '#/$defs/ltspiceSchematicSource')
   assert.equal(schema.properties.importedChildSchematicSources.maxItems, 63)
   assert.ok(schema.$defs.part.properties.symbolPinOffsets)
+  assert.ok(schema.$defs.part.properties.componentDefinitionId)
   assert.ok(schema.$defs.part.properties.extensions.properties.ltspice.properties.attributes)
   assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc', 'pwl'])
   assert.equal(schema.$defs.part.properties.pwl.maxItems, 32)

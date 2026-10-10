@@ -1,6 +1,7 @@
 import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourcePulse, type SourcePwlPoint, type SymbolAsset, type Wire } from './project'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseSubcircuitLibrary } from './subcircuitLibrary'
+import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
 
 type AscSymbol = { name: string; x: number; y: number; rotation: number; flipX: boolean; attributes: Record<string, string>; rawRecords: string[]; line: number }
 export type LtspiceSchematicImport = { project: Project; warnings: string[] }
@@ -339,8 +340,14 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const unmappedAttributes = Object.entries(symbol.attributes).filter(([key]) => !representedAttributes.includes(key))
     const omittedAttributes = unmappedAttributes.length - Math.min(unmappedAttributes.length, 16) + unmappedAttributes.slice(0, 16).filter(([, attribute]) => attribute.length > 512).length
     if (omittedAttributes > 0) warnings.push(`Line ${symbol.line}: ${omittedAttributes} imported SYMATTR record(s) on ${identity} exceed ELSim's extension limit; the original .asc source is retained.`)
+    const importedModel = kind === 'subcircuit' && !childSheet
+      ? (modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content).subcircuits.map((model) => ({ asset, model }))).find(({ model }) => model.name.toLowerCase() === mapped.modelName?.toLowerCase())
+      : undefined
+    const componentDefinitionId = importedModel
+      ? importedSubcircuitComponentDefinition(importedModel.model, { assetId: importedModel.asset.id, filename: importedModel.asset.filename, sha256: importedModel.asset.sha256 }).id
+      : componentDefinitionByKind[kind].id
     const part: Part = {
-      id: `asc-part-${project.parts.length + 1}`, kind, ref: identity, value: defaultValue,
+      id: `asc-part-${project.parts.length + 1}`, kind, componentDefinitionId, ref: identity, value: defaultValue,
       x: symbol.x, y: symbol.y, rotation: symbol.rotation as Part['rotation'], flipX: symbol.flipX,
       symbolAssetId: sidecar.asset.id, symbolPinOffsets: offsets,
       ...(Object.keys(extensionAttributes).length ? { extensions: { ltspice: { attributes: extensionAttributes } } } : {}),
