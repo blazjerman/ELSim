@@ -2,7 +2,7 @@ import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type PartKind, type Project } from '../domain/project'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
-import { validateSourcePwlPoints } from '../domain/sourcePwl'
+import { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { timeMagnitude } from '../domain/componentValue'
 import type { NetlistArtifact, NetlistSource } from './contract'
 
@@ -176,6 +176,15 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
         const valueField = errorIndex % 2 === 1
         const fieldName = part.kind === 'source' ? 'pwl' : 'currentPwl'
         add('pwlPoints', `${part.ref} ${pointErrors![errorIndex]}`, part.id, `${fieldName}.${pointIndex}.${valueField ? quantity : 'time'}`)
+      }
+      if (part.pwlRepeatCount !== undefined) {
+        const maximum = Math.floor((32 - points.length) / (points.length - 1)) + 1
+        if (!Number.isInteger(part.pwlRepeatCount) || part.pwlRepeatCount < 1 || part.pwlRepeatCount > 31 || part.pwlRepeatCount > maximum) {
+          add('pwlPoints', `${part.ref} finite PWL repeat count exceeds the 32-point expanded-table limit.`, part.id, 'pwl.repeatCount')
+        } else {
+          const boundary = validateSourcePwlRepeatBoundary(points, part.pwlRepeatCount, quantity)
+          if (boundary) add('pwlPoints', `${part.ref} ${boundary}`, part.id, 'pwl.repeatCount')
+        }
       }
     }
   } else if (project.simulation.analysis === 'ac') {
@@ -412,7 +421,22 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
           continue
         }
-        transientValue = `PWL(${normalized.map((point) => `${point.time} ${point.current}`).join(' ')})`
+        let outputPoints = normalized
+        if (part.pwlRepeatCount !== undefined) {
+          const count = part.pwlRepeatCount
+          const period = normalized.at(-1)!.timeMagnitude! - normalized[0].timeMagnitude!
+          const startLevel = spiceValueMagnitude(normalized[0].current!), endLevel = spiceValueMagnitude(normalized.at(-1)!.current!)
+          if (!Number.isInteger(count) || count < 1 || count > 31 || normalized.length + (count - 1) * (normalized.length - 1) > 32 || period <= 0 || count > 1 && (startLevel === null || startLevel !== endLevel)) {
+            const message = `${part.ref} finite PWL repeat must be an integer count whose expanded table has at most 32 points and whose first and last currents match.`
+            append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+            diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+            continue
+          }
+          outputPoints = Array.from({ length: count }, (_, cycle) => normalized
+            .filter((_, index) => cycle === 0 || index > 0)
+            .map((point) => ({ ...point, time: cycle === 0 ? point.time : String(point.timeMagnitude! + cycle * period), timeMagnitude: point.timeMagnitude! + cycle * period }))).flat()
+        }
+        transientValue = `PWL(${outputPoints.map((point) => `${point.time} ${point.current}`).join(' ')})${part.pwlRepeat === 'forever' ? ' r=0' : ''}`
       }
       const acMagnitude = spiceNumber(part.acMagnitude ?? part.value, 'currentSource')
       const acPhase = spiceScalar(part.acPhase ?? '0', '')

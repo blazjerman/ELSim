@@ -1,0 +1,6 @@
+ELSim ngspice WebAssembly repeating current-source PWL example
+I1 out 0 PWL(0 0 1m 1m 2m 0) r=0
+R1 out 0 1k
+.tran 0.1m 4m
+.print tran v(out)
+.end

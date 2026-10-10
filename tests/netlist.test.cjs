@@ -20,6 +20,26 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
 })
 
+test('current-source PWL supports ngspice infinite and bounded repeats', () => {
+  const project = createStarterProject()
+  const source = { id: 'repeat-current', kind: 'currentSource', ref: 'I1', value: '1m', x: 600, y: 450, rotation: 0, sourceMode: 'pwl', currentPwl: [{ time: '0', current: '0' }, { time: '1m', current: '1m' }, { time: '2m', current: '0' }] }
+  project.parts.push(source)
+  project.sheets[0].parts = project.parts
+  project.simulation.maxStep = '100u'
+  source.pwlRepeat = 'forever'
+  let artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^I1 .* PWL\(0 0 1m 1m 2m 0\) r=0$/m)
+
+  delete source.pwlRepeat
+  source.pwlRepeatCount = 3
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^I1 .* PWL\(0 0 1m 1m 2m 0 0\.003 1m 0\.004 0 0\.005 1m 0\.006 0\)$/m)
+  source.currentPwl[2].current = '1m'
+  assert.match(validateAnalysisSettings(project).find((error) => error.sourceId === source.id)?.message ?? '', /first and last current must match/i)
+})
+
 test('diode rectifier example generates an AC-driven half-wave transient', () => {
   const project = createDiodeRectifierExampleProject()
   const artifact = createNetlistArtifact(validateProject(project))

@@ -241,8 +241,17 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
         if (point.time === null || point.timeMagnitude === null || point.timeMagnitude < 0 || point.timeMagnitude <= previousTime || point.current === null) { valid = false; break }
         previousTime = point.timeMagnitude
       }
+      if (valid && part.pwlRepeatCount !== undefined) {
+        const count = part.pwlRepeatCount
+        const maximum = Math.floor((32 - mapped.length) / (mapped.length - 1)) + 1
+        const period = mapped.at(-1)!.timeMagnitude! - mapped[0].timeMagnitude!
+        const first = scalarMagnitude(mapped[0].current!, 'a'), last = scalarMagnitude(mapped.at(-1)!.current!, 'a')
+        if (!Number.isInteger(count) || count < 1 || count > 31 || count > maximum || period <= 0 || count > 1 && (first === null || first !== last)) valid = false
+      }
       if (!valid) return null
-      return { value: `PWL(${mapped.map((point) => `${point.time} ${point.current}`).join(' ')})`, ...(value2 ? { value2 } : {}) }
+      const pointList = mapped.map((point) => `${point.time} ${point.current}`).join(' ')
+      const waveform = part.pwlRepeat === 'forever' ? `PWL REPEAT FOREVER (${pointList}) ENDREPEAT` : part.pwlRepeatCount !== undefined ? `PWL REPEAT FOR ${part.pwlRepeatCount} (${pointList}) ENDREPEAT` : `PWL(${pointList})`
+      return { value: waveform, ...(value2 ? { value2 } : {}) }
     }
     if (part.sourceMode === 'pulse') {
       const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }

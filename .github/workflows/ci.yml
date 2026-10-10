@@ -126,6 +126,9 @@ jobs:
             --without-x \
             CFLAGS=-O2 \
             LDFLAGS=-O2
+          # Static parity build cannot link the optional Verilog/VHDL adapters.
+          python3 "$GITHUB_WORKSPACE/tools/configure-ngspice-xspice-subdirs.py" \
+            "$NATIVE_BUILD/src/xspice/Makefile"
           make -j2
 
       - name: Compare WASM fixtures with native ngspice

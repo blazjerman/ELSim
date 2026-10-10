@@ -700,12 +700,11 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...((kind === 'source' || kind === 'currentSource') && (valueAc ?? value2Ac) ? { acMagnitude: (valueAc ?? value2Ac)!.magnitude, acPhase: (valueAc ?? value2Ac)!.phase } : {}),
       ...(kind === 'source' && parsedSource.pwl ? { pwl: parsedSource.pwl } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.pwlFileName ? { pwlFileName: parsedSource.pwlFileName } : {}),
-      ...(kind === 'source' && parsedSource.pwlRepeat ? { pwlRepeat: parsedSource.pwlRepeat } : {}),
-      ...(kind === 'source' && parsedSource.pwlRepeatCount !== undefined ? { pwlRepeatCount: parsedSource.pwlRepeatCount } : {}),
+      ...((kind === 'source' || kind === 'currentSource') && parsedSource.pwlRepeat ? { pwlRepeat: parsedSource.pwlRepeat } : {}),
+      ...((kind === 'source' || kind === 'currentSource') && parsedSource.pwlRepeatCount !== undefined ? { pwlRepeatCount: parsedSource.pwlRepeatCount } : {}),
       ...(kind === 'currentSource' && parsedSource.pwl ? { currentPwl: parsedSource.pwl.map(({ time, voltage: current }) => ({ time, current })) } : {}),
     }
     importInstanceInitialCondition(project, kind, identity, symbol.attributes.SPICELINE, symbol.line, warnings)
-    if (kind === 'currentSource' && (parsedSource.pwlRepeat || parsedSource.pwlRepeatCount !== undefined)) warnings.push(`Line ${symbol.line}: repeated PWL current on ${identity} is not supported by the pinned ngspice engine; the source points were imported once without repetition.`)
     project.parts.push(part)
     warnings.push(...sidecar.parsed.warnings.map((warning) => `${identity}: ${warning}`))
   }

@@ -382,13 +382,13 @@
         },
         "pwlRepeat": {
           "enum": ["forever"],
-          "description": "Repeat the voltage-source PWL point sequence forever."
+          "description": "Repeat a voltage- or current-source PWL point sequence forever."
         },
         "pwlRepeatCount": {
           "type": "integer",
           "minimum": 1,
           "maximum": 31,
-          "description": "Repeat the voltage-source PWL point sequence this many times in total. Expanded source tables are limited to 32 points."
+          "description": "Repeat a voltage- or current-source PWL point sequence this many times in total. Finite repeats require matching first and last levels; expanded source tables are limited to 32 points."
         },
         "currentPwl": {
           "type": "array",

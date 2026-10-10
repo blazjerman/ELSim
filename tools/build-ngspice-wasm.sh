@@ -67,20 +67,10 @@ cd "$BUILD_DIR"
   CC="$(command -v emcc)" \
   CXX="$(command -v em++)"
 
-# Emscripten cannot produce the optional XSPICE Verilog and VHDL shared modules.
-# This build does not package or validate XSPICE .cm model modules.
-python3 - "$BUILD_DIR/src/xspice/Makefile" <<'PY'
-from pathlib import Path
-import sys
-
-makefile = Path(sys.argv[1])
-text = makefile.read_text()
-old = "SUBDIRS = mif cm enh evt idn cmpp icm verilog vhdl"
-new = "SUBDIRS = mif cm enh evt idn cmpp icm"
-if text.count(old) != 1:
-    raise SystemExit(f"Unexpected generated XSPICE subdirectory list in {makefile}")
-makefile.write_text(text.replace(old, new))
-PY
+# The static artifacts do not include optional XSPICE Verilog/VHDL shared
+# adapters; retain the other XSPICE modules used by the analog engine.
+python3 "$ROOT_DIR/tools/configure-ngspice-xspice-subdirs.py" \
+  "$BUILD_DIR/src/xspice/Makefile"
 
 # Make sure the link map describes the binary emitted by this invocation, not a
 # previous link left in a reused build directory.

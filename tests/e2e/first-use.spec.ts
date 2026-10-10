@@ -1268,6 +1268,17 @@ test('current-source inspector edits a finite-cycle PULSE waveform', async ({ pa
   await expect(page.getByLabel('PWL point 2 current')).toHaveValue('5m')
   await page.getByRole('button', { name: 'Netlist', exact: true }).click()
   await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\)/)
+  await page.getByLabel('Repeat PWL waveform forever').check()
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\) r=0/)
+  await page.getByLabel('Repeat PWL waveform forever').uncheck()
+  await page.getByLabel('PWL point 2 current').fill('0')
+  await page.getByRole('button', { name: '+ Add point' }).click()
+  await page.getByLabel('PWL point 3 time').fill('20m')
+  await page.getByLabel('PWL point 3 current').fill('0')
+  await page.getByLabel('PWL repeat cycles').fill('2')
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 0 20m 0 0\.03 0 0\.04 0\)/)
 })
 
 test('stop terminates an active ngspice run and leaves the workspace responsive', { tag: '@ngspice' }, async ({ page }) => {

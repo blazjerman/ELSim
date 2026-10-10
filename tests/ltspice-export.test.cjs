@@ -71,6 +71,30 @@ test('current sources export and reimport as I devices with ampere values', asyn
   assert.match(pwlAsc.content, /SYMATTR InstName I1\nSYMATTR Value PWL\(0 0 2m 3m\)/)
   const pwlRestored = parseLtspiceSchematic(pwlAsc.content, pwlAsc.path, symbols).project.parts.find((part) => part.ref === 'I1')
   assert.deepEqual(pwlRestored.currentPwl, [{ time: '0', current: '0' }, { time: '2m', current: '3m' }])
+  currentSource.currentPwl = [{ time: '0', current: '0' }, { time: '1m', current: '1mA' }, { time: '2m', current: '0' }]
+  currentSource.pwlRepeat = 'forever'
+  const repeatedPwlExport = await exportLtspiceProject(project)
+  assert.deepEqual(repeatedPwlExport.blockers, [])
+  const repeatedPwlAsc = repeatedPwlExport.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(repeatedPwlAsc.content, /SYMATTR InstName I1\nSYMATTR Value PWL REPEAT FOREVER \(0 0 1m 1m 2m 0\) ENDREPEAT/)
+  const repeatedPwlRestored = parseLtspiceSchematic(repeatedPwlAsc.content, repeatedPwlAsc.path, symbols).project.parts.find((part) => part.ref === 'I1')
+  assert.equal(repeatedPwlRestored.pwlRepeat, 'forever')
+  assert.deepEqual(repeatedPwlRestored.currentPwl, [{ time: '0', current: '0' }, { time: '1m', current: '1m' }, { time: '2m', current: '0' }])
+  currentSource.pwlRepeat = undefined
+  currentSource.pwlRepeatCount = 3
+  const finitePwlExport = await exportLtspiceProject(project)
+  assert.deepEqual(finitePwlExport.blockers, [])
+  const finitePwlAsc = finitePwlExport.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(finitePwlAsc.content, /SYMATTR InstName I1\nSYMATTR Value PWL REPEAT FOR 3 \(0 0 1m 1m 2m 0\) ENDREPEAT/)
+  const finitePwlRestored = parseLtspiceSchematic(finitePwlAsc.content, finitePwlAsc.path, symbols).project.parts.find((part) => part.ref === 'I1')
+  assert.equal(finitePwlRestored.pwlRepeatCount, 3)
+  assert.deepEqual(finitePwlRestored.currentPwl, [{ time: '0', current: '0' }, { time: '1m', current: '1m' }, { time: '2m', current: '0' }])
+  currentSource.currentPwl[2].current = '1m'
+  const invalidFiniteRepeat = await exportLtspiceProject(project)
+  assert.equal(invalidFiniteRepeat.files.length, 0)
+  assert.ok(invalidFiniteRepeat.blockers.some((blocker) => blocker.sourceId === currentSource.id))
+  currentSource.currentPwl[2].current = '0'
+  currentSource.pwlRepeatCount = undefined
   currentSource.sourceMode = 'sine'
   currentSource.sine = { offset: '1mA', amplitude: '3mA', frequency: '2kHz', delay: '4u', damping: '5', phase: '90' }
   const sineExport = await exportLtspiceProject(project)
