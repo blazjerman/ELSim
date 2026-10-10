@@ -87,3 +87,4 @@
 .component-card[data-help]:hover::after,.component-card[data-help]:focus-visible::after{opacity:1;visibility:visible;transform:translateY(0);transition-delay:.3s}
 .capacitor-charge-sign{font:700 11px var(--mono);text-anchor:middle;pointer-events:none}
 .inductor-current-arrow{pointer-events:none}
+.transistor-current-indicator{pointer-events:none;filter:drop-shadow(0 0 3px #79d9a4)}

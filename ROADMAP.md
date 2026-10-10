@@ -93,6 +93,8 @@ Capacitor result feedback now marks the positive and negative plates from the so
 
 Inductor result feedback now shows a coil-current arrow whose direction follows the signed branch vector and flips with the component transform. Its accessible SVG title reports magnetic field energy `E = ½ L I²` for numeric inductance; the RLC ngspice browser workflow checks the energy readout and confirms the arrow direction matches the reported pin-to-pin current at the scrubbed result sample.
 
+NPN/PNP collector and NMOS/PMOS drain branches now show a solver-driven current arrow and restrained glow. The arrow reverses for negative terminal current, and the accessible title states whether conventional current enters or leaves the collector/drain reference terminal. NPN, NMOS, and PMOS ngspice examples verify that the indicator follows the reported signed terminal current at scrubbed active-state samples; the visual indicator does not change device behavior.
+
 The RC first-use browser workflow also exports the selected `V(vin)` and `V(vout)` traces and reads the downloaded CSV to check time and voltage units in the header plus populated sample rows. This exercises the visible export action in addition to the serializer’s domain tests.
 
 Transient, operating-point, AC, and DC-sweep trace selectors now expose named groups and `aria-pressed` state, so screen readers can distinguish plotted traces from available traces. The first-use browser test verifies selection state changes when a trace is toggled.
