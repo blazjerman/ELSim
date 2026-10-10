@@ -191,6 +191,28 @@ test('schematic compatibility checks attribute unresolved dependencies and untra
   assert.deepEqual(analyzeLtspiceSchematicCompatibility(source, ['missing.lib', 'known.lib']).map(({ sourceLine }) => sourceLine), [4, 6, 7])
 })
 
+test('imports and flattens an unambiguous single-section model library', () => {
+  const parsed = parseSubcircuitLibrary([
+    '.LIB typical',
+    '.MODEL DFAST D(IS=2n)',
+    '.SUBCKT BUFFER IN OUT',
+    'R1 IN OUT 1k',
+    '.ENDS BUFFER',
+    '.ENDL typical',
+  ].join('\n'))
+  assert.deepEqual(parsed.models.map(({ name }) => name), ['DFAST'])
+  assert.deepEqual(parsed.subcircuits.map(({ name }) => name), ['BUFFER'])
+  assert.match(parsed.modelText, /\.MODEL DFAST/)
+  assert.doesNotMatch(parsed.modelText, /\.LIB|\.ENDL/i)
+})
+
+test('rejects ambiguous or malformed model-library section wrappers explicitly', () => {
+  assert.throws(() => parseSubcircuitLibrary('.LIB fast\n.MODEL D1 D\n.ENDL fast\n.LIB slow\n.MODEL D2 D\n.ENDL slow'), /multiple \.LIB sections.*section selection/i)
+  assert.throws(() => parseSubcircuitLibrary('.LIB typical\n.MODEL D1 D\n.ENDL other'), /does not match/)
+  assert.throws(() => parseSubcircuitLibrary('.MODEL D1 D\n.ENDL typical'), /no matching \.LIB/)
+  assert.throws(() => parseSubcircuitLibrary('.LIB models.lib typical'), /External \.LIB file references are not allowed/)
+})
+
 test('rejects executable, external-file, and whole-circuit directives', () => {
   for (const directive of ['.include evil.lib', '.lib "evil.lib" tt', '.control', '.endc', '.end', '.exec command', '.shell command', '.cm plugin']) {
     assert.throws(() => parseSubcircuitLibrary(`.SUBCKT x A\nR1 A 0 1k\n${directive}\n.ENDS`), /not allowed/)

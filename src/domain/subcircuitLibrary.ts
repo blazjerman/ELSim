@@ -13,7 +13,7 @@ const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 const pinName = /^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/
 const safeTopLevel = new Set(['.model', '.param', '.func', '.global'])
-const forbidden = new Set(['.control', '.endc', '.end', '.include', '.lib', '.endl', '.exec', '.shell', '.cm'])
+const forbidden = new Set(['.control', '.endc', '.end', '.include', '.exec', '.shell', '.cm'])
 
 /** Decode a user-selected library as plain UTF-8 and identify protected LTspice models. */
 export function decodeModelLibrary(bytes: Uint8Array): string {
@@ -248,6 +248,11 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
   if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
   const lines = logicalLines(source)
   if (lines.length > MAX_LIBRARY_LINES) throw new Error('Model libraries are limited to 100,000 lines.')
+  const sectionStarts = lines.filter(({ text }) => /^\s*\.lib\s+[A-Za-z_][A-Za-z0-9_-]*\s*$/i.test(withoutInlineComment(text)))
+  if (lines.some(({ text }) => /^\s*\.lib\b/i.test(withoutInlineComment(text)) && !/^\s*\.lib\s+[A-Za-z_][A-Za-z0-9_-]*\s*$/i.test(withoutInlineComment(text)))) {
+    throw new Error('External .LIB file references are not allowed inside an imported library. Import each plain-text dependency separately.')
+  }
+  if (sectionStarts.length > 1) throw new Error('Model libraries with multiple .LIB sections need section selection and cannot be imported yet; provide a single-section library copy.')
 
   const subcircuits: SubcircuitDefinition[] = []
   const models: SpiceModelDefinition[] = []
@@ -257,6 +262,7 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
   const modelLines: LogicalLine[] = []
   let active: { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; start: number } | null = null
   let sawTopLevelRecord = false
+  let activeLibrarySection: string | null = null
 
   for (const line of lines) {
     const text = withoutInlineComment(line.text)
@@ -266,6 +272,7 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
     if (forbidden.has(directive)) throw new Error(`Line ${line.start}: ${tokens[0]} is not allowed in an imported model library.`)
 
     if (active) {
+      if (directive === '.lib' || directive === '.endl') throw new Error(`Line ${line.start}: .LIB/.ENDL section wrappers cannot appear inside a .SUBCKT.`)
       if (directive === '.subckt') throw new Error(`Line ${line.start}: nested .SUBCKT definitions are not supported.`)
       if (directive === '.ends') {
         const closingName = tokens[1]
@@ -280,6 +287,20 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
     }
 
     if (directive === '.ends') throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
+    if (directive === '.lib') {
+      const section = tokens[1]
+      if (activeLibrarySection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
+      if (!section || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) throw new Error(`Line ${line.start}: .LIB needs one section name.`)
+      activeLibrarySection = section
+      continue
+    }
+    if (directive === '.endl') {
+      const closingSection = tokens[1]
+      if (!activeLibrarySection) throw new Error(`Line ${line.start}: .ENDL has no matching .LIB section.`)
+      if (closingSection && closingSection.toLowerCase() !== activeLibrarySection.toLowerCase()) throw new Error(`Line ${line.start}: .ENDL ${closingSection} does not match .LIB ${activeLibrarySection}.`)
+      activeLibrarySection = null
+      continue
+    }
     if (directive === '.subckt') {
       const name = tokens[1]
       if (!name || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
@@ -322,6 +343,7 @@ export function parseSubcircuitLibrary(source: string): ParsedSubcircuitLibrary 
     throw new Error(`Line ${line.start}: top-level circuit element found outside a .SUBCKT definition.`)
   }
   if (active) throw new Error(`.SUBCKT ${active.name} opened on line ${active.start} has no matching .ENDS.`)
+  if (activeLibrarySection) throw new Error(`.LIB ${activeLibrarySection} has no matching .ENDL.`)
   if (!subcircuits.length && !models.length) throw new Error('No .SUBCKT definitions or .MODEL cards were found in this file.')
   for (const subcircuit of subcircuits) dependencies.push(...subcircuit.dependencies)
 
