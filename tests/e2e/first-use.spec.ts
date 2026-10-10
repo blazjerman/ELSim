@@ -55,6 +55,22 @@ test('AC source validation focuses its inspector field before simulation', async
   await expect(page.getByText('AC frequency response')).toBeVisible({ timeout: 60_000 })
 })
 
+test('invalid pulse timing selects its source and focuses the exact setting', async ({ page }) => {
+  await page.goto('/')
+  const source = page.locator('.circuit-part[data-part-id="p-v1"]')
+  await source.click()
+  const riseTime = page.locator('[data-part-setting="p-v1:pulse.rise"]')
+  await riseTime.fill('not-a-time')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(source).toHaveClass(/selected/)
+  await expect(riseTime).toBeFocused()
+  await expect(riseTime).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.locator('.toast')).toContainText('V1 rise must be a valid nonnegative time value.')
+  await riseTime.fill('1u')
+  await expect(riseTime).toHaveAttribute('aria-invalid', 'false')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
 test('invalid component values select and focus the value field before engine checks', async ({ page }) => {
   await page.goto('/')
   const value = page.locator('[data-part-setting="p-r1:value"]')

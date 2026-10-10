@@ -38,6 +38,27 @@ test('analysis settings validation identifies invalid transient fields', () => {
   assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['stopTime', 'maxStep'])
 })
 
+test('analysis settings validation maps invalid pulse timing to its source field', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.kind === 'source')
+  source.pulse = { initial: '0', delay: 'not-time', rise: '1u', fall: '1u', width: '50m', period: '0' }
+  const errors = validateAnalysisSettings(project)
+  assert.deepEqual(errors.map(({ field }) => field), ['pulse.delay', 'pulse.period'])
+  assert.deepEqual(errors.map(({ sourceId }) => sourceId), [source.id, source.id])
+  source.pulse.delay = '0'
+  source.pulse.period = '100m'
+  assert.deepEqual(validateAnalysisSettings(project), [])
+})
+
+test('analysis settings validation maps invalid pulse current level to its source field', () => {
+  const project = createCurrentSourceExampleProject()
+  project.simulation.analysis = 'tran'
+  const source = project.parts.find((part) => part.kind === 'currentSource')
+  source.sourceMode = 'pulse'
+  source.pulse = { initial: 'not-current', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m' }
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field, sourceId }) => ({ field, sourceId })), [{ field: 'pulse.initial', sourceId: source.id }])
+})
+
 test('source waveform mode chooses a constant DC source or the backward-compatible pulse', () => {
   const project = createStarterProject()
   const source = project.parts.find((part) => part.ref === 'V1')

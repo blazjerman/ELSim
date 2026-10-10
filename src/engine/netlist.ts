@@ -69,7 +69,7 @@ function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage
   return Number.isFinite(result) ? result : null
 }
 
-export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase'
+export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string }
 
 export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
@@ -80,6 +80,17 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
     const step = spiceMagnitude(project.simulation.maxStep, 'time')
     if (stop === null || stop <= 0) add('stopTime', 'Enter a positive stop time, such as 100 ms.')
     if (step === null || step <= 0) add('maxStep', 'Enter a positive maximum step, such as 100 µs.')
+    for (const part of project.parts.filter((item) => item.kind === 'source' || (item.kind === 'currentSource' && item.sourceMode === 'pulse'))) {
+      if (part.kind === 'source' && (part.sourceMode === 'dc' || part.sourceMode === 'pwl')) continue
+      const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
+      const level = spiceNumber(pulse.initial, part.kind)
+      if (level === null) add('pulse.initial', `${part.ref} initial pulse level must be a valid SPICE value.`, part.id)
+      for (const key of ['delay', 'rise', 'fall', 'width', 'period'] as const) {
+        const magnitude = spiceTimeMagnitude(pulse[key])
+        const invalid = magnitude === null || magnitude < 0 || (key === 'period' && magnitude <= 0)
+        if (invalid) add(`pulse.${key}`, `${part.ref} ${key} must be a valid ${key === 'period' ? 'positive' : 'nonnegative'} time value.`, part.id)
+      }
+    }
   } else if (project.simulation.analysis === 'ac') {
     for (const part of project.parts.filter((item) => item.kind === 'source' || item.kind === 'currentSource')) {
       const unit = part.kind === 'source' ? 'source' : 'currentSource'
