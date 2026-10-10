@@ -1,0 +1,15 @@
+ELSim browser P-channel JFET operating point and drain current probe fixture
+VSS vss 0 DC -5
+RLOAD 0 drain 1k
+J1 drain vss vss JPTEST
+.MODEL JPTEST PJF (VTO=2 BETA=1m)
+.op
+.print op v(drain)
+.save all @J1[id]
+.control
+set filetype=ascii
+op
+write /result.raw all
+quit
+.endc
+.end
