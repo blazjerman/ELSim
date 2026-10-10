@@ -9,7 +9,7 @@ const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(pat
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createJfetSwitchExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
-const { validateSourcePwlPoints } = require(path.join(build, 'domain/sourcePwl.js'))
+const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
   const artifact = createNetlistArtifact(createStarterProject())
@@ -248,6 +248,14 @@ test('PWL editor validation reports malformed, negative, and non-increasing time
   assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '2 ms', voltage: '5 V' }]), [null, null, null, null])
   assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '0', voltage: 'bad' }]), [null, null, 'Time must be later than the previous point.', 'Enter a numeric voltage such as 3.3 or -5 V.'])
   assert.deepEqual(validateSourcePwlPoints([{ time: '-1m', voltage: '0' }, { time: 'x', voltage: '1' }]), ['Time must be zero or greater.', null, 'Enter a time such as 2m or 2 ms.', null])
+})
+
+test('finite PWL voltage repeats report boundaries that do not join smoothly', () => {
+  const points = [{ time: '0', voltage: '0 V' }, { time: '2m', voltage: '5 V' }, { time: '4m', voltage: '0 V' }]
+  assert.equal(validateSourcePwlRepeatBoundary(points, 3), null)
+  assert.equal(validateSourcePwlRepeatBoundary([points[0], points[1], { ...points[2], voltage: '1 V' }], 3), 'For finite repeats, the first and last voltage must match so the waveform joins smoothly.')
+  assert.equal(validateSourcePwlRepeatBoundary([points[0], points[1], { ...points[2], voltage: '1 V' }], 1), null)
+  assert.equal(validateSourcePwlRepeatBoundary(points, undefined), null)
 })
 
 test('zero-volt pulse initial level is valid', () => {

@@ -11,6 +11,15 @@ function magnitude(value: string, unit: 's' | 'v' | 'a'): number | null {
   return Number.isFinite(result) ? result : null
 }
 
+/** Finite voltage-source repeats must meet continuously at their cycle boundary. */
+export function validateSourcePwlRepeatBoundary(points: SourcePwlPoint[] | undefined, repeatCount: number | undefined): string | null {
+  if (repeatCount === undefined || repeatCount <= 1 || !points || points.length < 2) return null
+  const first = magnitude(points[0].voltage, 'v')
+  const last = magnitude(points.at(-1)!.voltage, 'v')
+  if (first === null || last === null || first === last) return null
+  return 'For finite repeats, the first and last voltage must match so the waveform joins smoothly.'
+}
+
 /** Returns one accessible inline error per PWL point field, or null for valid input. */
 export function validateSourcePwlPoints(points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined, quantity: 'voltage' | 'current' = 'voltage'): (string | null)[] | null {
   if (!points || points.length < 2 || points.length > 32) return null
