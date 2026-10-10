@@ -1506,6 +1506,29 @@ export default function App() {
       }
       const symbols = [...currentSymbols, ...newSymbols]
       if (symbols.length > 32 || symbols.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0) > 5 * 1024 * 1024) throw new Error('Imported symbols exceed the project limits of 32 files and 5 MiB total.')
+      const currentModels = projectRef.current.modelAssets ?? []
+      const newModels: ModelLibraryAsset[] = []
+      const modelCandidates = files.filter((candidate) => /\.(?:lib|sub|model|mod|cir|spice)$/i.test(candidate.name))
+      for (const file of modelCandidates) {
+        if (file.size > 4 * 1024 * 1024) throw new Error(`${file.name} exceeds the 4 MiB model library limit.`)
+        const content = decodeModelLibrary(new Uint8Array(await file.arrayBuffer()))
+        const parsed = parseSubcircuitLibrary(content)
+        const existingFile = [...currentModels, ...newModels].find((asset) => asset.filename.toLowerCase() === file.name.toLowerCase())
+        if (existingFile) {
+          if (existingFile.content !== content) throw new Error(`A different ${file.name} is already in this project. Remove or rename it before importing this schematic.`)
+          continue
+        }
+        const importedDefinitions = [...currentModels, ...newModels].flatMap((asset) => parseSubcircuitLibrary(asset.content))
+        const existingSubcircuits = new Set(importedDefinitions.flatMap((library) => library.subcircuits.map((model) => model.name.toLowerCase())))
+        const duplicateSubcircuit = parsed.subcircuits.find((model) => existingSubcircuits.has(model.name.toLowerCase()))
+        if (duplicateSubcircuit) throw new Error(`${duplicateSubcircuit.name} is already present in another imported model library.`)
+        const existingDeviceModels = new Set(importedDefinitions.flatMap((library) => library.models.map((model) => model.name.toLowerCase())))
+        const duplicateDeviceModel = parsed.models.find((model) => existingDeviceModels.has(model.name.toLowerCase()))
+        if (duplicateDeviceModel) throw new Error(`${duplicateDeviceModel.name} is already present in another imported model library.`)
+        newModels.push({ id: `model-${crypto.randomUUID()}`, filename: file.name, content, sha256: await sha256Text(content), licenseStatus: 'unknown', importedAt: new Date().toISOString() })
+      }
+      const modelAssets = [...currentModels, ...newModels]
+      if (modelAssets.length > 16 || modelAssets.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0) > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the project limits of 16 files and 10 MiB total.')
       const source = new TextDecoder('utf-8', { fatal: true }).decode(await ascFile.arrayBuffer())
       const childSchematics = await Promise.all(ascFiles.filter((candidate) => candidate !== ascFile).map(async (file) => ({ filename: file.name, content: new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()) })))
       const ascSources = [{ filename: ascFile.name, content: source }, ...childSchematics]
@@ -1514,7 +1537,7 @@ export default function App() {
       if (textCandidates.some((candidate) => candidate.size > 1024 * 1024)) throw new Error('LTspice PWL data files are limited to 1 MiB each.')
       if (textCandidates.reduce((sum, candidate) => sum + candidate.size, 0) > 8 * 1024 * 1024) throw new Error('LTspice PWL data files exceed the 8 MiB total import limit.')
       const pwlFiles = await Promise.all(textCandidates.map(async (file) => ({ filename: file.name, content: new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()) })))
-      const imported = parseLtspiceSchematic(source, ascFile.name, symbols, projectRef.current.modelAssets, childSchematics, [], pwlFiles)
+      const imported = parseLtspiceSchematic(source, ascFile.name, symbols, modelAssets, childSchematics, [], pwlFiles)
       setProjectState(imported.project)
       setImportWarnings(imported.warnings)
       setSelectedTraceIds([])
@@ -1522,7 +1545,8 @@ export default function App() {
       setSampleIndex(null)
       history.current = { past: [], future: [] }
       setSelection(null)
-      setNotice(imported.warnings.length ? `Imported ${imported.project.name} with ${imported.project.parts.length} parts and ${imported.project.wires.length} wires. ${imported.warnings.length} item(s) need attention: ${imported.warnings.slice(0, 3).join(' ')}` : `Imported ${imported.project.name} with ${imported.project.parts.length} parts and ${imported.project.wires.length} wires.`)
+      const modelSummary = newModels.length ? ` and ${newModels.length} model librar${newModels.length === 1 ? 'y' : 'ies'}` : ''
+      setNotice(imported.warnings.length ? `Imported ${imported.project.name} with ${imported.project.parts.length} parts, ${imported.project.wires.length} wires${modelSummary}. ${imported.warnings.length} item(s) need attention: ${imported.warnings.slice(0, 3).join(' ')}` : `Imported ${imported.project.name} with ${imported.project.parts.length} parts, ${imported.project.wires.length} wires${modelSummary}.`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this LTspice schematic.') }
     event.target.value = ''
   }
@@ -2078,7 +2102,7 @@ export default function App() {
     </header>
 
     <div className="main-toolbar">
-      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Select the parent .asc, matching child .asc/.asy files, and referenced PWL data files"><FolderOpen size={15}/> Import LTspice</button><button onClick={saveProject}><Save size={15}/> Save</button><button onClick={prepareLtspiceExport} disabled={ltspiceExportBusy}><Download size={15}/> Export LTspice</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple hidden onChange={importLtspiceSchematic}/></div>
+      <div className="menu-group"><button onClick={resetProject}><FilePlus2 size={15}/> New</button><button onClick={() => fileInput.current?.click()}><FolderOpen size={15}/> Open</button><button onClick={() => ascFileInput.current?.click()} title="Select the parent .asc, matching child .asc/.asy files, referenced PWL data, and optional .lib/.sub model files"><FolderOpen size={15}/> Import LTspice</button><button onClick={saveProject}><Save size={15}/> Save</button><button onClick={prepareLtspiceExport} disabled={ltspiceExportBusy}><Download size={15}/> Export LTspice</button><input ref={fileInput} type="file" accept=".elsim,.json,.elsim.json,application/json,application/vnd.elsim.project+zip" hidden onChange={loadProject}/><input ref={ascFileInput} type="file" accept=".asc,.asy,text/plain" multiple hidden onChange={importLtspiceSchematic}/></div>
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>

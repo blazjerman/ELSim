@@ -1211,6 +1211,38 @@ test('import a user NJF model and LTspice symbol, then simulate it in the browse
   await expect(jfet).toHaveCount(1)
 })
 
+test('one LTspice import loads its schematic, symbol, and user IC model together', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  const source = [
+    'Version 4', 'SHEET 1 640 240', 'FLAG -16 0 VIN', 'FLAG 16 0 0', 'FLAG 48 0 VIN', 'FLAG 80 0 OUT', 'FLAG 112 0 0',
+    'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 1',
+    'SYMBOL user_double 64 0 R0', 'SYMATTR InstName X1', 'SYMATTR Value USER_DOUBLE',
+    'SYMBOL res 128 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'TEXT 0 100 Left 2 !.include user-double.lib', 'TEXT 0 120 Left 2 !.op', 'TEXT 0 140 Left 2 !.save V(OUT) I(R1)',
+  ].join('\n')
+  const symbol = (prefix: string, pins: Array<[string, number, number, string]>) => [
+    'Version 4', `SYMATTR Prefix ${prefix}`,
+    ...pins.flatMap(([name, x, y, orientation], index) => [`PIN ${x} ${y} ${orientation}`, `PINATTR PinName ${name}`, `PINATTR SpiceOrder ${index + 1}`]),
+  ].join('\n')
+  const model = '.SUBCKT USER_DOUBLE IN OUT\nE1 OUT 0 IN 0 2\n.ENDS USER_DOUBLE\n'
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'bundled-ic.asc', mimeType: 'text/plain', buffer: Buffer.from(source) },
+    { name: 'voltage.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('V', [['PLUS', -16, 0, 'R'], ['MINUS', 16, 0, 'L']])) },
+    { name: 'user_double.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('X', [['IN', -16, 0, 'R'], ['OUT', 16, 0, 'L']])) },
+    { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
+    { name: 'user-double.lib', mimeType: 'text/plain', buffer: Buffer.from(model) },
+  ])
+  await expect(page.getByText(/Imported bundled-ic with 3 parts, 0 wires and 1 model library/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets?.map((asset: { filename: string }) => asset.filename))).toEqual(['user-double.lib'])
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelName)).toBe('USER_DOUBLE')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByRole('table')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()
+})
+
 test('current-controlled sources example shows CCCS gain and CCVS transresistance', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
