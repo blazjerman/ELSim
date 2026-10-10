@@ -19,6 +19,34 @@ test('wire current animation respects the operating system reduced-motion prefer
   await expect.poll(() => schematic.evaluate((svg) => getComputedStyle(svg.querySelector('.wire-current-flow')!).animationName)).toBe('wire-current-flow')
 })
 
+test('schematic components use one roving tab stop and arrow-key spatial navigation', async ({ page }) => {
+  await page.goto('/')
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await expect(resistor).toHaveAttribute('role', 'button')
+  await expect(resistor).toHaveAttribute('tabindex', '0')
+  await expect(resistor).toHaveAttribute('aria-label', /R1, Resistor, 1 kΩ/)
+  await expect(resistor).toHaveAttribute('aria-keyshortcuts', /ArrowRight.*Enter.*Space/)
+  await expect(page.locator('.circuit-part[tabindex="0"]')).toHaveCount(1)
+
+  await resistor.focus()
+  await page.keyboard.press('ArrowRight')
+  const capacitor = page.locator('.circuit-part[data-part-id="p-c1"]')
+  await expect(capacitor).toBeFocused()
+  await expect(capacitor).toHaveAttribute('tabindex', '0')
+  await page.keyboard.press('Enter')
+  await expect(capacitor).toHaveClass(/selected/)
+  await expect(capacitor).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.circuit-part[tabindex="0"]')).toHaveCount(1)
+
+  await page.getByTitle('Add Switch').click()
+  const switchPart = page.getByRole('button', { name: /^S1, Switch/ })
+  await switchPart.focus()
+  await expect(switchPart).toHaveAttribute('aria-pressed', 'false')
+  await page.keyboard.press('Space')
+  await expect(switchPart).toHaveAttribute('aria-pressed', 'true')
+  await expect(switchPart).toHaveAttribute('aria-label', /switch on/)
+})
+
 test('first use: run the RC starter and inspect its solved waveform', async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
