@@ -4,7 +4,7 @@ import {
   Activity, AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleDot, CircleHelp,
   Command, Copy, Download, FilePlus2, FlipHorizontal2, FolderOpen, Gauge, GitBranch, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
-  Save, Scan, Search, Settings2, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
+  Save, Scan, Search, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
@@ -32,6 +32,7 @@ import { extremaIndices, valueRange } from '../engine/plot'
 import { engineResponseIssue, isEngineResponse, type MeasurementResult, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
+type ComponentCategory = 'all' | 'basics' | 'semiconductors' | 'controlled'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
 const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: string }[] = [
@@ -53,6 +54,11 @@ const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: stri
   { kind: 'pnp', label: 'PNP transistor', Icon: GitBranch, subtitle: 'Q · switch/amplifier' },
   { kind: 'ground', label: 'Ground', Icon: ArrowDown, subtitle: 'GND' },
 ]
+const componentCategoryKinds: Record<Exclude<ComponentCategory, 'all'>, PartKind[]> = {
+  basics: ['resistor', 'lamp', 'capacitor', 'inductor', 'source', 'currentSource', 'switch', 'ground'],
+  semiconductors: ['diode', 'led', 'npn', 'pnp'],
+  controlled: ['vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral'],
+}
 
 function IconButton({ title, children, onClick, active = false, disabled = false }: { title: string; children: ReactNode; onClick?: () => void; active?: boolean; disabled?: boolean }) {
   return <button className={`icon-button${active ? ' active' : ''}`} title={title} aria-label={title} onClick={onClick} disabled={disabled}>{children}</button>
@@ -858,6 +864,7 @@ export default function App() {
   const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
   const [modelAssetsVerified, setModelAssetsVerified] = useState<boolean | null>(null)
   const [componentQuery, setComponentQuery] = useState('')
+  const [componentCategory, setComponentCategory] = useState<ComponentCategory>('all')
   const [tourStep, setTourStep] = useState<number | null>(null)
   const tourNextButtonRef = useRef<HTMLButtonElement>(null)
   const tourTriggerRef = useRef<HTMLElement | null>(null)
@@ -1123,7 +1130,11 @@ export default function App() {
   if (selected && !selectedParts.some((part) => part.id === selected.id)) selectedParts.splice(0, selectedParts.length, selected)
   const selectedWire = selection?.kind === 'wire' ? project.wires.find((wire) => wire.id === selection.id) ?? null : null
   const selectedLabel = selection?.kind === 'label' ? project.netLabels.find((label) => label.id === selection.id) ?? null : null
-  const filteredPalette = palette.filter(({ kind, label, subtitle }) => `${label} ${subtitle} ${kindNames[kind]}`.toLowerCase().includes(componentQuery.trim().toLowerCase()))
+  const filteredPalette = palette.filter(({ kind, label, subtitle }) => {
+    const matchesCategory = componentCategory === 'all' || componentCategoryKinds[componentCategory].includes(kind)
+    const matchesSearch = `${label} ${subtitle} ${kindNames[kind]}`.toLowerCase().includes(componentQuery.trim().toLowerCase())
+    return (componentQuery.trim() || matchesCategory) && matchesSearch
+  })
   const startTour = () => {
     tourTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const firstPart = projectRef.current.parts.find((part) => part.kind === 'resistor') ?? projectRef.current.parts[0]
@@ -1821,10 +1832,15 @@ export default function App() {
         <button className={mobilePane === 'properties' ? 'active' : ''} aria-pressed={mobilePane === 'properties'} onClick={() => setMobilePane('properties')}>Properties</button>
       </nav>
       <aside className={`library-panel${mobilePane === 'components' ? ' mobile-active' : ''}`}>
-        <div className="panel-heading"><div><span className="eyebrow">DESIGN</span><h2>Components</h2></div><button className="subtle-icon" title="Component library settings"><Settings2 size={16}/></button></div>
+        <div className="panel-heading"><div><span className="eyebrow">DESIGN</span><h2>Components</h2></div><span className="library-count" aria-label={`${filteredPalette.length} components shown`}>{filteredPalette.length}</span></div>
         <label className="search-box"><Search size={15}/><input ref={componentSearchRef} aria-label="Find a component" placeholder="Find a component" value={componentQuery} onChange={(event) => setComponentQuery(event.target.value)}/>{componentQuery ? <button type="button" aria-label="Clear component search" onClick={() => { setComponentQuery(''); componentSearchRef.current?.focus() }}><X size={13}/></button> : <kbd>/</kbd>}</label>
-        <div className="library-categories"><button className="category active"><Zap size={14}/> Basics</button><button className="category"><Activity size={14}/> Semiconductors <span className="soon-tag">SOON</span></button><button className="category"><Waypoints size={14}/> Integrated circuits <span className="soon-tag">SOON</span></button><button className="category"><Grid2X2 size={14}/> Connectors <span className="soon-tag">SOON</span></button></div>
-        <div className="component-list-label">{componentQuery ? `${filteredPalette.length} MATCHING COMPONENT${filteredPalette.length === 1 ? '' : 'S'}` : 'BASIC COMPONENTS'}</div>
+        <div className="library-categories" role="group" aria-label="Component category">
+          <button className={`category${componentCategory === 'all' ? ' active' : ''}`} aria-pressed={componentCategory === 'all'} onClick={() => setComponentCategory('all')}><Grid2X2 size={14}/> All parts</button>
+          <button className={`category${componentCategory === 'basics' ? ' active' : ''}`} aria-pressed={componentCategory === 'basics'} onClick={() => setComponentCategory('basics')}><Zap size={14}/> Basics</button>
+          <button className={`category${componentCategory === 'semiconductors' ? ' active' : ''}`} aria-pressed={componentCategory === 'semiconductors'} onClick={() => setComponentCategory('semiconductors')}><Waypoints size={14}/> Semiconductors</button>
+          <button className={`category${componentCategory === 'controlled' ? ' active' : ''}`} aria-pressed={componentCategory === 'controlled'} onClick={() => setComponentCategory('controlled')}><Activity size={14}/> Controlled sources</button>
+        </div>
+        <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'all' ? 'ALL COMPONENTS' : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
         {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, label, Icon, subtitle }) => <button key={kind} className="component-card" onClick={() => addPart(kind)} title={`Add ${label}`}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span></button>)}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
         {project.sheets.some((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)) && <div className="imported-models"><div className="component-list-label">PROJECT BLOCKS</div>{project.sheets.filter((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)).map((sheet) => <div className="imported-model" key={sheet.id}><div><strong>{sheet.name}</strong><span>{sheet.ports.length} ordered ports · {sheet.ports.map((port) => port.name).join(', ')}</span><small>Defined by this project</small><button className="place-model" onClick={() => placeSheetBlock(sheet)}>Place block</button></div><button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button></div>)}</div>}
         {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Model dependency report"><strong>MODEL DEPENDENCIES</strong>{modelDependencyAnalysis.missing.length > 0 && <><p>These references are not present in the imported project libraries. Import the library that defines each name before running a circuit that uses it.</p><ul>{modelDependencyAnalysis.missing.slice(0, 20).map((dependency, index) => <li key={`${dependency.assetId}:${dependency.sourceLine}:${index}`}><code>{dependency.modelName}</code> ({dependency.kind}) · {dependency.filename}:{dependency.sourceLine}, in {dependency.owner}</li>)}</ul>{modelDependencyAnalysis.missing.length > 20 && <p>{modelDependencyAnalysis.missing.length - 20} additional missing references are omitted.</p>}</>}{modelDependencyAnalysis.recursiveChains.length > 0 && <><p>A circuit that instantiates one of these recursive call chains will fail in ngspice.</p><ul>{modelDependencyAnalysis.recursiveChains.map((chain) => <li key={chain.join(':')}>{chain.join(' → ')}</li>)}</ul></>}</div>}

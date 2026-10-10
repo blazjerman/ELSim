@@ -3,6 +3,31 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect } from '@playwright/test'
 
+test('component categories filter the library and search crosses categories', async ({ page }) => {
+  await page.goto('/')
+  const cards = page.locator('.component-card')
+  await expect(cards).toHaveCount(17)
+  const categories = page.getByRole('group', { name: 'Component category' })
+  await categories.getByRole('button', { name: 'Semiconductors' }).click()
+  await expect(cards).toHaveCount(4)
+  await expect(cards.filter({ hasText: 'LED' })).toBeVisible()
+  await expect(cards.filter({ hasText: 'Resistor' })).toHaveCount(0)
+  await page.getByRole('textbox', { name: 'Find a component' }).fill('resistor')
+  await expect(cards).toHaveCount(1)
+  await expect(cards.first()).toContainText('Resistor')
+  await page.getByRole('button', { name: 'Clear component search' }).click()
+  await expect(cards).toHaveCount(4)
+  await categories.getByRole('button', { name: 'Controlled sources' }).click()
+  await expect(cards).toHaveCount(5)
+  await expect(cards.filter({ hasText: 'VCVS' })).toBeVisible()
+  await categories.getByRole('button', { name: 'Basics' }).click()
+  await expect(cards).toHaveCount(8)
+  await expect(categories.getByRole('button', { name: 'Basics' })).toHaveAttribute('aria-pressed', 'true')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: 'Components' }).click()
+  await expect(categories).toBeVisible()
+})
+
 test('AC source validation focuses its inspector field before simulation', async ({ page }) => {
   await page.goto('/')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')
