@@ -36,7 +36,9 @@ function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'p
   const generatedSine = trimmed.match(/^SINE\(\s*([^()]*)\s*\)$/i)
   if (generatedSine) {
     const values = generatedSine[1].trim().split(/[\s,]+/).filter(Boolean)
-    if (values.length >= 3 && values.length <= 6 && values.every((entry) => validScalar(entry)) && validScalar(values[0]) && validScalar(values[1]) && positiveFrequency(values[2]) && (values[3] === undefined || validScalar(values[3])) && (values[4] === undefined || /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(values[4])) && (values[5] === undefined || /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(values[5]))) {
+    const scalarWithEngineeringSuffix = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i
+    const unitlessNumber = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
+    if (values.length >= 3 && values.length <= 6 && values.every((entry) => validScalar(entry)) && validScalar(values[0]) && validScalar(values[1]) && positiveFrequency(values[2]) && (values[3] === undefined || validScalar(values[3])) && (values[4] === undefined || scalarWithEngineeringSuffix.test(values[4])) && (values[5] === undefined || unitlessNumber.test(values[5]))) {
       const [offset, amplitude, frequency, delay = '0', damping = '0', phase = '0'] = values
       return { value: amplitude, mode: 'sine', sine: { offset, amplitude, frequency, delay, damping, phase } }
     }

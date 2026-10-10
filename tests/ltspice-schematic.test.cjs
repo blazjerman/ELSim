@@ -53,6 +53,16 @@ test('imports an LTspice voltage SINE waveform with optional delay, damping, and
   assert.match(artifact.text, /^V1 .* SIN\(1 2 1k 3m 4 90\)$/m)
 })
 
+test('imports engineering-suffixed SINE damping and defaults omitted optional fields', () => {
+  const voltageSymbol = { ...symbol, id: 'symbol-voltage-sine-suffix', filename: 'voltage.asy', content: symbol.content.replace('Prefix R', 'Prefix V') }
+  const asc = ['Version 4', 'SHEET 1 880 680', 'SYMBOL voltage 32 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value SINE(0 5 2k 1m 4k)', 'TEXT 0 100 Left 2 !.tran 0 10m 0 10u'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'sine-source.asc', [voltageSymbol])
+  const source = project.parts.find((part) => part.ref === 'V1')
+  assert.equal(source.sourceMode, 'sine')
+  assert.deepEqual(source.sine, { offset: '0', amplitude: '5', frequency: '2k', delay: '1m', damping: '4k', phase: '0' })
+  assert.deepEqual(warnings, [])
+})
+
 test('imports a user-supplied LTspice M device with D-G-S-B SpiceOrder mapping', () => {
   const mosSymbol = {
     id: 'symbol-nmos', filename: 'nmos.asy', sha256: 'b'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
