@@ -229,6 +229,16 @@
           "enum": ["pulse", "dc", "pwl"],
           "description": "For transient analysis, voltage and independent current sources support pulse, DC, or PWL. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
         },
+        "acMagnitude": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional per-source small-signal AC magnitude; overrides the project default for voltage sources and the DC value for current sources."
+        },
+        "acPhase": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional per-source small-signal AC phase in degrees; defaults to zero."
+        },
         "pulse": {
           "type": "object",
           "additionalProperties": false,

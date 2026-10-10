@@ -150,7 +150,7 @@ function sheetWireRecords(sheet: ProjectSheet, blockers: LtspiceExportBlocker[])
   return records
 }
 
-function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymbolNames: Map<string, string>): { value: string; spiceLine?: string } | null {
+function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymbolNames: Map<string, string>): { value: string; spiceLine?: string; value2?: string } | null {
   const parameter = part.value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
   if (parameter && sheet.parameters?.some((entry) => entry.name.toLowerCase() === parameter[1].toLowerCase())) return { value: part.value.trim() }
   if (part.kind === 'switch') {
@@ -163,6 +163,11 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   if (part.kind === 'currentSource') {
     const value = scalar(part.value, 'a')
     if (!value) return null
+    const acMagnitude = part.acMagnitude ?? (project.simulation.analysis === 'ac' ? value : undefined)
+    const acScalar = acMagnitude === undefined ? undefined : scalar(acMagnitude, 'a')
+    const phaseScalar = acMagnitude === undefined ? '0' : scalar(part.acPhase ?? '0', '')
+    if ((acMagnitude !== undefined && acScalar === null) || phaseScalar === null) return null
+    const value2 = acScalar === undefined ? undefined : `AC ${acScalar} ${phaseScalar}`
     if (project.simulation.analysis === 'tran' && part.sourceMode === 'pwl') {
       const points = part.currentPwl ?? []
       const mapped = points.map((point) => ({ time: scalar(point.time, 's'), timeMagnitude: scalarMagnitude(point.time, 's'), current: scalar(point.current, 'a') }))
@@ -173,15 +178,15 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
         previousTime = point.timeMagnitude
       }
       if (!valid) return null
-      return { value: `PWL(${mapped.map((point) => `${point.time} ${point.current}`).join(' ')})` }
+      return { value: `PWL(${mapped.map((point) => `${point.time} ${point.current}`).join(' ')})`, ...(value2 ? { value2 } : {}) }
     }
     if (part.sourceMode === 'pulse') {
       const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
       const values = [scalar(pulse.initial, 'a'), scalar(pulse.delay, 's'), scalar(pulse.rise, 's'), scalar(pulse.fall, 's'), scalar(pulse.width, 's'), scalar(pulse.period, 's')]
       if (values.some((entry) => entry === null) || scalarMagnitude(pulse.period, 's')! <= 0) return null
-      return { value: `PULSE(${values[0]} ${value} ${values[1]} ${values[2]} ${values[3]} ${values[4]} ${values[5]})` }
+      return { value: `PULSE(${values[0]} ${value} ${values[1]} ${values[2]} ${values[3]} ${values[4]} ${values[5]})`, ...(value2 ? { value2 } : {}) }
     }
-    return { value, ...(project.simulation.analysis === 'ac' ? { spiceLine: `AC ${value} 0` } : {}) }
+    return { value, ...(value2 ? { value2 } : {}) }
   }
   if (part.kind === 'source') {
     const value = scalar(part.value, 'v')
@@ -200,14 +205,23 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
       }
       if (!valid) return null
       const output = `PWL(${mapped.map((point) => `${point.time} ${point.voltage}`).join(' ')})`
-      return { value: output }
+      const acMagnitude = part.acMagnitude ?? (project.simulation.analysis === 'ac' ? project.simulation.sourceAcMagnitude ?? '1 V' : undefined)
+      const acScalar = acMagnitude === undefined ? undefined : scalar(acMagnitude, 'v')
+      const phaseScalar = acMagnitude === undefined ? '0' : scalar(part.acPhase ?? '0', '')
+      if ((acMagnitude !== undefined && acScalar === null) || phaseScalar === null) return null
+      const value2 = acScalar === undefined ? undefined : `AC ${acScalar} ${phaseScalar}`
+      return { value: output, ...(value2 ? { value2 } : {}) }
     }
     if (isTransient && part.sourceMode !== 'dc' && pulseValues.some((entry) => entry === null)) return null
     const output = isTransient && part.sourceMode !== 'dc'
       ? `PULSE(${pulseValues[0]} ${value} ${pulseValues[1]} ${pulseValues[2]} ${pulseValues[3]} ${pulseValues[4]} ${pulseValues[5]})`
       : value
-    const spiceLine = project.simulation.analysis === 'ac' ? `AC ${scalar(project.simulation.sourceAcMagnitude ?? '1 V', 'v') ?? '1'}` : undefined
-    return { value: output, ...(spiceLine ? { spiceLine } : {}) }
+    const acMagnitude = part.acMagnitude ?? (project.simulation.analysis === 'ac' ? project.simulation.sourceAcMagnitude ?? '1 V' : undefined)
+    const acScalar = acMagnitude === undefined ? undefined : scalar(acMagnitude, 'v')
+    const phaseScalar = acMagnitude === undefined ? '0' : scalar(part.acPhase ?? '0', '')
+    if ((acMagnitude !== undefined && acScalar === null) || phaseScalar === null) return null
+    const value2 = acScalar === undefined ? undefined : `AC ${acScalar} ${phaseScalar}`
+    return { value: output, ...(value2 ? { value2 } : {}) }
   }
   if (part.kind === 'diode' || part.kind === 'led') return { value: part.deviceModel ?? 'DDEFAULT' }
   if (part.kind === 'npn' || part.kind === 'pnp') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
@@ -278,11 +292,12 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       continue
     }
     const instanceName = instanceNames.get(part.id) ?? part.ref
-    if (!checkText(instanceName, part.id, 'Reference designator', blockers) || !checkText(mapped.value, part.id, 'Component value', blockers) || (mapped.spiceLine && !checkText(mapped.spiceLine, part.id, 'SPICE line', blockers))) continue
+    if (!checkText(instanceName, part.id, 'Reference designator', blockers) || !checkText(mapped.value, part.id, 'Component value', blockers) || (mapped.value2 && !checkText(mapped.value2, part.id, 'AC value', blockers)) || (mapped.spiceLine && !checkText(mapped.spiceLine, part.id, 'SPICE line', blockers))) continue
     const symbolName = symbolNames.get(part.id)!
     rows.push(`SYMBOL ${symbolName} ${checkCoordinate(part.x, part.id, blockers)} ${checkCoordinate(part.y, part.id, blockers)} ${part.flipX ? 'M' : 'R'}${part.rotation}`)
     rows.push(`SYMATTR InstName ${instanceName}`)
     rows.push(`SYMATTR Value ${mapped.value}`)
+    if (mapped.value2) rows.push(`SYMATTR Value2 ${mapped.value2}`)
     if (mapped.spiceLine) rows.push(`SYMATTR SpiceLine ${mapped.spiceLine}`)
     if (part.kind === 'diode' || part.kind === 'led') {
       if (!part.deviceModel) losses.push({ severity: 'info', sourceId: part.id, title: 'Default diode model generated', explanation: 'A generic DDEFAULT model is written into this schematic.' })

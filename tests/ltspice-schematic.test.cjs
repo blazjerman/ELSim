@@ -62,7 +62,14 @@ test('imports scalar LTspice voltage sources as DC and preserves PULSE levels an
   const dc = parseLtspiceSchematic(scalar, 'dc.asc', [sourceSymbol]).project.parts[0]
   assert.equal(dc.value, '5')
   assert.equal(dc.sourceMode, 'dc')
-  assert.deepEqual(dc.extensions, { ltspice: { attributes: { VALUE2: 'AC 1' } } })
+  assert.equal(dc.acMagnitude, '1')
+  assert.equal(dc.acPhase, '0')
+  assert.equal(dc.extensions, undefined)
+  const valueAc = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V4', 'SYMATTR Value AC 2 90', 'SYMATTR Value2 5'].join('\n')
+  const importedAcValue = parseLtspiceSchematic(valueAc, 'value-ac.asc', [sourceSymbol]).project.parts[0]
+  assert.equal(importedAcValue.value, '5')
+  assert.equal(importedAcValue.acMagnitude, '2')
+  assert.equal(importedAcValue.acPhase, '90')
   const pulse = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V2', 'SYMATTR Value PULSE(1 5 2m 3u 4u 5m 10m)'].join('\n')
   const imported = parseLtspiceSchematic(pulse, 'pulse.asc', [sourceSymbol]).project.parts[0]
   assert.equal(imported.value, '5')

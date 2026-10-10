@@ -36,6 +36,12 @@ function sourceValue(value: string): { value: string; mode?: 'pulse' | 'dc' | 'p
   return { value: trimmed }
 }
 
+function sourceAc(value: string | undefined): { magnitude: string; phase: string } | null {
+  const match = value?.trim().match(/^AC\s+(\S+)(?:\s+(\S+))?$/i)
+  if (!match || !validScalar(match[1]) || (match[2] !== undefined && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(match[2]))) return null
+  return { magnitude: match[1], phase: match[2] ?? '0' }
+}
+
 function coordinate(value: string, line: number): number {
   const number = Number(value)
   if (!Number.isInteger(number) || Math.abs(number) > 1_000_000) throw new Error(`.asc line ${line}: coordinate is invalid or out of range.`)
@@ -249,9 +255,12 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   for (const symbol of symbols) {
     const identity = symbol.attributes.INSTNAME
     const rawValue = symbol.attributes.VALUE ?? symbol.attributes.VALUE2 ?? ''
-    const representedValueAttribute = symbol.attributes.VALUE !== undefined ? 'VALUE' : 'VALUE2'
     const sourcePrefix = symbol.attributes.INSTNAME?.[0]?.toUpperCase()
-    const parsedWaveform = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceValue(rawValue) : { value: rawValue }
+    const valueAc = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceAc(rawValue) : null
+    const value2Ac = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceAc(symbol.attributes.VALUE2) : null
+    const representedValueAttribute = valueAc && symbol.attributes.VALUE2 !== undefined ? 'VALUE2' : symbol.attributes.VALUE !== undefined ? 'VALUE' : 'VALUE2'
+    const fallbackSourceValue = valueAc ? (symbol.attributes.VALUE2 && !value2Ac ? symbol.attributes.VALUE2 : '0') : rawValue
+    const parsedWaveform = sourcePrefix === 'V' || sourcePrefix === 'I' ? valueAc ? { ...sourceValue(fallbackSourceValue), mode: 'dc' as const } : sourceValue(rawValue) : { value: rawValue }
     const parsedSource = parsedWaveform
     const value = parsedSource.value
     if (!identity || !/^[A-Za-z][A-Za-z0-9_]*$/.test(identity)) { warnings.push(`Line ${symbol.line}: ${symbol.name} is missing a valid SYMATTR InstName and was skipped.`); continue }
@@ -325,7 +334,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
     if ((prefix.toUpperCase() === 'D' || prefix.toUpperCase() === 'Q') && value && !deviceModels.has(value.toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${value}” for ${identity} is missing; the educational default model will be used.`)
     const offsets = pins.map(({ x, y }) => [x, y] as [number, number])
-    const representedAttributes = ['INSTNAME', representedValueAttribute]
+    const representedAttributes = ['INSTNAME', representedValueAttribute, ...(valueAc || value2Ac ? ['VALUE', 'VALUE2'] : [])]
     const extensionAttributes = Object.fromEntries(Object.entries(symbol.attributes).filter(([key]) => !representedAttributes.includes(key)).slice(0, 16).map(([key, attribute]) => [key, attribute.slice(0, 512)]))
     const unmappedAttributes = Object.entries(symbol.attributes).filter(([key]) => !representedAttributes.includes(key))
     const omittedAttributes = unmappedAttributes.length - Math.min(unmappedAttributes.length, 16) + unmappedAttributes.slice(0, 16).filter(([, attribute]) => attribute.length > 512).length
@@ -339,6 +348,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       ...(mapped.deviceModel ? { deviceModel: mapped.deviceModel } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
+      ...((kind === 'source' || kind === 'currentSource') && (valueAc ?? value2Ac) ? { acMagnitude: (valueAc ?? value2Ac)!.magnitude, acPhase: (valueAc ?? value2Ac)!.phase } : {}),
       ...(kind === 'source' && parsedSource.pwl ? { pwl: parsedSource.pwl } : {}),
       ...(kind === 'currentSource' && parsedSource.pwl ? { currentPwl: parsedSource.pwl.map(({ time, voltage: current }) => ({ time, current })) } : {}),
     }

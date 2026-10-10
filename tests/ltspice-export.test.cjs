@@ -111,6 +111,26 @@ test('exports and reimports supported PWL source points', async () => {
   assert.deepEqual(restored.pwl, [{ time: '0', voltage: '0' }, { time: '2m', voltage: '5' }, { time: '4m', voltage: '-1' }])
 })
 
+test('exports and reimports per-source AC magnitude and phase', async () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'ac'
+  project.simulation.acSweep = { scale: 'dec', points: 10, startFrequency: '10', stopFrequency: '1Meg' }
+  project.parts[0].acMagnitude = '250 mV'
+  project.parts[0].acPhase = '45'
+  const current = { id: 'ac-current', kind: 'currentSource', ref: 'I1', value: '2 mA', acMagnitude: '3 mA', acPhase: '-90', x: 520, y: 400, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName V1\nSYMATTR Value [^\n]+\nSYMATTR Value2 AC 250m 45/)
+  assert.match(asc.content, /SYMATTR InstName I1\nSYMATTR Value 2m\nSYMATTR Value2 AC 3m -90/)
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `ac-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project
+  assert.deepEqual([restored.parts.find((part) => part.ref === 'V1').acMagnitude, restored.parts.find((part) => part.ref === 'V1').acPhase], ['250m', '45'])
+  assert.deepEqual([restored.parts.find((part) => part.ref === 'I1').acMagnitude, restored.parts.find((part) => part.ref === 'I1').acPhase], ['3m', '-90'])
+})
+
 test('splits supported orthogonal wires at explicit junctions', async () => {
   const project = createStarterProject()
   project.wires.push({ id: 'wire-horizontal', points: [[700, 600], [900, 600]] }, { id: 'wire-vertical', points: [[800, 500], [800, 700]] })

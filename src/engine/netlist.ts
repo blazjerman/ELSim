@@ -264,12 +264,21 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         transientValue = `PWL(${normalized.map((point) => `${point.time} ${point.current}`).join(' ')})`
       }
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `AC ${value} 0` : project.simulation.analysis === 'tran' ? transientValue : value}`, part.id, 'component')
+      const acMagnitude = spiceNumber(part.acMagnitude ?? part.value, 'currentSource')
+      const acPhase = spiceScalar(part.acPhase ?? '0', '')
+      if (project.simulation.analysis === 'ac' && (acMagnitude === null || acPhase === null)) {
+        const message = `${part.ref} AC current magnitude and phase must be valid SPICE values.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'tran' ? transientValue : value}`, part.id, 'component')
     }
     else if (part.kind === 'source') {
-      const acMagnitude = spiceNumber(project.simulation.sourceAcMagnitude ?? '1 V', 'source')
-      if (project.simulation.analysis === 'ac' && !acMagnitude) {
-        const message = 'AC source magnitude must be a valid voltage value.'
+      const acMagnitude = spiceNumber(part.acMagnitude ?? project.simulation.sourceAcMagnitude ?? '1 V', 'source')
+      const acPhase = spiceScalar(part.acPhase ?? '0', '')
+      if (project.simulation.analysis === 'ac' && (acMagnitude === null || acPhase === null)) {
+        const message = `${part.ref} AC voltage magnitude and phase must be valid SPICE values.`
         append(`* ERROR: ${message}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
@@ -307,7 +316,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period})`
       }
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} 0` : project.simulation.analysis === 'dc' ? `DC ${value}` : transientValue}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'op' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'dc' ? `DC ${value}` : transientValue}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const currentCondition = part.kind === 'inductor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined

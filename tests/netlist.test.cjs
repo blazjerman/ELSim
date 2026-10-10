@@ -65,6 +65,23 @@ test('independent current sources netlist in amperes and receive I designators',
   assert.throws(() => validateProject({ ...project, parts: [{ ...project.parts[0], ref: 'V1' }, project.parts[1]], sheets: [{ ...project.sheets[0], parts: [{ ...project.parts[0], ref: 'V1' }, project.parts[1]] }] }), /invalid for currentSource/i)
 })
 
+test('AC analysis uses each source magnitude and phase override', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'ac'
+  const voltage = project.parts.find((part) => part.kind === 'source')
+  voltage.acMagnitude = '250 mV'
+  voltage.acPhase = '45'
+  const current = { id: 'i-ac', kind: 'currentSource', ref: 'I1', value: '2 mA', acMagnitude: '3 mA', acPhase: '-90', x: 700, y: 500, rotation: 0 }
+  project.parts.push(current)
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 AC 250m 45$/m)
+  assert.match(artifact.text, /^I1 .* .* AC 3m -90$/m)
+  voltage.acPhase = 'not-a-phase'
+  assert.match(createNetlistArtifact(project).diagnostics[0].message, /AC voltage magnitude and phase/)
+})
+
 test('independent current source pulse mode emits validated PULSE current levels', () => {
   const project = createStarterProject()
   const current = { id: 'i-pulse', kind: 'currentSource', ref: 'I1', value: '2 mA', sourceMode: 'pulse', pulse: { initial: '-1 mA', delay: '2m', rise: '3u', fall: '4u', width: '5m', period: '10m' }, x: 700, y: 500, rotation: 0 }
