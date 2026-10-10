@@ -111,6 +111,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   const warnings: string[] = []
   const wires: Wire[] = []
   const flags: { x: number; y: number; name: string }[] = []
+  const ioPins: { x: number; y: number; direction: 'input' | 'output' | 'inout'; line: number }[] = []
   const symbols: AscSymbol[] = []
   const textRecords: { line: number; text: string }[] = []
   let current: AscSymbol | undefined
@@ -147,6 +148,13 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
         finish()
         if (tokens.length < 3) throw new Error('FLAG expects a position and node name.')
         flags.push({ x: coordinate(tokens[0], lineNo), y: coordinate(tokens[1], lineNo), name: tokens.slice(2).join(' ') })
+      } else if (keyword === 'IOPIN') {
+        finish()
+        if (tokens.length < 3) throw new Error('IOPIN expects a position and a polarity.')
+        const polarity = tokens[2].toLowerCase()
+        const direction = polarity === 'in' ? 'input' : polarity === 'out' ? 'output' : polarity === 'bidirectional' || polarity === 'bidir' ? 'inout' : null
+        if (!direction) throw new Error(`unsupported IOPIN polarity ${tokens[2]}.`)
+        ioPins.push({ x: coordinate(tokens[0], lineNo), y: coordinate(tokens[1], lineNo), direction, line: lineNo })
       } else if (keyword === 'TEXT') {
         finish()
         if (tokens.length < 5) throw new Error('TEXT record is incomplete.')
@@ -237,6 +245,17 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     else if (/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(flag.name)) project.netLabels.push({ id: `asc-label-${project.netLabels.length + 1}`, name: flag.name, x: flag.x, y: flag.y, visible: true })
     else warnings.push(`A FLAG name at ${flag.x},${flag.y} is not supported and was skipped.`)
   }
+  const ports = [] as NonNullable<Project['sheets'][number]['ports']>
+  const portNames = new Set<string>()
+  for (const ioPin of ioPins) {
+    const flag = flags.find((item) => item.x === ioPin.x && item.y === ioPin.y)
+    if (!flag) { warnings.push(`Line ${ioPin.line}: IOPIN at ${ioPin.x},${ioPin.y} has no matching FLAG node name and was not exposed as a sheet port.`); continue }
+    if (flag.name !== '0' && !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(flag.name)) { warnings.push(`Line ${ioPin.line}: IOPIN name “${recordExcerpt(flag.name)}” is invalid and was not exposed as a sheet port.`); continue }
+    if (portNames.has(flag.name.toLowerCase())) { warnings.push(`Line ${ioPin.line}: duplicate IOPIN name ${flag.name} was ignored.`); continue }
+    ports.push({ id: `asc-port-${ports.length + 1}`, name: flag.name, side: 'auto', direction: ioPin.direction })
+    portNames.add(flag.name.toLowerCase())
+  }
+  project.sheets[0].ports = ports
   for (const record of textRecords) for (const directive of record.text.split(/\n|!\s+(?=\.)/).map((item) => item.trim()).filter(Boolean)) applyDirective(project, directive, warnings, record.line, knownLibraries)
 
   const points = [

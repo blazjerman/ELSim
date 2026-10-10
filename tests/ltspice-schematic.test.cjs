@@ -73,6 +73,19 @@ test('parses AC and DC analysis directives and rejects malformed ASC records', (
   assert.throws(() => parseLtspiceSchematic('Version 4\nSYMBOL res 0 0 R45', 'rotate.asc'), /unsupported symbol orientation/)
 })
 
+test('recognizes LTspice IOPIN records and matches them to named FLAG nodes', () => {
+  const asc = ['Version 4', 'IOPIN 0 0 In', 'FLAG 0 0 INPUT', 'IOPIN 80 0 Out', 'FLAG 80 0 OUTPUT'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'child.asc')
+  assert.deepEqual(project.sheets[0].ports.map(({ name, direction }) => ({ name, direction })), [
+    { name: 'INPUT', direction: 'input' },
+    { name: 'OUTPUT', direction: 'output' },
+  ])
+  assert.deepEqual(warnings, [])
+  const unmatched = parseLtspiceSchematic('Version 4\nIOPIN 1 2 In', 'unmatched.asc')
+  assert.equal(unmatched.project.sheets[0].ports.length, 0)
+  assert.match(unmatched.warnings[0], /has no matching FLAG node name/)
+})
+
 test('maps an X-prefixed imported IC symbol to an imported subcircuit model in SpiceOrder', () => {
   const modelContent = '.SUBCKT user_amp IN OUT\nR1 IN OUT 1k\n.ENDS user_amp\n'
   const modelAsset = { id: 'model-amp', filename: 'amp.lib', sha256: 'b'.repeat(64), content: modelContent, licenseStatus: 'unknown', importedAt: new Date().toISOString() }
