@@ -382,7 +382,12 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
         if (voltage) addDirective(`.ic V(${condition.node})=${voltage}`)
         else blockers.push({ sourceId: `initial:${condition.node}`, message: 'Initial node voltage is not a supported scalar.' })
       }
-      else if ('current' in condition) losses.push({ severity: 'warning', sourceId: `initial:${condition.element}`, title: 'Inductor initial current omitted', explanation: 'This exporter version does not yet map ELSim’s inductor IC attribute to LTspice schematic syntax.' })
+      else if ('current' in condition) {
+        const inductor = sheet.parts.find((part) => part.kind === 'inductor' && part.ref.toLowerCase() === condition.element.toLowerCase())
+        const current = scalar(condition.current, 'a')
+        if (!inductor || !current) blockers.push({ sourceId: `initial:${condition.element}`, message: 'Inductor initial current needs a placed inductor and a supported scalar current.' })
+        else addDirective(`.ic I(${inductor.ref})=${current}`)
+      }
       else {
         const capacitor = sheet.parts.find((part) => part.kind === 'capacitor' && part.ref.toLowerCase() === condition.element.toLowerCase())
         const voltage = scalar(condition.voltage, 'v')
@@ -517,7 +522,6 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
       if (part.kind === 'subcircuit' && !part.sheetId && part.modelParameters && Object.keys(part.modelParameters).length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Model parameter overrides may differ', explanation: 'The current exporter writes SpiceLine PARAMS: overrides; verify parameter handling in the target LTspice version.' })
     }
   }
-  if (project.simulation.initialConditions?.some((condition) => 'element' in condition && 'current' in condition)) losses.push({ severity: 'warning', sourceId: 'analysis:initial-conditions', title: 'Inductor initial currents are not fully mapped', explanation: 'Those inductor conditions are omitted. Node-voltage initial conditions are written as .ic directives.' })
   losses.push({ severity: 'info', sourceId: 'elsim-ui-state', title: 'ELSim-only interface state omitted', explanation: 'Editor view state, animation presentation, selections, plot windows, and saved waveform display choices have no LTspice schematic equivalent.' })
   if (project.importedSchematicSource || project.importedChildSchematicSources?.length) losses.push({ severity: 'info', sourceId: 'provenance:asc', title: 'Original schematic text not replayed', explanation: 'Export is generated from current ELSim sheets; original LTspice comments, unknown records, and source layout are preserved only in the ELSim project.' })
   if (project.plotSettings?.selectedTraceIds.length || Object.keys(project.plotSettings?.ranges ?? {}).length) losses.push({ severity: 'info', sourceId: 'plot-settings', title: 'Plot presentation omitted', explanation: 'Selected traces and ELSim plot ranges do not have an LTspice schematic equivalent.' })

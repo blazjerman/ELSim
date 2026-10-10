@@ -175,6 +175,27 @@ test('blocks capacitor voltage IC export when both capacitor pins share one net'
   assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'initial:C1' && /both terminals on the same net/.test(blocker.message)))
 })
 
+test('exports and reimports inductor current initial conditions', async () => {
+  const project = createStarterProject()
+  const inductor = { id: 'export-inductor-ic', kind: 'inductor', ref: 'L1', value: '1 mH', x: 800, y: 600, rotation: 0 }
+  project.parts.push(inductor)
+  project.sheets[0].parts = project.parts
+  project.simulation.initialConditions = [{ element: 'L1', current: '25 mA' }]
+
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.blockers, [])
+  assert.equal(output.losses.some((loss) => /Inductor initial current/.test(loss.title)), false)
+  const asc = output.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /\.ic I\(L1\)=25m/)
+
+  const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({
+    id: `inductor-ic-symbol-${index}`, filename: file.path, sha256: sha256(file.content),
+    content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+  }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project
+  assert.deepEqual(restored.simulation.initialConditions, [{ element: 'L1', current: '25m' }])
+})
+
 test('reports retained imported LTspice attributes omitted from generated schematics', async () => {
   const project = createStarterProject()
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'original-value' } } }
