@@ -68,6 +68,21 @@ test('reports LTspice compatibility-mode limit functions and VSWITCH without rew
   assert.equal(needsLtspiceFullDeckTranslation('B1 out 0 V=V(in)\n+ $ dnlim(V(ctrl),2,0.1)'), false)
 })
 
+test('warns when imported model libraries depend on unverified XSPICE A-device modules', () => {
+  const source = [
+    '* A1 OUT 0 fake is only a comment',
+    '.SUBCKT controlled IN OUT',
+    'A1 IN OUT slew',
+    '+ gain=2',
+    '.ENDS controlled',
+  ].join('\n')
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.deepEqual([warning.sourceLine, warning.feature], [3, 'XSPICE A-device (runtime support unverified)'])
+  assert.match(warning.impact, /does not package or validate external \.cm modules/)
+  assert.match(warning.suggestion, /verified for this browser build/)
+  assert.equal(source.includes('A1 IN OUT slew'), true)
+})
+
 test('pinpoints LTspice behavioral forms and options, including continuation records', () => {
   const source = [
     '.SUBCKT compat IN OUT',

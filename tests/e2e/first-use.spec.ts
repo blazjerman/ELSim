@@ -519,17 +519,20 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
-    name: 'laplace-model.lib',
+    name: 'compatibility-model.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.SUBCKT FILTER IN OUT\nB1 OUT 0 V=V(IN)\n+ Laplace=1/(1+s)\n.ENDS FILTER\n'),
+    buffer: Buffer.from('.SUBCKT FILTER IN OUT\nB1 OUT 0 V=V(IN)\n+ Laplace=1/(1+s)\nA1 IN OUT slew\n.ENDS FILTER\n'),
   })
 
   const warnings = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
   await expect(warnings).toBeVisible()
-  await expect(warnings).toContainText('laplace-model.lib:3')
+  await expect(warnings).toContainText('compatibility-model.lib:3')
   await expect(warnings).toContainText('LTspice behavioral Laplace option')
   await expect(warnings).toContainText('not translated by ELSim’s current compatibility path')
   await expect(warnings).toContainText('Use a tested ngspice-compatible transfer model')
+  await expect(warnings).toContainText('compatibility-model.lib:4')
+  await expect(warnings).toContainText('XSPICE A-device (runtime support unverified)')
+  await expect(warnings).toContainText('external .cm modules')
 })
 
 test('junction tool toggles a crossing connection in the schematic', async ({ page }) => {
