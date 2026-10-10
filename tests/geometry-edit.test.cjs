@@ -22,11 +22,14 @@ test('fit view centers and bounds distant parts, wire points, and labels', () =>
   ]
   const centerX = (Math.min(...content.map(({ x }) => x)) + Math.max(...content.map(({ x }) => x))) / 2
   const centerY = (Math.min(...content.map(({ y }) => y)) + Math.max(...content.map(({ y }) => y))) / 2
-  assert.equal(view.panX, centerX - 380)
-  assert.equal(view.panY, centerY - 300)
+  const viewWidth = 760 / view.zoom, viewHeight = 600 / view.zoom
+  const viewLeft = (760 - viewWidth) / 2 - view.panX
+  const viewTop = (600 - viewHeight) / 2 - view.panY
+  assert.equal(viewLeft + viewWidth / 2, centerX)
+  assert.equal(viewTop + viewHeight / 2, centerY)
   for (const point of content) {
-    assert.ok(Math.abs((point.x - centerX) * view.zoom) <= 380)
-    assert.ok(Math.abs((point.y - centerY) * view.zoom) <= 300)
+    assert.ok(point.x >= viewLeft && point.x <= viewLeft + viewWidth)
+    assert.ok(point.y >= viewTop && point.y <= viewTop + viewHeight)
   }
   assert.ok(view.zoom >= .1 && view.zoom <= 2.5)
 })

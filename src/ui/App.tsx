@@ -784,10 +784,23 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   const resultIsCurrent = simulationResult?.analysis === 'tran' && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt
   const transientAxis = resultIsCurrent ? simulationResult.traces[0]?.axis : undefined
   const resultConnectivity = useMemo(() => resultIsCurrent ? analyzeConnectivity(project) : null, [project, resultIsCurrent])
+  const viewWidth = 760 / project.view.zoom, viewHeight = 600 / project.view.zoom
+  const viewportLeft = (760 - viewWidth) / 2 - project.view.panX
+  const viewportTop = (600 - viewHeight) / 2 - project.view.panY
+  const tracesByVector = useMemo(() => {
+    const index = new Map<string, Trace>()
+    for (const trace of simulationResult?.traces ?? []) {
+      const id = trace.id.toLowerCase()
+      if (!index.has(id)) index.set(id, trace)
+      const baseId = trace.baseId?.toLowerCase()
+      if (baseId && !index.has(baseId)) index.set(baseId, trace)
+    }
+    return index
+  }, [simulationResult])
   const activeSample = transientAxis?.length ? Math.max(0, Math.min(transientAxis.length - 1, scrubIndex ?? transientAxis.length - 1)) : 0
   useEffect(() => { setScrubIndex(sampleIndex ?? (resultIsCurrent && transientAxis?.length ? transientAxis.length - 1 : null)) }, [simulationResult, sampleIndex])
   const resultValue = (id: string): number | undefined => {
-    const trace = simulationResult?.traces.find((item) => item.id.toLowerCase() === id.toLowerCase() || item.baseId?.toLowerCase() === id.toLowerCase())
+    const trace = tracesByVector.get(id.toLowerCase())
     if (!trace) return undefined
     const primaryAxis = simulationResult?.traces[0]?.axis
     const time = primaryAxis?.[activeSample] ?? trace.axis[activeSample] ?? 0
@@ -807,7 +820,10 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   }
   const voltageAtNode = (name: string): number | undefined => name === '0' ? 0 : resultValue(`v(${name})`)
   const componentSample = (part: Part) => {
-    if (!resultIsCurrent || part.kind === 'subcircuit') return {}
+    // Offscreen parts cannot display the cursor-linked animation. Keep their
+    // result props stable so a scrub does not rerender every symbol in a large
+    // sheet; the latest sample is applied when the viewport reaches them.
+    if (!resultIsCurrent || part.kind === 'subcircuit' || part.x < viewportLeft - 100 || part.x > viewportLeft + viewWidth + 100 || part.y < viewportTop - 100 || part.y > viewportTop + viewHeight + 100) return {}
     const positive = voltageAtNode(pinNet(resultConnectivity!, part, 0))
     const negative = voltageAtNode(pinNet(resultConnectivity!, part, 1))
     const current = resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`)
@@ -1035,7 +1051,6 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     setNotice(labelDraft.id ? `Net label renamed to ${name}.` : `Net label ${name} added.`)
     setLabelDraft(null)
   }
-  const viewWidth = 760 / project.view.zoom, viewHeight = 600 / project.view.zoom
   const viewBox = `${(760 - viewWidth) / 2 - project.view.panX} ${(600 - viewHeight) / 2 - project.view.panY} ${viewWidth} ${viewHeight}`
   const selectedPartId = selection?.kind === 'part' && project.parts.some((part) => part.id === selection.id) ? selection.id : undefined
   const visibleSelectedPartIds = selectedPartId && !selectedPartIds.includes(selectedPartId) ? [selectedPartId] : selectedPartIds

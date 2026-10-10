@@ -17,5 +17,7 @@ export function fitEditorView(project: Project, viewport = { width: 760, height:
     viewport.width / Math.max(1, maxX - minX + padding * 2),
     viewport.height / Math.max(1, maxY - minY + padding * 2)))
   const centerX = (minX + maxX) / 2, centerY = (minY + maxY) / 2
-  return { ...project.view, zoom, panX: centerX - 380, panY: centerY - 300 }
+  // The canvas viewBox center is (viewport / 2) - pan, so invert the
+  // content-center offset when converting the target bounds to pan values.
+  return { ...project.view, zoom, panX: viewport.width / 2 - centerX, panY: viewport.height / 2 - centerY }
 }

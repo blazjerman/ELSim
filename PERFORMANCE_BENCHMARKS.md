@@ -177,3 +177,9 @@ The worker now shares one parsed axis across all traces and transfers unique axi
 | Firefox | 2.00 | 3.00 | 5.6 MB |
 
 These small-payload timings vary by browser and are not budgets. Transfer’s consistent benefit is avoiding the waveform buffer copy and reducing peak duplicate memory; large end-to-end engine-worker runs remain to be measured.
+
+### Viewport-aware component animation (2026-10-11)
+
+Schematic result lookup now builds a case-insensitive trace index once per result instead of scanning the full vector list for each component. Cursor-linked voltage/current props are supplied only to components within the visible world-space viewport plus a 100-unit symbol margin. Offscreen components stay in the SVG for editing and keyboard access; changing the simulation cursor while they are offscreen leaves their React props unchanged. When the user pans or fits them into view, they receive the current solved sample. `fitEditorView` now computes pan offsets using the same sign convention as the SVG viewBox, so Fit all centers the actual content.
+
+The browser benchmark creates 500 non-overlapping series resistors plus one source, solves 1,001 vectors over 116 transient samples, scrubs from the first to last sample, then uses Fit all to reveal an offscreen resistor. Both browsers showed 25 animated components in the initial viewport and all 501 after fitting; the offscreen resistor's latest voltage/current readout appeared on reveal. A controlled Chromium run without viewport culling measured 602 ms for the Playwright slider action/readout update; with culling the same test measured 486 ms (about 19% lower). A Firefox post-change run measured 370 ms. These are single local observations that include Playwright interaction timing, not release budgets; see the `browser-500-component-animation-scrub-v2` test in `tests/e2e/performance-benchmark.spec.ts`.

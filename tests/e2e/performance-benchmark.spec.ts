@@ -3,6 +3,82 @@ import { performance } from 'node:perf_hooks'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
+test('measure result animation scrubbing for 500 components and 1,000 vectors', async ({ page, browserName }) => {
+  test.setTimeout(120_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the animation benchmark').toEqual([])
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const sourceTemplate = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    const resistorTemplate = project.parts.find((part: { kind: string }) => part.kind === 'resistor')
+    const sections = 500
+    const source = {
+      ...sourceTemplate,
+      id: 'animation-bench-v1', ref: 'V1', value: '5 V', sourceMode: 'pulse',
+      pulse: { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '5m' }, x: 120, y: 400,
+    }
+    const resistors = Array.from({ length: sections }, (_, index) => ({
+      ...resistorTemplate,
+      id: `animation-bench-r-${index + 1}`,
+      ref: `R${index + 1}`,
+      value: '1k',
+      x: 240 + (index % 50) * 110,
+      y: 400 + Math.floor(index / 50) * 100,
+    }))
+    const netLabels: { id: string; name: string; x: number; y: number; visible: boolean }[] = [
+      { id: 'animation-bench-source-positive', name: 'N0', x: source.x, y: source.y - 52, visible: true },
+      { id: 'animation-bench-source-ground', name: '0', x: source.x, y: source.y + 52, visible: true },
+    ]
+    resistors.forEach((part, index) => {
+      netLabels.push({ id: `animation-bench-label-${index}-left`, name: `N${index}`, x: part.x - 52, y: part.y, visible: true })
+      netLabels.push({ id: `animation-bench-label-${index}-right`, name: index === sections - 1 ? '0' : `N${index + 1}`, x: part.x + 52, y: part.y, visible: true })
+    })
+    const parts = [source, ...resistors]
+    project.name = 'Browser benchmark · 500 component animated transient'
+    project.parts = parts
+    project.wires = []
+    project.junctions = []
+    project.netLabels = netLabels
+    project.simulation.analysis = 'tran'
+    project.simulation.stopTime = '1 ms'
+    project.simulation.maxStep = '10 us'
+    project.plotSettings.selectedTraceIds = []
+    project.sheets = project.sheets.map((sheet: { id: string }) => sheet.id === project.rootSheetId
+      ? { ...sheet, parts, wires: [], junctions: [], netLabels }
+      : sheet)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(501)
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 90_000 })
+  await expect(page.locator('.waveform-title')).toContainText('1001 vectors')
+  const visibleResistorTitle = page.locator('g.circuit-part[data-part-id="animation-bench-r-5"] title')
+  await expect(visibleResistorTitle).toContainText('R5')
+  const offscreenResistorTitle = page.locator('g.circuit-part[data-part-id="animation-bench-r-500"] title')
+  await expect(offscreenResistorTitle).toHaveCount(0)
+  const visibleAnimationCount = await page.locator('svg.schematic g.circuit-part title').count()
+  expect(visibleAnimationCount).toBeLessThan(50)
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  await slider.press('Home')
+  const initialReading = await visibleResistorTitle.textContent()
+  const started = performance.now()
+  await slider.press('End')
+  await expect(visibleResistorTitle).not.toHaveText(initialReading ?? '')
+  await expect(offscreenResistorTitle).toHaveCount(0)
+  const scrubMs = performance.now() - started
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(offscreenResistorTitle).toContainText('R500')
+  const fittedAnimationCount = await page.locator('svg.schematic g.circuit-part title').count()
+  expect(fittedAnimationCount).toBe(501)
+  expect(pageErrors).toEqual([])
+  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v2', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, animatedComponentsInInitialViewport: visibleAnimationCount, animatedComponentsAfterFit: fittedAnimationCount, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, scrubMs: Number(scrubMs.toFixed(2)) }, null, 2))
+})
+
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
