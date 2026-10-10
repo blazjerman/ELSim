@@ -506,11 +506,11 @@ function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove
   const modelFor = (part?: Part) => models.find((model) => model.name.toLowerCase() === part?.deviceModel?.toLowerCase())
   const numericModelParameters = (part?: Part) => modelFor(part)?.parameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) ?? []
   const modelRange = (value: string) => { const magnitude = componentMagnitude(value, 'resistor'); return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` } }
-  const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined)) || (part.kind === 'source' && part.sourceMode === 'dc') || numericModelParameters(part).length > 0)
+  const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined || part.sourceMode === 'pulse')) || (part.kind === 'source' && (part.sourceMode === 'dc' || part.sourceMode === 'pulse')) || numericModelParameters(part).length > 0)
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
-    <p className="field-hint">Compare up to 10 transient cases while changing passive values, scalar DC sources, or numeric parameters from imported device models.</p>
+    <p className="field-hint">Compare up to 10 transient cases while changing passive values, scalar DC or pulse source levels, or numeric parameters from imported device models.</p>
     {sweeps.map((sweep, index) => {
       const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
       const maxPoints = Math.max(2, Math.floor(10 / otherPoints))

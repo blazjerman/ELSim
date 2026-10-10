@@ -208,6 +208,17 @@ for (const fixture of fixtures) {
   process.stdout.write(`PASS ${fixture}\n`)
 }
 
+// Exercise the same ngspice control commands generated for pulse-source stepping.
+const pulseSweepDeck = path.join(root, 'engine/wasm/fixtures', 'pulse-source-sweep.cir')
+const pulseSweepResult = await runInWorker(pulseSweepDeck, false, ['/result-0.raw', '/result-1.raw'])
+assert.equal(pulseSweepResult.status, 0, 'pulse-source-sweep: ngspice exited with a nonzero status')
+const pulseSweepPeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(vin)')))
+assert.ok(Math.abs(pulseSweepPeaks[0] - 2) < 1e-6, `pulse-source-sweep: first voltage pulse should reach 2 V, got ${pulseSweepPeaks[0]} V`)
+assert.ok(Math.abs(pulseSweepPeaks[1] - 4) < 1e-6, `pulse-source-sweep: second voltage pulse should reach 4 V, got ${pulseSweepPeaks[1]} V`)
+const pulseSweepCurrentPeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(load)')))
+assert.ok(Math.abs(pulseSweepCurrentPeaks[0] - 1) < 1e-6, `pulse-source-sweep: first current pulse should produce 1 V, got ${pulseSweepCurrentPeaks[0]} V`)
+assert.ok(Math.abs(pulseSweepCurrentPeaks[1] - 3) < 1e-6, `pulse-source-sweep: second current pulse should produce 3 V, got ${pulseSweepCurrentPeaks[1]} V`)
+
 const repeatedVectors = [
   ['v(xload1.mid)', 'v(mid1)', 2.5],
   ['v(xload2.mid)', 'v(mid2)', 5],

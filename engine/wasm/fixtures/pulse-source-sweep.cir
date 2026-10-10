@@ -1,0 +1,23 @@
+* Pulse-source parameter stepping regression
+.param ELSIM_SWEEP_PULSE_V1=2
+.param ELSIM_SWEEP_PULSE_I1=1m
+V1 vin 0 PULSE(0 {ELSIM_SWEEP_PULSE_V1} 0 1u 1u 2m 4m)
+R1 load 0 1k
+I1 0 load PULSE(0 {ELSIM_SWEEP_PULSE_I1} 0 1u 1u 2m 4m)
+.tran 100u 3m
+.save all @I1[current]
+.control
+set filetype=ascii
+alterparam ELSIM_SWEEP_PULSE_V1=2
+alterparam ELSIM_SWEEP_PULSE_I1=1m
+reset
+run
+write /result-0.raw all
+alterparam ELSIM_SWEEP_PULSE_V1=4
+alterparam ELSIM_SWEEP_PULSE_I1=3m
+reset
+run
+write /result-1.raw all
+quit
+.endc
+.end

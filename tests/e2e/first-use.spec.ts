@@ -1403,6 +1403,33 @@ test('three-parameter sweep runs all eight bounded cases in the browser engine',
   expect(labels).toContain('R1=2000 Ω, C1=0.00002 F, V1=1 V')
 })
 
+test('pulse source high levels can be swept in the browser ngspice engine', async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    const source = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    source.sourceMode = 'pulse'
+    source.value = '5 V'
+    source.pulse = { initial: '0 V', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '4m' }
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    project.simulation.stopTime = '3m'
+    project.simulation.maxStep = '100u'
+    project.simulation.parameterSweeps = [{ component: source.ref, start: '2 V', stop: '4 V', points: 2 }]
+    localStorage.setItem(key, JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('V1')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  const labels = await page.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('V1=2 V'))).toBe(true)
+  expect(labels.some((label) => label.includes('V1=4 V'))).toBe(true)
+})
+
 test('imported device model parameters can be stepped through the browser ngspice engine', async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

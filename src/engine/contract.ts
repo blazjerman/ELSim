@@ -191,6 +191,7 @@ function isParameterSweepRun(value: unknown): boolean {
     const hasModelTarget = entry.parameter !== undefined || entry.model !== undefined
     if (hasModelTarget && (typeof entry.parameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter)
       || typeof entry.model !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(entry.model))) return false
+    if (entry.pulseHigh !== undefined && (typeof entry.pulseHigh !== 'boolean' || (entry.pulseHigh && hasModelTarget))) return false
     const key = entry.component.toLowerCase()
     if (components.has(key)) return false
     components.add(key)

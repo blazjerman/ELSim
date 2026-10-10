@@ -2,7 +2,7 @@ import type { ParameterSweep, Project } from '../domain/project'
 import { componentMagnitude } from '../domain/componentValue'
 import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 
-export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string }[]; label: string }
+export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; pulseHigh?: boolean }[]; label: string }
 
 function componentUnit(kind: string): string {
   return kind === 'source' ? 'V' : kind === 'currentSource' ? 'A' : kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
@@ -19,9 +19,10 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     if (start === null || stop === null || start === stop) throw new Error(`${part.ref}.${parameter.name} needs valid, different start and stop values.`)
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
-  if (!part || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, current source, resistor, lamp, capacitor, or inductor for parameter stepping.')
-  if (part.kind === 'source' && part.sourceMode !== 'dc') throw new Error(`${part.ref} must use the DC waveform mode for parameter stepping. Pulse and PWL waveform stepping is unsupported.`)
-  if (part.kind === 'currentSource' && part.sourceMode !== 'dc' && part.sourceMode !== undefined) throw new Error(`${part.ref} must use scalar DC mode for parameter stepping. Waveform source stepping is unsupported.`)
+  if (!part || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, pulse source, resistor, lamp, capacitor, or inductor for parameter stepping.')
+  const pulseHigh = (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
+  if (part.kind === 'source' && part.sourceMode !== 'dc' && !pulseHigh) throw new Error(`${part.ref} must use DC or PULSE waveform mode for parameter stepping.`)
+  if (part.kind === 'currentSource' && part.sourceMode !== 'dc' && part.sourceMode !== undefined && !pulseHigh) throw new Error(`${part.ref} must use scalar DC or PULSE waveform mode for parameter stepping.`)
   const start = componentMagnitude(sweep.start, part.kind)
   const stop = componentMagnitude(sweep.stop, part.kind)
   if (start === null || stop === null || start === stop) throw new Error(`${part.ref} needs valid, different start and stop values.`)
@@ -53,7 +54,8 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
       const target = parameter ? `${part.ref}.${parameter}` : part.ref
       const label = combination.label ? `${combination.label}, ${target}=${display}` : `${target}=${display}`
       const model = parameter ? part.deviceModel : undefined
-      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model } : {}) }], label }
+      const pulseHigh = !parameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
+      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model } : {}), ...(pulseHigh ? { pulseHigh: true } : {}) }], label }
     }))
   }
   if (combinations.length > 10) throw new Error('Parameter stepping is limited to 10 total combinations.')
