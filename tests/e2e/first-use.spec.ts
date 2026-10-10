@@ -188,3 +188,25 @@ test('global editor shortcuts stay inactive while an app dialog is open', async 
   await page.keyboard.press('w')
   await expect(page.locator('svg.schematic')).toHaveClass(/wire-mode/)
 })
+
+test('circuit checks can select the affected component and orphan wire', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.find((part: { id: string }) => part.id === 'p-r1').value = 'not-a-value'
+    project.wires.push({ id: 'orphan-wire', points: [[700, 650], [760, 650]] })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  await expect(report).toContainText('R1 has an invalid value')
+  await report.getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('R1')
+
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  await expect(report).toContainText('Wire is not attached to a component or label')
+  await report.getByRole('button', { name: 'Select wire' }).click()
+  await expect(page.locator('.wire-line.selected')).toHaveCount(1)
+})

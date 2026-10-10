@@ -1,5 +1,5 @@
 import type { ParameterSweep, Project } from '../domain/project'
-import { componentMagnitude } from './netlist'
+import { componentMagnitude } from '../domain/componentValue'
 
 export type ParameterSweepRun = { values: { component: string; value: string }[]; label: string }
 

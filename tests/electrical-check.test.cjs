@@ -50,3 +50,32 @@ test('gives a useful first step for an empty project', () => {
   project.parts = []
   assert.deepEqual(checkCircuit(project).map(({ id, detail }) => ({ id, detail })), [{ id: 'empty', detail: 'Add a component before running a simulation.' }])
 })
+
+test('identifies a wire network that is not attached to a component or net label', () => {
+  const project = createStarterProject()
+  project.wires.push({ id: 'orphan-wire', points: [[700, 650], [760, 650]] })
+  const issue = checkCircuit(project).find((item) => item.id === 'orphan-wire:orphan-wire')
+  assert.equal(issue.severity, 'info')
+  assert.equal(issue.wireId, 'orphan-wire')
+})
+
+test('does not warn for wire-only named nets or wires connected through junctions', () => {
+  const project = createStarterProject()
+  project.wires.push({ id: 'named-wire', points: [[700, 650], [760, 650]] })
+  project.netLabels.push({ id: 'named-wire-label', name: 'testpoint', x: 700, y: 650, visible: true })
+  assert.equal(checkCircuit(project).some((item) => item.id === 'orphan-wire:named-wire'), false)
+})
+
+test('reports malformed and non-positive passive component values', () => {
+  const project = createStarterProject()
+  project.parts.find((part) => part.id === 'p-r1').value = 'lots of ohms'
+  project.parts.find((part) => part.id === 'p-c1').value = '0 F'
+  const issues = checkCircuit(project)
+  assert.ok(issues.some((item) => item.id === 'invalid-value:p-r1' && item.partId === 'p-r1'))
+  assert.ok(issues.some((item) => item.id === 'nonpositive-value:p-c1' && item.partId === 'p-c1'))
+})
+
+test('accepts common SI-prefixed passive values', () => {
+  const project = createStarterProject()
+  assert.equal(checkCircuit(project).some((item) => item.id.startsWith('invalid-value:') || item.id.startsWith('nonpositive-value:')), false)
+})

@@ -2,6 +2,7 @@ import { analyzeConnectivity } from './connectivity'
 import type { Connectivity } from './connectivity'
 import { componentPins } from './geometry'
 import type { Project } from './project'
+import { componentMagnitude } from './componentValue'
 
 export type ElectricalIssue = {
   id: string
@@ -9,6 +10,7 @@ export type ElectricalIssue = {
   title: string
   detail: string
   partId?: string
+  wireId?: string
 }
 
 /** Beginner-oriented checks that explain common schematic mistakes without
@@ -25,6 +27,26 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       const net = connectivity.pinNets.get(`${part.id}:${pin.index}`)
       if (!net || net === '0' || part.kind === 'ground') continue
       pinsByNet.set(net, [...(pinsByNet.get(net) ?? []), { partId: part.id, index: pin.index }])
+    }
+  }
+
+  for (const wire of project.wires) {
+    const net = connectivity.wireNets.get(wire.id)
+    const connectedToPart = net === '0' || (net !== undefined && pinsByNet.has(net))
+    const attachedLabel = net !== undefined && project.netLabels.some((label) => label.name.trim() === net)
+    if (!connectedToPart && !attachedLabel) {
+      issues.push({ id: `orphan-wire:${wire.id}`, severity: 'info', title: 'Wire is not attached to a component or label', detail: 'This wire may be leftover drawing. Connect it to a terminal or delete it if it is not needed.', wireId: wire.id })
+    }
+  }
+
+  for (const part of project.parts) {
+    if (['resistor', 'capacitor', 'inductor'].includes(part.kind)) {
+      const magnitude = componentMagnitude(part.value, part.kind)
+      if (magnitude === null) {
+        issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid value`, detail: 'Enter a numeric value with an optional SI prefix, such as 1 kΩ, 10 µF, or 2 mH.', partId: part.id })
+      } else if (magnitude <= 0) {
+        issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
+      }
     }
   }
 

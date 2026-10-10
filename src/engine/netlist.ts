@@ -4,6 +4,8 @@ import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domai
 import { parseBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import type { NetlistArtifact, NetlistSource } from './contract'
 
+export { componentMagnitude } from '../domain/componentValue'
+
 function cleanComment(value: string): string {
   return value.replace(/[\r\n\u0000-\u001f]/g, ' ').trim()
 }
@@ -29,16 +31,6 @@ function spiceSheetValue(value: string, kind: PartKind, parameters: Project['she
   const expression = value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
   if (!expression || !parameters?.some((parameter) => parameter.name.toLowerCase() === expression[1].toLowerCase())) return null
   return `{${expression[1]}}`
-}
-
-export function componentMagnitude(value: string, kind: PartKind): number | null {
-  if (!['resistor', 'capacitor', 'inductor'].includes(kind)) return null
-  const normalized = spiceNumber(value, kind)
-  const match = normalized?.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
-  if (!match) return null
-  const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
-  const result = Number(match[1]) * scale
-  return Number.isFinite(result) ? result : null
 }
 
 function spiceTime(value: string): string | null {
