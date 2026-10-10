@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { isEngineRequest, isEngineResponse } = require(path.join(process.env.ELSIM_TEST_BUILD, 'engine/contract.js'))
+const { engineResponseIssue, isEngineRequest, isEngineResponse } = require(path.join(process.env.ELSIM_TEST_BUILD, 'engine/contract.js'))
 
 const artifact = { text: '.tran 1u 1m', sourceMap: [], diagnostics: [] }
 const metadata = { runId: 'run-1', startedAt: '2026-10-10T12:00:00.000Z', engine: 'fixture', engineVersion: '1', projectVersion: 7, netlistHash: 'abc123', settings: { analysis: 'tran' } }
@@ -14,6 +14,7 @@ test('independent request producer satisfies run and control request contracts',
   assert.equal(isEngineRequest({ type: 'dispose', requestId: 'dispose-1' }), true)
   assert.equal(isEngineRequest({ type: 'cancel', requestId: 'cancel-1', runId: 'run-1' }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'riseDelay', operation: 'delay', vector: 'v(in)', threshold: '0.5', targetVector: 'v(out)', targetThreshold: '4.5', edge: 'rise', targetEdge: 'rise' }] }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, settings: { analysis: 'ac', acSweep: { scale: 'dec' } } } }), false)
 })
 
 test('request consumer rejects malformed payloads before engine execution', () => {
@@ -39,6 +40,7 @@ test('response consumer rejects malformed or incomplete worker messages', () => 
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, traces: [{ ...trace, values: new Float64Array([0]) }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, traces: [{ ...trace, axis: new Float64Array([0, Number.NaN]) }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, traces: [{ ...trace, imaginaryValues: new Float64Array([1]) }] } }), false)
+  assert.equal(engineResponseIssue({ type: 'result', requestId: 'run-1', result: { ...base, traces: [{ ...trace, values: new Float64Array([0]) }] } }), 'trace 1 axis/value lengths do not match')
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, traces: [{ ...trace, values: new Int32Array([0, 5]) }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, sourceMap: [{ line: 0, sourceId: '', role: 'oops' }] } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'peak', operation: 'max', vector: 'v(out)', value: Number.POSITIVE_INFINITY, unit: 'V' }] } }), false)

@@ -23,7 +23,7 @@ import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef, vali
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
 import { extremaIndices, valueRange } from '../engine/plot'
-import { isEngineResponse, type MeasurementResult, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
+import { engineResponseIssue, isEngineResponse, type MeasurementResult, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
@@ -1285,6 +1285,7 @@ export default function App() {
     try { parameterSweep = prepareParameterSweep(snapshot) }
     catch (error) { setRunState('error'); setNotice(error instanceof Error ? error.message : 'Could not prepare parameter sweep.'); return }
     setAnalysisTab('waveforms')
+    setPlaybackRunning(false)
     setRunState('loading')
     setNotice('Loading ngspice WebAssembly')
     const measurements = snapshot.simulation.transientMeasurements ?? []
@@ -1293,16 +1294,25 @@ export default function App() {
     const worker = new Worker(new URL('../engine/ngspice.worker.ts', import.meta.url), { type: 'module' })
     activeWorkerRef.current = worker
     worker.onmessage = (event: MessageEvent<unknown>) => {
-      if (!isEngineResponse(event.data) || event.data.requestId !== requestId) return
+      if (event.data && typeof event.data === 'object' && 'requestId' in event.data && event.data.requestId !== requestId) return
+      if (!isEngineResponse(event.data)) {
+        setPlaybackRunning(false)
+        setRunState('error')
+        setNotice(`The ngspice worker returned a malformed response (${engineResponseIssue(event.data)}). The worker was stopped; try again and include the project and generated netlist when reporting the issue.`)
+        worker.terminate()
+        if (activeWorkerRef.current === worker) activeWorkerRef.current = null
+        return
+      }
       const response = event.data
       if (response.type === 'progress') {
         setRunState(response.fraction < 0.2 ? 'loading' : 'running')
         if (response.message) setNotice(response.message)
       } else if (response.type === 'result') {
         setCompatibilityDiagnostic(null)
-        setPlaybackRunning(false)
         setSimulationResult(response.result)
-        setSampleIndex(response.result.analysis === 'tran' ? (response.result.traces[0]?.axis.length ?? 1) - 1 : null)
+        const transientSamples = response.result.analysis === 'tran' ? response.result.traces[0]?.axis.length ?? 1 : 0
+        setSampleIndex(response.result.analysis === 'tran' ? 0 : null)
+        setPlaybackRunning(response.result.analysis === 'tran' && transientSamples > 1)
         const savedTraceIds = projectRef.current.plotSettings?.selectedTraceIds ?? []
         const restoredTraces = savedTraceIds.filter((id) => response.result.traces.some((trace) => trace.id === id))
         let initialTraces = restoredTraces
@@ -1328,7 +1338,8 @@ export default function App() {
         if (hierarchyWalkthroughStep === 0) {
           setHierarchyWalkthroughStep(1)
           setNotice('Simulation complete. Continue the nested-block walkthrough in the guide.')
-        } else setNotice(parameterSweep.length ? `Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors` : `Analysis complete · ${response.result.traces.length} result vectors`)
+        } else if (response.result.analysis === 'tran' && transientSamples > 1) setNotice(`Transient analysis complete · playing solved animation · ${response.result.traces.length} result vectors`)
+        else setNotice(parameterSweep.length ? `Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors` : `Analysis complete · ${response.result.traces.length} result vectors`)
         setAnalysisTab('waveforms')
         worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
@@ -1358,7 +1369,7 @@ export default function App() {
         metadata: {
           runId, startedAt: new Date().toISOString(), engine: 'ngspice-wasm', engineVersion: '47',
           projectVersion: snapshot.version, netlistHash,
-          settings: { analysis: snapshot.simulation.analysis, stopTime: snapshot.simulation.stopTime, maxStep: snapshot.simulation.maxStep, acSweep: snapshot.simulation.acSweep ?? {}, sourceAcMagnitude: snapshot.simulation.sourceAcMagnitude ?? '1 V', parameterSweep: parameterSweep.map((sweep) => sweep.label).join(' | '), projectUpdatedAt: snapshot.updatedAt, scopeSheetId: snapshot.activeSheetId, scopeInstancePath: JSON.stringify(sheetInstancePath) },
+          settings: { analysis: snapshot.simulation.analysis, stopTime: snapshot.simulation.stopTime, maxStep: snapshot.simulation.maxStep, acSweep: JSON.stringify(snapshot.simulation.acSweep ?? {}), dcSweep: JSON.stringify(snapshot.simulation.dcSweep ?? {}), sourceAcMagnitude: snapshot.simulation.sourceAcMagnitude ?? '1 V', parameterSweep: parameterSweep.map((sweep) => sweep.label).join(' | '), projectUpdatedAt: snapshot.updatedAt, scopeSheetId: snapshot.activeSheetId, scopeInstancePath: JSON.stringify(sheetInstancePath) },
         },
         ...(parameterSweep.length ? { parameterSweep } : {}),
         ...(measurements.length ? { measurements } : {}),

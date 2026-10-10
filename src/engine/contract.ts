@@ -171,6 +171,46 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
   return false
 }
 
+/** Give the UI a concise, non-data-bearing reason when an engine boundary check fails. */
+export function engineResponseIssue(value: unknown): string {
+  if (!isRecord(value)) return 'message is not an object'
+  if (typeof value.requestId !== 'string') return 'request ID is missing'
+  if (value.type === 'result') {
+    const result = value.result
+    if (!isRecord(result)) return 'result payload is missing'
+    if (!isCompletedMetadata(result.metadata)) {
+      const metadata = result.metadata
+      if (!isRecord(metadata)) return 'run metadata is missing'
+      if (typeof metadata.runId !== 'string' || !metadata.runId) return 'run ID is missing from metadata'
+      if (typeof metadata.startedAt !== 'string' || !Number.isFinite(Date.parse(metadata.startedAt))) return 'start time is invalid in metadata'
+      if (typeof metadata.completedAt !== 'string' || !Number.isFinite(Date.parse(metadata.completedAt))) return 'completion time is invalid in metadata'
+      if (typeof metadata.engine !== 'string' || !metadata.engine) return 'engine name is invalid in metadata'
+      if (typeof metadata.engineVersion !== 'string' || !metadata.engineVersion) return 'engine version is invalid in metadata'
+      if (!Number.isInteger(metadata.projectVersion) || Number(metadata.projectVersion) < 1) return 'project version is invalid in metadata'
+      if (typeof metadata.netlistHash !== 'string' || !metadata.netlistHash) return 'netlist hash is missing from metadata'
+      if (!isRecord(metadata.settings)) return 'simulation settings are missing from metadata'
+      if (!Object.values(metadata.settings).every((setting) => typeof setting === 'string' || typeof setting === 'boolean' || (typeof setting === 'number' && Number.isFinite(setting)))) return 'simulation settings contain unsupported values'
+      return 'run metadata is incomplete or invalid'
+    }
+    if (typeof result.netlist !== 'string') return 'generated netlist is missing'
+    if (!Array.isArray(result.sourceMap) || !result.sourceMap.every(isSource)) return 'netlist source map is malformed'
+    if (!Array.isArray(result.traces) || result.traces.length === 0) return 'result has no waveform traces'
+    for (let index = 0; index < result.traces.length; index++) {
+      const trace = result.traces[index]
+      if (!isRecord(trace)) return `trace ${index + 1} is not an object`
+      if (!isFiniteVector(trace.axis) || !isFiniteVector(trace.values)) return `trace ${index + 1} has an invalid numeric vector`
+      if (trace.axis.length === 0 || trace.axis.length !== trace.values.length) return `trace ${index + 1} axis/value lengths do not match`
+      if (trace.imaginaryValues !== undefined && (!isFiniteVector(trace.imaginaryValues) || trace.imaginaryValues.length !== trace.values.length)) return `trace ${index + 1} complex vector length does not match`
+      if (!isTrace(trace)) return `trace ${index + 1} metadata is malformed`
+    }
+    if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
+    if (!['tran', 'op', 'ac', 'dc'].includes(String(result.analysis))) return 'analysis type is invalid'
+    if (!Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return 'measurement results are malformed'
+    return 'result message is incomplete'
+  }
+  return 'message type or required fields are invalid'
+}
+
 /** Runtime boundary check for independently implemented request producers. */
 export function isEngineRequest(value: unknown): value is EngineRequest {
   if (!isRecord(value) || typeof value.requestId !== 'string') return false
@@ -179,8 +219,9 @@ export function isEngineRequest(value: unknown): value is EngineRequest {
   if (value.type !== 'run' || !isRecord(value.artifact) || !isRecord(value.metadata)) return false
   const artifact = value.artifact
   const metadata = value.metadata
-  if (typeof artifact.text !== 'string' || !Array.isArray(artifact.sourceMap) || !Array.isArray(artifact.diagnostics) || !artifact.diagnostics.every(isDiagnostic)) return false
-  if (typeof metadata.runId !== 'string' || typeof metadata.startedAt !== 'string' || typeof metadata.engine !== 'string' || typeof metadata.engineVersion !== 'string' || typeof metadata.projectVersion !== 'number' || typeof metadata.netlistHash !== 'string' || !isRecord(metadata.settings)) return false
+  if (typeof artifact.text !== 'string' || !Array.isArray(artifact.sourceMap) || !artifact.sourceMap.every(isSource) || !Array.isArray(artifact.diagnostics) || !artifact.diagnostics.every(isDiagnostic)) return false
+  if (typeof metadata.runId !== 'string' || !metadata.runId || typeof metadata.startedAt !== 'string' || !Number.isFinite(Date.parse(metadata.startedAt)) || typeof metadata.engine !== 'string' || !metadata.engine || typeof metadata.engineVersion !== 'string' || !metadata.engineVersion || !Number.isInteger(metadata.projectVersion) || Number(metadata.projectVersion) < 1 || typeof metadata.netlistHash !== 'string' || !metadata.netlistHash || !isRecord(metadata.settings)) return false
+  if (!Object.values(metadata.settings).every((setting) => typeof setting === 'string' || typeof setting === 'boolean' || (typeof setting === 'number' && Number.isFinite(setting)))) return false
   if (value.parameterSweep !== undefined && !Array.isArray(value.parameterSweep)) return false
   if (value.measurements !== undefined && !Array.isArray(value.measurements)) return false
   return true
