@@ -68,7 +68,7 @@ test('unsupported LTspice .step forms remain in source and explain the import li
   assert.equal(project.importedSchematicSource.originalText, asc)
 })
 
-test('imports aligned LTspice dec/oct parameter sweeps as bounded logarithmic value lists', () => {
+test('imports explicit LTspice lin, dec, and oct parameter sweeps as bounded values', () => {
   const asc = ['Version 4', 'TEXT 0 100 Left 2 !.param RLOG=1k', 'TEXT 0 120 Left 2 !.step dec param RLOG 5 1k 10k', 'TEXT 0 140 Left 2 !.tran 0 1m'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'log-step.asc')
   assert.deepEqual(warnings, [])
@@ -80,6 +80,22 @@ test('imports aligned LTspice dec/oct parameter sweeps as bounded logarithmic va
   assert.ok(Math.abs(values[0] - 1000) < 1e-8)
   assert.ok(Math.abs(values.at(-1) - 10000) < 1e-8)
   for (let index = 1; index < values.length; index += 1) assert.ok(Math.abs(values[index] / values[index - 1] - 10 ** 0.2) < 1e-8)
+
+  const octAsc = ['Version 4', 'TEXT 0 100 Left 2 !.param ROCT=1k', 'TEXT 0 120 Left 2 !.step oct param ROCT 2 1k 4k', 'TEXT 0 140 Left 2 !.tran 0 1m'].join('\n')
+  const oct = parseLtspiceSchematic(octAsc, 'oct-step.asc')
+  assert.deepEqual(oct.warnings, [])
+  assert.equal(oct.project.simulation.parameterSweeps[0].points, 5)
+  const octValues = prepareParameterSweep(oct.project).map((run) => Number(run.values[0].value))
+  assert.ok(Math.abs(octValues[0] - 1000) < 1e-8)
+  assert.ok(Math.abs(octValues.at(-1) - 4000) < 1e-8)
+  for (let index = 1; index < octValues.length; index += 1) assert.ok(Math.abs(octValues[index] / octValues[index - 1] - Math.sqrt(2)) < 1e-8)
+
+  const linAsc = ['Version 4', 'TEXT 0 100 Left 2 !.param RLIN=1k', 'TEXT 0 120 Left 2 !.step lin param RLIN 1k 3k 1k', 'TEXT 0 140 Left 2 !.tran 0 1m'].join('\n')
+  const lin = parseLtspiceSchematic(linAsc, 'lin-step.asc')
+  assert.deepEqual(lin.warnings, [])
+  assert.equal(lin.project.simulation.parameterSweeps[0].points, 3)
+  assert.deepEqual(prepareParameterSweep(lin.project).map((run) => Number(run.values[0].value)), [1000, 2000, 3000])
+
   const unaligned = parseLtspiceSchematic(['Version 4', 'TEXT 0 100 Left 2 !.param RLOG=1k', 'TEXT 0 120 Left 2 !.step oct param RLOG 2 1k 5k'].join('\n'), 'unaligned-step.asc')
   assert.equal(unaligned.project.simulation.parameterSweeps, undefined)
   assert.match(unaligned.warnings.join('\n'), /aligned logarithmic ranges/)
