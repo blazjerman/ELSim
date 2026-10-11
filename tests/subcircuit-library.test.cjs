@@ -208,6 +208,21 @@ test('flags LTspice unary ~ inversion syntax rejected by browser ngspice', () =>
   assert.equal(source.includes('~(V(IN))'), true)
 })
 
+test('flags LTspice ! truth-threshold differences without flagging inequality', () => {
+  const source = [
+    '.SUBCKT logic IN OUT',
+    'B1 OUT 0 V=!(V(IN))',
+    'B2 OUT2 0 V=V(IN)!=0',
+    '.ENDS logic',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [2, 'LTspice B-source ! Boolean threshold semantics differ'],
+  ])
+  assert.match(warnings[0].impact, /0\.4.*0.*1/)
+  assert.match(warnings[0].suggestion, /explicit comparison/)
+})
+
 test('dialect warnings retain continuation line numbers and ignore dollar signs inside quotes', () => {
   const source = [
     '.SUBCKT compat IN OUT',

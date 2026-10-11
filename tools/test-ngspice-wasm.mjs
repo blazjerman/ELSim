@@ -272,6 +272,18 @@ try {
   rmSync(unsupportedFunctionDir, { recursive: true, force: true })
 }
 
+const booleanThresholdDir = mkdtempSync(path.join(tmpdir(), 'elsim-ngspice-boolean-threshold-'))
+try {
+  const deckPath = path.join(booleanThresholdDir, 'ngspice-bang-threshold.cir')
+  writeFileSync(deckPath, '* LTspice and ngspice use different numeric Boolean thresholds\nV1 in 0 DC 0.4\nB1 out 0 V=!(V(in))\nR1 out 0 1k\n.op\n.end\n')
+  const result = await runInWorker(deckPath)
+  assert.equal(result.status, 0, 'ngspice ! threshold comparison should solve')
+  assert.match(result.stdout, /out\s+0\.000000e\+00/i, 'ngspice treats a nonzero 0.4 input as true, so ! returns zero')
+  process.stdout.write('PASS LTspice/ngspice Boolean inversion threshold difference\n')
+} finally {
+  rmSync(booleanThresholdDir, { recursive: true, force: true })
+}
+
 // Exercise the same ngspice control commands generated for pulse-source stepping.
 const pulseSweepDeck = path.join(root, 'engine/wasm/fixtures', 'pulse-source-sweep.cir')
 const pulseSweepResult = await runInWorker(pulseSweepDeck, false, ['/result-0.raw', '/result-1.raw'])
