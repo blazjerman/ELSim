@@ -220,6 +220,8 @@ The 5,000-part editor benchmark ran three independent times in each supported br
 
 All six runs passed. This supports run-to-run stability on this host only; it does not establish performance across other hardware. Firefox does not expose the performance.memory fields used by this benchmark, and Chromium's page-heap readings do not include the ngspice worker's WebAssembly linear memory. Browser/worker peak-memory measurement and an additional hardware baseline remain open.
 
+A test-only probe also tried Chromium's `performance.measureUserAgentSpecificMemory()` under a local cross-origin-isolated Vite server (`crossOriginIsolated === true`) with experimental web-platform features enabled. The property existed, but every call rejected with “performance.measureUserAgentSpecificMemory is not available.” The probe configuration was removed; it did not change production response headers. This browser build therefore provides no usable user-agent memory estimate for the page/worker workload, so worker peak memory remains unmeasured.
+
 ### Browser waveform transport check
 
 The worker now shares one parsed axis across all traces and transfers unique axis/value buffers to the UI, avoiding per-trace axis copies and a structured-clone copy of result vectors. The UI validates shared typed vectors once per response. A Playwright `MessageChannel` check used six 100,000-sample traces (5.6 MB total including one shared axis); both clone and transfer preserved values and shared-axis identity, and transfer detached the sender buffers as expected.
