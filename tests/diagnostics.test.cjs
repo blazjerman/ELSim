@@ -74,3 +74,22 @@ test('ngspice model-card errors identify the imported file and original source l
   assert.equal(diagnostic.assetLine, 14)
   assert.match(diagnostic.hint, /line 14.*replace the library/i)
 })
+
+test('imported model failures explain common card, type, parameter, and dependency errors', () => {
+  const modelArtifact = { text: '.model QX NPN(BF=100)', sourceMap: [{ line: 1, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 14 }], diagnostics: [] }
+  const cases = [
+    ['Error: unknown parameter (VTO) in model card at line 1', /parameter ngspice does not recognize/i],
+    ['Error: model type mismatch at line 1', /does not match the device or subcircuit/i],
+    ['Error: too few parameters in model card at line 1', /parameter list/i],
+    ['Error: badly formed model card at line 1', /could not parse this model card/i],
+    ['Error: unknown subckt CORE referenced at line 1', /required model files are imported/i],
+  ]
+
+  for (const [message, hint] of cases) {
+    const diagnostic = diagnosticForNgspice(message, modelArtifact)
+    assert.equal(diagnostic.assetLine, 14)
+    assert.equal(diagnostic.sourceId, 'model-file:asset-7')
+    assert.equal(diagnostic.message, message)
+    assert.match(diagnostic.hint, hint)
+  }
+})

@@ -31,6 +31,14 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact)
     hint = `${missingFunction}() is not available in this ngspice build. Replace the expression with a supported ngspice function or an equivalent circuit/model.`
   } else if (source?.assetId && /unknown parameter|unrecognized parameter|parameter .* not found/i.test(message)) {
     hint = 'This imported model card uses a parameter ngspice does not recognize. Check whether the model expects simulator-specific syntax, or ask its supplier for an ngspice-compatible version.'
+  } else if (source?.assetId && /model type mismatch|wrong model type|incorrect model type|is not a valid model type/i.test(message)) {
+    hint = 'This model card type does not match the device or subcircuit that references it. Check the component prefix and model declaration, or use a model card intended for that device type.'
+  } else if (source?.assetId && /too few parameters|too many parameters|missing required parameter/i.test(message)) {
+    hint = 'ngspice could not read the model card’s parameter list. Check its parameter names, values, and continuation lines against ngspice syntax, or ask for an ngspice-compatible library.'
+  } else if (source?.assetId && /syntax error|parse error|badly formed|malformed model|invalid model card/i.test(message)) {
+    hint = 'ngspice could not parse this model card. Check the reported source line and nearby continuation lines for unsupported syntax or a missing value, or ask for an ngspice-compatible library.'
+  } else if (source?.assetId && /unknown subckt|missing.*model|could not find.*model|no such model|unknown device type/i.test(message)) {
+    hint = 'This model references a device model or subcircuit ngspice cannot find. Check that all required model files are imported and that each referenced name matches exactly.'
   } else if (source?.assetId) {
     hint = `ngspice points to line ${source.assetLine ?? '?'} in an imported model library. Check that card against ngspice syntax, or replace the library with an ngspice-compatible version.`
   } else if (/singular matrix|no ground|missing ground|no reference node/.test(lower)) {
