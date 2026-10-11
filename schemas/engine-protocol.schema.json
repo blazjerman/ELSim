@@ -146,11 +146,13 @@
             "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$" },
             "operation": { "const": "delay" },
             "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" },
-            "threshold": { "type": "string", "pattern": "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" },
+            "threshold": { "type": "string", "pattern": "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:[mM][eE][gG]|[tTgGkKmMuUnNpPfF])?[vVaA]?$" },
             "targetVector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" },
-            "targetThreshold": { "type": "string", "pattern": "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" },
+            "targetThreshold": { "type": "string", "pattern": "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:[mM][eE][gG]|[tTgGkKmMuUnNpPfF])?[vVaA]?$" },
             "edge": { "enum": ["rise", "fall", "either"] },
-            "targetEdge": { "enum": ["rise", "fall", "either"] }
+            "targetEdge": { "enum": ["rise", "fall", "either"] },
+            "triggerCount": { "type": "integer", "minimum": 1, "maximum": 9999 },
+            "targetCount": { "type": "integer", "minimum": 1, "maximum": 9999 }
           }
         }
       ]

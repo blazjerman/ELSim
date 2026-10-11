@@ -1,0 +1,7 @@
+ELSim equal-resistor voltage divider
+V1 vin 0 DC 10
+R1 vin vout 1k
+R2 vout 0 1k
+.op
+.print op v(vin) v(vout)
+.end

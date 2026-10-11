@@ -1,0 +1,8 @@
+Behavioral differential voltage source
+VHIGH HIGH 0 5
+VLOW LOW 0 2
+BDELTA DELTA 0 V=V(HIGH,LOW)
+RDELTA DELTA 0 1k
+.op
+.print op v(high) v(low) v(delta)
+.end

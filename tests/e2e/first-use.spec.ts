@@ -26,6 +26,13 @@ test('quick tour explains the current workspace and project save flow', async ({
   await page.goto('/')
   await page.getByRole('button', { name: 'Open quick tour' }).click()
   const dialog = page.locator('.tour-dialog[role="dialog"]')
+  const close = dialog.getByRole('button', { name: 'Close quick tour' })
+  const next = dialog.getByRole('button', { name: 'Next' })
+  await expect(close).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(next).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(close).toBeFocused()
   await expect(dialog.getByLabel('Step 1 of 5')).toBeVisible()
   await expect(dialog).toContainText('Your open circuit is on the center canvas.')
   await dialog.getByRole('button', { name: 'Next' }).click()
@@ -39,6 +46,25 @@ test('quick tour explains the current workspace and project save flow', async ({
   await expect(dialog).toContainText('.elsim project file')
   await dialog.getByRole('button', { name: 'Finish' }).click()
   await expect(dialog).toHaveCount(0)
+})
+
+test('examples can be searched by title and description', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  const search = dialog.getByRole('textbox', { name: 'Find an example' })
+  const cards = dialog.locator('.example-list article')
+  await expect(cards).toHaveCount(16)
+  await search.fill('P-JFET')
+  await expect(cards).toHaveCount(1)
+  await expect(cards.first()).toContainText('P-JFET positive-rail switch')
+  await search.fill('approximately 1 kHz cutoff')
+  await expect(cards).toHaveCount(1)
+  await expect(cards.first()).toContainText('RC low-pass frequency response')
+  await search.fill('no such circuit')
+  await expect(dialog.getByRole('status')).toContainText('No examples found')
+  await dialog.getByRole('button', { name: 'Clear example search' }).click()
+  await expect(cards).toHaveCount(16)
 })
 
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', async ({ page }) => {
@@ -153,6 +179,40 @@ test('imported library provenance notes persist while rights remain unverified',
   await expect(review).toContainText('permission still needs confirmation')
 })
 
+test('duplicate model definitions show both library locations and open the source line', async ({ page }) => {
+  await page.goto('/')
+  const picker = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await picker.setInputFiles({ name: 'amp-a.lib', mimeType: 'text/plain', buffer: Buffer.from('.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP\n.MODEL DFAST D(Is=1n)') })
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await picker.setInputFiles({ name: 'amp-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.SUBCKT amp A B\nR1 A B 2k\n.ENDS amp\n.MODEL dfast D(Is=2n)') })
+
+  const conflicts = page.getByRole('status', { name: 'Conflicting model definitions' })
+  await expect(conflicts).toBeVisible()
+  await expect(conflicts).toContainText('.SUBCKT AMP')
+  await expect(conflicts).toContainText('amp-a.lib:1')
+  await expect(conflicts).toContainText('amp-b.lib:1')
+  await expect(conflicts).toContainText('.MODEL DFAST')
+  await conflicts.getByRole('button', { name: 'Review definition' }).nth(1).click()
+  await expect(page.locator('.model-source-viewer').filter({ has: page.locator('.active-source-line') })).toContainText('.SUBCKT amp A B')
+})
+
+test('LTspice schematic import preserves and reports duplicate model library files', async ({ page }) => {
+  await page.goto('/')
+  const schematic = ['Version 4', 'SHEET 1 640 240', 'TEXT 0 40 Left 2 !.include amp-a.lib', 'TEXT 0 60 Left 2 !.include amp-b.lib'].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'duplicate-models.asc', mimeType: 'text/plain', buffer: Buffer.from(schematic) },
+    { name: 'amp-a.lib', mimeType: 'text/plain', buffer: Buffer.from('.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP') },
+    { name: 'amp-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.SUBCKT amp A B\nR1 A B 2k\n.ENDS amp') },
+  ])
+  await expect(page.getByText(/Imported duplicate-models/)).toBeVisible()
+  const conflicts = page.getByRole('status', { name: 'Conflicting model definitions' })
+  await expect(conflicts).toContainText('amp-a.lib:1')
+  await expect(conflicts).toContainText('amp-b.lib:1')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets.map((asset: { filename: string }) => asset.filename))).toEqual(['amp-a.lib', 'amp-b.lib'])
+})
+
 test('component cards explain behavior on hover and keyboard focus', async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
@@ -230,6 +290,24 @@ test('invalid component values select and focus the value field before engine ch
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-r1').value)).toBe('2k')
 })
 
+test('invalid educational transistor beta selects and focuses its inspector field before engine checks', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.push({ id: 'ui-beta-q1', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 500, rotation: 0 })
+    project.sheets[0].parts = project.parts
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.locator('.circuit-part[data-part-id="ui-beta-q1"]').click()
+  const beta = page.locator('[data-part-setting="ui-beta-q1:value"]')
+  await beta.fill('0')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="ui-beta-q1"]')).toHaveClass(/selected/)
+  await expect(beta).toBeFocused()
+  await expect(page.locator('.toast')).toContainText('Q1 forward beta must be an integer from 1 to 1000.')
+})
+
 test('transient resolution presets derive and save a maximum step from stop time', async ({ page }) => {
   await page.goto('/')
   await page.keyboard.press('Escape')
@@ -247,6 +325,7 @@ test('transient resolution presets derive and save a maximum step from stop time
   await presets.getByRole('button', { name: 'Standard' }).click()
   await expect(maxStep).toHaveValue('2.000000e-4 s')
 })
+
 
 test('wire current animation respects the operating system reduced-motion preference', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -486,6 +565,31 @@ test('fit schematic view frames distant parts, wires, and labels', async ({ page
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view.panX)).not.toBe(0)
 })
 
+test('schematic grid fills the zoomed and panned view and has no fixed placeholder labels', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByText('INPUT', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('OUTPUT', { exact: true })).toHaveCount(0)
+  const svg = page.locator('svg.schematic')
+  const grid = async () => svg.evaluate((element) => {
+    const view = element.viewBox.baseVal
+    const rect = element.querySelector('rect[fill="url(#large-grid)"]')!
+    return [rect.getAttribute('x'), rect.getAttribute('y'), rect.getAttribute('width'), rect.getAttribute('height')]
+      .map(Number)
+      .map((value, index) => Number(value.toFixed(5)) - Number([view.x, view.y, view.width, view.height][index].toFixed(5)))
+  })
+  expect(await grid()).toEqual([0, 0, 0, 0])
+  await page.getByRole('button', { name: 'Zoom in' }).click()
+  await expect.poll(grid).toEqual([0, 0, 0, 0])
+
+  const box = await svg.boundingBox()
+  expect(box).not.toBeNull()
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(box!.x + box!.width / 2 + 90, box!.y + box!.height / 2 + 45, { steps: 4 })
+  await page.mouse.up({ button: 'middle' })
+  await expect.poll(grid).toEqual([0, 0, 0, 0])
+})
+
 test('first use: run the RC starter and inspect its solved waveform', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
@@ -685,13 +789,22 @@ test('import, place, and simulate a user-supplied IC with its symbol', { tag: '@
   await expect(importedDefinition).toBeVisible()
   await expect(importedDefinition).toContainText('Add to schematic')
   await expect(page.locator('.imported-model').filter({ has: importedDefinition })).toContainText('Parameters: gain=2')
+  await page.locator('.circuit-part[aria-label^="X1,"]').click()
+  const gainOverride = page.getByRole('textbox', { name: 'gain model value' })
+  await gainOverride.fill('.end')
+  await gainOverride.blur()
+  await expect(gainOverride).toHaveAttribute('aria-invalid', 'true')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelParameters)).toBeUndefined()
+  await gainOverride.fill('3')
+  await gainOverride.blur()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelParameters)).toEqual({ gain: '3' })
   await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled()
   await page.getByRole('button', { name: 'Run simulation' }).click()
 
   await expect(page.getByRole('table')).toBeVisible({ timeout: 20_000 })
   await expect(page.getByRole('button', { name: 'V(out)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'I(r1)', exact: true })).toBeVisible()
-  await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()
+  await expect(page.getByRole('row', { name: /V\(out\).*3\.000000 V/ })).toBeVisible()
   await page.getByText('Run details', { exact: true }).click()
   await expect(page.locator('.run-details-popover')).toContainText('ngspice-wasm 47')
   await expect(page.locator('.run-details-popover')).toContainText('user-double.lib')
@@ -818,7 +931,7 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'compatibility-model.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.SUBCKT FILTER IN OUT\nB1 OUT 0 V=V(IN)\n+ Laplace=1/(1+s)\nB2 OUT 0 V=cbrt(V(IN))\nA1 IN OUT slew\n.ENDS FILTER\n'),
+    buffer: Buffer.from('.SUBCKT FILTER IN OUT\nB1 OUT 0 V=V(IN)\n+ Laplace=1/(1+s)\nB2 OUT 0 V=cbrt(V(IN))\nB3 OUT 0 V=u(V(IN))\nB4 OUT 0 V=mc(10,0.05)\nA1 IN OUT slew\n.ENDS FILTER\n'),
   })
 
   const warnings = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
@@ -828,12 +941,36 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await expect(warnings).toContainText('not translated by ELSim’s current compatibility path')
   await expect(warnings).toContainText('Use a tested ngspice-compatible transfer model')
   await expect(warnings).toContainText('compatibility-model.lib:4')
-  await expect(warnings).toContainText('LTspice B-source function unavailable in browser ngspice')
+  await expect(warnings).toContainText('LTspice B-source function unavailable or incompatible in browser ngspice')
   await expect(warnings).toContainText('B2 OUT 0 V=cbrt(V(IN))')
-  await expect(warnings).toContainText('Check the function’s intended behavior and replace it with a tested ngspice-compatible expression')
+  await expect(warnings).toContainText('Check the function’s intended statistical distribution and replace it with a tested ngspice-compatible expression or equivalent subcircuit')
   await expect(warnings).toContainText('compatibility-model.lib:5')
+  await expect(warnings).toContainText('LTspice u() step boundary semantics in an imported model library')
+  await expect(warnings).toContainText('ngspice u(0) returns 0.5')
+  await expect(warnings).toContainText('compatibility-model.lib:6')
+  await expect(warnings).toContainText('LTspice B-source function unavailable or incompatible in browser ngspice')
+  await expect(warnings).toContainText('B4 OUT 0 V=mc(10,0.05)')
+  await expect(warnings).toContainText('argument-count mismatch')
+  await expect(warnings).toContainText('intended statistical distribution')
+  await warnings.getByRole('button', { name: 'Review source line 6' }).click()
+  const sourceViewer = page.locator('.model-source-viewer')
+  await expect(sourceViewer.locator('li').nth(5)).toBeFocused()
+  await expect(sourceViewer.locator('li').nth(5)).toContainText('B4 OUT 0 V=mc(10,0.05)')
+  await expect(warnings).toContainText('compatibility-model.lib:7')
   await expect(warnings).toContainText('XSPICE A-device (runtime support unverified)')
   await expect(warnings).toContainText('external .cm modules')
+})
+
+test('compatibility report reveals model warnings beyond its initial page', async ({ page }) => {
+  await page.goto('/')
+  const lines = ['.SUBCKT MANY IN OUT', ...Array.from({ length: 21 }, (_, index) => `B${index + 1} OUT 0 V=mc(1,0.1)`), '.ENDS MANY']
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'many-warnings.lib', mimeType: 'text/plain', buffer: Buffer.from(lines.join('\n')) })
+  const warnings = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
+  await expect(warnings.getByRole('button', { name: 'Review source line 21' })).toBeVisible()
+  await expect(warnings.getByRole('button', { name: 'Review source line 22' })).toHaveCount(0)
+  await warnings.getByRole('button', { name: 'Show 1 more compatibility warning' }).click()
+  await expect(warnings.getByRole('button', { name: 'Review source line 22' })).toBeVisible()
 })
 
 test('show source-line guidance for imported AKO models and MOSFET bins', async ({ page }) => {
@@ -1021,6 +1158,22 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   expect(arrowPath?.startsWith(titleText?.includes('from pin 1 toward pin 2') ? 'M-10' : 'M10')).toBe(true)
 })
 
+test('voltage-divider example teaches and solves the equal-resistor midpoint', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Voltage divider' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Voltage divider')
+  await expect(page.getByLabel('Guided example')).toContainText('Equal 1 kΩ resistors share the 10 V supply evenly')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
+  await expect(page.getByText(/V\(VOUT\)\s*=\s*5(?:\.0+)? V/i)).toBeVisible()
+})
+
 test('diode rectifier example clips the negative half-cycle in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
@@ -1045,6 +1198,41 @@ test('diode rectifier example clips the negative half-cycle in the browser engin
   expect(negative).toMatch(/V\(vin\) = -4\./i)
   const blockedOutput = Number(negative.match(/V\(vout\) = ([\d.e+-]+)/i)?.[1])
   expect(Math.abs(blockedOutput)).toBeLessThan(0.01)
+})
+
+test('RC low-pass example explains and solves its AC cutoff response', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'RC low-pass frequency response' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('RC low-pass frequency response')
+  await expect(page.getByLabel('Guided example')).toContainText('0.707 V')
+  await expect(page.getByLabel('Analysis type')).toHaveValue('ac')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(vin)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
+  const chart = page.getByRole('img', { name: /AC magnitude from/ })
+  await expect(chart).toBeVisible()
+  await chart.click({ position: { x: (await chart.boundingBox())!.width * 0.55, y: 35 } })
+  await expect(page.getByText(/Hz$/).first()).toBeVisible()
+})
+
+test('RC high-pass example explains and solves its AC cutoff response', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'RC high-pass frequency response' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('RC high-pass frequency response')
+  await expect(page.getByLabel('Guided example')).toContainText('0.707 V')
+  await expect(page.getByLabel('Analysis type')).toHaveValue('ac')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'V(vin)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
+  await expect(page.getByRole('img', { name: /AC magnitude from/ })).toBeVisible()
 })
 
 
@@ -1247,6 +1435,24 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', {
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByRole('table')).toBeVisible({ timeout: 20_000 })
   await expect(page.getByRole('row', { name: /V\(out\).*1\.000000 V/i })).toBeVisible()
+  await page.getByLabel('Analysis type', { exact: true }).selectOption('dc')
+  await page.getByLabel('Independent source').selectOption('I1')
+  const currentStart = page.getByLabel('Start current (A)')
+  const currentStop = page.getByLabel('Stop current (A)')
+  const currentStep = page.getByLabel('Step (A)')
+  await expect(currentStart).toHaveValue('0 A')
+  await expect(currentStop).toHaveValue('10 mA')
+  await expect(currentStep).toHaveValue('1 mA')
+  await currentStop.fill('5 V')
+  await expect(currentStop).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByText(/valid stop current, such as 10 mA/)).toBeVisible()
+  await currentStop.fill('10 mA')
+  await currentStep.fill('2 mA')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const currentSweep = page.getByRole('img', { name: /DC sweep of i\(i-sweep\)/i })
+  await expect(currentSweep).toBeVisible()
+  await expect(currentSweep).toContainText('0.0100 A')
 })
 
 test('current-source inspector edits a finite-cycle PULSE waveform', async ({ page }) => {
@@ -1603,11 +1809,13 @@ test('LTspice B-source voltage expression imports and solves in the browser engi
   await page.goto('/')
   const source = [
     'Version 4', 'SHEET 1 640 240',
-    'FLAG -16 0 VIN', 'FLAG 16 0 0', 'FLAG 48 0 OUT', 'FLAG 80 0 0', 'FLAG 112 0 OUT', 'FLAG 144 0 0',
+    'FLAG -16 0 VIN', 'FLAG 16 0 0', 'FLAG 48 0 OUT', 'FLAG 80 0 0', 'FLAG 112 0 OUT', 'FLAG 144 0 0', 'FLAG 176 0 XOROUT', 'FLAG 208 0 0', 'FLAG 240 0 XOROUT', 'FLAG 272 0 0',
     'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 1',
     'SYMBOL bv 64 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V={GAIN*V(VIN)}',
+    'SYMBOL bv 192 0 R0', 'SYMATTR InstName B2', 'SYMATTR Value V={V(VIN)^0}',
     'SYMBOL res 128 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
-    'TEXT 0 100 Left 2 !.op', 'TEXT 0 120 Left 2 !.save V(OUT) I(R1)', 'TEXT 0 140 Left 2 !.param GAIN=2',
+    'SYMBOL res 256 0 R0', 'SYMATTR InstName R2', 'SYMATTR Value 1k',
+    'TEXT 0 100 Left 2 !.op', 'TEXT 0 120 Left 2 !.save V(OUT) V(XOROUT) I(R1)', 'TEXT 0 140 Left 2 !.param GAIN=2',
   ].join('\n')
   const symbol = (prefix: string, pins: Array<[string, number, number, string]>) => [
     'Version 4', `SYMATTR Prefix ${prefix}`,
@@ -1620,12 +1828,14 @@ test('LTspice B-source voltage expression imports and solves in the browser engi
     { name: 'bv.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('B', [['PLUS', -16, 0, 'R'], ['MINUS', 16, 0, 'L']])) },
     { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
   ])
-  await expect(page.getByText(/Imported behavioral with 3 parts, 0 wires\./)).toBeVisible()
+  await expect(page.getByText(/Imported behavioral with 5 parts, 0 wires\./)).toBeVisible()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'B1')?.behavioralOutput)).toBe('voltage')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'B1')?.value)).toBe('GAIN*V(VIN)')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'B2')?.behavioralDialect)).toBe('ltspice')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByRole('table')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('row', { name: /V\(out\).*2\.000000 V/ })).toBeVisible()
+  await expect(page.getByRole('row', { name: /V\(xorout\).*1\.000000 V/ })).toBeVisible()
 })
 
 test('user-provided op-amp IC model imports and simulates with ordered pins', { tag: '@ngspice' }, async ({ page }) => {
@@ -1701,6 +1911,42 @@ test('global editor shortcuts stay inactive while an app dialog is open', async 
   await expect(page.locator('svg.schematic')).toHaveClass(/wire-mode/)
 })
 
+test('Examples, Circuit checks, and Sheet settings keep keyboard focus inside modal dialogs', async ({ page }) => {
+  await page.goto('/')
+  const examplesTrigger = page.getByRole('button', { name: 'Examples' })
+  await examplesTrigger.click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  const closeExamples = examples.getByRole('button', { name: 'Close examples' })
+  const lastExample = examples.locator('.example-list article button').last()
+  await expect(closeExamples).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(lastExample).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(closeExamples).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(examplesTrigger).toBeFocused()
+
+  const checksTrigger = page.getByRole('button', { name: /Check circuit/ })
+  await checksTrigger.click()
+  const checks = page.getByRole('dialog', { name: 'Circuit checks' })
+  const closeChecks = checks.getByRole('button', { name: 'Close circuit checks' })
+  await expect(closeChecks).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(checks.getByRole('button', { name: 'Done' })).toBeFocused()
+  await checks.getByRole('button', { name: 'Done' }).click()
+  await expect(checksTrigger).toBeFocused()
+
+  const sheetSettingsTrigger = page.getByRole('button', { name: 'Sheet ports and block settings' })
+  await sheetSettingsTrigger.click()
+  const sheetSettings = page.getByRole('dialog', { name: /ports and parameters/ })
+  const closeSheetSettings = sheetSettings.getByRole('button', { name: 'Close sheet settings' })
+  await expect(closeSheetSettings).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(sheetSettings.getByRole('button', { name: 'Done' })).toBeFocused()
+  await sheetSettings.getByRole('button', { name: 'Done' }).click()
+  await expect(sheetSettingsTrigger).toBeFocused()
+})
+
 test('circuit checks can select the affected component and orphan wire', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
@@ -1721,6 +1967,27 @@ test('circuit checks can select the affected component and orphan wire', async (
   await expect(report).toContainText('Wire is not attached to a component or label')
   await report.getByRole('button', { name: 'Select wire' }).click()
   await expect(page.locator('.wire-line.selected')).toHaveCount(1)
+})
+
+test('inspector rejects a duplicate case-insensitive SPICE reference before saving', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /Add Resistor/ }).click()
+  const newPartId = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R2').id)
+  const reference = page.getByLabel('Reference designator')
+  await reference.fill('C9')
+  await expect(reference).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByRole('alert')).toContainText('resistor references must start with R')
+  await reference.blur()
+  await expect.poll(() => page.evaluate((id) => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === id).ref, newPartId)).toBe('R2')
+  await reference.fill('r1')
+  await expect(reference).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByRole('alert')).toContainText('R1 already uses this reference')
+  await reference.blur()
+  await expect.poll(() => page.evaluate((id) => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === id).ref, newPartId)).toBe('R2')
+  await reference.fill('r3')
+  await expect(reference).toHaveAttribute('aria-invalid', 'false')
+  await reference.blur()
+  await expect.poll(() => page.evaluate((id) => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === id).ref, newPartId)).toBe('R3')
 })
 
 test('circuit checks distinguish a behavioral node from a same-named component', async ({ page }) => {
@@ -1766,6 +2033,33 @@ test('circuit checks explain missing transitive model dependencies and select th
   await expect(report).toContainText('AMP needs missing subcircuit CORE')
   await expect(report).toContainText('Import the library that defines CORE')
   await report.getByRole('listitem').filter({ hasText: 'AMP needs missing subcircuit CORE' }).getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('XAMP1 · AMP')
+})
+
+test('circuit checks select the component with an ambiguous imported model name', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(async () => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const contents = [
+      ['amp-a.lib', '.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP'],
+      ['amp-b.lib', '.SUBCKT amp A B\nR1 A B 2k\n.ENDS amp'],
+    ]
+    project.modelAssets = await Promise.all(contents.map(async ([filename, content], index) => {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
+      const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+      return { id: `amp-${index}`, filename, content, sha256, licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }
+    }))
+    project.parts.push({ id: 'conflicted-amp', kind: 'subcircuit', ref: 'XAMP1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  const conflict = report.getByRole('listitem').filter({ hasText: 'Model AMP has conflicting definitions' })
+  await expect(conflict).toContainText('amp-a.lib:1')
+  await expect(conflict).toContainText('amp-b.lib:1')
+  await conflict.getByRole('button', { name: 'Select affected component' }).click()
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('XAMP1 · AMP')
 })
 
@@ -1826,8 +2120,8 @@ test('LTspice model compatibility check warns about limit() clamp semantics', as
   await expect(warning).toContainText('LTspice B-source ^ operator semantics')
   await expect(warning).toContainText('interprets it as exponentiation')
   await expect(warning).toContainText('ltspice-clamp.lib:4')
-  await expect(warning).toContainText('LTspice B-source function unavailable in browser ngspice')
-  await expect(warning).toContainText('no such function')
+  await expect(warning).toContainText('LTspice B-source function unavailable or incompatible in browser ngspice')
+  await expect(warning).toContainText('missing function or an argument-count mismatch')
 })
 
 test('creating a child sheet can be undone and redone', async ({ page }) => {
@@ -1889,9 +2183,19 @@ test('transient measurements offer labeled nodes and common component currents',
   await expect(vector.locator('optgroup[label="Component current"]')).toContainText(/R1 · Resistor.*C1 · Capacitor/)
   await vector.selectOption('I(R1)')
   await page.getByRole('combobox', { name: 'Choose target vector for measurement 1' }).selectOption('V(vout)')
+  await page.getByLabel('Measurement 1 trigger threshold').fill('not-a-voltage')
+  await expect(page.getByLabel('Measurement 1 trigger threshold')).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByText('Trigger threshold must be a numeric voltage, such as 2.5V.')).toBeVisible()
+  await page.getByLabel('Measurement 1 trigger threshold').fill('2.5V')
+  await page.getByLabel('Measurement 1 trigger crossing number').fill('1.5')
+  await expect(page.getByLabel('Measurement 1 trigger crossing number')).toHaveAttribute('aria-invalid', 'true')
+  await page.getByLabel('Measurement 1 trigger crossing number').fill('2')
+  await page.getByLabel('Measurement 1 target crossing number').fill('3')
   await expect(page.getByRole('textbox', { name: 'Vector expression', exact: true })).toHaveValue('I(R1)')
   await expect(page.getByLabel('Target vector expression')).toHaveValue('V(vout)')
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0])).toMatchObject({ vector: 'I(R1)', targetVector: 'V(vout)' })
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0])).toMatchObject({ vector: 'I(R1)', targetVector: 'V(vout)', triggerCount: 2, targetCount: 3 })
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-panel pre')).toContainText('TRIG I(R1) VAL=2.5 RISE=2 TARG V(vout) VAL=2.5 RISE=3')
 })
 
 test('transient measurement time windows persist and appear in the netlist', async ({ page }) => {
@@ -2051,6 +2355,46 @@ test('three-parameter sweep runs all eight bounded cases in the browser engine',
   expect(labels).toContain('R1=2000 Ω, C1=0.00002 F, V1=1 V')
 })
 
+test('two-source LTspice DC sweep imports exact secondary steps, runs labeled curves, and remains editable', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  const source = [
+    'Version 4',
+    'FLAG 16 0 0', 'FLAG 16 128 0', 'FLAG 80 0 OUT', 'FLAG 80 128 OUT',
+    'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 0',
+    'SYMBOL res 64 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'SYMBOL voltage 0 128 R0', 'SYMATTR InstName V2', 'SYMATTR Value 0',
+    'SYMBOL res 64 128 R0', 'SYMATTR InstName R2', 'SYMATTR Value 1k',
+    'WIRE -16 0 48 0', 'WIRE -16 128 48 128',
+    'TEXT 0 240 Left 2 !.dc V1 0 2 1 V2 0 5 2',
+  ].join('\n')
+  const symbol = (prefix: string) => [
+    'Version 4', `SYMATTR Prefix ${prefix}`,
+    'PIN -16 0 R', 'PINATTR PinName A', 'PINATTR SpiceOrder 1',
+    'PIN 16 0 L', 'PINATTR PinName B', 'PINATTR SpiceOrder 2',
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'dual-dc.asc', mimeType: 'text/plain', buffer: Buffer.from(source) },
+    { name: 'voltage.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('V')) },
+    { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R')) },
+  ])
+  await expect(page.getByText(/Imported dual-dc with 4 parts, 2 wires/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.parameterSweeps[0].listValues)).toEqual(['0', '2', '4'])
+  await expect(page.getByLabel('Parameter 1 start value')).toHaveValue('0')
+  await expect(page.getByLabel('Parameter 1 stop value')).toHaveValue('5')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 3 cases/)).toBeVisible({ timeout: 60_000 })
+  const labels = await page.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => /V2=0 V/.test(label))).toBe(true)
+  expect(labels.some((label) => /V2=2 V/.test(label))).toBe(true)
+  expect(labels.some((label) => /V2=4 V/.test(label))).toBe(true)
+  await page.getByLabel('Parameter 1 stop value').fill('6')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.parameterSweeps[0].listValues)).toBeUndefined()
+})
+
 test('declared global parameter sweep edits and simulates through the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
@@ -2133,6 +2477,33 @@ test('PWL source point can be swept in the browser ngspice engine', { tag: '@ngs
   const labels = await page.locator('.trace-toggles button').allTextContents()
   expect(labels.some((label) => label.includes('V1.pwl.point.2=1 V'))).toBe(true)
   expect(labels.some((label) => label.includes('V1.pwl.point.2=3 V'))).toBe(true)
+})
+
+test('PWL shared value scale can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    const source = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    source.sourceMode = 'pwl'
+    source.pwl = [{ time: '0', voltage: '0 V' }, { time: '1m', voltage: '2 V' }, { time: '2m', voltage: '-1 V' }]
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    project.simulation.stopTime = '3m'
+    project.simulation.maxStep = '100u'
+    project.simulation.parameterSweeps = [{ component: source.ref, sourceParameter: 'pwl.scale', start: '0.5', stop: '2', points: 2 }]
+    localStorage.setItem(key, JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Escape')
+  const sourceParameter = page.getByRole('combobox', { name: 'Parameter 1 source parameter' })
+  await expect(sourceParameter).toHaveValue('pwl.scale')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  const labels = await page.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('V1.pwl.scale=0.5 ×'))).toBe(true)
+  expect(labels.some((label) => label.includes('V1.pwl.scale=2 ×'))).toBe(true)
 })
 
 test('SINE source amplitude can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
@@ -2270,7 +2641,8 @@ test('portable export names imported files and asks before including unknown-lic
   }, { content, sha256, symbolContent, symbolSha256 })
   await page.reload()
 
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  const saveTrigger = page.getByRole('button', { name: 'Save', exact: true })
+  await saveTrigger.click()
   const warning = page.getByRole('alertdialog', { name: 'Review imported files' })
   await expect(warning).toBeVisible()
   await expect(warning).toContainText('user-diode.lib')
@@ -2282,11 +2654,13 @@ test('portable export names imported files and asks before including unknown-lic
   await expect(warning).toContainText('Saving a copy for your own use does not grant permission')
   await warning.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect(warning).toBeHidden()
+  await expect(saveTrigger).toBeFocused()
 
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await saveTrigger.click()
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('alertdialog', { name: 'Review imported files' }).getByRole('button', { name: 'Save project file', exact: true }).click()
   const download = await downloadPromise
+  await expect(saveTrigger).toBeFocused()
   expect(download.suggestedFilename()).toMatch(/\.elsim$/)
   const archivePath = await download.path()
   expect(archivePath).not.toBeNull()
@@ -2352,6 +2726,12 @@ test('LTspice export preview gates unknown-license model ZIPs and reports blocke
   await page.reload()
   await page.getByRole('button', { name: 'Export LTspice', exact: true }).click()
   const preview = page.getByRole('dialog', { name: 'Review export' })
+  const closePreview = preview.getByRole('button', { name: 'Close LTspice export preview' })
+  await expect(preview.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(closePreview).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(preview.getByRole('button', { name: 'Cancel' })).toBeFocused()
   await expect(preview).toContainText('user-diode.lib')
   await expect(preview).toContainText('redistribution rights unknown')
   const downloadButton = preview.getByRole('button', { name: 'Download ZIP' })
@@ -2361,6 +2741,7 @@ test('LTspice export preview gates unknown-license model ZIPs and reports blocke
   const downloadPromise = page.waitForEvent('download')
   await downloadButton.click()
   expect((await downloadPromise).suggestedFilename()).toMatch(/ltspice-export\.zip$/)
+  await expect(page.getByRole('button', { name: 'Export LTspice', exact: true })).toBeFocused()
 
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
@@ -2374,6 +2755,7 @@ test('LTspice export preview gates unknown-license model ZIPs and reports blocke
   await expect(supportedPreview).not.toContainText('Export blocked')
   await expect(supportedPreview).toContainText('Behavioral expression passed through to LTspice')
   await supportedPreview.getByRole('button', { name: 'Close LTspice export preview' }).click()
+  await expect(page.getByRole('button', { name: 'Export LTspice', exact: true })).toBeFocused()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts.find((part: { ref: string }) => part.ref === 'B1').value = 'V(vin)^2'

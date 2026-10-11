@@ -142,7 +142,8 @@ function readEntries(bytes: Uint8Array): Map<string, Uint8Array> {
   const entryCount = view.getUint16(endOffset + 10, true)
   const directorySize = view.getUint32(endOffset + 12, true)
   const directoryOffset = view.getUint32(endOffset + 16, true)
-  if (disk !== 0 || directoryDisk !== 0 || diskEntries !== entryCount || entryCount > MAX_ENTRIES || directoryOffset + directorySize > endOffset) throw new Error('Project archive uses unsupported ZIP features or has an invalid directory.')
+  const commentLength = view.getUint16(endOffset + 20, true)
+  if (disk !== 0 || directoryDisk !== 0 || diskEntries !== entryCount || entryCount > MAX_ENTRIES || directoryOffset + directorySize !== endOffset || endOffset + 22 + commentLength !== bytes.length) throw new Error('Project archive uses unsupported ZIP features or has an invalid directory.')
   const entries = new Map<string, Uint8Array>()
   const dataRanges: { start: number; end: number; path: string }[] = []
   let offset = directoryOffset

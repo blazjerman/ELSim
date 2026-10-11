@@ -85,7 +85,7 @@ test('identifies protected LTspice models and binary inputs without attempting t
 test('reports LTspice limit() semantic mismatch, compatibility-mode functions, and VSWITCH without rewriting source', () => {
   const source = '* uplim(V(x), 1) is only a comment\n.SUBCKT AMP IN OUT\nB1 OUT 0 V=limit(V(IN),0,5)\nB2 OUT 0 V=uplim(V(IN),0,5)\n.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)\n.ENDS AMP\n'
   assert.deepEqual(analyzeLtspiceModelDialect(source), [
-    { sourceLine: 3, feature: 'LTspice limit() clamp semantics are unsupported', excerpt: 'B1 OUT 0 V=limit(V(IN),0,5)', impact: 'The pinned browser ngspice engine accepts limit() but does not match LTspice clamp behavior: with x=4, low=0, and high=3 it returns 0 instead of 3, including in lta mode.', suggestion: 'For ordered bounds, replace limit(x, low, high) with min(max(x, low), high) after checking the model author’s intended behavior. ELSim preserves the imported expression and does not rewrite it.' },
+    { sourceLine: 3, feature: 'LTspice limit() in imported model library', excerpt: 'B1 OUT 0 V=limit(V(IN),0,5)', impact: 'ELSim translates limit() on native schematic B sources to min(max(x, low), high), which provides the expected clamp for ordered bounds. Raw imported model-library text is not rewritten; the pinned browser ngspice engine returns 0 instead of 3 for limit(4,0,3), including in lta mode.', suggestion: 'For ordered bounds, replace limit(x, low, high) in the library with min(max(x, low), high) after checking the model author’s intended behavior. ELSim preserves imported model source unchanged.' },
     { sourceLine: 4, feature: 'LTspice limit function (ngspice lta mode)', excerpt: 'B2 OUT 0 V=uplim(V(IN),0,5)', impact: 'ngspice translates this documented subset only when ELSim enables whole-deck lta compatibility. Other LTspice syntax is not covered by that mode.', suggestion: 'If simulation fails, check the mapped model line and simplify or replace the expression with a tested ngspice-compatible form.' },
     { sourceLine: 5, feature: 'VSWITCH model (unsupported by the current WASM engine)', excerpt: '.MODEL SW1 VSWITCH(RON=1 ROFF=1Meg VON=2 VOFF=1)', impact: 'This switch model needs an XSPICE aswitch code model that is not present in the current browser runtime.', suggestion: 'Replace this model with a compatible user model or ELSim’s built-in ideal switch, then reconnect its control pins.' },
   ])
@@ -136,21 +136,43 @@ test('pinpoints LTspice behavioral forms and options, including continuation rec
   assert.equal(source.includes('Laplace=1/(1+s)'), true)
 })
 
-test('flags LTspice table() expressions rejected by the pinned browser ngspice engine', () => {
+test('flags raw LTspice table() expressions in imported model libraries that ELSim does not rewrite', () => {
   const source = '.SUBCKT lookup IN OUT\nB1 OUT 0 V=table(V(IN),0,0,1,5)\n.ENDS lookup'
   const [warning] = analyzeLtspiceModelDialect(source)
-  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'LTspice table() behavioral lookup function'])
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'LTspice table() behavioral lookup function in an imported model library'])
   assert.match(warning.impact, /no such function/)
-  assert.match(warning.suggestion, /does not rewrite/)
+  assert.match(warning.suggestion, /does not modify user model source/)
   assert.equal(source.includes('table(V(IN)'), true)
 })
 
-test('flags if() expressions rejected by the pinned browser ngspice engine', () => {
+test('flags raw if() expressions in imported model libraries that ELSim does not rewrite', () => {
   const source = '.SUBCKT conditional IN OUT\nB1 OUT 0 V=if(V(IN)>1,5,0)\n.ENDS conditional'
   const [warning] = analyzeLtspiceModelDialect(source)
-  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'LTspice if() behavioral function'])
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'LTspice if() behavioral function in an imported model library'])
   assert.match(warning.impact, /no such function/)
-  assert.match(warning.suggestion, /does not rewrite/)
+  assert.match(warning.suggestion, /does not modify user model source/)
+})
+
+test('limits behavioral-function compatibility warnings to B-source expressions', () => {
+  const unrelated = [
+    '.param LOOKUP=table(V(IN),0,0,1,5)',
+    '.MODEL DFAST D(Is=if(V(IN)>1,5,0))',
+    'R1 OUT 0 u(V(IN))',
+    '.param INTEGRAL=idt(V(IN))',
+  ].join('\n')
+  assert.deepEqual(analyzeLtspiceModelDialect(unrelated), [])
+
+  const behavioral = '.SUBCKT compat IN OUT\nB1 OUT 0 V=table(V(IN),0,0,1,5)\n.ENDS compat'
+  assert.equal(analyzeLtspiceModelDialect(behavioral)[0].feature, 'LTspice table() behavioral lookup function in an imported model library')
+})
+
+test('warns about the different u(0) boundary in preserved imported model libraries', () => {
+  const source = '.SUBCKT step IN OUT\nB1 OUT 0 V=u(V(IN))\n.ENDS step'
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'LTspice u() step boundary semantics in an imported model library'])
+  assert.match(warning.impact, /LTspice u\(x\) returns 0.*ngspice u\(0\) returns 0\.5/)
+  assert.match(warning.suggestion, /\(x > 0\) \? 1 : 0/)
+  assert.equal(source.includes('u(V(IN))'), true)
 })
 
 test('flags LTspice idt() behavioral functions rejected by the pinned browser ngspice engine', () => {
@@ -165,11 +187,11 @@ test('warns for verified LTspice behavioral functions and caret operator mismatc
   const source = '.SUBCKT compat IN OUT\nB1 OUT 0 V=delay(V(IN),1u)\nB2 OUT 0 V=V(IN)^2\n.ENDS compat'
   const warnings = analyzeLtspiceModelDialect(source)
   assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
-    [2, 'LTspice B-source function unavailable in browser ngspice'],
+    [2, 'LTspice B-source function unavailable or incompatible in browser ngspice'],
     [3, 'LTspice B-source ^ operator semantics'],
   ])
-  assert.match(warnings[0].impact, /no such function/)
-  assert.match(warnings[0].suggestion, /does not rewrite/)
+  assert.match(warnings[0].impact, /missing function or an argument-count mismatch/)
+  assert.match(warnings[0].suggestion, /does not modify user model source/)
   assert.match(warnings[1].impact, /interprets it as exponentiation/)
   assert.match(warnings[1].suggestion, /pow\(a,b\)/)
   assert.equal(source.includes('V(IN)^2'), true)
@@ -187,15 +209,20 @@ test('flags additional LTspice functions rejected by the pinned browser ngspice 
     'B7 OUT 0 V=arctan(V(IN))',
     'B8 OUT 0 V=noise()',
     'B9 OUT 0 V=smallsig()',
+    'B10 OUT 0 V=flat(1)',
+    'B11 OUT 0 V=gauss(1)',
+    'B12 OUT 0 V=mc(1,0.05)',
+    'B13 OUT 0 V=select(1,0,1)',
     '.ENDS functions',
   ].join('\n')
   const warnings = analyzeLtspiceModelDialect(source)
   assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
-    ...Array.from({ length: 9 }, (_, index) => [index + 2, 'LTspice B-source function unavailable in browser ngspice']),
+    ...Array.from({ length: 13 }, (_, index) => [index + 2, 'LTspice B-source function unavailable or incompatible in browser ngspice']),
   ])
-  assert.match(warnings[0].impact, /no such function/)
-  assert.match(warnings.at(-1).impact, /expression syntax error/)
-  assert.match(warnings[0].suggestion, /does not rewrite/)
+  assert.match(warnings[0].impact, /missing function or an argument-count mismatch/)
+  assert.match(warnings.at(-1).impact, /missing function or an argument-count mismatch/)
+  assert.match(warnings[0].suggestion, /intended statistical distribution/)
+  assert.match(warnings[0].suggestion, /does not modify user model source/)
   assert.equal(source.includes('cbrt(V(IN))'), true)
 })
 
@@ -252,6 +279,7 @@ test('schematic compatibility checks attribute unresolved dependencies and untra
     'TEXT 0 140 Left 2 !.step param LOAD 1k 3k 1k',
     'TEXT 0 160 Left 2 !.step dec param LOAD 10 1k 100k',
     'TEXT 0 180 Left 2 !.step temp -40 125 5',
+    'TEXT 0 200 Left 2 !.step dec param LOG 4 1k 10k',
   ].join('\n')
   const warnings = analyzeLtspiceSchematicCompatibility(source, ['known.lib'])
   assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
@@ -259,11 +287,25 @@ test('schematic compatibility checks attribute unresolved dependencies and untra
     [4, 'LTspice simulation options are not applied'],
     [6, 'Partially supported .save vectors'],
     [7, 'Unsupported .control schematic directive'],
+    [10, 'Unsupported .step sweep form'],
     [11, 'Unsupported .step sweep form'],
   ])
   assert.match(warnings[0].suggestion, /filename matches the directive/)
   assert.match(warnings[2].impact, /placed-component current/)
-  assert.deepEqual(analyzeLtspiceSchematicCompatibility(source, ['missing.lib', 'known.lib']).map(({ sourceLine }) => sourceLine), [4, 6, 7, 11])
+  assert.deepEqual(analyzeLtspiceSchematicCompatibility(source, ['missing.lib', 'known.lib']).map(({ sourceLine }) => sourceLine), [4, 6, 7, 10, 11])
+})
+
+test('schematic step compatibility checks enforce aligned ranges and the ten-case boundary', () => {
+  const exactTen = analyzeLtspiceSchematicCompatibility('TEXT 0 0 Left 2 !.step param R list 1k,2k,3k,4k,5k,6k,7k,8k,9k,10k')
+  assert.deepEqual(exactTen, [])
+  const exactTenLog = analyzeLtspiceSchematicCompatibility('TEXT 0 0 Left 2 !.step dec param R 9 1k 10k')
+  assert.deepEqual(exactTenLog, [])
+  const alignedLog = analyzeLtspiceSchematicCompatibility('TEXT 0 0 Left 2 !.step dec param R 4 1k 10k')
+  assert.deepEqual(alignedLog, [])
+  const unalignedLog = analyzeLtspiceSchematicCompatibility('TEXT 0 0 Left 2 !.step dec param R 3 1k 2k')
+  assert.equal(unalignedLog[0].feature, 'Unsupported .step sweep form')
+  const elevenValues = analyzeLtspiceSchematicCompatibility('TEXT 0 0 Left 2 !.step param R 1k 11k 1k')
+  assert.equal(elevenValues[0].feature, 'Unsupported .step sweep form')
 })
 
 test('imports and flattens an unambiguous single-section model library', () => {
@@ -360,6 +402,19 @@ test('resolves cross-library device and nested-subcircuit dependencies', () => {
   ])
   assert.deepEqual([...requiredModelAssetIds(report, [{ kind: 'subcircuit', modelName: 'AMP' }])].sort(), ['amp', 'core'])
   assert.deepEqual([...requiredModelAssetIds(report, [{ kind: 'diode', deviceModel: 'DFAST' }])], ['core'])
+})
+
+test('reports duplicate model names across imported files with both source locations', () => {
+  const report = analyzeModelDependencies([
+    { id: 'amp-a', filename: 'amp-a.lib', content: '.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP\n.MODEL DFAST D(Is=1n)' },
+    { id: 'amp-b', filename: 'amp-b.lib', content: '.SUBCKT amp A B\nR1 A B 2k\n.ENDS amp\n.MODEL dfast D(Is=2n)' },
+  ])
+  assert.deepEqual(report.conflicts, [
+    { name: 'AMP', kind: 'subcircuit', definitions: [{ assetId: 'amp-a', filename: 'amp-a.lib', sourceLine: 1 }, { assetId: 'amp-b', filename: 'amp-b.lib', sourceLine: 1 }] },
+    { name: 'DFAST', kind: 'device', definitions: [{ assetId: 'amp-a', filename: 'amp-a.lib', sourceLine: 4 }, { assetId: 'amp-b', filename: 'amp-b.lib', sourceLine: 4 }] },
+  ])
+  assert.equal(report.subcircuitAssets.get('amp'), 'amp-b')
+  assert.equal(report.deviceModelAssets.get('dfast'), 'amp-b')
 })
 
 test('tracks ordered model references for common diode, transistor, JFET, MOSFET, and switch cards', () => {

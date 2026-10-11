@@ -1,9 +1,11 @@
 import { componentPins } from './geometry'
+import { analyzeConnectivity } from './connectivity'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
 import { timeMagnitude } from './componentValue'
+import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from './measurementSettings'
 
 export type PartKind = 'source' | 'currentSource' | 'resistor' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'diode' | 'led' | 'switch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'npn' | 'pnp' | 'njfet' | 'pjfet' | 'nmos' | 'pmos' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
@@ -31,6 +33,7 @@ export type Part = {
   deviceModel?: string
   controlSource?: string
   behavioralOutput?: 'voltage' | 'current'
+  behavioralDialect?: 'ltspice'
   sourceMode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp' | 'sffm'
   acMagnitude?: string
   acPhase?: string
@@ -63,12 +66,12 @@ export type PlotSettings = {
 }
 export type SourceSweepParameter = 'pulse.initial' | 'pulse.high' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pwl.scale' | `pwl.point.${number}` | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
 export type ParameterSweep = { component: string; parameter?: string; sourceParameter?: SourceSweepParameter; globalParameter?: string; listValues?: string[]; start: string; stop: string; points: number }
-export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string; from?: string; to?: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
+export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string; from?: string; to?: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either'; triggerCount?: number; targetCount?: number }
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
 export type AssetProvenance = { sourceUrl?: string; licenseReference?: string; rightsNotes?: string }
 export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; selectedSections?: string[]; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
 export type SymbolAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
-export type LtspiceSchematicSource = { format: 'ltspice-asc'; filename: string; originalText: string }
+export type LtspiceSchematicSource = { format: 'ltspice-asc'; filename: string; originalText: string } & AssetProvenance
 export type ProjectSheet = {
   id: string
   name: string
@@ -236,6 +239,10 @@ export function validateProject(input: unknown): Project {
   const rootParameterNames = Array.isArray(rootSheetRaw?.parameters) ? (rootSheetRaw.parameters as { name?: unknown }[]).flatMap((parameter) => typeof parameter?.name === 'string' ? [parameter.name] : []) : []
   const activeSheetRaw = Array.isArray(data.sheets) ? (data.sheets as { id?: unknown; parameters?: unknown }[]).find((sheet) => sheet?.id === data.activeSheetId) : undefined
   const activeParameterNames = Array.isArray(activeSheetRaw?.parameters) ? (activeSheetRaw.parameters as { name?: unknown }[]).flatMap((parameter) => typeof parameter?.name === 'string' ? [parameter.name] : []) : []
+  const draftConnectivity = Array.isArray(data.parts) && Array.isArray(data.wires) && Array.isArray(data.netLabels) && Array.isArray(data.junctions)
+    ? analyzeConnectivity(data as unknown as Project)
+    : undefined
+  const connectedNodeNames = draftConnectivity ? [...draftConnectivity.pinNets.values(), ...draftConnectivity.wireNets.values()] : []
   const refs = new Set<string>()
   const partIds = new Set<string>()
   for (const candidate of data.parts as Part[]) {
@@ -271,11 +278,13 @@ export function validateProject(input: unknown): Project {
     if ((candidate.kind === 'cccs' || candidate.kind === 'ccvs') && (typeof candidate.controlSource !== 'string' || !/^V[A-Za-z0-9_]*$/i.test(candidate.controlSource) || !(data.parts as Part[]).some((part) => part.kind === 'source' && part.ref.toLowerCase() === candidate.controlSource?.toLowerCase()))) throw new Error(`${candidate.ref} must reference an existing voltage source that senses its controlling current.`)
     if (candidate.kind === 'behavioral') {
       if (!['voltage', 'current'].includes(candidate.behavioralOutput ?? '') || !candidate.value.trim()) throw new Error(`${candidate.ref} needs a voltage/current output mode and an expression.`)
+      if (candidate.behavioralDialect !== undefined && candidate.behavioralDialect !== 'ltspice') throw new Error(`${candidate.ref} has an unsupported behavioral expression dialect.`)
       const parsed = parseBehavioralExpression(candidate.value)
       const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
       const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
-      validateBehavioralReferences(parsed.references, labels, references, activeParameterNames)
+      validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
     }
+    if (candidate.behavioralDialect !== undefined && candidate.kind !== 'behavioral') throw new Error(`${candidate.ref} has a behavioral dialect on a non-behavioral component.`)
     if ((candidate.kind === 'npn' || candidate.kind === 'pnp') && (!/^[1-9]\d{0,3}$/.test(candidate.value) || Number(candidate.value) > 1000)) throw new Error(`${candidate.ref} forward beta must be an integer from 1 to 1000.`)
     if (candidate.kind === 'subcircuit' && (typeof candidate.modelName !== 'string' || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(candidate.modelName) || !Array.isArray(candidate.modelPins) || candidate.modelPins.length < 1 || candidate.modelPins.length > 64 || candidate.modelPins.some((pin) => typeof pin !== 'string' || !/^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(pin)))) throw new Error(`${candidate.ref} has malformed subcircuit model or ordered pins.`)
     if (candidate.sheetId !== undefined && (candidate.kind !== 'subcircuit' || typeof candidate.sheetId !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(candidate.sheetId))) throw new Error(`${candidate.ref} has a malformed sheet block reference.`)
@@ -302,7 +311,7 @@ export function validateProject(input: unknown): Project {
   }
   if (data.modelAssets !== undefined) {
     if (!Array.isArray(data.modelAssets) || data.modelAssets.length > 16) throw new Error('A project can store up to 16 imported model libraries.')
-    const assetIds = new Set<string>(), modelNames = new Set<string>(), deviceModelNames = new Set<string>()
+    const assetIds = new Set<string>()
     let totalBytes = 0
     for (const candidate of data.modelAssets as ModelLibraryAsset[]) {
       if (!candidate || typeof candidate.id !== 'string' || !candidate.id || assetIds.has(candidate.id) || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.content !== 'string' || !/^[a-f\d]{64}$/i.test(candidate.sha256) || candidate.licenseStatus !== 'unknown' || typeof candidate.importedAt !== 'string' || !Number.isFinite(Date.parse(candidate.importedAt)) || !validAssetProvenance(candidate)) throw new Error('Project contains a malformed imported model library.')
@@ -311,17 +320,7 @@ export function validateProject(input: unknown): Project {
       totalBytes += size
       if (totalBytes > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
       if (candidate.selectedSections !== undefined && (!Array.isArray(candidate.selectedSections) || candidate.selectedSections.length > 32 || candidate.selectedSections.some((section) => typeof section !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) || new Set(candidate.selectedSections.map((section) => section.toLowerCase())).size !== candidate.selectedSections.length)) throw new Error(`${candidate.filename} has invalid selected .LIB sections.`)
-      const parsed = parseSubcircuitLibrary(candidate.content, candidate.selectedSections)
-      for (const subcircuit of parsed.subcircuits) {
-        const key = subcircuit.name.toLowerCase()
-        if (modelNames.has(key)) throw new Error(`Imported subcircuit ${subcircuit.name} is declared more than once in this project.`)
-        modelNames.add(key)
-      }
-      for (const model of parsed.models) {
-        const key = model.name.toLowerCase()
-        if (deviceModelNames.has(key)) throw new Error(`Imported device model ${model.name} is declared more than once in this project.`)
-        deviceModelNames.add(key)
-      }
+      parseSubcircuitLibrary(candidate.content, candidate.selectedSections)
       assetIds.add(candidate.id)
     }
   }
@@ -341,14 +340,14 @@ export function validateProject(input: unknown): Project {
   }
   if (data.importedSchematicSource !== undefined) {
     const source = data.importedSchematicSource as LtspiceSchematicSource
-    if (!source || source.format !== 'ltspice-asc' || typeof source.filename !== 'string' || !source.filename.trim() || /[\\/\u0000-\u001f]/.test(source.filename) || typeof source.originalText !== 'string' || !source.originalText.length) throw new Error('Project contains malformed LTspice schematic source provenance.')
+    if (!source || source.format !== 'ltspice-asc' || typeof source.filename !== 'string' || !source.filename.trim() || /[\\/\u0000-\u001f]/.test(source.filename) || typeof source.originalText !== 'string' || !source.originalText.length || !validAssetProvenance(source)) throw new Error('Project contains malformed LTspice schematic source provenance.')
     if (new TextEncoder().encode(source.originalText).length > 10 * 1024 * 1024) throw new Error('Original LTspice schematic source exceeds the 10 MiB import limit.')
   }
   if (data.importedChildSchematicSources !== undefined) {
     if (!Array.isArray(data.importedChildSchematicSources) || data.importedChildSchematicSources.length > 63) throw new Error('A project can retain up to 63 imported child schematics.')
     let totalBytes = data.importedSchematicSource ? new TextEncoder().encode((data.importedSchematicSource as LtspiceSchematicSource).originalText).length : 0
     for (const candidate of data.importedChildSchematicSources as LtspiceSchematicSource[]) {
-      if (!candidate || candidate.format !== 'ltspice-asc' || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.originalText !== 'string' || !candidate.originalText.length) throw new Error('Project contains malformed LTspice child schematic source provenance.')
+      if (!candidate || candidate.format !== 'ltspice-asc' || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.originalText !== 'string' || !candidate.originalText.length || !validAssetProvenance(candidate)) throw new Error('Project contains malformed LTspice child schematic source provenance.')
       const size = new TextEncoder().encode(candidate.originalText).length
       if (size > 10 * 1024 * 1024) throw new Error(`${candidate.filename} exceeds the 10 MiB LTspice schematic limit.`)
       totalBytes += size
@@ -411,7 +410,7 @@ export function validateProject(input: unknown): Project {
   if (simulation.acSweep && (!['dec', 'oct', 'lin'].includes(simulation.acSweep.scale) || !Number.isInteger(simulation.acSweep.points) || simulation.acSweep.points < 1 || simulation.acSweep.points > 10000 || typeof simulation.acSweep.startFrequency !== 'string' || !simulation.acSweep.startFrequency.trim() || typeof simulation.acSweep.stopFrequency !== 'string' || !simulation.acSweep.stopFrequency.trim())) throw new Error('AC sweep settings are malformed.')
   if (simulation.parameterSweeps !== undefined) {
     if (!Array.isArray(simulation.parameterSweeps) || simulation.parameterSweeps.length < 1 || simulation.parameterSweeps.length > 3) throw new Error('Parameter stepping supports one to three component values.')
-    if (simulation.analysis !== 'tran') throw new Error('Parameter stepping currently supports transient analysis only.')
+    if (simulation.analysis !== 'tran' && simulation.analysis !== 'dc') throw new Error('Parameter stepping currently supports transient analysis only, with a separate DC-source sweep for DC analysis.')
     const sweepRefs = new Set<string>()
     let combinations = 1
     for (const sweep of simulation.parameterSweeps) {
@@ -424,6 +423,7 @@ export function validateProject(input: unknown): Project {
       const modelSweep = typeof sweep.parameter === 'string'
       const sourceFieldSweep = sweep.sourceParameter !== undefined
       const sourceMode = component?.sourceMode ?? (component?.kind === 'source' ? 'pulse' : 'dc')
+      const dcSourceSweep = simulation.analysis === 'dc' && !globalParameterSweep && !modelSweep && !sourceFieldSweep && (component?.kind === 'source' || component?.kind === 'currentSource') && sourceMode === 'dc' && component.ref.toLowerCase() !== simulation.dcSweep?.source.toLowerCase()
       const pwlPointIndex = typeof sweep.sourceParameter === 'string' && sweep.sourceParameter.startsWith('pwl.point.') ? Number(sweep.sourceParameter.slice('pwl.point.'.length)) : null
       const pwlPointCount = component?.kind === 'currentSource' ? component.currentPwl?.length : component?.pwl?.length
       const validPwlPoint = sourceMode === 'pwl' && pwlPointIndex !== null && Number.isInteger(pwlPointIndex) && pwlPointIndex >= 1 && pwlPointIndex <= (pwlPointCount ?? 0)
@@ -432,7 +432,7 @@ export function validateProject(input: unknown): Project {
       const selectedModel = component?.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === component.deviceModel!.toLowerCase()) : undefined
       const modelParameter = modelSweep && selectedModel?.parameters.find((parameter) => parameter.name.toLowerCase() === sweep.parameter!.toLowerCase())
       const waveformSweep = !modelSweep && (component?.kind === 'source' || component?.kind === 'currentSource') && ['pulse', 'pwl', 'sine', 'exp', 'sffm'].includes(component.sourceMode ?? '')
-      if ((!globalParameterSweep && !component) || (listSweep && !globalParameterSweep) || (globalParameterSweep && (modelSweep || sourceFieldSweep)) || (modelSweep && (sourceFieldSweep || !supportedDevice || !selectedModel || !modelParameter || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.parameter!))) || (sourceFieldSweep && (modelSweep || !validSourceTarget)) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component!.kind)) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && component!.kind === 'source' && component!.sourceMode !== 'dc' && !waveformSweep) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && component!.kind === 'currentSource' && component!.sourceMode !== 'dc' && component!.sourceMode !== undefined && !waveformSweep) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || (listSweep && (sweep.listValues!.length !== sweep.points || sweep.listValues!.some((value) => typeof value !== 'string' || !value.trim()))) || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose a declared parameter, distinct scalar DC, PULSE/PWL, SINE, EXP, or SFFM sources, R/C/L parts, a valid source waveform field, or numeric parameters on selected imported device models, with 2–10 steps.')
+      if ((!globalParameterSweep && !component) || (listSweep && !globalParameterSweep && !dcSourceSweep) || (globalParameterSweep && (modelSweep || sourceFieldSweep)) || (modelSweep && (sourceFieldSweep || !supportedDevice || !selectedModel || !modelParameter || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.parameter!))) || (sourceFieldSweep && (modelSweep || !validSourceTarget)) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component!.kind)) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && component!.kind === 'source' && component!.sourceMode !== 'dc' && !waveformSweep) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && component!.kind === 'currentSource' && component!.sourceMode !== 'dc' && component!.sourceMode !== undefined && !waveformSweep) || (simulation.analysis === 'dc' && !dcSourceSweep) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || (listSweep && (sweep.listValues!.length !== sweep.points || sweep.listValues!.some((value) => typeof value !== 'string' || !value.trim()))) || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose a declared parameter, distinct scalar DC source for DC analysis, or a supported transient sweep target including numeric parameters on selected imported device models, with 2–10 steps.')
       const parseComponentValue = (value: string): number | null => {
         const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/[ΩΩ]|ohms?|[vVaAfFhH]$/gi, '')
         const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
@@ -451,6 +451,14 @@ export function validateProject(input: unknown): Project {
       const timeField = ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(sourceField ?? '')
       const positiveTimeField = ['period', 'riseTau', 'fallTau'].includes(sourceField ?? '')
       if (!validListValues) throw new Error(`${parameterTarget} discrete sweep values must be numeric SPICE scalars.`)
+      if (listSweep && dcSourceSweep && sweep.listValues!.some((value) => parseComponentValue(value) === null)) throw new Error(`${component!.ref} DC sweep list values must use the source's voltage or current units.`)
+      if (listSweep && dcSourceSweep) {
+        const values = sweep.listValues!.map((value) => parseComponentValue(value)!)
+        const from = parseComponentValue(sweep.start), to = parseComponentValue(sweep.stop)
+        const delta = values[1] - values[0]
+        const close = (left: number, right: number) => Math.abs(left - right) <= Math.max(1e-15, Math.max(Math.abs(left), Math.abs(right)) * 1e-10)
+        if (from === null || to === null || delta === 0 || !close(values[0], from) || (to - from) * delta < 0 || values.some((value, index) => !close(value, from + delta * index) || (value - to) * delta > Math.max(1e-15, Math.abs(to - from) * 1e-10))) throw new Error(`${component!.ref} DC sweep list must be an arithmetic sequence from its start toward its stop value.`)
+      }
       if (start === null || stop === null || (!listSweep && start === stop) || (frequencyField && (start <= 0 || stop <= 0)) || (timeField && (start < 0 || stop < 0 || (positiveTimeField && (start <= 0 || stop <= 0)))) || (!globalParameterSweep && !sweep.parameter && !sourceFieldSweep && !['source', 'currentSource'].includes(component!.kind) && (start <= 0 || stop <= 0))) throw new Error(`${globalParameterSweep ? parameterTarget : component!.ref} needs valid, different parameter start and stop values; passive values, source frequencies, and positive time constants must be positive.`)
       sweepRefs.add(sweep.component.toLowerCase())
       combinations *= sweep.points
@@ -463,7 +471,7 @@ export function validateProject(input: unknown): Project {
     const measurementIds = new Set<string>()
     for (const measurement of simulation.transientMeasurements) {
       const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQBJ][A-Za-z0-9_]*\)|i\(@I[A-Za-z0-9_]+\[current\]\))$/i
-      const validDelay = measurement?.operation === 'delay' && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && typeof measurement.targetVector === 'string' && vectorPattern.test(measurement.targetVector.trim()) && typeof measurement.threshold === 'string' && Number.isFinite(Number(measurement.threshold)) && typeof measurement.targetThreshold === 'string' && Number.isFinite(Number(measurement.targetThreshold)) && ['rise', 'fall', 'either'].includes(measurement.edge) && ['rise', 'fall', 'either'].includes(measurement.targetEdge)
+      const validDelay = measurement?.operation === 'delay' && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && typeof measurement.targetVector === 'string' && vectorPattern.test(measurement.targetVector.trim()) && typeof measurement.threshold === 'string' && measurementThresholdMagnitude(measurement.threshold, measurement.vector) !== null && typeof measurement.targetThreshold === 'string' && measurementThresholdMagnitude(measurement.targetThreshold, measurement.targetVector) !== null && ['rise', 'fall', 'either'].includes(measurement.edge) && ['rise', 'fall', 'either'].includes(measurement.targetEdge) && isValidMeasurementCrossingCount(measurement.triggerCount) && isValidMeasurementCrossingCount(measurement.targetCount)
       const from = measurement?.operation === 'delay' ? null : measurement?.from === undefined ? null : typeof measurement.from === 'string' ? timeMagnitude(measurement.from) ?? Number.NaN : Number.NaN
       const to = measurement?.operation === 'delay' ? null : measurement?.to === undefined ? null : typeof measurement.to === 'string' ? timeMagnitude(measurement.to) ?? Number.NaN : Number.NaN
       const validRange = !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)

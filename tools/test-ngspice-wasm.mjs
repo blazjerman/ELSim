@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['bsource-basic-functions-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'current-source-op', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-param-arithmetic-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op']
+const fixtures = ['bsource-basic-functions-op', 'behavioral-differential-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'rc-lowpass-ac', 'rc-highpass-ac', 'current-source-op', 'current-source-dc-sweep', 'two-source-dc-sweep', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'voltage-divider-op', 'rlc-ac', 'subckt-op', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-param-arithmetic-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -53,7 +53,7 @@ function realRawVector(raw, name) {
 
 for (const fixture of fixtures) {
   const deckPath = path.join(root, 'engine/wasm/fixtures', `${fixture}.cir`)
-  const wasmResult = await runInWorker(deckPath, fixture === 'current-source-op' || fixture === 'imported-mosfet-model-op' || fixture === 'jfet-model-op' || fixture === 'pjfet-model-op' || fixture === 'jfet-switch' || fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op', undefined, fixture === 'ltspice-uplim-op')
+  const wasmResult = await runInWorker(deckPath, fixture === 'current-source-op' || fixture === 'imported-mosfet-model-op' || fixture === 'jfet-model-op' || fixture === 'pjfet-model-op' || fixture === 'jfet-switch' || fixture === 'hierarchical-block-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op', fixture === 'two-source-dc-sweep' ? ['/result-0.raw', '/result-1.raw', '/result-2.raw'] : undefined, fixture === 'ltspice-uplim-op')
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
@@ -63,12 +63,44 @@ for (const fixture of fixtures) {
     assert.match(wasmResult.stdout, /@r1\[i\]\s+1\.666667e-03/i, 'dependent parameter should produce the expected branch current')
   }
   if (fixture === 'param-bsource-op') assert.match(wasmResult.stdout, /\bout\s+6\.000000e\+00/i, 'declared .param GAIN should scale the behavioral source output to 6 V')
+  if (fixture === 'rc-lowpass-ac') {
+    const rows = wasmRows.map((row) => row.trim().split(/\s+/).map(Number)).filter((row) => row.length >= 4 && row.every(Number.isFinite))
+    assert.ok(rows.length > 40, 'RC low-pass AC fixture should produce a logarithmic frequency sweep')
+    const corner = rows.reduce((best, row) => Math.abs(Math.log10(row[1] / 1000)) < Math.abs(Math.log10(best[1] / 1000)) ? row : best)
+    assert.ok(Math.abs(corner[1] - 1000) < 1, `expected a sweep point at 1 kHz, got ${corner[1]} Hz`)
+    assert.ok(Math.abs(corner[2] - 1) < 1e-6, `input AC magnitude should stay at 1 V, got ${corner[2]} V`)
+    assert.ok(corner[3] > 0.70 && corner[3] < 0.72, `output at the RC cutoff should be about -3 dB, got ${corner[3]} V/V`)
+    assert.ok(rows.at(-1)[3] < 0.02, `high-frequency output should be attenuated, got ${rows.at(-1)[3]} V/V`)
+  }
+  if (fixture === 'rc-highpass-ac') {
+    const rows = wasmRows.map((row) => row.trim().split(/\s+/).map(Number)).filter((row) => row.length >= 4 && row.every(Number.isFinite))
+    assert.ok(rows.length > 40, 'RC high-pass AC fixture should produce a logarithmic frequency sweep')
+    const corner = rows.reduce((best, row) => Math.abs(Math.log10(row[1] / 1000)) < Math.abs(Math.log10(best[1] / 1000)) ? row : best)
+    assert.ok(Math.abs(corner[1] - 1000) < 1, `expected a sweep point at 1 kHz, got ${corner[1]} Hz`)
+    assert.ok(Math.abs(corner[2] - 1) < 1e-6, `input AC magnitude should stay at 1 V, got ${corner[2]} V`)
+    assert.ok(corner[3] > 0.70 && corner[3] < 0.72, `output at the RC cutoff should be about -3 dB, got ${corner[3]} V/V`)
+    assert.ok(rows[0][3] < 0.02, `low-frequency output should be attenuated, got ${rows[0][3]} V/V`)
+    assert.ok(rows.at(-1)[3] > 0.99, `high-frequency output should approach the 1 V input, got ${rows.at(-1)[3]} V/V`)
+  }
+  if (fixture === 'current-source-dc-sweep') {
+    assert.match(wasmResult.stdout, /5\s+1\.000000e-02\s+1\.000000e\+01/i, 'sweeping the independent current source to 10 mA through 1 kΩ should produce 10 V')
+  }
+  if (fixture === 'two-source-dc-sweep') {
+    assert.equal(wasmResult.rawFiles?.length, 3, 'secondary DC source values should produce three separate results')
+    const outputs = wasmResult.rawFiles.map((raw) => realRawVector(raw, 'v(out)'))
+    assert.deepEqual(outputs.map((values) => values.length), [3, 3, 3])
+    assert.deepEqual(outputs.map((values) => values.at(-1)), [1, 2, 3], 'each secondary-source case should shift the midpoint voltage by half its value, including a non-dividing 0-to-5-by-2 sweep')
+  }
+  if (fixture === 'voltage-divider-op') {
+    assert.match(wasmResult.stdout, /vin\s+1\.000000e\+01/i, 'divider input should solve to 10 V')
+    assert.match(wasmResult.stdout, /vout\s+5\.000000e\+00/i, 'equal 1 kΩ resistors should divide 10 V to 5 V')
+  }
   if (fixture === 'imported-subckt-param-arithmetic-op') {
     assert.match(wasmResult.stdout, /out_default\s+2\.000000e\+01/i, 'subcircuit parameter default should evaluate SCALE=2, GAIN={SCALE * 2}, and produce 20 V')
     assert.match(wasmResult.stdout, /out_override\s+3\.000000e\+01/i, 'per-instance SCALE=3 override should reevaluate dependent GAIN and produce 30 V')
   }
   if (fixture === 'hierarchical-parameter') { assert.match(wasmResult.stdout, /in\s+5\.000000e\+00/i); assert.match(wasmResult.stdout, /in2\s+1\.000000e\+01/i); assert.match(wasmResult.stdout, /resistance\s+2000\s+1000/i); assert.match(wasmResult.stdout, /\bi\s+0\.005\s+0\.005/i) }
-  if (fixture !== 'hierarchical-parameter' && fixture !== 'current-source-op' && fixture !== 'imported-mosfet-model-op' && fixture !== 'jfet-model-op' && fixture !== 'pjfet-model-op' && fixture !== 'jfet-switch' && fixture !== 'mosfet-switch' && fixture !== 'user-opamp-op' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
+  if (fixture !== 'hierarchical-parameter' && fixture !== 'current-source-op' && fixture !== 'two-source-dc-sweep' && fixture !== 'imported-mosfet-model-op' && fixture !== 'jfet-model-op' && fixture !== 'pjfet-model-op' && fixture !== 'jfet-switch' && fixture !== 'mosfet-switch' && fixture !== 'user-opamp-op' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed`)
 
   if (fixture === 'bsource-basic-functions-op') {
     assert.match(wasmResult.stdout, /nmin\s+1\.000000e\+00/i, 'min() should clamp the 2 V input to 1 V')
@@ -78,10 +110,35 @@ for (const fixture of fixtures) {
     assert.match(wasmResult.stdout, /nclamp\s+3\.000000e\+00/i, 'min(max()) should reproduce LTspice upper clamp semantics')
     assert.match(wasmResult.stdout, /ncaret\s+9\.000000e\+00/i, 'the pinned ngspice engine interprets ^ as exponentiation')
     assert.match(wasmResult.stdout, /npow\s+9\.000000e\+00/i, 'pow() should provide the explicit exponentiation equivalent')
+    assert.match(wasmResult.stdout, /npowstar\s+9\.000000e\+00/i, 'LTspice ** exponentiation should run unchanged through ngspice')
+    assert.match(wasmResult.stdout, /npospwrs\s+2\.000000e\+00/i, 'LTspice pwrs should return positive signed square root')
+    assert.match(wasmResult.stdout, /nnegpwrs\s+-2\.0+e\+00/i, 'LTspice pwrs should retain the sign for negative inputs')
+    assert.match(wasmResult.stdout, /nposint\s+2\.000000e\+00/i, 'LTspice int should truncate positive values toward zero')
+    assert.match(wasmResult.stdout, /nnegint\s+-2\.0+e\+00/i, 'LTspice int should truncate negative values toward zero')
+    assert.match(wasmResult.stdout, /nposquare\s+9\.000000e\+00/i, 'LTspice square should return nine for a positive three')
+    assert.match(wasmResult.stdout, /nnegquare\s+9\.000000e\+00/i, 'LTspice square should return nine for a negative three')
+    assert.match(wasmResult.stdout, /nhypot\s+5\.000000e\+00/i, 'hypot(3, 4) should return five')
+    assert.match(wasmResult.stdout, /nuraw\s+5\.000000e-01/i, 'native ngspice u(0) should retain its half-step boundary value')
+    assert.match(wasmResult.stdout, /nult\s+0\.000000e\+00/i, 'the LTspice-compatible strict step should return zero at the boundary')
+    assert.match(wasmResult.stdout, /nboolxorfunction\s+1\.000000e\+00/i, 'LTspice xor() should recognize high xor low as true')
+    assert.match(wasmResult.stdout, /nboolxorfunctionsame\s+0\.000000e\+00/i, 'LTspice xor() should recognize high xor high as false')
+    assert.match(wasmResult.stdout, /narccos\s+1\.047198e\+00/i, 'arccos() should translate to ngspice acos()')
+    assert.match(wasmResult.stdout, /narcsin\s+5\.235988e-01/i, 'arcsin() should translate to ngspice asin()')
+    assert.match(wasmResult.stdout, /narctan\s+4\.636476e-01/i, 'arctan() should translate to ngspice atan()')
+    for (const [name, value] of [['nposquad', Math.PI / 4], ['nnegquad', 3 * Math.PI / 4], ['nnerquad', -3 * Math.PI / 4], ['naxis', Math.PI / 2], ['nzeroaxis', Math.PI], ['ncbrtpos', 2], ['ncbrtneg', -2], ['nmodpos', 1.5], ['nmodneg', -1.5], ['nbuflow', 0], ['nbufhalf', 0], ['nbufhigh', 1], ['ninvlow', 1], ['ninvhalf', 1], ['ninvhigh', 0], ['nnotlow', 1], ['nnothalf', 1], ['nnothigh', 0], ['ntilde_low', 1], ['ntilde_half', 1], ['ntilde_high', 0], ['nbooland', 0], ['nboolandtrue', 1], ['nboolor', 1], ['nboolxor', 1], ['nboolxorsame', 0]]) {
+      const match = wasmResult.stdout.match(new RegExp(`${name}\\s+([-+\\d.eE]+)`, 'i'))
+      assert.ok(match, `${name} should be printed by the behavioral function fixture`)
+      assert.ok(Math.abs(Number(match[1]) - value) < 1e-5, `${name} expected ${value}, got ${match[1]}`)
+    }
     const ltaResult = await runInWorker(deckPath, false, undefined, true)
     assert.equal(ltaResult.status, 0, 'limit() comparison should also run in lta compatibility mode')
     assert.match(ltaResult.stdout, /nraw\s+0\.000000e\+00/i, 'lta mode does not fix limit() clamp semantics')
     assert.match(ltaResult.stdout, /nclamp\s+3\.000000e\+00/i, 'min(max()) retains clamp behavior in lta mode')
+  }
+  if (fixture === 'behavioral-differential-op') {
+    assert.match(wasmResult.stdout, /high\s+5\.000000e\+00/i, 'high node should solve to 5 V')
+    assert.match(wasmResult.stdout, /low\s+2\.000000e\+00/i, 'low node should solve to 2 V')
+    assert.match(wasmResult.stdout, /delta\s+3\.000000e\+00/i, 'differential B-source should output V(high) - V(low) = 3 V')
   }
 
   if (fixture === 'pwl-repeat-forever') {
@@ -232,7 +289,7 @@ for (const fixture of fixtures) {
     }
     if (fixture.startsWith('hierarchical-repeat-')) hierarchyRepeatRaws.set(fixture, wasmResult.raw)
     if (fixture.startsWith('hierarchical-nested-')) hierarchyNestedRaws.set(fixture, wasmResult.raw)
-  } else if (fixture !== 'hierarchical-parameter' && fixture !== 'mosfet-switch' && fixture !== 'jfet-switch' && !fixture.startsWith('hierarchical-nested-')) {
+  } else if (fixture !== 'hierarchical-parameter' && fixture !== 'two-source-dc-sweep' && fixture !== 'mosfet-switch' && fixture !== 'jfet-switch' && !fixture.startsWith('hierarchical-nested-')) {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)
   }
 
@@ -259,13 +316,13 @@ for (const fixture of fixtures) {
 // Keep the compatibility assistant's warnings tied to failures from the shipped pinned WASM engine.
 const unsupportedFunctionDir = mkdtempSync(path.join(tmpdir(), 'elsim-ngspice-unsupported-functions-'))
 try {
-  const unsupportedFunctions = ['cbrt(V(in))', 'atan2(V(in),1)', 'mod(V(in),2)', 'pwrs(V(in),2)', 'arccos(V(in))', 'arcsin(V(in))', 'arctan(V(in))', 'noise()', 'smallsig()', '~(V(in))']
+  const unsupportedFunctions = ['mod(V(in),2)', 'pwrs(V(in),2)', 'noise()', 'smallsig()', 'flat(1)', 'gauss(1)', 'mc(1,0.05)', 'select(1,0,1)', '~(V(in))']
   for (const [index, expression] of unsupportedFunctions.entries()) {
     const deckPath = path.join(unsupportedFunctionDir, `unsupported-${index + 1}.cir`)
     writeFileSync(deckPath, `* ${expression}\nV1 in 0 DC 0.5\nB1 out 0 V=${expression}\nR1 out 0 1k\n.op\n.end\n`)
     const result = await runInWorker(deckPath)
     assert.notEqual(result.status, 0, `${expression}: expected the pinned browser ngspice engine to reject this LTspice-only function`)
-    assert.match(result.stderr, /no such function|YYparse error/i, `${expression}: expected an unsupported-function or expression-syntax diagnostic`)
+    assert.match(result.stderr, /no such function|YYparse error|argument|parameter count|bogus .* form|incomplete function/i, `${expression}: expected an unsupported-function or incompatible-signature diagnostic`)
     process.stdout.write(`PASS unsupported LTspice B-source function ${expression}\n`)
   }
 } finally {
@@ -309,6 +366,35 @@ assert.ok(Math.abs(expPeaks[1] - 2) < 1e-3, `pulse-source-sweep: second EXP curr
 const sffmPeaks = pulseSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(vsffm)')))
 assert.ok(Math.abs(sffmPeaks[0] - 0.5) < 1e-3, `pulse-source-sweep: first SFFM amplitude should peak near 0.5 V, got ${sffmPeaks[0]} V`)
 assert.ok(Math.abs(sffmPeaks[1] - 1.5) < 1e-3, `pulse-source-sweep: second SFFM amplitude should peak near 1.5 V, got ${sffmPeaks[1]} V`)
+
+const parameterizedFieldsDeck = path.join(root, 'engine/wasm/fixtures', 'parameterized-waveform-fields.cir')
+const parameterizedFields = await runInWorker(parameterizedFieldsDeck, false, ['/result-0.raw', '/result-1.raw'])
+assert.equal(parameterizedFields.status, 0, `parameterized-waveform-fields: ngspice failed: ${parameterizedFields.stderr}`)
+const parameterizedRaws = parameterizedFields.rawFiles
+const pulseOnsets = parameterizedRaws.map((raw) => {
+  const times = realRawVector(raw, 'time'), values = realRawVector(raw, 'v(pulse)')
+  const point = values.findIndex((value) => value > 0.1)
+  assert.notEqual(point, -1, 'parameterized-waveform-fields: pulse never reached its high level')
+  return times[point]
+})
+assert.ok(Math.abs(pulseOnsets[0] - 0.001) < 0.0002, `parameterized-waveform-fields: first pulse onset should follow 1 ms delay, got ${pulseOnsets[0]} s`)
+assert.ok(Math.abs(pulseOnsets[1] - 0.002) < 0.0002, `parameterized-waveform-fields: second pulse onset should follow 2 ms delay, got ${pulseOnsets[1]} s`)
+const sineCrossings = parameterizedRaws.map((raw) => {
+  const values = realRawVector(raw, 'v(sine)')
+  return values.slice(1).reduce((count, value, index) => count + (values[index] <= 0 && value > 0 ? 1 : 0), 0)
+})
+assert.ok(sineCrossings[1] > sineCrossings[0] * 1.7, `parameterized-waveform-fields: 2 kHz SINE should cross zero substantially more often than 1 kHz (${sineCrossings})`)
+const expAtSixMs = parameterizedRaws.map((raw) => {
+  const times = realRawVector(raw, 'time'), values = realRawVector(raw, 'v(exp)')
+  const point = times.findIndex((value) => value >= 0.006)
+  assert.notEqual(point, -1, 'parameterized-waveform-fields: EXP vector has no sample at 6 ms')
+  return values[point]
+})
+assert.ok(expAtSixMs[1] > expAtSixMs[0] + 0.1, `parameterized-waveform-fields: a longer EXP fall constant should retain more voltage at 6 ms (${expAtSixMs})`)
+for (const raw of parameterizedRaws) for (const vector of ['v(pulse)', 'v(sine)', 'v(exp)', 'v(sffm)']) {
+  assert.ok(realRawVector(raw, vector).every(Number.isFinite), `parameterized-waveform-fields: ${vector} contains non-finite samples`)
+}
+process.stdout.write('PASS parameterized-pulse-sine-exp-sffm-waveform-fields\n')
 
 const frequencySweepDeck = path.join(root, 'engine/wasm/fixtures', 'source-frequency-sweep.cir')
 const frequencySweepResult = await runInWorker(frequencySweepDeck, false, ['/result-0.raw', '/result-1.raw'])
@@ -455,6 +541,13 @@ const modelSweepCollector = importedModelSweepResult.rawFiles.map((raw) => realR
 assert.ok(modelSweepCollector[0] > modelSweepCollector[1] + 0.01, `increasing imported model BF should lower collector voltage; got ${modelSweepCollector.join(', ')}`)
 process.stdout.write('PASS imported-model-parameter-sweep\n')
 
+const importedModelExpressionResult = await runInWorker(path.join(root, 'engine/wasm/fixtures', 'imported-model-sweep-expression.cir'), false, ['/result-0.raw', '/result-1.raw'])
+assert.equal(importedModelExpressionResult.status, 0, `imported-model-sweep-expression: ngspice exited with a nonzero status: ${importedModelExpressionResult.stderr}`)
+assert.equal(importedModelExpressionResult.rawFiles.length, 2)
+const scopedModelDrain = importedModelExpressionResult.rawFiles.map((raw) => realRawVector(raw, 'v(drain)')[0])
+assert.ok(scopedModelDrain[0] > scopedModelDrain[1] + 0.1, `the generated .MODEL parameter expression should load and respond to altermod, got drain voltages ${scopedModelDrain.join(', ')}`)
+process.stdout.write('PASS imported-model-sweep-expression\n')
+
 const currentPulsePath = path.join(root, 'engine/wasm/fixtures', 'current-source-pulse.cir')
 const currentPulseResult = await runInWorker(currentPulsePath, true)
 assert.equal(currentPulseResult.status, 0, `current-source-pulse: ngspice exited with a nonzero status: ${currentPulseResult.stderr}`)
@@ -503,6 +596,14 @@ const propagationDelay = Number(delayMatch[1])
 assert.ok(propagationDelay > 0 && propagationDelay < 50e-3, `unexpected RC propagation delay ${propagationDelay}`)
 process.stdout.write('PASS transient-delay-measurement\n')
 
+const countedDelayPath = path.join(root, 'engine/wasm/fixtures', 'measurement-delay-count.cir')
+const countedDelayResult = await runInWorker(countedDelayPath)
+assert.equal(countedDelayResult.status, 0, `measurement-delay-count: ngspice exited with a nonzero status: ${countedDelayResult.stderr}`)
+const countedDelays = Object.fromEntries([...countedDelayResult.stdout.matchAll(/elsim_(rise_count|cross_count)\s*=\s*([-+\d.eE]+)/gi)].map((match) => [match[1].toLowerCase(), Number(match[2])]))
+assert.ok(Number.isFinite(countedDelays.rise_count) && countedDelays.rise_count > 0 && countedDelays.rise_count < 3e-3, `unexpected counted rising-edge delay ${countedDelays.rise_count}`)
+assert.ok(Number.isFinite(countedDelays.cross_count) && countedDelays.cross_count > 0 && countedDelays.cross_count < 4e-3, `unexpected counted crossing delay ${countedDelays.cross_count}`)
+process.stdout.write('PASS transient-counted-delay-measurements\n')
+
 const initialConditionPath = path.join(root, 'engine/wasm/fixtures', 'initial-condition-transient.cir')
 const initialConditionResult = await runInWorker(initialConditionPath, true)
 assert.equal(initialConditionResult.status, 0, `initial-condition-transient: ngspice exited with a nonzero status: ${initialConditionResult.stderr}`)
@@ -538,6 +639,19 @@ assert.ok(Math.abs(behavioralCurrentOutput + 3) < 1e-8, `behavioral current sour
 assert.match(behavioralResult.raw, /^\s*\d+\s+i\(@b1\[i\]\)\s+current$/mi)
 assert.match(behavioralResult.raw, /^\s*\d+\s+i\(@b2\[i\]\)\s+current$/mi)
 process.stdout.write('PASS behavioral-sources-op\n')
+
+const behavioralTablePath = path.join(root, 'engine/wasm/fixtures', 'behavioral-table-dc.cir')
+const behavioralTableResult = await runInWorker(behavioralTablePath, true)
+assert.equal(behavioralTableResult.status, 0, `behavioral-table-dc: ngspice exited with a nonzero status: ${behavioralTableResult.stderr}`)
+const tableInput = realRawVector(behavioralTableResult.raw, 'v(in)')
+const tableOutput = realRawVector(behavioralTableResult.raw, 'v(out-table)')
+const ifOutput = realRawVector(behavioralTableResult.raw, 'v(out-if)')
+const expandedFunctionOutput = realRawVector(behavioralTableResult.raw, 'v(out-function)')
+assert.deepEqual([...tableInput].map((value) => Math.round(value * 10) / 10), [-1, -0.6, -0.2, 0.2, 0.6, 1, 1.4, 1.8, 2.2, 2.6, 3])
+assert.deepEqual([...tableOutput].map((value) => Math.round(value * 10) / 10), [0, 0, 0, 1, 3, 5, 7, 9, 10, 10, 10])
+assert.deepEqual([...ifOutput].map((value) => Math.round(value * 10) / 10), [0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5], 'LTspice if() switches from false below 0.5 to true above 0.5')
+assert.deepEqual([...expandedFunctionOutput].map((value) => Math.round(value * 10) / 10), [3, 3.8, 4.6, 5.4, 6.2, 7, 7.8, 8.6, 9.4, 10.2, 11], 'inlined .func arithmetic should preserve nested-call grouping')
+process.stdout.write('PASS behavioral-table-dc\n')
 
 const controlledPath = path.join(root, 'engine/wasm/fixtures', 'controlled-sources.cir')
 const controlledResult = await runInWorker(controlledPath, true)

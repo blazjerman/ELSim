@@ -83,7 +83,8 @@ export function parseAsciiRawFile(text: string): ParsedRawFile {
   }
   const axisVector = isDcSweep ? variables[0].name : ''
   const axisLabel = hasTimeAxis ? 'Time' : isFrequency ? 'Frequency' : isDcSweep ? axisVector : 'Operating point'
-  const axisUnit = hasTimeAxis ? 's' : isFrequency ? 'Hz' : isDcSweep && variables[0].type.toLowerCase() === 'voltage' ? 'V' : ''
+  const sweepType = variables[0].type.toLowerCase()
+  const axisUnit = hasTimeAxis ? 's' : isFrequency ? 'Hz' : isDcSweep && sweepType === 'voltage' ? 'V' : isDcSweep && sweepType === 'current' ? 'A' : ''
   if (isDcSweep) variables[0].values.set(axis)
   return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : 'op', axis, variables: variables.slice(hasTimeAxis || isFrequency || isDcSweep ? 1 : 0) }
 }

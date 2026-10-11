@@ -2,6 +2,26 @@ Behavioral source basic functions
 V1 IN 0 2
 VLIMIT LIMITIN 0 4
 VPOWER POWERIN 0 3
+VHYPOTX HYPOTX 0 3
+VHYPOTY HYPOTY 0 4
+VUZERO UZERO 0 0
+VTRIG TRIGIN 0 0.5
+VBOOLLOW BOOLLOW 0 0.4
+VBOOLHIGH BOOLHIGH 0 0.6
+VATAN2Y ATAN2Y 0 1
+VATAN2XPOS ATAN2XPOS 0 1
+VATAN2XNEG ATAN2XNEG 0 -1
+VATAN2ZERO ATAN2ZERO 0 0
+VCBRTPOS CBRTPOS 0 8
+VCBRTNEG CBRTNEG 0 -8
+VMODPOS MODPOS 0 5.5
+VMODNEG MODNEG 0 -5.5
+VPWRS POSPWRS 0 4
+VPWRSNEG NEGPWRS 0 -4
+VINTPOS POSINT 0 2.7
+VINTNEG NEGINT 0 -2.7
+VSQUAREPOS POSQUARE 0 3
+VSQUARENEG NEGQUARE 0 -3
 BMIN NMIN 0 V=min(V(IN),1)
 BMAX NMAX 0 V=max(V(IN),3)
 BURAMP NRAMP 0 V=uramp(V(IN)-3)
@@ -9,6 +29,47 @@ BRAW NRAW 0 V=limit(V(LIMITIN),0,3)
 BCLAMP NCLAMP 0 V=min(max(V(LIMITIN),0),3)
 BCARET NCARET 0 V=V(POWERIN)^2
 BPOW NPOW 0 V=pow(V(POWERIN),2)
+BPOWSTAR NPOWSTAR 0 V=V(POWERIN)**2
+BARCCOS NARCCOS 0 V=acos(V(TRIGIN))
+BARCSIN NARCSIN 0 V=asin(V(TRIGIN))
+BARCTAN NARCTAN 0 V=atan(V(TRIGIN))
+BPOSQUAD NPOSQUAD 0 V=atan(V(ATAN2Y)/V(ATAN2XPOS))
+BNEGQUAD NNEGQUAD 0 V=atan(V(ATAN2Y)/V(ATAN2XNEG))+pi
+BNERQUAD NNERQUAD 0 V=atan(-V(ATAN2Y)/V(ATAN2XNEG))-pi
+BAXIS NAXIS 0 V=pi/2
+BZEROAXIS NZEROAXIS 0 V=pi
+BCBRTPOS NCBRTPOS 0 V=pow(V(CBRTPOS),1/3)
+BCBRTNEG NCBRTNEG 0 V=-pow(-V(CBRTNEG),1/3)
+BMODPOS NMODPOS 0 V=(V(MODPOS)-(sgn(V(MODPOS)/2)*floor(abs(V(MODPOS)/2))*2))
+BMODNEG NMODNEG 0 V=(V(MODNEG)-(sgn(V(MODNEG)/2)*floor(abs(V(MODNEG)/2))*2))
+BPWRS NPOSPWRS 0 V=pwr(V(POSPWRS),0.5)
+BPWRSNEG NNEGPWRS 0 V=pwr(V(NEGPWRS),0.5)
+BINTPOS NPOSINT 0 V=(sgn(V(POSINT))*floor(abs(V(POSINT))))
+BINTNEG NNEGINT 0 V=(sgn(V(NEGINT))*floor(abs(V(NEGINT))))
+BSQUAREPOS NPOSQUARE 0 V=(V(POSQUARE)*V(POSQUARE))
+BSQUARENEG NNEGQUARE 0 V=(V(NEGQUARE)*V(NEGQUARE))
+BHYPOT NHYPOT 0 V=((max(abs((V(HYPOTX))), abs((V(HYPOTY)))) > 0) ? (max(abs((V(HYPOTX))), abs((V(HYPOTY)))) * sqrt(pow((V(HYPOTX)) / max(abs((V(HYPOTX))), abs((V(HYPOTY)))), 2) + pow((V(HYPOTY)) / max(abs((V(HYPOTX))), abs((V(HYPOTY)))), 2))) : 0)
+BURAW NURAW 0 V=u(V(UZERO))
+BULT NULT 0 V=(V(UZERO)>0?1:0)
+BBUFLOW NBUFLOW 0 V={(((V(BOOLLOW) - 0.5) > 1e-12) ? 1 : 0)}
+BBUFHALF NBUFHALF 0 V={(((V(TRIGIN) - 0.5) > 1e-12) ? 1 : 0)}
+BBUFHIGH NBUFHIGH 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) ? 1 : 0)}
+BINVLOW NINVLOW 0 V={(((V(BOOLLOW) - 0.5) > 1e-12) ? 0 : 1)}
+BINVHALF NINVHALF 0 V={(((V(TRIGIN) - 0.5) > 1e-12) ? 0 : 1)}
+BINVHIGH NINVHIGH 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) ? 0 : 1)}
+BNOTLOW NNOTLOW 0 V={(((V(BOOLLOW) - 0.5) > 1e-12) ? 0 : 1)}
+BNOTHALF NNOTHALF 0 V={(((V(TRIGIN) - 0.5) > 1e-12) ? 0 : 1)}
+BNOTHIGH NNOTHIGH 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) ? 0 : 1)}
+BTILDELOW NTILDE_LOW 0 V={(((V(BOOLLOW) - 0.5) > 1e-12) ? 0 : 1)}
+BTILDEHALF NTILDE_HALF 0 V={(((V(TRIGIN) - 0.5) > 1e-12) ? 0 : 1)}
+BTILDEHIGH NTILDE_HIGH 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) ? 0 : 1)}
+BBOOLAND NBOOLAND 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLLOW) - 0.5) > 1e-12))}
+BBOOLANDTRUE NBOOLANDTRUE 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLHIGH) - 0.5) > 1e-12))}
+BBOOLOR NBOOLOR 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) || ((V(BOOLLOW) - 0.5) > 1e-12))}
+BBOOLXOR NBOOLXOR 0 V={((((V(BOOLHIGH) - 0.5) > 1e-12) && !((V(BOOLLOW) - 0.5) > 1e-12)) || (!((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLLOW) - 0.5) > 1e-12)))}
+BBOOLXORSAME NBOOLXORSAME 0 V={((((V(BOOLHIGH) - 0.5) > 1e-12) && !((V(BOOLHIGH) - 0.5) > 1e-12)) || (!((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLHIGH) - 0.5) > 1e-12)))}
+BXORFUNCTION NBOOLXORFUNCTION 0 V={((((V(BOOLHIGH) - 0.5) > 1e-12) && !((V(BOOLLOW) - 0.5) > 1e-12)) || (!((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLLOW) - 0.5) > 1e-12)))}
+BXORFUNCTIONSAME NBOOLXORFUNCTIONSAME 0 V={((((V(BOOLHIGH) - 0.5) > 1e-12) && !((V(BOOLHIGH) - 0.5) > 1e-12)) || (!((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLHIGH) - 0.5) > 1e-12)))}
 .op
-.print op v(nmin) v(nmax) v(nramp) v(nraw) v(nclamp) v(ncaret) v(npow)
+.print op v(nmin) v(nmax) v(nramp) v(nraw) v(nclamp) v(ncaret) v(npow) v(npowstar) v(npospwrs) v(nnegpwrs) v(nposint) v(nnegint) v(nposquare) v(nnegquare) v(nhypot) v(nuraw) v(nult) v(narccos) v(narcsin) v(narctan) v(nposquad) v(nnegquad) v(nnerquad) v(naxis) v(nzeroaxis) v(ncbrtpos) v(ncbrtneg) v(nmodpos) v(nmodneg) v(nbuflow) v(nbufhalf) v(nbufhigh) v(ninvlow) v(ninvhalf) v(ninvhigh) v(nnotlow) v(nnothalf) v(nnothigh) v(ntilde_low) v(ntilde_half) v(ntilde_high) v(nbooland) v(nboolandtrue) v(nboolor) v(nboolxor) v(nboolxorsame) v(nboolxorfunction) v(nboolxorfunctionsame)
 .end

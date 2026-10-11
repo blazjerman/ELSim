@@ -52,6 +52,19 @@ test('independent worker response producer satisfies response contract', () => {
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { metadata: completedMetadata, netlist: artifact.text, sourceMap: [], traces: [trace], diagnostics: [], analysis: 'tran', measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '2m', to: '8m', value: 2.5, unit: 'V' }] } }), true)
 })
 
+test('standalone protocol peer produces and consumes messages independently of the app contract code', async () => {
+  const peer = await import('./fixtures/engine-protocol-peer.mjs')
+  const requests = peer.produceRequests()
+  const responses = peer.produceResponses()
+  assert.deepEqual(requests.map(({ type }) => type), ['initialize', 'run', 'cancel', 'dispose'])
+  assert.deepEqual(responses.map(({ type }) => type), ['ready', 'progress', 'result', 'cancelled', 'error'])
+  for (const request of requests) assert.equal(isEngineRequest(JSON.parse(JSON.stringify(request))), true, `${request.type} from peer must satisfy ELSim's request consumer`)
+  for (const response of responses) assert.equal(isEngineResponse(JSON.parse(JSON.stringify(response))), true, `${response.type} from peer must satisfy ELSim's response consumer`)
+  for (const response of responses) assert.equal(peer.consumeResponse(JSON.parse(JSON.stringify(response))), true, `${response.type} from ELSim-shaped JSON must satisfy the independent peer consumer`)
+  assert.equal(peer.consumeResponse({ type: 'progress', requestId: 'bad', runId: 'bad', fraction: 1.5 }), false)
+  assert.equal(peer.consumeResponse({ type: 'result', requestId: 'bad', result: { metadata: {}, netlist: '', traces: [{ axis: [0, 0], values: [1, 2] }] } }), false)
+})
+
 test('response consumer rejects malformed or incomplete worker messages', () => {
   assert.equal(isEngineResponse({ type: 'progress', requestId: 'run-1', runId: 'run-1', fraction: 1.1 }), false)
   assert.equal(isEngineResponse({ type: 'error', requestId: 'run-1', error: { message: 'failed' } }), false)

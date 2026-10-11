@@ -12,6 +12,14 @@ const symbol = {
   id: 'symbol-res', filename: 'res.asy', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
   content: ['Version 4', 'SYMATTR Prefix R', 'LINE Normal -16 0 16 0', 'PIN -16 0 R', 'PINATTR PinName A', 'PINATTR SpiceOrder 1', 'PIN 16 0 L', 'PINATTR PinName B', 'PINATTR SpiceOrder 2'].join('\n'),
 }
+const voltageSymbol = {
+  id: 'symbol-voltage', filename: 'voltage.asy', sha256: 'b'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+  content: ['Version 4', 'SYMATTR Prefix V', 'LINE Normal -16 -16 16 16', 'PIN -16 0 R', 'PINATTR PinName +', 'PINATTR SpiceOrder 1', 'PIN 16 0 L', 'PINATTR PinName -', 'PINATTR SpiceOrder 2'].join('\n'),
+}
+const currentSymbol = {
+  id: 'symbol-current', filename: 'current.asy', sha256: 'd'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+  content: ['Version 4', 'SYMATTR Prefix I', 'LINE Normal -16 -16 16 16', 'PIN -16 0 R', 'PINATTR PinName +', 'PINATTR SpiceOrder 1', 'PIN 16 0 L', 'PINATTR PinName -', 'PINATTR SpiceOrder 2'].join('\n'),
+}
 
 test('imports ordinary wires, flags, components, symbol pin order, and transient settings', () => {
   const asc = [
@@ -41,6 +49,35 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
   assert.notEqual(positive, pinNet(connectivity, pins, 1))
 })
 
+test('explains that four-pin LTspice voltage-controlled switches are not imported as manual switches', () => {
+  const voltageSwitchSymbol = {
+    id: 'symbol-voltage-switch', filename: 'sw.asy', sha256: 'e'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+    content: ['Version 4', 'SYMATTR Prefix S', ...[
+      ['+', -16, 0, 'R', 1], ['-', 16, 0, 'L', 2], ['CTRL+', 0, -16, 'U', 3], ['CTRL-', 0, 16, 'D', 4],
+    ].flatMap(([name, x, y, orientation, order]) => [`PIN ${x} ${y} ${orientation}`, `PINATTR PinName ${name}`, `PINATTR SpiceOrder ${order}`])].join('\n'),
+  }
+  const source = ['Version 4', 'SYMBOL sw 0 0 R0', 'SYMATTR InstName S1', 'SYMATTR Value SWMOD'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(source, 'controlled-switch.asc', [voltageSwitchSymbol])
+  assert.equal(project.parts.some((part) => part.ref === 'S1'), false)
+  assert.match(warnings[0], /voltage-controlled switch S1 uses four electrical pins and model “SWMOD”/)
+  assert.match(warnings[0], /two-terminal manual switch/)
+  assert.match(warnings[0], /original \.asc source is preserved/)
+  assert.equal(project.importedSchematicSource.originalText, source)
+})
+
+test('explains that nonlinear POLY current-controlled sources are skipped', () => {
+  const polynomialSourceSymbol = {
+    id: 'symbol-poly-source', filename: 'cccs.asy', sha256: 'f'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+    content: ['Version 4', 'SYMATTR Prefix F', 'PIN -16 0 R', 'PINATTR PinName +', 'PINATTR SpiceOrder 1', 'PIN 16 0 L', 'PINATTR PinName -', 'PINATTR SpiceOrder 2'].join('\n'),
+  }
+  const source = ['Version 4', 'SYMBOL cccs 0 0 R0', 'SYMATTR InstName F1', 'SYMATTR Value POLY(2)', 'SYMATTR Value2 1 2 3'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(source, 'polynomial-source.asc', [polynomialSourceSymbol])
+  assert.equal(project.parts.some((part) => part.ref === 'F1'), false)
+  assert.match(warnings[0], /nonlinear polynomial current-controlled source F1 uses POLY syntax/)
+  assert.match(warnings[0], /only the linear F\/H gain form is supported/)
+  assert.equal(project.importedSchematicSource.originalText, source)
+})
+
 test('imports bounded LTspice .step param ranges and arithmetic lists independent of directive order', () => {
   const asc = [
     'Version 4',
@@ -58,6 +95,20 @@ test('imports bounded LTspice .step param ranges and arithmetic lists independen
   ])
   assert.match(createNetlistArtifact(project).text, /^\.param RLOAD=1k$/m)
   assert.match(createNetlistArtifact(project).text, /^\.param RALT=1k$/m)
+})
+
+test('LTspice linear and logarithmic parameter steps accept exactly ten values and reject eleven', () => {
+  const linear = parseLtspiceSchematic(['Version 4', 'TEXT 0 100 Left 2 !.param R=1k', 'TEXT 0 120 Left 2 !.step param R 1k 10k 1k', 'TEXT 0 140 Left 2 !.tran 0 1m'].join('\n'), 'ten-linear-step.asc')
+  assert.deepEqual(linear.warnings, [])
+  assert.equal(linear.project.simulation.parameterSweeps[0].points, 10)
+
+  const logarithmic = parseLtspiceSchematic(['Version 4', 'TEXT 0 100 Left 2 !.param R=1k', 'TEXT 0 120 Left 2 !.step dec param R 9 1k 10k', 'TEXT 0 140 Left 2 !.tran 0 1m'].join('\n'), 'ten-log-step.asc')
+  assert.deepEqual(logarithmic.warnings, [])
+  assert.equal(logarithmic.project.simulation.parameterSweeps[0].points, 10)
+
+  const eleven = parseLtspiceSchematic(['Version 4', 'TEXT 0 100 Left 2 !.param R=1k', 'TEXT 0 120 Left 2 !.step param R 1k 11k 1k', 'TEXT 0 140 Left 2 !.tran 0 1m'].join('\n'), 'eleven-step.asc')
+  assert.equal(eleven.project.simulation.parameterSweeps, undefined)
+  assert.match(eleven.warnings.join('\n'), /only bounded numeric lists or ranges with 2–10 values are supported/)
 })
 
 test('imports multiple LTspice directives packed into one TEXT record', () => {
@@ -135,6 +186,7 @@ test('imports supported LTspice B-source voltage and current expressions as beha
   assert.deepEqual(voltage.warnings, [])
   assert.equal(voltage.project.parts[0].kind, 'behavioral')
   assert.equal(voltage.project.parts[0].behavioralOutput, 'voltage')
+  assert.equal(voltage.project.parts[0].behavioralDialect, 'ltspice')
   assert.equal(voltage.project.parts[0].value, 'GAIN*V(IN)')
   assert.match(createNetlist(voltage.project), /^\.param GAIN=2$/m)
   assert.match(createNetlist(voltage.project), /^B1\s+IN\s+OUT\s+V=\{GAIN\*V\(IN\)\}$/m)
@@ -147,14 +199,76 @@ test('imports supported LTspice B-source voltage and current expressions as beha
   assert.match(createNetlist(current.project), /^B1\s+IN\s+OUT\s+I=\{I\(R1\)\}$/m)
 })
 
-test('skips LTspice B sources outside the behavioral expression subset with a source-preserving warning', () => {
+test('LTspice behavioral caret uses XOR while imported exponentiation remains explicit', () => {
+  const behavioralSymbol = { ...symbol, id: 'symbol-xor-behavioral', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
+  const asc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V=V(IN)^V(OUT)'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'behavioral-xor.asc', [behavioralSymbol])
+  assert.deepEqual(warnings, [])
+  assert.equal(project.parts[0].behavioralDialect, 'ltspice')
+  assert.match(createNetlist(project), /&&/)
+  const poweredAsc = asc.replace('V(IN)^V(OUT)', 'V(IN)**2')
+  const powered = parseLtspiceSchematic(poweredAsc, 'behavioral-power.asc', [behavioralSymbol])
+  assert.deepEqual(powered.warnings, [])
+  assert.match(createNetlist(powered.project), /V\(IN\)\*\*2/)
+  const signedPowerAsc = asc.replace('V(IN)^V(OUT)', 'pwrs(V(IN),0.5)')
+  const signedPower = parseLtspiceSchematic(signedPowerAsc, 'behavioral-signed-power.asc', [behavioralSymbol])
+  assert.deepEqual(signedPower.warnings, [])
+  assert.match(createNetlist(signedPower.project), /pwr\(V\(IN\), 0\.5\)/)
+  const hypotAsc = asc.replace('V(IN)^V(OUT)', 'hypot(V(IN),V(OUT))')
+  const hypot = parseLtspiceSchematic(hypotAsc, 'behavioral-hypot.asc', [behavioralSymbol])
+  assert.deepEqual(hypot.warnings, [])
+  assert.match(createNetlist(hypot.project), /sqrt\(pow\(/)
+  assert.doesNotMatch(createNetlist(hypot.project), /hypot\s*\(/i)
+  const unitStepAsc = asc.replace('V(IN)^V(OUT)', 'u(V(IN))')
+  const unitStep = parseLtspiceSchematic(unitStepAsc, 'behavioral-unit-step.asc', [behavioralSymbol])
+  assert.deepEqual(unitStep.warnings, [])
+  assert.match(createNetlist(unitStep.project), /V=\{\(\(V\(IN\)\) > 0 \? 1 : 0\)\}/)
+})
+
+test('imports LTspice behavioral table lookups and generates ngspice-compatible clamped interpolation', () => {
   const behavioralSymbol = { ...symbol, id: 'symbol-unsupported-behavioral', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
-  const asc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V=table(V(IN),0,0,1,1)'].join('\n')
+  const asc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V=table(V(IN),-1,0,0,1,2k,5)'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'unsupported-behavioral.asc', [behavioralSymbol])
-  assert.equal(project.parts.length, 0)
+  assert.equal(project.parts.length, 1)
+  assert.equal(project.parts[0].value, 'table(V(IN),-1,0,0,1,2k,5)')
+  assert.match(createNetlist(project), /pwl\(V\(IN\), -1, 0, 0, 1, 2k, 5\)/)
+  assert.deepEqual(warnings, [])
   assert.equal(project.importedSchematicSource.originalText, asc)
-  assert.match(warnings[0], /LTspice behavioral source B1 was skipped: Function “table” is not supported/)
-  assert.match(warnings[0], /original schematic source is preserved/)
+})
+
+test('imports LTspice if() behavioral sources with their documented threshold semantics', () => {
+  const behavioralSymbol = { ...symbol, id: 'symbol-conditional-behavioral', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
+  const asc = ['Version 4', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V=if(V(IN),5,0)'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'conditional-behavioral.asc', [behavioralSymbol])
+  assert.deepEqual(warnings, [])
+  assert.equal(project.parts[0].value, 'if(V(IN),5,0)')
+  assert.match(createNetlist(project), /> 1e-12 \? 5 : 0/)
+})
+
+test('imports .func directives and inlines nested functions into behavioral sources', () => {
+  const behavioralSymbol = { ...symbol, id: 'symbol-user-function', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
+  const asc = [
+    'Version 4',
+    'TEXT 0 100 Left 2 !.func twice(x) {x * 2}\\n.func offset(signal,bias) {twice(signal) + bias}',
+    'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V=offset(V(IN), 3)',
+  ].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'user-function.asc', [behavioralSymbol])
+  assert.deepEqual(warnings, [])
+  assert.equal(project.parts.length, 1)
+  assert.match(project.parts[0].value, /V\(IN\).*\* 2.*\+.*3/)
+  const netlist = createNetlist(project)
+  assert.match(netlist, /B1\s+IN\s+OUT\s+V=\{/)
+  assert.doesNotMatch(netlist, /offset\s*\(|twice\s*\(/i)
+  assert.equal(project.importedSchematicSource.originalText, asc)
+})
+
+test('rejects recursive imported .func calls with a source-preserving warning', () => {
+  const behavioralSymbol = { ...symbol, id: 'symbol-recursive-function', filename: 'bv.asy', content: symbol.content.replace('Prefix R', 'Prefix B') }
+  const asc = ['Version 4', 'TEXT 0 100 Left 2 !.func recurse(x) {recurse(x)}', 'FLAG 16 0 IN', 'FLAG 48 0 OUT', 'SYMBOL bv 32 0 R0', 'SYMATTR InstName B1', 'SYMATTR Value V=recurse(V(IN))'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'recursive-function.asc', [behavioralSymbol])
+  assert.equal(project.parts.length, 0)
+  assert.match(warnings[0], /Recursive \.func definition detected for recurse\(\)/)
+  assert.equal(project.importedSchematicSource.originalText, asc)
 })
 
 test('skips an LTspice B source that references an undeclared parameter', () => {
@@ -344,20 +458,24 @@ test('imports supported scalar and trigger-target transient measurements and war
     'TEXT 0 120 Left 2 !.meas tran VPEAK MAX V(OUT)',
     'TEXT 0 130 Left 2 !.meas tran VWINDOW AVG V(OUT) FROM=1m TO=4m',
     'TEXT 0 140 Left 2 !.measure tran IRMS RMS I(r1)',
-    'TEXT 0 160 Left 2 !.meas tran TDELAY TRIG V(OUT) VAL=2.5 RISE=1 TARG I(R1) VAL=0 FALL=1',
+    'TEXT 0 160 Left 2 !.meas tran TDELAY TRIG V(OUT) VAL=2.5V RISE=1 TARG I(R1) VAL=0mA FALL=1',
+    'TEXT 0 180 Left 2 !.meas tran SECOND_DELAY TRIG V(OUT) VAL=1 RISE=2 TARG I(R1) VAL=0 CROSS=3',
   ].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'measurements.asc', [symbol])
   assert.deepEqual(project.simulation.transientMeasurements, [
     { id: 'VPEAK', operation: 'max', vector: 'v(out)' },
     { id: 'VWINDOW', operation: 'avg', vector: 'v(out)', from: '1m', to: '4m' },
     { id: 'IRMS', operation: 'rms', vector: 'i(r1)' },
-    { id: 'TDELAY', operation: 'delay', vector: 'v(out)', threshold: '2.5', edge: 'rise', targetVector: 'i(r1)', targetThreshold: '0', targetEdge: 'fall' },
+    { id: 'TDELAY', operation: 'delay', vector: 'v(out)', threshold: '2.5V', edge: 'rise', targetVector: 'i(r1)', targetThreshold: '0mA', targetEdge: 'fall' },
+    { id: 'SECOND_DELAY', operation: 'delay', vector: 'v(out)', threshold: '1', edge: 'rise', triggerCount: 2, targetVector: 'i(r1)', targetThreshold: '0', targetEdge: 'either', targetCount: 3 },
   ])
   assert.deepEqual(warnings, [])
   const netlist = createNetlistArtifact(project)
   assert.match(netlist.text, /^\.meas tran ELSIM_VPEAK max v\(out\)$/m)
   assert.match(netlist.text, /^\.meas tran ELSIM_VWINDOW avg v\(out\) FROM=1m TO=4m$/m)
   assert.match(netlist.text, /^\.meas tran ELSIM_IRMS rms i\(r1\)$/m)
+  assert.match(netlist.text, /^\.meas tran ELSIM_TDELAY TRIG v\(out\) VAL=2\.5 RISE=1 TARG i\(r1\) VAL=0m FALL=1$/m)
+  assert.match(netlist.text, /^\.meas tran ELSIM_SECOND_DELAY TRIG v\(out\) VAL=1 RISE=2 TARG i\(r1\) VAL=0 CROSS=3$/m)
   assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
 
   const unsupported = parseLtspiceSchematic(['Version 4', 'FLAG 0 0 OUT', 'TEXT 0 100 Left 2 !.meas tran VPEAK MAX V(out) FROM=1m INVALID=2m'].join('\n'), 'qualified-measure.asc')
@@ -454,6 +572,10 @@ test('imports scalar LTspice current sources with ampere values and ordered pins
   assert.deepEqual(currentSine.project.parts[0].sine, { offset: '1mA', amplitude: '2mA', frequency: '1kHz', delay: '3m', damping: '4', phase: '90' })
   assert.deepEqual(currentSine.warnings, [])
   assert.match(createNetlist(currentSine.project), /^I4 .* .* SIN\(1m 2m 1k 3m 4 90\)$/m)
+  const finiteSine = parseLtspiceSchematic(['Version 4', 'SYMBOL current 0 0 R0', 'SYMATTR InstName I8', 'SYMATTR Value SINE(0 1m 1k 0 0 0 3)'].join('\n'), 'current-sine-finite.asc', [currentSymbol])
+  assert.equal(finiteSine.project.parts.some((part) => part.ref === 'I8'), false)
+  assert.match(finiteSine.warnings[0], /finite-cycle SINE\(\.\.\. Ncycles\)/)
+  assert.equal(finiteSine.project.importedSchematicSource.originalText, 'Version 4\nSYMBOL current 0 0 R0\nSYMATTR InstName I8\nSYMATTR Value SINE(0 1m 1k 0 0 0 3)')
   const currentExp = parseLtspiceSchematic(['Version 4', 'SYMBOL current 0 0 R0', 'SYMATTR InstName I5', 'SYMATTR Value EXP(0 2m 1m 10u 4m 20u)'].join('\n'), 'current-exp.asc', [currentSymbol])
   assert.equal(currentExp.project.parts[0].sourceMode, 'exp')
   assert.deepEqual(currentExp.project.parts[0].exp, { initial: '0', pulsed: '2m', riseDelay: '1m', riseTau: '10u', fallDelay: '4m', fallTau: '20u' })
@@ -573,11 +695,68 @@ test('parses AC and DC analysis directives and rejects malformed ASC records', (
   const ac = parseLtspiceSchematic('Version 4\nTEXT 0 0 Left 2 !.ac dec 20 10 1Meg', 'ac.asc').project
   assert.equal(ac.simulation.analysis, 'ac')
   assert.deepEqual(ac.simulation.acSweep, { scale: 'dec', points: 20, startFrequency: '10', stopFrequency: '1Meg' })
-  const dc = parseLtspiceSchematic('Version 4\nTEXT 0 0 Left 2 !.dc V1 0 5 0.1', 'dc.asc').project
+  const dcSourceAsc = (directive, symbolName = 'voltage', reference = 'V1', value = '5') => ['Version 4', `SYMBOL ${symbolName} 0 0 R0`, `SYMATTR InstName ${reference}`, `SYMATTR Value ${value}`, `TEXT 0 100 Left 2 !${directive}`].join('\n')
+  const dcImport = parseLtspiceSchematic(dcSourceAsc('.dc V1 0 5 0.1'), 'dc.asc', [voltageSymbol])
+  const dc = dcImport.project
+  assert.deepEqual(dcImport.warnings, [])
   assert.equal(dc.simulation.analysis, 'dc')
   assert.deepEqual(dc.simulation.dcSweep, { source: 'V1', start: '0', stop: '5', step: '0.1' })
+  const dualAsc = ['Version 4', 'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 5', 'SYMBOL voltage 100 0 R0', 'SYMATTR InstName V2', 'SYMATTR Value 5', 'TEXT 0 200 Left 2 !.dc V1 0 5 1 V2 -1 1 1'].join('\n')
+  const dualDc = parseLtspiceSchematic(dualAsc, 'dual-dc.asc', [voltageSymbol])
+  assert.equal(dualDc.project.simulation.analysis, 'dc')
+  assert.deepEqual(dualDc.project.simulation.parameterSweeps, [{ component: 'V2', start: '-1', stop: '1', points: 3, listValues: ['-1', '0', '1'] }])
+  assert.deepEqual(dualDc.warnings, [])
+  const partialEndpoint = parseLtspiceSchematic(dualAsc.replace('.dc V1 0 5 1 V2 -1 1 1', '.dc V1 0 5 1 V2 0 5 2'), 'dual-dc-partial-endpoint.asc', [voltageSymbol])
+  assert.deepEqual(partialEndpoint.project.simulation.parameterSweeps, [{ component: 'V2', start: '0', stop: '5', points: 3, listValues: ['0', '2', '4'] }])
+  const excessiveDual = parseLtspiceSchematic(dualAsc.replace('V2 -1 1 1', 'V2 0 10 1'), 'dual-dc-too-many.asc', [voltageSymbol])
+  assert.equal(excessiveDual.project.simulation.analysis, 'tran')
+  assert.match(excessiveDual.warnings[0], /second \.dc sweep range.*2–10 cases/)
+  assert.match(dualDc.project.importedSchematicSource.originalText, /\.dc V1 0 5 1 V2 -1 1 1/)
+  const malformedDc = parseLtspiceSchematic('Version 4\nTEXT 0 0 Left 2 !.dc V1 0 five 0.1', 'malformed-dc.asc')
+  assert.equal(malformedDc.project.simulation.analysis, 'tran')
+  assert.match(malformedDc.warnings[0], /expected one source followed by numeric start, stop, and step values/)
+  const missingSource = parseLtspiceSchematic(dcSourceAsc('.dc V9 0 5 0.1'), 'missing-dc-source.asc', [voltageSymbol])
+  assert.match(missingSource.warnings[0], /V9 is not a placed scalar DC voltage or current source/)
+  const passiveTarget = parseLtspiceSchematic(dcSourceAsc('.dc R1 0 5 0.1', 'res', 'R1'), 'passive-dc-target.asc', [symbol])
+  assert.match(passiveTarget.warnings[0], /R1 is not a placed scalar DC voltage or current source/)
+  for (const directive of ['.dc V1 0V 5A 1V', '.dc V1 0 5 0V', '.dc V1 5 0 1']) {
+    const invalidRange = parseLtspiceSchematic(dcSourceAsc(directive), 'invalid-dc-range.asc', [voltageSymbol])
+    assert.equal(invalidRange.project.simulation.analysis, 'tran')
+    assert.match(invalidRange.warnings[0], /numeric start, stop, and nonzero step values in volts/)
+  }
+  const currentSweep = parseLtspiceSchematic(dcSourceAsc('.dc I1 0A 10mA 1mA', 'current', 'I1', '1m'), 'current-dc.asc', [currentSymbol])
+  assert.equal(currentSweep.project.simulation.analysis, 'dc')
+  assert.deepEqual(currentSweep.project.simulation.dcSweep, { source: 'I1', start: '0A', stop: '10mA', step: '1mA' })
+  const maximumSweep = parseLtspiceSchematic(dcSourceAsc('.dc V1 0 9999 1'), 'maximum-dc.asc', [voltageSymbol])
+  assert.equal(maximumSweep.project.simulation.analysis, 'dc')
+  const oversizedSweep = parseLtspiceSchematic(dcSourceAsc('.dc V1 0 10000 1'), 'oversized-dc.asc', [voltageSymbol])
+  assert.equal(oversizedSweep.project.simulation.analysis, 'tran')
+  assert.match(oversizedSweep.warnings[0], /exceeds the 10,000-point limit/)
   assert.throws(() => parseLtspiceSchematic('Version 4\nWIRE 1 2 bad 4', 'bad.asc'), /coordinate is invalid/)
   assert.throws(() => parseLtspiceSchematic('Version 4\nSYMBOL res 0 0 R45', 'rotate.asc'), /unsupported symbol orientation/)
+})
+
+test('imports a wired two-source DC schematic into exact, labeled per-case runs', () => {
+  const asc = [
+    'Version 4', 'FLAG 16 0 0', 'FLAG 16 128 0', 'FLAG 80 0 OUT', 'FLAG 80 128 OUT',
+    'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 0',
+    'SYMBOL res 64 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'SYMBOL voltage 0 128 R0', 'SYMATTR InstName V2', 'SYMATTR Value 0',
+    'SYMBOL res 64 128 R0', 'SYMATTR InstName R2', 'SYMATTR Value 1k',
+    'WIRE -16 0 48 0', 'WIRE -16 128 48 128',
+    'TEXT 0 240 Left 2 !.dc V1 0 2 1 V2 0 5 2',
+  ].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'dual-dc.asc', [voltageSymbol, symbol])
+  assert.deepEqual(warnings, [])
+  assert.equal(project.parts.length, 4)
+  assert.equal(project.wires.length, 2)
+  assert.deepEqual(project.simulation.parameterSweeps[0].listValues, ['0', '2', '4'])
+  const runs = prepareParameterSweep(project)
+  assert.deepEqual(runs.map((run) => run.label), ['V2=0 V', 'V2=2 V', 'V2=4 V'])
+  assert.deepEqual(runs.map((run) => Number(run.values[0].value)), [0, 2, 4])
+  const artifact = createNetlistArtifact(project)
+  assert.match(artifact.text, /^\.dc V1 0 2 1$/m)
+  assert.equal(artifact.diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length, 0)
 })
 
 test('maps transient UIC and warns when LTspice startup ramp behavior cannot be preserved', () => {
@@ -590,6 +769,7 @@ test('maps transient UIC and warns when LTspice startup ramp behavior cannot be 
   assert.match(startup.warnings[0], /startup source ramp is not modeled/)
   assert.equal(startup.project.simulation.skipInitialOperatingPoint, undefined)
 })
+
 
 test('recognizes LTspice IOPIN records and matches them to named FLAG nodes', () => {
   const asc = ['Version 4', 'IOPIN 0 0 In', 'FLAG 0 0 INPUT', 'IOPIN 80 0 Out', 'FLAG 80 0 OUTPUT'].join('\n')
@@ -619,6 +799,21 @@ test('imports a matching child ASC as a native hierarchical sheet block and reta
   assert.match(createNetlist(project), /X1\s+\S+\s+\S+\s+ELSIM_SHEET_asc_divider/)
 })
 
+test('imports safe hierarchical SpiceLine PARAMS overrides and rejects unsupported values', () => {
+  const blockSymbol = { ...symbol, id: 'symbol-block', filename: 'divider.asy', content: ['Version 4', 'RECTANGLE Normal -32 -24 32 24', 'PIN -32 0 R', 'PINATTR PinName IN', 'PINATTR SpiceOrder 1', 'PIN 32 0 L', 'PINATTR PinName OUT', 'PINATTR SpiceOrder 2'].join('\n') }
+  const root = ['Version 4', 'SYMBOL divider 0 0 R0', 'SYMATTR InstName X1', 'SYMATTR Value divider', 'SYMATTR SpiceLine PARAMS: RLOAD={RBASE * 2}'].join('\n')
+  const child = ['Version 4', 'IOPIN 0 0 In', 'FLAG 0 0 IN', 'IOPIN 80 0 Out', 'FLAG 80 0 OUT', 'TEXT 0 120 Left 2 !.param RLOAD=1k RBASE=2k'].join('\n')
+  const imported = parseLtspiceSchematic(root, 'top.asc', [blockSymbol], [], [{ filename: 'divider.asc', content: child }])
+  assert.deepEqual(imported.warnings, [])
+  assert.deepEqual(imported.project.parts[0].sheetParameters, { RLOAD: '{RBASE * 2}' })
+  assert.equal(imported.project.parts[0].extensions, undefined)
+
+  const unsafe = parseLtspiceSchematic(root.replace('RBASE * 2', 'exec(1)'), 'top.asc', [blockSymbol], [], [{ filename: 'divider.asc', content: child }])
+  assert.match(unsafe.warnings.join('\n'), /block parameter RLOAD.*unsupported value/)
+  assert.equal(unsafe.project.parts[0].sheetParameters, undefined)
+  assert.equal(unsafe.project.parts[0].extensions.ltspice.attributes.SPICELINE, 'PARAMS: RLOAD={exec(1)}')
+})
+
 test('recursively imports nested child schematics with remapped sheet references', () => {
   const blockSymbol = (name) => ({ ...symbol, id: `symbol-${name}`, filename: `${name}.asy`, content: ['Version 4', 'RECTANGLE Normal -32 -24 32 24', 'PIN -32 0 R', 'PINATTR PinName IN', 'PINATTR SpiceOrder 1', 'PIN 32 0 L', 'PINATTR PinName OUT', 'PINATTR SpiceOrder 2'].join('\n') })
   const root = ['Version 4', 'SYMBOL middle 0 0 R0', 'SYMATTR InstName XMID', 'SYMATTR Value middle'].join('\n')
@@ -639,14 +834,15 @@ test('recursively imports nested child schematics with remapped sheet references
   assert.match(createNetlist(project), /XLEAF\s+\S+\s+\S+\s+ELSIM_SHEET_/)
 })
 
-test('maps an X-prefixed imported IC symbol to an imported subcircuit model in SpiceOrder', () => {
-  const modelContent = '.SUBCKT user_amp IN OUT\nR1 IN OUT 1k\n.ENDS user_amp\n'
+test('maps an X-prefixed imported IC symbol and its SpiceLine parameter overrides in SpiceOrder', () => {
+  const modelContent = '.SUBCKT user_amp IN OUT PARAMS: RLOAD=1k\nR1 IN OUT {RLOAD}\n.ENDS user_amp\n'
   const modelAsset = { id: 'model-amp', filename: 'amp.lib', sha256: 'b'.repeat(64), content: modelContent, licenseStatus: 'unknown', importedAt: new Date().toISOString() }
   const ampSymbol = { ...symbol, id: 'symbol-amp', filename: 'user_amp.asy', content: ['Version 4', 'SYMATTR Prefix X', 'RECTANGLE Normal -32 -24 32 24', 'PIN -32 0 R', 'PINATTR PinName IN', 'PINATTR SpiceOrder 1', 'PIN 32 0 L', 'PINATTR PinName OUT', 'PINATTR SpiceOrder 2'].join('\n') }
-  const asc = ['Version 4', 'WIRE 0 0 -32 0', 'WIRE 32 0 64 0', 'SYMBOL user_amp 0 0 R0', 'SYMATTR InstName X1', 'SYMATTR Value user_amp'].join('\n')
+  const asc = ['Version 4', 'WIRE 0 0 -32 0', 'WIRE 32 0 64 0', 'SYMBOL user_amp 0 0 R0', 'SYMATTR InstName X1', 'SYMATTR Value user_amp', 'SYMATTR SpiceLine PARAMS: RLOAD=2k'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'amp.asc', [ampSymbol], [modelAsset])
   assert.deepEqual(warnings, [])
   assert.equal(project.parts[0].kind, 'subcircuit')
   assert.deepEqual(project.parts[0].modelPins, ['IN', 'OUT'])
-  assert.match(createNetlist(project), /X1\s+\S+\s+\S+\s+user_amp/)
+  assert.deepEqual(project.parts[0].modelParameters, { RLOAD: '2k' })
+  assert.match(createNetlist(project), /X1\s+\S+\s+\S+\s+user_amp PARAMS: RLOAD=2k/)
 })

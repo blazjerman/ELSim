@@ -1,0 +1,33 @@
+* Declared parameters inside independent source waveform fields
+.param PULSE_DELAY=1m
+.param SINE_FREQUENCY=1k
+.param EXP_FALL_TAU=2m
+.param SFFM_INDEX=2
+V1 pulse 0 PULSE(0 5 {PULSE_DELAY} 1u 1u 2m 6m)
+V2 sine 0 SIN(0 1 {SINE_FREQUENCY} 0 0 0)
+V3 exp 0 EXP(0 1 0 1u 3m {EXP_FALL_TAU})
+V4 sffm 0 SFFM(0 0.5 1k {SFFM_INDEX} 100)
+R1 pulse 0 1k
+R2 sine 0 1k
+R3 exp 0 1k
+R4 sffm 0 1k
+.tran 10u 10m
+.control
+set filetype=ascii
+alterparam PULSE_DELAY=1m
+alterparam SINE_FREQUENCY=1k
+alterparam EXP_FALL_TAU=2m
+alterparam SFFM_INDEX=2
+reset
+run
+write /result-0.raw all
+alterparam PULSE_DELAY=2m
+alterparam SINE_FREQUENCY=2k
+alterparam EXP_FALL_TAU=4m
+alterparam SFFM_INDEX=4
+reset
+run
+write /result-1.raw all
+quit
+.endc
+.end

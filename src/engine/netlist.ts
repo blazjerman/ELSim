@@ -1,9 +1,10 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type PartKind, type Project } from '../domain/project'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
-import { parseBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
+import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { timeMagnitude } from '../domain/componentValue'
+import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import type { NetlistArtifact, NetlistSource } from './contract'
 
 export { componentMagnitude } from '../domain/componentValue'
@@ -34,6 +35,37 @@ function spiceSheetValue(value: string, kind: PartKind, parameters: Project['she
   const expression = value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
   if (!expression || !parameters?.some((parameter) => parameter.name.toLowerCase() === expression[1].toLowerCase())) return null
   return `{${expression[1]}}`
+}
+
+function spiceSheetParameterDefault(value: string, parameters: Project['sheets'][number]['parameters'] = []): string | null {
+  const expression = value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
+  return expression ? parameters?.find((parameter) => parameter.name.toLowerCase() === expression[1].toLowerCase())?.defaultValue ?? null : null
+}
+
+function spiceSheetTime(value: string, parameters: Project['sheets'][number]['parameters'] = []): string | null {
+  const expression = value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
+  if (expression && parameters?.some((parameter) => parameter.name.toLowerCase() === expression[1].toLowerCase())) return `{${expression[1]}}`
+  return spiceTime(value)
+}
+
+function spiceSheetFrequency(value: string, parameters: Project['sheets'][number]['parameters'] = []): string | null {
+  const expression = value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
+  if (expression && parameters?.some((parameter) => parameter.name.toLowerCase() === expression[1].toLowerCase())) return `{${expression[1]}}`
+  return spiceFrequency(value)
+}
+
+function spiceSheetScalar(value: string, parameters: Project['sheets'][number]['parameters'] = []): string | null {
+  const expression = value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
+  if (expression && parameters?.some((parameter) => parameter.name.toLowerCase() === expression[1].toLowerCase())) return `{${expression[1]}}`
+  return spiceScalar(value, '')
+}
+
+function spiceSheetTimeMagnitude(value: string, parameters: Project['sheets'][number]['parameters'] = []): number | null {
+  return spiceTimeMagnitude(spiceSheetParameterDefault(value, parameters) ?? value)
+}
+
+function spiceSheetMagnitude(value: string, quantity: 'frequency', parameters: Project['sheets'][number]['parameters'] = []): number | null {
+  return spiceMagnitude(spiceSheetParameterDefault(value, parameters) ?? value, quantity)
 }
 
 function spiceTime(value: string): string | null {
@@ -68,11 +100,13 @@ function spiceFrequency(value: string): string | null {
 
 function spiceSweepValue(value: string): string | null {
   let result = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
-  result = result.replace(/[vV]$/, '')
+  result = result.replace(/[vVaA]$/, '')
   return spiceScalar(result, '')
 }
 
-function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage'): number | null {
+function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage' | 'current'): number | null {
+  const explicitElectricalUnit = value.trim().match(/([vVaA])$/)?.[1]?.toLowerCase()
+  if (quantity === 'voltage' && explicitElectricalUnit === 'a' || quantity === 'current' && explicitElectricalUnit === 'v') return null
   const normalized = quantity === 'time' ? spiceTime(value) : quantity === 'frequency' ? spiceFrequency(value) : spiceSweepValue(value)
   const match = normalized?.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
   if (!match) return null
@@ -81,23 +115,24 @@ function spiceMagnitude(value: string, quantity: 'time' | 'frequency' | 'voltage
   return Number.isFinite(result) ? result : null
 }
 
-function spiceExponential(part: Part): string | null {
+function spiceExponential(part: Part, parameters: Project['sheets'][number]['parameters'] = []): string | null {
   if (part.kind !== 'source' && part.kind !== 'currentSource') return null
   const exp = { initial: '0', pulsed: part.value, riseDelay: '0', riseTau: '1u', fallDelay: '10m', fallTau: '1u', ...part.exp }
-  const initial = spiceNumber(exp.initial, part.kind), pulsed = spiceNumber(exp.pulsed, part.kind)
-  const times = [exp.riseDelay, exp.riseTau, exp.fallDelay, exp.fallTau].map(spiceTime)
-  const magnitudes = [exp.riseDelay, exp.riseTau, exp.fallDelay, exp.fallTau].map(spiceTimeMagnitude)
+  const initial = spiceSheetValue(exp.initial, part.kind, parameters), pulsed = spiceSheetValue(exp.pulsed, part.kind, parameters)
+  const times = [exp.riseDelay, exp.riseTau, exp.fallDelay, exp.fallTau].map((value) => spiceSheetTime(value, parameters))
+  const magnitudes = [exp.riseDelay, exp.riseTau, exp.fallDelay, exp.fallTau].map((value) => spiceSheetTimeMagnitude(value, parameters))
   if (initial === null || pulsed === null || times.some((time) => time === null) || magnitudes.some((time) => time === null || time < 0) || (magnitudes[1] ?? 0) <= 0 || (magnitudes[3] ?? 0) <= 0 || (magnitudes[2] ?? -1) < (magnitudes[0] ?? 0)) return null
   return `EXP(${initial} ${pulsed} ${times.join(' ')})`
 }
 
-function spiceSffm(part: Part): string | null {
+function spiceSffm(part: Part, parameters: Project['sheets'][number]['parameters'] = []): string | null {
   if (part.kind !== 'source' && part.kind !== 'currentSource') return null
   const sffm = { offset: '0', amplitude: part.value, carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100', ...part.sffm }
-  const offset = spiceNumber(sffm.offset, part.kind), amplitude = spiceNumber(sffm.amplitude, part.kind)
-  const carrier = spiceFrequency(sffm.carrierFrequency), signal = spiceFrequency(sffm.signalFrequency), index = spiceScalar(sffm.modulationIndex, '')
-  const carrierMagnitude = spiceMagnitude(sffm.carrierFrequency, 'frequency'), signalMagnitude = spiceMagnitude(sffm.signalFrequency, 'frequency')
-  const modulationIndex = index === null ? null : Number(index)
+  const offset = spiceSheetValue(sffm.offset, part.kind, parameters), amplitude = spiceSheetValue(sffm.amplitude, part.kind, parameters)
+  const carrier = spiceSheetFrequency(sffm.carrierFrequency, parameters), signal = spiceSheetFrequency(sffm.signalFrequency, parameters), index = spiceSheetScalar(sffm.modulationIndex, parameters)
+  const carrierMagnitude = spiceSheetMagnitude(sffm.carrierFrequency, 'frequency', parameters), signalMagnitude = spiceSheetMagnitude(sffm.signalFrequency, 'frequency', parameters)
+  const modulationIndexValue = spiceScalar(spiceSheetParameterDefault(sffm.modulationIndex, parameters) ?? sffm.modulationIndex, '')
+  const modulationIndex = modulationIndexValue === null ? null : Number(modulationIndexValue)
   if (offset === null || amplitude === null || carrier === null || signal === null || carrierMagnitude === null || carrierMagnitude <= 0 || signalMagnitude === null || signalMagnitude <= 0 || modulationIndex === null || !Number.isFinite(modulationIndex) || modulationIndex < 0 || modulationIndex > carrierMagnitude / signalMagnitude) return null
   // ngspice accepts the same five core SFFM parameters as LTspice.
   return `SFFM(${offset} ${amplitude} ${carrier} ${index} ${signal})`
@@ -109,6 +144,7 @@ export type AnalysisSettingError = { field: AnalysisSettingField; message: strin
 export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
   const errors: AnalysisSettingError[] = []
   const add = (field: AnalysisSettingField, message: string, sourceId?: string, settingPath?: string) => errors.push({ field, message, ...(sourceId ? { sourceId } : {}), ...(settingPath ? { settingPath } : {}) })
+  const sourceParameters = project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []
   if (project.simulation.analysis === 'tran') {
     const stop = spiceMagnitude(project.simulation.stopTime, 'time')
     const step = spiceMagnitude(project.simulation.maxStep, 'time')
@@ -117,10 +153,10 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
     for (const part of project.parts.filter((item) => item.kind === 'source' || (item.kind === 'currentSource' && item.sourceMode === 'pulse'))) {
       if (part.kind === 'source' && part.sourceMode !== undefined && part.sourceMode !== 'pulse') continue
       const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
-      const level = spiceNumber(pulse.initial, part.kind)
+      const level = spiceSheetValue(pulse.initial, part.kind, sourceParameters)
       if (level === null) add('pulse.initial', `${part.ref} initial pulse level must be a valid SPICE value.`, part.id)
       for (const key of ['delay', 'rise', 'fall', 'width', 'period'] as const) {
-        const magnitude = spiceTimeMagnitude(pulse[key])
+        const magnitude = spiceSheetTimeMagnitude(pulse[key], sourceParameters)
         const invalid = magnitude === null || magnitude < 0 || (key === 'period' && magnitude <= 0)
         if (invalid) add(`pulse.${key}`, `${part.ref} ${key} must be a valid ${key === 'period' ? 'positive' : 'nonnegative'} time value.`, part.id)
       }
@@ -129,22 +165,22 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
     for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'sine')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
       const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
-      if (spiceNumber(sine.offset, part.kind) === null) add('sine.offset', `${part.ref} sine offset must be a valid ${quantity}.`, part.id, 'sine.offset')
-      if (spiceNumber(sine.amplitude, part.kind) === null) add('sine.amplitude', `${part.ref} sine amplitude must be a valid ${quantity}.`, part.id, 'sine.amplitude')
-      const frequency = spiceMagnitude(sine.frequency, 'frequency')
+      if (spiceSheetValue(sine.offset, part.kind, sourceParameters) === null) add('sine.offset', `${part.ref} sine offset must be a valid ${quantity} or a declared parameter.`, part.id, 'sine.offset')
+      if (spiceSheetValue(sine.amplitude, part.kind, sourceParameters) === null) add('sine.amplitude', `${part.ref} sine amplitude must be a valid ${quantity} or a declared parameter.`, part.id, 'sine.amplitude')
+      const frequency = spiceSheetMagnitude(sine.frequency, 'frequency', sourceParameters)
       if (frequency === null || frequency <= 0) add('sine.frequency', `${part.ref} sine frequency must be positive.`, part.id, 'sine.frequency')
-      const delay = spiceTimeMagnitude(sine.delay)
+      const delay = spiceSheetTimeMagnitude(sine.delay, sourceParameters)
       if (delay === null || delay < 0) add('sine.delay', `${part.ref} sine delay must be a nonnegative time.`, part.id, 'sine.delay')
-      const damping = spiceScalar(sine.damping, '')
+      const damping = spiceScalar(spiceSheetParameterDefault(sine.damping, sourceParameters) ?? sine.damping, '')
       if (damping === null || Number(damping) < 0) add('sine.damping', `${part.ref} sine damping must be nonnegative.`, part.id, 'sine.damping')
-      if (spiceScalar(sine.phase, '') === null) add('sine.phase', `${part.ref} sine phase must be a numeric angle in degrees.`, part.id, 'sine.phase')
+      if (spiceSheetScalar(sine.phase, sourceParameters) === null) add('sine.phase', `${part.ref} sine phase must be a numeric angle in degrees or a declared parameter.`, part.id, 'sine.phase')
     }
     for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'exp')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
       const exp = { initial: '0', pulsed: part.value, riseDelay: '0', riseTau: '1u', fallDelay: '10m', fallTau: '1u', ...part.exp }
-      if (spiceNumber(exp.initial, part.kind) === null) add('exp.initial', `${part.ref} EXP initial level must be a valid ${quantity}.`, part.id, 'exp.initial')
-      if (spiceNumber(exp.pulsed, part.kind) === null) add('exp.pulsed', `${part.ref} EXP pulsed level must be a valid ${quantity}.`, part.id, 'exp.pulsed')
-      const riseDelay = spiceTimeMagnitude(exp.riseDelay), riseTau = spiceTimeMagnitude(exp.riseTau), fallDelay = spiceTimeMagnitude(exp.fallDelay), fallTau = spiceTimeMagnitude(exp.fallTau)
+      if (spiceSheetValue(exp.initial, part.kind, sourceParameters) === null) add('exp.initial', `${part.ref} EXP initial level must be a valid ${quantity} or a declared parameter.`, part.id, 'exp.initial')
+      if (spiceSheetValue(exp.pulsed, part.kind, sourceParameters) === null) add('exp.pulsed', `${part.ref} EXP pulsed level must be a valid ${quantity} or a declared parameter.`, part.id, 'exp.pulsed')
+      const riseDelay = spiceSheetTimeMagnitude(exp.riseDelay, sourceParameters), riseTau = spiceSheetTimeMagnitude(exp.riseTau, sourceParameters), fallDelay = spiceSheetTimeMagnitude(exp.fallDelay, sourceParameters), fallTau = spiceSheetTimeMagnitude(exp.fallTau, sourceParameters)
       if (riseDelay === null || riseDelay < 0) add('exp.riseDelay', `${part.ref} EXP rise delay must be a nonnegative time.`, part.id, 'exp.riseDelay')
       if (riseTau === null || riseTau <= 0) add('exp.riseTau', `${part.ref} EXP rise time constant must be positive.`, part.id, 'exp.riseTau')
       if (fallDelay === null || fallDelay < 0 || riseDelay !== null && fallDelay < riseDelay) add('exp.fallDelay', `${part.ref} EXP fall delay must be nonnegative and no earlier than its rise delay.`, part.id, 'exp.fallDelay')
@@ -153,9 +189,9 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
     for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'sffm')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
       const sffm = { offset: '0', amplitude: part.value, carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100', ...part.sffm }
-      if (spiceNumber(sffm.offset, part.kind) === null) add('sffm.offset', `${part.ref} SFFM offset must be a valid ${quantity}.`, part.id, 'sffm.offset')
-      if (spiceNumber(sffm.amplitude, part.kind) === null) add('sffm.amplitude', `${part.ref} SFFM amplitude must be a valid ${quantity}.`, part.id, 'sffm.amplitude')
-      const carrier = spiceMagnitude(sffm.carrierFrequency, 'frequency'), signal = spiceMagnitude(sffm.signalFrequency, 'frequency'), index = spiceScalar(sffm.modulationIndex, '')
+      if (spiceSheetValue(sffm.offset, part.kind, sourceParameters) === null) add('sffm.offset', `${part.ref} SFFM offset must be a valid ${quantity} or a declared parameter.`, part.id, 'sffm.offset')
+      if (spiceSheetValue(sffm.amplitude, part.kind, sourceParameters) === null) add('sffm.amplitude', `${part.ref} SFFM amplitude must be a valid ${quantity} or a declared parameter.`, part.id, 'sffm.amplitude')
+      const carrier = spiceSheetMagnitude(sffm.carrierFrequency, 'frequency', sourceParameters), signal = spiceSheetMagnitude(sffm.signalFrequency, 'frequency', sourceParameters), index = spiceScalar(spiceSheetParameterDefault(sffm.modulationIndex, sourceParameters) ?? sffm.modulationIndex, '')
       if (carrier === null || carrier <= 0) add('sffm.carrierFrequency', `${part.ref} SFFM carrier frequency must be positive.`, part.id, 'sffm.carrierFrequency')
       if (signal === null || signal <= 0) add('sffm.signalFrequency', `${part.ref} SFFM modulating frequency must be positive.`, part.id, 'sffm.signalFrequency')
       const modulationIndex = index === null ? null : Number(index)
@@ -169,7 +205,10 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
         add('pwlPoints', `${part.ref} PWL source needs between 2 and 32 points.`, part.id, settingPath)
         continue
       }
-      const pointErrors = validateSourcePwlPoints(points, quantity)
+      const pointValues = points.map((point) => 'voltage' in point
+        ? { time: point.time, voltage: spiceSheetParameterDefault(point.voltage, sourceParameters) ?? point.voltage }
+        : { time: point.time, current: spiceSheetParameterDefault(point.current, sourceParameters) ?? point.current })
+      const pointErrors = validateSourcePwlPoints(pointValues, quantity)
       const errorIndex = pointErrors?.findIndex((error) => error !== null) ?? -1
       if (errorIndex >= 0) {
         const pointIndex = Math.floor(errorIndex / 2)
@@ -182,7 +221,7 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
         if (!Number.isInteger(part.pwlRepeatCount) || part.pwlRepeatCount < 1 || part.pwlRepeatCount > 31 || part.pwlRepeatCount > maximum) {
           add('pwlPoints', `${part.ref} finite PWL repeat count exceeds the 32-point expanded-table limit.`, part.id, 'pwl.repeatCount')
         } else {
-          const boundary = validateSourcePwlRepeatBoundary(points, part.pwlRepeatCount, quantity)
+          const boundary = validateSourcePwlRepeatBoundary(pointValues, part.pwlRepeatCount, quantity)
           if (boundary) add('pwlPoints', `${part.ref} ${boundary}`, part.id, 'pwl.repeatCount')
         }
       }
@@ -192,28 +231,35 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
       const unit = part.kind === 'source' ? 'source' : 'currentSource'
       const magnitudeText = part.acMagnitude ?? (part.kind === 'source' ? project.simulation.sourceAcMagnitude ?? '1 V' : part.value)
       const magnitude = spiceNumber(magnitudeText, unit)
-      const magnitudeValue = spiceMagnitude(magnitudeText, 'voltage')
+      const magnitudeValue = spiceMagnitude(magnitudeText, part.kind === 'source' ? 'voltage' : 'current')
       if (magnitude === null || magnitudeValue === null || magnitudeValue < 0) add('partAcMagnitude', `${part.ref} AC magnitude must be a valid nonnegative ${part.kind === 'source' ? 'voltage' : 'current'} value.`, part.id)
       const phase = spiceScalar(part.acPhase ?? '0', '')
       if (phase === null || !Number.isFinite(Number(phase))) add('partAcPhase', `${part.ref} AC phase must be a finite numeric value in degrees.`, part.id)
     }
     const sweep = project.simulation.acSweep ?? { scale: 'dec' as const, points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
     if (!['dec', 'oct', 'lin'].includes(sweep.scale)) add('acScale', 'Choose a supported sweep scale.')
-    if (!Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000) add('acPoints', 'Enter from 1 to 10,000 points per scale.')
+    const pointDescription = sweep.scale === 'lin' ? 'total points in the sweep' : `points per ${sweep.scale === 'oct' ? 'octave' : 'decade'}`
+    if (!Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000) add('acPoints', `Enter from 1 to 10,000 ${pointDescription}.`)
     const start = spiceMagnitude(sweep.startFrequency, 'frequency')
     const stop = spiceMagnitude(sweep.stopFrequency, 'frequency')
     if (start === null || start <= 0) add('acStartFrequency', 'Enter a positive start frequency, such as 10 Hz.')
     if (stop === null || stop <= 0 || (start !== null && stop <= start)) add('acStopFrequency', 'Stop frequency must be greater than the start frequency.')
   } else if (project.simulation.analysis === 'dc') {
     const sweep = project.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
-    if (!project.parts.some((part) => part.kind === 'source' && part.ref.toLowerCase() === sweep.source.toLowerCase())) add('dcSource', 'Choose an existing voltage source.')
-    const start = spiceMagnitude(sweep.start, 'voltage')
-    const stop = spiceMagnitude(sweep.stop, 'voltage')
-    const step = spiceMagnitude(sweep.step, 'voltage')
-    if (start === null) add('dcStart', 'Enter a valid start voltage, such as 0 V.')
-    if (stop === null) add('dcStop', 'Enter a valid stop voltage, such as 5 V.')
-    if (step === null || step === 0) add('dcStep', 'Enter a nonzero voltage step.')
-    else if (start !== null && stop !== null && (stop - start) * step < 0) add('dcStep', 'Step direction must lead from the start voltage to the stop voltage.')
+    const source = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.source.toLowerCase())
+    if (!source) add('dcSource', 'Choose an existing independent voltage or current source.')
+    const quantity = source?.kind === 'currentSource' ? 'current' : 'voltage'
+    const quantityName = quantity === 'current' ? 'current' : 'voltage'
+    const unit = quantity === 'current' ? 'A' : 'V'
+    const start = spiceMagnitude(sweep.start, quantity)
+    const stop = spiceMagnitude(sweep.stop, quantity)
+    const step = spiceMagnitude(sweep.step, quantity)
+    if (start === null) add('dcStart', `Enter a valid start ${quantityName}, such as 0 ${unit}.`)
+    if (stop === null) add('dcStop', `Enter a valid stop ${quantityName}, such as ${quantity === 'current' ? '10 mA' : '5 V'}.`)
+    if (step === null || step === 0) add('dcStep', `Enter a nonzero ${quantityName} step, such as ${quantity === 'current' ? '1 mA' : '0.1 V'}.`)
+    else if (start !== null && stop !== null && (stop - start) * step < 0) add('dcStep', `Step direction must lead from the start ${quantityName} to the stop ${quantityName}.`)
+    const pointCount = source ? dcSweepPointCount(sweep.start, sweep.stop, sweep.step, source.kind === 'currentSource' ? 'currentSource' : 'source') : null
+    if (pointCount !== null && pointCount > MAX_DC_SWEEP_POINTS) add('dcStep', `DC sweep is limited to ${MAX_DC_SWEEP_POINTS.toLocaleString()} points. Increase the step size or narrow the range.`)
   }
   return errors
 }
@@ -344,6 +390,12 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
       continue
     }
+    if ((part.kind === 'npn' || part.kind === 'pnp') && !part.deviceModel && (!/^[1-9]\d{0,3}$/.test(part.value) || Number(part.value) > 1000)) {
+      const message = `${part.ref} forward beta must be an integer from 1 to 1000.`
+      append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+      diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+      continue
+    }
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
     const value = part.kind === 'behavioral' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
@@ -357,13 +409,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       let transientValue = value
       if (project.simulation.analysis === 'tran' && part.sourceMode === 'pulse') {
         const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
-        const initial = spiceNumber(pulse.initial, 'currentSource')
-        const delay = spiceTime(pulse.delay)
-        const rise = spiceTime(pulse.rise)
-        const fall = spiceTime(pulse.fall)
-        const width = spiceTime(pulse.width)
-        const period = spiceTime(pulse.period)
-        if (initial === null || [delay, rise, fall, width, period].some((time) => time === null || Number(time) < 0) || Number(period) <= 0) {
+        const initial = spiceSheetValue(pulse.initial, 'currentSource', sheetParameters)
+        const delay = spiceSheetTime(pulse.delay, sheetParameters)
+        const rise = spiceSheetTime(pulse.rise, sheetParameters)
+        const fall = spiceSheetTime(pulse.fall, sheetParameters)
+        const width = spiceSheetTime(pulse.width, sheetParameters)
+        const period = spiceSheetTime(pulse.period, sheetParameters)
+        const magnitudes = [pulse.delay, pulse.rise, pulse.fall, pulse.width, pulse.period].map((time) => spiceSheetTimeMagnitude(time, sheetParameters))
+        if (initial === null || [delay, rise, fall, width, period].some((time) => time === null) || magnitudes.some((time) => time === null || time < 0) || (magnitudes[4] ?? 0) <= 0) {
           const message = `${part.ref} pulse current levels and timing must be valid SPICE values (period must be positive).`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -378,7 +431,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period}${cycleCount ? ` ${cycleCount}` : ''})`
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'exp') {
-        const exponential = spiceExponential(part)
+        const exponential = spiceExponential(part, sheetParameters)
         if (!exponential) {
           const message = `${part.ref} EXP levels and timing must be valid currents, time constants positive, and fall delay no earlier than rise delay.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -387,7 +440,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         transientValue = exponential
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sffm') {
-        const waveform = spiceSffm(part)
+        const waveform = spiceSffm(part, sheetParameters)
         if (!waveform) {
           const message = `${part.ref} SFFM settings must contain valid currents, positive carrier/modulating frequencies, and a valid modulation index.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -397,9 +450,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         transientValue = waveform
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
         const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
-        const offset = spiceNumber(sine.offset, 'currentSource'), amplitude = spiceNumber(sine.amplitude, 'currentSource')
-        const frequency = spiceFrequency(sine.frequency), delay = spiceTime(sine.delay), damping = spiceScalar(sine.damping, ''), phase = spiceScalar(sine.phase, '')
-        if (offset === null || amplitude === null || frequency === null || (spiceMagnitude(sine.frequency, 'frequency') ?? 0) <= 0 || delay === null || (spiceTimeMagnitude(sine.delay) ?? -1) < 0 || damping === null || Number(damping) < 0 || phase === null) {
+        const offset = spiceSheetValue(sine.offset, 'currentSource', sheetParameters), amplitude = spiceSheetValue(sine.amplitude, 'currentSource', sheetParameters)
+        const frequency = spiceSheetFrequency(sine.frequency, sheetParameters), delay = spiceSheetTime(sine.delay, sheetParameters), damping = spiceSheetScalar(sine.damping, sheetParameters), phase = spiceSheetScalar(sine.phase, sheetParameters)
+        if (offset === null || amplitude === null || frequency === null || (spiceSheetMagnitude(sine.frequency, 'frequency', sheetParameters) ?? 0) <= 0 || delay === null || (spiceSheetTimeMagnitude(sine.delay, sheetParameters) ?? -1) < 0 || damping === null || Number(spiceScalar(spiceSheetParameterDefault(sine.damping, sheetParameters) ?? sine.damping, '')) < 0 || phase === null) {
           const message = `${part.ref} sine source settings must contain valid currents, positive frequency, nonnegative delay/damping, and numeric phase.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -408,7 +461,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         transientValue = `SIN(${offset} ${amplitude} ${frequency} ${delay} ${damping} ${phase})`
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'pwl') {
         const points = part.currentPwl ?? []
-        const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), current: spiceNumber(point.current, 'currentSource') }))
+        const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), current: spiceSheetValue(point.current, 'currentSource', sheetParameters) }))
         let previousTime = -Infinity
         let valid = points.length >= 2 && points.length <= 32
         for (const point of normalized) {
@@ -425,7 +478,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         if (part.pwlRepeatCount !== undefined) {
           const count = part.pwlRepeatCount
           const period = normalized.at(-1)!.timeMagnitude! - normalized[0].timeMagnitude!
-          const startLevel = spiceValueMagnitude(normalized[0].current!), endLevel = spiceValueMagnitude(normalized.at(-1)!.current!)
+          const startLevel = spiceValueMagnitude(spiceSheetParameterDefault(normalized[0].current!, sheetParameters) ?? normalized[0].current!), endLevel = spiceValueMagnitude(spiceSheetParameterDefault(normalized.at(-1)!.current!, sheetParameters) ?? normalized.at(-1)!.current!)
           if (!Number.isInteger(count) || count < 1 || count > 31 || normalized.length + (count - 1) * (normalized.length - 1) > 32 || period <= 0 || count > 1 && (startLevel === null || startLevel !== endLevel)) {
             const message = `${part.ref} finite PWL repeat must be an integer count whose expanded table has at most 32 points and whose first and last currents match.`
             append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -459,7 +512,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       let transientValue = `DC ${value}`
       if (project.simulation.analysis === 'tran' && part.sourceMode === 'exp') {
-        const exponential = spiceExponential(part)
+        const exponential = spiceExponential(part, sheetParameters)
         if (!exponential) {
           const message = `${part.ref} EXP levels and timing must be valid voltages, time constants positive, and fall delay no earlier than rise delay.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -468,7 +521,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         transientValue = exponential
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sffm') {
-        const waveform = spiceSffm(part)
+        const waveform = spiceSffm(part, sheetParameters)
         if (!waveform) {
           const message = `${part.ref} SFFM settings must contain valid voltages, positive carrier/modulating frequencies, and a valid modulation index.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -478,9 +531,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         transientValue = waveform
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
         const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
-        const offset = spiceNumber(sine.offset, 'source'), amplitude = spiceNumber(sine.amplitude, 'source')
-        const frequency = spiceFrequency(sine.frequency), delay = spiceTime(sine.delay), damping = spiceScalar(sine.damping, ''), phase = spiceScalar(sine.phase, '')
-        if (offset === null || amplitude === null || frequency === null || (spiceMagnitude(sine.frequency, 'frequency') ?? 0) <= 0 || delay === null || (spiceTimeMagnitude(sine.delay) ?? -1) < 0 || damping === null || Number(damping) < 0 || phase === null) {
+        const offset = spiceSheetValue(sine.offset, 'source', sheetParameters), amplitude = spiceSheetValue(sine.amplitude, 'source', sheetParameters)
+        const frequency = spiceSheetFrequency(sine.frequency, sheetParameters), delay = spiceSheetTime(sine.delay, sheetParameters), damping = spiceSheetScalar(sine.damping, sheetParameters), phase = spiceSheetScalar(sine.phase, sheetParameters)
+        if (offset === null || amplitude === null || frequency === null || (spiceSheetMagnitude(sine.frequency, 'frequency', sheetParameters) ?? 0) <= 0 || delay === null || (spiceSheetTimeMagnitude(sine.delay, sheetParameters) ?? -1) < 0 || damping === null || Number(spiceScalar(spiceSheetParameterDefault(sine.damping, sheetParameters) ?? sine.damping, '')) < 0 || phase === null) {
           const message = `${part.ref} sine source settings must contain valid voltages, positive frequency, nonnegative delay/damping, and numeric phase.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -489,7 +542,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         transientValue = `SIN(${offset} ${amplitude} ${frequency} ${delay} ${damping} ${phase})`
       } else if (part.sourceMode === 'pwl') {
         const points = part.pwl ?? []
-        const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), voltage: spiceNumber(point.voltage, 'source') }))
+        const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), voltage: spiceSheetValue(point.voltage, 'source', sheetParameters) }))
         let previousTime = -Infinity
         let valid = points.length >= 2 && points.length <= 32
         for (const point of normalized) {
@@ -506,7 +559,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         if (part.pwlRepeatCount !== undefined) {
           const count = part.pwlRepeatCount
           const period = normalized.at(-1)!.timeMagnitude! - normalized[0].timeMagnitude!
-          const startLevel = spiceValueMagnitude(normalized[0].voltage!), endLevel = spiceValueMagnitude(normalized.at(-1)!.voltage!)
+          const startLevel = spiceValueMagnitude(spiceSheetParameterDefault(normalized[0].voltage!, sheetParameters) ?? normalized[0].voltage!), endLevel = spiceValueMagnitude(spiceSheetParameterDefault(normalized.at(-1)!.voltage!, sheetParameters) ?? normalized.at(-1)!.voltage!)
           if (!Number.isInteger(count) || count < 1 || count > 31 || normalized.length + (count - 1) * (normalized.length - 1) > 32 || period <= 0 || count > 1 && (startLevel === null || startLevel !== endLevel)) {
             const message = `${part.ref} finite PWL repeat must be an integer count whose expanded table has at most 32 points and whose first and last voltages match.`
             append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -520,13 +573,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         transientValue = `PWL(${outputPoints.map((point) => `${point.time} ${point.voltage}`).join(' ')})${part.pwlRepeat === 'forever' ? ' r=0' : ''}`
       } else if (part.sourceMode === 'pulse' || part.sourceMode === undefined) {
         const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
-        const initial = spiceNumber(pulse.initial, 'source')
-        const delay = spiceTime(pulse.delay)
-        const rise = spiceTime(pulse.rise)
-        const fall = spiceTime(pulse.fall)
-        const width = spiceTime(pulse.width)
-        const period = spiceTime(pulse.period)
-        if (initial === null || [delay, rise, fall, width, period].some((time) => time === null || Number(time) < 0) || Number(period) <= 0) {
+        const initial = spiceSheetValue(pulse.initial, 'source', sheetParameters)
+        const delay = spiceSheetTime(pulse.delay, sheetParameters)
+        const rise = spiceSheetTime(pulse.rise, sheetParameters)
+        const fall = spiceSheetTime(pulse.fall, sheetParameters)
+        const width = spiceSheetTime(pulse.width, sheetParameters)
+        const period = spiceSheetTime(pulse.period, sheetParameters)
+        const magnitudes = [pulse.delay, pulse.rise, pulse.fall, pulse.width, pulse.period].map((time) => spiceSheetTimeMagnitude(time, sheetParameters))
+        if (initial === null || [delay, rise, fall, width, period].some((time) => time === null) || magnitudes.some((time) => time === null || time < 0) || (magnitudes[4] ?? 0) <= 0) {
           const message = `${part.ref} pulse levels and timing must be valid SPICE values (period must be positive).`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -666,8 +720,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'behavioral') {
       try {
         const parsed = parseBehavioralExpression(part.value)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name))
-        append(`${part.ref} ${positive} ${negative} ${part.behavioralOutput === 'current' ? 'I' : 'V'}={${part.value.replace(/[\r\n]/g, ' ')}}`, part.id, 'component')
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        append(`${part.ref} ${positive} ${negative} ${part.behavioralOutput === 'current' ? 'I' : 'V'}={${translateBehavioralExpression(part.value.replace(/[\r\n]/g, ' '), part.behavioralDialect)}}`, part.id, 'component')
       } catch (error) {
         const message = error instanceof Error ? `${part.ref}: ${error.message}` : `${part.ref} has an invalid behavioral expression.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -701,9 +755,13 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   } else if (project.simulation.analysis === 'dc') {
     const sweep = project.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
     const start = spiceSweepValue(sweep.start), stop = spiceSweepValue(sweep.stop), step = spiceSweepValue(sweep.step)
-    const source = project.parts.find((part) => part.kind === 'source' && part.ref.toLowerCase() === sweep.source.toLowerCase())
-    if (!source || !start || !stop || !step || Number(step) === 0 || (Number(stop) - Number(start)) * Number(step) < 0) {
-      const message = 'DC sweep needs an existing voltage source and valid start, stop, and nonzero step values in the same direction.'
+    const source = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.source.toLowerCase())
+    const quantity = source?.kind === 'currentSource' ? 'current' : 'voltage'
+    const unit = quantity === 'current' ? 'A' : 'V'
+    const startMagnitude = spiceMagnitude(sweep.start, quantity), stopMagnitude = spiceMagnitude(sweep.stop, quantity), stepMagnitude = spiceMagnitude(sweep.step, quantity)
+    const pointCount = source ? dcSweepPointCount(sweep.start, sweep.stop, sweep.step, source.kind === 'currentSource' ? 'currentSource' : 'source') : null
+    if (!source || !start || !stop || !step || startMagnitude === null || stopMagnitude === null || stepMagnitude === null || Number(step) === 0 || (Number(stop) - Number(start)) * Number(step) < 0 || pointCount === null || pointCount > MAX_DC_SWEEP_POINTS) {
+      const message = pointCount !== null && pointCount > MAX_DC_SWEEP_POINTS ? `DC sweep is limited to ${MAX_DC_SWEEP_POINTS.toLocaleString()} points; increase the step size or narrow the range.` : `DC sweep needs an existing independent voltage or current source and valid start, stop, and nonzero ${unit} step values in the same direction.`
       rows.push(`* ERROR: ${message}`)
       diagnostics.push({ severity: 'error', message, sourceId: source?.id ?? 'analysis:dc', line: rows.length })
     } else append(`.dc ${source.ref} ${start} ${stop} ${step}`, 'analysis:dc', 'analysis')
@@ -759,8 +817,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const from = scalarMeasurement?.from === undefined ? null : timeMagnitude(scalarMeasurement.from) ?? Number.NaN
     const to = scalarMeasurement?.to === undefined ? null : timeMagnitude(scalarMeasurement.to) ?? Number.NaN
     const rangeValid = !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)
+    const triggerThreshold = delay ? spiceScalar(delay.threshold, delay.vector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v') : null
+    const targetThreshold = delay ? spiceScalar(delay.targetThreshold, delay.targetVector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v') : null
     const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (delay
-      ? vectorPattern.test(measurement.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && Number.isFinite(Number(delay.threshold)) && Number.isFinite(Number(delay.targetThreshold)) && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
+      ? vectorPattern.test(measurement.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && triggerThreshold !== null && targetThreshold !== null && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
       : ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()) && rangeValid)
     if (!valid) {
       const message = `Transient measurement ${cleanComment(measurement.id)} has an unsupported name, operation, or vector.`
@@ -768,7 +828,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       continue
     }
     if (sourceCurrent) append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id}${scalarMeasurement ? `${scalarMeasurement.from ? ` from ${scalarMeasurement.from}` : ''}${scalarMeasurement.to ? ` to ${scalarMeasurement.to}` : ''}` : ''} from the solved current-source samples.`, 'analysis:tran', 'analysis')
-    else if (delay) append(`.meas tran ELSIM_${delay.id} TRIG ${delay.vector.trim()} VAL=${delay.threshold} ${delay.edge.toUpperCase()}=1 TARG ${delay.targetVector.trim()} VAL=${delay.targetThreshold} ${delay.targetEdge.toUpperCase()}=1`, 'analysis:tran', 'analysis')
+    else if (delay) append(`.meas tran ELSIM_${delay.id} TRIG ${delay.vector.trim()} VAL=${triggerThreshold} ${delay.edge === 'either' ? 'CROSS' : delay.edge.toUpperCase()}=${delay.triggerCount ?? 1} TARG ${delay.targetVector.trim()} VAL=${targetThreshold} ${delay.targetEdge === 'either' ? 'CROSS' : delay.targetEdge.toUpperCase()}=${delay.targetCount ?? 1}`, 'analysis:tran', 'analysis')
     else {
       const scalarMeasure = scalarMeasurement!
       append(`.meas tran ELSIM_${scalarMeasure.id} ${scalarMeasure.operation} ${scalarMeasure.vector.trim()}${scalarMeasure.from ? ` FROM=${scalarMeasure.from}` : ''}${scalarMeasure.to ? ` TO=${scalarMeasure.to}` : ''}`, 'analysis:tran', 'analysis')
@@ -778,8 +838,12 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   return { text: rows.join('\n'), sourceMap, diagnostics }
 }
 
+export function referencePrefixForKind(kind: Part['kind']): string {
+  return ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[kind]
+}
+
 export function nextRef(parts: Part[], kind: Part['kind']): string {
-  const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[kind]
+  const prefix = referencePrefixForKind(kind)
   const used = new Set(parts.map((part) => part.ref.toLowerCase()))
   let index = 1
   while (used.has(`${prefix}${index}`.toLowerCase())) index += 1

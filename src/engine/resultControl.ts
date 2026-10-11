@@ -1,4 +1,5 @@
 import type { TransientMeasurement } from '../domain/project'
+import { componentMagnitude } from '../domain/componentValue'
 import type { ParameterSweepRun } from './sweep'
 
 export function addResultControl(netlist: string, parameterSweep: ParameterSweepRun[] = [], measurements: TransientMeasurement[] = []): string {
@@ -103,11 +104,12 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     return [`@${ref}[${current}]`]
   })
   const hasSourceCurrentVector = (measurement: TransientMeasurement) => /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.vector.trim()) || (measurement.operation === 'delay' && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.targetVector.trim()))
+  const threshold = (value: string, vector: string) => String(componentMagnitude(value, vector.trim().toLowerCase().startsWith('i(') ? 'currentSource' : 'source'))
   const rangeOptions = (measurement: TransientMeasurement) => measurement.operation === 'delay' ? '' : `${measurement.from ? ` FROM=${measurement.from}` : ''}${measurement.to ? ` TO=${measurement.to}` : ''}`
   const measurementCommand = (measurement: TransientMeasurement, suffix = '') => hasSourceCurrentVector(measurement) ? null : measurement.operation === 'delay'
-    ? `meas tran ELSIM_${measurement.id}${suffix} TRIG ${measurement.vector} VAL=${measurement.threshold} ${measurement.edge.toUpperCase()}=1 TARG ${measurement.targetVector} VAL=${measurement.targetThreshold} ${measurement.targetEdge.toUpperCase()}=1`
+    ? `meas tran ELSIM_${measurement.id}${suffix} TRIG ${measurement.vector} VAL=${threshold(measurement.threshold, measurement.vector)} ${measurement.edge === 'either' ? 'CROSS' : measurement.edge.toUpperCase()}=${measurement.triggerCount ?? 1} TARG ${measurement.targetVector} VAL=${threshold(measurement.targetThreshold, measurement.targetVector)} ${measurement.targetEdge === 'either' ? 'CROSS' : measurement.targetEdge.toUpperCase()}=${measurement.targetCount ?? 1}`
     : `meas tran ELSIM_${measurement.id}${suffix} ${measurement.operation} ${measurement.vector}${rangeOptions(measurement)}`
-  const measurementRows = analysisType !== 'tran' || parameterSweep.length ? [] : measurements.filter((measurement) => !hasSourceCurrentVector(measurement)).map((measurement) => `.meas tran ELSIM_${measurement.id} ${measurement.operation === 'delay' ? `TRIG ${measurement.vector} VAL=${measurement.threshold} ${measurement.edge.toUpperCase()}=1 TARG ${measurement.targetVector} VAL=${measurement.targetThreshold} ${measurement.targetEdge.toUpperCase()}=1` : `${measurement.operation} ${measurement.vector}${rangeOptions(measurement)}`}`)
+  const measurementRows = analysisType !== 'tran' || parameterSweep.length ? [] : measurements.filter((measurement) => !hasSourceCurrentVector(measurement)).map((measurement) => `.meas tran ELSIM_${measurement.id} ${measurement.operation === 'delay' ? `TRIG ${measurement.vector} VAL=${threshold(measurement.threshold, measurement.vector)} ${measurement.edge === 'either' ? 'CROSS' : measurement.edge.toUpperCase()}=${measurement.triggerCount ?? 1} TARG ${measurement.targetVector} VAL=${threshold(measurement.targetThreshold, measurement.targetVector)} ${measurement.targetEdge === 'either' ? 'CROSS' : measurement.targetEdge.toUpperCase()}=${measurement.targetCount ?? 1}` : `${measurement.operation} ${measurement.vector}${rangeOptions(measurement)}`}`)
   const save = analysisType === 'ac' ? [] : [`.save all${deviceCurrents.length ? ` ${deviceCurrents.join(' ')}` : ''}`]
   const commands = ['.control', 'set filetype=ascii']
   if (parameterSweep.length) {

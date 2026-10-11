@@ -35,6 +35,22 @@ test('single and nested parameter sweeps produce deterministic, bounded combinat
   assert.match(control, /alter R1 1\.00000000e\+3\nalter C1 1\.00000000e-5\nrun\nwrite \/result-0\.raw all/)
 })
 
+test('a secondary DC source sweep creates one labeled ngspice run per outer-axis value', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'v2', kind: 'source', ref: 'V2', value: '0 V', x: 700, y: 400, rotation: 0, sourceMode: 'dc' })
+  project.simulation.analysis = 'dc'
+  project.simulation.dcSweep = { source: 'V1', start: '0 V', stop: '2 V', step: '1 V' }
+  project.simulation.parameterSweeps = [{ component: 'V2', start: '0 V', stop: '5 V', listValues: ['0', '2', '4'], points: 3 }]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => run.label), ['V2=0 V', 'V2=2 V', 'V2=4 V'])
+  assert.deepEqual(runs.map((run) => Number(run.values[0].value)), [0, 2, 4])
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /\.dc V1 0 2 1/)
+  assert.match(control, /alter V2 0\.00000000e\+0\nrun\nwrite \/result-0\.raw all/)
+  assert.equal((control.match(/write \/result-\d+\.raw all/g) ?? []).length, 3)
+})
+
 test('declared global parameters produce alterparam cases and a reset before each run', () => {
   const project = createStarterProject()
   project.sheets[0].parameters = [{ id: 'param-gain', name: 'GAIN', defaultValue: '1k' }]

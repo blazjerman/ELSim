@@ -1,0 +1,20 @@
+* Two-source LTspice-style DC sweep with separate secondary-axis result runs
+V1 a 0 DC 0
+V2 b 0 DC 0
+R1 a out 1k
+R2 b out 1k
+.dc V1 0 2 1
+.control
+set filetype=ascii
+alter V2 0
+run
+write /result-0.raw all
+alter V2 2
+run
+write /result-1.raw all
+alter V2 4
+run
+write /result-2.raw all
+quit
+.endc
+.end

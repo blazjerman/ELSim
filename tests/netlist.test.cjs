@@ -7,9 +7,11 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createJfetSwitchExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createAcHighPassExampleProject, createAcLowPassExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createJfetSwitchExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createVoltageDividerExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
+const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
+const { dcSweepPointCount, MAX_DC_SWEEP_POINTS } = require(path.join(build, 'domain/dcSweep.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
   const artifact = createNetlistArtifact(createStarterProject())
@@ -18,6 +20,19 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^R1 vin vout 1k$/m)
   assert.match(artifact.text, /^C1 vout 0 10u$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
+})
+
+
+test('behavioral differential voltage references retain their two-node expression', () => {
+  const project = createStarterProject()
+  project.wires.push({ id: 'w-unlabeled-diff', points: [[900, 900], [960, 900]] })
+  project.sheets[0].wires = project.wires
+  const generatedNet = analyzeConnectivity(project).wireNets.get('w-unlabeled-diff')
+  assert.ok(generatedNet)
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: `V(vin, ${generatedNet})`, behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, new RegExp(`^B1 n\\d+ n\\d+ V=\\{V\\(vin, ${generatedNet}\\)\\}$`, 'm'))
 })
 
 test('current-source PWL supports ngspice infinite and bounded repeats', () => {
@@ -49,6 +64,30 @@ test('diode rectifier example generates an AC-driven half-wave transient', () =>
   assert.match(artifact.text, /^D1 VIN VOUT DDEFAULT$/m)
   assert.match(artifact.text, /^R1 VOUT 0 1k$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)', 'I(D1)'])
+})
+
+test('RC low-pass example generates a 1 V AC logarithmic sweep around its cutoff', () => {
+  const project = createAcLowPassExampleProject()
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'RC low-pass frequency response')
+  assert.match(artifact.text, /^V1 VIN 0 AC 1 0$/m)
+  assert.match(artifact.text, /^R1 VIN VOUT 1k$/m)
+  assert.match(artifact.text, /^C1 VOUT 0 159n$/m)
+  assert.match(artifact.text, /^\.ac dec 20 10 100k$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)'])
+})
+
+test('RC high-pass example generates a 1 V AC logarithmic sweep around its cutoff', () => {
+  const project = createAcHighPassExampleProject()
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'RC high-pass frequency response')
+  assert.match(artifact.text, /^V1 VIN 0 AC 1 0$/m)
+  assert.match(artifact.text, /^C1 VIN VOUT 159n$/m)
+  assert.match(artifact.text, /^R1 VOUT 0 1k$/m)
+  assert.match(artifact.text, /^\.ac dec 20 10 100k$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)'])
 })
 
 test('active sheet parameters are emitted as source-mapped SPICE declarations', () => {
@@ -235,6 +274,19 @@ test('current-source beginner example predicts the expected one-volt load result
   assert.equal(project.simulation.analysis, 'op')
 })
 
+test('voltage-divider beginner example creates a grounded 10 V equal-resistor midpoint', () => {
+  const project = createVoltageDividerExampleProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'Voltage divider')
+  assert.equal(project.simulation.analysis, 'op')
+  assert.match(artifact.text, /^V1 VIN 0 DC 10$/m)
+  assert.match(artifact.text, /^R1 VIN VOUT 1k$/m)
+  assert.match(artifact.text, /^R2 VOUT 0 1k$/m)
+  assert.match(artifact.text, /^\.op$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)'])
+})
+
 test('source pulse levels and timing are editable and validated before netlisting', () => {
   const project = createStarterProject()
   const source = project.parts.find((part) => part.ref === 'V1')
@@ -305,6 +357,11 @@ test('analysis settings validation identifies invalid AC sweep and source fields
   const errors = validateAnalysisSettings(project)
   assert.deepEqual(errors.map(({ field }) => field), ['partAcMagnitude', 'partAcPhase', 'acPoints', 'acStartFrequency', 'acStopFrequency'])
   assert.equal(errors[0].sourceId, project.parts[0].id)
+  assert.match(errors.find(({ field }) => field === 'acPoints').message, /points per decade/)
+  project.simulation.acSweep.scale = 'oct'
+  assert.match(validateAnalysisSettings(project).find(({ field }) => field === 'acPoints').message, /points per octave/)
+  project.simulation.acSweep.scale = 'lin'
+  assert.match(validateAnalysisSettings(project).find(({ field }) => field === 'acPoints').message, /total points in the sweep/)
   project.parts[0].acMagnitude = '1 V'
   project.parts[0].acPhase = '45'
   assert.deepEqual(validateAnalysisSettings(project).filter(({ field }) => field.startsWith('partAc')), [])
@@ -315,6 +372,22 @@ test('analysis settings validation checks DC source and sweep direction', () => 
   project.simulation.analysis = 'dc'
   project.simulation.dcSweep = { source: 'R1', start: '0 V', stop: '5 V', step: '-1 V' }
   assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['dcSource', 'dcStep'])
+
+  project.parts.push({ id: 'current-source-sweep', kind: 'currentSource', ref: 'I1', value: '0 A', x: 500, y: 400, rotation: 0, sourceMode: 'dc' })
+  project.simulation.dcSweep = { source: 'I1', start: '0 A', stop: '10 mA', step: '1 mA' }
+  assert.deepEqual(validateAnalysisSettings(project), [])
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.dc I1 0 10m 1m$/m)
+
+  project.simulation.dcSweep = { source: 'I1', start: '0 V', stop: '10 V', step: '1 V' }
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['dcStart', 'dcStop', 'dcStep'])
+  assert.match(validateAnalysisSettings(project)[1].message, /valid stop current, such as 10 mA/)
+  const invalidCurrentArtifact = createNetlistArtifact(project)
+  assert.match(invalidCurrentArtifact.diagnostics[0].message, /nonzero A step/)
+
+  project.simulation.dcSweep = { source: 'V1', start: '0 A', stop: '5 A', step: '1 A' }
+  assert.deepEqual(validateAnalysisSettings(project).map(({ field }) => field), ['dcStart', 'dcStop', 'dcStep'])
 })
 
 test('LED pulse example is a runnable transient circuit with a diode-current trace selected', () => {
@@ -364,6 +437,18 @@ test('NPN switch example drives the base through a resistor and returns the coll
   assert.match(artifact.text, /^RLOAD VCC COLLECTOR 1k$/m)
   assert.match(artifact.text, /^Q1 COLLECTOR BASE 0 ELSIM_MODEL_Q1$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(BASE)', 'V(COLLECTOR)', 'I(Q1)'])
+})
+
+test('invalid educational transistor beta is diagnosed before generating a model card', () => {
+  const project = createTransistorSwitchExampleProject()
+  const transistor = project.parts.find((part) => part.ref === 'Q1')
+  transistor.value = '0'
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.length, 1)
+  assert.deepEqual(artifact.diagnostics[0], { severity: 'error', message: 'Q1 forward beta must be an integer from 1 to 1000.', sourceId: transistor.id, line: artifact.diagnostics[0].line })
+  assert.match(artifact.text, /^\* ERROR: Q1 forward beta must be an integer from 1 to 1000\.$/m)
+  assert.doesNotMatch(artifact.text, /^Q1 /m)
+  assert.doesNotMatch(artifact.text, /^\.model ELSIM_MODEL_Q1/m)
 })
 
 test('NMOS switch example drives the gate and returns the drain load to the supply', () => {
@@ -503,6 +588,75 @@ test('behavioral voltage and current sources emit validated B-source expressions
   assert.throws(() => validateProject(project), /unknown node/)
 })
 
+test('behavioral table lookups become clamped ngspice PWL expressions', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'table(V(vin), 0, 0, 1, 5, 2, 10)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^B1 n\d+ n\d+ V=\{\(\(V\(vin\) < 0\) \? 0 : \(\(V\(vin\) > 2\) \? 10 : pwl\(V\(vin\), 0, 0, 1, 5, 2, 10\)\)\)\}$/m)
+})
+
+test('behavioral if() output preserves LTspice’s condition threshold', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'if(V(vin), 5, 0)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /> 1e-12 \? 5 : 0/)
+})
+
+test('LTspice buf() and inv() outputs preserve threshold behavior', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'buf(V(vin))', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 },
+    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: 'inv(V(vin))', behavioralOutput: 'voltage', x: 700, y: 420, rotation: 0 },
+  )
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /> 1e-12 \? 1 : 0/)
+  assert.match(artifact.text, /> 1e-12 \? 0 : 1/)
+})
+
+test('LTspice unary Boolean inversion outputs are translated in native B sources', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: '!V(vin)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 },
+    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: '~V(vin)', behavioralOutput: 'voltage', x: 700, y: 420, rotation: 0 },
+  )
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal((artifact.text.match(/> 1e-12 \? 0 : 1/g) ?? []).length, 2)
+})
+
+test('LTspice limit() output clamps with ngspice min/max functions', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'limit(V(vin), 0, 3)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^B1 n\d+ n\d+ V=\{min\(max\(V\(vin\), 0\), 3\)\}$/m)
+})
+
+test('LTspice mod() output uses ngspice remainder arithmetic', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'mod(V(vin), 2)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 },
+    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: 'V(vin) % 2', behavioralOutput: 'voltage', x: 700, y: 420, rotation: 0 },
+  )
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  const functionLine = artifact.text.match(/^B1 n\d+ n\d+ V=\{(.*)\}$/m)?.[1]
+  const operatorLine = artifact.text.match(/^B2 n\d+ n\d+ V=\{(.*)\}$/m)?.[1]
+  assert.ok(functionLine)
+  assert.equal(operatorLine, functionLine)
+})
+
+test('behavioral inverse-trig aliases produce ngspice function names', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'arccos(V(vin)) + arcsin(V(vin)) + arctan(V(vin))', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^B1 n\d+ n\d+ V=\{acos\(V\(vin\)\) \+ asin\(V\(vin\)\) \+ atan\(V\(vin\)\)\}$/m)
+})
+
 test('DC sweep emits a steady source and a validated voltage-source sweep', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'dc'
@@ -514,6 +668,19 @@ test('DC sweep emits a steady source and a validated voltage-source sweep', () =
   assert.doesNotMatch(artifact.text, /^\.tran\b|^\.op$/m)
   project.simulation.dcSweep.step = '-1 V'
   assert.match(createNetlistArtifact(project).diagnostics[0].message, /same direction/)
+})
+
+test('DC sweep point count is bounded consistently in preflight and netlist generation', () => {
+  assert.equal(MAX_DC_SWEEP_POINTS, 10_000)
+  assert.equal(dcSweepPointCount('0 V', '9999 V', '1 V', 'source'), 10_000)
+  assert.equal(dcSweepPointCount('10 mA', '0 A', '-1 µA', 'currentSource'), 10_001)
+  const project = createStarterProject()
+  project.simulation.analysis = 'dc'
+  project.simulation.dcSweep = { source: 'V1', start: '0 V', stop: '9999 V', step: '1 V' }
+  assert.equal(validateAnalysisSettings(project).some((error) => error.field === 'dcStep'), false)
+  project.simulation.dcSweep.stop = '10000 V'
+  assert.match(validateAnalysisSettings(project).find((error) => error.field === 'dcStep').message, /limited to 10,000 points/)
+  assert.match(createNetlistArtifact(project).diagnostics[0].message, /limited to 10,000 points/)
 })
 
 test('switch Off state creates an open voltage-controlled SPICE switch', () => {

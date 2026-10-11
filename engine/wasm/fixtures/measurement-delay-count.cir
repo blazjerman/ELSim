@@ -1,0 +1,13 @@
+ELSim transient counted edge regression
+V1 in 0 SIN(0 1 1k)
+R1 in out 1k
+C1 out 0 10u
+.tran 10u 8m
+.control
+set filetype=ascii
+run
+meas tran ELSIM_rise_count TRIG v(in) VAL=0 RISE=2 TARG v(out) VAL=0 RISE=2
+meas tran ELSIM_cross_count TRIG v(in) VAL=0 CROSS=3 TARG v(out) VAL=0 CROSS=3
+quit
+.endc
+.end

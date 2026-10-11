@@ -1,7 +1,7 @@
 import { componentPins, pointOnSegment, subcircuitPinOffsets } from './geometry'
 import { analyzeConnectivity, pinNet } from './connectivity'
 import { validateProject, type Part, type PartKind, type Project, type ProjectSheet } from './project'
-import { analyzeModelDependencies, requiredModelAssetIds } from './subcircuitLibrary'
+import { analyzeModelDependencies, parseSubcircuitLibrary, requiredModelAssetIds } from './subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 
 export type LtspiceExportLoss = {
@@ -54,12 +54,51 @@ function scalarMagnitude(value: string, unit = ''): number | null {
   return Number.isFinite(magnitude) ? magnitude : null
 }
 
+function parameterSweepScalar(value: string): string | null {
+  let normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll('Ω', '').replaceAll('Ω', '').replace(/ohms?/gi, '')
+  normalized = normalized.replace(/\s+(?:farads?|henrys?)$/i, '').replace(/[vVaA]$/, '')
+  return scalar(normalized)
+}
+
 function frequencyScalar(value: string): string | null {
   const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
   const withUnit = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?hz$/i)
   if (!withUnit) return scalar(normalized)
   const suffix = withUnit[2] === 'M' ? 'meg' : (withUnit[2] ?? '')
   return scalar(`${withUnit[1]}${suffix}`)
+}
+
+function sourceSweepTarget(part: Part, sourceParameter: string): { mode: string; field: string; index: number; unit: string; nominal: string; waveform: string } | null {
+  if (part.kind !== 'source' && part.kind !== 'currentSource') return null
+  const mode = part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')
+  const unit = part.kind === 'currentSource' ? 'a' : 'v'
+  const field = sourceParameter.split('.').at(-1) ?? ''
+  if (mode === 'pwl' && sourceParameter === 'pwl.scale') return { mode, field: 'scale', index: -1, unit: '', nominal: '1', waveform: 'PWL' }
+  const pointMatch = sourceParameter.match(/^pwl\.point\.([1-9]\d*)$/)
+  if (mode === 'pwl' && pointMatch) {
+    const pointIndex = Number(pointMatch[1]) - 1
+    const points = part.kind === 'source' ? part.pwl : part.currentPwl
+    const point = points?.[pointIndex]
+    const nominal = part.kind === 'source' ? (point && 'voltage' in point ? point.voltage : undefined) : (point && 'current' in point ? point.current : undefined)
+    if (!point || nominal === undefined) return null
+    // PWL point sweeps change only the point's value. Keeping every time literal
+    // avoids invalid/reordered axes when LTspice evaluates .step cases.
+    return { mode, field: `point.${pointIndex + 1}`, index: pointIndex * 2 + 1, unit, nominal, waveform: 'PWL' }
+  }
+  const table: Record<string, { waveform: string; fields: string[]; defaults: string[]; units: string[] }> = {
+    pulse: { waveform: 'PULSE', fields: ['initial', 'high', 'delay', 'rise', 'fall', 'width', 'period'], defaults: ['0', part.value, '0', '1u', '1u', '50m', '100m'], units: [unit, unit, 's', 's', 's', 's', 's'] },
+    sine: { waveform: 'SINE', fields: ['offset', 'amplitude', 'frequency', 'delay', 'damping', 'phase'], defaults: ['0', part.value, '1k', '0', '0', '0'], units: [unit, unit, 'hz', 's', '', '', ''] },
+    exp: { waveform: 'EXP', fields: ['initial', 'pulsed', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'], defaults: ['0', part.value, '0', '1u', '10m', '1u'], units: [unit, unit, 's', 's', 's', 's'] },
+    sffm: { waveform: 'SFFM', fields: ['offset', 'amplitude', 'carrierFrequency', 'modulationIndex', 'signalFrequency'], defaults: ['0', part.value, '1k', '5', '100'], units: [unit, unit, 'hz', '', 'hz'] },
+  }
+  const spec = table[mode]
+  if (!spec) return null
+  const index = spec.fields.indexOf(field)
+  if (index < 0 || sourceParameter !== `${mode}.${field}`) return null
+  const settings = mode === 'pulse' ? part.pulse : mode === 'sine' ? part.sine : mode === 'exp' ? part.exp : part.sffm
+  const configured = settings as Record<string, string> | undefined
+  const raw = configured?.[field] ?? spec.defaults[index]
+  return { mode, field, index, unit: spec.units[index], nominal: raw, waveform: spec.waveform }
 }
 
 function exponentialSourceValue(part: Part): string | null {
@@ -348,6 +387,86 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
   return null
 }
 
+function generatedSweepModelNames(project: Project): Map<string, string> {
+  const used = new Set((project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models.map((model) => model.name.toLowerCase())))
+  const names = new Map<string, string>()
+  const parts = project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parts ?? []
+  for (const sweep of project.simulation.parameterSweeps ?? []) {
+    if (!sweep.parameter || sweep.globalParameter || sweep.sourceParameter) continue
+    const part = parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
+    if (!part?.deviceModel) continue
+    const model = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models).find((candidate) => candidate.name.toLowerCase() === part.deviceModel!.toLowerCase())
+    const parameter = model?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
+    if (!parameter) continue
+    const base = `ELSIM_MODEL_${spiceIdentifier(part.ref).toUpperCase()}_${spiceIdentifier(part.deviceModel).toUpperCase()}_${spiceIdentifier(parameter.name).toUpperCase()}`
+    let name = base, suffix = 2
+    while (used.has(name.toLowerCase())) name = `${base}_${suffix++}`
+    used.add(name.toLowerCase())
+    names.set(part.id, name)
+  }
+  return names
+}
+
+function modelAssetContent(project: Project, assetId: string, blockers: LtspiceExportBlocker[]): string {
+  const asset = project.modelAssets?.find((candidate) => candidate.id === assetId)
+  if (!asset) return ''
+  const hasBom = asset.content.startsWith('\uFEFF')
+  const lineEnding = asset.content.includes('\r\n') ? '\r\n' : '\n'
+  const lines = asset.content.replace(/^\uFEFF/, '').split(/\r?\n/)
+  const insertions = new Map<number, string[]>()
+  const usedParameters = new Set(project.sheets.flatMap((sheet) => (sheet.parameters ?? []).map((parameter) => parameter.name.toLowerCase())))
+  for (const candidate of project.modelAssets ?? []) for (const directive of candidate.content.matchAll(/^\s*\.param\b([^\r\n]*)/gim)) for (const assignment of directive[1].matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*=/g)) usedParameters.add(assignment[1].toLowerCase())
+  const parameterNames = new Map<string, string>()
+  const modelNames = generatedSweepModelNames(project)
+  for (const sweep of project.simulation.parameterSweeps ?? []) {
+    if (sweep.globalParameter) continue
+    const part = project.sheets.flatMap((sheet) => sheet.parts).find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
+    if (!part) continue
+    const suffix = sweep.parameter ? `_${spiceIdentifier(sweep.parameter).toUpperCase()}` : ''
+    const base = `ELSIM_SWEEP_${spiceIdentifier(part.ref).toUpperCase()}${suffix}`
+    let parameter = base, collision = 2
+    while (usedParameters.has(parameter.toLowerCase())) parameter = `${base}_${collision++}`
+    usedParameters.add(parameter.toLowerCase())
+    if (sweep.parameter) parameterNames.set(part.id, parameter)
+  }
+  // Insert cloned cards beside originals so named .LIB sections still include them.
+  for (const sweep of project.simulation.parameterSweeps ?? []) {
+    if (!sweep.parameter || sweep.globalParameter || sweep.sourceParameter) continue
+    const part = project.sheets.flatMap((sheet) => sheet.parts).find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
+    if (!part?.deviceModel) continue
+    const selectedAsset = project.modelAssets?.find((candidate) => candidate.id === assetId && parseSubcircuitLibrary(candidate.content, candidate.selectedSections).models.some((model) => model.name.toLowerCase() === part.deviceModel!.toLowerCase()))
+    if (!selectedAsset) continue
+    const definition = parseSubcircuitLibrary(selectedAsset.content, selectedAsset.selectedSections).models.find((model) => model.name.toLowerCase() === part.deviceModel!.toLowerCase())
+    const parameter = definition?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
+    if (!definition || !parameter) continue
+    const parameterName = parameterNames.get(part.id)
+    if (!parameterName) continue
+    const generatedName = modelNames.get(part.id)
+    if (!generatedName) continue
+    const cardLines = lines.slice(definition.startLine - 1, definition.endLine)
+    if (!cardLines.length || cardLines.length !== definition.endLine - definition.startLine + 1) { blockers.push({ sourceId: part.id, message: `${part.ref} model card could not be located in ${asset.filename}.` }); continue }
+    const escaped = parameter.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const assignment = new RegExp(`(\\b${escaped}\\s*=\\s*)(?:\\{[^{}]*\\}|[^\\s,)]+)`, 'i')
+    const matchingLines = cardLines.flatMap((line, index) => assignment.test(line) ? [index] : [])
+    if (matchingLines.length !== 1) { blockers.push({ sourceId: part.id, message: `${part.ref} parameter ${parameter.name} must occur exactly once on a single physical line in its imported model card.` }); continue }
+    const cloneLines = [...cardLines]
+    const parameterLine = matchingLines[0]
+    cloneLines[parameterLine] = cloneLines[parameterLine].replace(assignment, `$1{${parameterName}}`)
+    const modelNamePattern = new RegExp(`(^\\s*\\.model\\s+)${definition.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i')
+    const renamedHeader = cloneLines[0].replace(modelNamePattern, `$1${generatedName}`)
+    if (renamedHeader === cloneLines[0]) { blockers.push({ sourceId: part.id, message: `${part.ref} model name could not be safely changed in its imported card.` }); continue }
+    cloneLines[0] = renamedHeader
+    const records = insertions.get(definition.endLine) ?? []
+    records.push(`* ELSim per-instance sweep clone for ${part.ref}`, ...cloneLines)
+    insertions.set(definition.endLine, records)
+  }
+  if (insertions.size === 0) return asset.content
+  const output: string[] = []
+  lines.forEach((line, index) => output.push(line, ...(insertions.get(index + 1) ?? [])))
+  if (hasBom) output[0] = `\uFEFF${output[0]}`
+  return output.join(lineEnding)
+}
+
 function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<string, string>, modelPaths: Map<string, string>, symbolNames: Map<string, string>, blockers: LtspiceExportBlocker[], losses: LtspiceExportLoss[]): string {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   const includePoint = (x: number, y: number) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y) }
@@ -368,6 +487,87 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
   }
   let directiveIndex = 0
   const addDirective = (directive: string) => rows.push(`TEXT 0 ${directiveIndex++ * 32} Left 2 !${directive}`)
+  const componentSweepByPart = new Map<string, { parameter: string; nominal: string; sourceParameter?: string; modelParameter?: string }>()
+  const componentSweepDefinitions: { parameter: string; nominal: string; values: string[]; part: Part }[] = []
+  if (sheet.id === project.rootSheetId) {
+    const usedParameterNames = new Set(project.sheets.flatMap((candidate) => (candidate.parameters ?? []).map((parameter) => parameter.name.toLowerCase())))
+    for (const asset of project.modelAssets ?? []) {
+      for (const directive of asset.content.matchAll(/^\s*\.param\b([^\r\n]*)/gim)) {
+        for (const assignment of directive[1].matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*=/g)) usedParameterNames.add(assignment[1].toLowerCase())
+      }
+    }
+    for (const sweep of project.simulation.parameterSweeps ?? []) {
+      if (sweep.globalParameter) continue
+      const part = sheet.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
+      if (!part) continue
+      if (project.simulation.analysis === 'dc' && (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() !== project.simulation.dcSweep?.source.toLowerCase()) continue
+      if (sweep.parameter) {
+        const supportedDevice = ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(part.kind)
+        const model = part.deviceModel ? (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models.map((definition) => ({ asset, definition }))).find(({ definition }) => definition.name.toLowerCase() === part.deviceModel!.toLowerCase()) : undefined
+        const modelParameter = model?.definition.parameters.find((entry) => entry.name.toLowerCase() === sweep.parameter!.toLowerCase())
+        if (!supportedDevice || !model || !modelParameter) continue
+        const nominal = scalar(modelParameter.defaultValue)
+        const start = scalar(sweep.start), stop = scalar(sweep.stop)
+        const startMagnitude = scalarMagnitude(sweep.start), stopMagnitude = scalarMagnitude(sweep.stop)
+        if (!nominal || start === null || stop === null || startMagnitude === null || stopMagnitude === null) {
+          blockers.push({ sourceId: part.id, message: `${part.ref} model parameter sweep needs a numeric imported model default and supported numeric endpoint values.` })
+          continue
+        }
+        const base = `ELSIM_SWEEP_${spiceIdentifier(part.ref).toUpperCase()}_${spiceIdentifier(sweep.parameter).toUpperCase()}`
+        let parameter = base, suffix = 2
+        while (usedParameterNames.has(parameter.toLowerCase())) parameter = `${base}_${suffix++}`
+        usedParameterNames.add(parameter.toLowerCase())
+        const values = Array.from({ length: sweep.points }, (_, index) => String(Number((startMagnitude + (stopMagnitude - startMagnitude) * index / (sweep.points - 1)).toPrecision(12))))
+        componentSweepByPart.set(part.id, { parameter, nominal, modelParameter: modelParameter.name })
+        componentSweepDefinitions.push({ parameter, nominal, values, part })
+        const modelUseCount = project.sheets.flatMap((candidate) => candidate.parts).filter((candidate) => candidate.deviceModel?.toLowerCase() === part.deviceModel!.toLowerCase()).length
+        if (modelUseCount !== 1) losses.push({ severity: 'warning', sourceId: part.id, title: 'Swept model card cloned for this device', explanation: `${part.ref} uses a generated copy of ${part.deviceModel} so this sweep does not change other instances. Review the exported model card because the copied card may still reference parameters or dependencies from its original library context.` })
+        else losses.push({ severity: 'info', sourceId: part.id, title: 'Model parameter sweep translated to an LTspice parameter sweep', explanation: `${part.ref} ${modelParameter.name} is placed in a generated per-device model card and stepped through ${parameter}.` })
+        continue
+      }
+      if (sweep.sourceParameter) {
+        const target = sourceSweepTarget(part, sweep.sourceParameter)
+        if (!target) continue
+        const normalize = (value: string) => scalar(target.field === 'phase' ? value.trim().replace(/°$/, '') : value, target.unit)
+        const magnitude = (value: string) => scalarMagnitude(target.field === 'phase' ? value.trim().replace(/°$/, '') : value, target.unit)
+        const nominal = normalize(target.nominal)
+        const start = normalize(sweep.start), stop = normalize(sweep.stop)
+        const startMagnitude = magnitude(sweep.start), stopMagnitude = magnitude(sweep.stop)
+        if (!nominal || !start || !stop || startMagnitude === null || stopMagnitude === null) {
+          blockers.push({ sourceId: part.id, message: `${part.ref} waveform sweep needs valid nominal and numeric endpoint values.` })
+          continue
+        }
+        const base = `ELSIM_SWEEP_${spiceIdentifier(part.ref).toUpperCase()}`
+        let parameter = base, suffix = 2
+        while (usedParameterNames.has(parameter.toLowerCase())) parameter = `${base}_${suffix++}`
+        usedParameterNames.add(parameter.toLowerCase())
+        const values = Array.from({ length: sweep.points }, (_, index) => String(Number((startMagnitude + (stopMagnitude - startMagnitude) * index / (sweep.points - 1)).toPrecision(12))))
+        componentSweepByPart.set(part.id, { parameter, nominal, sourceParameter: sweep.sourceParameter })
+        componentSweepDefinitions.push({ parameter, nominal, values, part })
+        losses.push({ severity: 'info', sourceId: part.id, title: 'Waveform sweep translated to a parameter sweep', explanation: `${part.ref} ${sweep.sourceParameter} is exported using generated parameter ${parameter}; its selected values are preserved in an LTspice .step list.` })
+        continue
+      }
+      const sourceMode = part.kind === 'source' ? part.sourceMode ?? 'pulse' : part.kind === 'currentSource' ? part.sourceMode ?? 'dc' : undefined
+      const unit = part.kind === 'capacitor' ? 'f' : part.kind === 'inductor' ? 'h' : part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'a' : ''
+      const supported = ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || ((part.kind === 'source' || part.kind === 'currentSource') && sourceMode === 'dc')
+      if (!supported) continue
+      const nominal = scalar(part.value, unit)
+      const start = scalar(sweep.start, unit), stop = scalar(sweep.stop, unit)
+      const startMagnitude = scalarMagnitude(sweep.start, unit), stopMagnitude = scalarMagnitude(sweep.stop, unit)
+      if (!nominal || !start || !stop || startMagnitude === null || stopMagnitude === null) {
+        blockers.push({ sourceId: part.id, message: `${part.ref} sweep needs a valid nominal value and supported numeric endpoints.` })
+        continue
+      }
+      const base = `ELSIM_SWEEP_${spiceIdentifier(part.ref).toUpperCase()}`
+      let parameter = base, suffix = 2
+      while (usedParameterNames.has(parameter.toLowerCase())) parameter = `${base}_${suffix++}`
+      usedParameterNames.add(parameter.toLowerCase())
+      const values = Array.from({ length: sweep.points }, (_, index) => String(Number((startMagnitude + (stopMagnitude - startMagnitude) * index / (sweep.points - 1)).toPrecision(12))))
+      componentSweepByPart.set(part.id, { parameter, nominal })
+      componentSweepDefinitions.push({ parameter, nominal, values, part })
+      losses.push({ severity: 'info', sourceId: part.id, title: 'Component sweep translated to a parameter sweep', explanation: `${part.ref} is exported with generated parameter ${parameter}; its selected values are preserved in an LTspice .step list.` })
+    }
+  }
   const ports = new Map(sheet.ports.map((port) => [port.name.toLowerCase(), port]))
   const emittedPorts = new Set<string>()
   for (const label of sheet.netLabels) {
@@ -404,20 +604,43 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       if (mapped === null && !blockers.some((item) => item.sourceId === part.id)) blockers.push({ sourceId: part.id, message: `${part.ref} has a value that cannot be represented in the LTspice schematic format.` })
       continue
     }
+    const componentSweep = componentSweepByPart.get(part.id)
+    const deviceModelSweep = componentSweep?.modelParameter && part.deviceModel
+    const clonedModelName = deviceModelSweep ? generatedSweepModelNames(project).get(part.id) : undefined
+    let mappedOutput = componentSweep ? { ...mapped, value: deviceModelSweep ? clonedModelName! : `{${componentSweep.parameter}}` } : mapped
+    if (componentSweep?.sourceParameter) {
+      const target = sourceSweepTarget(part, componentSweep.sourceParameter)
+        const match = target && mapped.value.match(target.waveform === 'PWL'
+          ? /^PWL(?:\s+REPEAT(?:\s+(?:FOREVER|FOR\s+\d+))?\s*)?\(\s*([^()]*)\s*\)(?:\s*ENDREPEAT)?$/i
+          : new RegExp(`^${target.waveform}\\(([^()]*)\\)$`, 'i'))
+      const values = match?.[1].trim().split(/\s+/) ?? []
+      if (!target || !match || (target.field === 'scale' ? values.length < 4 || values.length % 2 !== 0 : values.length <= target.index)) {
+        blockers.push({ sourceId: part.id, message: `${part.ref} waveform field cannot be represented by the LTspice export.` })
+        continue
+      }
+      if (target.field === 'scale') {
+        mappedOutput = { ...mapped, value: mapped.value.replace(/^PWL\b/i, `PWL VALUE_SCALE_FACTOR={${componentSweep.parameter}} `) }
+      } else values[target.index] = `{${componentSweep.parameter}}`
+      if (target.field !== 'scale') mappedOutput = { ...mapped, value: mapped.value.replace(match[1], values.join(' ')) }
+    }
     const instanceName = instanceNames.get(part.id) ?? part.ref
-    if (!checkText(instanceName, part.id, 'Reference designator', blockers) || !checkText(mapped.value, part.id, 'Component value', blockers) || (mapped.value2 && !checkText(mapped.value2, part.id, 'AC value', blockers)) || (mapped.spiceLine && !checkText(mapped.spiceLine, part.id, 'SPICE line', blockers))) continue
+    if (!checkText(instanceName, part.id, 'Reference designator', blockers) || !checkText(mappedOutput.value, part.id, 'Component value', blockers) || (mappedOutput.value2 && !checkText(mappedOutput.value2, part.id, 'AC value', blockers)) || (mappedOutput.spiceLine && !checkText(mappedOutput.spiceLine, part.id, 'SPICE line', blockers))) continue
     const symbolName = symbolNames.get(part.id)!
     rows.push(`SYMBOL ${symbolName} ${checkCoordinate(part.x, part.id, blockers)} ${checkCoordinate(part.y, part.id, blockers)} ${part.flipX ? 'M' : 'R'}${part.rotation}`)
     rows.push(`SYMATTR InstName ${instanceName}`)
-    rows.push(`SYMATTR Value ${mapped.value}`)
-    if (mapped.value2) rows.push(`SYMATTR Value2 ${mapped.value2}`)
-    if (mapped.spiceLine) rows.push(`SYMATTR SpiceLine ${mapped.spiceLine}`)
+    rows.push(`SYMATTR Value ${mappedOutput.value}`)
+    if (mappedOutput.value2) rows.push(`SYMATTR Value2 ${mappedOutput.value2}`)
+    if (mappedOutput.spiceLine) rows.push(`SYMATTR SpiceLine ${mappedOutput.spiceLine}`)
     if (part.kind === 'diode' || part.kind === 'led') {
       if (!part.deviceModel) losses.push({ severity: 'info', sourceId: part.id, title: 'Default diode model generated', explanation: 'A generic DDEFAULT model is written into this schematic.' })
     }
     if (part.symbolAssetId) losses.push({ severity: 'warning', sourceId: part.id, title: 'Imported artwork replaced', explanation: 'The circuit uses an original generated symbol with the same ordered pins; user-provided .asy artwork is not included.' })
   }
   for (const parameter of sheet.parameters ?? []) addDirective(`.param ${parameter.name}=${parameter.defaultValue}`)
+  for (const sweep of componentSweepDefinitions) {
+    addDirective(`.param ${sweep.parameter}=${sweep.nominal}`)
+    addDirective(`.step param ${sweep.parameter} list ${sweep.values.join(' ')}`)
+  }
   if (sheet.parts.some((part) => (part.kind === 'diode' || part.kind === 'led') && !part.deviceModel)) addDirective('.model DDEFAULT D')
   for (const part of sheet.parts) {
     if ((part.kind === 'npn' || part.kind === 'pnp') && !part.deviceModel) {
@@ -508,9 +731,27 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
     } else if (simulation.analysis === 'dc') {
       const sweep = simulation.dcSweep
       if (sweep) {
-        const start = scalar(sweep.start, 'v'), stop = scalar(sweep.stop, 'v'), step = scalar(sweep.step, 'v')
-        if (start && stop && step) addDirective(`.dc ${sweep.source} ${start} ${stop} ${step}`)
-        else blockers.push({ sourceId: 'analysis:dc', message: 'DC sweep values must be valid scalar voltages.' })
+        const source = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.source.toLowerCase())
+        const unit = source?.kind === 'currentSource' ? 'a' : 'v'
+        const start = scalar(sweep.start, unit), stop = scalar(sweep.stop, unit), step = scalar(sweep.step, unit)
+        const secondarySweep = simulation.parameterSweeps?.length === 1 ? simulation.parameterSweeps[0] : undefined
+        const secondary = secondarySweep && project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === secondarySweep.component.toLowerCase())
+        const secondaryUnit = secondary?.kind === 'currentSource' ? 'a' : 'v'
+        const secondaryStart = secondarySweep && scalar(secondarySweep.start, secondaryUnit)
+        const secondaryStop = secondarySweep && scalar(secondarySweep.stop, secondaryUnit)
+        const secondaryStartMagnitude = secondarySweep && secondarySweep.listValues?.length === secondarySweep.points ? scalarMagnitude(secondarySweep.listValues[0], secondaryUnit) : secondarySweep && scalarMagnitude(secondarySweep.start, secondaryUnit)
+        const secondaryNextMagnitude = secondarySweep && secondarySweep.listValues?.length === secondarySweep.points ? scalarMagnitude(secondarySweep.listValues[1], secondaryUnit) : null
+        const secondaryStopMagnitude = secondarySweep && scalarMagnitude(secondarySweep.stop, secondaryUnit)
+        const secondaryStepMagnitude = secondaryStartMagnitude !== null && secondaryStartMagnitude !== undefined && secondarySweep && secondarySweep.points >= 2
+          ? secondaryNextMagnitude !== null && secondaryNextMagnitude !== undefined
+            ? secondaryNextMagnitude - secondaryStartMagnitude
+            : secondaryStopMagnitude !== null && secondaryStopMagnitude !== undefined
+              ? (secondaryStopMagnitude - secondaryStartMagnitude) / (secondarySweep.points - 1)
+              : null
+          : null
+        const secondaryStep = secondaryStepMagnitude !== null && Number.isFinite(secondaryStepMagnitude) ? String(Number(secondaryStepMagnitude.toPrecision(12))) : null
+        if (source && start && stop && step && (!secondarySweep || (secondary && secondary.ref.toLowerCase() !== source.ref.toLowerCase() && secondaryStart && secondaryStop && secondaryStep))) addDirective(`.dc ${source.ref} ${start} ${stop} ${step}${secondarySweep && secondary ? ` ${secondary.ref} ${secondaryStart} ${secondaryStop} ${secondaryStep}` : ''}`)
+        else blockers.push({ sourceId: 'analysis:dc', message: 'DC sweep needs an existing independent voltage or current source and supported scalar values with matching units.' })
       }
       else blockers.push({ sourceId: 'analysis:dc', message: 'DC sweep settings are missing.' })
     } else {
@@ -518,7 +759,28 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       if (maxStep && stopTime) addDirective(`.tran ${maxStep} ${stopTime}${simulation.skipInitialOperatingPoint || simulation.initialConditions?.some((condition) => 'element' in condition) ? ' uic' : ''}`)
       else blockers.push({ sourceId: 'analysis:tran', message: 'Transient stop time and maximum step must be supported scalar time values.' })
     }
-    if (simulation.parameterSweeps?.length) losses.push({ severity: 'warning', sourceId: 'analysis:parameter-sweep', title: 'Parameter sweep omitted', explanation: 'The schematic exports its current nominal component values; the ELSim parameter sweep is not translated.' })
+    const unsupportedSweeps: string[] = []
+    for (const sweep of simulation.parameterSweeps ?? []) {
+      if (!sweep.globalParameter) {
+        const target = sheet.parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())
+        if (simulation.analysis === 'dc' && target && target.ref.toLowerCase() !== simulation.dcSweep?.source.toLowerCase() && (target.kind === 'source' || target.kind === 'currentSource')) continue
+        const supportedComponentSweep = target && componentSweepByPart.has(target.id) && (!sweep.parameter || componentSweepByPart.get(target.id)?.modelParameter?.toLowerCase() === sweep.parameter.toLowerCase()) && (!sweep.sourceParameter || componentSweepByPart.get(target.id)?.sourceParameter === sweep.sourceParameter)
+        if (!supportedComponentSweep) unsupportedSweeps.push(`${sweep.component}${sweep.parameter ? `.${sweep.parameter}` : sweep.sourceParameter ? `.${sweep.sourceParameter}` : ''}`)
+        continue
+      }
+      const declared = sheet.parameters?.find((parameter) => parameter.name.toLowerCase() === sweep.globalParameter!.toLowerCase())
+      const start = parameterSweepScalar(sweep.start), stop = parameterSweepScalar(sweep.stop)
+      const startMagnitude = start === null ? null : scalarMagnitude(start), stopMagnitude = stop === null ? null : scalarMagnitude(stop)
+      const values = sweep.listValues?.map(parameterSweepScalar) ?? (start !== null && stop !== null && startMagnitude !== null && stopMagnitude !== null
+        ? Array.from({ length: sweep.points }, (_, index) => parameterSweepScalar(String(Number((startMagnitude + (stopMagnitude - startMagnitude) * index / (sweep.points - 1)).toPrecision(12)))))
+        : [])
+      if (!declared || values.length !== sweep.points || values.some((value) => value === null)) {
+        blockers.push({ sourceId: `analysis:parameter-sweep:${sweep.globalParameter}`, message: `Parameter sweep for ${sweep.globalParameter} needs a declared root-sheet parameter and supported numeric values.` })
+        continue
+      }
+      addDirective(`.step param ${declared.name} list ${values.join(' ')}`)
+    }
+    if (unsupportedSweeps.length) losses.push({ severity: 'warning', sourceId: 'analysis:parameter-sweep', title: 'Component parameter sweeps omitted', explanation: `The export retains nominal values for component-targeted sweeps that do not have a tested LTspice mapping: ${unsupportedSweeps.join(', ')}.` })
     for (const measurement of simulation.transientMeasurements ?? []) {
       if (measurement.operation !== 'delay') {
         const from = measurement.from === undefined ? undefined : scalar(measurement.from, 's')
@@ -530,14 +792,14 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
         addDirective(`.meas tran ${measurement.id} ${measurement.operation.toUpperCase()} ${measurement.vector}${from === undefined ? '' : ` FROM=${from}`}${to === undefined ? '' : ` TO=${to}`}`)
         continue
       }
-      const threshold = scalar(measurement.threshold), targetThreshold = scalar(measurement.targetThreshold)
+      const threshold = scalar(measurement.threshold, measurement.vector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v'), targetThreshold = scalar(measurement.targetThreshold, measurement.targetVector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v')
       if (!threshold || !targetThreshold) {
         blockers.push({ sourceId: `measurement:${measurement.id}`, message: 'Delay measurement thresholds must be supported numeric scalars.' })
         continue
       }
       const edge = measurement.edge === 'either' ? 'CROSS' : measurement.edge.toUpperCase()
       const targetEdge = measurement.targetEdge === 'either' ? 'CROSS' : measurement.targetEdge.toUpperCase()
-      addDirective(`.meas tran ${measurement.id} TRIG ${measurement.vector} VAL=${threshold} ${edge}=1 TARG ${measurement.targetVector} VAL=${targetThreshold} ${targetEdge}=1`)
+      addDirective(`.meas tran ${measurement.id} TRIG ${measurement.vector} VAL=${threshold} ${edge}=${measurement.triggerCount ?? 1} TARG ${measurement.targetVector} VAL=${targetThreshold} ${targetEdge}=${measurement.targetCount ?? 1}`)
     }
   }
   return `${rows.join('\n')}\n`
@@ -570,6 +832,7 @@ async function sha256(content: string): Promise<string> {
 /** Build a deterministic, loss-reported file tree without touching the browser or filesystem. */
 export async function exportLtspiceProject(input: unknown): Promise<LtspiceExportResult> {
   const blockers: LtspiceExportBlocker[] = [], losses: LtspiceExportLoss[] = [], includedAssets: LtspiceExportAsset[] = []
+  const includedAssetIndexById = new Map<string, number>()
   if (!globalThis.crypto?.subtle) return { files: [], losses, blockers: [{ sourceId: 'export', message: 'This browser context does not provide Web Crypto for export integrity hashes.' }], includedAssets, requiresUnknownLicenseConfirmation: false }
   let project: Project
   try { project = validateProject(structuredClone(input)) }
@@ -608,6 +871,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
     while (usedModelPaths.has(path.toLowerCase())) path = original.replace(/(\.[^.]+)?$/, `_${suffix++}$1`)
     usedModelPaths.add(path.toLowerCase())
     modelPaths.set(asset.id, path)
+    includedAssetIndexById.set(asset.id, includedAssets.length)
     includedAssets.push({ filename: asset.filename, sha256: asset.sha256, licenseStatus: asset.licenseStatus, ...(asset.sourceUrl ? { sourceUrl: asset.sourceUrl } : {}), ...(asset.licenseReference ? { licenseReference: asset.licenseReference } : {}), ...(asset.rightsNotes ? { rightsNotes: asset.rightsNotes } : {}) })
   }
   for (const sheet of sheets) {
@@ -631,7 +895,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
         if (!['on', 'off'].includes(part.value.trim().toLowerCase())) blockers.push({ sourceId: part.id, message: `${part.ref} state must be On or Off before LTspice export.` })
         else losses.push({ severity: 'warning', sourceId: part.id, title: 'Fixed-state switch exported as a resistor', explanation: `The saved ${part.value.trim()} state is exported as a fixed 1 mΩ or 1 TΩ resistor, matching ELSim's current switch Ron/Roff settings. It will not be toggleable in LTspice; replace it with a voltage-controlled switch if dynamic control is needed.` })
       }
-      if (part.sheetParameters && Object.keys(part.sheetParameters).length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Sheet parameter overrides may differ', explanation: 'The current exporter writes the child block value but does not yet validate LTspice SpiceLine parameter override behavior.' })
+      if (part.sheetParameters && Object.keys(part.sheetParameters).length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Review LTspice block parameter overrides', explanation: 'Overrides are written as SpiceLine PARAMS and round-trip through ELSim import. Verify their interpretation in the target LTspice version before relying on the exported values.' })
       if (part.kind === 'subcircuit' && !part.sheetId && part.modelParameters && Object.keys(part.modelParameters).length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Model parameter overrides may differ', explanation: 'The current exporter writes SpiceLine PARAMS: overrides; verify parameter handling in the target LTspice version.' })
     }
   }
@@ -662,9 +926,13 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
       const asset = project.modelAssets?.find((candidate) => candidate.id === assetId)
       const path = modelPaths.get(assetId)
       if (asset && path) {
-        const digest = await sha256(asset.content)
-        if (digest.toLowerCase() !== asset.sha256.toLowerCase()) blockers.push({ sourceId: `model:${asset.id}`, message: `Stored SHA-256 for ${asset.filename} does not match its current content.` })
-        files.push({ path, content: asset.content, sha256: digest, mediaType: 'text/plain' })
+        const originalDigest = await sha256(asset.content)
+        if (originalDigest.toLowerCase() !== asset.sha256.toLowerCase()) blockers.push({ sourceId: `model:${asset.id}`, message: `Stored SHA-256 for ${asset.filename} does not match its current content.` })
+        const content = modelAssetContent(project, assetId, blockers)
+        const digest = await sha256(content)
+        const includedAssetIndex = includedAssetIndexById.get(assetId)
+        if (includedAssetIndex !== undefined) includedAssets[includedAssetIndex] = { ...includedAssets[includedAssetIndex], sha256: digest }
+        files.push({ path, content, sha256: digest, mediaType: 'text/plain' })
       }
     }
     const filePaths = new Set<string>()

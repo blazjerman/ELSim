@@ -8,6 +8,18 @@ const { parseMeasurementOutput } = require(path.join(build, 'engine/measurements
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { addResultControl } = require(path.join(build, 'engine/resultControl.js'))
+const { isValidMeasurementCrossingCount, measurementCrossingCountError, measurementThresholdError, measurementThresholdMagnitude } = require(path.join(build, 'domain/measurementSettings.js'))
+
+test('delay threshold and crossing validation accepts SPICE units and gives actionable field errors', () => {
+  assert.equal(measurementThresholdMagnitude('500mA', 'I(R1)'), 0.5)
+  assert.equal(measurementThresholdMagnitude('2.5V', 'V(out)'), 2.5)
+  assert.equal(measurementThresholdError('bad', 'V(out)', 'Trigger threshold'), 'Trigger threshold must be a numeric voltage, such as 2.5V.')
+  assert.equal(measurementCrossingCountError(1.5, 'Trigger crossing number'), 'Trigger crossing number must be a whole number from 1 to 9,999.')
+  assert.equal(measurementCrossingCountError(10000, 'Target crossing number'), 'Target crossing number must be a whole number from 1 to 9,999.')
+  assert.equal(measurementCrossingCountError(3, 'Target crossing number'), '')
+  assert.equal(isValidMeasurementCrossingCount(undefined), true)
+  assert.equal(isValidMeasurementCrossingCount(0), false)
+})
 
 test('transient measurements parse units and separate sweep cases', () => {
   const measures = [
@@ -47,6 +59,48 @@ test('current-source measurements use the solved raw vector when ngspice has no 
   const sweepTraces = [1, 2].map((scale, index) => ({ ...traces[0], id: `i(@i1[current])::sweep-${index}`, baseId: traces[0].id, values: Float64Array.from(traces[0].values, (value) => value * scale), sweep: { label: `I1=${scale} mA`, index } }))
   const stepped = parseMeasurementOutput('', [{ id: 'MeanI', operation: 'avg', vector: 'i(@I1[current])' }], ['I1=1 mA', 'I1=2 mA'], sweepTraces.map((trace) => [trace]))
   assert.deepEqual(stepped.results.map(({ value, sweep }) => ({ value, label: sweep.label })), [{ value: 0.5, label: 'I1=1 mA' }, { value: 1, label: 'I1=2 mA' }])
+})
+
+test('delay measurements accept SPICE SI suffixes and interpolate in base units', () => {
+  const traces = [
+    { id: 'i(@i1[current])', label: 'I(I1)', unit: 'A', axisLabel: 'Time', axisUnit: 's', axis: Float64Array.from([0, 1, 2]), values: Float64Array.from([0, 1, 0]) },
+    { id: 'v(out)', label: 'V(out)', unit: 'V', axisLabel: 'Time', axisUnit: 's', axis: Float64Array.from([0, 1, 2]), values: Float64Array.from([0, 0, 2]) },
+  ]
+  const delay = { id: 'Delay', operation: 'delay', vector: 'i(@I1[current])', threshold: '500mA', edge: 'rise', targetVector: 'V(out)', targetThreshold: '1V', targetEdge: 'rise' }
+  const project = createStarterProject()
+  project.parts.push({ id: 'measurement-i1', kind: 'currentSource', ref: 'I1', value: '1mA', x: 700, y: 600, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  project.simulation.transientMeasurements = [delay]
+  assert.equal(validateProject(JSON.parse(JSON.stringify(project))).simulation.transientMeasurements[0].threshold, '500mA')
+  const parsed = parseMeasurementOutput('', [delay], [], [traces])
+  assert.deepEqual(parsed.diagnostics, [])
+  assert.equal(parsed.results[0].value, 1)
+  project.simulation.transientMeasurements = [{ ...delay, vector: 'V(vin)', threshold: '500mV', targetVector: 'V(vout)', targetThreshold: '1V' }]
+  const deck = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project)))).text
+  assert.match(deck, /TRIG V\(vin\) VAL=500m RISE=1 TARG V\(vout\) VAL=1 RISE=1/i)
+  assert.doesNotMatch(deck, /VAL=500mV|VAL=1V/i)
+})
+
+test('delay measurements select the requested trigger and target crossings', () => {
+  const axis = Float64Array.from([0, 1, 2, 3, 4, 5, 6, 7])
+  const traces = [
+    { id: 'i(@i1[current])', label: 'I(I1)', unit: 'A', axisLabel: 'Time', axisUnit: 's', axis, values: Float64Array.from([0, 1, 0, 1, 0, 1, 0, 1]) },
+    { id: 'v(out)', label: 'V(out)', unit: 'V', axisLabel: 'Time', axis, values: Float64Array.from([0, 0, 1, 0, 1, 0, 1, 0]) },
+  ]
+  const parsed = parseMeasurementOutput('', [{ id: 'DelayedCrossing', operation: 'delay', vector: 'i(@I1[current])', threshold: '0.5', edge: 'rise', triggerCount: 2, targetVector: 'V(out)', targetThreshold: '0.5', targetEdge: 'rise', targetCount: 2 }], [], [traces])
+  assert.deepEqual(parsed.diagnostics, [])
+  assert.equal(parsed.results[0].value, 3)
+})
+
+test('voltage delay measurements use target crossings after the selected trigger, not ngspice absolute crossing counts', () => {
+  const axis = Float64Array.from([0, 1, 2, 3, 4, 5, 6, 7])
+  const traces = [
+    { id: 'v(in)', label: 'V(in)', unit: 'V', axisLabel: 'Time', axisUnit: 's', axis, values: Float64Array.from([0, 1, 0, 1, 0, 1, 0, 1]) },
+    { id: 'v(out)', label: 'V(out)', unit: 'V', axisLabel: 'Time', axis, values: Float64Array.from([0, 0, 1, 0, 1, 0, 1, 0]) },
+  ]
+  const parsed = parseMeasurementOutput('elsim_DelayedCrossing = -1', [{ id: 'DelayedCrossing', operation: 'delay', vector: 'V(in)', threshold: '0.5', edge: 'rise', triggerCount: 2, targetVector: 'V(out)', targetThreshold: '0.5', targetEdge: 'rise', targetCount: 2 }], [], [traces])
+  assert.deepEqual(parsed.diagnostics, [])
+  assert.equal(parsed.results[0].value, 3)
 })
 
 test('current-source scalar measurements clip and integrate only the requested time window', () => {
@@ -113,6 +167,15 @@ test('delay measurements validate and generate trigger/target clauses', () => {
   project.simulation.transientMeasurements = [{ id: 'RiseDelay', operation: 'delay', vector: 'V(vin)', threshold: '2.5', edge: 'rise', targetVector: 'V(vout)', targetThreshold: '2.5', targetEdge: 'rise' }]
   const deck = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project)))).text
   assert.match(deck, /\.meas tran ELSIM_RiseDelay TRIG V\(vin\) VAL=2\.5 RISE=1 TARG V\(vout\) VAL=2\.5 RISE=1/i)
+  project.simulation.transientMeasurements[0].edge = 'either'
+  project.simulation.transientMeasurements[0].targetEdge = 'either'
+  project.simulation.transientMeasurements[0].triggerCount = 2
+  project.simulation.transientMeasurements[0].targetCount = 3
+  const crossingDeck = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project)))).text
+  assert.match(crossingDeck, /TRIG V\(vin\) VAL=2\.5 CROSS=2 TARG V\(vout\) VAL=2\.5 CROSS=3/i)
+  project.simulation.transientMeasurements[0].triggerCount = 0
+  assert.throws(() => validateProject(project), /Transient measurements/)
+  project.simulation.transientMeasurements[0].triggerCount = 2
   project.simulation.transientMeasurements[0].edge = 'sideways'
   assert.throws(() => validateProject(project), /Transient measurements/)
 })

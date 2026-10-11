@@ -127,6 +127,27 @@ test('ASCII raw parser exposes DC sweep source values as the analysis axis', () 
   assert.deepEqual([...parsed.variables[1].values], [0, -0.0005, -0.001])
 })
 
+test('ASCII raw parser labels a current-source DC sweep axis in amperes', () => {
+  const raw = `Title: Current-source DC sweep
+Plotname: DC transfer characteristic
+Flags: real
+No. Variables: 2
+No. Points: 2
+Variables:
+  0 i-sweep current
+  1 v(out) voltage
+Values:
+ 0 0.000000e+00
+ 0.000000e+00
+ 1 1.000000e-02
+ 1.000000e+01
+`
+  const parsed = parseAsciiRawFile(raw)
+  assert.equal(parsed.axisLabel, 'i-sweep')
+  assert.equal(parsed.axisUnit, 'A')
+  assert.deepEqual([...parsed.axis], [0, 0.01])
+})
+
 test('transient plotting accepts only voltage and current variable names', () => {
   const names = ['time', 'v(vout)', 'i(@r1[i])', 'i(@v1[i])', 'i(v1)']
   assert.equal(isTraceVariable('time', names), false)

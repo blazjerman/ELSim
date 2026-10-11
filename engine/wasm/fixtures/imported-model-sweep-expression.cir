@@ -1,0 +1,20 @@
+ELSim generated instance-scoped imported MOSFET sweep model
+.param ELSIM_SWEEP_M1_KP=0.5m
+VDD vdd 0 5
+VGG gate 0 5
+RD vdd drain 1k
+M1 drain gate 0 0 ELSIM_MODEL_M1_USER_NMOS_KP
+.MODEL ELSIM_MODEL_M1_USER_NMOS_KP NMOS (LEVEL=1 VTO=2
++ KP={ELSIM_SWEEP_M1_KP} LAMBDA=0.02)
+.op
+.save all
+.control
+set filetype=ascii
+op
+write /result-0.raw all
+altermod ELSIM_MODEL_M1_USER_NMOS_KP KP=2m
+op
+write /result-1.raw all
+quit
+.endc
+.end

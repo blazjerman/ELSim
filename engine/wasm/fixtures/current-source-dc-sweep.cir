@@ -1,0 +1,6 @@
+* Independent current-source DC sweep
+I1 0 out DC 0
+R1 out 0 1k
+.dc I1 0 10m 2m
+.print dc v(out)
+.end

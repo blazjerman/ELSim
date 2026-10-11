@@ -1,4 +1,5 @@
 import { timeMagnitude } from '../domain/componentValue'
+import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from '../domain/measurementSettings'
 
 export type EngineState = 'not-integrated' | 'loading' | 'ready' | 'running' | 'error'
 
@@ -203,11 +204,12 @@ function isTransientMeasurement(value: unknown): boolean {
   }
   if (value.from !== undefined || value.to !== undefined) return false
   return value.operation === 'delay'
-    && typeof value.threshold === 'string' && Number.isFinite(Number(value.threshold))
+    && typeof value.threshold === 'string' && measurementThresholdMagnitude(value.threshold, value.vector) !== null
     && typeof value.targetVector === 'string' && measurementVectorPattern.test(value.targetVector.trim())
-    && typeof value.targetThreshold === 'string' && Number.isFinite(Number(value.targetThreshold))
+    && typeof value.targetThreshold === 'string' && measurementThresholdMagnitude(value.targetThreshold, value.targetVector) !== null
     && ['rise', 'fall', 'either'].includes(String(value.edge))
     && ['rise', 'fall', 'either'].includes(String(value.targetEdge))
+    && isValidMeasurementCrossingCount(value.triggerCount) && isValidMeasurementCrossingCount(value.targetCount)
 }
 
 function isParameterSweepRun(value: unknown): boolean {

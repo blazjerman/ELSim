@@ -5,6 +5,7 @@ import type { Project } from './project'
 import { componentMagnitude } from './componentValue'
 import { analyzeModelDependencies } from './subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
+import { componentDefinitionFor } from './componentDefinitions'
 
 export type ElectricalIssue = {
   id: string
@@ -13,6 +14,28 @@ export type ElectricalIssue = {
   detail: string
   partId?: string
   wireId?: string
+}
+
+type ReachableSimulationSheet = { sheet: Project['sheets'][number]; topLevelInstanceId?: string }
+
+function reachableSimulationSheets(project: Project): ReachableSimulationSheet[] {
+  const sheetsById = new Map(project.sheets.map((sheet) => [sheet.id, sheet]))
+  const pending: { id: string; topLevelInstanceId?: string }[] = [{ id: project.activeSheetId }]
+  const visited = new Set<string>()
+  const reachable: ReachableSimulationSheet[] = []
+  while (pending.length) {
+    const { id: sheetId, topLevelInstanceId } = pending.pop()!
+    if (visited.has(sheetId)) continue
+    visited.add(sheetId)
+    const sheet = sheetsById.get(sheetId)
+    if (!sheet) continue
+    const scene = sheetId === project.activeSheetId
+      ? { ...sheet, parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view }
+      : sheet
+    reachable.push({ sheet: scene, ...(topLevelInstanceId ? { topLevelInstanceId } : {}) })
+    pending.push(...scene.parts.flatMap((part) => part.sheetId ? [{ id: part.sheetId, topLevelInstanceId: topLevelInstanceId ?? part.id }] : []))
+  }
+  return reachable
 }
 
 /** Beginner-oriented checks that explain common schematic mistakes without
@@ -26,6 +49,37 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   }
   if (project.parts.length === 0) {
     return [{ id: 'empty', severity: 'info', title: 'Circuit is empty', detail: 'Add a component before running a simulation.' }]
+  }
+  const reachableSheets = reachableSimulationSheets(project)
+
+  const partsByReference = new Map<string, Project['parts']>()
+  for (const part of project.parts) {
+    const key = part.ref.trim().toLowerCase()
+    partsByReference.set(key, [...(partsByReference.get(key) ?? []), part])
+  }
+  for (const duplicates of partsByReference.values()) {
+    if (duplicates.length < 2) continue
+    for (const part of duplicates) {
+      const otherReferences = duplicates.filter((candidate) => candidate.id !== part.id).map((candidate) => candidate.ref)
+      issues.push({
+        id: `duplicate-reference:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} shares its reference with ${otherReferences.join(', ')}`,
+        detail: 'SPICE component references must be unique within a sheet, ignoring letter case. Rename one of these components before running the simulation.',
+        partId: part.id,
+      })
+    }
+  }
+
+  if (project.simulation.analysis === 'dc') {
+    const sweepSource = project.parts.find((part) => part.ref.toLowerCase() === project.simulation.dcSweep?.source.trim().toLowerCase())
+    if (!sweepSource || (sweepSource.kind !== 'source' && sweepSource.kind !== 'currentSource')) issues.push({
+      id: 'invalid-dc-sweep-source',
+      severity: 'warning',
+      title: sweepSource ? `DC sweep target ${sweepSource.ref} is not an independent source` : 'DC sweep source is missing',
+      detail: sweepSource ? 'Choose a placed voltage or current source as the sweep target.' : 'Choose the reference designator of a placed voltage or current source for the DC sweep.',
+      ...(sweepSource ? { partId: sweepSource.id } : {}),
+    })
   }
 
   const pinsByNet = new Map<string, { partId: string; index: number }[]>()
@@ -47,6 +101,16 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   }
 
   for (const part of project.parts) {
+    if ((part.kind === 'npn' || part.kind === 'pnp') && !part.deviceModel && (!/^[1-9]\d{0,3}$/.test(part.value) || Number(part.value) > 1000)) issues.push({
+      id: `invalid-beta:${part.id}`,
+      severity: 'warning',
+      title: `${part.ref} has an invalid forward beta`,
+      detail: 'Enter a whole-number forward beta from 1 to 1000, or select an imported device model to replace the educational beta approximation.',
+      partId: part.id,
+    })
+    if (part.kind === 'source' && (part.sourceMode === undefined || part.sourceMode === 'dc') && componentMagnitude(part.value, part.kind) === null && !isDeclaredParameter(part.value)) {
+      issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid voltage`, detail: 'Enter a numeric voltage with an optional SI prefix, such as 5 V or -250 mV, or use a declared sheet parameter.', partId: part.id })
+    }
     if (part.kind === 'cccs' || part.kind === 'ccvs') {
       const controlSource = part.controlSource?.trim().toLowerCase()
       const sourceExists = controlSource && project.parts.some((candidate) => candidate.kind === 'source' && candidate.ref.toLowerCase() === controlSource)
@@ -86,7 +150,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     if (part.kind === 'behavioral') {
       try {
         const parsed = parseBehavioralExpression(part.value)
-        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name))
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'The expression is unsupported.'
         const isUnknownReference = /unknown node|unknown component|unknown parameter/i.test(detail)
@@ -104,7 +168,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   if (project.modelAssets?.length) {
     try {
       const dependencies = analyzeModelDependencies(project.modelAssets)
-      const modelParts = project.sheets.flatMap((sheet) => sheet.parts.filter((part) => part.kind === 'subcircuit' && !part.sheetId && part.modelName).map((part) => ({ id: part.id, modelName: part.modelName!.toLowerCase() })))
+      const modelParts = reachableSheets.flatMap(({ sheet, topLevelInstanceId }) => sheet.parts.filter((part) => part.kind === 'subcircuit' && !part.sheetId && part.modelName).map((part) => ({ id: topLevelInstanceId ?? part.id, modelName: part.modelName!.toLowerCase() })))
       const graph = new Map<string, Set<string>>()
       for (const dependency of dependencies.resolved) if (dependency.kind === 'subcircuit') {
         const owner = dependency.owner.toLowerCase(), child = dependency.modelName.toLowerCase()
@@ -123,25 +187,46 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         }
         return false
       }
-      const usedDevices = new Set(project.sheets.flatMap((sheet) => sheet.parts.flatMap((part) => part.deviceModel ? [part.deviceModel.toLowerCase()] : [])))
+      const usedDevices = new Map<string, Set<string>>()
+      for (const { sheet, topLevelInstanceId } of reachableSheets) for (const part of sheet.parts) if (part.deviceModel) {
+        const name = part.deviceModel.toLowerCase()
+        const selectors = usedDevices.get(name) ?? new Set<string>()
+        selectors.add(topLevelInstanceId ?? part.id)
+        usedDevices.set(name, selectors)
+      }
       const assets = new Map(project.modelAssets.map((asset) => [asset.id, asset.filename]))
       for (const missing of dependencies.missing) {
-        const affected = missing.kind === 'subcircuit'
-          ? modelParts.filter((part) => reaches(part.modelName, missing.owner.toLowerCase()))
-          : modelParts.filter((part) => reaches(part.modelName, missing.owner.toLowerCase()))
-        if (!affected.length && !usedDevices.has(missing.owner.toLowerCase())) continue
-        for (const part of affected.length ? affected : [{ id: undefined }]) issues.push({
-          id: `missing-model-dependency:${missing.assetId}:${missing.sourceLine}:${missing.modelName.toLowerCase()}:${part.id ?? 'library'}`,
+        const affectedModels = modelParts.filter((part) => reaches(part.modelName, missing.owner.toLowerCase()))
+        const affectedIds = new Set(affectedModels.map((part) => part.id))
+        if (missing.kind === 'device') for (const id of usedDevices.get(missing.owner.toLowerCase()) ?? []) affectedIds.add(id)
+        if (!affectedIds.size) continue
+        for (const partId of affectedIds) issues.push({
+          id: `missing-model-dependency:${missing.assetId}:${missing.sourceLine}:${missing.modelName.toLowerCase()}:${partId}`,
           severity: 'warning',
           title: `${missing.owner} needs missing ${missing.kind} ${missing.modelName}`,
           detail: `Import the library that defines ${missing.modelName}; this dependency is referenced by ${assets.get(missing.assetId) ?? 'an imported model'} at line ${missing.sourceLine}.`,
-          ...(part.id ? { partId: part.id } : {}),
+          partId,
         })
       }
       for (const chain of dependencies.recursiveChains) {
         const chainNames = new Set(chain.map((name) => name.toLowerCase()))
-        if (!modelParts.some((part) => [...chainNames].some((name) => reaches(part.modelName, name)))) continue
-        issues.push({ id: `recursive-model:${chain.map((name) => name.toLowerCase()).join(':')}`, severity: 'warning', title: 'A used subcircuit has a recursive model chain', detail: `${chain.join(' → ')}. ngspice cannot instantiate a recursive subcircuit chain.` })
+        const affected = modelParts.find((part) => [...chainNames].some((name) => reaches(part.modelName, name)))
+        if (!affected) continue
+        issues.push({ id: `recursive-model:${chain.map((name) => name.toLowerCase()).join(':')}`, severity: 'warning', title: 'A used subcircuit has a recursive model chain', detail: `${chain.join(' → ')}. ngspice cannot instantiate a recursive subcircuit chain.`, partId: affected.id })
+      }
+      for (const conflict of dependencies.conflicts) {
+        const name = conflict.name.toLowerCase()
+        const affectedIds = conflict.kind === 'subcircuit'
+          ? new Set(modelParts.filter((part) => reaches(part.modelName, name)).map((part) => part.id))
+          : usedDevices.get(name) ?? new Set<string>()
+        const locations = conflict.definitions.map((definition) => `${definition.filename}:${definition.sourceLine}`).join(', ')
+        for (const partId of affectedIds) issues.push({
+          id: `model-conflict:${conflict.kind}:${name}:${partId}`,
+          severity: 'warning',
+          title: `Model ${conflict.name} has conflicting definitions`,
+          detail: `More than one imported library defines ${conflict.name} (${locations}). Remove or rename one definition so the circuit does not depend on library resolution order.`,
+          partId,
+        })
       }
     } catch {
       // Invalid library syntax has its own importer and project-validation diagnostics.
@@ -157,11 +242,18 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   }
   for (const [partId, pins] of floatingByPart) {
     const part = project.parts.find((item) => item.id === partId)!
+    const pinNames = pins.map((index) => {
+      const declaredName = part.kind === 'subcircuit'
+        ? part.modelPins?.[index]
+        : componentDefinitionFor(part.kind).pins[index]?.name
+      if (!declaredName || /^pin\d+$/i.test(declaredName)) return `terminal ${index + 1}`
+      return /^\d+$/.test(declaredName) ? `pin ${declaredName}` : declaredName
+    })
     issues.push({
       id: `floating:${partId}`,
       severity: 'warning',
-      title: `${part.ref} has ${pins.length === 1 ? 'an unconnected terminal' : `${pins.length} unconnected terminals`}`,
-      detail: 'Connect each open terminal to a wire, another component, or an intentional net label.',
+      title: `${part.ref} has ${pins.length === 1 ? `an unconnected ${pinNames[0]} terminal` : `${pins.length} unconnected terminals (${pinNames.join(', ')})`}`,
+      detail: `Connect the open terminal${pins.length === 1 ? '' : 's'} (${pinNames.join(', ')}) to a wire, another component, or an intentional net label.`,
       partId,
     })
   }
@@ -173,7 +265,20 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     if (first && first === second) issues.push({ id: `shorted:${part.id}`, severity: 'warning', title: `${part.ref} has both terminals on the same net`, detail: 'Check whether this component is intentionally bypassed or shorted.', partId: part.id })
   }
 
-  const hasGround = project.parts.some((part) => part.kind === 'ground') || project.netLabels.some((label) => label.name.trim() === '0')
+  let hasGround = false
+  for (const { sheet } of reachableSheets) {
+    const sheetParts = sheet.parts
+    const sheetConnectivity = sheet.id === project.activeSheetId ? connectivity : analyzeConnectivity({
+      ...project,
+      activeSheetId: sheet.id,
+      parts: sheetParts,
+      wires: sheet.wires,
+      junctions: sheet.junctions,
+      netLabels: sheet.netLabels,
+      view: sheet.view,
+    })
+    if (sheetParts.some((part) => part.kind !== 'ground' && componentPins(part).some((pin) => sheetConnectivity.pinNets.get(`${part.id}:${pin.index}`) === '0'))) hasGround = true
+  }
   if (!hasGround) issues.push({ id: 'ground', severity: 'warning', title: 'No ground reference found', detail: 'Most SPICE circuits need a node named 0. Add a ground symbol or a net label named 0.' })
   for (const [index, diagnostic] of connectivity.diagnostics.entries()) {
     issues.push({ id: `connectivity:${index}`, severity: 'warning', title: 'Conflicting net labels', detail: diagnostic.message })

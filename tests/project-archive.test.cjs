@@ -23,8 +23,8 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   project.parts.push({ id: 'archive-i-pwl', kind: 'currentSource', ref: 'I1', value: '1m', sourceMode: 'pwl', currentPwl: [{ time: '0', current: '0' }, { time: '5m', current: '1m' }], x: 800, y: 500, rotation: 0 })
   project.sheets[0].parts = project.parts
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'keep-me' } } }
-  project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n' }
-  project.importedChildSchematicSources = [{ format: 'ltspice-asc', filename: 'child.asc', originalText: 'Version 4\nIOPIN 0 0 In\nFLAG 0 0 INPUT\n' }]
+  project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n', sourceUrl: 'https://example.invalid/source', licenseReference: 'Vendor terms', rightsNotes: 'User supplied; redistribution not checked.' }
+  project.importedChildSchematicSources = [{ format: 'ltspice-asc', filename: 'child.asc', originalText: 'Version 4\nIOPIN 0 0 In\nFLAG 0 0 INPUT\n', sourceUrl: 'https://example.invalid/child', licenseReference: 'MIT?', rightsNotes: 'Need to verify.' }]
   const first = createProjectArchive(project)
   const second = createProjectArchive(project)
   assert.deepEqual(first, second)
@@ -43,6 +43,8 @@ test('project ZIP archive is deterministic and round-trips the complete v7 proje
   assert.deepEqual(restored.parts[1].extensions, project.parts[1].extensions)
   assert.match(restored.importedSchematicSource.originalText, /UNKNOWN_VENDOR_RECORD keep-me/)
   assert.match(restored.importedChildSchematicSources[0].originalText, /IOPIN 0 0 In/)
+  assert.equal(restored.importedSchematicSource.licenseReference, 'Vendor terms')
+  assert.equal(restored.importedChildSchematicSources[0].rightsNotes, 'Need to verify.')
   assert.equal(crc32(new TextEncoder().encode('123456789')), 0xcbf43926)
 })
 
@@ -142,6 +144,24 @@ test('user model libraries round-trip inside project data with digest and licens
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], rightsNotes: 'x'.repeat(1001) }] }), /malformed imported model library/)
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], licenseReference: 42 }] }), /malformed imported model library/)
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], selectedSections: ['missing'] }] }), /section names that exist/)
+})
+
+test('project validation preserves case-insensitive duplicate definitions across model library files', async () => {
+  const project = createStarterProject()
+  const contents = [
+    ['amp-a.lib', '.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP\n.MODEL DFAST D(Is=1n)'],
+    ['amp-b.lib', '.SUBCKT amp A B\nR1 A B 2k\n.ENDS amp\n.MODEL dfast D(Is=2n)'],
+  ]
+  project.modelAssets = await Promise.all(contents.map(async ([filename, content], index) => ({
+    id: `model-${index}`,
+    filename,
+    content,
+    sha256: [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(content)))].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+    licenseStatus: 'unknown',
+    importedAt: new Date().toISOString(),
+  })))
+  const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  assert.deepEqual(restored.modelAssets, project.modelAssets)
 })
 
 test('.MODEL-only libraries and device model assignments round-trip in project archives', async () => {
@@ -253,6 +273,8 @@ test('LTspice source provenance validates its format, filename, and UTF-8 size l
   assert.deepEqual(validateProject(project).importedSchematicSource, project.importedSchematicSource)
   assert.throws(() => validateProject({ ...project, importedSchematicSource: { ...project.importedSchematicSource, filename: '../unsafe.asc' } }), /malformed LTspice schematic source provenance/)
   assert.throws(() => validateProject({ ...project, importedSchematicSource: { ...project.importedSchematicSource, format: 'other' } }), /malformed LTspice schematic source provenance/)
+  assert.throws(() => validateProject({ ...project, importedSchematicSource: { ...project.importedSchematicSource, sourceUrl: 'x'.repeat(2049) } }), /malformed LTspice schematic source provenance/)
+  assert.throws(() => validateProject({ ...project, importedChildSchematicSources: [{ format: 'ltspice-asc', filename: 'child.asc', originalText: 'Version 4', rightsNotes: 'x'.repeat(1001) }] }), /malformed LTspice child schematic source provenance/)
 })
 
 test('plot preferences survive project validation and old projects receive defaults', () => {
@@ -318,4 +340,18 @@ test('project ZIP archive rejects unsupported ZIP compression and oversized inpu
   view.setUint16(centralRecord + 10, 8, true)
   assert.throws(() => readProjectArchive(compressed), /unsupported compression or encryption/)
   assert.throws(() => readProjectArchive(new Uint8Array(50 * 1024 * 1024 + 1)), /total size limit/)
+})
+
+test('project ZIP archive rejects trailing bytes and gaps before the end record', () => {
+  const archive = createProjectArchive(createStarterProject())
+  const trailingData = new Uint8Array(archive.length + 1)
+  trailingData.set(archive)
+  trailingData[trailingData.length - 1] = 0x41
+  assert.throws(() => readProjectArchive(trailingData), /invalid directory/)
+
+  const extraGap = new Uint8Array(archive.length + 1)
+  extraGap.set(archive.subarray(0, archive.length - 22))
+  extraGap[archive.length - 22] = 0x41
+  extraGap.set(archive.subarray(archive.length - 22), archive.length - 21)
+  assert.throws(() => readProjectArchive(extraGap), /invalid directory/)
 })

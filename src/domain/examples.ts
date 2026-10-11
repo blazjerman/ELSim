@@ -80,6 +80,33 @@ export function createCurrentSourceExampleProject(): Project {
   return project
 }
 
+/** A first voltage-divider lesson with a predictable 5 V midpoint. */
+export function createVoltageDividerExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'divider-v1', kind: 'source', ref: 'V1', value: '10 V', sourceMode: 'dc', x: 260, y: 360, rotation: 0 }
+  const upper: Part = { id: 'divider-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 520, y: 300, rotation: 0 }
+  const lower: Part = { id: 'divider-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 760, y: 300, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Voltage divider'
+  project.parts = [source, upper, lower]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('divider-vin-source', 'VIN', source, 0), labelAt('divider-vin-r1', 'VIN', upper, 0),
+    labelAt('divider-vout-r1', 'VOUT', upper, 1), labelAt('divider-vout-r2', 'VOUT', lower, 0),
+    labelAt('divider-ground-source', '0', source, 1), labelAt('divider-ground-r2', '0', lower, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -10, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A driven series RLC circuit whose ringing is visible in the capacitor voltage. */
 export function createRlcExampleProject(): Project {
   const project = createStarterProject()
@@ -105,6 +132,60 @@ export function createRlcExampleProject(): Project {
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '40 ms', maxStep: '20 µs' }
   project.plotSettings = { selectedTraceIds: ['V(L_C)', 'I(L1)'], ranges: {} }
   project.view = { zoom: 0.9, panX: -30, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
+/** A first AC sweep example showing the RC low-pass cutoff near 1 kHz. */
+export function createAcLowPassExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'ac-lowpass-v1', kind: 'source', ref: 'V1', value: '0 V', acMagnitude: '1 V', acPhase: '0', x: 260, y: 360, rotation: 0 }
+  const resistor: Part = { id: 'ac-lowpass-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 500, y: 300, rotation: 0 }
+  const capacitor: Part = { id: 'ac-lowpass-c1', kind: 'capacitor', ref: 'C1', value: '159 nF', x: 740, y: 360, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'RC low-pass frequency response'
+  project.parts = [source, resistor, capacitor]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('ac-lowpass-vin-source', 'VIN', source, 0), labelAt('ac-lowpass-vin-resistor', 'VIN', resistor, 0),
+    labelAt('ac-lowpass-vout-resistor', 'VOUT', resistor, 1), labelAt('ac-lowpass-vout-capacitor', 'VOUT', capacitor, 0),
+    labelAt('ac-lowpass-ground-source', '0', source, 1), labelAt('ac-lowpass-ground-capacitor', '0', capacitor, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '100 kHz' }, sourceAcMagnitude: '1 V' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
+  project.view = { zoom: 0.95, panX: -10, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
+/** A first AC sweep example showing the complementary RC high-pass response. */
+export function createAcHighPassExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'ac-highpass-v1', kind: 'source', ref: 'V1', value: '0 V', acMagnitude: '1 V', acPhase: '0', x: 260, y: 360, rotation: 0 }
+  const capacitor: Part = { id: 'ac-highpass-c1', kind: 'capacitor', ref: 'C1', value: '159 nF', x: 500, y: 300, rotation: 0 }
+  const resistor: Part = { id: 'ac-highpass-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 740, y: 360, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'RC high-pass frequency response'
+  project.parts = [source, capacitor, resistor]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('ac-highpass-vin-source', 'VIN', source, 0), labelAt('ac-highpass-vin-capacitor', 'VIN', capacitor, 0),
+    labelAt('ac-highpass-vout-capacitor', 'VOUT', capacitor, 1), labelAt('ac-highpass-vout-resistor', 'VOUT', resistor, 0),
+    labelAt('ac-highpass-ground-source', '0', source, 1), labelAt('ac-highpass-ground-resistor', '0', resistor, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '100 kHz' }, sourceAcMagnitude: '1 V' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
+  project.view = { zoom: 0.95, panX: -10, panY: 0 }
   project.sheets[0].view = project.view
   return project
 }

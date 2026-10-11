@@ -2,10 +2,12 @@ import type { TransientMeasurement } from '../domain/project'
 import type { MeasurementResult, SimulationDiagnostic } from './contract'
 import type { Trace } from './contract'
 import { timeMagnitude } from '../domain/componentValue'
+import { measurementThresholdMagnitude } from '../domain/measurementSettings'
 
 const currentSourceVector = /^i\((@I[A-Za-z0-9_]+\[current\])\)$/i
 
-function interpolateCrossing(axis: Float64Array, values: Float64Array, threshold: number, edge: string, after = -Infinity): number | null {
+function interpolateCrossing(axis: Float64Array, values: Float64Array, threshold: number, edge: string, after = -Infinity, count = 1): number | null {
+  let crossings = 0
   for (let index = 1; index < values.length; index++) {
     const leftValue = values[index - 1] - threshold
     const rightValue = values[index] - threshold
@@ -14,12 +16,12 @@ function interpolateCrossing(axis: Float64Array, values: Float64Array, threshold
     if ((edge === 'rise' && !rising) || (edge === 'fall' && !falling) || (edge === 'either' && !rising && !falling)) continue
     const fraction = leftValue === rightValue ? 0 : -leftValue / (rightValue - leftValue)
     const time = axis[index - 1] + (axis[index] - axis[index - 1]) * fraction
-    if (time >= after) return time
+    if (time >= after && ++crossings === count) return time
   }
   return null
 }
 
-function calculateSourceCurrent(measurement: TransientMeasurement, traces: readonly Trace[]): number | null {
+function calculateFromTraces(measurement: TransientMeasurement, traces: readonly Trace[]): number | null {
   const traceFor = (vector: string) => traces.find((trace) => trace.id.toLowerCase() === vector.trim().toLowerCase() || trace.baseId?.toLowerCase() === vector.trim().toLowerCase())
   const source = traceFor(measurement.vector)
   if (!source || source.values.length < 2) return null
@@ -50,9 +52,12 @@ function calculateSourceCurrent(measurement: TransientMeasurement, traces: reado
   if (measurement.operation === 'delay') {
     const target = traceFor(measurement.targetVector)
     if (!target || target.values.length < 2) return null
-    const triggerTime = interpolateCrossing(source.axis, source.values, Number(measurement.threshold), measurement.edge)
+    const triggerThreshold = measurementThresholdMagnitude(measurement.threshold, measurement.vector)
+    const targetThreshold = measurementThresholdMagnitude(measurement.targetThreshold, measurement.targetVector)
+    if (triggerThreshold === null || targetThreshold === null) return null
+    const triggerTime = interpolateCrossing(source.axis, source.values, triggerThreshold, measurement.edge, -Infinity, measurement.triggerCount ?? 1)
     if (triggerTime === null) return null
-    const targetTime = interpolateCrossing(target.axis, target.values, Number(measurement.targetThreshold), measurement.targetEdge, triggerTime)
+    const targetTime = interpolateCrossing(target.axis, target.values, targetThreshold, measurement.targetEdge, triggerTime, measurement.targetCount ?? 1)
     return targetTime === null ? null : targetTime - triggerTime
   }
   if (!(end > start)) return null
@@ -88,8 +93,9 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
       const expression = new RegExp(`^\\s*${name}\\s*=\\s*([-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[-+]?\\d+)?)`, 'im')
       const match = output.match(expression)
       const sourceCurrent = currentSourceVector.test(measurement.vector.trim()) || (measurement.operation === 'delay' && currentSourceVector.test(measurement.targetVector.trim()))
-      const calculated = !match && sourceCurrent ? calculateSourceCurrent(measurement, traceSets[index] ?? traceSets[0] ?? []) : null
-      if (!match && calculated === null) {
+      const calculateWithTraces = measurement.operation === 'delay' || (!match && sourceCurrent)
+      const calculated = calculateWithTraces ? calculateFromTraces(measurement, traceSets[index] ?? traceSets[0] ?? []) : null
+      if ((!match || measurement.operation === 'delay') && calculated === null) {
         diagnostics.push({ severity: 'warning', message: `ngspice did not return the ${measurement.operation.toUpperCase()} measurement for ${measurement.vector}. Check that the vector exists and the transient run covers enough data.`, sourceId: 'analysis:tran' })
         continue
       }

@@ -1,0 +1,7 @@
+ELSim RC high-pass frequency response at a 1 kHz corner
+V1 vin 0 AC 1 0
+C1 vin vout 159n
+R1 vout 0 1k
+.ac dec 20 10 100k
+.print ac vm(vin) vm(vout)
+.end

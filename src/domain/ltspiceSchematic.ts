@@ -1,11 +1,12 @@
-import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourceExp, type SourcePulse, type SourcePwlPoint, type SourceSffm, type SourceSine, type SymbolAsset, type Wire } from './project'
+import { createStarterProject, sheetModelName, validateProject, type Part, type PartKind, type Project, type ProjectSheet, type SourceExp, type SourcePulse, type SourcePwlPoint, type SourceSffm, type SourceSine, type SourceSweepParameter, type SymbolAsset, type Wire } from './project'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
 import { componentCurrentVector } from './probe'
 import { analyzeConnectivity, pinNet } from './connectivity'
-import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
-import { timeMagnitude } from './componentValue'
+import { expandBehavioralFunctions, parseBehavioralExpression, validateBehavioralReferences, type BehavioralFunctionDefinition } from './behavioralExpression'
+import { componentMagnitude, timeMagnitude } from './componentValue'
+import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from './dcSweep'
 
 type AscSymbol = { name: string; x: number; y: number; rotation: number; flipX: boolean; attributes: Record<string, string>; rawRecords: string[]; line: number }
 export type LtspiceSchematicImport = { project: Project; warnings: string[] }
@@ -16,7 +17,10 @@ const MAX_ASC_WIRES = 2_000
 const MAX_ASC_SYMBOLS = 1_000
 const MAX_PWL_FILE_BYTES = 1024 * 1024
 const MAX_UNSUPPORTED_RECORD_CHARS = 240
+const MAX_LTSPICE_FUNCTIONS = 32
 const validScalar = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?$/i.test(value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u'))
+const parameterReference = (value: string) => /^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value.trim())
+const validScalarOrParameter = (value: string) => validScalar(value) || parameterReference(value)
 const positiveFrequency = (value: string) => {
   const match = value.trim().toLowerCase().replace(/hz$/, '').match(/^([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/)
   const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match?.[2] ?? ''] ?? 1
@@ -32,6 +36,15 @@ function negateInitialScalar(value: string): string {
 function recordExcerpt(raw: string): string {
   const compact = raw.replace(/\s+/g, ' ').trim()
   return compact.length > MAX_UNSUPPORTED_RECORD_CHARS ? `${compact.slice(0, MAX_UNSUPPORTED_RECORD_CHARS - 1)}…` : compact
+}
+
+function parseLtspiceFunction(directive: string): BehavioralFunctionDefinition | null {
+  const match = directive.trim().match(/^\.func\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)\)\s*(?:=\s*)?\{?([\s\S]*?)\}?$/i)
+  if (!match) return null
+  const args = match[2].trim() ? match[2].split(',').map((value) => value.trim()) : []
+  const expression = match[3].trim()
+  if (args.length > 8 || args.some((argument) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(argument)) || new Set(args.map((argument) => argument.toLowerCase())).size !== args.length || !expression || expression.length > 256 || /[{}\r\n;"'`\\#]/.test(expression)) return null
+  return { name: match[1], arguments: args, expression }
 }
 
 function scalarMagnitude(value: string): number | null {
@@ -65,12 +78,46 @@ function importInstanceInitialCondition(project: Project, kind: PartKind, ref: s
   project.simulation.initialConditions = initialConditions
 }
 
-function sourceValue(value: string, pwlFiles: { filename: string; content: string }[] = []): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp' | 'sffm'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; pwlFileName?: string; pwlRepeat?: 'forever'; pwlRepeatCount?: number; sine?: SourceSine; exp?: SourceExp; sffm?: SourceSffm } {
+function importSubcircuitParameterOverrides(spiceLine: string | undefined, parameters: readonly { name: string }[] | undefined, ref: string, line: number, warnings: string[]): { values?: Record<string, string>; consumed: boolean } {
+  if (!spiceLine?.trim()) return { consumed: false }
+  const header = spiceLine.match(/^\s*PARAMS:\s*/i)
+  if (!header) return { consumed: false }
+  if (spiceLine.length > 4096) {
+    warnings.push(`Line ${line}: SpiceLine PARAMS on ${ref} exceeds the 4096-character import limit; the overrides were not applied.`)
+    return { consumed: false }
+  }
+  const source = spiceLine.slice(header[0].length)
+  const assignments = [...source.matchAll(/(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)\s*=/g)]
+  if (!assignments.length || assignments.length > 32 || source.slice(0, assignments[0].index ?? 0).trim()) {
+    warnings.push(`Line ${line}: SpiceLine PARAMS on ${ref} must contain named scalar or arithmetic parameter assignments; the overrides were not applied.`)
+    return { consumed: false }
+  }
+  const values: Record<string, string> = {}
+  let consumed = true
+  for (let index = 0; index < assignments.length; index++) {
+    const assignment = assignments[index]
+    const name = assignment[1]
+    const valueStart = (assignment.index ?? 0) + assignment[0].length
+    const valueEnd = index + 1 < assignments.length ? assignments[index + 1].index ?? source.length : source.length
+    const value = source.slice(valueStart, valueEnd).trim()
+    const declared = parameters?.find((parameter) => parameter.name.toLowerCase() === name.toLowerCase())
+    if (!declared || !isSafeSubcircuitParameterValue(value) || Object.keys(values).some((existing) => existing.toLowerCase() === name.toLowerCase())) {
+      consumed = false
+      const reason = !declared ? 'is not declared by the child sheet' : !isSafeSubcircuitParameterValue(value) ? 'has an unsupported value' : 'is specified more than once'
+      warnings.push(`Line ${line}: block parameter ${name} on ${ref} ${reason}; it was retained as an attribute but not applied.`)
+      continue
+    }
+    values[declared.name] = value
+  }
+  return { ...(Object.keys(values).length ? { values } : {}), consumed }
+}
+
+function sourceValue(value: string, pwlFiles: { filename: string; content: string }[] = []): { value: string; mode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp' | 'sffm'; pulse?: SourcePulse; pwl?: SourcePwlPoint[]; pwlFileName?: string; pwlRepeat?: 'forever'; pwlRepeatCount?: number; sine?: SourceSine; exp?: SourceExp; sffm?: SourceSffm; pwlScaleParameter?: string } {
   const trimmed = value.trim()
   const generatedSffm = trimmed.match(/^SFFM\(\s*([^()]*)\s*\)$/i)
   if (generatedSffm) {
     const values = generatedSffm[1].trim().split(/[\s,]+/).filter(Boolean)
-    if (values.length === 5 && values.every((entry) => validScalar(entry))) {
+    if (values.length === 5 && values.every(validScalarOrParameter)) {
       const [offset, amplitude, carrierFrequency, modulationIndex, signalFrequency] = values
       return { value: amplitude, mode: 'sffm', sffm: { offset, amplitude, carrierFrequency, modulationIndex, signalFrequency } }
     }
@@ -78,7 +125,7 @@ function sourceValue(value: string, pwlFiles: { filename: string; content: strin
   const generatedExp = trimmed.match(/^EXP\(\s*([^()]*)\s*\)$/i)
   if (generatedExp) {
     const values = generatedExp[1].trim().split(/[\s,]+/).filter(Boolean)
-    if (values.length === 6 && values.every((entry) => validScalar(entry))) {
+    if (values.length === 6 && values.every(validScalarOrParameter)) {
       const [initial, pulsed, riseDelay, riseTau, fallDelay, fallTau] = values
       return { value: pulsed, mode: 'exp', exp: { initial, pulsed, riseDelay, riseTau, fallDelay, fallTau } }
     }
@@ -88,14 +135,14 @@ function sourceValue(value: string, pwlFiles: { filename: string; content: strin
     const values = generatedSine[1].trim().split(/[\s,]+/).filter(Boolean)
     const scalarWithEngineeringSuffix = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i
     const unitlessNumber = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
-    if (values.length >= 3 && values.length <= 6 && values.every((entry) => validScalar(entry)) && validScalar(values[0]) && validScalar(values[1]) && positiveFrequency(values[2]) && (values[3] === undefined || validScalar(values[3])) && (values[4] === undefined || scalarWithEngineeringSuffix.test(values[4])) && (values[5] === undefined || unitlessNumber.test(values[5]))) {
+    if (values.length >= 3 && values.length <= 6 && values.every(validScalarOrParameter) && validScalarOrParameter(values[0]) && validScalarOrParameter(values[1]) && (positiveFrequency(values[2]) || parameterReference(values[2])) && (values[3] === undefined || validScalarOrParameter(values[3])) && (values[4] === undefined || scalarWithEngineeringSuffix.test(values[4]) || parameterReference(values[4])) && (values[5] === undefined || unitlessNumber.test(values[5]) || parameterReference(values[5]))) {
       const [offset, amplitude, frequency, delay = '0', damping = '0', phase = '0'] = values
       return { value: amplitude, mode: 'sine', sine: { offset, amplitude, frequency, delay, damping, phase } }
     }
   }
   const generatedPulse = trimmed.match(/^PULSE\(\s*([^()]*)\s*\)$/i)
   const pulseValues = generatedPulse?.[1].trim().split(/[\s,]+/).filter(Boolean) ?? []
-  if ((pulseValues.length === 7 || pulseValues.length === 8) && pulseValues.slice(0, 7).every(validScalar) && (pulseValues[7] === undefined || /^(?:0|[1-9]\d*)$/.test(pulseValues[7]))) {
+  if ((pulseValues.length === 7 || pulseValues.length === 8) && pulseValues.slice(0, 7).every(validScalarOrParameter) && (pulseValues[7] === undefined || /^(?:0|[1-9]\d*)$/.test(pulseValues[7]))) {
     const [initial, high, delay, rise, fall, width, period, cycleCount] = pulseValues
     return { value: high, mode: 'pulse', pulse: { initial, delay, rise, fall, width, period, ...(cycleCount === undefined ? {} : { cycleCount }) } }
   }
@@ -120,23 +167,26 @@ function sourceValue(value: string, pwlFiles: { filename: string; content: strin
       if (valid && rows.length >= 2) return { value: rows.at(-1)!.voltage, mode: 'pwl', pwl: rows, pwlFileName: matchingFiles[0].filename.replace(/\\/g, '/').split('/').at(-1) }
     }
   }
-  const repeatedPwl = trimmed.match(/^PWL\s+REPEAT\s+FOREVER\s*\(\s*([^()]*)\s*\)\s*ENDREPEAT$/i)
-  const finiteRepeatedPwl = trimmed.match(/^PWL\s+REPEAT\s+FOR\s+(\d+)\s*\(\s*([^()]*)\s*\)\s*ENDREPEAT$/i)
-  const generatedPwl = repeatedPwl || finiteRepeatedPwl ? null : trimmed.match(/^PWL\(\s*([^()]*)\s*\)$/i)
+  const pwlScale = trimmed.match(/^PWL\s+VALUE_SCALE_FACTOR\s*=\s*\{([A-Za-z_][A-Za-z0-9_]*)\}\s+/i)
+  const pwlWithoutScale = pwlScale ? trimmed.replace(/^PWL\s+VALUE_SCALE_FACTOR\s*=\s*\{[A-Za-z_][A-Za-z0-9_]*\}\s+/i, 'PWL ') : trimmed
+  const repeatedPwl = pwlWithoutScale.match(/^PWL\s+REPEAT\s+FOREVER\s*\(\s*([^()]*)\s*\)\s*ENDREPEAT$/i)
+  const finiteRepeatedPwl = pwlWithoutScale.match(/^PWL\s+REPEAT\s+FOR\s+(\d+)\s*\(\s*([^()]*)\s*\)\s*ENDREPEAT$/i)
+  const generatedPwl = repeatedPwl || finiteRepeatedPwl ? null : pwlWithoutScale.match(/^PWL\s*\(\s*([^()]*)\s*\)$/i)
   const pwlBody = repeatedPwl?.[1] ?? finiteRepeatedPwl?.[2] ?? generatedPwl?.[1]
   if (pwlBody !== undefined) {
     const values = pwlBody.trim().split(/[\s,]+/).filter(Boolean)
-    if (values.length >= 4 && values.length <= 64 && values.length % 2 === 0 && values.every((entry) => validScalar(entry))) {
+    if (values.length >= 4 && values.length <= 64 && values.length % 2 === 0 && values.every((entry, index) => index % 2 === 0 ? validScalar(entry) : validScalar(entry) || parameterReference(entry))) {
       const pwl = Array.from({ length: values.length / 2 }, (_, index) => ({ time: values[index * 2], voltage: values[index * 2 + 1] }))
+      const scaleParameter = pwlScale?.[1]
       if (finiteRepeatedPwl) {
         const repeatCount = Number(finiteRepeatedPwl[1])
         const expandedCount = pwl.length + (repeatCount - 1) * (pwl.length - 1)
         const startVoltage = scalarMagnitude(pwl[0].voltage), endVoltage = scalarMagnitude(pwl.at(-1)!.voltage)
         if (repeatCount >= 1 && repeatCount <= 31 && expandedCount <= 32 && (repeatCount === 1 || startVoltage !== null && startVoltage === endVoltage)) {
-          return { value: pwl.at(-1)!.voltage, mode: 'pwl', pwl, pwlRepeatCount: repeatCount }
+          return { value: pwl.at(-1)!.voltage, mode: 'pwl', pwl, pwlRepeatCount: repeatCount, ...(scaleParameter ? { pwlScaleParameter: scaleParameter } : {}) }
         }
       } else {
-        return { value: pwl.at(-1)!.voltage, mode: 'pwl', pwl, ...(repeatedPwl ? { pwlRepeat: 'forever' as const } : {}) }
+        return { value: pwl.at(-1)!.voltage, mode: 'pwl', pwl, ...(repeatedPwl ? { pwlRepeat: 'forever' as const } : {}), ...(scaleParameter ? { pwlScaleParameter: scaleParameter } : {}) }
       }
     }
   }
@@ -171,6 +221,7 @@ function applyDirective(project: Project, directive: string, warnings: string[],
   const tokens = directive.trim().replace(/^!\s*/, '').split(/\s+/)
   const command = tokens.shift()?.toLowerCase()
   if (!command) return
+  if (command === '.func') return
   if (command === '.op') { project.simulation.analysis = 'op'; return }
   if (command === '.tran') {
     const options = tokens.map((value) => value.toLowerCase())
@@ -196,10 +247,48 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     return
   }
   if (command === '.dc') {
-    const [source, start, stop, step] = tokens
-    if (!source || !start || !stop || !step) { warnings.push(`Line ${line}: could not interpret .dc settings.`); return }
+    const [source, start, stop, step, secondSource, secondStart, secondStop, secondStep, ...extra] = tokens
+    if (!source || !start || !stop || !step || !validScalar(start) || !validScalar(stop) || !validScalar(step)) {
+      warnings.push(`Line ${line}: could not interpret .dc settings; expected one source followed by numeric start, stop, and step values. Original source is preserved.`)
+      return
+    }
+    const sweepSource = project.parts.find((part) => part.ref.toLowerCase() === source.toLowerCase())
+    if (!sweepSource || (sweepSource.kind !== 'source' && sweepSource.kind !== 'currentSource') || sweepSource.sourceMode !== 'dc') {
+      warnings.push(`Line ${line}: .dc target ${source} is not a placed scalar DC voltage or current source; the sweep was not imported. Original source is preserved.`)
+      return
+    }
+    const startMagnitude = componentMagnitude(start, sweepSource.kind), stopMagnitude = componentMagnitude(stop, sweepSource.kind), stepMagnitude = componentMagnitude(step, sweepSource.kind)
+    const pointCount = dcSweepPointCount(start, stop, step, sweepSource.kind)
+    if (startMagnitude === null || stopMagnitude === null || stepMagnitude === null || stepMagnitude === 0 || (stopMagnitude - startMagnitude) * stepMagnitude < 0 || pointCount === null || pointCount > MAX_DC_SWEEP_POINTS) {
+      const unit = sweepSource.kind === 'currentSource' ? 'amperes' : 'volts'
+      const reason = pointCount !== null && pointCount > MAX_DC_SWEEP_POINTS ? `the sweep exceeds the ${MAX_DC_SWEEP_POINTS.toLocaleString()}-point limit` : `the numeric start, stop, and nonzero step values in ${unit} do not move toward the stop value`
+      warnings.push(`Line ${line}: .dc settings for ${source} are invalid because ${reason}; the sweep was not imported. Original source is preserved.`)
+      return
+    }
+    let secondSweep: Project['simulation']['parameterSweeps'] = undefined
+    if (secondSource || secondStart || secondStop || secondStep || extra.length) {
+      const secondary = project.parts.find((part) => part.ref.toLowerCase() === secondSource?.toLowerCase())
+      if (!secondSource || !secondStart || !secondStop || !secondStep || extra.length || !secondary || (secondary.kind !== 'source' && secondary.kind !== 'currentSource') || secondary.sourceMode !== 'dc' || secondary.ref.toLowerCase() === sweepSource.ref.toLowerCase()) {
+        warnings.push(`Line ${line}: two-source .dc sweep needs a distinct placed scalar DC voltage or current source and two complete numeric ranges; the directive was not imported. Original source is preserved.`)
+        return
+      }
+      const secondaryStart = componentMagnitude(secondStart, secondary.kind), secondaryStop = componentMagnitude(secondStop, secondary.kind), secondaryStep = componentMagnitude(secondStep, secondary.kind)
+      const secondaryCount = dcSweepPointCount(secondStart, secondStop, secondStep, secondary.kind)
+      if (secondaryStart === null || secondaryStop === null || secondaryStep === null || secondaryStep === 0 || (secondaryStop - secondaryStart) * secondaryStep < 0 || secondaryCount === null || secondaryCount < 2 || secondaryCount > 10) {
+        warnings.push(`Line ${line}: second .dc sweep range for ${secondary.ref} must move toward its stop value and contain 2–10 cases; the directive was not imported. Original source is preserved.`)
+        return
+      }
+      secondSweep = [{
+        component: secondary.ref,
+        start: secondStart,
+        stop: secondStop,
+        points: secondaryCount,
+        listValues: Array.from({ length: secondaryCount }, (_, index) => String(Number((secondaryStart + secondaryStep * index).toPrecision(12)))),
+      }]
+    }
     project.simulation.analysis = 'dc'
     project.simulation.dcSweep = { source, start, stop, step }
+    project.simulation.parameterSweeps = secondSweep
     return
   }
   if (command === '.step') {
@@ -223,7 +312,7 @@ function applyDirective(project: Project, directive: string, warnings: string[],
       const [first, last, increment] = magnitudes
       const intervals = (last - first) / increment
       const rounded = Math.round(intervals)
-      if (increment !== 0 && intervals > 0 && Math.abs(intervals - rounded) < 1e-9 && rounded >= 1 && rounded < 10) {
+      if (increment !== 0 && intervals > 0 && Math.abs(intervals - rounded) < 1e-9 && rounded >= 1 && rounded <= 9) {
         start = values[0]; stop = values[1]; points = rounded + 1
       }
     } else if (!listMode && (mode === 'dec' || mode === 'oct') && values.length === 3 && magnitudes.every((value): value is number => value !== null)) {
@@ -231,7 +320,7 @@ function applyDirective(project: Project, directive: string, warnings: string[],
       const base = mode === 'dec' ? 10 : 2
       const intervals = Math.log(last / first) / Math.log(base) * density
       const rounded = Math.round(intervals)
-      if (Number.isInteger(density) && density > 0 && first > 0 && last > first && Number.isFinite(intervals) && Math.abs(intervals - rounded) < 1e-9 && rounded >= 1 && rounded < 10) {
+      if (Number.isInteger(density) && density > 0 && first > 0 && last > first && Number.isFinite(intervals) && Math.abs(intervals - rounded) < 1e-9 && rounded >= 1 && rounded <= 9) {
         start = values[1]; stop = values[2]; points = rounded + 1
         listValues = Array.from({ length: points }, (_, index) => (index === points - 1 ? last : first * base ** (index / density)).toPrecision(12))
       }
@@ -409,10 +498,11 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     if (operation === 'trig') {
       const parseTrigger = (index: number) => {
         const vector = resolveVector(measurementTokens[index])
-        const value = measurementTokens[index + 1]?.match(/^(?:val=)?([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?)$/i)?.[1]
+        const value = measurementTokens[index + 1]?.match(/^(?:val=)?([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?[vVaA]?)$/i)?.[1]
         const edge = measurementTokens[index + 2]?.match(/^(rise|fall|cross)(?:=(\d+))?$/i)
-        if (!vector || !value || !edge || Number(edge[2] ?? '1') !== 1) return null
-        return { vector, threshold: value, edge: edge[1].toLowerCase() === 'cross' ? 'either' as const : edge[1].toLowerCase() as 'rise' | 'fall' }
+        const count = Number(edge?.[2] ?? '1')
+        if (!vector || !value || !edge || !Number.isInteger(count) || count < 1 || count > 9999) return null
+        return { vector, threshold: value, edge: edge[1].toLowerCase() === 'cross' ? 'either' as const : edge[1].toLowerCase() as 'rise' | 'fall', count }
       }
       const targetIndex = measurementTokens.findIndex((token) => token.toLowerCase() === 'targ')
       const trigger = parseTrigger(0)
@@ -424,7 +514,7 @@ function applyDirective(project: Project, directive: string, warnings: string[],
         warnings.push(`Line ${line}: ${command} ${recordExcerpt(tokens.join(' '))} is not a supported trigger/target transient delay measurement.`)
         return
       }
-      measurements.push({ id, operation: 'delay', ...trigger, targetVector: target.vector, targetThreshold: target.threshold, targetEdge: target.edge })
+      measurements.push({ id, operation: 'delay', vector: trigger.vector, threshold: trigger.threshold, edge: trigger.edge, ...(trigger.count === 1 ? {} : { triggerCount: trigger.count }), targetVector: target.vector, targetThreshold: target.threshold, targetEdge: target.edge, ...(target.count === 1 ? {} : { targetCount: target.count }) })
       project.simulation.transientMeasurements = measurements
       return
     }
@@ -566,9 +656,19 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     else symbolByName.set(key, { asset, parsed: parseLtspiceSymbol(asset.content, asset.filename) })
   }
   const subcircuits = new Map<string, string[]>()
+  const subcircuitDefinitions = new Map<string, { name: string; parameters: { name: string; defaultValue: string }[] }>()
   const deviceModels = new Map<string, string>()
   const knownLibraries = new Set<string>()
   const importedParameterNames = new Set<string>()
+  const importedBehavioralFunctions = new Map<string, BehavioralFunctionDefinition>()
+  for (const record of textRecords) for (const directive of record.text.split(/\n|!\s+(?=\.)/).map((item) => item.trim()).filter((item) => /^\.func\b/i.test(item))) {
+    const definition = parseLtspiceFunction(directive)
+    if (!definition) { warnings.push(`Line ${record.line}: .func definition is outside the supported bounded NAME(arg,...) {expression} form; original source is preserved.`); continue }
+    const key = definition.name.toLowerCase()
+    if (importedBehavioralFunctions.has(key)) { warnings.push(`Line ${record.line}: duplicate .func ${definition.name} was ignored; the first definition is used.`); continue }
+    if (importedBehavioralFunctions.size >= MAX_LTSPICE_FUNCTIONS) { warnings.push(`Line ${record.line}: .func ${definition.name} exceeds ELSim’s ${MAX_LTSPICE_FUNCTIONS}-function schematic limit.`); continue }
+    importedBehavioralFunctions.set(key, definition)
+  }
   for (const record of textRecords) for (const directive of record.text.split(/\n|!\s+(?=\.)/).map((item) => item.trim())) {
     const body = directive.replace(/^\.param\b/i, '')
     if (body === directive) continue
@@ -577,7 +677,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   for (const asset of modelAssets ?? []) {
     knownLibraries.add(baseName(asset.filename))
     const parsed = parseSubcircuitLibrary(asset.content, asset.selectedSections)
-    parsed.subcircuits.forEach((item) => subcircuits.set(item.name.toLowerCase(), item.pins))
+    parsed.subcircuits.forEach((item) => { subcircuits.set(item.name.toLowerCase(), item.pins); subcircuitDefinitions.set(item.name.toLowerCase(), item) })
     parsed.models.forEach((item) => deviceModels.set(item.name.toLowerCase(), item.type.toLowerCase()))
   }
 
@@ -604,11 +704,13 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   project.importedChildSchematicSources = availableChildren.map((child) => ({ format: 'ltspice-asc', filename: child.filename.replace(/\\/g, '/').split('/').pop() || child.filename, originalText: child.content }))
   const childByName = new Map(availableChildren.map((child) => [baseName(child.filename), child]))
   const importedChildren = new Map<string, ProjectSheet>()
+  const importedPwlScaleParameters = new Map<string, string>()
 
   for (const symbol of symbols) {
     const identity = symbol.attributes.INSTNAME
     const sourcePrefix = symbol.attributes.INSTNAME?.[0]?.toUpperCase()
     const rawValue = symbol.attributes.VALUE ?? symbol.attributes.VALUE2 ?? ''
+    const currentSineWithCycleLimit = sourcePrefix === 'I' && /^SINE\s*\([^()]*\)$/i.test(rawValue.trim()) && rawValue.trim().match(/^SINE\s*\(([^()]*)\)$/i)?.[1].trim().split(/[\s,]+/).filter(Boolean).length === 7
     const behavioralRecord = sourcePrefix === 'B' ? rawValue.trim().match(/^([VI])\s*=\s*(.+)$/i) : null
     const behavioralExpression = behavioralRecord?.[2].trim().replace(/^\{([\s\S]*)\}$/, '$1').trim()
     const valueAc = sourcePrefix === 'V' || sourcePrefix === 'I' ? sourceAc(rawValue) : null
@@ -617,8 +719,12 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const fallbackSourceValue = valueAc ? (symbol.attributes.VALUE2 && !value2Ac ? symbol.attributes.VALUE2 : '0') : rawValue
     const parsedWaveform = sourcePrefix === 'V' || sourcePrefix === 'I' ? valueAc ? { ...sourceValue(fallbackSourceValue, pwlFiles), mode: 'dc' as const } : sourceValue(rawValue, pwlFiles) : { value: rawValue }
     const parsedSource = parsedWaveform
-    const value = behavioralExpression ?? parsedSource.value
+    let value = behavioralExpression ?? parsedSource.value
     if (!identity || !/^[A-Za-z][A-Za-z0-9_]*$/.test(identity)) { warnings.push(`Line ${symbol.line}: ${symbol.name} is missing a valid SYMATTR InstName and was skipped.`); continue }
+    if (currentSineWithCycleLimit) {
+      warnings.push(`Line ${symbol.line}: current source ${identity} uses finite-cycle SINE(... Ncycles), which is not represented by ELSim's current-source waveform model; it was skipped rather than imported as a continuous sine. The original .asc source is preserved.`)
+      continue
+    }
     const sidecar = symbolByName.get(baseName(symbol.name))
     if (!sidecar) { warnings.push(`Line ${symbol.line}: symbol ${symbol.name} (${identity}) is missing its .asy sidecar and was skipped.`); continue }
     const prefix = sidecar.parsed.prefix ?? identity[0]
@@ -677,6 +783,14 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const mapped = childSheet ? { kind: 'subcircuit' as const, modelName: sheetModelName(childSheet.id) } : partKind(symbol, prefix, prefix.toUpperCase() === 'M' ? (symbol.attributes.SPICEMODEL ?? value) : value, subcircuits, deviceModels)
     if (!mapped.kind) { warnings.push(`Line ${symbol.line}: ${symbol.name} (${identity}) is unsupported or refers to missing subcircuit model ${value}; symbol was skipped: “${recordExcerpt(symbol.rawRecords.join(' | '))}”.`); continue }
     const pins = sidecar.parsed.pins
+    if (prefix.toUpperCase() === 'S' && pins.length === 4) {
+      warnings.push(`Line ${symbol.line}: LTspice voltage-controlled switch ${identity} uses four electrical pins and model “${recordExcerpt(value)}”; ELSim's current Switch is a two-terminal manual switch, so this device was skipped. Recreate it with a tested subcircuit or another compatible model; the original .asc source is preserved.`)
+      continue
+    }
+    if (['F', 'H'].includes(prefix.toUpperCase()) && /^\s*POLY\s*\(/i.test(symbol.attributes.VALUE ?? '')) {
+      warnings.push(`Line ${symbol.line}: nonlinear polynomial current-controlled source ${identity} uses POLY syntax, which ELSim does not translate; only the linear F/H gain form is supported. The original .asc source is preserved.`)
+      continue
+    }
     const expectedPinNames = childSheet ? childSheet.ports.map((port) => port.name) : mapped.kind === 'subcircuit' ? subcircuits.get(mapped.modelName!.toLowerCase()) ?? [] : null
     const expectedPinCount = expectedPinNames?.length ?? ({ source: 2, currentSource: 2, resistor: 2, lamp: 2, capacitor: 2, ground: 1, inductor: 2, diode: 2, led: 2, switch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, npn: 3, pnp: 3, njfet: 3, pjfet: 3, nmos: 4, pmos: 4, subcircuit: 0 } satisfies Record<PartKind, number>)[mapped.kind]
     if (pins.length !== expectedPinCount) { warnings.push(`Line ${symbol.line}: ${symbol.name} has ${pins.length} pins but ${identity} requires ${expectedPinCount}; it was skipped.`); continue }
@@ -690,7 +804,8 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       }
       behavioralOutput = behavioralRecord[1].toUpperCase() === 'I' ? 'current' : 'voltage'
       try {
-        const parsed = parseBehavioralExpression(behavioralExpression)
+        value = expandBehavioralFunctions(behavioralExpression, importedBehavioralFunctions)
+        const parsed = parseBehavioralExpression(value)
         validateBehavioralReferences(parsed.references, flags.map((flag) => flag.name), symbols.flatMap((candidate) => candidate.attributes.INSTNAME ? [candidate.attributes.INSTNAME] : []), [...importedParameterNames])
       } catch (error) {
         const message = error instanceof Error ? error.message : 'the expression or one of its references is unsupported.'
@@ -699,6 +814,9 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       }
     }
     const isCurrentControlled = kind === 'cccs' || kind === 'ccvs'
+    const importedSubcircuitDefinition = kind === 'subcircuit' && !childSheet ? subcircuitDefinitions.get(mapped.modelName!.toLowerCase()) : undefined
+    const sheetOverrides = childSheet ? importSubcircuitParameterOverrides(symbol.attributes.SPICELINE, childSheet.parameters, identity, symbol.line, warnings) : { consumed: false }
+    const modelOverrides = importedSubcircuitDefinition ? importSubcircuitParameterOverrides(symbol.attributes.SPICELINE, importedSubcircuitDefinition.parameters, identity, symbol.line, warnings) : { consumed: false }
     const controlSource = isCurrentControlled ? symbol.attributes.VALUE?.trim() : undefined
     const coefficient = isCurrentControlled ? symbol.attributes.VALUE2?.trim() ?? '' : value
     if (isCurrentControlled && (!controlSource || !/^V[A-Za-z0-9_]*$/i.test(controlSource))) {
@@ -722,7 +840,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     else if (['resistor', 'capacitor', 'inductor', 'source', 'vcvs', 'vccs'].includes(kind) && !requestsPwlFile && !validScalar(value) && !/^\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value)) warnings.push(`Line ${symbol.line}: value “${value}” on ${identity} is outside the supported scalar syntax.`)
     if ((['D', 'Q', 'M', 'J'].includes(prefix.toUpperCase())) && (mapped.deviceModel ?? value) && !deviceModels.has((mapped.deviceModel ?? value).toLowerCase())) warnings.push(`Line ${symbol.line}: device model “${mapped.deviceModel ?? value}” for ${identity} is missing; the educational default model will be used.`)
     const offsets = pins.map(({ x, y }) => [x, y] as [number, number])
-    const representedAttributes = ['INSTNAME', ...(isCurrentControlled || ['njfet', 'pjfet', 'nmos', 'pmos'].includes(kind) ? ['VALUE', 'VALUE2'] : [representedValueAttribute, ...(valueAc || value2Ac ? ['VALUE', 'VALUE2'] : [])])]
+    const representedAttributes = ['INSTNAME', ...(isCurrentControlled || ['njfet', 'pjfet', 'nmos', 'pmos'].includes(kind) ? ['VALUE', 'VALUE2'] : [representedValueAttribute, ...(valueAc || value2Ac ? ['VALUE', 'VALUE2'] : [])]), ...(sheetOverrides.consumed || modelOverrides.consumed ? ['SPICELINE'] : [])]
     const extensionAttributes = Object.fromEntries(Object.entries(symbol.attributes).filter(([key]) => !representedAttributes.includes(key)).slice(0, 16).map(([key, attribute]) => [key, attribute.slice(0, 512)]))
     const unmappedAttributes = Object.entries(symbol.attributes).filter(([key]) => !representedAttributes.includes(key))
     const omittedAttributes = unmappedAttributes.length - Math.min(unmappedAttributes.length, 16) + unmappedAttributes.slice(0, 16).filter(([, attribute]) => attribute.length > 512).length
@@ -739,9 +857,12 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       symbolAssetId: sidecar.asset.id, symbolPinOffsets: offsets,
       ...(Object.keys(extensionAttributes).length ? { extensions: { ltspice: { attributes: extensionAttributes } } } : {}),
       ...(kind === 'subcircuit' ? { modelName: mapped.modelName, modelPins: [...pins.map((pin) => pin.name)], ...(childSheet ? { sheetId: childSheet.id, sheetPortLayout: childSheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })) } : {}) } : {}),
+      ...(sheetOverrides.values ? { sheetParameters: sheetOverrides.values } : {}),
+      ...(modelOverrides.values ? { modelParameters: modelOverrides.values } : {}),
       ...(mapped.deviceModel ? { deviceModel: mapped.deviceModel } : {}),
       ...(isCurrentControlled ? { controlSource } : {}),
       ...(behavioralOutput ? { behavioralOutput } : {}),
+      ...(behavioralOutput ? { behavioralDialect: 'ltspice' as const } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.mode ? { sourceMode: parsedSource.mode } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.pulse ? { pulse: parsedSource.pulse } : {}),
       ...((kind === 'source' || kind === 'currentSource') && parsedSource.sine ? { sine: parsedSource.sine } : {}),
@@ -756,6 +877,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     }
     importInstanceInitialCondition(project, kind, identity, symbol.attributes.SPICELINE, symbol.line, warnings)
     project.parts.push(part)
+    if ((kind === 'source' || kind === 'currentSource') && parsedSource.pwlScaleParameter) importedPwlScaleParameters.set(identity.toLowerCase(), parsedSource.pwlScaleParameter)
     warnings.push(...sidecar.parsed.warnings.map((warning) => `${identity}: ${warning}`))
   }
   for (const flag of flags) {
@@ -787,6 +909,80 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
   for (const entry of directives.filter(({ directive }) => /^\.param\b/i.test(directive))) applyDirective(project, entry.directive, warnings, entry.line, knownLibraries)
   for (const entry of directives.filter(({ directive }) => /^\.(?:tran|ac|dc|op)\b/i.test(directive))) applyDirective(project, entry.directive, warnings, entry.line, knownLibraries)
   for (const entry of directives.filter(({ directive }) => !/^\.(?:param|tran|ac|dc|op)\b/i.test(directive))) applyDirective(project, entry.directive, warnings, entry.line, knownLibraries)
+  const activeSheet = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
+  const unsupportedPwlScaleParts = new Set<string>()
+  for (const [ref, parameter] of importedPwlScaleParameters) {
+    const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === ref)
+    const declared = activeSheet?.parameters?.find((item) => item.name.toLowerCase() === parameter.toLowerCase())
+    const scale = declared ? scalarMagnitude(declared.defaultValue.replace(/^\{(.*)\}$/, '$1')) : null
+    if (!part || !declared || scale === null) {
+      warnings.push(`${part?.ref ?? ref}: generated PWL scaling expression refers to ${parameter}, which has no supported numeric .param default; the source was skipped and original .asc text is preserved.`)
+      if (part) unsupportedPwlScaleParts.add(part.id)
+      continue
+    }
+    if (part.kind === 'source' && part.pwl) part.pwl = part.pwl.map((point) => ({ ...point, voltage: String((scalarMagnitude(point.voltage) ?? 0) * scale) }))
+    if (part.kind === 'currentSource' && part.currentPwl) part.currentPwl = part.currentPwl.map((point) => ({ ...point, current: String((scalarMagnitude(point.current) ?? 0) * scale) }))
+    const last = part.kind === 'source' ? part.pwl?.at(-1)?.voltage : part.kind === 'currentSource' ? part.currentPwl?.at(-1)?.current : undefined
+    if (last !== undefined) part.value = last
+  }
+  if (unsupportedPwlScaleParts.size) {
+    project.parts = project.parts.filter((part) => !unsupportedPwlScaleParts.has(part.id))
+    project.sheets[0].parts = project.parts
+  }
+  const importedSweeps = (project.simulation as Project['simulation']).parameterSweeps
+  for (const sweep of importedSweeps ?? []) {
+    if (!sweep.globalParameter || sweep.listValues) continue
+    const candidates: { part: Part; sourceParameter: SourceSweepParameter }[] = []
+    const parameter = sweep.globalParameter.toLowerCase()
+    const parameterUses = project.parts.flatMap((part) => {
+      if (part.kind !== 'source' && part.kind !== 'currentSource') return [part.value, ...Object.values(part.modelParameters ?? {}), ...Object.values(part.sheetParameters ?? {})].filter((value) => parameterReference(value) && value.slice(1, -1).toLowerCase() === parameter)
+      const mode = part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')
+      const sourceValues = mode === 'pulse' ? [part.value, ...Object.values(part.pulse ?? {})]
+        : mode === 'sine' ? Object.values({ offset: '0', amplitude: part.sine?.amplitude ?? part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine })
+          : mode === 'exp' ? Object.values({ initial: '0', pulsed: part.exp?.pulsed ?? part.value, riseDelay: '0', riseTau: '1u', fallDelay: '10m', fallTau: '1u', ...part.exp })
+            : mode === 'sffm' ? Object.values({ offset: '0', amplitude: part.sffm?.amplitude ?? part.value, carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100', ...part.sffm })
+              : mode === 'pwl' ? [...(part.kind === 'source' ? (part.pwl ?? []).map((point) => point.voltage) : (part.currentPwl ?? []).map((point) => point.current)), ...(importedPwlScaleParameters.has(part.ref.toLowerCase()) ? [`{${importedPwlScaleParameters.get(part.ref.toLowerCase())}}`] : [])] : [part.value]
+      return [...sourceValues, part.acMagnitude ?? '', ...Object.values(part.modelParameters ?? {})].filter((value) => parameterReference(value) && value.slice(1, -1).toLowerCase() === parameter)
+    })
+    if (parameterUses.length !== 1) continue
+    for (const part of project.parts) {
+      const parameter = sweep.globalParameter!.toLowerCase()
+      if (part.kind !== 'source' && part.kind !== 'currentSource') continue
+      const mode = part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')
+      const fieldSets: Record<string, { fields: string[]; values: Record<string, string> }> = {
+        pulse: { fields: ['initial', 'high', 'delay', 'rise', 'fall', 'width', 'period'], values: { initial: part.pulse?.initial ?? '0', high: part.value, delay: part.pulse?.delay ?? '0', rise: part.pulse?.rise ?? '1u', fall: part.pulse?.fall ?? '1u', width: part.pulse?.width ?? '50m', period: part.pulse?.period ?? '100m' } },
+        sine: { fields: ['offset', 'amplitude', 'frequency', 'delay', 'damping', 'phase'], values: { offset: part.sine?.offset ?? '0', amplitude: part.sine?.amplitude ?? part.value, frequency: part.sine?.frequency ?? '1k', delay: part.sine?.delay ?? '0', damping: part.sine?.damping ?? '0', phase: part.sine?.phase ?? '0' } },
+        exp: { fields: ['initial', 'pulsed', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'], values: { initial: part.exp?.initial ?? '0', pulsed: part.exp?.pulsed ?? part.value, riseDelay: part.exp?.riseDelay ?? '0', riseTau: part.exp?.riseTau ?? '1u', fallDelay: part.exp?.fallDelay ?? '10m', fallTau: part.exp?.fallTau ?? '1u' } },
+        sffm: { fields: ['offset', 'amplitude', 'carrierFrequency', 'modulationIndex', 'signalFrequency'], values: { offset: part.sffm?.offset ?? '0', amplitude: part.sffm?.amplitude ?? part.value, carrierFrequency: part.sffm?.carrierFrequency ?? '1k', modulationIndex: part.sffm?.modulationIndex ?? '5', signalFrequency: part.sffm?.signalFrequency ?? '100' } },
+        pwl: { fields: (part.kind === 'source' ? part.pwl ?? [] : part.currentPwl ?? []).map((_, index) => `point.${index + 1}`), values: Object.fromEntries((part.kind === 'source' ? part.pwl ?? [] : part.currentPwl ?? []).map((point, index) => [`point.${index + 1}`, part.kind === 'source' && 'voltage' in point ? point.voltage : part.kind === 'currentSource' && 'current' in point ? point.current : ''])) },
+      }
+      const set = fieldSets[mode]
+      const field = mode === 'pwl' && importedPwlScaleParameters.get(part.ref.toLowerCase())?.toLowerCase() === parameter
+        ? 'scale'
+        : set?.fields.find((name) => { const value = set.values[name]; return parameterReference(value) && value.slice(1, -1).toLowerCase() === parameter })
+      if (field) candidates.push({ part, sourceParameter: mode === 'pwl' ? `pwl.${field}` as SourceSweepParameter : `${mode}.${field}` as SourceSweepParameter })
+    }
+    if (candidates.length !== 1 || !activeSheet?.parameters?.some((item) => item.name.toLowerCase() === sweep.globalParameter!.toLowerCase())) continue
+    const [{ part, sourceParameter }] = candidates
+    sweep.component = part.ref
+    sweep.sourceParameter = sourceParameter
+    delete sweep.globalParameter
+  }
+  for (const sweep of importedSweeps ?? []) {
+    if (!sweep.globalParameter) continue
+    const parameterName = sweep.globalParameter.toLowerCase()
+    const candidates = project.parts.flatMap((part) => {
+      if (!part.deviceModel) return []
+      const model = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models).find((entry) => entry.name.toLowerCase() === part.deviceModel!.toLowerCase())
+      const parameter = model?.parameters.find((entry) => entry.defaultValue.trim().replace(/^\{(.*)\}$/, '$1').toLowerCase() === parameterName)
+      return parameter ? [{ part, parameter }] : []
+    })
+    if (candidates.length !== 1) continue
+    const [{ part, parameter }] = candidates
+    sweep.component = part.ref
+    sweep.parameter = parameter.name
+    delete sweep.globalParameter
+  }
   const hasImportedInitialConditions = (project.simulation.initialConditions ?? []).length > 0
   if (project.simulation.analysis !== 'tran' && hasImportedInitialConditions) {
     warnings.push('Imported instance or .ic initial conditions require transient analysis; they were skipped because the imported analysis is not transient.')

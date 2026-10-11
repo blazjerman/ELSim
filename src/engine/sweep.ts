@@ -50,6 +50,12 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (!part || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, pulse source, resistor, lamp, capacitor, or inductor for parameter stepping.')
+  if (sweep.listValues) {
+    if ((part.kind !== 'source' && part.kind !== 'currentSource') || part.sourceMode !== 'dc') throw new Error(`${part.ref} discrete values are supported only for scalar DC source sweeps.`)
+    const values = sweep.listValues.map((value) => componentMagnitude(value, part.kind))
+    if (values.some((value) => value === null)) throw new Error(`${part.ref} discrete sweep values must be valid source quantities.`)
+    return values as number[]
+  }
   const pulseHigh = (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
   const pwlScale = (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pwl'
   const waveformAmplitude = (part.kind === 'source' || part.kind === 'currentSource') && ['sine', 'exp', 'sffm'].includes(part.sourceMode ?? '')

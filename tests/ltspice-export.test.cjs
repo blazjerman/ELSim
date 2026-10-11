@@ -11,8 +11,15 @@ const { createHierarchicalExampleProject } = require(path.join(build, 'domain/ex
 const { analyzeConnectivity, pinNet } = require(path.join(build, 'domain/connectivity.js'))
 const { parseLtspiceSchematic } = require(path.join(build, 'domain/ltspiceSchematic.js'))
 const { createFilesZip } = require(path.join(build, 'domain/projectArchive.js'))
+const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 
 function sha256(content) { return crypto.createHash('sha256').update(content).digest('hex') }
+function scalarForTest(value) {
+  const match = value.trim().replaceAll('µ', 'u').match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?(?:hz|s|v|a)?$/i)
+  assert.ok(match, `expected scalar: ${value}`)
+  const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 })[match[2]?.toLowerCase() ?? ''] ?? 1
+  return String(Number(match[1]) * scale)
+}
 
 function zipPaths(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
@@ -218,12 +225,13 @@ test('exports a deterministic portable file tree for the beginner circuit', asyn
   assert.ok(first.files.every((file) => file.sha256 === sha256(file.content)))
 })
 
+
 test('exports scalar and trigger-target transient measurements as LTspice .meas directives', async () => {
   const project = createStarterProject()
   project.simulation.transientMeasurements = [
     { id: 'VoutMax', operation: 'max', vector: 'V(vout)', from: '2m', to: '8m' },
     { id: 'R1Rms', operation: 'rms', vector: 'I(R1)' },
-    { id: 'RiseDelay', operation: 'delay', vector: 'V(vin)', threshold: '2.5', edge: 'rise', targetVector: 'V(vout)', targetThreshold: '2.5', targetEdge: 'either' },
+    { id: 'RiseDelay', operation: 'delay', vector: 'V(vin)', threshold: '2.5', edge: 'rise', triggerCount: 2, targetVector: 'V(vout)', targetThreshold: '2.5', targetEdge: 'either', targetCount: 3 },
   ]
   const output = await exportLtspiceProject(project)
   assert.deepEqual(output.blockers, [])
@@ -231,7 +239,7 @@ test('exports scalar and trigger-target transient measurements as LTspice .meas 
   const asc = output.files.find((file) => file.path.endsWith('.asc')).content
   assert.match(asc, /\.meas tran VoutMax MAX V\(vout\) FROM=2m TO=8m/)
   assert.match(asc, /\.meas tran R1Rms RMS I\(R1\)/)
-  assert.match(asc, /\.meas tran RiseDelay TRIG V\(vin\) VAL=2\.5 RISE=1 TARG V\(vout\) VAL=2\.5 CROSS=1/)
+  assert.match(asc, /\.meas tran RiseDelay TRIG V\(vin\) VAL=2\.5 RISE=2 TARG V\(vout\) VAL=2\.5 CROSS=3/)
   const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `measurement-symbol-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
   const imported = parseLtspiceSchematic(asc, 'measurements.asc', symbols).project
   assert.deepEqual(imported.simulation.transientMeasurements, project.simulation.transientMeasurements.map((measurement) => ({ ...measurement, vector: measurement.vector.toLowerCase(), ...('targetVector' in measurement ? { targetVector: measurement.targetVector.toLowerCase() } : {}) })))
@@ -402,6 +410,313 @@ test('exports and reimports per-source AC magnitude and phase', async () => {
   assert.deepEqual([restored.parts.find((part) => part.ref === 'I1').acMagnitude, restored.parts.find((part) => part.ref === 'I1').acPhase], ['3m', '-90'])
 })
 
+test('exports current-source DC sweeps with ampere values', async () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'dc-current-source', kind: 'currentSource', ref: 'I1', value: '0 A', x: 520, y: 400, rotation: 0, sourceMode: 'dc' })
+  project.sheets[0].parts = project.parts
+  project.simulation.analysis = 'dc'
+  project.simulation.dcSweep = { source: 'I1', start: '0 A', stop: '10 mA', step: '1 mA' }
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /\.dc I1 0 10m 1m/)
+})
+
+test('exports a secondary scalar DC source sweep as a two-source LTspice directive', async () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'dc-secondary', kind: 'currentSource', ref: 'I1', value: '0 A', x: 520, y: 400, rotation: 0, sourceMode: 'dc' })
+  project.sheets[0].parts = project.parts
+  project.simulation.analysis = 'dc'
+  project.simulation.dcSweep = { source: 'V1', start: '0 V', stop: '5 V', step: '1 V' }
+  project.simulation.parameterSweeps = [{ component: 'I1', start: '-1 mA', stop: '3 mA', listValues: ['-0.001', '0.001', '0.003'], points: 3 }]
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  assert.equal(exported.losses.some((loss) => /I1/.test(loss.explanation)), false)
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /\.dc V1 0 5 1 I1 -1m 3m 0\.002/)
+})
+
+test('exports and reimports declared global parameter sweeps as LTspice .step lists', async () => {
+  const project = createStarterProject()
+  project.sheets[0].parameters = [
+    { id: 'gain-param', name: 'GAIN', defaultValue: '1' },
+    { id: 'bias-param', name: 'BIAS', defaultValue: '0' },
+  ]
+  project.parts.find((part) => part.kind === 'resistor').value = '{GAIN}'
+  project.simulation.parameterSweeps = [
+    { component: '$param:GAIN', globalParameter: 'GAIN', start: '1', stop: '4', points: 3, listValues: ['1', '2', '4'] },
+    { component: '$param:BIAS', globalParameter: 'BIAS', start: '-1', stop: '1', points: 3 },
+  ]
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  assert.equal(exported.losses.some((loss) => loss.sourceId === 'analysis:parameter-sweep'), false)
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /\.param GAIN=1/)
+  assert.match(asc.content, /\.step param GAIN list 1 2 4/)
+  assert.match(asc.content, /\.step param BIAS list -1 0 1/)
+  assert.match(asc.content, /SYMATTR Value \{GAIN\}/)
+  const restored = parseLtspiceSchematic(asc.content, asc.path).project
+  assert.deepEqual(restored.sheets[0].parameters.map(({ name, defaultValue }) => ({ name, defaultValue })), [
+    { name: 'GAIN', defaultValue: '1' },
+    { name: 'BIAS', defaultValue: '0' },
+  ])
+  assert.deepEqual(restored.simulation.parameterSweeps, [
+    { component: '$param:GAIN', globalParameter: 'GAIN', start: '1', stop: '4', points: 3, listValues: ['1', '2', '4'] },
+    { component: '$param:BIAS', globalParameter: 'BIAS', start: '-1', stop: '1', points: 3 },
+  ])
+})
+
+test('translates PULSE high-level and SINE amplitude sweeps to generated LTspice parameter steps', async () => {
+  const project = createStarterProject()
+  project.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'pulse.high', start: '0 V', stop: '5 V', points: 2 }]
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  let asc = exported.files.find((file) => file.path.endsWith('.asc')).content
+  assert.match(asc, /SYMATTR Value PULSE\(0 \{ELSIM_SWEEP_V1\} 0 1u 1u 50m 100m\)/)
+  assert.match(asc, /\.step param ELSIM_SWEEP_V1 list 0 5/)
+  assert.equal(exported.losses.some((loss) => loss.sourceId === 'analysis:parameter-sweep'), false)
+  const symbols = exported.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `pulse-sweep-symbol-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const pulseRestored = parseLtspiceSchematic(asc, 'pulse-sweep.asc', symbols).project
+  assert.deepEqual(pulseRestored.simulation.parameterSweeps, [{ component: 'V1', sourceParameter: 'pulse.high', start: '0', stop: '5', points: 2 }])
+  const pulseNetlist = createNetlistArtifact(pulseRestored)
+  assert.deepEqual(pulseNetlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+  assert.match(pulseNetlist.text, /V1 .* PULSE\(0 \{ELSIM_SWEEP_V1\} 0 1u 1u 50m 100m\)/)
+
+  project.parts.find((part) => part.ref === 'V1').sourceMode = 'sine'
+  project.parts.find((part) => part.ref === 'V1').sine = { offset: '0', amplitude: '5 V', frequency: '1 kHz', delay: '0', damping: '0', phase: '0' }
+  project.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'sine.amplitude', start: '1 V', stop: '5 V', points: 3 }]
+  const sineExport = await exportLtspiceProject(project)
+  assert.deepEqual(sineExport.blockers, [])
+  asc = sineExport.files.find((file) => file.path.endsWith('.asc')).content
+  assert.match(asc, /SYMATTR Value SINE\(0 \{ELSIM_SWEEP_V1\} 1k 0 0 0\)/)
+  assert.match(asc, /\.step param ELSIM_SWEEP_V1 list 1 3 5/)
+  assert.equal(sineExport.losses.some((loss) => loss.sourceId === 'analysis:parameter-sweep'), false)
+  const sineSymbols = sineExport.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `sine-sweep-symbol-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const sineRestored = parseLtspiceSchematic(asc, 'sine-sweep.asc', sineSymbols).project
+  assert.deepEqual(sineRestored.simulation.parameterSweeps, [{ component: 'V1', sourceParameter: 'sine.amplitude', start: '1', stop: '5', points: 3 }])
+  const sineNetlist = createNetlistArtifact(sineRestored)
+  assert.deepEqual(sineNetlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+  assert.match(sineNetlist.text, /V1 .* SIN\(0 \{ELSIM_SWEEP_V1\} 1k 0 0 0\)/)
+})
+
+test('exports, imports, and netlists declared PULSE, SINE, EXP, and SFFM field sweeps', async () => {
+  const cases = [
+    { mode: 'pulse', field: 'pulse.delay', nominal: '1us', start: '2us', stop: '4us', index: 2, fieldName: 'delay' },
+    { mode: 'sine', field: 'sine.frequency', nominal: '1kHz', start: '2kHz', stop: '4kHz', index: 2, fieldName: 'frequency' },
+    { mode: 'exp', field: 'exp.fallTau', nominal: '1u', start: '2u', stop: '4u', index: 5, fieldName: 'fallTau' },
+    { mode: 'sffm', field: 'sffm.modulationIndex', nominal: '5', start: '2', stop: '6', index: 3, fieldName: 'modulationIndex' },
+  ]
+  for (const [index, entry] of cases.entries()) {
+    const project = createStarterProject()
+    const source = project.parts.find((part) => part.ref === 'V1')
+    source.sourceMode = entry.mode
+    if (entry.mode === 'pulse') source.pulse = { initial: '0', delay: entry.nominal, rise: '1u', fall: '1u', width: '20m', period: '40m' }
+    if (entry.mode === 'sine') source.sine = { offset: '0', amplitude: '5 V', frequency: entry.nominal, delay: '0', damping: '0', phase: '0' }
+    if (entry.mode === 'exp') source.exp = { initial: '0', pulsed: '5 V', riseDelay: '0', riseTau: '1u', fallDelay: '10m', fallTau: entry.nominal }
+    if (entry.mode === 'sffm') source.sffm = { offset: '0', amplitude: '5 V', carrierFrequency: '1k', modulationIndex: entry.nominal, signalFrequency: '100' }
+    project.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: entry.field, start: entry.start, stop: entry.stop, points: 2 }]
+    const exported = await exportLtspiceProject(project)
+    assert.deepEqual(exported.blockers, [], `${entry.field}: export blockers`)
+    assert.equal(exported.losses.some((loss) => loss.sourceId === 'analysis:parameter-sweep'), false, `${entry.field}: sweep omission`)
+    const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+    const generatedParameter = 'ELSIM_SWEEP_V1'
+    const escapedWaveform = entry.mode.toUpperCase()
+    const exportedSource = asc.content.match(new RegExp(`SYMATTR Value (${escapedWaveform}\\([^\\n]+)`))?.[1]
+    assert.ok(exportedSource?.includes(`{${generatedParameter}}`), `${entry.field}: parameterized waveform missing`)
+    const symbols = exported.files.filter((file) => file.path.endsWith('.asy')).map((file, symbolIndex) => ({ id: `field-sweep-${index}-${symbolIndex}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+    const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project
+    assert.deepEqual(restored.simulation.parameterSweeps, [{ component: 'V1', sourceParameter: entry.field, start: scalarForTest(entry.start), stop: scalarForTest(entry.stop), points: 2 }], `${entry.field}: imported sweep`)
+    const netlist = createNetlistArtifact(restored)
+    assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [], `${entry.field}: netlist errors`)
+    const netlistWaveform = entry.mode === 'sine' ? 'SIN' : escapedWaveform
+    assert.match(netlist.text, new RegExp(`V1 .* ${netlistWaveform}\\([^\\n]*\\{${generatedParameter}\\}`), `${entry.field}: netlist parameter reference`)
+  }
+
+  const shared = createStarterProject()
+  shared.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'pulse.delay', start: '1 ms', stop: '2 ms', points: 2 }]
+  shared.parts.find((part) => part.ref === 'V1').pulse = { initial: '0', delay: '1 ms', rise: '1 us', fall: '1 us', width: '20 ms', period: '40 ms' }
+  const sharedExport = await exportLtspiceProject(shared)
+  const sharedAsc = sharedExport.files.find((file) => file.path.endsWith('.asc'))
+  const sharedText = sharedAsc.content.replace(/(SYMATTR InstName R1\nSYMATTR Value )1k/, '$1{ELSIM_SWEEP_V1}')
+  const sharedSymbols = sharedExport.files.filter((file) => file.path.endsWith('.asy')).map((file, symbolIndex) => ({ id: `shared-field-sweep-${symbolIndex}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const sharedRestored = parseLtspiceSchematic(sharedText, sharedAsc.path, sharedSymbols).project
+  assert.equal(sharedRestored.simulation.parameterSweeps[0].globalParameter, 'ELSIM_SWEEP_V1')
+  assert.equal(sharedRestored.simulation.parameterSweeps[0].sourceParameter, undefined)
+})
+
+test('exports and imports indexed PWL point value sweeps while keeping the time axis literal', async () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.ref === 'V1')
+  source.sourceMode = 'pwl'
+  source.value = '0 V'
+  source.pwl = [
+    { time: '0', voltage: '0 V' },
+    { time: '1 ms', voltage: '2 V' },
+    { time: '2 ms', voltage: '0 V' },
+  ]
+  project.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'pwl.point.2', start: '1 V', stop: '3 V', points: 3 }]
+
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR Value PWL\(0 0 1m \{ELSIM_SWEEP_V1\} 2m 0\)/)
+  assert.match(asc.content, /\.step param ELSIM_SWEEP_V1 list 1 2 3/)
+  const symbols = exported.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `pwl-point-sweep-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project
+  assert.deepEqual(restored.simulation.parameterSweeps, [{ component: 'V1', sourceParameter: 'pwl.point.2', start: '1', stop: '3', points: 3 }])
+  assert.equal(restored.parts.find((part) => part.ref === 'V1').pwl[1].voltage, '{ELSIM_SWEEP_V1}')
+  const netlist = createNetlistArtifact(restored)
+  assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+  assert.match(netlist.text, /V1 .* PWL\(0 0 1m \{ELSIM_SWEEP_V1\} 2m 0\)/)
+})
+
+test('exports and imports PWL shared-scale sweeps for voltage and current sources', async () => {
+  for (const kind of ['source', 'currentSource']) {
+    const project = createStarterProject()
+    const source = kind === 'source'
+      ? project.parts.find((part) => part.ref === 'V1')
+      : { id: 'pwl-current-scale', kind: 'currentSource', ref: 'I1', value: '0 A', x: 800, y: 700, rotation: 0, sourceMode: 'pwl' }
+    if (kind === 'currentSource') {
+      source.currentPwl = [{ time: '0', current: '0 A' }, { time: '1 ms', current: '2 mA' }, { time: '2 ms', current: '-1 mA' }]
+      project.parts.push(source)
+      project.sheets[0].parts = project.parts
+    } else source.pwl = [{ time: '0', voltage: '0 V' }, { time: '1 ms', voltage: '2 V' }, { time: '2 ms', voltage: '-1 V' }]
+    source.sourceMode = 'pwl'
+    project.simulation.parameterSweeps = [{ component: source.ref, sourceParameter: 'pwl.scale', start: '0.5', stop: '2', points: 3 }]
+
+    const exported = await exportLtspiceProject(project)
+    assert.deepEqual(exported.blockers, [], `${kind}: export blockers`)
+    const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+    const prefix = kind === 'source' ? 'V1' : 'I1'
+    const middleValue = kind === 'source' ? '2' : '2m'
+    const lastValue = kind === 'source' ? '-1' : '-1m'
+    assert.match(asc.content, new RegExp(`SYMATTR Value PWL VALUE_SCALE_FACTOR=\\{ELSIM_SWEEP_${prefix}\\} \\(0 0 1m ${middleValue} 2m ${lastValue}\\)`))
+    assert.match(asc.content, new RegExp(`\\.step param ELSIM_SWEEP_${prefix} list 0\\.5 1\\.25 2`))
+    const symbols = exported.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `pwl-scale-${kind}-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+    const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project
+    assert.deepEqual(restored.simulation.parameterSweeps, [{ component: prefix, sourceParameter: 'pwl.scale', start: '0.5', stop: '2', points: 3 }], `${kind}: imported scale sweep`)
+    const restoredSource = restored.parts.find((part) => part.ref === prefix)
+    const restoredValues = kind === 'source' ? restoredSource.pwl.map((point) => point.voltage) : restoredSource.currentPwl.map((point) => point.current)
+    assert.deepEqual(restoredValues, kind === 'source' ? ['0', '2', '-1'] : ['0', '0.002', '-0.001'])
+    const netlist = createNetlistArtifact(restored)
+    assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [], `${kind}: netlist diagnostics`)
+    const netlistValues = kind === 'source' ? '2 2m -1' : '0.002 2m -0.001'
+    assert.match(netlist.text, new RegExp(`${prefix} .* PWL\\(0 0 1m ${netlistValues}\\)`), `${kind}: nominal netlist waveform`)
+  }
+})
+
+test('translates resistor sweeps to generated LTspice parameters and restores the sweep on import', async () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-l1-sweep', kind: 'inductor', ref: 'L1', value: '10 mH', x: 700, y: 300, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [
+    { component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 2 },
+    { component: 'C1', start: '10 µF', stop: '20 µF', points: 2 },
+    { component: 'L1', start: '10 mH', stop: '20 mH', points: 2 },
+  ]
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName R1\nSYMATTR Value \{ELSIM_SWEEP_R1\}/)
+  assert.match(asc.content, /SYMATTR InstName C1\nSYMATTR Value \{ELSIM_SWEEP_C1\}/)
+  assert.match(asc.content, /SYMATTR InstName L1\nSYMATTR Value \{ELSIM_SWEEP_L1\}/)
+  assert.match(asc.content, /\.param ELSIM_SWEEP_R1=1k/)
+  assert.match(asc.content, /\.step param ELSIM_SWEEP_R1 list 1000 2000/)
+  assert.match(asc.content, /\.param ELSIM_SWEEP_C1=10u/)
+  assert.match(asc.content, /\.step param ELSIM_SWEEP_C1 list 0\.00001 0\.00002/)
+  assert.match(asc.content, /\.param ELSIM_SWEEP_L1=10m/)
+  assert.match(asc.content, /\.step param ELSIM_SWEEP_L1 list 0\.01 0\.02/)
+  assert.ok(exported.losses.some((loss) => loss.sourceId === 'p-r1' && loss.title === 'Component sweep translated to a parameter sweep'))
+  assert.equal(exported.losses.some((loss) => loss.sourceId === 'analysis:parameter-sweep'), false)
+  const symbols = exported.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `sweep-symbol-${index}`, filename: file.path, sha256: file.sha256, content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols).project
+  assert.equal(restored.parts.find((part) => part.ref === 'R1').value, '{ELSIM_SWEEP_R1}')
+  assert.deepEqual(restored.simulation.parameterSweeps.map(({ globalParameter, start, stop, points }) => ({ globalParameter, start, stop, points })), [
+    { globalParameter: 'ELSIM_SWEEP_R1', start: '1000', stop: '2000', points: 2 },
+    { globalParameter: 'ELSIM_SWEEP_C1', start: '0.00001', stop: '0.00002', points: 2 },
+    { globalParameter: 'ELSIM_SWEEP_L1', start: '0.01', stop: '0.02', points: 2 },
+  ])
+})
+
+test('translates scalar independent voltage and current source sweeps to generated LTspice parameters', async () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'i-sweep-source', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 700, y: 400, rotation: 0, sourceMode: 'dc' })
+  project.parts.push({ id: 'v-sweep-source', kind: 'source', ref: 'V2', value: '5 V', x: 700, y: 500, rotation: 0, sourceMode: 'dc' })
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [
+    { component: 'I1', start: '0 mA', stop: '2 mA', points: 3 },
+    { component: 'V2', start: '3 V', stop: '5 V', points: 2 },
+  ]
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName I1\nSYMATTR Value \{ELSIM_SWEEP_I1\}/)
+  assert.match(asc.content, /SYMATTR InstName V2\nSYMATTR Value \{ELSIM_SWEEP_V2\}/)
+  assert.match(asc.content, /\.param ELSIM_SWEEP_I1=1m/)
+  assert.match(asc.content, /\.step param ELSIM_SWEEP_I1 list 0 0\.001 0\.002/)
+  assert.match(asc.content, /\.param ELSIM_SWEEP_V2=5/)
+  assert.match(asc.content, /\.step param ELSIM_SWEEP_V2 list 3 5/)
+})
+
+test('generated component sweep parameters avoid existing project parameter names', async () => {
+  const project = createStarterProject()
+  project.sheets[0].parameters = [{ id: 'sweep-name-collision', name: 'ELSIM_SWEEP_R1', defaultValue: '7' }]
+  const modelContent = '.param ELSIM_SWEEP_R1_2=9\n.SUBCKT USER_BLOCK IN OUT\nR2 IN OUT 1k\n.ENDS USER_BLOCK\n'
+  project.modelAssets = [{ id: 'sweep-collision-model', filename: 'user.lib', content: modelContent, sha256: sha256(modelContent), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'sweep-collision-instance', kind: 'subcircuit', ref: 'XUSER', value: 'USER_BLOCK', modelName: 'USER_BLOCK', modelPins: ['IN', 'OUT'], x: 700, y: 500, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [{ component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 2 }]
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /\.param ELSIM_SWEEP_R1=7/)
+  assert.match(asc.content, /SYMATTR InstName R1\nSYMATTR Value \{ELSIM_SWEEP_R1_3\}/)
+  assert.match(asc.content, /\.param ELSIM_SWEEP_R1_3=1k/)
+  assert.match(asc.content, /\.step param ELSIM_SWEEP_R1_3 list 1000 2000/)
+})
+
+test('exports and reimports imported device model parameter sweeps with an instance-scoped model clone', async () => {
+  const project = createStarterProject()
+  const content = `\uFEFF${'.LIB TYPICAL\n.MODEL USER_NMOS NMOS (LEVEL=1 VTO=2\n+ KP=1m LAMBDA=0.02)\n.MODEL ELSIM_MODEL_M1_USER_NMOS_KP NMOS (LEVEL=1 VTO=3 KP=3m)\n.ENDL TYPICAL\n'.replace(/\n/g, '\r\n')}`
+  project.modelAssets = [{ id: 'user-nmos-model', filename: 'user-nmos.lib', content, sha256: sha256(content), licenseStatus: 'unknown', importedAt: new Date().toISOString(), selectedSections: ['TYPICAL'] }]
+  project.parts.push(
+    { id: 'swept-mos', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'USER_NMOS', x: 700, y: 500, rotation: 0 },
+    { id: 'unswept-mos', kind: 'nmos', ref: 'M2', value: '0', deviceModel: 'USER_NMOS', x: 900, y: 500, rotation: 0 },
+  )
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [{ component: 'M1', parameter: 'KP', start: '0.5m', stop: '2m', points: 4 }]
+  const exported = await exportLtspiceProject(project)
+  assert.deepEqual(exported.blockers, [])
+  assert.ok(exported.losses.some((loss) => loss.sourceId === 'swept-mos' && loss.title === 'Swept model card cloned for this device'))
+  const asc = exported.files.find((file) => file.path.endsWith('.asc'))
+  assert.match(asc.content, /SYMATTR InstName M1\nSYMATTR Value ELSIM_MODEL_M1_USER_NMOS_KP_2/)
+  assert.match(asc.content, /SYMATTR InstName M2\nSYMATTR Value USER_NMOS/)
+  assert.match(asc.content, /\.param ELSIM_SWEEP_M1_KP=1m/)
+  assert.match(asc.content, /\.step param ELSIM_SWEEP_M1_KP list 0\.0005 0\.001 0\.0015 0\.002/)
+  const library = exported.files.find((file) => file.path.endsWith('user-nmos.lib'))
+  assert.equal(exported.includedAssets.find((asset) => asset.filename === 'user-nmos.lib').sha256, library.sha256)
+  assert.notEqual(library.sha256, sha256(content), 'the output hash should cover the added swept model clone')
+  assert.match(library.content, /\.LIB TYPICAL\r?\n\.MODEL USER_NMOS NMOS \(LEVEL=1 VTO=2\r?\n\+ KP=1m LAMBDA=0\.02\)\r?\n\* ELSim per-instance sweep clone for M1\r?\n\.MODEL ELSIM_MODEL_M1_USER_NMOS_KP_2 NMOS \(LEVEL=1 VTO=2\r?\n\+ KP=\{ELSIM_SWEEP_M1_KP\} LAMBDA=0\.02\)\r?\n\.MODEL ELSIM_MODEL_M1_USER_NMOS_KP NMOS \(LEVEL=1 VTO=3 KP=3m\)\r?\n.ENDL TYPICAL/)
+  assert.ok(library.content.startsWith('\uFEFF.LIB TYPICAL\r\n'))
+  assert.ok(!/(?<!\r)\n/.test(library.content), 'the cloned model library should retain its CRLF line endings')
+  const symbols = exported.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `model-sweep-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
+  const modelAsset = { id: 'reimported-user-nmos-model', filename: 'user-nmos.lib', content: library.content, sha256: library.sha256, licenseStatus: 'unknown', importedAt: new Date().toISOString(), selectedSections: ['TYPICAL'] }
+  const restored = parseLtspiceSchematic(asc.content, asc.path, symbols, [modelAsset]).project
+  assert.deepEqual(restored.simulation.parameterSweeps, [{ component: 'M1', parameter: 'KP', start: '0.0005', stop: '0.002', points: 4 }])
+  assert.equal(restored.parts.find((part) => part.ref === 'M1').deviceModel, 'ELSIM_MODEL_M1_USER_NMOS_KP_2')
+  assert.equal(restored.parts.find((part) => part.ref === 'M2').deviceModel, 'USER_NMOS')
+  const netlist = createNetlistArtifact(restored)
+  assert.deepEqual(netlist.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+  assert.match(netlist.text, /\.model ELSIM_MODEL_M1_USER_NMOS_KP_2 NMOS \(LEVEL=1 VTO=2\r?\n\+ KP=\{ELSIM_SWEEP_M1_KP\} LAMBDA=0\.02\)/i)
+
+  const splitAssignment = structuredClone(project)
+  splitAssignment.modelAssets[0].content = content.replace('KP=1m', 'KP\r\n+ =1m')
+  splitAssignment.modelAssets[0].sha256 = sha256(splitAssignment.modelAssets[0].content)
+  const blocked = await exportLtspiceProject(splitAssignment)
+  assert.deepEqual(blocked.files, [])
+  assert.ok(blocked.blockers.some((blocker) => blocker.sourceId === 'swept-mos' && /exactly once on a single physical line/.test(blocker.message)))
+})
+
 test('splits supported orthogonal wires at explicit junctions', async () => {
   const project = createStarterProject()
   project.wires.push({ id: 'wire-horizontal', points: [[700, 600], [900, 600]] }, { id: 'wire-vertical', points: [[800, 500], [800, 700]] })
@@ -445,6 +760,7 @@ test('exports nested sheets and generated block symbols, then reimports the topo
   const restored = parseLtspiceSchematic(rootFile.content, rootFile.path, symbols, [], children)
   assert.deepEqual(restored.warnings, [])
   assert.equal(restored.project.sheets.length, project.sheets.length)
+  assert.deepEqual(Object.fromEntries(restored.project.parts.filter((part) => part.ref === 'X1' || part.ref === 'X2').map((part) => [part.ref, part.sheetParameters])), { X1: { RINPUT: '1k' }, X2: { RINPUT: '2k' } })
 
   const originalConnectivity = analyzeConnectivity(project)
   const restoredConnectivity = analyzeConnectivity(restored.project)

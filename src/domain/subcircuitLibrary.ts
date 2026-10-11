@@ -7,13 +7,50 @@ export type ModelDependencyIssue = { assetId: string; filename: string; owner: s
 export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
 export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string }
-export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
+export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
+export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
 
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 const pinName = /^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/
 const safeTopLevel = new Set(['.model', '.param', '.func', '.global'])
 const forbidden = new Set(['.control', '.endc', '.end', '.include', '.exec', '.shell', '.cm'])
+
+function compatibilityScalar(value: string): number | null {
+  const match = value.toLowerCase().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?(?:v|a|s|hz)?$/)
+  if (!match) return null
+  const multiplier = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2] ?? ''] ?? 1
+  const number = Number(match[1]) * multiplier
+  return Number.isFinite(number) ? number : null
+}
+
+function isBoundedNumericStep(directive: string): boolean {
+  const match = directive.match(/^\.step\s+(?:(dec|oct|lin)\s+)?param\s+[A-Za-z_][A-Za-z0-9_]*\s+(.+)$/i)
+  if (!match) return false
+  const mode = match[1]?.toLowerCase() ?? 'lin'
+  const body = match[2].trim()
+  if (/^list\s+/i.test(body)) {
+    if (mode !== 'lin') return false
+    const entries = body.replace(/^list\s+/i, '').split(/[\s,]+/).filter(Boolean)
+    return entries.length >= 2 && entries.length <= 10 && entries.every((entry) => compatibilityScalar(entry) !== null)
+  }
+  const entries = body.split(/[\s,]+/).filter(Boolean)
+  const values = entries.map(compatibilityScalar)
+  if (values.some((value) => value === null)) return false
+  if (mode === 'lin') {
+    if (entries.length !== 3) return false
+    const [start, stop, increment] = values as number[]
+    const intervals = (stop - start) / increment
+    const rounded = Math.round(intervals)
+    return increment !== 0 && intervals > 0 && Math.abs(intervals - rounded) < 1e-9 && rounded >= 1 && rounded <= 9
+  }
+  if (entries.length !== 3) return false
+  const [density, start, stop] = values as number[]
+  const base = mode === 'dec' ? 10 : 2
+  const intervals = Math.log(stop / start) / Math.log(base) * density
+  const rounded = Math.round(intervals)
+  return Number.isInteger(density) && density > 0 && start > 0 && stop > start && Number.isFinite(intervals) && Math.abs(intervals - rounded) < 1e-9 && rounded >= 1 && rounded <= 9
+}
 
 /** Decode a user-selected library as plain UTF-8 and identify protected LTspice models. */
 export function decodeModelLibrary(bytes: Uint8Array): string {
@@ -210,18 +247,19 @@ export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[
     { pattern: /^\s*\.model\s+\S+\s+ako\s*:\s*\S+\s+\S+\b/i, name: 'LTspice AKO model inheritance (unsupported by browser ngspice)', impact: 'The pinned browser ngspice rejects this model card with a model-type mismatch and cannot resolve the inherited model name.', suggestion: 'Provide a tested ngspice-compatible standalone model definition or subcircuit after checking the inherited parameters with the model author. ELSim preserves the original model and does not expand AKO inheritance.' },
     { pattern: /^\s*\.model\s+[A-Za-z_][A-Za-z0-9_$-]*\.[A-Za-z0-9_$-]+\s+(?:nmos|pmos)\b.*\b(?:lmin|lmax|wmin|wmax)\s*=/i, name: 'LTspice MOSFET model binning (automatic selection unsupported)', impact: 'LTspice selects suffixed MOSFET model cards by the instance L/W ranges. ELSim’s current browser import and ngspice path does not select a model bin by an unsuffixed base name; the pinned engine reports that the base model cannot be found.', suggestion: 'Use a device-specific model or subcircuit verified for ngspice, or explicitly select and validate a compatible model card for the instance dimensions. ELSim preserves the bins and does not choose one automatically.' },
     { pattern: /\b(?:uplim|dnlim|uplim_tanh|dnlim_tanh)\s*\(/i, name: 'LTspice limit function (ngspice lta mode)', impact: 'ngspice translates this documented subset only when ELSim enables whole-deck lta compatibility. Other LTspice syntax is not covered by that mode.', suggestion: 'If simulation fails, check the mapped model line and simplify or replace the expression with a tested ngspice-compatible form.' },
-    { pattern: /\blimit\s*\(/i, name: 'LTspice limit() clamp semantics are unsupported', impact: 'The pinned browser ngspice engine accepts limit() but does not match LTspice clamp behavior: with x=4, low=0, and high=3 it returns 0 instead of 3, including in lta mode.', suggestion: 'For ordered bounds, replace limit(x, low, high) with min(max(x, low), high) after checking the model author’s intended behavior. ELSim preserves the imported expression and does not rewrite it.' },
+    { pattern: /\blimit\s*\(/i, name: 'LTspice limit() in imported model library', impact: 'ELSim translates limit() on native schematic B sources to min(max(x, low), high), which provides the expected clamp for ordered bounds. Raw imported model-library text is not rewritten; the pinned browser ngspice engine returns 0 instead of 3 for limit(4,0,3), including in lta mode.', suggestion: 'For ordered bounds, replace limit(x, low, high) in the library with min(max(x, low), high) after checking the model author’s intended behavior. ELSim preserves imported model source unchanged.' },
     { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*\^/i, name: 'LTspice B-source ^ operator semantics', impact: 'LTspice uses ^ for boolean XOR in B-source expressions, while the pinned ngspice engine interprets it as exponentiation. For example, with V(IN)=3, V(IN)^2 evaluates to 9 in ngspice but LTspice treats the operands as true and returns false (0).', suggestion: 'Review every caret in the expression. For exponentiation, use pow(a,b), which is supported by both tested dialects; rewrite intended boolean XOR explicitly for the target simulator. ELSim preserves the original expression.' },
     { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*~/i, name: 'LTspice ~ Boolean inversion operator (unsupported by browser ngspice)', impact: 'LTspice accepts ~ as an alias for Boolean inversion in B-source expressions. The pinned browser ngspice engine rejects this syntax as an unknown function, so the model can fail during parsing.', suggestion: 'Rewrite the expression using an explicit comparison that preserves LTspice’s Boolean threshold semantics, after checking the model author’s intent. Do not replace ~ with ngspice ! blindly: their numeric truth rules may differ. ELSim preserves the original expression.' },
     { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*!(?!=)/i, name: 'LTspice B-source ! Boolean threshold semantics differ', impact: 'LTspice converts values greater than 0.5 to true before Boolean inversion. The pinned browser ngspice engine treats any nonzero numeric value as true for !; for example, !(0.4) evaluates to 0 in ngspice but 1 in LTspice. The expression may parse while producing different circuit behavior.', suggestion: 'Check the model author’s intended Boolean threshold and rewrite the expression with an explicit comparison if needed. ELSim preserves the source and does not translate the operator.' },
-    { pattern: /\b(?:absdelay|arccos|arcsin|arctan|atan2|buf|cbrt|delay|hypot|inv|int|mod|noise|pwrs|random|rand|round|smallsig|square|white|xor)\s*\(/i, name: 'LTspice B-source function unavailable in browser ngspice', impact: 'The pinned browser ngspice engine rejects this LTspice B-source function: named functions may report “no such function”, while unsupported no-argument functions may produce an expression syntax error. The imported expression can therefore fail instead of producing a waveform.', suggestion: 'Check the function’s intended behavior and replace it with a tested ngspice-compatible expression or an equivalent circuit. ELSim preserves the imported expression and does not rewrite it.' },
+    { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*\b(?:absdelay|arccos|arcsin|arctan|atan2|buf|cbrt|delay|flat|gauss|hypot|inv|int|mc|mod|noise|pwrs|random|rand|round|select|smallsig|square|white|xor)\s*\(/i, name: 'LTspice B-source function unavailable or incompatible in browser ngspice', impact: 'The pinned browser ngspice engine rejects this function or uses an incompatible function signature when it appears in raw imported model-library text; errors may identify a missing function or an argument-count mismatch. For example, LTspice gauss(x), flat(x), and mc(nominal,tolerance) do not map to ngspice gauss(nominal, relativeVariation, sigma). ELSim translates tested functions on native schematic B sources, but imported library text remains unchanged.', suggestion: 'Check the function’s intended statistical distribution and replace it with a tested ngspice-compatible expression or equivalent subcircuit. ELSim does not modify user model source.' },
     { pattern: /^\s*\.model\s+\S+\s+VSWITCH\b/i, name: 'VSWITCH model (unsupported by the current WASM engine)', impact: 'This switch model needs an XSPICE aswitch code model that is not present in the current browser runtime.', suggestion: 'Replace this model with a compatible user model or ELSim’s built-in ideal switch, then reconnect its control pins.' },
     { pattern: /^\s*A\S*\s+/i, name: 'XSPICE A-device (runtime support unverified)', impact: 'This model uses an XSPICE code model. The browser build does not package or validate external .cm modules, so this device may fail to load even though XSPICE is enabled.', suggestion: 'Check the model requirements with its author. Use a code model verified for this browser build or replace it with a tested ngspice-compatible subcircuit.' },
     { pattern: /^\s*b\S*\s+\S+\s+\S+\s+[rp]\s*=/i, name: 'LTspice behavioral resistor/power source', impact: 'This LTspice B-source R= or P= form is outside ngspice’s documented B-source V=/I= syntax.', suggestion: 'Rewrite as a supported ngspice B-source V= or I= expression, or provide an equivalent subcircuit.' },
     { pattern: /\blaplace\s*=/i, name: 'LTspice behavioral Laplace option', impact: 'LTspice behavioral-source Laplace options are not translated by ELSim’s current compatibility path. ngspice’s E-source Laplace support uses a separate XSPICE code model.', suggestion: 'Use a tested ngspice-compatible transfer model or replace this block with a supported ngspice-compatible circuit/subcircuit model.' },
-    { pattern: /\btable\s*\(/i, name: 'LTspice table() behavioral lookup function', impact: 'The pinned browser ngspice engine does not implement table() as a behavioral expression function; it reports “no such function”.', suggestion: 'Replace the lookup with an equivalent supported circuit or ngspice-compatible subcircuit. ELSim preserves the imported expression and does not rewrite it.' },
-    { pattern: /\bif\s*\(/i, name: 'LTspice if() behavioral function', impact: 'The pinned browser ngspice engine reports “no such function” for if() in a behavioral-source expression.', suggestion: 'Rewrite the conditional using a tested ngspice-compatible expression or an equivalent circuit/subcircuit. ELSim preserves the imported expression and does not rewrite it.' },
-    { pattern: /\b(?:idt|idtmod|sdt)\s*\(/i, name: 'LTspice behavioral integration function', impact: 'The pinned browser ngspice engine does not implement LTspice idt()/idtmod()/sdt() as behavioral expression functions; idt() fails with “no such function”.', suggestion: 'Replace the behavioral integrator with an explicit capacitor-based circuit or a tested ngspice-compatible subcircuit. ELSim preserves the imported expression and does not rewrite it.' },
+  { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*\btable\s*\(/i, name: 'LTspice table() behavioral lookup function in an imported model library', impact: 'ELSim translates literal table() calls on native schematic B sources, but does not rewrite behavioral expressions inside imported model-library text; the pinned browser ngspice engine reports “no such function” for those raw library expressions.', suggestion: 'Rewrite the model-library lookup as an ngspice-compatible PWL expression or equivalent subcircuit. ELSim preserves imported library text and does not modify user model source.' },
+    { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*\bif\s*\(/i, name: 'LTspice if() behavioral function in an imported model library', impact: 'ELSim translates if() calls on native schematic B sources, but does not rewrite behavioral expressions inside imported model-library text; the pinned browser ngspice engine reports “no such function” for those raw library expressions.', suggestion: 'Rewrite the model-library conditional using an ngspice-compatible ternary expression or equivalent subcircuit. ELSim preserves imported library text and does not modify user model source.' },
+    { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*\bu\s*\(/i, name: 'LTspice u() step boundary semantics in an imported model library', impact: 'LTspice u(x) returns 0 when x is zero, while ngspice u(0) returns 0.5. Raw imported model-library text is not rewritten, so an expression evaluated at exactly zero can behave differently.', suggestion: 'If the zero boundary matters, replace u(x) with an explicit (x > 0) ? 1 : 0 expression after checking the model author’s intended behavior. ELSim preserves imported library text and does not modify user model source.' },
+    { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*\b(?:idt|idtmod|sdt)\s*\(/i, name: 'LTspice behavioral integration function', impact: 'The pinned browser ngspice engine does not implement LTspice idt()/idtmod()/sdt() as behavioral expression functions; idt() fails with “no such function”.', suggestion: 'Replace the behavioral integrator with an explicit capacitor-based circuit or a tested ngspice-compatible subcircuit. ELSim preserves the imported expression and does not rewrite it.' },
     { pattern: /\b(?:tripdv|tripdt|nfft|window|mtol)\s*=/i, name: 'LTspice behavioral-source option', impact: 'This LTspice timestep/Laplace tuning option is not part of ngspice’s documented B-source instance syntax and may prevent the card from parsing.', suggestion: 'Remove or replace the option only after checking the model author’s intended behavior; ELSim does not rewrite it.' },
   ]
   const logical: { sourceLine: number; text: string; segments: { start: number; end: number; physicalLine: number }[] }[] = []
@@ -288,7 +326,7 @@ export function analyzeLtspiceSchematicCompatibility(source: string, availableLi
       continue
     }
     if (command === 'step') {
-      if (/^\.step\s+(?:(?:dec|oct|lin)\s+)?param\s+[A-Za-z_][A-Za-z0-9_]*\s+(?:list\s+)?[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?(?:[\s,]+[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?){1,9}$/i.test(directive)) continue
+      if (isBoundedNumericStep(directive)) continue
       warnings.push({ sourceLine: index + 1, feature: 'Unsupported .step sweep form', excerpt: directive.slice(0, 160), impact: 'ELSim imports bounded numeric linear and aligned dec/oct parameter ranges plus explicit numeric lists. Other LTspice sweep forms are preserved but are not simulated.', suggestion: 'Use a numeric range or explicit list with at most 10 total cases, or configure the sweep in ELSim after import.' })
       continue
     }
@@ -435,12 +473,23 @@ export function analyzeModelDependencies(assets: { id: string; filename: string;
   const subcircuits = new Map<string, string>()
   const subcircuitAssets = new Map<string, string>()
   const deviceModelAssets = new Map<string, string>()
+  const definitionLocations = new Map<string, ModelDefinitionConflict>()
   for (const { asset, parsed } of parsedAssets) {
     for (const model of parsed.subcircuits) {
+      const key = `subcircuit:${model.name.toLowerCase()}`
+      const conflict = definitionLocations.get(key) ?? { name: model.name, kind: 'subcircuit' as const, definitions: [] }
+      conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: model.startLine })
+      definitionLocations.set(key, conflict)
       subcircuits.set(model.name.toLowerCase(), model.name)
       subcircuitAssets.set(model.name.toLowerCase(), asset.id)
     }
-    for (const model of parsed.models) deviceModelAssets.set(model.name.toLowerCase(), asset.id)
+    for (const model of parsed.models) {
+      const key = `device:${model.name.toLowerCase()}`
+      const conflict = definitionLocations.get(key) ?? { name: model.name, kind: 'device' as const, definitions: [] }
+      conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: model.startLine })
+      definitionLocations.set(key, conflict)
+      deviceModelAssets.set(model.name.toLowerCase(), asset.id)
+    }
   }
   const missing: ModelDependencyIssue[] = [], resolved: ResolvedModelDependency[] = []
   const graph = new Map<string, Set<string>>()
@@ -474,7 +523,8 @@ export function analyzeModelDependencies(assets: { id: string; filename: string;
     visited.add(name)
   }
   for (const name of subcircuits.keys()) visit(name)
-  return { missing, recursiveChains, resolved, subcircuitAssets, deviceModelAssets }
+  const conflicts = [...definitionLocations.values()].filter((conflict) => conflict.definitions.length > 1)
+  return { missing, recursiveChains, resolved, conflicts, subcircuitAssets, deviceModelAssets }
 }
 
 /** Return the imported libraries required by schematic instances, including transitive dependencies. */
