@@ -39,6 +39,8 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact)
     hint = 'ngspice could not parse this model card. Check the reported source line and nearby continuation lines for unsupported syntax or a missing value, or ask for an ngspice-compatible library.'
   } else if (source?.assetId && /unknown subckt|missing.*model|could not find.*model|no such model|unknown device type/i.test(message)) {
     hint = 'This model references a device model or subcircuit ngspice cannot find. Check that all required model files are imported and that each referenced name matches exactly.'
+  } else if (source?.assetId && /timestep too small|convergence problem|convergence failure|no convergence|gmin stepping failed|source stepping failed/i.test(message)) {
+    hint = `Simulation did not converge while evaluating this imported model (source line ${source.assetLine ?? '?'}). Check the model’s parameter values, supply and bias conditions, and connected pins; try a smaller maximum time step or a small series resistance only if appropriate for the circuit.`
   } else if (source?.assetId) {
     hint = `ngspice points to line ${source.assetLine ?? '?'} in an imported model library. Check that card against ngspice syntax, or replace the library with an ngspice-compatible version.`
   } else if (/singular matrix|no ground|missing ground|no reference node/.test(lower)) {

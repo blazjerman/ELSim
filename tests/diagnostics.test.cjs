@@ -93,3 +93,14 @@ test('imported model failures explain common card, type, parameter, and dependen
     assert.match(diagnostic.hint, hint)
   }
 })
+
+test('imported model convergence failures retain source context and give solver-focused recovery guidance', () => {
+  const modelArtifact = { text: '.SUBCKT AMP IN OUT\nQ1 OUT IN 0 QCORE', sourceMap: [{ line: 2, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 24 }], diagnostics: [] }
+  const diagnostic = diagnosticForNgspice('doAnalyses: TRAN: Timestep too small at line 2', modelArtifact)
+  assert.equal(diagnostic.line, 2)
+  assert.equal(diagnostic.assetLine, 24)
+  assert.equal(diagnostic.sourceId, 'model-file:asset-7')
+  assert.match(diagnostic.hint, /did not converge while evaluating this imported model/)
+  assert.match(diagnostic.hint, /parameter values, supply and bias conditions, and connected pins/)
+  assert.match(diagnostic.hint, /smaller maximum time step or a small series resistance/)
+})
