@@ -389,10 +389,11 @@ test('record large-project editor render and selection input-to-frame timings', 
     }
     interactionSamples.sort((a, b) => a - b)
     const renderedLabelCount = await page.locator('svg.schematic [data-net-label-id]').count()
-    expect(renderedLabelCount).toBe(count * 2)
+    expect(renderedLabelCount).toBeGreaterThan(0)
+    expect(renderedLabelCount).toBeLessThan(count * 2)
     results.push({
       parts: count,
-      labels: count * 2,
+      totalLabels: count * 2,
       renderedLabelCount,
       editorReadyMs: Number(renderMs.toFixed(2)),
       twoAnimationFramesAfterDomMs: Number(twoFrameMs.toFixed(2)),
@@ -410,7 +411,7 @@ test('record large-project editor render and selection input-to-frame timings', 
   await offscreenPart.press('Enter')
   await expect(offscreenPart).toHaveClass(/selected/)
   await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(5_000)
-  await expect(page.locator('svg.schematic [data-net-label-id]')).toHaveCount(10_000)
+  expect(await page.locator('svg.schematic [data-net-label-id]').count()).toBeLessThan(10_000)
 
   const transport = await page.evaluate(async () => {
     const sampleCount = 100_000, traceCount = 6

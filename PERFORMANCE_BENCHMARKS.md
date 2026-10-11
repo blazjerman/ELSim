@@ -169,7 +169,7 @@ The comparison shows much lower selection latency for this wire-heavy case. The 
 
 ### 5,000-part browser schematic (2026-10-11)
 
-The editor benchmark now also opens a 5,000-resistor schematic with 10,000 net labels and measures synthetic selection input through the next animation frame. This isolates UI update work from Playwright locator/actionability time. The SVG retains every part as a focusable named control and all 10,000 net labels. Component symbol details are drawn for parts within the visible view plus a margin; offscreen parts keep their accessible control and hit target. The benchmark verifies offscreen keyboard selection and rechecks all 10,000 label nodes after each interaction series.
+The editor benchmark opens a 5,000-resistor schematic with 10,000 net labels and measures synthetic selection input through the next animation frame. This isolates UI update work from Playwright locator/actionability time. Every part remains a focusable named control; net-label controls are rendered only when their text intersects the visible view plus a 30-unit margin, while the selected label remains mounted during pan. Labels outside the view return when navigation brings them onscreen. Component symbol details are also drawn only within the visible view plus a margin; offscreen parts keep their accessible control and hit target.
 
 | Browser | Parts | Editor ready (ms) | Selection median progression (ms) | Selection max-of-5 progression (ms) | SVG elements progression | Detailed parts in view |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -194,7 +194,7 @@ The 2026-10-11 repeat run found a duplicate accessible-name `<title>` inside com
 | Chromium | 5,000 | 2,068.9 / 2,020.1 | 142.3 / 151.6 → 133.0 / 147.1 | 35,370 / 30,442 |
 | Firefox | 5,000 | 2,699.3 / 2,645.1 | 15.0 / 18.0 → 16.0 / 22.0 | 35,370 / 30,442 |
 
-The Chromium selection result varied between 133.0 and 147.1 ms after the change, so this is not evidence of a selection-speed improvement; it still exceeds a 16 ms frame. Larger gains will require profiling and restructuring the remaining editor update/render path rather than removing more accessible labels.
+The Chromium selection result varied between 133.0 and 147.1 ms before label culling, so that step alone was not evidence of a selection-speed improvement. Viewport label culling was then measured locally in Chromium: at 5,000 parts, only 120 of 10,000 labels were mounted, SVG elements fell from 30,442 to 10,682, editor-ready measured 1,166 ms, and selection input-to-next-frame measured 42.8 ms median / 44.4 ms p95. This is a single local run, not a release budget; selection still exceeds a 16 ms frame. The visible-label keyboard test passes. Remaining editor work should profile and restructure the selection update/render path without removing visible keyboard access.
 
 ### Browser waveform transport check
 
