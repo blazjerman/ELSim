@@ -415,7 +415,15 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(page.getByLabel('Reference designator')).toHaveValue('C1')
   await expect(page.locator('.circuit-part[tabindex="0"]')).toHaveCount(1)
 
-  await page.getByTitle('Add Switch').click()
+  await page.getByRole('button', { name: /Add Switch/ }).click()
+  const svg = page.locator('svg.schematic')
+  const screenPoint = (x: number, y: number) => svg.evaluate((element, point) => {
+    const target = (element as SVGSVGElement).createSVGPoint(); target.x = point.x; target.y = point.y
+    const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  }, { x, y })
+  const start = await screenPoint(500, 160), end = await screenPoint(540, 160)
+  await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
   const switchPart = page.getByRole('button', { name: /^S1, Switch/ })
   await switchPart.focus()
   await expect(switchPart).toHaveAttribute('aria-pressed', 'false')
@@ -767,7 +775,8 @@ test('starter and newly added native parts use the same 10-unit pin grid', async
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
   const placed = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R2'))
   expect(placed).toMatchObject({ x: 500, y: 320, rotation: 90 })
-  await expect(page.locator('.component-card').filter({ hasText: 'Resistor' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.component-card').filter({ hasText: 'Resistor' })).toHaveAttribute('aria-pressed', 'false')
+  await page.locator('.component-card').filter({ hasText: 'Resistor' }).click()
   const secondStart = await screenPoint(500, 180)
   const secondEnd = await screenPoint(540, 180)
   await page.mouse.move(secondStart.x, secondStart.y); await page.mouse.down(); await page.mouse.move(secondEnd.x, secondEnd.y, { steps: 4 }); await page.mouse.up()
@@ -775,7 +784,33 @@ test('starter and newly added native parts use the same 10-unit pin grid', async
   await expect.poll(readGridErrors).toEqual([])
 })
 
-test('wire toolbar and component selections stay armed for drag placement', async ({ page }) => {
+test('component hotkeys choose parts and newly placed parts stay unselected', async ({ page }) => {
+  await page.goto('/')
+  const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
+  await page.keyboard.press('r')
+  await expect(resistor).toHaveAttribute('aria-pressed', 'true')
+  const svg = page.locator('svg.schematic')
+  const point = (x: number, y: number) => svg.evaluate((element, position) => {
+    const svg = element as SVGSVGElement
+    const location = svg.createSVGPoint(); location.x = position.x; location.y = position.y
+    const screen = location.matrixTransform(svg.getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  }, { x, y })
+  const start = await point(500, 160), end = await point(540, 160)
+  await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
+  const newPartId = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R2').id)
+  const newPart = page.locator(`.circuit-part[data-part-id="${newPartId}"]`)
+  await expect(newPart).not.toHaveClass(/selected/)
+  await expect(page.locator('.inspector-heading h2')).not.toHaveText('R2')
+  await expect(page.getByRole('button', { name: 'Rotate selected (O)' })).toBeDisabled()
+
+  await page.getByRole('textbox', { name: 'Find a component' }).fill('capacitor')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.component-card').filter({ hasText: 'Capacitor' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('wire tool stays armed while component placement ends after one drop', async ({ page }) => {
   await page.goto('/')
   const svg = page.locator('svg.schematic')
   const screenPoint = (x: number, y: number) => svg.evaluate((element, point) => {
@@ -804,7 +839,7 @@ test('wire toolbar and component selections stay armed for drag placement', asyn
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
   await resistor.click()
   await dragOnCanvas(500, 300, 500, 340)
-  await expect(resistor).toHaveAttribute('aria-pressed', 'true')
+  await expect(resistor).toHaveAttribute('aria-pressed', 'false')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
 })
 
@@ -2270,6 +2305,7 @@ test('inspector rejects a duplicate case-insensitive SPICE reference before savi
   })
   await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
   const newPartId = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R2').id)
+  await page.locator(`.circuit-part[data-part-id="${newPartId}"]`).click()
   const reference = page.getByLabel('Reference designator')
   await reference.fill('C9')
   await expect(reference).toHaveAttribute('aria-invalid', 'true')
@@ -2518,7 +2554,18 @@ test('transient measurement time windows persist and appear in the netlist', asy
 
 test('lamp palette item exposes resistance and nominal animation power', async ({ page }) => {
   await page.goto('/')
-  await page.getByTitle('Add Lamp').click()
+  await page.getByRole('button', { name: /Add Lamp/ }).click()
+  const svg = page.locator('svg.schematic')
+  const screenPoint = (x: number, y: number) => svg.evaluate((element, position) => {
+    const target = (element as SVGSVGElement).createSVGPoint()
+    target.x = position.x; target.y = position.y
+    const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  }, { x, y })
+  const start = await screenPoint(500, 160), end = await screenPoint(540, 160)
+  await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
+  const partId = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'lamp').id)
+  await page.locator(`.circuit-part[data-part-id="${partId}"]`).click()
   await expect(page.getByRole('heading', { name: 'R2' })).toBeVisible()
   await expect(page.getByLabel('Resistance (Ω)')).toHaveValue('12 Ω')
   await expect(page.getByLabel('Nominal lamp power (W)')).toHaveValue('10')

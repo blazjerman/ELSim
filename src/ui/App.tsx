@@ -1909,6 +1909,15 @@ export default function App() {
     const matchesSearch = `${label} ${subtitle} ${kindNames[kind]}`.toLowerCase().includes(componentQuery.trim().toLowerCase())
     return (componentQuery.trim() || matchesCategory) && matchesSearch
   })
+  const selectComponentForPlacement = (kind: PartKind) => {
+    const component = palette.find((item) => item.kind === kind)
+    if (!component) return
+    setPendingComponentKind(kind)
+    setTool('select')
+    setComponentCategory('all')
+    setComponentQuery('')
+    setNotice(`${component.label} selected. Drag on the schematic to place it and set its orientation.`)
+  }
   const normalizedExampleQuery = exampleQuery.trim().toLocaleLowerCase()
   const filteredExamples = exampleCatalog.filter(({ title, description }) => `${title} ${description}`.toLocaleLowerCase().includes(normalizedExampleQuery))
   const startTour = () => {
@@ -2174,8 +2183,11 @@ export default function App() {
     const placeY = y ?? snapToEditorGrid(380 + (Math.floor(project.parts.length / 4) % 2) * 90)
     const part: Part = { id, kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: nextRef(project.parts, kind), value: componentDefaultValue(kind) || (kind === 'behavioral' ? 'V(vin) * 2' : kind === 'ground' || kind === 'subcircuit' ? '' : '1'), x: placeX, y: placeY, rotation, ...(kind === 'behavioral' ? { behavioralOutput: 'voltage' as const } : {}), ...(kind === 'lamp' ? { animationNominalPower: Number(componentDefinitionFor(kind).properties.find((property) => property.key === 'animationNominalPower')?.defaultValue ?? 10) } : {}) }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
-    setSelection({ kind: 'part', id })
-    setNotice(`${componentDefinitionFor(kind).name} placed. Select a different tool or component when you are done placing them.`)
+    setPendingComponentKind(null)
+    setSelection(null)
+    setSelectedPartIds([])
+    setSelectedWireId(null)
+    setNotice(`${componentDefinitionFor(kind).name} placed.`)
   }
   const addSubcircuit = (model: { name: string; pins: string[]; definition: ReturnType<typeof importedSubcircuitComponentDefinition> }, symbol?: (typeof importedSymbols)[number]) => {
     const orderedPins = model.definition.pins.map((pin) => pin.name)
@@ -2191,7 +2203,10 @@ export default function App() {
     const position = [{ x: 720, y: 520 }, { x: 880, y: 520 }, { x: 720, y: 700 }, { x: 880, y: 700 }].find(({ x, y }) => project.parts.every((part) => Math.hypot(part.x - x, part.y - y) > 150)) ?? { x: 900 + (project.parts.length % 3) * 170, y: 520 + Math.floor(project.parts.length / 3) * 170 }
     const part: Part = { id, kind: model.definition.kind, componentDefinitionId: model.definition.id, ref: nextRef(project.parts, model.definition.kind), value: model.definition.name, modelName: model.definition.name, modelPins: orderedPins, ...(symbol ? { symbolAssetId: symbol.assetId, symbolPinOffsets: symbol.pins.map(({ x, y }) => [x, y] as [number, number]) } : {}), x: position.x, y: position.y, rotation: 0 }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
-    setSelection({ kind: 'part', id })
+    setPendingComponentKind(null)
+    setSelection(null)
+    setSelectedPartIds([])
+    setSelectedWireId(null)
     setNotice(`${model.name} added with ${model.pins.length} pins in the library’s declared order${symbol ? ` using ${symbol.name}` : ''}.`)
   }
   const updateSelected = (patch: Partial<Part>) => {
@@ -2352,7 +2367,11 @@ export default function App() {
       else if (key === 'n') { setPendingComponentKind(null); setTool('label') }
       else if (key === 'p') { setPendingComponentKind(null); setTool('probe') }
       else if (key === 'j') { setPendingComponentKind(null); setTool('junction') }
-      else if (key === 'r' && selected) rotateSelected()
+      else if (key === 'r') selectComponentForPlacement('resistor')
+      else if (key === 'c') selectComponentForPlacement('capacitor')
+      else if (key === 'l') selectComponentForPlacement('inductor')
+      else if (key === 'd') selectComponentForPlacement('diode')
+      else if (key === 'o' && selected) rotateSelected()
       else if (key === 'f' && selected) flipSelected()
       else if ((key === 'delete' || key === 'backspace') && selectedWireId && target instanceof Element && target.closest('.wire-line')) { event.preventDefault(); setProject((current) => ({ ...current, wires: current.wires.filter((wire) => wire.id !== selectedWireId) })); setSelectedWireId(null) }
       else if ((key === 'delete' || key === 'backspace') && selection) { event.preventDefault(); deleteSelection() }
@@ -2815,7 +2834,7 @@ export default function App() {
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
-      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (F)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
+      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (O)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (F)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select><ChevronDown size={13}/></label>
       {simulationResult?.analysis === 'tran' && <div className="menu-group playback-controls" aria-label="Result playback"><IconButton title={playbackRunning ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!playbackRunning && (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1) setSampleIndex(0); setPlaybackRunning((running) => !running) }} active={playbackRunning} disabled={!playbackAvailable}>{playbackRunning ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton><IconButton title="Rewind result playback to the first solved sample" onClick={() => { setPlaybackRunning(false); setSampleIndex(0) }} disabled={!playbackAvailable}><RotateCcw size={14}/></IconButton><details className="animation-tuning"><summary aria-label="Current animation settings" title="Current animation size and speed"><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div>}
@@ -2832,7 +2851,7 @@ export default function App() {
       </nav>
       <aside className={`library-panel${mobilePane === 'components' ? ' mobile-active' : ''}`}>
         <div className="panel-heading"><div><span className="eyebrow">DESIGN</span><h2>Components</h2></div><span className="library-count" aria-label={`${filteredPalette.length} components shown`}>{filteredPalette.length}</span></div>
-        <label className="search-box"><Search size={15}/><input ref={componentSearchRef} aria-label="Find a component" placeholder="Find a component" value={componentQuery} onChange={(event) => setComponentQuery(event.target.value)}/>{componentQuery ? <button type="button" aria-label="Clear component search" onClick={() => { setComponentQuery(''); componentSearchRef.current?.focus() }}><X size={13}/></button> : <kbd>/</kbd>}</label>
+        <label className="search-box"><Search size={15}/><input ref={componentSearchRef} aria-label="Find a component" placeholder="Find a component" value={componentQuery} onChange={(event) => setComponentQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && filteredPalette[0]) { event.preventDefault(); selectComponentForPlacement(filteredPalette[0].kind); componentSearchRef.current?.blur() } }}/>{componentQuery ? <button type="button" aria-label="Clear component search" onClick={() => { setComponentQuery(''); componentSearchRef.current?.focus() }}><X size={13}/></button> : <kbd>/</kbd>}</label>
         <div className="library-categories" role="group" aria-label="Component category">
           <button className={`category${componentCategory === 'all' ? ' active' : ''}`} aria-pressed={componentCategory === 'all'} onClick={() => setComponentCategory('all')}><Grid2X2 size={14}/> All parts</button>
           <button className={`category${componentCategory === 'basics' ? ' active' : ''}`} aria-pressed={componentCategory === 'basics'} onClick={() => setComponentCategory('basics')}><Zap size={14}/> Basics</button>
@@ -2840,7 +2859,7 @@ export default function App() {
           <button className={`category${componentCategory === 'controlled' ? ' active' : ''}`} aria-pressed={componentCategory === 'controlled'} onClick={() => setComponentCategory('controlled')}><Activity size={14}/> Controlled sources</button>
         </div>
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'all' ? 'ALL COMPONENTS' : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
-        {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, label, Icon, subtitle, help }) => <button key={kind} className={`component-card${pendingComponentKind === kind ? ' active' : ''}`} aria-pressed={pendingComponentKind === kind} onClick={() => { setPendingComponentKind(kind); setTool('select'); setNotice(`${label} selected. Drag on the schematic to place it and set its orientation.`) }} title={`Select ${label} to place`} aria-label={`Add ${label}. ${help}`} data-help={help}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span></button>)}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
+        {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, label, Icon, subtitle, help }) => <button key={kind} className={`component-card${pendingComponentKind === kind ? ' active' : ''}`} aria-pressed={pendingComponentKind === kind} onClick={() => selectComponentForPlacement(kind)} title={`Select ${label} to place`} aria-label={`Add ${label}. ${help}`} data-help={help}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span></button>)}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
         {project.sheets.some((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)) && <div className="imported-models"><div className="component-list-label">PROJECT BLOCKS</div>{project.sheets.filter((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)).map((sheet) => <div className="imported-model" key={sheet.id}><div><strong>{sheet.name}</strong><span>{sheet.ports.length} ordered ports · {sheet.ports.map((port) => port.name).join(', ')}</span><small>Defined by this project</small><button className="place-model" onClick={() => placeSheetBlock(sheet)}>Place block</button></div><button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button></div>)}</div>}
         {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Model dependency report"><strong>MODEL DEPENDENCIES</strong>{modelDependencyAnalysis.missing.length > 0 && <><p>These references are not present in the imported project libraries. Import the library that defines each name before running a circuit that uses it.</p><ul>{modelDependencyAnalysis.missing.slice(0, 20).map((dependency, index) => <li key={`${dependency.assetId}:${dependency.sourceLine}:${index}`}><code>{dependency.modelName}</code> ({dependency.kind}) · {dependency.filename}:{dependency.sourceLine}, in {dependency.owner}</li>)}</ul>{modelDependencyAnalysis.missing.length > 20 && <p>{modelDependencyAnalysis.missing.length - 20} additional missing references are omitted.</p>}</>}{modelDependencyAnalysis.recursiveChains.length > 0 && <><p>A circuit that instantiates one of these recursive call chains will fail in ngspice.</p><ul>{modelDependencyAnalysis.recursiveChains.map((chain) => <li key={chain.join(':')}>{chain.join(' → ')}</li>)}</ul></>}</div>}
         {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Conflicting model definitions"><strong>CONFLICTING MODEL DEFINITIONS</strong><p>More than one imported file defines the same model name. ELSim preserves both files; ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.</p><ul>{modelDependencyAnalysis.conflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.name}`}><code>{conflict.kind === 'subcircuit' ? '.SUBCKT' : '.MODEL'} {conflict.name}</code><ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>{definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => setModelSourceReview({ assetId: definition.assetId, line: definition.sourceLine })}>Review definition</button></li>)}</ul></li>)}</ul></div>}
