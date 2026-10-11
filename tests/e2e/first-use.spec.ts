@@ -116,11 +116,15 @@ test('quick tour explains the current workspace and project save flow', async ({
   const dialog = page.locator('.tour-dialog[role="dialog"]')
   const close = dialog.getByRole('button', { name: 'Close quick tour' })
   const next = dialog.getByRole('button', { name: 'Next' })
-  await expect(close).toBeFocused()
-  await page.keyboard.press('Shift+Tab')
   await expect(next).toBeFocused()
-  await page.keyboard.press('Tab')
+  await page.keyboard.press('Shift+Tab')
+  await expect(dialog.getByRole('button', { name: 'Skip tour' })).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
   await expect(close).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(dialog.getByRole('button', { name: 'Skip tour' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(next).toBeFocused()
   await expect(dialog.getByLabel('Step 1 of 5')).toBeVisible()
   await expect(dialog).toContainText('Your open circuit is on the center canvas.')
   await dialog.getByRole('button', { name: 'Next' }).click()
@@ -142,7 +146,7 @@ test('examples can be searched by title and description', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   const search = dialog.getByRole('textbox', { name: 'Find an example' })
   const cards = dialog.locator('.example-list article')
-  await expect(cards).toHaveCount(16)
+  await expect(cards).toHaveCount(18)
   await search.fill('P-JFET')
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('P-JFET positive-rail switch')
@@ -152,7 +156,7 @@ test('examples can be searched by title and description', async ({ page }) => {
   await search.fill('no such circuit')
   await expect(dialog.getByRole('status')).toContainText('No examples found')
   await dialog.getByRole('button', { name: 'Clear example search' }).click()
-  await expect(cards).toHaveCount(16)
+  await expect(cards).toHaveCount(18)
 })
 
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', async ({ page }) => {
@@ -419,7 +423,9 @@ test('drag placement aligns a transistor collector-to-emitter axis with the drag
   const canvas = page.locator('svg.schematic')
   const bounds = await canvas.boundingBox()
   expect(bounds).not.toBeNull()
-  await page.keyboard.press('q')
+  await page.keyboard.press('Escape')
+  await page.mouse.click(bounds!.x + 20, bounds!.y + 20)
+  await page.keyboard.press('n')
   await page.mouse.move(bounds!.x + 90, bounds!.y + 110)
   await page.mouse.down()
   await page.mouse.move(bounds!.x + 190, bounds!.y + 110)
@@ -522,7 +528,7 @@ test('invalid educational transistor beta selects and focuses its inspector fiel
   await page.goto('/')
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    project.parts.push({ id: 'ui-beta-q1', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 500, rotation: 0 })
+    project.parts.push({ id: 'ui-beta-q1', kind: 'npn', ref: 'Q1', value: '100', x: 450, y: 350, rotation: 0 })
     project.sheets[0].parts = project.parts
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
@@ -755,7 +761,7 @@ test('hierarchical block parameter overrides validate before saving and update t
       ports: [{ id: 'parameter-port-in', name: 'IN', side: 'left', direction: 'input' }, { id: 'parameter-port-out', name: 'OUT', side: 'right', direction: 'output' }],
       parameters: [{ id: 'parameter-rload', name: 'RLOAD', defaultValue: '1k' }],
     }
-    const block = { id: 'parameter-block', kind: 'subcircuit', componentDefinitionId: 'elsim.subcircuit', ref: 'XLOAD', value: 'Parameterized load', modelName: 'ELSIM_SHEET_sheet_parameter', modelPins: ['IN', 'OUT'], sheetId: child.id, sheetPortLayout: child.ports.map(({ side, direction }) => ({ side, direction })), x: 700, y: 500, rotation: 0 }
+    const block = { id: 'parameter-block', kind: 'subcircuit', componentDefinitionId: 'elsim.subcircuit', ref: 'XLOAD', value: 'Parameterized load', modelName: 'ELSIM_SHEET_sheet_parameter', modelPins: ['IN', 'OUT'], sheetId: child.id, sheetPortLayout: child.ports.map(({ side, direction }) => ({ side, direction })), x: 420, y: 350, rotation: 0 }
     project.parts.push(block)
     project.sheets[0] = { ...project.sheets[0], parts: project.parts }
     project.sheets.push(child)
@@ -808,8 +814,8 @@ test('shift selection moves, copies, pastes, and deletes a group of parts', asyn
   await page.keyboard.press('Control+c')
   await page.keyboard.press('Control+v')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial + 2)
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wiresBeforeCopy + 3)
-  await expect(page.getByRole('status')).toContainText('Ends at unselected parts stay open')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wiresBeforeCopy)
+  await expect(page.getByRole('status')).toContainText('Pasted 2 components')
   await expect(page.locator('.circuit-part.selected')).toHaveCount(2)
   await page.keyboard.press('Delete')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial)
@@ -831,22 +837,27 @@ test('copy and paste an explicitly selected net label with its global connection
 
 test('copy and paste a selected wire path without connected parts', async ({ page }) => {
   await page.goto('/')
-  const wire = page.locator('.wire-line').first()
-  const point = await wire.locator('polyline').first().evaluate((element) => {
-    const path = element as SVGPolylineElement
-    const point = path.getPointAtLength(path.getTotalLength() / 2)
-    const screen = new DOMPoint(point.x, point.y).matrixTransform(path.getScreenCTM()!)
-    return { x: screen.x, y: screen.y }
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = []
+    project.wires = [{ id: 'clipboard-wire', points: [[300, 300], [400, 300]] }]
+    project.junctions = []
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: [], wires: project.wires, junctions: [], netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
-  await page.mouse.click(point.x, point.y)
+  await page.reload()
+  const wire = page.locator('.wire-line[data-wire-id="clipboard-wire"]')
+  await wire.click()
+  await expect(wire).toHaveClass(/selected/)
   await page.keyboard.press('Control+c')
-  await expect(page.locator('.toast')).toContainText('Copied 1 wire path')
+  await expect(page.locator('.toast')).toContainText('Copied 1 wire segment')
   await page.keyboard.press('Control+v')
-  await expect(page.locator('.toast')).toContainText('Pasted 1 wire path')
+  await expect(page.locator('.toast')).toContainText('Pasted 1 wire segment')
   await expect.poll(() => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return { parts: project.parts.length, wires: project.wires.length, points: project.wires.at(-1).points }
-  })).toEqual({ parts: 4, wires: 4, points: [[225, 353], [225, 330], [353, 330]] })
+  })).toEqual({ parts: 0, wires: 2, points: [[340, 340], [440, 340]] })
 })
 
 test('fit schematic view frames distant parts, wires, and labels', async ({ page }) => {
@@ -2127,7 +2138,7 @@ test('current-source inspector edits a finite-cycle PULSE waveform', async ({ pa
   await page.goto('/')
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    const source = { id: 'ui-pulse-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 700, y: 500, rotation: 0 }
+    const source = { id: 'ui-pulse-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 450, y: 350, rotation: 0 }
     project.parts.push(source)
     project.sheets[0].parts = project.parts
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
@@ -2142,14 +2153,17 @@ test('current-source inspector edits a finite-cycle PULSE waveform', async ({ pa
   await page.getByLabel('Number of cycles (0 = unlimited)').fill('2')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PULSE\(-1m 2m 0 1u 1u 50m 100m 2\)/)
+  await page.keyboard.press('Escape')
   await waveform.selectOption('pwl')
   await expect(page.getByText('Current (A)', { exact: true })).toBeVisible()
   await expect(page.getByLabel('PWL point 2 current')).toHaveValue('5m')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\)/)
+  await page.keyboard.press('Escape')
   await page.getByLabel('Repeat PWL waveform forever').check()
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\) r=0/)
+  await page.keyboard.press('Escape')
   await page.getByLabel('Repeat PWL waveform forever').uncheck()
   await page.getByLabel('PWL point 2 current').fill('0')
   await page.getByRole('button', { name: '+ Add point' }).click()
@@ -2572,6 +2586,7 @@ test('global editor shortcuts stay inactive while an app dialog is open', async 
   await page.getByRole('button', { name: 'Examples' }).click()
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   await expect(dialog).toBeVisible()
+  await dialog.getByRole('textbox', { name: 'Find an example' }).focus()
   await page.keyboard.press('w')
   await expect(page.locator('svg.schematic')).not.toHaveClass(/wire-mode/)
   await page.keyboard.press('Space')
@@ -2756,6 +2771,7 @@ test('circuit checks explain and select a current-controlled source with no cont
   const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
   await examples.locator('.example-list article').filter({ hasText: 'Current-controlled sources' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await page.locator('.circuit-part[data-part-id="current-f1"]').click()
   await page.getByLabel('Controlling voltage source').selectOption('')
   await page.getByRole('button', { name: /Check circuit/ }).click()
@@ -2836,11 +2852,13 @@ test('voltage source inspector edits DC, pulse, and validated PWL transient beha
   await waveform.selectOption('dc')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('V1 vin 0 DC 5')
+  await page.keyboard.press('Escape')
   await waveform.selectOption('pulse')
   await page.getByLabel('Period', { exact: true }).fill('20m')
   await page.getByLabel('Number of cycles (0 = unlimited)').fill('3')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('V1 vin 0 PULSE(0 5 0 1u 1u 50m 20m 3)')
+  await page.keyboard.press('Escape')
   await expect(page.getByLabel('Initial voltage (V)')).toHaveValue('0')
   await waveform.selectOption('pwl')
   await page.getByLabel('PWL point 2 time').fill('2m')
@@ -2872,8 +2890,8 @@ test('transient measurements offer labeled nodes and common component currents',
   await page.getByRole('combobox', { name: 'Choose target vector for measurement 1' }).selectOption('V(vout)')
   await page.getByLabel('Measurement 1 trigger threshold').fill('not-a-voltage')
   await expect(page.getByLabel('Measurement 1 trigger threshold')).toHaveAttribute('aria-invalid', 'true')
-  await expect(page.getByText('Trigger threshold must be a numeric voltage, such as 2.5V.')).toBeVisible()
-  await page.getByLabel('Measurement 1 trigger threshold').fill('2.5V')
+  await expect(page.getByText('Trigger threshold must be a numeric current, such as 500mA.')).toBeVisible()
+  await page.getByLabel('Measurement 1 trigger threshold').fill('2.5mA')
   await page.getByLabel('Measurement 1 trigger crossing number').fill('1.5')
   await expect(page.getByLabel('Measurement 1 trigger crossing number')).toHaveAttribute('aria-invalid', 'true')
   await page.getByLabel('Measurement 1 trigger crossing number').fill('2')
@@ -2882,7 +2900,7 @@ test('transient measurements offer labeled nodes and common component currents',
   await expect(page.getByLabel('Target vector expression')).toHaveValue('V(vout)')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0])).toMatchObject({ vector: 'I(R1)', targetVector: 'V(vout)', triggerCount: 2, targetCount: 3 })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText('TRIG I(R1) VAL=2.5 RISE=2 TARG V(vout) VAL=2.5 RISE=3')
+  await expect(page.locator('.netlist-modal pre')).toContainText('TRIG I(R1) VAL=2.5m RISE=2 TARG V(vout) VAL=2.5 RISE=3')
 })
 
 test('transient measurement time windows persist and appear in the netlist', async ({ page }) => {
