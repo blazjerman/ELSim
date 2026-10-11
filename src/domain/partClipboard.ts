@@ -1,4 +1,5 @@
 import { componentPins, pointOnSegment } from './geometry'
+import { analyzeModelDependencies, requiredModelAssetIds } from './subcircuitLibrary'
 import type { Part, Project, ProjectSheet } from './project'
 
 export type PartClipboard = {
@@ -7,9 +8,11 @@ export type PartClipboard = {
   junctions: Project['junctions']
   netLabels: Project['netLabels']
   sheets?: ProjectSheet[]
+  modelAssets?: NonNullable<Project['modelAssets']>
+  symbolAssets?: NonNullable<Project['symbolAssets']>
 }
 
-export type ResolvedPartClipboard = { parts: Part[]; sheets: ProjectSheet[] }
+export type ResolvedPartClipboard = { parts: Part[]; sheets: ProjectSheet[]; modelAssets: NonNullable<Project['modelAssets']>; symbolAssets: NonNullable<Project['symbolAssets']> }
 
 function cloneSheet(sheet: ProjectSheet): ProjectSheet {
   return {
@@ -22,6 +25,18 @@ function cloneSheet(sheet: ProjectSheet): ProjectSheet {
     ports: sheet.ports.map((port) => ({ ...port })),
     ...(sheet.parameters ? { parameters: sheet.parameters.map((parameter) => ({ ...parameter })) } : {}),
   }
+}
+
+function resolveAssets<T extends { id: string; sha256: string; content: string }>(existing: T[], copied: T[], createId: () => string): { assets: T[]; ids: Map<string, string> } {
+  const ids = new Map<string, string>(), assets: T[] = []
+  for (const source of copied) {
+    const sameContent = existing.find((asset) => asset.sha256 === source.sha256 && asset.content === source.content)
+    if (sameContent) { ids.set(source.id, sameContent.id); continue }
+    const id = existing.some((asset) => asset.id === source.id) ? `asset-${createId()}` : source.id
+    ids.set(source.id, id)
+    assets.push({ ...source, id })
+  }
+  return { assets, ids }
 }
 
 /** Resolve block definitions carried by a clipboard into the destination project.
@@ -58,8 +73,14 @@ export function resolvePartClipboard(project: Project, clipboard: PartClipboard,
       parts: copied.parts.map((part) => part.sheetId && idMap.has(part.sheetId) ? { ...part, sheetId: idMap.get(part.sheetId)! } : part),
     }
   })
-  const parts = clipboard.parts.map((part) => part.sheetId && idMap.has(part.sheetId) ? { ...part, sheetId: idMap.get(part.sheetId)! } : { ...part })
-  return { parts, sheets }
+  const modelAssets = resolveAssets(project.modelAssets ?? [], clipboard.modelAssets ?? [], createId)
+  const symbolAssets = resolveAssets(project.symbolAssets ?? [], clipboard.symbolAssets ?? [], createId)
+  const parts = clipboard.parts.map((part) => ({
+    ...part,
+    ...(part.sheetId && idMap.has(part.sheetId) ? { sheetId: idMap.get(part.sheetId)! } : {}),
+    ...(part.symbolAssetId && symbolAssets.ids.has(part.symbolAssetId) ? { symbolAssetId: symbolAssets.ids.get(part.symbolAssetId)! } : {}),
+  }))
+  return { parts, sheets, modelAssets: modelAssets.assets, symbolAssets: symbolAssets.assets }
 }
 
 /** Copy wire geometry attached to selected pins. Pasted geometry is translated,
@@ -101,5 +122,15 @@ export function createPartClipboard(project: Project, selectedPartIds: readonly 
     const sheet = definitions.get(id)
     return sheet ? [cloneSheet(sheet)] : []
   })
-  return { parts, wires, junctions, netLabels, ...(sheets.length ? { sheets } : {}) }
+  const dependencyAnalysis = (project.modelAssets?.length ?? 0) > 0 ? analyzeModelDependencies(project.modelAssets!) : null
+  const requiredModelIds = dependencyAnalysis ? requiredModelAssetIds(dependencyAnalysis, parts) : new Set<string>()
+  const modelAssets = project.modelAssets?.filter((asset) => requiredModelIds.has(asset.id)).map((asset) => ({ ...asset, ...(asset.selectedSections ? { selectedSections: [...asset.selectedSections] } : {}) }))
+  const symbolIds = new Set(parts.flatMap((part) => part.symbolAssetId ? [part.symbolAssetId] : []))
+  const symbolAssets = project.symbolAssets?.filter((asset) => symbolIds.has(asset.id)).map((asset) => ({ ...asset }))
+  return {
+    parts, wires, junctions, netLabels,
+    ...(sheets.length ? { sheets } : {}),
+    ...(modelAssets?.length ? { modelAssets } : {}),
+    ...(symbolAssets?.length ? { symbolAssets } : {}),
+  }
 }

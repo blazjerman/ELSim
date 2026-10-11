@@ -137,3 +137,31 @@ test('pasting a block with a missing copied definition returns an actionable err
   const result = resolvePartClipboard(project, { parts: [{ id: 'x1', kind: 'subcircuit', ref: 'X1', value: 'Missing', x: 500, y: 360, rotation: 0, sheetId: 'missing' }], wires: [], junctions: [], netLabels: [] })
   assert.match(result.error, /missing its sheet definition/)
 })
+
+test('copying an imported IC carries its transitive model libraries and custom symbol', () => {
+  const project = createStarterProject()
+  const topLibrary = '.SUBCKT USER_TOP IN OUT\nXCORE IN OUT USER_CORE\n.ENDS USER_TOP\n'
+  const coreLibrary = '.SUBCKT USER_CORE IN OUT\nRCORE IN OUT 1k\n.ENDS USER_CORE\n'
+  const part = { id: 'x-user', kind: 'subcircuit', ref: 'XUSER', value: 'USER_TOP', modelName: 'USER_TOP', modelPins: ['IN', 'OUT'], componentDefinitionId: 'imported:test', symbolAssetId: 'symbol-user', x: 500, y: 360, rotation: 0 }
+  project.parts = [part]
+  project.sheets[0] = { ...project.sheets[0], parts: [part] }
+  project.modelAssets = [
+    { id: 'model-top', filename: 'user-top.lib', content: topLibrary, sha256: 'top-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'model-core', filename: 'user-core.lib', content: coreLibrary, sha256: 'core-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+  ]
+  project.symbolAssets = [{ id: 'symbol-user', filename: 'user-top.asy', content: 'Version 4\n', sha256: 'symbol-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
+  const clipboard = createPartClipboard(project, ['x-user'])
+  assert.deepEqual(clipboard.modelAssets.map((asset) => asset.filename).sort(), ['user-core.lib', 'user-top.lib'])
+  assert.deepEqual(clipboard.symbolAssets.map((asset) => asset.filename), ['user-top.asy'])
+
+  const destination = createStarterProject()
+  destination.modelAssets = [{ ...project.modelAssets[0], content: '.MODEL DIFFERENT D(Is=1n)\n', sha256: 'different-hash' }]
+  destination.symbolAssets = [{ ...project.symbolAssets[0], content: 'Version 4\nRECTANGLE Normal 0 0 1 1\n', sha256: 'different-symbol-hash' }]
+  let nextId = 0
+  const resolved = resolvePartClipboard(destination, clipboard, () => `generated-${++nextId}`)
+  assert.equal('error' in resolved, false)
+  assert.deepEqual(resolved.modelAssets.map((asset) => asset.filename).sort(), ['user-core.lib', 'user-top.lib'])
+  assert.equal(resolved.modelAssets.find((asset) => asset.filename === 'user-top.lib').id, 'asset-generated-1')
+  assert.equal(resolved.symbolAssets[0].id, 'asset-generated-2')
+  assert.equal(resolved.parts[0].symbolAssetId, 'asset-generated-2')
+})

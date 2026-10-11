@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator } from '@playwright/test'
+import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
+import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
+import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
 
 async function rightClickNetLabel(page: import('@playwright/test').Page, name: string) {
   const labels = page.getByRole('button', { name: `Net label ${name.toUpperCase()}` })
@@ -1003,6 +1006,55 @@ test('copying a hierarchical block into a new project preserves nested definitio
     const inner = project.sheets.find((sheet: { id: string }) => sheet.id === innerInstance?.sheetId)
     return { outer: outer?.name, inner: inner?.name, nestedReferenceResolves: Boolean(inner), override: instance.sheetParameters?.RINPUT }
   })).toEqual({ outer: 'Parameterized divider', inner: 'Core resistor', nestedReferenceResolves: true, override: '2k' })
+})
+
+test('copying a user IC into a new project carries transitive libraries and its custom symbol', async ({ page }) => {
+  const topSource = '.SUBCKT USER_TOP IN OUT\nXCORE IN OUT USER_CORE\n.ENDS USER_TOP\n'
+  const coreSource = '.SUBCKT USER_CORE IN OUT\nRCORE IN OUT 1k\n.ENDS USER_CORE\n'
+  const topAsset = { id: 'model-top', filename: 'user-top.lib', content: topSource, sha256: createHash('sha256').update(topSource).digest('hex'), licenseStatus: 'unknown' as const, importedAt: '2026-01-01T00:00:00.000Z' }
+  const coreAsset = { id: 'model-core', filename: 'user-core.lib', content: coreSource, sha256: createHash('sha256').update(coreSource).digest('hex'), licenseStatus: 'unknown' as const, importedAt: '2026-01-01T00:00:00.000Z' }
+  const top = parseSubcircuitLibrary(topSource).subcircuits[0]
+  const definition = importedSubcircuitComponentDefinition(top, { assetId: topAsset.id, filename: topAsset.filename, sha256: topAsset.sha256 })
+  const symbolSource = 'Version 4\nSYMATTR Prefix X\nRECTANGLE Normal -8 -8 8 8\nPIN -16 0 R\nPINATTR PinName IN\nPINATTR SpiceOrder 1\nPIN 16 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 2\n'
+  const symbol = parseLtspiceSymbol(symbolSource, 'user-top.asy')
+  const symbolAsset = { id: 'symbol-top', filename: 'user-top.asy', content: symbolSource, sha256: createHash('sha256').update(symbolSource).digest('hex'), licenseStatus: 'unknown' as const, importedAt: '2026-01-01T00:00:00.000Z' }
+  await page.goto('/')
+  await page.evaluate(({ topAsset, coreAsset, symbolAsset, definition, symbol }) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const part = {
+      id: 'user-ic', kind: 'subcircuit', ref: 'XUSER', value: 'USER_TOP', modelName: 'USER_TOP', modelPins: ['IN', 'OUT'],
+      componentDefinitionId: definition.id, symbolAssetId: symbolAsset.id,
+      symbolPinOffsets: symbol.pins.map((pin: { x: number; y: number }) => [pin.x, pin.y]),
+      x: 500, y: 360, rotation: 0,
+    }
+    project.parts.push(part)
+    project.sheets.find((sheet: { id: string }) => sheet.id === project.activeSheetId).parts = project.parts
+    project.modelAssets = [topAsset, coreAsset]
+    project.symbolAssets = [symbolAsset]
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  }, { topAsset, coreAsset, symbolAsset, definition, symbol })
+  await page.reload()
+  const sourcePart = page.locator('.circuit-part[aria-label^="XUSER,"]')
+  await expect(sourcePart).toBeVisible()
+  await sourcePart.evaluate((element) => (element as SVGGElement).focus())
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Control+c')
+  await expect(page.getByText(/Copied XUSER and/)).toBeVisible()
+
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'New', exact: true }).click()
+  await page.keyboard.press('Control+v')
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const part = project.parts.find((candidate: { ref: string }) => candidate.ref === 'X1')
+    return {
+      libraries: project.modelAssets.map((asset: { filename: string }) => asset.filename).sort(),
+      symbol: project.symbolAssets.find((asset: { id: string }) => asset.id === part.symbolAssetId)?.filename,
+      hasTransitiveModel: project.modelAssets.some((asset: { content: string }) => asset.content.includes('USER_CORE')),
+      definitionMatchesModel: part.componentDefinitionId === `user.${project.modelAssets.find((asset: { filename: string }) => asset.filename === 'user-top.lib').sha256}.user-top`,
+    }
+  })).toEqual({ libraries: ['user-core.lib', 'user-top.lib'], symbol: 'user-top.asy', hasTransitiveModel: true, definitionMatchesModel: true })
 })
 
 test('copy and paste an explicitly selected net label with its global connection semantics', async ({ page }) => {
