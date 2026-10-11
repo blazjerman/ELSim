@@ -23,6 +23,15 @@ test('small ranges keep all original indices and respect clamped bounds', () => 
   assert.deepEqual(extremaIndices([2, 5, -1, 4], -4, 2, 10), [0, 1, 2])
 })
 
+test('identical plot windows share bounded downsample indices for the same immutable vector range', () => {
+  const values = new Float64Array(100_000)
+  values[50_001] = 10
+  const first = extremaIndices(values, 0, values.length - 1, 900)
+  assert.strictEqual(extremaIndices(values, 0, values.length - 1, 900), first)
+  assert.notStrictEqual(extremaIndices(values, 1, values.length - 1, 900), first)
+  assert.ok(first.includes(50_001))
+})
+
 test('value range handles transformed values without temporary arrays', () => {
   assert.deepEqual(valueRange([1, 10, 100, 1000], 1, 3, (value) => Math.log10(value)), [1, 3])
   assert.equal(valueRange([], 0, 0), null)
