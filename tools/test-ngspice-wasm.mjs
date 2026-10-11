@@ -259,7 +259,7 @@ for (const fixture of fixtures) {
 // Keep the compatibility assistant's warnings tied to failures from the shipped pinned WASM engine.
 const unsupportedFunctionDir = mkdtempSync(path.join(tmpdir(), 'elsim-ngspice-unsupported-functions-'))
 try {
-  const unsupportedFunctions = ['cbrt(V(in))', 'atan2(V(in),1)', 'mod(V(in),2)', 'pwrs(V(in),2)', 'arccos(V(in))', 'arcsin(V(in))', 'arctan(V(in))', 'noise()', 'smallsig()']
+  const unsupportedFunctions = ['cbrt(V(in))', 'atan2(V(in),1)', 'mod(V(in),2)', 'pwrs(V(in),2)', 'arccos(V(in))', 'arcsin(V(in))', 'arctan(V(in))', 'noise()', 'smallsig()', '~(V(in))']
   for (const [index, expression] of unsupportedFunctions.entries()) {
     const deckPath = path.join(unsupportedFunctionDir, `unsupported-${index + 1}.cir`)
     writeFileSync(deckPath, `* ${expression}\nV1 in 0 DC 0.5\nB1 out 0 V=${expression}\nR1 out 0 1k\n.op\n.end\n`)

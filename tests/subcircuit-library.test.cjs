@@ -199,6 +199,15 @@ test('flags additional LTspice functions rejected by the pinned browser ngspice 
   assert.equal(source.includes('cbrt(V(IN))'), true)
 })
 
+test('flags LTspice unary ~ inversion syntax rejected by browser ngspice', () => {
+  const source = '.SUBCKT inverter IN OUT\nB1 OUT 0 V=~(V(IN))\n.ENDS inverter'
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'LTspice ~ Boolean inversion operator (unsupported by browser ngspice)'])
+  assert.match(warning.impact, /unknown function/)
+  assert.match(warning.suggestion, /Do not replace ~ with ngspice ! blindly/)
+  assert.equal(source.includes('~(V(IN))'), true)
+})
+
 test('dialect warnings retain continuation line numbers and ignore dollar signs inside quotes', () => {
   const source = [
     '.SUBCKT compat IN OUT',
