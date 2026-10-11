@@ -369,7 +369,7 @@ test('imported library provenance notes persist while rights remain unverified',
   await expect(review).toContainText('permission still needs confirmation')
 })
 
-test('user model library import exposes its subcircuit and parameter in the component picker', async ({ page }) => {
+test('user model library adds a subcircuit with ordered pins and parameter defaults', async ({ page }) => {
   await page.goto('/')
   const modelLibrary = '.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
@@ -381,7 +381,12 @@ test('user model library import exposes its subcircuit and parameter in the comp
   await expect(page.getByText(/Imported 1 subcircuit and 0 device models from user-double\.lib/)).toBeVisible()
   const importedModel = page.locator('.imported-model').filter({ hasText: 'USER_DOUBLE' })
   await expect(importedModel).toContainText('Parameters: gain=2')
-  await expect(importedModel.getByRole('button', { name: 'Add to schematic' })).toBeEnabled()
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  const instance = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(instance).toBeVisible()
+  await instance.click()
+  await expect(page.getByRole('textbox', { name: 'gain model value' })).toHaveValue('2')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
 test('duplicate model definitions show both library locations and open the source line', async ({ page }) => {
