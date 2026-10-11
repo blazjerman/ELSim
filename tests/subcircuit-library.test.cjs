@@ -6,11 +6,26 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('accepts only bounded numeric SPICE parameter arithmetic without executable syntax', () => {
   for (const value of ['1k', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}']) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
   for (const value of ['{if(RLOAD, 1k, 2k)}', '{RLOAD > 1k}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD ** 2}', '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+})
+
+test('combined model-library analysis shares parsed cards with dependency resolution', () => {
+  const assets = [
+    { id: 'child', filename: 'child.lib', content: '.SUBCKT CHILD IN OUT\nR1 IN OUT 1k\n.ENDS CHILD\n.MODEL DFAST D(IS=2n)' },
+    { id: 'top', filename: 'top.lib', content: '.SUBCKT TOP IN OUT\nX1 IN OUT CHILD\n.ENDS TOP' },
+  ]
+  const result = analyzeModelLibraries(assets)
+  assert.deepEqual(result.assets.map(({ asset, parsed }) => ({ filename: asset.filename, subcircuits: parsed.subcircuits.map(({ name }) => name), models: parsed.models.map(({ name }) => name) })), [
+    { filename: 'child.lib', subcircuits: ['CHILD'], models: ['DFAST'] },
+    { filename: 'top.lib', subcircuits: ['TOP'], models: [] },
+  ])
+  assert.deepEqual(result.dependencies.missing, [])
+  assert.equal(result.dependencies.resolved[0].targetAssetId, 'child')
+  assert.deepEqual(analyzeModelDependencies(assets), result.dependencies)
 })
 
 test('parses ordered subcircuit pins, parameters, continuations, shared models, and multiple definitions', () => {

@@ -9,6 +9,8 @@ export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string }
 export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
 export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
+export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
+export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInput> = { assets: { asset: T; parsed: ParsedSubcircuitLibrary }[]; dependencies: ModelDependencyAnalysis }
 
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
@@ -467,9 +469,14 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   return { subcircuits, models, dependencies, modelText, modelRecords }
 }
 
-/** Resolve references between imported libraries and report missing cards and recursive .SUBCKT chains. */
-export function analyzeModelDependencies(assets: { id: string; filename: string; content: string; selectedSections?: string[] }[]): ModelDependencyAnalysis {
+/** Parse each library once, then share its definitions with dependency checks and the UI. */
+export function analyzeModelLibraries<T extends ModelLibraryInput>(assets: T[]): AnalyzedModelLibraries<T> {
   const parsedAssets = assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections) }))
+  return { assets: parsedAssets, dependencies: analyzeParsedModelDependencies(parsedAssets) }
+}
+
+/** Resolve references between parsed libraries and report missing cards and recursive .SUBCKT chains. */
+function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['assets']): ModelDependencyAnalysis {
   const subcircuits = new Map<string, string>()
   const subcircuitAssets = new Map<string, string>()
   const deviceModelAssets = new Map<string, string>()
@@ -525,6 +532,11 @@ export function analyzeModelDependencies(assets: { id: string; filename: string;
   for (const name of subcircuits.keys()) visit(name)
   const conflicts = [...definitionLocations.values()].filter((conflict) => conflict.definitions.length > 1)
   return { missing, recursiveChains, resolved, conflicts, subcircuitAssets, deviceModelAssets }
+}
+
+/** Resolve references between imported libraries and report missing cards and recursive .SUBCKT chains. */
+export function analyzeModelDependencies(assets: ModelLibraryInput[]): ModelDependencyAnalysis {
+  return analyzeModelLibraries(assets).dependencies
 }
 
 /** Return the imported libraries required by schematic instances, including transitive dependencies. */

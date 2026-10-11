@@ -369,6 +369,21 @@ test('imported library provenance notes persist while rights remain unverified',
   await expect(review).toContainText('permission still needs confirmation')
 })
 
+test('user model library import exposes its subcircuit and parameter in the component picker', async ({ page }) => {
+  await page.goto('/')
+  const modelLibrary = '.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'user-double.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 0 device models from user-double\.lib/)).toBeVisible()
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'USER_DOUBLE' })
+  await expect(importedModel).toContainText('Parameters: gain=2')
+  await expect(importedModel.getByRole('button', { name: 'Add to schematic' })).toBeEnabled()
+})
+
 test('duplicate model definitions show both library locations and open the source line', async ({ page }) => {
   await page.goto('/')
   const picker = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
