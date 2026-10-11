@@ -8,6 +8,7 @@ const { checkCircuit } = require(path.join(build, 'domain/electricalCheck.js'))
 const { createStarterProject } = require(path.join(build, 'domain/project.js'))
 const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
+const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('starter project passes the common wiring checks', () => {
   assert.deepEqual(checkCircuit(createStarterProject()), [])
@@ -79,6 +80,29 @@ test('reports floating terminals on the component a beginner needs to wire', () 
   assert.equal(issue.partId, 'loose-r')
   assert.match(issue.title, /2 unconnected terminals/)
   assert.match(issue.title, /terminal 1, terminal 2/)
+})
+
+test('MOSFET bulk guidance is informational and allows intentional separate body bias', () => {
+  const project = createStarterProject()
+  const mosfet = { id: 'body-bias-m1', kind: 'nmos', ref: 'M1', value: '0', x: 900, y: 900, rotation: 0 }
+  project.parts.push(mosfet)
+  const pins = componentPins(mosfet)
+  project.netLabels.push(
+    ...pins.map((pin, index) => ({
+      id: `m1-pin-${index}`,
+      name: ['DRAIN', 'GATE', 'SOURCE', 'BULK'][index],
+      x: pin.x,
+      y: pin.y,
+      visible: false,
+    })),
+  )
+
+  let issue = checkCircuit(project).find((item) => item.id === 'mosfet-body-bias:body-bias-m1')
+  assert.equal(issue.severity, 'info')
+  assert.match(issue.detail, /may be intentional/)
+
+  project.netLabels.find((label) => label.id === 'm1-pin-3').name = 'SOURCE'
+  assert.equal(checkCircuit(project).some((item) => item.id === 'mosfet-body-bias:body-bias-m1'), false)
 })
 
 test('names open semiconductor pins in floating-terminal guidance', () => {

@@ -258,6 +258,20 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     })
   }
 
+  for (const part of project.parts) {
+    if (part.kind !== 'nmos' && part.kind !== 'pmos') continue
+    const source = connectivity.pinNets.get(`${part.id}:2`)
+    const bulk = connectivity.pinNets.get(`${part.id}:3`)
+    if (!source || !bulk || source === bulk) continue
+    issues.push({
+      id: `mosfet-body-bias:${part.id}`,
+      severity: 'info',
+      title: `${part.ref} bulk and source use different nets`,
+      detail: 'Many discrete MOSFET circuits connect bulk to source. Separate body bias may be intentional; check the device model and circuit design.',
+      partId: part.id,
+    })
+  }
+
   const twoTerminalKinds = new Set(['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'switch'])
   for (const part of project.parts) {
     if (!twoTerminalKinds.has(part.kind)) continue
