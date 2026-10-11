@@ -60,6 +60,17 @@ test('imports bounded LTspice .step param ranges and arithmetic lists independen
   assert.match(createNetlistArtifact(project).text, /^\.param RALT=1k$/m)
 })
 
+test('imports multiple LTspice directives packed into one TEXT record', () => {
+  const asc = ['Version 4', 'TEXT 0 100 Left 2 !.step param RLOAD 1k 3k 1k\\n.tran 0 1m\\n.param RLOAD=1k'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'packed-directives.asc')
+  assert.deepEqual(warnings, [])
+  assert.equal(project.simulation.analysis, 'tran')
+  assert.equal(project.simulation.stopTime, '1m')
+  assert.deepEqual(project.simulation.parameterSweeps.map(({ globalParameter, points }) => ({ globalParameter, points })), [
+    { globalParameter: 'RLOAD', points: 3 },
+  ])
+})
+
 test('unsupported LTspice .step forms remain in source and explain the import limitation', () => {
   const asc = ['Version 4', 'TEXT 0 100 Left 2 !.param R=1k', 'TEXT 0 120 Left 2 !.step dec param R 10 1k 100k'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'unsupported-step.asc')
