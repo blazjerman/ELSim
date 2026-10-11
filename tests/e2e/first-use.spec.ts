@@ -282,6 +282,8 @@ test('Ctrl+A selects components and wires; drag boxes use window and crossing se
   await expect(page.locator('.circuit-part.selected')).toHaveCount(count)
   const wireCount = await page.locator('.wire-line').count()
   await expect(page.locator('.wire-line.selected')).toHaveCount(wireCount)
+  const labelCount = await page.locator('.canvas-label').count()
+  await expect(page.locator('.canvas-label.selected')).toHaveCount(labelCount)
 
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
   const bounds = await resistor.boundingBox()
@@ -1502,6 +1504,46 @@ test('Ctrl+A selects multiple wires and dragging one moves the selected wire gro
   expect(after[1].points).toEqual(before[1].points.map(([x, y]: [number, number]) => [x + dx, y + dy]))
 })
 
+test('dragging a mixed component, wire, and label selection moves every selected item together', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = [{ id: 'mixed-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 330, rotation: 0 }]
+    project.wires = [{ id: 'mixed-wire', points: [[430, 330], [530, 330]] }]
+    project.netLabels = [{ id: 'mixed-label', name: 'VOUT', x: 430, y: 390, visible: true }]
+    project.junctions = []
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const svg = page.locator('svg.schematic')
+  const matrix = await svg.evaluate((element) => {
+    const { a, b, c, d, e, f } = element.getScreenCTM()!
+    return { a, b, c, d, e, f }
+  })
+  const toScreen = (x: number, y: number) => ({ x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f })
+  const boxStart = toScreen(200, 220), boxEnd = toScreen(580, 430)
+  await page.mouse.move(boxStart.x, boxStart.y)
+  await page.mouse.down()
+  await page.mouse.move(boxEnd.x, boxEnd.y, { steps: 4 })
+  await page.mouse.up()
+  await expect(page.locator('.circuit-part[data-part-id="mixed-resistor"]')).toHaveClass(/selected/)
+  await expect(page.locator('.wire-line[data-wire-id="mixed-wire"]')).toHaveClass(/selected/)
+  await expect(page.locator('.canvas-label[data-net-label-id="mixed-label"]')).toHaveClass(/selected/)
+  const part = page.locator('.circuit-part[data-part-id="mixed-resistor"]')
+  const bounds = await part.boundingBox()
+  expect(bounds).not.toBeNull()
+  const start = { x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x + matrix.a * 30, start.y + matrix.d * 20, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return { part: [project.parts[0].x, project.parts[0].y], wire: project.wires[0].points, label: [project.netLabels[0].x, project.netLabels[0].y] }
+  })).toEqual({ part: [380, 350], wire: [[460, 350], [560, 350]], label: [460, 410] })
+})
+
 test('wire segments move independently and wheel zoom preserves their geometry', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
@@ -1514,7 +1556,6 @@ test('wire segments move independently and wheel zoom preserves their geometry',
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
-  await page.getByRole('button', { name: 'Draw wire (W)' }).click()
   const svg = page.locator('svg.schematic')
   const matrix = await svg.evaluate((element) => {
     const { a, b, c, d, e, f } = element.getScreenCTM()!
