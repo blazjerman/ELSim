@@ -383,6 +383,18 @@ test('wire current animation respects the operating system reduced-motion prefer
   await expect.poll(() => schematic.evaluate((svg) => getComputedStyle(svg.querySelector('.wire-current-flow')!).animationName)).toBe('none')
 })
 
+test('wire current animation keeps moving while transient playback advances', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const flow = page.locator('.wire-current-flow').first()
+  await expect(flow).toBeVisible()
+  const before = Number(await flow.getAttribute('stroke-dashoffset') ?? 0)
+  await page.waitForTimeout(350)
+  const after = Number(await flow.getAttribute('stroke-dashoffset') ?? 0)
+  expect(Math.abs(after - before)).toBeGreaterThan(1)
+})
+
 test('schematic components use one roving tab stop and arrow-key spatial navigation', async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
@@ -419,6 +431,9 @@ test('schematic wire segments and net labels can be selected from the keyboard',
   await expect(wire).toHaveAttribute('tabindex', '0')
   await wire.focus()
   await page.keyboard.press('Enter')
+  await expect(wire).toHaveClass(/selected/)
+  await expect(wire).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('Space')
   await expect(wire).toHaveClass(/selected/)
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
   const wireBefore = await wire.locator('polyline').first().getAttribute('points')

@@ -21,7 +21,7 @@ import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { updateSheetDefinition } from '../domain/sheetDefinition'
 import { wireCurrentFlowSegments, type WireCurrentFlowSegment } from '../domain/wireFlow'
-import { registerWireAnimation } from './wireAnimation'
+import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentDefaultValue, componentDefinitionFor, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { timeMagnitude } from '../domain/componentValue'
@@ -861,7 +861,8 @@ const WireFlowPath = memo(function WireFlowPath({ wireId, index, segment, enable
 }) {
   const key = `${wireId}:${index}`
   const config = enabled ? { key, magnitude: segment.magnitude, forward: segment.forward, speed, scale } : undefined
-  const ref = useCallback((element: SVGPolylineElement | null) => registerWireAnimation(key, element, config), [key, config?.magnitude, config?.forward, config?.speed, config?.scale])
+  const ref = useCallback((element: SVGPolylineElement | null) => registerWireAnimation(key, element), [key])
+  useLayoutEffect(() => updateWireAnimation(key, config), [key, config?.magnitude, config?.forward, config?.speed, config?.scale])
   return <polyline ref={ref} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={(2.2 + strength * 2.2) * scale} strokeLinecap="round" strokeDasharray={`${3 * scale} ${15 * scale}`} opacity={opacity}><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
 })
 
@@ -1196,6 +1197,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     if (tool !== 'select' || spacePan) return
     const wire = project.wires.find((item) => item.id === id)
     if (!wire) return
+    setSelectedPartIds([])
     setSelection({ kind: 'wire', id })
     beginEdit()
     const point = pointFromEvent(event)
