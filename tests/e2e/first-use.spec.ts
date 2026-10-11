@@ -274,6 +274,65 @@ test('every component shortcut selects its matching palette item', async ({ page
   await expect(page.getByRole('button', { name: 'Select and move (M)' })).toHaveClass(/active/)
 })
 
+test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', async ({ page }) => {
+  await page.goto('/')
+  const parts = page.locator('.circuit-part')
+  const count = await parts.count()
+  await page.keyboard.press('Control+a')
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(count)
+  const wireCount = await page.locator('.wire-line').count()
+  await expect(page.locator('.wire-line.selected')).toHaveCount(wireCount)
+
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const bounds = await resistor.boundingBox()
+  const canvas = await page.locator('svg.schematic').boundingBox()
+  expect(bounds).not.toBeNull()
+  expect(canvas).not.toBeNull()
+  const leftStart = await page.evaluate(({ bounds, canvas }) => {
+    for (let offset = 15; offset <= 100; offset += 5) for (let rise = 5; rise <= 45; rise += 5) {
+      const x = bounds.x - offset, y = bounds.y - rise
+      const hit = document.elementFromPoint(x, y)
+      if (x > canvas.x && y > canvas.y && hit && !hit.closest('.circuit-part, .wire-line, .canvas-label')) return { x, y }
+    }
+    return null
+  }, { bounds: bounds!, canvas: canvas! })
+  expect(leftStart).not.toBeNull()
+  await page.mouse.move(leftStart!.x, leftStart!.y)
+  await page.mouse.down()
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2)
+  await page.mouse.up()
+  await expect(resistor).not.toHaveClass(/selected/)
+
+  const rightStart = await page.evaluate(({ bounds, canvas }) => {
+    for (let offset = 15; offset <= 100; offset += 5) for (let rise = 5; rise <= 45; rise += 5) {
+      const x = bounds.x + bounds.width + offset, y = bounds.y - rise
+      const hit = document.elementFromPoint(x, y)
+      if (x < canvas.x + canvas.width && y > canvas.y && hit && !hit.closest('.circuit-part, .wire-line, .canvas-label')) return { x, y }
+    }
+    return null
+  }, { bounds: bounds!, canvas: canvas! })
+  expect(rightStart).not.toBeNull()
+  await page.mouse.move(rightStart!.x, rightStart!.y)
+  await page.mouse.down()
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2)
+  await expect(page.locator('.selection-box.crossing')).toBeVisible()
+  await page.mouse.up()
+  await expect(resistor).toHaveClass(/selected/)
+})
+
+test('drag placement aligns a transistor collector-to-emitter axis with the drag', async ({ page }) => {
+  await page.goto('/')
+  const canvas = page.locator('svg.schematic')
+  const bounds = await canvas.boundingBox()
+  expect(bounds).not.toBeNull()
+  await page.keyboard.press('q')
+  await page.mouse.move(bounds!.x + 90, bounds!.y + 110)
+  await page.mouse.down()
+  await page.mouse.move(bounds!.x + 190, bounds!.y + 110)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.filter((part: { kind: string }) => part.kind === 'npn').at(-1)?.rotation)).toBe(270)
+})
+
 test('component cards explain behavior on hover and keyboard focus', async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
@@ -1407,6 +1466,42 @@ test('junction tool toggles a crossing connection in the schematic', async ({ pa
   await expect(svg.locator('title', { hasText: 'Connected wire junction' })).toHaveCount(0)
 })
 
+test('Ctrl+A selects multiple wires and dragging one moves the selected wire group', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = []
+    project.wires = [
+      { id: 'group-wire-a', points: [[300, 300], [400, 300]] },
+      { id: 'group-wire-b', points: [[300, 360], [400, 360]] },
+    ]
+    project.junctions = []
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: [], wires: project.wires, junctions: [], netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Control+a')
+  await expect(page.locator('.wire-line.selected')).toHaveCount(2)
+  const wire = page.locator('.wire-line[data-wire-id="group-wire-a"]')
+  const center = await wire.evaluate((element) => {
+    const matrix = (element.ownerSVGElement as SVGSVGElement).getScreenCTM()!
+    const point = new DOMPoint(350, 300).matrixTransform(matrix)
+    return { x: point.x, y: point.y }
+  })
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)
+  await page.mouse.move(center.x, center.y)
+  await page.mouse.down()
+  await page.mouse.move(center.x + 35, center.y)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)).not.toEqual(before)
+  const after = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)
+  const dx = after[0].points[0][0] - before[0].points[0][0]
+  const dy = after[0].points[0][1] - before[0].points[0][1]
+  expect(dx).not.toBe(0)
+  expect(after[1].points).toEqual(before[1].points.map(([x, y]: [number, number]) => [x + dx, y + dy]))
+})
+
 test('wire segments move independently and wheel zoom preserves their geometry', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
@@ -1446,6 +1541,89 @@ test('wire segments move independently and wheel zoom preserves their geometry',
   })
   await expect.poll(async () => Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))).toBeGreaterThan(beforeZoom)
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual(moved)
+})
+
+test('dragging a wire endpoint moves only that connection point', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = []
+    project.wires = [{ id: 'endpoint-wire', points: [[300, 300], [400, 300]] }]
+    project.junctions = []
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: [], wires: project.wires, junctions: [], netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const wire = page.locator('.wire-line[data-wire-id="endpoint-wire"]')
+  const matrix = await page.locator('svg.schematic').evaluate((element) => {
+    const { a, b, c, d, e, f } = element.getScreenCTM()!
+    return { a, b, c, d, e, f }
+  })
+  const toScreen = (x: number, y: number) => ({ x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f })
+  const end = toScreen(325, 325)
+  await page.mouse.move(toScreen(350, 300).x, toScreen(350, 300).y)
+  const handle = page.locator('.wire-endpoint-handles circle').first()
+  await expect(handle).toBeVisible()
+  const handlePosition = await handle.evaluate((element) => {
+    const matrix = (element.ownerSVGElement as SVGSVGElement).getScreenCTM()!
+    const point = new DOMPoint(Number(element.getAttribute('cx')), Number(element.getAttribute('cy'))).matrixTransform(matrix)
+    return { x: point.x, y: point.y }
+  })
+  await page.mouse.move(handlePosition.x, handlePosition.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 3 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual([[330, 330], [400, 300]])
+})
+
+test('wire hover clears immediately over a component and connection dots mark joined pins', async ({ page }) => {
+  await page.goto('/')
+  const wire = page.locator('.wire-line[data-wire-id="w-1"]')
+  await expect(wire).toBeVisible()
+  const wirePoint = await wire.evaluate((element) => {
+    const matrix = (element.ownerSVGElement as SVGSVGElement).getScreenCTM()!
+    const point = new DOMPoint(180, 300).matrixTransform(matrix)
+    return { x: point.x, y: point.y }
+  })
+  await page.mouse.move(wirePoint.x, wirePoint.y)
+  await expect(wire).toHaveClass(/hovered/)
+  const component = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const componentPoint = await component.evaluate((element) => {
+    const matrix = (element.ownerSVGElement as SVGSVGElement).getScreenCTM()!
+    const point = new DOMPoint(360, 290).matrixTransform(matrix)
+    return { x: point.x, y: point.y }
+  })
+  await page.mouse.move(componentPoint.x, componentPoint.y)
+  await expect(wire).not.toHaveClass(/hovered/)
+  const dots = page.locator('.wire-connection-dot')
+  await expect(dots).toHaveCount(10)
+  const coordinates = await dots.evaluateAll((elements) => elements.map((element) => [Number(element.getAttribute('cx')), Number(element.getAttribute('cy'))]))
+  expect(coordinates).toContainEqual([180, 310])
+  expect(coordinates).toContainEqual([180, 290])
+})
+
+test('connection dots render at wire T joins and component pins on a wire', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = [{ id: 'join-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 300, rotation: 0 }]
+    project.wires = [
+      { id: 'join-horizontal', points: [[250, 300], [450, 300]] },
+      { id: 'join-vertical', points: [[350, 200], [350, 300]] },
+    ]
+    project.junctions = []
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const dots = page.locator('.wire-connection-dot')
+  await expect(dots).toHaveCount(3)
+  const coordinates = await dots.evaluateAll((elements) => elements.map((element) => [Number(element.getAttribute('cx')), Number(element.getAttribute('cy'))]))
+  expect(coordinates).toContainEqual([300, 300])
+  expect(coordinates).toContainEqual([350, 300])
+  expect(coordinates).toContainEqual([400, 300])
 })
 
 test('moving a component leaves all wire objects fixed in place', async ({ page }) => {

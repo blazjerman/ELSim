@@ -849,7 +849,6 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
       const glow = segment.magnitude > 1e-12 ? Math.min(1, (0.12 + currentStrength * 0.88) * animationScale) : 0
       return <WireFlowPath key={`${wire.id}:${index}`} wireId={wire.id} index={index} segment={segment} enabled={animationEnabled} scale={animationScale} speed={animationSpeed} strength={currentStrength} opacity={glow}/>
     })}
-    <circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/>
   </g>
 })
 
@@ -957,15 +956,16 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
   </div>
 }
 
-function Schematic({ project, selection, setSelection, selectedWireId, setSelectedWireId, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, pendingComponent, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, onSampleChange, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedWireId: string | null; setSelectedWireId: (id: string | null) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
+function Schematic({ project, selection, setSelection, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, pendingComponent, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, onSampleChange, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
-  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-create' | 'component-create' | 'label' | 'pan'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; group?: { id: string; x: number; y: number }[] } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'component-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; pointIndex?: number; points?: [number, number][]; group?: { id: string; x: number; y: number }[]; wireGroup?: { id: string; points: [number, number][] }[] } | null>(null)
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [wirePreviewEnd, setWirePreviewEnd] = useState<{ x: number; y: number } | null>(null)
   const [componentPreview, setComponentPreview] = useState<{ x: number; y: number } | null>(null)
+  const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number; crossing: boolean } | null>(null)
   const [hoveredWireId, setHoveredWireId] = useState<string>()
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | null>(null)
@@ -1117,6 +1117,15 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
     suppressCanvasClick.current = true
     event.currentTarget.setPointerCapture(event.pointerId)
   }
+  const beginBoxSelection = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0 || spacePan || tool !== 'select' || pendingComponent) return
+    const target = event.target instanceof Element ? event.target : null
+    if (target?.closest('.circuit-part, .wire-line, .canvas-label, .schematic-context-menu')) return
+    const point = pointFromEvent(event)
+    drag.current = { kind: 'box-select', id: 'selection', pointer: event.pointerId, x: point.x, y: point.y, originX: point.x, originY: point.y, screenX: event.clientX, screenY: event.clientY }
+    setSelectionBox({ x: point.x, y: point.y, width: 0, height: 0, crossing: false })
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
   const beginDrag = (event: PointerEvent<SVGGElement>, kind: 'part' | 'wire' | 'label', id: string) => {
     if (pendingComponent) return
     if (event.button !== 0 || spacePan) return
@@ -1135,14 +1144,17 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
     const group = kind === 'part' && selectedPartIds.length > 1 && selectedPartIds.includes(id)
       ? project.parts.filter((item) => selectedPartIds.includes(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y }))
       : undefined
-    if (kind === 'wire') setSelectedWireId(id)
+    const wireGroup = kind === 'wire' && selectedWireIds.length > 1 && selectedWireIds.includes(id)
+      ? project.wires.filter((item) => selectedWireIds.includes(item.id)).map((item) => ({ id: item.id, points: item.points.map(([x, y]) => [x, y] as [number, number]) }))
+      : undefined
+    if (kind === 'wire') { if (!wireGroup) setSelectedWireId(id) }
     else {
       if (kind === 'part' && !group) setSelectedPartIds([id])
       else if (kind !== 'part') setSelectedPartIds([])
       setSelection({ kind, id })
     }
     beginEdit()
-    drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, points: wire?.points.map(([x,y]) => [x,y]), group }
+    drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, points: wire?.points.map(([x,y]) => [x,y]), group, wireGroup }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const labelEventHandlers = useRef({ beginDrag })
@@ -1206,6 +1218,18 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
   const wireEventHandlers = useRef({ beginDrag, probeWire })
   wireEventHandlers.current = { beginDrag, probeWire }
   const beginWireDrag = useCallback((event: PointerEvent<SVGGElement>, id: string) => wireEventHandlers.current.beginDrag(event, 'wire', id), [])
+  const beginWirePointDrag = (event: PointerEvent<SVGCircleElement>, id: string, pointIndex: number) => {
+    if (pendingComponent || event.button !== 0 || spacePan || tool !== 'select') return
+    const wire = project.wires.find((item) => item.id === id)
+    if (!wire) return
+    event.preventDefault()
+    event.stopPropagation()
+    const point = pointFromEvent(event)
+    setSelectedWireId(id)
+    beginEdit()
+    drag.current = { kind: 'wire-point', id, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, pointIndex, points: wire.points.map(([x, y]) => [x, y]) }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
   const probeWireStable = useCallback((id: string) => wireEventHandlers.current.probeWire(id), [])
   const selectWire = useCallback((id: string) => setSelectedWireId(id), [setSelectedWireId])
   const beginPan = (event: PointerEvent<SVGSVGElement>) => {
@@ -1230,6 +1254,12 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
       return
     }
     const point = pointFromEvent(event)
+    if (drag.current.kind === 'box-select') {
+      const startX = drag.current.originX, startY = drag.current.originY
+      setSelectionBox({ x: Math.min(startX, point.x), y: Math.min(startY, point.y), width: Math.abs(point.x - startX), height: Math.abs(point.y - startY), crossing: point.x < startX })
+      if (Math.hypot(event.clientX - (drag.current.screenX ?? event.clientX), event.clientY - (drag.current.screenY ?? event.clientY)) > 3) suppressCanvasClick.current = true
+      return
+    }
     if (drag.current.kind === 'wire-create') {
       const end = resolveNode(point) ?? { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
       setWirePreviewEnd(end)
@@ -1247,9 +1277,14 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
     const deltaX = Math.round((point.x - drag.current.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     const deltaY = Math.round((point.y - drag.current.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     if (deltaX !== 0 || deltaY !== 0) suppressCanvasClick.current = true
-    const { id, kind, originX, originY, points, group } = drag.current
+    const { id, kind, originX, originY, points, group, wireGroup, pointIndex } = drag.current
     setProject((current) => {
-      if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: [[points[0][0] + deltaX, points[0][1] + deltaY], [points[1][0] + deltaX, points[1][1] + deltaY]] } : wire) }
+      if (kind === 'wire-point' && points && pointIndex !== undefined) return { ...current, wires: current.wires.map((wire) => wire.id === id ? { ...wire, points: points.map(([x, y], index) => index === pointIndex ? [x + deltaX, y + deltaY] as [number, number] : [x, y]) as [[number, number], [number, number]] } : wire) }
+      if (kind === 'wire' && wireGroup?.length) {
+        const movingWires = new Map<string, [[number, number], [number, number]]>(wireGroup.map((origin) => [origin.id, [[origin.points[0][0] + deltaX, origin.points[0][1] + deltaY], [origin.points[1][0] + deltaX, origin.points[1][1] + deltaY]]]))
+        return { ...current, wires: current.wires.map((wire) => { const moved = movingWires.get(wire.id); return moved ? { ...wire, points: moved } : wire }) }
+      }
+      if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: [[points[0][0] + deltaX, points[0][1] + deltaY], [points[1][0] + deltaX, points[1][1] + deltaY]] as [[number, number], [number, number]] } : wire) }
       if (kind === 'label') return { ...current, netLabels: current.netLabels.map((label) => label.id === id ? { ...label, x: originX + deltaX, y: originY + deltaY } : label) }
       if (kind === 'part' && group?.length) {
         const movedParts = new Map<string, Part>()
@@ -1268,6 +1303,37 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
     })
   }
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
+    if (drag.current?.kind === 'box-select') {
+      const boxDrag = drag.current
+      const endX = event.clientX, endY = event.clientY
+      const startX = boxDrag.screenX ?? endX, startY = boxDrag.screenY ?? endY
+      const moved = Math.hypot(endX - startX, endY - startY) > 3
+      if (moved) {
+        const left = Math.min(startX, endX), right = Math.max(startX, endX)
+        const top = Math.min(startY, endY), bottom = Math.max(startY, endY)
+        const selectedIds = project.parts.filter((part) => {
+          const bounds = svg.current?.querySelector<SVGGElement>(`[data-part-id="${CSS.escape(part.id)}"]`)?.getBoundingClientRect()
+          if (!bounds) return false
+          return endX < startX
+            ? bounds.right >= left && bounds.left <= right && bounds.bottom >= top && bounds.top <= bottom
+            : bounds.left >= left && bounds.right <= right && bounds.top >= top && bounds.bottom <= bottom
+        }).map((part) => part.id)
+        const selectedWireIds = project.wires.filter((wire) => {
+          const bounds = svg.current?.querySelector<SVGGElement>(`[data-wire-id="${CSS.escape(wire.id)}"]`)?.getBoundingClientRect()
+          if (!bounds) return false
+          return endX < startX
+            ? bounds.right >= left && bounds.left <= right && bounds.bottom >= top && bounds.top <= bottom
+            : bounds.left >= left && bounds.right <= right && bounds.top >= top && bounds.bottom <= bottom
+        }).map((wire) => wire.id)
+        setSelectedPartIds(selectedIds)
+        setSelection(selectedIds.length ? { kind: 'part', id: selectedIds[selectedIds.length - 1] } : null)
+        setSelectedWireIds(selectedWireIds)
+        suppressCanvasClick.current = true
+      }
+      setSelectionBox(null)
+      drag.current = null
+      return
+    }
     if (drag.current?.kind === 'component-create') {
       const placement = drag.current
       const kind = placement.id as PartKind
@@ -1280,7 +1346,9 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
         const target = ((Math.round(angle / 90) * 90) % 360 + 360) % 360
         const exemplar: Part = { id: 'placement', kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: 'X', value: '', x: 0, y: 0, rotation: 0 }
         const pins = componentPins(exemplar)
-        const native = pins.length > 1 ? Math.atan2(pins[1].y - pins[0].y, pins[1].x - pins[0].x) * 180 / Math.PI : 0
+        const channelAligned = ['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(kind)
+        const alignedPin = channelAligned ? pins[2] : pins[1]
+        const native = alignedPin ? Math.atan2(alignedPin.y - pins[0].y, alignedPin.x - pins[0].x) * 180 / Math.PI : 0
         rotation = (((target - Math.round(native / 90) * 90) % 360 + 360) % 360) as Part['rotation']
       }
       onPlaceComponent(kind, position.x, position.y, rotation)
@@ -1341,12 +1409,31 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
   }, [project, resultIsCurrent, resultConnectivity, activeSample, simulationResult, currentAnimationEnabled])
   const orderedWires = useMemo(() => hoveredWireId ? [...project.wires.filter((wire) => wire.id !== hoveredWireId), ...project.wires.filter((wire) => wire.id === hoveredWireId)] : project.wires, [project.wires, hoveredWireId])
   const hoveredWire = hoveredWireId ? project.wires.find((wire) => wire.id === hoveredWireId) : undefined
+  const wireConnectionDots = useMemo(() => {
+    const pins = projectPinLocations(project)
+    const dots = new Map<string, { x: number; y: number }>()
+    const add = (x: number, y: number) => dots.set(`${Math.round(x * 1000)},${Math.round(y * 1000)}`, { x, y })
+    for (const pin of pins) {
+      const connected = project.wires.some((wire) => wire.points.slice(1).some((end, index) => {
+        const start = wire.points[index]
+        return pointOnSegment(pin, { x: start[0], y: start[1] }, { x: end[0], y: end[1] })
+      }))
+      if (connected) add(pin.x, pin.y)
+    }
+    for (const wire of project.wires) for (const [x, y] of [wire.points[0], wire.points[wire.points.length - 1]]) {
+      const point = { x, y }
+      const connectedToPin = pins.some((pin) => Math.hypot(pin.x - x, pin.y - y) < .5)
+      const connectedToWire = project.wires.some((other) => other.id !== wire.id && other.points.slice(1).some((end, index) => pointOnSegment(point, { x: other.points[index][0], y: other.points[index][1] }, { x: end[0], y: end[1] })))
+      if (connectedToPin || connectedToWire) add(x, y)
+    }
+    return [...dots.values()]
+  }, [project.parts, project.wires])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
       <div className="canvas-toolset"><IconButton title="Select and move (M)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => { onClearPendingComponent(); setTool('wire'); setNotice('Wire selected. Drag anywhere on the grid to place one segment.') }}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (U)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
-      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Drag anywhere on the grid to place a wire' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Shift-click parts to select several · drag to move · Ctrl/⌘+C/V copies parts, wire segments, and selected labels · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
+      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Drag anywhere on the grid to place a wire' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Drag blank space L→R to contain-select, R→L to touch-select · Ctrl/⌘+A selects all components and wires · Shift-click adds/removes · drag to move · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
-    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire paths and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event) }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onContextMenu={(event) => {
+    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire paths and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event); beginBoxSelection(event) }} onPointerMove={(event) => { moveDrag(event); const target = event.target instanceof Element ? event.target : null; if (!target?.closest('.wire-line, .wire-endpoint-handles')) setHoveredWireId(undefined) }} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onContextMenu={(event) => {
       event.preventDefault()
       const element = event.target instanceof Element ? event.target : null
       const partElement = element?.closest<SVGGElement>('[data-part-id]')
@@ -1386,14 +1473,16 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
-      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireId === wire.id} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>) }
+      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireIds.includes(wire.id)} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>) }
+      {wireConnectionDots.map(({ x, y }) => <circle key={`${x}:${y}`} className="wire-connection-dot" data-x={x} data-y={y} cx={x} cy={y} r="4" pointerEvents="none"/>)}
       <CanvasNetLabelLayer labels={project.netLabels} selectedId={selection?.kind === 'label' ? selection.id : undefined} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && wirePreviewEnd && <line x1={wireStart.x} y1={wireStart.y} x2={wirePreviewEnd.x} y2={wirePreviewEnd.y} stroke="#a4e8bb" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3" pointerEvents="none"/>}
       {componentPreview && <g className="component-placement-preview" pointerEvents="none"><circle cx={componentPreview.x} cy={componentPreview.y} r="8"/><path d={`M ${componentPreview.x - 5} ${componentPreview.y} H ${componentPreview.x + 5} M ${componentPreview.x} ${componentPreview.y - 5} V ${componentPreview.y + 5}`}/></g>}
+      {selectionBox && <rect className={`selection-box${selectionBox.crossing ? ' crossing' : ''}`} x={selectionBox.x} y={selectionBox.y} width={selectionBox.width} height={selectionBox.height} pointerEvents="none"/>}
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
-      {hoveredWire && tool === 'select' && <g className="wire-endpoint-handles" aria-label="Wire endpoints" onPointerEnter={() => setHoveredWireId(hoveredWire.id)}>{([0, 1] as const).map((index) => <circle key={index} cx={hoveredWire.points[index][0]} cy={hoveredWire.points[index][1]} r="7" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedWireId(hoveredWire.id) }} onClick={(event) => event.stopPropagation()}><title>Select this wire segment</title></circle>)}</g>}
+      {hoveredWire && tool === 'select' && <g className="wire-endpoint-handles" aria-label="Wire endpoints" onPointerEnter={() => setHoveredWireId(hoveredWire.id)}>{([0, hoveredWire.points.length - 1] as const).map((index) => <circle key={index} cx={hoveredWire.points[index][0]} cy={hoveredWire.points[index][1]} r="7" onPointerDown={(event) => beginWirePointDrag(event, hoveredWire.id, index)} onClick={(event) => event.stopPropagation()}><title>Drag this wire endpoint</title></circle>)}</g>}
     </svg>
     {contextMenu && <div className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : 'Wire options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
       {contextPart ? <>
@@ -1434,7 +1523,9 @@ export default function App() {
     } catch { return createStarterProject() }
   })
   const [selection, setSelection] = useState<Selection>({ kind: 'part', id: 'p-r1' })
-  const [selectedWireId, setSelectedWireId] = useState<string | null>(null)
+  const [selectedWireIds, setSelectedWireIds] = useState<string[]>([])
+  const selectedWireId = selectedWireIds.at(-1) ?? null
+  const setSelectedWireId = (id: string | null) => setSelectedWireIds(id ? [id] : [])
   const [selectedPartIds, setSelectedPartIds] = useState<string[]>(['p-r1'])
   const [tool, setTool] = useState<ToolMode>('select')
   const [pendingComponentKind, setPendingComponentKind] = useState<PartKind | null>(null)
@@ -1904,8 +1995,9 @@ export default function App() {
   }, [partsById, selected, selectedPartIds])
   const selectedLabel = selection?.kind === 'label' ? project.netLabels.find((label) => label.id === selection.id) ?? null : null
   useEffect(() => {
-    if (selectedWireId && !project.wires.some((wire) => wire.id === selectedWireId)) setSelectedWireId(null)
-  }, [project.wires, selectedWireId])
+    const validIds = selectedWireIds.filter((id) => project.wires.some((wire) => wire.id === id))
+    if (validIds.length !== selectedWireIds.length) setSelectedWireIds(validIds)
+  }, [project.wires, selectedWireIds])
   useLayoutEffect(() => {
     const selectedIds = selected && !selectedPartIds.includes(selected.id) ? [selected.id] : selectedPartIds
     updatePartUiState(selectedIds, selected?.id ?? project.parts[0]?.id)
@@ -2226,7 +2318,7 @@ export default function App() {
   }
   const rotateSelected = () => selected && updateSelected({ rotation: ((selected.rotation + 90) % 360) as Part['rotation'] })
   const flipSelected = () => selected && updateSelected({ flipX: !selected.flipX })
-  const duplicateSelected = () => selectedParts.length && pasteParts(createPartClipboard(project, selectedParts.map((part) => part.id)), 80, 60)
+  const duplicateSelected = () => selectedParts.length && pasteParts(createPartClipboard(project, selectedParts.map((part) => part.id), [], selectedWireIds), 80, 60)
   const pasteParts = (clipboard = copiedParts.current, offsetX = 40, offsetY = 40) => {
     if (!clipboard || (!clipboard.parts.length && !clipboard.netLabels.length && !clipboard.wires.length)) return
     const sources = clipboard.parts
@@ -2336,11 +2428,20 @@ export default function App() {
         }
       }
       const key = event.key.toLowerCase()
-      if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
-      if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedParts.length) {
+      if ((event.ctrlKey || event.metaKey) && key === 'a') {
         event.preventDefault()
-        copiedParts.current = createPartClipboard(project, selectedParts.map((part) => part.id))
-        setNotice(`Copied ${selectedParts.length} ${selectedParts.length === 1 ? selectedParts[0].ref : 'components'} and ${copiedParts.current.wires.length} attached wire segments. Ends at unselected parts will stay open; net labels are not copied.`)
+        const allIds = project.parts.map((part) => part.id)
+        setSelectedPartIds(allIds)
+        setSelectedWireIds(project.wires.map((wire) => wire.id))
+        setSelection(allIds.length ? { kind: 'part', id: allIds[allIds.length - 1] } : null)
+        setNotice(`Selected all ${allIds.length} components and ${project.wires.length} wires.`)
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
+      if ((event.ctrlKey || event.metaKey) && key === 'c' && (selectedParts.length || selectedWireIds.length)) {
+        event.preventDefault()
+        copiedParts.current = createPartClipboard(project, selectedParts.map((part) => part.id), [], selectedWireIds)
+        setNotice(`Copied ${selectedParts.length} ${selectedParts.length === 1 ? selectedParts[0].ref : 'components'} and ${copiedParts.current.wires.length} wire segments. Ends at unselected parts will stay open; net labels are not copied.`)
         return
       }
       if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedLabel) {
@@ -2351,7 +2452,7 @@ export default function App() {
       }
       if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedWireId && target instanceof Element && target.closest('.wire-line')) {
         event.preventDefault()
-        copiedParts.current = createPartClipboard(project, [], [], [selectedWireId])
+        copiedParts.current = createPartClipboard(project, [], [], selectedWireIds)
         setNotice(`Copied ${copiedParts.current.wires.length} wire path. Pasting keeps its shape; connect open ends as needed.`)
         return
       }
@@ -2376,7 +2477,7 @@ export default function App() {
       else if (palette.some(({ kind }) => COMPONENT_SHORTCUTS[kind] === key)) selectComponentForPlacement(palette.find(({ kind }) => COMPONENT_SHORTCUTS[kind] === key)!.kind)
       else if (key === 'o' && selected) rotateSelected()
       else if (key === 'y' && selected) flipSelected()
-      else if ((key === 'delete' || key === 'backspace') && selectedWireId && target instanceof Element && target.closest('.wire-line')) { event.preventDefault(); setProject((current) => ({ ...current, wires: current.wires.filter((wire) => wire.id !== selectedWireId) })); setSelectedWireId(null) }
+      else if ((key === 'delete' || key === 'backspace') && selectedWireIds.length && ((target instanceof Element && target.closest('.wire-line')) || selectedPartIds.length > 0)) { event.preventDefault(); const ids = new Set(selectedWireIds); if (selectedPartIds.length) deleteSelection(); setProject((current) => ({ ...current, wires: current.wires.filter((wire) => !ids.has(wire.id)) })); setSelectedWireIds([]) }
       else if ((key === 'delete' || key === 'backspace') && selection) { event.preventDefault(); deleteSelection() }
       else if (key === 'escape') { setPendingComponentKind(null); setSelection(null); setSelectedWireId(null) }
     }
@@ -2388,7 +2489,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onSpaceKeyDown, true); window.removeEventListener('keyup', onSpaceKeyUp, true); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, project, tourStep, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy])
+  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, project, tourStep, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
     try { await navigator.clipboard.writeText(netlist); setNotice('Generated netlist copied') }
@@ -2883,7 +2984,7 @@ export default function App() {
       <main className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button ref={sheetSettingsTriggerRef} className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => setSheetSettingsOpen(true)}><SlidersHorizontal size={15}/></button></div>
         {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p></div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
-        <Schematic project={project} selection={selection} setSelection={setSelection} selectedWireId={selectedWireId} setSelectedWireId={setSelectedWireId} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} onPlaceComponent={addPart} onClearPendingComponent={() => setPendingComponentKind(null)} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
+        <Schematic project={project} selection={selection} setSelection={setSelection} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} onPlaceComponent={addPart} onClearPendingComponent={() => setPendingComponentKind(null)} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div>{simulationResult && <details className="run-details"><summary>Run details</summary><div className="run-details-popover"><h3>Reproducible run record</h3><button className="run-report-download" onClick={downloadRunReport}><Download size={12}/> Download report · JSON</button><p className="run-report-note">The JSON report includes inputs and provenance, not waveform samples. Use Export CSV for the solved vectors.</p><dl><div><dt>Engine</dt><dd>{simulationResult.metadata.engine} {simulationResult.metadata.engineVersion}</dd></div><div><dt>Run ID</dt><dd><code>{simulationResult.metadata.runId}</code></dd></div><div><dt>Started</dt><dd>{simulationResult.metadata.startedAt}</dd></div><div><dt>Completed</dt><dd>{simulationResult.metadata.completedAt}</dd></div><div><dt>Netlist / sweep SHA-256</dt><dd><code>{simulationResult.metadata.netlistHash}</code></dd></div></dl><h4>Simulation settings</h4><pre>{JSON.stringify(simulationResult.metadata.settings, null, 2)}</pre><h4>Project model libraries</h4><p>Hashes identify stored source files; some may not be referenced by this run.</p>{simulationResult.metadata.modelAssets?.length ? <ul>{simulationResult.metadata.modelAssets.map((asset) => <li key={asset.id}><strong>{asset.filename}</strong><code>{asset.sha256}</code></li>)}</ul> : <p>No imported model files were recorded for this run.</p>}</div></details>}<div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <><button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button><button className="subtle-icon" title="Tile open plot windows" aria-label="Tile open plot windows" onClick={tilePlotWindows} disabled={(waveformDetached ? 1 : 0) + additionalPlotPanels.length < 2}><Grid2X2 size={15}/></button><button className="subtle-icon" title="Add independent plot panel" aria-label="Add independent plot panel" onClick={addPlotPanel} disabled={!simulationResult || additionalPlotPanels.length >= 8}><Plus size={15}/></button></>}</div></div>
           <div className="analysis-content">

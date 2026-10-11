@@ -109,3 +109,5 @@
 .component-card[aria-pressed="true"]{background:#26382b;border-color:#8bc79b;box-shadow:0 0 0 1px #8bc79b33}
 .component-placement-preview circle{fill:#26382b;stroke:#a4e8bb;stroke-width:2;stroke-dasharray:3 2}
 .component-placement-preview path{stroke:#a4e8bb;stroke-width:1.5}
+.selection-box{fill:#73c99722;stroke:#91e5ad;stroke-width:1.5;stroke-dasharray:5 3;vector-effect:non-scaling-stroke}.selection-box.crossing{fill:#67a9e822;stroke:#86c5f5}
+.wire-connection-dot{fill:#a9d8b7;stroke:#152019;stroke-width:1.5;vector-effect:non-scaling-stroke}
