@@ -14,7 +14,7 @@ import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
-import { canMoveWireSegment, componentPins, EDITOR_GRID_SIZE, moveWireAnchors, moveWireSegment, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { canMoveWireSegment, canTranslateWire, componentPins, EDITOR_GRID_SIZE, moveWireAnchors, moveWireSegment, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
@@ -40,6 +40,15 @@ type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = 'all' | 'basics' | 'semiconductors' | 'controlled'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
 type ExampleId = 'rc' | 'ac-lowpass' | 'ac-highpass' | 'led' | 'rlc' | 'controlled' | 'current-controlled' | 'transistor' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'voltage-divider'
+
+function stationaryWireAnchors(project: Project, movingPartIds: ReadonlySet<string>) {
+  return [
+    ...project.parts.filter((part) => !movingPartIds.has(part.id)).flatMap(componentPins),
+    ...project.junctions,
+    ...project.netLabels.map(({ x, y }) => ({ x, y })),
+  ]
+}
+
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
 const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: string; help: string }[] = [
   { kind: 'resistor', label: 'Resistor', Icon: Minus, subtitle: 'R', help: 'Limits current. A larger resistance gives less current for the same voltage.' },
@@ -850,12 +859,13 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, tool, spacePan, mo
       const elapsed = Math.min(0.05, Math.max(0, (now - previous) / 1000))
       previous = now
       const currentFlows = flowRef.current
-      if (!reducedMotion.matches) for (const current of currentFlows) {
+      if (!reducedMotion.matches) for (const [index, current] of currentFlows.entries()) {
         if (current.magnitude <= 1e-12) continue
-        const key = current.points.map(([x, y]) => `${x},${y}`).join(' ')
-        const phase = (phases.current.get(key) ?? 0) + elapsed * 18 * speedRef.current * Math.min(1, Math.sqrt(current.magnitude / 0.01)) * (current.forward ? 1 : -1)
-        phases.current.set(key, phase % 18)
-        flowPaths.current.get(key)?.setAttribute('stroke-dashoffset', `${-phase * scaleRef.current}`)
+        const pathKey = current.points.map(([x, y]) => `${x},${y}`).join(' ')
+        const phaseKey = `${wire.id}:${index}`
+        const phase = (phases.current.get(phaseKey) ?? 0) + elapsed * 18 * speedRef.current * Math.min(1, Math.sqrt(current.magnitude / 0.01)) * (current.forward ? 1 : -1)
+        phases.current.set(phaseKey, phase % 18)
+        flowPaths.current.get(pathKey)?.setAttribute('stroke-dashoffset', `${-phase * scaleRef.current}`)
       }
       frame = requestAnimationFrame(tick)
     }
@@ -866,11 +876,12 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, tool, spacePan, mo
     <polyline points={points} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/>
     <polyline points={points} fill="none" stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     {tool === 'select' && wire.points.slice(0, -1).map((point, index) => movableSegments[index] && <polyline key={`segment-hit-${index}`} points={`${point[0]},${point[1]} ${wire.points[index + 1][0]},${wire.points[index + 1][1]}`} fill="none" stroke="transparent" strokeWidth="12" strokeLinecap="round" style={{ pointerEvents: 'stroke', cursor: 'move' }} onPointerDown={(event) => onBeginSegmentDrag(event, wire.id, index)}><title>Drag to reroute this wire segment</title></polyline>)}
-    {flow.map((segment) => {
+    {flow.map((segment, index) => {
       const key = segment.points.map(([x, y]) => `${x},${y}`).join(' ')
+      const phaseKey = `${wire.id}:${index}`
       const currentStrength = Math.min(1, Math.sqrt(segment.magnitude / 0.01))
       const glow = segment.magnitude > 1e-12 ? Math.min(1, (0.12 + currentStrength * 0.88) * animationScale) : 0
-      return <polyline key={key} ref={(element) => { if (element) flowPaths.current.set(key, element); else flowPaths.current.delete(key) }} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={(2.2 + currentStrength * 2.2) * animationScale} strokeLinecap="round" strokeDasharray={`${3 * animationScale} ${15 * animationScale}`} strokeDashoffset={-(phases.current.get(key) ?? 0) * animationScale} opacity={glow}><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first wire endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
+      return <polyline key={key} ref={(element) => { if (element) flowPaths.current.set(key, element); else flowPaths.current.delete(key) }} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={(2.2 + currentStrength * 2.2) * animationScale} strokeLinecap="round" strokeDasharray={`${3 * animationScale} ${15 * animationScale}`} strokeDashoffset={-(phases.current.get(phaseKey) ?? 0) * animationScale} opacity={glow}><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first wire endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
     })}
     <circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/>
   </g>
@@ -1115,6 +1126,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     const wire = kind === 'wire' ? project.wires.find((item) => item.id === id) : undefined
     const label = kind === 'label' ? project.netLabels.find((item) => item.id === id) : undefined
     if (!part && !wire && !label) return
+    if (wire && !canTranslateWire(project, wire)) return
     event.stopPropagation()
     const group = kind === 'part' && selectedPartIds.length > 1 && selectedPartIds.includes(id)
       ? project.parts.filter((item) => selectedPartIds.includes(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y }))
@@ -1245,7 +1257,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
           if (!moving) continue
           const moved = { ...moving, x: origin.x + deltaX, y: origin.y + deltaY }
           movedParts.set(origin.id, moved)
-          wires = moveWireAnchors(wires, componentPins(moving), componentPins(moved))
+          wires = moveWireAnchors(wires, componentPins(moving), componentPins(moved), stationaryWireAnchors(current, new Set(group.map(({ id }) => id))))
         }
         return { ...current, parts: current.parts.map((part) => movedParts.get(part.id) ?? part), wires }
       }
@@ -1255,7 +1267,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       return {
         ...current,
         parts: current.parts.map((part) => part.id === id ? moved : part),
-        wires: moveWireAnchors(current.wires, componentPins(moving), componentPins(moved)),
+        wires: moveWireAnchors(current.wires, componentPins(moving), componentPins(moved), stationaryWireAnchors(current, new Set([moving.id]))),
       }
     })
   }
@@ -2140,7 +2152,7 @@ export default function App() {
       const candidate: Project = {
         ...project,
         parts: project.parts.map((part) => part.id === selected.id ? transformed : part),
-        wires: moveWireAnchors(project.wires, componentPins(selected), componentPins(transformed)),
+        wires: moveWireAnchors(project.wires, componentPins(selected), componentPins(transformed), stationaryWireAnchors(project, new Set([selected.id]))),
       }
       if (!hasSameElectricalConnectivity(project, candidate)) {
         setNotice('This orientation change would change circuit connectivity. Reroute the attached wires first, then try again.')
@@ -2154,7 +2166,7 @@ export default function App() {
       return {
         ...current,
         parts: current.parts.map((part) => part.id === selected.id ? after : part),
-        wires: moveWireAnchors(current.wires, componentPins(before), componentPins(after)),
+        wires: moveWireAnchors(current.wires, componentPins(before), componentPins(after), stationaryWireAnchors(current, new Set([before.id]))),
       }
     })
   }

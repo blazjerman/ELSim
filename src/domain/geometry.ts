@@ -133,29 +133,65 @@ export function wireVertices(wire: Wire): Point[] {
   return wire.points.map(([x, y]) => ({ x, y }))
 }
 
-export function moveWireAnchors(wires: Wire[], oldPins: PinLocation[], newPins: PinLocation[]): Wire[] {
+export function moveWireAnchors(wires: Wire[], oldPins: PinLocation[], newPins: PinLocation[], fixedAnchors: Point[] = []): Wire[] {
   return wires.map((wire) => {
-    const points = wire.points.map(([x, y]) => [x, y] as [number, number])
-    for (let pointIndex = 0; pointIndex < wire.points.length; pointIndex += 1) {
-      const [x, y] = wire.points[pointIndex]
+    const externalWireAnchors = wires.filter((other) => other.id !== wire.id).flatMap((other) => other.points.map(([x, y]) => ({ x, y })))
+    const anchors = [...fixedAnchors, ...externalWireAnchors]
+    const original: [number, number][] = []
+    for (let segmentIndex = 0; segmentIndex < wire.points.length - 1; segmentIndex += 1) {
+      const a = wire.points[segmentIndex], b = wire.points[segmentIndex + 1]
+      if (!original.length) original.push([a[0], a[1]])
+      const dx = b[0] - a[0], dy = b[1] - a[1], lengthSquared = dx * dx + dy * dy
+      const interiorAnchors = lengthSquared ? anchors
+        .filter((anchor) => pointOnSegment(anchor, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }, 0.01)
+          && Math.hypot(anchor.x - a[0], anchor.y - a[1]) > 0.01
+          && Math.hypot(anchor.x - b[0], anchor.y - b[1]) > 0.01)
+        .map((anchor) => ({ point: [anchor.x, anchor.y] as [number, number], t: ((anchor.x - a[0]) * dx + (anchor.y - a[1]) * dy) / lengthSquared }))
+        .sort((left, right) => left.t - right.t)
+        .map(({ point }) => point) : []
+      for (const point of interiorAnchors) if (!sameXY(original.at(-1)!, { x: point[0], y: point[1] })) original.push(point)
+      if (!sameXY(original.at(-1)!, { x: b[0], y: b[1] })) original.push([b[0], b[1]])
+    }
+    if (!original.length) original.push(...wire.points.map(([x, y]) => [x, y] as [number, number]))
+    const points = original.map(([x, y]) => [x, y] as [number, number])
+    const movedIndices = new Set<number>()
+    for (let pointIndex = 0; pointIndex < original.length; pointIndex += 1) {
+      const [x, y] = original[pointIndex]
       const pinIndex = oldPins.findIndex((pin) => Math.abs(pin.x - x) < .5 && Math.abs(pin.y - y) < .5)
       const nextPin = newPins[pinIndex]
       if (pinIndex < 0 || !nextPin) continue
+      movedIndices.add(pointIndex)
       points[pointIndex] = [nextPin.x, nextPin.y]
-      for (const neighborIndex of [pointIndex - 1, pointIndex + 1]) {
-        if (neighborIndex < 0 || neighborIndex >= wire.points.length) continue
-        const [neighborX, neighborY] = wire.points[neighborIndex]
-        const deltaX = Math.abs(x - neighborX), deltaY = Math.abs(y - neighborY)
-        if (deltaY < 1e-5 || (deltaX > 1e-5 && deltaX >= deltaY)) points[neighborIndex][1] = nextPin.y
-        else points[neighborIndex][0] = nextPin.x
+    }
+    const isFixed = (point: [number, number], index: number) => !movedIndices.has(index) && (
+      anchors.some((anchor) => sameXY(point, anchor))
+    )
+    for (let index = 0; index < original.length - 1; index += 1) {
+      const a = original[index], b = original[index + 1]
+      const movedA = movedIndices.has(index), movedB = movedIndices.has(index + 1)
+      const fixedA = isFixed(a, index), fixedB = isFixed(b, index + 1)
+      const vertical = Math.abs(a[0] - b[0]) < 0.01
+      if (movedA && !movedB && !fixedB) {
+        if (vertical) points[index + 1][0] = points[index][0]
+        else points[index + 1][1] = points[index][1]
+      } else if (movedB && !movedA && !fixedA) {
+        if (vertical) points[index][0] = points[index + 1][0]
+        else points[index][1] = points[index + 1][1]
       }
     }
-    const compact: [number, number][] = []
-    for (const point of points) {
-      const previous = compact[compact.length - 1]
-      if (!previous || previous[0] !== point[0] || previous[1] !== point[1]) compact.push(point)
+    const routed: [number, number][] = []
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index]
+      if (!routed.length || !sameXY(routed.at(-1)!, { x: point[0], y: point[1] })) routed.push(point)
+      if (index >= points.length - 1) continue
+      const next = points[index + 1]
+      if (Math.abs(point[0] - next[0]) < 0.01 || Math.abs(point[1] - next[1]) < 0.01) continue
+      const oldA = original[index], oldB = original[index + 1]
+      const wasVertical = Math.abs(oldA[0] - oldB[0]) < 0.01
+      const elbow: [number, number] = wasVertical ? [next[0], point[1]] : [point[0], next[1]]
+      if (!sameXY(routed.at(-1)!, { x: elbow[0], y: elbow[1] })) routed.push(elbow)
     }
-    return { ...wire, points: compact.length >= 2 ? compact : points }
+    return { ...wire, points: routed.length >= 2 ? routed : points }
   })
 }
 
@@ -186,6 +222,17 @@ export function canMoveWireSegment(project: Project, wire: Wire, segmentIndex: n
     || project.junctions.some(interior)
     || project.wires.some((other) => other.id !== wire.id && other.points.some(([x, y]) => interior({ x, y })))) return false
   return true
+}
+
+/** Whole-path translation is only safe when no electrical anchor lies on it. */
+export function canTranslateWire(project: Project, wire: Wire): boolean {
+  const anchors: Point[] = [
+    ...project.parts.flatMap(componentPins),
+    ...project.netLabels.map(({ x, y }) => ({ x, y })),
+    ...project.junctions,
+    ...project.wires.filter((other) => other.id !== wire.id).flatMap((other) => other.points.map(([x, y]) => ({ x, y }))),
+  ]
+  return !anchors.some((anchor) => wire.points.slice(0, -1).some((point, index) => pointOnSegment(anchor, { x: point[0], y: point[1] }, { x: wire.points[index + 1][0], y: wire.points[index + 1][1] }, 0.01)))
 }
 
 export function moveWireSegment(project: Project, wireId: string, segmentIndex: number, deltaX: number, deltaY: number): Wire[] {

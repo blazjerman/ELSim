@@ -1231,9 +1231,11 @@ test('wire segment drag reroutes its path and viewport gestures preserve the cir
   })
   await page.reload()
   const svg = page.locator('svg.schematic')
-  const box = await svg.boundingBox()
-  expect(box).not.toBeNull()
-  const toScreen = (x: number, y: number) => ({ x: box!.x + x / 760 * box!.width, y: box!.y + y / 600 * box!.height })
+  const matrix = await svg.evaluate((element) => {
+    const { a, b, c, d, e, f } = element.getScreenCTM()!
+    return { a, b, c, d, e, f }
+  })
+  const toScreen = (x: number, y: number) => ({ x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f })
   const before = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
   const start = toScreen(350, 300), end = toScreen(350, 330)
   await page.mouse.move(start.x, start.y)
@@ -1261,6 +1263,30 @@ test('wire segment drag reroutes its path and viewport gestures preserve the cir
     element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }))
   })
   await expect.poll(async () => Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))).toBeGreaterThan(beforeZoom)
+})
+
+test('moving the starter voltage source keeps its ground and input-label anchors connected', async ({ page }) => {
+  await page.goto('/')
+  const svg = page.locator('svg.schematic')
+  const source = page.locator('.circuit-part[data-part-id="p-v1"]')
+  await expect(source).toBeVisible()
+  const screenPoints = await svg.evaluate((element) => {
+    const matrix = element.getScreenCTM()!
+    const point = (x: number, y: number) => new DOMPoint(x, y).matrixTransform(matrix)
+    const start = point(180, 360), end = point(280, 360)
+    return { start: { x: start.x, y: start.y }, end: { x: end.x, y: end.y } }
+  })
+  await page.mouse.move(screenPoints.start.x, screenPoints.start.y)
+  await page.mouse.down()
+  await page.mouse.move(screenPoints.end.x, screenPoints.end.y, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-v1').x)).toBe(280)
+  const moved = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  const returnWire = moved.wires.find((wire: { id: string }) => wire.id === 'w-3')
+  const inputWire = moved.wires.find((wire: { id: string }) => wire.id === 'w-1')
+  expect(returnWire.points).toContainEqual([180, 470])
+  expect(returnWire.points).toContainEqual([280, 410])
+  expect(inputWire.points).toContainEqual([240, 290])
 })
 
 test('RLC example opens and solves with capacitor-voltage and inductor-current probes', { tag: '@ngspice' }, async ({ page }) => {

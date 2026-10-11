@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { canMoveWireSegment, componentPins, EDITOR_GRID_SIZE, moveWireAnchors, moveWireSegment, snapToEditorGrid, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
+const { canMoveWireSegment, canTranslateWire, componentPins, EDITOR_GRID_SIZE, moveWireAnchors, moveWireSegment, snapToEditorGrid, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
 
@@ -98,6 +98,53 @@ test('horizontal flip geometry updates indexed pin anchors and detects crossed s
   looseCandidate.parts = looseCandidate.parts.map((item) => item.id === loosePart.id ? looseAfter : item)
   assert.equal(hasSameElectricalConnectivity(loose, looseCandidate), true)
   assert.equal(analyzeConnectivity(looseCandidate).pinNets.get('loose-r:0'), looseBefore.pinNets.get('loose-r:0'))
+})
+
+test('moving a starter component keeps stationary ground and junction anchors connected', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.id === 'p-v1')
+  const movedSource = { ...source, x: 280 }
+  const candidate = structuredClone(project)
+  candidate.wires = moveWireAnchors(candidate.wires, componentPins(source), componentPins(movedSource), [
+    ...project.parts.filter((part) => part.id !== source.id).flatMap(componentPins),
+    ...project.junctions,
+    ...project.netLabels.map(({ x, y }) => ({ x, y })),
+  ])
+  candidate.parts = candidate.parts.map((part) => part.id === source.id ? movedSource : part)
+  assert.deepEqual(candidate.wires.find((wire) => wire.id === 'w-3').points, [[540, 450], [540, 470], [180, 470], [280, 470], [280, 410]])
+  assert.equal(hasSameElectricalConnectivity(project, candidate), true)
+  const connectivity = analyzeConnectivity(candidate)
+  assert.equal(connectivity.pinNets.get('p-v1:1'), connectivity.pinNets.get('p-gnd:0'))
+
+  const resistor = project.parts.find((part) => part.id === 'p-r1')
+  const movedResistor = { ...resistor, x: 460 }
+  const resistorMove = structuredClone(project)
+  resistorMove.wires = moveWireAnchors(resistorMove.wires, componentPins(resistor), componentPins(movedResistor), [
+    ...project.parts.filter((part) => part.id !== resistor.id).flatMap(componentPins),
+    ...project.junctions,
+    ...project.netLabels.map(({ x, y }) => ({ x, y })),
+  ])
+  resistorMove.parts = resistorMove.parts.map((part) => part.id === resistor.id ? movedResistor : part)
+  const movedInput = resistorMove.wires.find((wire) => wire.id === 'w-1')
+  assert.ok(movedInput.points.some(([x, y]) => x === 240 && y === 290))
+  assert.ok(movedInput.points.some(([x, y]) => x === 410 && y === 290))
+  assert.equal(hasSameElectricalConnectivity(project, resistorMove), true)
+})
+
+test('moving a wire segment with anchored ends reroutes around them without changing nets', () => {
+  const project = createStarterProject()
+  const wires = moveWireSegment(project, 'w-3', 2, 40, 0)
+  const candidate = { ...project, wires }
+  assert.deepEqual(wires.find((wire) => wire.id === 'w-3').points, [[540, 450], [540, 470], [180, 470], [220, 470], [220, 410], [180, 410]])
+  assert.equal(hasSameElectricalConnectivity(project, candidate), true)
+})
+
+test('whole-wire translation is refused for connected paths but allowed for isolated wires', () => {
+  const project = createStarterProject()
+  assert.equal(canTranslateWire(project, project.wires.find((wire) => wire.id === 'w-3')), false)
+  const isolated = { id: 'loose-wire', points: [[700, 700], [800, 700]] }
+  project.wires.push(isolated)
+  assert.equal(canTranslateWire(project, isolated), true)
 })
 
 test('flip state validates while older project records remain valid', () => {
