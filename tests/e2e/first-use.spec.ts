@@ -453,7 +453,8 @@ test('schematic wire segments and net labels can be selected from the keyboard',
 
 test('wire selection stays separate from the inspector and active tool', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: /Add Wire/ }).click()
+  const selectTool = page.getByRole('button', { name: 'Select and move (V)' })
+  await selectTool.click()
   const target = await page.locator('svg.schematic').evaluate((svgElement) => {
     const svg = svgElement as SVGSVGElement
     for (const wire of svg.querySelectorAll<SVGGElement>('.wire-line')) {
@@ -478,8 +479,7 @@ test('wire selection stays separate from the inspector and active tool', async (
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
   await page.mouse.click(target!.x, target!.y)
   const wire = page.locator(`.wire-line[data-wire-id="${target!.id}"]`)
-  await expect(page.getByRole('button', { name: /Add Wire/ })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('button', { name: 'Select and move (V)' })).not.toHaveClass(/active/)
+  await expect(selectTool).toHaveClass(/active/)
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
   await expect(wire).toHaveClass(/selected/)
   await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
@@ -495,13 +495,14 @@ test('wire selection stays separate from the inspector and active tool', async (
   await page.mouse.move(bounds!.x + bounds!.width / 2 + 30, bounds!.y + bounds!.height / 2, { steps: 4 })
   await page.mouse.up()
   await expect.poll(() => resistor.getAttribute('transform')).not.toBe(before)
+  await expect(selectTool).toHaveClass(/active/)
   await expect(wire).toHaveClass(/selected/)
   await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
-  await page.getByRole('button', { name: 'Select and move (V)' }).click()
   await wire.hover()
   const endpoints = page.locator('.wire-endpoint-handles circle')
   await expect(endpoints).toHaveCount(2)
   await endpoints.first().click()
+  await expect(selectTool).toHaveClass(/active/)
   await expect(wire).toHaveClass(/selected/)
   await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
 })
