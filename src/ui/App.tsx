@@ -105,6 +105,12 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'led', title: 'LED pulse response', description: 'See ngspice current drive the LED brightness as a pulse source switches.' },
   { id: 'hierarchy', title: 'Nested reusable divider', description: 'Run two instances, inspect a two-level block, compare parameter overrides, and probe the inner resistor current.' },
 ]
+const exampleSelection: Record<ExampleId, string> = {
+  rc: 'p-r1', 'ac-lowpass': 'ac-lowpass-c1', 'ac-highpass': 'ac-highpass-c1', led: 'p-c1', 'led-current-limiter': 'p-r1',
+  rlc: 'rlc-l1', controlled: 'amp-e1', 'current-controlled': 'current-f1', transistor: 'switch-q1', pnp: 'pnp-switch-q1',
+  pjfet: 'pjfet-switch-j1', mosfet: 'mos-switch-m1', pmos: 'pmos-switch-m1', jfet: 'jfet-switch-j1', hierarchy: 'example-x1',
+  pwl: 'p-v1', 'current-source': 'isource-i1', rectifier: 'rectifier-d1', 'voltage-divider': 'divider-r1', zener: 'zener-d1',
+}
 const componentCategoryKinds: Record<Exclude<ComponentCategory, 'all'>, PartKind[]> = {
   basics: ['resistor', 'lamp', 'capacitor', 'inductor', 'source', 'currentSource', 'switch', 'ground'],
   semiconductors: ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'],
@@ -2951,7 +2957,19 @@ export default function App() {
       if (example === 'rc') next = createStarterProject()
       else {
         const examples = await import('../domain/examples')
-        next = example === 'hierarchy' ? examples.createHierarchicalExampleProject() : example === 'pwl' ? examples.createPwlExampleProject() : example === 'current-source' ? examples.createCurrentSourceExampleProject() : example === 'voltage-divider' ? examples.createVoltageDividerExampleProject() : example === 'zener' ? examples.createZenerRegulatorExampleProject() : example === 'rectifier' ? examples.createDiodeRectifierExampleProject() : example === 'ac-lowpass' ? examples.createAcLowPassExampleProject() : example === 'ac-highpass' ? examples.createAcHighPassExampleProject() : example === 'led' ? examples.createLedExampleProject() : example === 'led-current-limiter' ? examples.createLedCurrentLimiterExampleProject() : example === 'rlc' ? examples.createRlcExampleProject() : example === 'controlled' ? examples.createControlledSourceExampleProject() : example === 'current-controlled' ? examples.createCurrentControlledSourcesExampleProject() : example === 'pnp' ? examples.createPnpSwitchExampleProject() : example === 'pjfet' ? examples.createPjfetSwitchExampleProject() : example === 'mosfet' ? examples.createMosfetSwitchExampleProject() : example === 'pmos' ? examples.createMosfetHighSideExampleProject() : example === 'jfet' ? examples.createJfetSwitchExampleProject() : examples.createTransistorSwitchExampleProject()
+        const createExample = {
+          'ac-lowpass': examples.createAcLowPassExampleProject, 'ac-highpass': examples.createAcHighPassExampleProject,
+          led: examples.createLedExampleProject, 'led-current-limiter': examples.createLedCurrentLimiterExampleProject,
+          rlc: examples.createRlcExampleProject, controlled: examples.createControlledSourceExampleProject,
+          'current-controlled': examples.createCurrentControlledSourcesExampleProject, transistor: examples.createTransistorSwitchExampleProject,
+          pnp: examples.createPnpSwitchExampleProject, pjfet: examples.createPjfetSwitchExampleProject,
+          mosfet: examples.createMosfetSwitchExampleProject, pmos: examples.createMosfetHighSideExampleProject,
+          jfet: examples.createJfetSwitchExampleProject, hierarchy: examples.createHierarchicalExampleProject,
+          pwl: examples.createPwlExampleProject, 'current-source': examples.createCurrentSourceExampleProject,
+          rectifier: examples.createDiodeRectifierExampleProject, 'voltage-divider': examples.createVoltageDividerExampleProject,
+          zener: examples.createZenerRegulatorExampleProject,
+        } satisfies Record<Exclude<ExampleId, 'rc'>, () => Project>
+        next = createExample[example]()
       }
     } catch {
       setNotice('Could not load the example. Refresh ELSim and try again.')
@@ -2992,7 +3010,7 @@ export default function App() {
     setImportWarnings([])
     setCompatibilityDiagnostic(null)
     history.current = { past: [], future: [] }
-    setSelection({ kind: 'part', id: example === 'hierarchy' ? 'example-x1' : example === 'rectifier' ? 'rectifier-d1' : example === 'zener' ? 'zener-d1' : example === 'ac-lowpass' ? 'ac-lowpass-c1' : example === 'ac-highpass' ? 'ac-highpass-c1' : example === 'led' || example === 'led-current-limiter' ? 'p-c1' : example === 'rlc' ? 'rlc-l1' : example === 'controlled' ? 'amp-e1' : example === 'current-controlled' ? 'current-f1' : example === 'transistor' ? 'switch-q1' : example === 'pnp' ? 'pnp-switch-q1' : example === 'pjfet' ? 'pjfet-switch-j1' : example === 'mosfet' ? 'mos-switch-m1' : example === 'pmos' ? 'pmos-switch-m1' : 'p-r1' })
+    setSelection({ kind: 'part', id: exampleSelection[example] })
     setHierarchyWalkthroughStep(example === 'hierarchy' ? 0 : null)
     setExamplesOpen(false)
     setPendingExample(null)
