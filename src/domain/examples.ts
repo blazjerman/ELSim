@@ -10,6 +10,22 @@ export function createLedExampleProject(): Project {
   return project
 }
 
+/** A beginner operating-point example showing a resistor limiting LED current. */
+export function createLedCurrentLimiterExampleProject(): Project {
+  const project = createStarterProject()
+  project.name = 'LED current limiter'
+  project.parts = project.parts.map((part) => part.id === 'p-v1'
+    ? { ...part, sourceMode: 'dc', value: '5 V' }
+    : part.id === 'p-r1'
+      ? { ...part, value: '330 Ω' }
+      : part.id === 'p-c1'
+        ? { ...part, kind: 'led', ref: 'D1', value: 'Default LED' }
+        : part)
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(vout)', 'I(D1)'], ranges: {} }
+  return project
+}
+
 /** A beginner half-wave rectifier showing an AC input and clipped output. */
 export function createDiodeRectifierExampleProject(): Project {
   const project = createStarterProject()

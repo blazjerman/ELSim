@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createAcHighPassExampleProject, createAcLowPassExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createJfetSwitchExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createVoltageDividerExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createAcHighPassExampleProject, createAcLowPassExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createVoltageDividerExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -433,6 +433,19 @@ test('LED pulse example is a runnable transient circuit with a diode-current tra
   assert.match(artifact.text, /^\.tran 100u 200m$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(vout)', 'I(D1)'])
   assert.equal(project.parts.some((part) => part.kind === 'capacitor'), false)
+})
+
+test('LED current-limiter example has a grounded 5 V supply and a 330 ohm series resistor', () => {
+  const project = createLedCurrentLimiterExampleProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'LED current limiter')
+  assert.equal(project.simulation.analysis, 'op')
+  assert.match(artifact.text, /^V1 vin 0 DC 5$/m)
+  assert.match(artifact.text, /^R1 vin vout 330$/m)
+  assert.match(artifact.text, /^D1 vout 0 DDEFAULT$/m)
+  assert.match(artifact.text, /^\.op$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(vout)', 'I(D1)'])
 })
 
 test('RLC ringing example is a complete series circuit with transient probes', () => {

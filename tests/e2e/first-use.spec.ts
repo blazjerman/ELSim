@@ -2198,6 +2198,23 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*5\.000000 V/i })).toBeVisible()
 })
 
+test('LED current-limiter example explains and solves its resistor-limited current', { tag: '@ngspice @engine-smoke' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'LED current limiter' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('LED current limiter')
+  await expect(page.getByLabel('Guided example')).toContainText('increase R1 to reduce the LED current')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByLabel('Guided example')).toContainText('operating-point table')
+  await expectAvailableTrace(page, 'I(D1)')
+  await expect(page.locator('.plot-window').getByRole('row', { name: /I\(D1\)/i })).toBeVisible()
+})
+
 test('Zener shortcut and guided regulator example solve near the 5.1 V breakdown point', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
