@@ -123,6 +123,17 @@ The performance Playwright suite builds a 24-resistor DC chain, runs a 10 ms tra
 
 These are single local observations, not release budgets. The rerun after memoizing trace geometry verifies the combined high-trace/high-sample browser workload at this size. Cursor-only changes do not regenerate the polylines. Larger simultaneous sample/trace counts and reliable browser/worker peak-memory measurement remain open.
 
+### Nonlinear high-sample multi-trace browser run
+
+A second fixture uses a pulsed 5 V source to drive 24 parallel 1 kΩ / diode branches. It verifies diode-current and branch-voltage vectors, solves 100,126 transient samples, selects 40 traces, checks that each rendered trace stays within the 902-point display limit, and moves the cursor to the final sample. This exercises a nonlinear device model together with many high-resolution traces rather than extrapolating from the RC-only million-sample case.
+
+| Browser | Diodes | Samples | Available vectors | Plotted traces | Max rendered points/trace | Result ready (ms) | Select/render (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Chromium | 24 | 100,126 | 74 | 40 | 597 | 6,035 | 2,963 |
+| Firefox | 24 | 100,126 | 74 | 40 | 597 | 15,045 | 3,534 |
+
+These are local single-run observations, not budgets. The circuit, engine fixture, point cap, and final cursor interaction passed in both supported browsers. Reliable browser/worker peak-memory measurement remains open.
+
 ## Legacy browser editor timing (2026-10-10)
 
 These are results from the v2 Playwright benchmark in `npm run benchmark:browser` (Chromium and Firefox). The generated project contains one resistor and two net labels per component. `editorReadyMs` measures reload through rendered component count; selection timings include Playwright locator lookup, click/actionability work, and the React update. They are local historical measurements, not CI thresholds, and are not directly comparable to the in-browser v3 input-to-frame timings below.

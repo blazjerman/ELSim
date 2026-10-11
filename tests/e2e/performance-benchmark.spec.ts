@@ -307,6 +307,127 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
   console.log(JSON.stringify({ benchmark: 'browser-24-section-40-trace-transient-v2', browser: browserName, sections: 24, solvedSamples, availableTraces: availableTraceCount, plottedTraces: selection.selectedCount, maxRenderedPointsPerTrace: Math.max(...plottedPoints), resultReadyMs: Number(resultReadyMs.toFixed(2)), selectAndRenderNextFrameMs: Number(selection.elapsedMs.toFixed(2)) }, null, 2))
 })
 
+test('measure high-sample multi-trace rendering for a nonlinear diode circuit', async ({ page, browserName }) => {
+  test.setTimeout(120_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the nonlinear waveform benchmark').toEqual([])
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const sourceTemplate = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    const resistorTemplate = project.parts.find((part: { kind: string }) => part.kind === 'resistor')
+    const branchCount = 24
+    const source = {
+      ...sourceTemplate,
+      id: 'nonlinear-bench-v1',
+      ref: 'V1',
+      value: '5 V',
+      sourceMode: 'pulse',
+      pulse: { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '5m', period: '10m' },
+      x: 120,
+      y: 400,
+    }
+    const resistors = Array.from({ length: branchCount }, (_, index) => ({
+      ...resistorTemplate,
+      id: `nonlinear-bench-r-${index + 1}`,
+      ref: `R${index + 1}`,
+      value: '1k',
+      x: 300 + (index % 6) * 300,
+      y: 280 + Math.floor(index / 6) * 180,
+    }))
+    const diodes = resistors.map((resistor, index) => ({
+      id: `nonlinear-bench-d-${index + 1}`,
+      kind: 'diode',
+      ref: `D${index + 1}`,
+      value: 'D',
+      x: resistor.x + 140,
+      y: resistor.y,
+      rotation: 0,
+    }))
+    const netLabels: { id: string; name: string; x: number; y: number; visible: boolean }[] = [
+      { id: 'nonlinear-bench-drive', name: 'DRIVE', x: source.x, y: source.y - 52, visible: true },
+      { id: 'nonlinear-bench-ground', name: '0', x: source.x, y: source.y + 52, visible: true },
+    ]
+    resistors.forEach((resistor, index) => {
+      const diode = diodes[index]
+      const output = `DOUT${index + 1}`
+      netLabels.push(
+        { id: `nonlinear-bench-r-${index + 1}-drive`, name: 'DRIVE', x: resistor.x - 52, y: resistor.y, visible: true },
+        { id: `nonlinear-bench-r-${index + 1}-output`, name: output, x: resistor.x + 52, y: resistor.y, visible: true },
+        { id: `nonlinear-bench-d-${index + 1}-input`, name: output, x: diode.x - 52, y: diode.y, visible: true },
+        { id: `nonlinear-bench-d-${index + 1}-ground`, name: '0', x: diode.x + 52, y: diode.y, visible: true },
+      )
+    })
+    const parts = [source, ...resistors, ...diodes]
+    project.name = 'Browser benchmark · nonlinear diode bank'
+    project.parts = parts
+    project.wires = []
+    project.junctions = []
+    project.netLabels = netLabels
+    project.simulation.analysis = 'tran'
+    project.simulation.stopTime = '100 ms'
+    project.simulation.maxStep = '1 µs'
+    project.plotSettings.selectedTraceIds = []
+    project.sheets = project.sheets.map((sheet: { id: string }) => sheet.id === project.rootSheetId
+      ? { ...sheet, parts, wires: [], junctions: [], netLabels }
+      : sheet)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(49)
+  const started = performance.now()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 105_000 })
+  const resultReadyMs = performance.now() - started
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  await expect(slider).toBeVisible()
+  const solvedSamples = Number(await slider.getAttribute('max')) + 1
+  expect(solvedSamples).toBeGreaterThanOrEqual(100_000)
+  const traces = page.locator('.trace-toggles button')
+  const availableTraceCount = await traces.count()
+  expect(availableTraceCount).toBeGreaterThanOrEqual(49)
+  const vectorNames = (await traces.allTextContents()).join('\n')
+  expect(vectorNames).toMatch(/I\(D1\)/i)
+  expect(vectorNames).toMatch(/V\(DOUT24\)/i)
+  const requestedTraceCount = 40
+  const selection = await page.evaluate(async (count) => {
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('.trace-toggles button')]
+    const started = performance.now()
+    for (const [index, button] of buttons.entries()) {
+      const shouldSelect = index < count
+      if ((button.getAttribute('aria-pressed') === 'true') !== shouldSelect) button.click()
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    }
+    return {
+      elapsedMs: performance.now() - started,
+      selectedCount: document.querySelectorAll('.trace-toggles button[aria-pressed="true"]').length,
+    }
+  }, requestedTraceCount)
+  const selectAndRenderMs = selection.elapsedMs
+  expect(selection.selectedCount).toBe(requestedTraceCount)
+  await expect(page.locator('.waveform-chart polyline')).toHaveCount(requestedTraceCount)
+  const pointCounts = await page.locator('.waveform-chart polyline').evaluateAll((lines) => lines.map((line) => (line as SVGPolylineElement).points.numberOfItems))
+  expect(Math.max(...pointCounts)).toBeLessThanOrEqual(902)
+  await slider.press('End')
+  await expect(page.locator('.cursor-readout')).toBeVisible()
+  expect(pageErrors).toEqual([])
+  console.log(JSON.stringify({
+    benchmark: 'browser-nonlinear-100k-sample-40-trace-v1',
+    browser: browserName,
+    circuit: '24 parallel resistor-diode branches with pulse excitation',
+    nonlinearDevices: 24,
+    solvedSamples,
+    availableTraceCount,
+    plottedTraceCount: requestedTraceCount,
+    maxRenderedPointsPerTrace: Math.max(...pointCounts),
+    resultReadyMs: Number(resultReadyMs.toFixed(2)),
+    selectAndRenderMs: Number(selectAndRenderMs.toFixed(2)),
+  }, null, 2))
+})
+
 test('record large-project editor render and selection input-to-frame timings', async ({ page, browserName }) => {
   test.setTimeout(180_000)
   test.setTimeout(120_000)
