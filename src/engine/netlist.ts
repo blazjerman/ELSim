@@ -606,9 +606,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const secondaryNegative = pinNet(connectivity, part, 3)
       const primaryInductance = componentMagnitude(spiceSheetParameterDefault(part.value, sheetParameters) ?? part.value, 'transformer')
       const turnsRatio = Number(part.turnsRatio ?? '2')
+      const coupling = Number(part.coupling ?? '1')
       const secondaryInductanceValue = (primaryInductance ?? 0) * turnsRatio * turnsRatio
-      if (primaryInductance === null || primaryInductance <= 0 || !Number.isFinite(turnsRatio) || turnsRatio < 0.001 || turnsRatio > 1000 || !Number.isFinite(secondaryInductanceValue) || secondaryInductanceValue <= 0) {
-        const message = `${part.ref} needs a positive finite primary inductance and a turns ratio from 0.001 to 1000.`
+      if (primaryInductance === null || primaryInductance <= 0 || !Number.isFinite(turnsRatio) || turnsRatio < 0.001 || turnsRatio > 1000 || !Number.isFinite(coupling) || coupling <= 0 || coupling > 1 || !Number.isFinite(secondaryInductanceValue) || secondaryInductanceValue <= 0) {
+        const message = `${part.ref} needs a positive finite primary inductance, a turns ratio from 0.001 to 1000, and a coupling coefficient greater than 0 and at most 1.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
@@ -617,7 +618,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const secondaryInductance = secondaryInductanceValue.toPrecision(12)
       append(`${primary} ${positive} ${negative} ${value}`, part.id, 'component')
       append(`${secondary} ${secondaryPositive} ${secondaryNegative} ${secondaryInductance}`, part.id, 'component')
-      append(`K${part.ref} ${primary} ${secondary} 1`, part.id, 'component')
+      append(`K${part.ref} ${primary} ${secondary} ${coupling}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const elementCondition = part.kind === 'inductor' || part.kind === 'capacitor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined

@@ -267,6 +267,8 @@ Schematic canvas follow-up (2026-10-11): Removed fixed, non-editable INPUT/OUTPU
 
 Transient delay follow-up (2026-10-11): Delay results are now computed from the solved voltage/current traces so the target crossing count is measured after the selected trigger crossing, rather than accepting ngspice's independently counted target event (which can produce a negative delay). Added a regression with a deliberately negative ngspice scalar result and corrected the counted-crossing WASM fixture expectations. `npm test`, `npm run typecheck`, and `npm run test:wasm` pass; WASM numeric comparison against native ngspice was skipped because no native executable was supplied.
 
+Transformer follow-up (2026-10-12): The built-in coupled-inductor transformer now exposes its magnetic coupling coefficient in the inspector. A value of 1 keeps ideal coupling; lower positive values let learners model leakage. The coefficient persists in project data, is validated in the range (0, 1], and is emitted in the ngspice K statement. Domain tests cover the emitted value, invalid bounds, and component-definition default. This extends M1.2 without requiring a WASM rebuild.
+
 ## 7. Primary references checked
 
 - ngspice source: https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/ (M0.3 spike pinned to `a80f6e3e95d51534905b1f23410a951802666656`)

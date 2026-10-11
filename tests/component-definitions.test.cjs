@@ -39,6 +39,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.ok(componentDefinitionFor('inductor').animationChannels.includes('field.current'))
   assert.deepEqual(componentDefinitionFor('transformer').pins.map(({ name }) => name), ['primaryPositive', 'primaryNegative', 'secondaryPositive', 'secondaryNegative'])
   assert.equal(componentDefinitionFor('transformer').properties.find((property) => property.key === 'turnsRatio')?.defaultValue, '2')
+  assert.equal(componentDefinitionFor('transformer').properties.find((property) => property.key === 'coupling')?.defaultValue, '1')
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
   assert.ok(project.parts.every((part) => part.componentDefinitionId === componentDefinitionFor(part.kind).id))
 })

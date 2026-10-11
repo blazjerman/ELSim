@@ -51,6 +51,8 @@ export type Part = {
   polarized?: boolean
   /** Secondary-to-primary turns ratio for a built-in coupled-inductor transformer. */
   turnsRatio?: string
+  /** Magnetic coupling coefficient for a built-in coupled-inductor transformer. */
+  coupling?: string
   symbolAssetId?: string
   symbolPinOffsets?: [number, number][]
   sheetId?: string
@@ -353,6 +355,8 @@ export function validateProject(input: unknown): Project {
     if (candidate.polarized !== undefined && (candidate.kind !== 'capacitor' || typeof candidate.polarized !== 'boolean')) throw new Error(`${candidate.ref} has invalid capacitor polarity metadata.`)
     if (candidate.turnsRatio !== undefined && (candidate.kind !== 'transformer' || typeof candidate.turnsRatio !== 'string' || candidate.turnsRatio.length > 64)) throw new Error(`${candidate.ref} has invalid transformer turns-ratio metadata.`)
     if (candidate.kind === 'transformer' && (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(candidate.turnsRatio ?? '2') || !Number.isFinite(Number(candidate.turnsRatio ?? '2')) || Number(candidate.turnsRatio ?? '2') < 0.001 || Number(candidate.turnsRatio ?? '2') > 1000)) throw new Error(`${candidate.ref} secondary-to-primary turns ratio must be between 0.001 and 1000.`)
+    if (candidate.coupling !== undefined && (candidate.kind !== 'transformer' || typeof candidate.coupling !== 'string' || candidate.coupling.length > 64)) throw new Error(`${candidate.ref} has invalid transformer coupling metadata.`)
+    if (candidate.kind === 'transformer' && (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(candidate.coupling ?? '1') || !Number.isFinite(Number(candidate.coupling ?? '1')) || Number(candidate.coupling ?? '1') <= 0 || Number(candidate.coupling ?? '1') > 1)) throw new Error(`${candidate.ref} magnetic coupling coefficient must be greater than 0 and at most 1.`)
     if (!candidate.ref.startsWith(prefix) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(candidate.ref)) throw new Error(`The reference designator ${candidate.ref} is invalid for ${candidate.kind}.`)
     if (refs.has(candidate.ref.toLowerCase())) throw new Error(`The reference designator ${candidate.ref} is used more than once.`)
     refs.add(candidate.ref.toLowerCase())
