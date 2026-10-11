@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ChangeEvent, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
   Activity, AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleDot, CircleHelp,
@@ -1022,16 +1022,25 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   selectedPartIdsRef.current = selectedPartIds
   const selectPart = useCallback((id: string, additive = false) => {
     if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return }
+    let next: string[]
     if (additive) {
       const current = selectedPartIdsRef.current
-      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-      setSelectedPartIds(next)
-      setSelection(next.length ? { kind: 'part', id: next.at(-1)! } : null)
+      next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
     } else {
-      setSelectedPartIds([id])
-      setSelection({ kind: 'part', id })
+      next = [id]
     }
-  }, [setSelection, setSelectedPartIds])
+    // Keep additive clicks based on the latest input even while React is
+    // still rendering the lower-priority inspector update.
+    selectedPartIdsRef.current = next
+    const nextSelection = next.length ? { kind: 'part' as const, id: next.at(-1)! } : null
+    // Update the two affected SVG controls in the urgent lane. Inspector and
+    // app-wide selection consumers can render at transition priority.
+    updatePartUiState(next, nextSelection?.id ?? project.parts[0]?.id)
+    startTransition(() => {
+      setSelectedPartIds(next)
+      setSelection(nextSelection)
+    })
+  }, [project.parts, setSelection, setSelectedPartIds])
   const beginPartDrag = useCallback((event: PointerEvent<SVGGElement>, id: string) => partEventHandlers.current.beginDrag(event, 'part', id), [])
   const probePart = useCallback((id: string) => partEventHandlers.current.probe({ kind: 'part', id }), [])
   const togglePart = useCallback((id: string) => partEventHandlers.current.toggleSwitch(id), [])

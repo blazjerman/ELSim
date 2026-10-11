@@ -281,6 +281,7 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await page.keyboard.press('Enter')
   await expect(capacitor).toHaveClass(/selected/)
   await expect(capacitor).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByLabel('Reference designator')).toHaveValue('C1')
   await expect(page.locator('.circuit-part[tabindex="0"]')).toHaveCount(1)
 
   await page.getByTitle('Add Switch').click()

@@ -194,7 +194,9 @@ The 2026-10-11 repeat run found a duplicate accessible-name `<title>` inside com
 | Chromium | 5,000 | 2,068.9 / 2,020.1 | 142.3 / 151.6 → 133.0 / 147.1 | 35,370 / 30,442 |
 | Firefox | 5,000 | 2,699.3 / 2,645.1 | 15.0 / 18.0 → 16.0 / 22.0 | 35,370 / 30,442 |
 
-The Chromium selection result varied between 133.0 and 147.1 ms before label culling, so that step alone was not evidence of a selection-speed improvement. Viewport label culling was then measured locally in Chromium: at 5,000 parts, only 120 of 10,000 labels were mounted, SVG elements fell from 30,442 to 10,682, editor-ready measured 1,166 ms, and selection input-to-next-frame measured 42.8 ms median / 44.4 ms p95. This is a single local run, not a release budget; selection still exceeds a 16 ms frame. The visible-label keyboard test passes. Remaining editor work should profile and restructure the selection update/render path without removing visible keyboard access.
+The Chromium selection result varied between 133.0 and 147.1 ms before label culling, so that step alone was not evidence of a selection-speed improvement. Viewport label culling was then measured locally in Chromium: at 5,000 parts, only 120 of 10,000 labels were mounted, SVG elements fell from 30,442 to 10,682, editor-ready measured 1,166 ms, and selection input-to-next-frame measured 42.8 ms median / 44.4 ms p95.
+
+The selection path now updates the selected/focusable part controls immediately through the external store and schedules the inspector/app selection state at transition priority. This preserves a responsive canvas highlight while moving the larger application render out of the urgent input lane. The 5,000-part Chromium benchmark measured 7.7 ms median / 8.1 ms p95 input-to-next-frame; Firefox measured 3 ms / 4 ms. Editor-ready measured 1,157 ms in Chromium and 1,622 ms in Firefox, with 10,682 SVG elements and 120 mounted labels in both. Focused keyboard navigation, inspector update, visible-label selection, and group-edit tests pass. These are local single-run observations, not release budgets; repeatability and broader interaction coverage remain necessary.
 
 ### Browser waveform transport check
 
