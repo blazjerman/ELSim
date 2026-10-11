@@ -819,7 +819,7 @@ function measurementVectorChoices(project: Project) {
   return { nodes: nodes.map((name) => ({ value: `V(${name})`, label: name })), currents }
 }
 
-const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spacePan, flow, animationEnabled, animationScale, animationSpeed, onProbe, onBeginDrag, onBeginEndpointDrag, onSelect, onHover }: {
+const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spacePan, flow, animationEnabled, animationScale, animationSpeed, onProbe, onBeginDrag, onSelect, onHover }: {
   wire: Project['wires'][number]
   selected: boolean
   hovered: boolean
@@ -831,15 +831,13 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
   animationSpeed: number
   onProbe: (id: string) => void
   onBeginDrag: (event: PointerEvent<SVGGElement>, id: string) => void
-  onBeginEndpointDrag: (event: PointerEvent<SVGCircleElement>, id: string, endpoint: 0 | 1) => void
   onSelect: (id: string) => void
   onHover: (id?: string) => void
 }) {
   const points = wire.points.map(([x, y]) => `${x},${y}`).join(' ')
-  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'probe' || tool === 'wire' || tool === 'select') { event.stopPropagation(); if (tool !== 'probe') onSelect(wire.id) } }}>
+  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select' || tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
     <polyline points={points} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/>
     <polyline points={points} fill="none" stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    {hovered && tool === 'select' && <g className="wire-endpoint-handles" aria-label="Wire endpoints">{([0, 1] as const).map((index) => <circle key={index} cx={wire.points[index][0]} cy={wire.points[index][1]} r="6" onPointerDown={(event) => onBeginEndpointDrag(event, wire.id, index)}><title>Drag this wire endpoint to connect it elsewhere</title></circle>)}</g>}
     {flow.map((segment, index) => {
       const currentStrength = Math.min(1, Math.sqrt(segment.magnitude / 0.01))
       const glow = segment.magnitude > 1e-12 ? Math.min(1, (0.12 + currentStrength * 0.88) * animationScale) : 0
@@ -957,7 +955,7 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
-  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-end' | 'wire-create' | 'component-create' | 'label' | 'pan'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; endpointIndex?: 0 | 1; group?: { id: string; x: number; y: number }[] } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-create' | 'component-create' | 'label' | 'pan'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; group?: { id: string; x: number; y: number }[] } | null>(null)
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [wirePreviewEnd, setWirePreviewEnd] = useState<{ x: number; y: number } | null>(null)
@@ -1199,22 +1197,9 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
   const probePart = useCallback((id: string) => partEventHandlers.current.probe({ kind: 'part', id }), [])
   const togglePart = useCallback((id: string) => partEventHandlers.current.toggleSwitch(id), [])
   const navigateFocusedPart = useCallback((id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => partEventHandlers.current.navigatePart(id, key), [])
-  const beginWireEndpointDrag = (event: PointerEvent<SVGCircleElement>, id: string, endpointIndex: 0 | 1) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (tool !== 'select' || spacePan) return
-    const wire = project.wires.find((item) => item.id === id)
-    if (!wire) return
-    setSelectedWireId(id)
-    beginEdit()
-    const point = pointFromEvent(event)
-    drag.current = { kind: 'wire-end', id, endpointIndex, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, points: [[...wire.points[0]], [...wire.points[1]]] }
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-  const wireEventHandlers = useRef({ beginDrag, beginWireEndpointDrag, probeWire })
-  wireEventHandlers.current = { beginDrag, beginWireEndpointDrag, probeWire }
+  const wireEventHandlers = useRef({ beginDrag, probeWire })
+  wireEventHandlers.current = { beginDrag, probeWire }
   const beginWireDrag = useCallback((event: PointerEvent<SVGGElement>, id: string) => wireEventHandlers.current.beginDrag(event, 'wire', id), [])
-  const beginWireEndpointDragStable = useCallback((event: PointerEvent<SVGCircleElement>, id: string, endpoint: 0 | 1) => wireEventHandlers.current.beginWireEndpointDrag(event, id, endpoint), [])
   const probeWireStable = useCallback((id: string) => wireEventHandlers.current.probeWire(id), [])
   const selectWire = useCallback((id: string) => setSelectedWireId(id), [setSelectedWireId])
   const beginPan = (event: PointerEvent<SVGSVGElement>) => {
@@ -1256,10 +1241,9 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
     const deltaX = Math.round((point.x - drag.current.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     const deltaY = Math.round((point.y - drag.current.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     if (deltaX !== 0 || deltaY !== 0) suppressCanvasClick.current = true
-    const { id, kind, originX, originY, points, endpointIndex, group } = drag.current
+    const { id, kind, originX, originY, points, group } = drag.current
     setProject((current) => {
       if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: [[points[0][0] + deltaX, points[0][1] + deltaY], [points[1][0] + deltaX, points[1][1] + deltaY]] } : wire) }
-      if (kind === 'wire-end') return { ...current, wires: current.wires.map((wire) => wire.id === id && points && endpointIndex !== undefined ? { ...wire, points: points.map((point, index) => index === endpointIndex ? [point[0] + deltaX, point[1] + deltaY] : point) as [[number, number], [number, number]] } : wire) }
       if (kind === 'label') return { ...current, netLabels: current.netLabels.map((label) => label.id === id ? { ...label, x: originX + deltaX, y: originY + deltaY } : label) }
       if (kind === 'part' && group?.length) {
         const movedParts = new Map<string, Part>()
@@ -1350,6 +1334,7 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
     )
   }, [project, resultIsCurrent, resultConnectivity, activeSample, simulationResult, currentAnimationEnabled])
   const orderedWires = useMemo(() => hoveredWireId ? [...project.wires.filter((wire) => wire.id !== hoveredWireId), ...project.wires.filter((wire) => wire.id === hoveredWireId)] : project.wires, [project.wires, hoveredWireId])
+  const hoveredWire = hoveredWireId ? project.wires.find((wire) => wire.id === hoveredWireId) : undefined
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
       <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
@@ -1395,13 +1380,14 @@ function Schematic({ project, selection, setSelection, selectedWireId, setSelect
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
-      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireId === wire.id} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onBeginEndpointDrag={beginWireEndpointDragStable} onSelect={selectWire} onHover={setHoveredWireId}/>) }
+      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireId === wire.id} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>) }
       <CanvasNetLabelLayer labels={project.netLabels} selectedId={selection?.kind === 'label' ? selection.id : undefined} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && wirePreviewEnd && <line x1={wireStart.x} y1={wireStart.y} x2={wirePreviewEnd.x} y2={wirePreviewEnd.y} stroke="#a4e8bb" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3" pointerEvents="none"/>}
       {componentPreview && <g className="component-placement-preview" pointerEvents="none"><circle cx={componentPreview.x} cy={componentPreview.y} r="8"/><path d={`M ${componentPreview.x - 5} ${componentPreview.y} H ${componentPreview.x + 5} M ${componentPreview.x} ${componentPreview.y - 5} V ${componentPreview.y + 5}`}/></g>}
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
+      {hoveredWire && tool === 'select' && <g className="wire-endpoint-handles" aria-label="Wire endpoints" onPointerEnter={() => setHoveredWireId(hoveredWire.id)}>{([0, 1] as const).map((index) => <circle key={index} cx={hoveredWire.points[index][0]} cy={hoveredWire.points[index][1]} r="7" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedWireId(hoveredWire.id) }} onClick={(event) => event.stopPropagation()}><title>Select this wire segment</title></circle>)}</g>}
     </svg>
     {contextMenu && <div className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : 'Wire options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
       {contextPart ? <>

@@ -451,7 +451,7 @@ test('schematic wire segments and net labels can be selected from the keyboard',
   await expect.poll(async () => Number(await label.locator('text').getAttribute('y'))).toBe(labelY + 10)
 })
 
-test('clicking a wire selects it like clicking a component', async ({ page }) => {
+test('wire selection stays separate from the inspector and active tool', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: /Add Wire/ }).click()
   const target = await page.locator('svg.schematic').evaluate((svgElement) => {
@@ -495,6 +495,13 @@ test('clicking a wire selects it like clicking a component', async ({ page }) =>
   await page.mouse.move(bounds!.x + bounds!.width / 2 + 30, bounds!.y + bounds!.height / 2, { steps: 4 })
   await page.mouse.up()
   await expect.poll(() => resistor.getAttribute('transform')).not.toBe(before)
+  await expect(wire).toHaveClass(/selected/)
+  await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
+  await page.getByRole('button', { name: 'Select and move (V)' }).click()
+  await wire.hover()
+  const endpoints = page.locator('.wire-endpoint-handles circle')
+  await expect(endpoints).toHaveCount(2)
+  await endpoints.first().click()
   await expect(wire).toHaveClass(/selected/)
   await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
 })
