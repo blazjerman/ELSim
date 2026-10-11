@@ -44,7 +44,7 @@ export function wireCurrentFlow(
   const interiorPoint = (point: { x: number; y: number }) => liesInsideWire(point, wire)
   const labelCounts = new Map<string, number>()
   for (const label of project.netLabels) labelCounts.set(label.name.toLowerCase(), (labelCounts.get(label.name.toLowerCase()) ?? 0) + 1)
-  if (project.parts.some((part) => componentPins(part).some(interiorPoint))
+  if (project.parts.some((part) => part.kind !== 'ground' && componentPins(part).some(interiorPoint))
     || project.netLabels.some((label) => (labelCounts.get(label.name.toLowerCase()) ?? 0) > 1 && interiorPoint(label))
     || project.junctions.some(interiorPoint)
     || project.wires.some((other) => other.id !== wire.id && other.points.some(([x, y]) => interiorPoint({ x, y })))) return null
