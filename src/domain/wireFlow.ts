@@ -33,17 +33,11 @@ export function wireCurrentFlow(
   if (wire.points.length < 2) return null
   const first = endpointAt(project, wire.points[0])
   const last = endpointAt(project, wire.points.at(-1)!)
-  if (!first || !last || first.part.id === last.part.id) return null
+  if (first && last && first.part.id === last.part.id) return null
 
   const net = connectivity.wireNets.get(wire.id)
-  if (!net || connectivity.pinNets.get(`${first.part.id}:${first.pinIndex}`) !== net
-    || connectivity.pinNets.get(`${last.part.id}:${last.pinIndex}`) !== net) return null
-  const devicePinsOnNet = project.parts.filter((part) => part.kind !== 'ground').flatMap((part) => componentPins(part)
-    .filter((pin) => connectivity.pinNets.get(`${part.id}:${pin.index}`) === net)
-    .map((pin) => `${part.id}:${pin.index}`))
-  const endpointDevicePins = [first, last].filter(({ part }) => part.kind !== 'ground').map(({ part, pinIndex }) => `${part.id}:${pinIndex}`)
-  if (devicePinsOnNet.length > 2 || devicePinsOnNet.length !== endpointDevicePins.length
-    || devicePinsOnNet.some((pin) => !endpointDevicePins.includes(pin))) return null
+  if (!net || (first && connectivity.pinNets.get(`${first.part.id}:${first.pinIndex}`) !== net)
+    || (last && connectivity.pinNets.get(`${last.part.id}:${last.pinIndex}`) !== net)) return null
 
   // A pin, label, junction, or other lead meeting the interior makes current
   // division ambiguous for ideal schematic wires, so don't draw a direction.
@@ -60,15 +54,16 @@ export function wireCurrentFlow(
     || ((part.kind === 'vcvs' || part.kind === 'vccs') && pinIndex >= 2)
     ? undefined
     : currentForPart(part)
-  const firstCurrent = branchCurrent(first)
-  const lastCurrent = branchCurrent(last)
+  const firstCurrent = first ? branchCurrent(first) : undefined
+  const lastCurrent = last ? branchCurrent(last) : undefined
+  if (!firstCurrent && !lastCurrent) return null
   const current = firstCurrent ?? lastCurrent
   if (current === undefined || !Number.isFinite(current) || Math.abs(current) < 1e-12) return null
 
   // If both ends have device currents, require KCL consistency before using
   // either vector. The sign at each pin determines the same wire direction.
-  const firstForward = firstCurrent === undefined ? undefined : (first.pinIndex === 1) === (firstCurrent > 0)
-  const lastForward = lastCurrent === undefined ? undefined : (last.pinIndex === 0) === (lastCurrent > 0)
+  const firstForward = firstCurrent === undefined || !first ? undefined : (first.pinIndex === 1) === (firstCurrent > 0)
+  const lastForward = lastCurrent === undefined || !last ? undefined : (last.pinIndex === 0) === (lastCurrent > 0)
   if (firstForward !== undefined && lastForward !== undefined) {
     const tolerance = Math.max(1e-9, Math.max(Math.abs(firstCurrent!), Math.abs(lastCurrent!)) * 0.05)
     if (firstForward !== lastForward || Math.abs(Math.abs(firstCurrent!) - Math.abs(lastCurrent!)) > tolerance) return null

@@ -37,3 +37,19 @@ test('branched wire with an intermediate ground pin is not assigned an invented 
   const flow = wireCurrentFlow(project, connectivity, project.wires.find((wire) => wire.id === 'w-3'), (part) => currents.get(part.ref))
   assert.equal(flow, null)
 })
+
+test('a component lead on a split branch animates using its solved component current', () => {
+  const project = createStarterProject()
+  const branchResistor = { id: 'p-r2', kind: 'resistor', ref: 'R2', value: '2 kΩ', x: 500, y: 200, rotation: 0 }
+  project.parts.push(branchResistor)
+  project.wires.push({ id: 'w-branch', points: [[470, 290], [470, 200], [450, 200]] })
+  const connectivity = analyzeConnectivity(project)
+  const currents = new Map([['R2', 0.002]])
+  const branch = wireCurrentFlow(project, connectivity, project.wires.find((wire) => wire.id === 'w-branch'), (part) => currents.get(part.ref))
+  assert.deepEqual(branch, { forward: true, magnitude: 0.002 })
+
+  // The trunk's current is split at the tap, so one value cannot describe the
+  // entire trunk polyline. Keep its animation hidden until it can be segmented.
+  const trunk = wireCurrentFlow(project, connectivity, project.wires.find((wire) => wire.id === 'w-2'), (part) => new Map([['R1', 0.005], ['C1', 0.003], ['R2', 0.002]]).get(part.ref))
+  assert.equal(trunk, null)
+})
