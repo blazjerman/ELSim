@@ -817,7 +817,7 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'compatibility-model.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.SUBCKT FILTER IN OUT\nB1 OUT 0 V=V(IN)\n+ Laplace=1/(1+s)\nA1 IN OUT slew\n.ENDS FILTER\n'),
+    buffer: Buffer.from('.SUBCKT FILTER IN OUT\nB1 OUT 0 V=V(IN)\n+ Laplace=1/(1+s)\nB2 OUT 0 V=cbrt(V(IN))\nA1 IN OUT slew\n.ENDS FILTER\n'),
   })
 
   const warnings = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
@@ -827,6 +827,10 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await expect(warnings).toContainText('not translated by ELSim’s current compatibility path')
   await expect(warnings).toContainText('Use a tested ngspice-compatible transfer model')
   await expect(warnings).toContainText('compatibility-model.lib:4')
+  await expect(warnings).toContainText('LTspice B-source function unavailable in browser ngspice')
+  await expect(warnings).toContainText('B2 OUT 0 V=cbrt(V(IN))')
+  await expect(warnings).toContainText('Check the function’s intended behavior and replace it with a tested ngspice-compatible expression')
+  await expect(warnings).toContainText('compatibility-model.lib:5')
   await expect(warnings).toContainText('XSPICE A-device (runtime support unverified)')
   await expect(warnings).toContainText('external .cm modules')
 })
