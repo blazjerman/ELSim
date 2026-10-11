@@ -48,6 +48,7 @@ export type Part = {
   currentPwl?: CurrentSourcePwlPoint[]
   extensions?: { ltspice?: { attributes?: Record<string, string> } }
   animationNominalPower?: number
+  polarized?: boolean
   symbolAssetId?: string
   symbolPinOffsets?: [number, number][]
   sheetId?: string
@@ -347,6 +348,7 @@ export function validateProject(input: unknown): Project {
       if (malformed) throw new Error(`${candidate.ref} has malformed imported LTspice extension attributes.`)
     }
     if (candidate.animationNominalPower !== undefined && (candidate.kind !== 'lamp' || !Number.isFinite(candidate.animationNominalPower) || candidate.animationNominalPower <= 0 || candidate.animationNominalPower > 100_000)) throw new Error(`${candidate.ref} has an invalid animation nominal power.`)
+    if (candidate.polarized !== undefined && (candidate.kind !== 'capacitor' || typeof candidate.polarized !== 'boolean')) throw new Error(`${candidate.ref} has invalid capacitor polarity metadata.`)
     if (!candidate.ref.startsWith(prefix) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(candidate.ref)) throw new Error(`The reference designator ${candidate.ref} is invalid for ${candidate.kind}.`)
     if (refs.has(candidate.ref.toLowerCase())) throw new Error(`The reference designator ${candidate.ref} is used more than once.`)
     refs.add(candidate.ref.toLowerCase())

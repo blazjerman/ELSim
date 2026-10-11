@@ -419,7 +419,10 @@ test('component shortcuts are case-sensitive and future Falstad shortcuts stay r
     await expect(card, `${shortcut} should select ${label}`).toHaveAttribute('aria-pressed', 'true')
     await page.keyboard.press('Escape')
   }
-  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+C', 'Polarized capacitor'], ['Shift+S', 'SPDT switch'], ['Shift+T', 'Transformer'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
+  await page.keyboard.press('Shift+C')
+  await expect(page.locator('.component-card').filter({ hasText: 'Capacitor' })).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('Escape')
+  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+S', 'SPDT switch'], ['Shift+T', 'Transformer'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
     await page.keyboard.press(shortcut)
     await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
   }
@@ -1239,6 +1242,30 @@ test('component hotkeys choose parts and newly placed parts stay unselected', as
   await page.getByRole('textbox', { name: 'Find a component' }).fill('capacitor')
   await page.keyboard.press('Enter')
   await expect(page.locator('.component-card').filter({ hasText: 'Capacitor' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('uppercase C places a polarized capacitor with editable polarity marks', async ({ page }) => {
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Shift+C')
+  const canvas = page.locator('svg.schematic')
+  const bounds = await canvas.boundingBox()
+  if (!bounds) throw new Error('Schematic canvas is not visible')
+  const x = bounds.x + bounds.width * 0.86
+  const y = bounds.y + bounds.height * 0.72
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + 32, y, { steps: 3 })
+  await page.mouse.up()
+  const capacitor = page.locator('.circuit-part[data-polarized="true"]')
+  await expect(capacitor).toHaveCount(1)
+  await expect(capacitor.locator('.capacitor-polarity[data-pin="1"]')).toHaveText('+')
+  await expect(capacitor.locator('.capacitor-polarity[data-pin="2"]')).toHaveText('−')
+  await capacitor.click({ position: { x: 20, y: 0 } })
+  const toggle = page.getByRole('checkbox', { name: 'Polarized capacitor symbol' })
+  await expect(toggle).toBeChecked()
+  await toggle.uncheck()
+  await expect(page.locator('.circuit-part[data-polarized="true"]')).toHaveCount(0)
 })
 
 test('r rotates a selected part and component shortcuts do not replace an active selection', async ({ page }) => {

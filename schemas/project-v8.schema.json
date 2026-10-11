@@ -524,6 +524,10 @@
           "maximum": 100000,
           "description": "Nominal electrical power in watts used only to scale lamp brightness."
         },
+        "polarized": {
+          "type": "boolean",
+          "description": "Render a positive and negative terminal marker on a polarized capacitor."
+        },
         "symbolAssetId": {
           "type": "string",
           "minLength": 1

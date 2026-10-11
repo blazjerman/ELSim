@@ -22,6 +22,30 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
 })
 
+test('polarized capacitor metadata changes its symbol but not its simulated netlist', () => {
+  const project = createStarterProject()
+  const original = createNetlistArtifact(project)
+  project.parts.find((part) => part.kind === 'capacitor').polarized = true
+  const validated = validateProject(project)
+  assert.equal(validated.parts.find((part) => part.kind === 'capacitor').polarized, true)
+  assert.equal(createNetlistArtifact(validated).text, original.text)
+  const malformed = structuredClone(validated)
+  malformed.parts.find((part) => part.kind === 'resistor').polarized = true
+  assert.throws(() => validateProject(malformed), /invalid capacitor polarity metadata/i)
+})
+
+test('polarized capacitor metadata changes its symbol but not its simulated netlist', () => {
+  const project = createStarterProject()
+  const original = createNetlistArtifact(project)
+  project.parts.find((part) => part.kind === 'capacitor').polarized = true
+  const validated = validateProject(project)
+  assert.equal(validated.parts.find((part) => part.kind === 'capacitor').polarized, true)
+  assert.equal(createNetlistArtifact(validated).text, original.text)
+  const malformed = structuredClone(validated)
+  malformed.parts.find((part) => part.kind === 'resistor').polarized = true
+  assert.throws(() => validateProject(malformed), /invalid capacitor polarity metadata/i)
+})
+
 test('Zener regulator uses its breakdown model and has ordered diode current probing', () => {
   const project = validateProject(createZenerRegulatorExampleProject())
   const artifact = createNetlistArtifact(project)
