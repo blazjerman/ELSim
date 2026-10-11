@@ -1792,11 +1792,13 @@ export default function App() {
   const createWaveformWindow = (traceIds: string[]) => {
     if (additionalPlotPanels.length >= 8) { setNotice('Close a waveform window before opening another. A project can show up to eight windows.'); return null }
     const offset = (additionalPlotPanels.length % 5) * 26
+    const workspaceTop = Math.max(48, Math.ceil(document.querySelector('.workspace')?.getBoundingClientRect().top ?? 112))
+    const top = workspaceTop + 8 + offset
     const width = Math.max(320, Math.min(820, Math.floor(window.innerWidth * 0.48)))
-    const height = Math.max(220, Math.min(640, Math.floor(window.innerHeight * 0.62)))
+    const height = Math.max(220, Math.min(640, Math.floor(window.innerHeight * 0.62), window.innerHeight - top - 16))
     const panel: PlotPanel = {
       id: crypto.randomUUID(),
-      bounds: { x: Math.max(8, window.innerWidth - width - 16 - offset), y: Math.max(48, 48 + offset), width, height },
+      bounds: { x: Math.max(8, window.innerWidth - width - 16 - offset), y: top, width, height },
       selectedTraceIds: [...new Set(traceIds)],
       ranges: { ...(project.plotSettings?.ranges ?? {}) },
     }
@@ -1807,8 +1809,9 @@ export default function App() {
     const windows = additionalPlotPanels
     if (windows.length < 2) return
     const gap = 12
+    const top = Math.max(48, Math.ceil(document.querySelector('.workspace')?.getBoundingClientRect().top ?? 112)) + gap
     const width = window.innerWidth - gap * 2
-    const height = window.innerHeight - 72
+    const height = window.innerHeight - top - gap
     const maxColumns = Math.max(1, Math.floor((width + gap) / (360 + gap)))
     const columns = Math.min(maxColumns, Math.ceil(Math.sqrt(windows.length * width / height)))
     const rows = Math.ceil(windows.length / columns)
@@ -1816,7 +1819,7 @@ export default function App() {
     const panelHeight = Math.floor((height - gap * (rows - 1)) / rows)
     saveAdditionalPlotPanels(windows.map((panel, index) => ({
       ...panel,
-      bounds: { x: gap + (index % columns) * (panelWidth + gap), y: 48 + Math.floor(index / columns) * (panelHeight + gap), width: panelWidth, height: panelHeight },
+      bounds: { x: gap + (index % columns) * (panelWidth + gap), y: top + Math.floor(index / columns) * (panelHeight + gap), width: panelWidth, height: panelHeight },
     })))
     setNotice(`Tiled ${windows.length} waveform windows. Each window keeps its own traces and zoom.`)
   }

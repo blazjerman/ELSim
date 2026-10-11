@@ -18,6 +18,28 @@ async function rightClickNetLabel(page: import('@playwright/test').Page, name: s
   throw new Error(`No visible, unobstructed label for net ${name} can be right-clicked`)
 }
 
+async function rightClickWire(page: import('@playwright/test').Page, selector: string) {
+  const point = await page.locator(selector).evaluate((element) => {
+    const group = element as SVGGElement
+    const line = group.querySelector('line')
+    const svg = group.ownerSVGElement
+    if (!line || !svg) throw new Error('Wire hit target is missing its schematic line')
+    const position = svg.createSVGPoint()
+    position.x = (Number(line.getAttribute('x1')) + Number(line.getAttribute('x2'))) / 2
+    position.y = (Number(line.getAttribute('y1')) + Number(line.getAttribute('y2'))) / 2
+    const screen = position.matrixTransform(svg.getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
+  await page.mouse.click(point.x, point.y, { button: 'right' })
+}
+
+async function expectWireFlow(flow: Locator, direction: 'first-to-last' | 'last-to-first') {
+  await expect(flow).toHaveAttribute('data-current-direction', direction)
+  await expect.poll(async () => Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(1e-6)
+  await expect.poll(async () => Number(await flow.getAttribute('opacity'))).toBeGreaterThan(0)
+  await expect(flow).toHaveAttribute('stroke-dasharray', /\S/)
+}
+
 async function expectAvailableTrace(page: import('@playwright/test').Page, name: string) {
   const hadPlotWindow = (await page.locator('.plot-window').count()) > 0
   const match = /^(V|I)\(([^)]+)\)$/i.exec(name)
@@ -171,7 +193,7 @@ test('LTspice parameter arithmetic imports while unsupported expressions are pre
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).importedSchematicSource.originalText)).toBe(source)
 })
 
-test('quick tour can run the open circuit directly from its simulation step', { tag: '@ngspice' }, async ({ page }) => {
+test('quick tour can run the open circuit directly from its simulation step', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -187,7 +209,7 @@ test('quick tour can run the open circuit directly from its simulation step', { 
   await expect(plot.locator('.trace-toggles button', { hasText: 'V(vout)' })).toBeVisible()
 })
 
-test('right-click probes wire voltage to ground and component voltage across its pins', { tag: '@ngspice' }, async ({ page }) => {
+test('right-click probes wire voltage to ground and component voltage across its pins', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -212,7 +234,7 @@ test('right-click probes wire voltage to ground and component voltage across its
 
   await resizePlotWindow(page, plot, 430, 340)
   await movePlotWindowRight(page, plot)
-  await page.locator('.wire-line[data-wire-id="w-2"]').click({ position: { x: 30, y: 4 }, button: 'right' })
+  await rightClickWire(page, '.wire-line[data-wire-id="w-2"]')
   await expect(page.getByRole('menuitem', { name: 'Plot voltage to ground' })).toBeVisible()
   await page.getByRole('menuitem', { name: 'Plot voltage to ground' }).click()
   const nodeChooser = page.getByRole('dialog', { name: /V\(vout\)/i })
@@ -589,7 +611,7 @@ test('wire current animation keeps moving while transient playback advances', as
   expect(Math.abs(after - before)).toBeGreaterThan(1)
 })
 
-test('ngspice current animates through the grounded RC return wire', { tag: '@ngspice' }, async ({ page }) => {
+test('ngspice current animates through the grounded RC return wire', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -600,13 +622,10 @@ test('ngspice current animates through the grounded RC return wire', { tag: '@ng
   const lastSample = Number(await time.getAttribute('max'))
   await time.fill(String(Math.max(1, Math.round(lastSample * 0.05))))
   const returnWire = page.locator('.wire-line[data-wire-id="w-3-seg-2"] .wire-current-flow')
-  await expect(returnWire).toBeVisible()
-  const current = Number(await returnWire.getAttribute('data-current-magnitude'))
-  expect(current).toBeGreaterThan(1e-6)
-  await expect(returnWire).toHaveAttribute('data-current-direction', 'first-to-last')
+  await expectWireFlow(returnWire, 'first-to-last')
 })
 
-test('ngspice current splits evenly across parallel resistor wire branches', { tag: '@ngspice' }, async ({ page }) => {
+test('ngspice current splits evenly across parallel resistor wire branches', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -630,15 +649,13 @@ test('ngspice current splits evenly across parallel resistor wire branches', { t
   await time.fill(String(Math.max(1, Math.round(lastSample * 0.05))))
   const left = page.locator('.wire-line[data-wire-id="parallel-left"] .wire-current-flow')
   const right = page.locator('.wire-line[data-wire-id="parallel-right"] .wire-current-flow')
-  await expect(left).toBeVisible()
-  await expect(right).toBeVisible()
+  await expectWireFlow(left, 'first-to-last')
+  await expectWireFlow(right, 'last-to-first')
   const leftCurrent = Number(await left.getAttribute('data-current-magnitude'))
   const rightCurrent = Number(await right.getAttribute('data-current-magnitude'))
   expect(leftCurrent).toBeGreaterThan(1e-6)
   expect(rightCurrent).toBeGreaterThan(1e-6)
   expect(leftCurrent).toBeCloseTo(rightCurrent, 10)
-  await expect(left).toHaveAttribute('data-current-direction', 'first-to-last')
-  await expect(right).toHaveAttribute('data-current-direction', 'last-to-first')
 })
 
 test('wire animation refreshes after moving a component and changing its value', { tag: '@ngspice' }, async ({ page }) => {
@@ -1263,7 +1280,7 @@ async function openWireVoltagePlot(page: import('@playwright/test').Page, x: num
   return plotWindow
 }
 
-test('waveforms open from component probes in dedicated resizable windows', { tag: '@ngspice' }, async ({ page }) => {
+test('waveforms open from component probes in dedicated resizable windows', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -1281,6 +1298,9 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await destination.getByRole('button', { name: 'Open waveform' }).click()
   const firstWindow = page.locator('.plot-window')
   await expect(firstWindow).toHaveCount(1)
+  const windowTop = (await firstWindow.boundingBox())!.y
+  const workspaceTop = (await page.locator('.workspace').boundingBox())!.y
+  expect(windowTop).toBeGreaterThan(workspaceTop)
   await expect(firstWindow.getByRole('button', { name: /Disable V\(R1\)/ })).toBeVisible()
   await expect(firstWindow.getByRole('img', { name: /Transient waveforms from/ })).toBeVisible()
   await expect(firstWindow).toHaveCSS('resize', 'both')
@@ -1482,7 +1502,7 @@ test('LTspice capacitor SpiceLine IC starts the ngspice transient at its importe
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(out\) = 2(?:\.0+)? V/)
 })
 
-test('capacitor initial voltage editor starts the transient at the requested voltage', { tag: '@ngspice' }, async ({ page }) => {
+test('capacitor initial voltage editor starts the transient at the requested voltage', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -3207,7 +3227,7 @@ test('waveform click moves the cursor, wheel zooms horizontally, and drag keeps 
   await expect(page.locator('.plot-cursor')).toBeAttached()
 })
 
-test('AC waveform supports frequency cursor and horizontal wheel zoom without drag-pan', { tag: '@ngspice' }, async ({ page }) => {
+test('AC waveform supports frequency cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
   await page.getByLabel('Analysis type').selectOption('ac')
@@ -3225,6 +3245,7 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   const box = await chart.boundingBox()
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.5)
   await page.mouse.wheel(0, -250)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.ac)).not.toEqual(zoomedRange)
   const wheelRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.ac)
   expect(wheelRange.end - wheelRange.start).toBeLessThan(zoomedRange.end - zoomedRange.start)
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.5)
@@ -3235,7 +3256,7 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   expect(draggedRange).toEqual(wheelRange)
 })
 
-test('DC sweep waveform supports source cursor and horizontal wheel zoom without drag-pan', { tag: '@ngspice' }, async ({ page }) => {
+test('DC sweep waveform supports source cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
   await page.getByLabel('Analysis type').selectOption('dc')
   await page.getByRole('button', { name: 'Run simulation' }).click()
@@ -3252,6 +3273,7 @@ test('DC sweep waveform supports source cursor and horizontal wheel zoom without
   const box = await chart.boundingBox()
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.5)
   await page.mouse.wheel(0, -250)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.dc)).not.toEqual(zoomedRange)
   const wheelRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.dc)
   expect(wheelRange.end - wheelRange.start).toBeLessThan(zoomedRange.end - zoomedRange.start)
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.5)
