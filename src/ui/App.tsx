@@ -559,7 +559,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
       points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
     }
     return { id: trace.id, color: colors[traces.indexOf(trace) % colors.length], points: points.join(' ') }
-  }), [shown, minTime, maxTime, voltageRange[0], voltageRange[1], currentRange[0], currentRange[1]])
+  }), [shown, minTime, maxTime, width, height, voltageRange[0], voltageRange[1], currentRange[0], currentRange[1]])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
     const rect = event.currentTarget.getBoundingClientRect()
