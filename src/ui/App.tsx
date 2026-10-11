@@ -39,7 +39,7 @@ import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type Measure
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = 'all' | 'basics' | 'semiconductors' | 'controlled'
-type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
+type Selection = { kind: 'part' | 'label'; id: string } | null
 type ExampleId = 'rc' | 'ac-lowpass' | 'ac-highpass' | 'led' | 'rlc' | 'controlled' | 'current-controlled' | 'transistor' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'voltage-divider'
 
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
@@ -836,7 +836,7 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
   onHover: (id?: string) => void
 }) {
   const points = wire.points.map(([x, y]) => `${x},${y}`).join(' ')
-  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else if (tool === 'wire') { event.stopPropagation(); onSelect(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'probe' || tool === 'wire') { event.stopPropagation(); if (tool === 'wire') onSelect(wire.id) } else if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } }}>
+  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'probe' || tool === 'wire' || tool === 'select') { event.stopPropagation(); if (tool !== 'probe') onSelect(wire.id) } }}>
     <polyline points={points} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/>
     <polyline points={points} fill="none" stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     {hovered && tool === 'select' && <g className="wire-endpoint-handles" aria-label="Wire endpoints">{([0, 1] as const).map((index) => <circle key={index} cx={wire.points[index][0]} cy={wire.points[index][1]} r="6" onPointerDown={(event) => onBeginEndpointDrag(event, wire.id, index)}><title>Drag this wire endpoint to connect it elsewhere</title></circle>)}</g>}
@@ -953,7 +953,7 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
   </div>
 }
 
-function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, pendingComponent, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, onSampleChange, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
+function Schematic({ project, selection, setSelection, selectedWireId, setSelectedWireId, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, pendingComponent, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, onSampleChange, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedWireId: string | null; setSelectedWireId: (id: string | null) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
@@ -1081,7 +1081,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       return
     }
     if (tool === 'wire') return
-    setSelection(null); setSelectedPartIds([])
+    setSelection(null); setSelectedPartIds([]); setSelectedWireId(null)
   }
   const probeWire = (wireId: string) => {
     const wire = project.wires.find((candidate) => candidate.id === wireId)
@@ -1122,18 +1122,21 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     const label = kind === 'label' ? project.netLabels.find((item) => item.id === id) : undefined
     if (!part && !wire && !label) return
     const point = pointFromEvent(event)
-    // Keep Wire armed for repeated drawing, while still letting users grab
-    // component bodies to move them. Pin hits continue to start a wire.
+    // In Wire mode, existing bodies can still move; component pin hits start wires.
     const movingPartWithWireArmed = tool === 'wire' && kind === 'part' && part
       && componentPins(part).every((pin) => Math.hypot(point.x - pin.x, point.y - pin.y) > 16)
-    if (tool !== 'select' && !movingPartWithWireArmed) return
+    const movingWireWithWireArmed = tool === 'wire' && kind === 'wire' && wire
+    if (tool !== 'select' && !movingPartWithWireArmed && !movingWireWithWireArmed) return
     event.stopPropagation()
     const group = kind === 'part' && selectedPartIds.length > 1 && selectedPartIds.includes(id)
       ? project.parts.filter((item) => selectedPartIds.includes(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y }))
       : undefined
-    if (kind === 'part' && !group) setSelectedPartIds([id])
-    else if (kind !== 'part') setSelectedPartIds([])
-    setSelection({ kind, id })
+    if (kind === 'wire') setSelectedWireId(id)
+    else {
+      if (kind === 'part' && !group) setSelectedPartIds([id])
+      else if (kind !== 'part') setSelectedPartIds([])
+      setSelection({ kind, id })
+    }
     beginEdit()
     drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, points: wire?.points.map(([x,y]) => [x,y]), group }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -1202,8 +1205,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     if (tool !== 'select' || spacePan) return
     const wire = project.wires.find((item) => item.id === id)
     if (!wire) return
-    setSelectedPartIds([])
-    setSelection({ kind: 'wire', id })
+    setSelectedWireId(id)
     beginEdit()
     const point = pointFromEvent(event)
     drag.current = { kind: 'wire-end', id, endpointIndex, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, points: [[...wire.points[0]], [...wire.points[1]]] }
@@ -1214,7 +1216,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   const beginWireDrag = useCallback((event: PointerEvent<SVGGElement>, id: string) => wireEventHandlers.current.beginDrag(event, 'wire', id), [])
   const beginWireEndpointDragStable = useCallback((event: PointerEvent<SVGCircleElement>, id: string, endpoint: 0 | 1) => wireEventHandlers.current.beginWireEndpointDrag(event, id, endpoint), [])
   const probeWireStable = useCallback((id: string) => wireEventHandlers.current.probeWire(id), [])
-  const selectWire = useCallback((id: string) => { setSelectedPartIds([]); setSelection({ kind: 'wire', id }); onClearPendingComponent(); setTool('select') }, [onClearPendingComponent, setSelectedPartIds, setSelection, setTool])
+  const selectWire = useCallback((id: string) => setSelectedWireId(id), [setSelectedWireId])
   const beginPan = (event: PointerEvent<SVGSVGElement>) => {
     if (event.button !== 1 && !(event.button === 0 && spacePan)) return
     event.preventDefault()
@@ -1375,8 +1377,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
         const hit = wireNetAt(project, point, 12)
         const connectivity = analyzeConnectivity(project)
         const node = hit ? connectivity.wireNets.get(hit.wireId) : undefined
-        setSelection({ kind: 'wire', id })
-        setSelectedPartIds([])
+        setSelectedWireId(id)
         setContextMenu({ kind: 'wire', id, x, y, point: hit ? { x: hit.point.x, y: hit.point.y } : point, ...(node ? { node } : {}) })
       } else setContextMenu(null)
     }} onWheel={(event) => {
@@ -1394,7 +1395,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
-      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selection?.kind === 'wire' && selection.id === wire.id} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onBeginEndpointDrag={beginWireEndpointDragStable} onSelect={selectWire} onHover={setHoveredWireId}/>) }
+      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireId === wire.id} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onBeginEndpointDrag={beginWireEndpointDragStable} onSelect={selectWire} onHover={setHoveredWireId}/>) }
       <CanvasNetLabelLayer labels={project.netLabels} selectedId={selection?.kind === 'label' ? selection.id : undefined} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && wirePreviewEnd && <line x1={wireStart.x} y1={wireStart.y} x2={wirePreviewEnd.x} y2={wirePreviewEnd.y} stroke="#a4e8bb" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>}
@@ -1441,6 +1442,7 @@ export default function App() {
     } catch { return createStarterProject() }
   })
   const [selection, setSelection] = useState<Selection>({ kind: 'part', id: 'p-r1' })
+  const [selectedWireId, setSelectedWireId] = useState<string | null>(null)
   const [selectedPartIds, setSelectedPartIds] = useState<string[]>(['p-r1'])
   const [tool, setTool] = useState<ToolMode>('select')
   const [pendingComponentKind, setPendingComponentKind] = useState<PartKind | null>(null)
@@ -1790,6 +1792,7 @@ export default function App() {
     setProjectState((current) => ({ ...current, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view }))
     history.current = { past: [], future: [] }
     setSelection(null)
+    setSelectedWireId(null)
     setNotice(simulationResult ? `Opened ${sheet.name}. Probe labeled internal nodes to inspect this block instance in the current simulation.` : `Opened sheet ${sheet.name}. Run the root circuit to probe this block in context.`)
   }
   const addSheet = () => {
@@ -1800,6 +1803,7 @@ export default function App() {
     history.current = { past: [...history.current.past, structuredClone(projectRef.current)].slice(-100), future: [] }
     setProjectState((current) => ({ ...current, sheets: [...current.sheets, sheet], activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, updatedAt: new Date().toISOString() }))
     setSelection(null)
+    setSelectedWireId(null)
     setSimulationResult(null)
     setSampleIndex(null)
     setNotice(`Created ${name} inside ${parent?.name ?? 'the project'}.`)
@@ -1906,8 +1910,10 @@ export default function App() {
     })
     return selected && !parts.some((part) => part.id === selected.id) ? [selected] : parts
   }, [partsById, selected, selectedPartIds])
-  const selectedWire = selection?.kind === 'wire' ? project.wires.find((wire) => wire.id === selection.id) ?? null : null
   const selectedLabel = selection?.kind === 'label' ? project.netLabels.find((label) => label.id === selection.id) ?? null : null
+  useEffect(() => {
+    if (selectedWireId && !project.wires.some((wire) => wire.id === selectedWireId)) setSelectedWireId(null)
+  }, [project.wires, selectedWireId])
   useLayoutEffect(() => {
     const selectedIds = selected && !selectedPartIds.includes(selected.id) ? [selected.id] : selectedPartIds
     updatePartUiState(selectedIds, selected?.id ?? project.parts[0]?.id)
@@ -2016,6 +2022,7 @@ export default function App() {
       setSelectedTraceIds(parsed.plotSettings?.selectedTraceIds ?? [])
       history.current = { past: [], future: [] }
       setSelection(null)
+      setSelectedWireId(null)
       setNotice(`Opened ${parsed.name}`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not open this project') }
     event.target.value = ''
@@ -2171,6 +2178,7 @@ export default function App() {
       setSampleIndex(null)
       history.current = { past: [], future: [] }
       setSelection(null)
+      setSelectedWireId(null)
       const modelSummary = newModels.length ? ` and ${newModels.length} model librar${newModels.length === 1 ? 'y' : 'ies'}` : ''
       setNotice(imported.warnings.length ? `Imported ${imported.project.name} with ${imported.project.parts.length} parts, ${imported.project.wires.length} wires${modelSummary}. ${imported.warnings.length} item(s) need attention: ${imported.warnings.slice(0, 3).join(' ')}` : `Imported ${imported.project.name} with ${imported.project.parts.length} parts, ${imported.project.wires.length} wires${modelSummary}.`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this LTspice schematic.') }
@@ -2250,7 +2258,7 @@ export default function App() {
       setSelection({ kind: 'label', id: lastLabel.id })
       setNotice(`Pasted net label ${lastLabel.name}. Same-name labels on this sheet connect to the same electrical node.`)
     } else if (lastWireId) {
-      setSelection({ kind: 'wire', id: lastWireId })
+      setSelectedWireId(lastWireId)
       setNotice(`Pasted ${pastedWires.length} wire path${pastedWires.length === 1 ? '' : 's'}. Pasted wires keep their shape and may remain electrically open until connected.`)
     }
   }
@@ -2265,11 +2273,11 @@ export default function App() {
     })
     setSelection(null)
     setSelectedPartIds([])
+    setSelectedWireId(null)
   }
   const deleteSelection = () => {
     if (!selection) return
     if (selection.kind === 'part') deleteSelected()
-    else if (selection.kind === 'wire') setProject((current) => ({ ...current, wires: current.wires.filter((wire) => wire.id !== selection.id) }))
     else setProject((current) => ({ ...current, netLabels: current.netLabels.filter((label) => label.id !== selection.id) }))
     setSelection(null)
     setSelectedPartIds([])
@@ -2311,9 +2319,9 @@ export default function App() {
       if (modalOpen) return
       if (event.shiftKey && target instanceof Element && target.closest('.wire-line, .canvas-label') && /^Arrow(Up|Down|Left|Right)$/.test(event.key)) {
         const delta = event.key === 'ArrowLeft' ? [-EDITOR_GRID_SIZE, 0] : event.key === 'ArrowRight' ? [EDITOR_GRID_SIZE, 0] : event.key === 'ArrowUp' ? [0, -EDITOR_GRID_SIZE] : [0, EDITOR_GRID_SIZE]
-        if (selection?.kind === 'wire') {
+        if (selectedWireId && target.closest('.wire-line')) {
           event.preventDefault()
-          setProject((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === selection.id ? { ...wire, points: [[wire.points[0][0] + delta[0], wire.points[0][1] + delta[1]], [wire.points[1][0] + delta[0], wire.points[1][1] + delta[1]]] } : wire) }))
+          setProject((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === selectedWireId ? { ...wire, points: [[wire.points[0][0] + delta[0], wire.points[0][1] + delta[1]], [wire.points[1][0] + delta[0], wire.points[1][1] + delta[1]]] } : wire) }))
           return
         }
         if (selection?.kind === 'label') {
@@ -2336,9 +2344,9 @@ export default function App() {
         setNotice(`Copied net label ${selectedLabel.name}. Pasting it keeps the same name; same-name labels on this sheet connect.`)
         return
       }
-      if ((event.ctrlKey || event.metaKey) && key === 'c' && selection?.kind === 'wire') {
+      if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedWireId && target instanceof Element && target.closest('.wire-line')) {
         event.preventDefault()
-        copiedParts.current = createPartClipboard(project, [], [], [selection.id])
+        copiedParts.current = createPartClipboard(project, [], [], [selectedWireId])
         setNotice(`Copied ${copiedParts.current.wires.length} wire path. Pasting keeps its shape; connect open ends as needed.`)
         return
       }
@@ -2362,8 +2370,9 @@ export default function App() {
       else if (key === 'j') { setPendingComponentKind(null); setTool('junction') }
       else if (key === 'r' && selected) rotateSelected()
       else if (key === 'f' && selected) flipSelected()
+      else if ((key === 'delete' || key === 'backspace') && selectedWireId && target instanceof Element && target.closest('.wire-line')) { event.preventDefault(); setProject((current) => ({ ...current, wires: current.wires.filter((wire) => wire.id !== selectedWireId) })); setSelectedWireId(null) }
       else if ((key === 'delete' || key === 'backspace') && selection) { event.preventDefault(); deleteSelection() }
-      else if (key === 'escape') { setPendingComponentKind(null); setSelection(null) }
+      else if (key === 'escape') { setPendingComponentKind(null); setSelection(null); setSelectedWireId(null) }
     }
     const onKeyUp = (event: KeyboardEvent) => { if (event.code === 'Space') setSpacePan(false) }
     const onBlur = () => setSpacePan(false)
@@ -2373,7 +2382,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onSpaceKeyDown, true); window.removeEventListener('keyup', onSpaceKeyUp, true); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, project, tourStep, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy])
+  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, project, tourStep, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
     try { await navigator.clipboard.writeText(netlist); setNotice('Generated netlist copied') }
@@ -2751,6 +2760,7 @@ export default function App() {
     setSelectedTraceIds(starter.plotSettings?.selectedTraceIds ?? [])
     history.current = { past: [], future: [] }
     setSelection(null)
+    setSelectedWireId(null)
     setHierarchyWalkthroughStep(null)
   }
   const loadExample = async (example: ExampleId) => {
@@ -2867,7 +2877,7 @@ export default function App() {
       <main className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button ref={sheetSettingsTriggerRef} className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => setSheetSettingsOpen(true)}><SlidersHorizontal size={15}/></button></div>
         {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p></div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
-        <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} onPlaceComponent={addPart} onClearPendingComponent={() => setPendingComponentKind(null)} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
+        <Schematic project={project} selection={selection} setSelection={setSelection} selectedWireId={selectedWireId} setSelectedWireId={setSelectedWireId} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} onPlaceComponent={addPart} onClearPendingComponent={() => setPendingComponentKind(null)} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div>{simulationResult && <details className="run-details"><summary>Run details</summary><div className="run-details-popover"><h3>Reproducible run record</h3><button className="run-report-download" onClick={downloadRunReport}><Download size={12}/> Download report · JSON</button><p className="run-report-note">The JSON report includes inputs and provenance, not waveform samples. Use Export CSV for the solved vectors.</p><dl><div><dt>Engine</dt><dd>{simulationResult.metadata.engine} {simulationResult.metadata.engineVersion}</dd></div><div><dt>Run ID</dt><dd><code>{simulationResult.metadata.runId}</code></dd></div><div><dt>Started</dt><dd>{simulationResult.metadata.startedAt}</dd></div><div><dt>Completed</dt><dd>{simulationResult.metadata.completedAt}</dd></div><div><dt>Netlist / sweep SHA-256</dt><dd><code>{simulationResult.metadata.netlistHash}</code></dd></div></dl><h4>Simulation settings</h4><pre>{JSON.stringify(simulationResult.metadata.settings, null, 2)}</pre><h4>Project model libraries</h4><p>Hashes identify stored source files; some may not be referenced by this run.</p>{simulationResult.metadata.modelAssets?.length ? <ul>{simulationResult.metadata.modelAssets.map((asset) => <li key={asset.id}><strong>{asset.filename}</strong><code>{asset.sha256}</code></li>)}</ul> : <p>No imported model files were recorded for this run.</p>}</div></details>}<div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <><button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button><button className="subtle-icon" title="Tile open plot windows" aria-label="Tile open plot windows" onClick={tilePlotWindows} disabled={(waveformDetached ? 1 : 0) + additionalPlotPanels.length < 2}><Grid2X2 size={15}/></button><button className="subtle-icon" title="Add independent plot panel" aria-label="Add independent plot panel" onClick={addPlotPanel} disabled={!simulationResult || additionalPlotPanels.length >= 8}><Plus size={15}/></button></>}</div></div>
           <div className="analysis-content">
@@ -2887,7 +2897,7 @@ export default function App() {
       </FloatingPlotPanel>)}
 
       <aside className={`inspector-panel${mobilePane === 'properties' ? ' mobile-active' : ''}`}>
-        <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : selectedWire ? 'Wire segment' : 'Circuit settings'}</h2></div><button className="subtle-icon" title="More properties"><MoreHorizontal size={17}/></button></div>
+        <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : 'Circuit settings'}</h2></div><button className="subtle-icon" title="More properties"><MoreHorizontal size={17}/></button></div>
         {compatibilityDiagnostic?.assetId && project.modelAssets?.some((asset) => asset.id === compatibilityDiagnostic.assetId) && (() => { const asset = project.modelAssets.find((item) => item.id === compatibilityDiagnostic.assetId)!; return <section className="import-diagnostics engine-model-diagnostic" aria-label="ngspice model compatibility diagnostic"><div><strong>ngspice rejected an imported model card</strong><button onClick={() => setCompatibilityDiagnostic(null)} aria-label="Dismiss model diagnostic"><X size={13}/></button></div><p>{asset.filename}{compatibilityDiagnostic.assetLine ? ` · source line ${compatibilityDiagnostic.assetLine}` : ''}</p><code>{compatibilityDiagnostic.message}</code><p>{compatibilityDiagnostic.hint ?? 'Check the model against ngspice syntax and replace it with a compatible version if needed.'}</p><button className="replace-model" onClick={() => { setReplacementModelAssetId(asset.id); if (modelFileInput.current) { modelFileInput.current.value = ''; modelFileInput.current.click() } }}><FolderOpen size={13}/> Replace model library</button></section> })()}
         {importWarnings.length > 0 && <section className="import-diagnostics" aria-label="LTspice import diagnostics"><div><strong>Import needs review</strong><button onClick={() => setImportWarnings([])} aria-label="Dismiss import diagnostics"><X size={13}/></button></div><p>{importWarnings.length} item{importWarnings.length === 1 ? '' : 's'} could not be fully translated.</p><ul>{importWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul></section>}
         {selected ? <>
@@ -2896,10 +2906,6 @@ export default function App() {
           <div className="form-section"><div className="form-section-title">CONNECTIONS</div>{selected.kind === 'subcircuit' ? (selected.modelPins ?? []).map((name, index) => <div className="pin-row" key={`${name}-${index}`}><span className="pin-index">{index + 1}</span><span>{name}{selected.sheetId && selected.sheetPortLayout?.[index] ? ` · ${selected.sheetPortLayout[index].direction} · ${selected.sheetPortLayout[index].side}` : ""}</span><strong>{pinNet(connectivity, selected, index)}</strong></div>) : <><div className="pin-row"><span className="pin-index">1</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Collector / pin 1' : selected.kind === 'nmos' || selected.kind === 'pmos' || selected.kind === 'njfet' || selected.kind === 'pjfet' ? 'Drain / pin 1' : selected.kind === 'currentSource' ? 'Current out / pin 1' : 'Positive / pin 1'}</span><strong>{pinNet(connectivity, selected, 0)}</strong></div>{selected.kind !== 'ground' && <div className="pin-row"><span className="pin-index">2</span><span>{selected.kind === 'npn' || selected.kind === 'pnp' ? 'Base / pin 2' : selected.kind === 'nmos' || selected.kind === 'pmos' || selected.kind === 'njfet' || selected.kind === 'pjfet' ? 'Gate / pin 2' : selected.kind === 'currentSource' ? 'Current return / pin 2' : 'Negative / pin 2'}</span><strong>{pinNet(connectivity, selected, 1)}</strong></div>}{(selected.kind === 'npn' || selected.kind === 'pnp') && <><div className="pin-row"><span className="pin-index">3</span><span>Emitter / pin 3</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="field-hint">The arrow distinguishes NPN and PNP. Collector current is positive into the collector.</div></>}{(selected.kind === 'njfet' || selected.kind === 'pjfet') && <><div className="pin-row"><span className="pin-index">3</span><span>Source / pin 3</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="field-hint">SPICE terminal order is Drain, Gate, Source. The arrow indicates channel polarity; drain current is positive into the drain.</div></>}{(selected.kind === 'nmos' || selected.kind === 'pmos') && <><div className="pin-row"><span className="pin-index">3</span><span>Source / pin 3</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="pin-row"><span className="pin-index">4</span><span>Bulk / pin 4</span><strong>{pinNet(connectivity, selected, 3)}</strong></div><div className="field-hint">SPICE terminal order is Drain, Gate, Source, Bulk. Drain current is positive into the drain terminal.</div></>}{(selected.kind === 'vcvs' || selected.kind === 'vccs') && <><div className="pin-row"><span className="pin-index">3</span><span>Control +</span><strong>{pinNet(connectivity, selected, 2)}</strong></div><div className="pin-row"><span className="pin-index">4</span><span>Control −</span><strong>{pinNet(connectivity, selected, 3)}</strong></div><div className="field-hint">Output is pins 1–2; control voltage is pin 3 relative to pin 4. Pin 1 current is positive toward pin 2.</div></>}{(selected.kind === 'cccs' || selected.kind === 'ccvs') && <div className="field-hint">Output current is positive from pin 1 to pin 2. Control current follows the selected voltage source from pin 1 to pin 2.</div>}</>}<div className="field-hint">Node names are derived from wires, pin positions, ground symbols, and labels.</div></div>
           <div className="form-section"><div className="form-section-title">APPEARANCE</div><button className="wide-select" onClick={rotateSelected}>Orientation <span>{selected.rotation}° <RotateCw size={13}/></span></button><button className="wide-select flip-control" onClick={flipSelected}>Flip horizontally <span>{selected.flipX ? 'Flipped' : 'Normal'} <FlipHorizontal2 size={13}/></span></button><div className="field-hint">Orientation keeps electrical pin indexes stable. If moving attached wires would change connectivity, reroute them before applying the change.</div></div>
           <div className="inspector-bottom"><button onClick={duplicateSelected}><Copy size={14}/> Duplicate</button><button className="delete-action" onClick={deleteSelected}><Trash2 size={14}/> Delete part</button></div>
-        </> : selectedWire ? <>
-          <div className="selected-part-card"><span className="selected-part-icon icon-wire"><Cable size={18}/></span><div><strong>Wire segment</strong><span>{selectedWire.points.length} routing points · electrical connection</span></div></div>
-          <div className="form-section"><div className="form-section-title">CONNECTION</div><div className="field-hint">Wire geometry defines connectivity. Select a different tool to keep drawing, or drag this wire to reroute its displayed path.</div></div>
-          <div className="inspector-bottom"><button className="delete-action" onClick={deleteSelection}><Trash2 size={14}/> Delete wire</button></div>
         </> : selectedLabel ? <>
           <div className="selected-part-card"><span className="selected-part-icon icon-label"><Bookmark size={17}/></span><div><strong>Net label</strong><span>Shared SPICE node name</span></div></div>
           <div className="form-section"><div className="form-section-title">IDENTIFICATION</div><label className="field-label">Net name<input value={selectedLabel.name} onChange={(event) => renameSelectedLabel(event.target.value)}/></label><div className="field-hint">Labels with the same name connect electrically across this sheet.</div></div>
@@ -2968,7 +2974,7 @@ export default function App() {
     {saveWarningOpen && <div className="tour-backdrop" onClick={closeSaveWarning}><section className="tour-dialog examples-dialog" role="alertdialog" aria-modal="true" aria-labelledby="export-warning-title" aria-describedby="export-warning-description" onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogTab}><div className="modal-heading"><div><span className="eyebrow">PORTABLE PROJECT EXPORT</span><h2 id="export-warning-title">Review imported files</h2></div><button className="subtle-icon" aria-label="Cancel project export" onClick={closeSaveWarning}><X size={17}/></button></div><p id="export-warning-description" className="tour-copy">This project file will include user-imported source files whose redistribution rights are unknown. Saving a copy for your own use does not grant permission to share or publish those files. Check with each file’s author or supplier before redistributing the archive.</p><ul className="export-warning-files">{exportProvenanceFiles().map((asset, index) => <li key={`${asset.type}:${asset.filename}:${index}`}><strong>{asset.filename}</strong><span>{asset.type} · redistribution rights unknown</span>{asset.sourceUrl && <span>Recorded source: {asset.sourceUrl}</span>}{asset.licenseReference && <span>User-entered license reference: {asset.licenseReference}</span>}{asset.rightsNotes && <span>{asset.rightsNotes}</span>}</li>)}</ul><div className="modal-footer"><button className="tour-secondary" autoFocus onClick={closeSaveWarning}>Cancel</button><button className="primary-small" onClick={() => { closeSaveWarning(); downloadProjectArchive() }}>Save project file</button></div></section></div>}
     {sheetSettingsOpen && <div className="tour-backdrop" onClick={() => { setSheetSettingsOpen(false); restoreDialogTriggerFocus(sheetSettingsTriggerRef) }}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="sheet-settings-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">REUSABLE BLOCK</span><h2 id="sheet-settings-title">{activeSheet?.name ?? 'Sheet'} ports and parameters</h2></div><button autoFocus className="subtle-icon" aria-label="Close sheet settings" onClick={() => { setSheetSettingsOpen(false); restoreDialogTriggerFocus(sheetSettingsTriggerRef) }}><X size={17}/></button></div>{activeSheet?.parentSheetId === null ? <p className="tour-copy">The root circuit is the project entry point. Add a child sheet to define a reusable block and its ports.</p> : <><p className="tour-copy">Expose labeled nodes as ordered pins. Choose each pin’s side and direction. Changes update all placed instances; removing a port may leave connected wires open, so review the parent sheet afterward.</p>{activeSheet?.ports.length ? <div className="example-list">{activeSheet.ports.map((port, index) => <article key={port.id}><div><strong>Pin {index + 1} · {port.name}</strong><p>Connected to the sheet net labeled {port.name}.</p><div className="port-metadata-controls"><label>Side<select aria-label={`Pin ${index + 1} placement`} value={port.side ?? 'auto'} onChange={(event) => updateSheetPort(port.id, { side: event.target.value as NonNullable<typeof port.side> })}><option value="auto">Automatic</option><option value="left">Left</option><option value="right">Right</option><option value="top">Top</option><option value="bottom">Bottom</option></select></label><label>Direction<select aria-label={`Pin ${index + 1} direction`} value={port.direction ?? 'inout'} onChange={(event) => updateSheetPort(port.id, { direction: event.target.value as NonNullable<typeof port.direction> })}><option value="input">Input</option><option value="output">Output</option><option value="inout">Bidirectional</option></select></label></div></div><button className="tour-secondary" disabled={activeSheetInstances.length > 0 && index !== (activeSheet?.ports.length ?? 0) - 1} title={activeSheetInstances.length > 0 && index !== (activeSheet?.ports.length ?? 0) - 1 ? "Remove ports from the end of the ordered pin list" : "Remove port"} onClick={() => removeSheetPort(port.id)}>Remove</button></article>)}</div> : <div className="example-confirm"><strong>No ports yet</strong><p>Add net labels to the circuit first, then expose those nodes here.</p></div>}<div className="field-label">Labeled node<select aria-label="Labeled node for new port" value={portSelection} onChange={(event) => setPortSelection(event.target.value)}><option value="">Choose a node</option>{[...new Set(activeSheet?.netLabels.map((label) => label.name).filter((name) => !activeSheet.ports.some((port) => port.name.toLowerCase() === name.toLowerCase())) ?? [])].map((name) => <option key={name} value={name}>{name}</option>)}</select></div><div className="modal-footer"><span>Port order follows the list above. With placed blocks, remove pins from the end.</span><button className="primary-small" disabled={!portSelection} onClick={() => { addSheetPort(portSelection); setPortSelection('') }}>Expose as port</button></div><h3>Block parameters</h3>{activeSheet?.parameters?.length ? <div className="example-list">{activeSheet.parameters.map((parameter) => <article key={parameter.id}><div><strong>{parameter.name} = {parameter.defaultValue}</strong><label className="field-label">Default value<input aria-label={`Default value for ${parameter.name}`} value={parameterDefaultDrafts[parameter.id] ?? parameter.defaultValue} onChange={(event) => setParameterDefaultDrafts((drafts) => ({ ...drafts, [parameter.id]: event.target.value }))} onBlur={(event) => updateSheetParameterDefault(parameter.id, event.target.value)}/></label><p>Use {'{'}{parameter.name}{'}'} as a component value inside this sheet.</p></div><button className="tour-secondary" onClick={() => removeSheetParameter(parameter.id)}>Remove</button></article>)}</div> : <p className="field-hint">No parameters. Add one to let each block instance use a different value.</p>}<div className="block-parameter-form"><label className="field-label">Parameter name<input aria-label="New block parameter name" value={parameterNameDraft} maxLength={64} placeholder="RLOAD" onChange={(event) => { setParameterNameDraft(event.target.value); setParameterFormError('') }}/></label><label className="field-label">Default SPICE value<input aria-label="New block parameter default" value={parameterValueDraft} maxLength={64} placeholder="{RBASE * 2}" onChange={(event) => { setParameterValueDraft(event.target.value); setParameterFormError('') }}/><small className="field-hint">Use a number such as 1k or braced arithmetic such as {'{'}RBASE * 2{'}'}. Operators: +, -, *, /, ^.</small></label>{parameterFormError && <small className="field-error" role="alert">{parameterFormError}</small>}<button className="tour-secondary" disabled={(activeSheet?.parameters?.length ?? 0) >= 32 || !parameterNameDraft.trim()} onClick={addSheetParameter}>Add block parameter</button></div></>}<div className="modal-footer"><span>{project.sheets.length} sheets in this project</span><button className="tour-secondary" onClick={() => { setSheetSettingsOpen(false); restoreDialogTriggerFocus(sheetSettingsTriggerRef) }}>Done</button></div></section></div>}
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={() => setNetlistOpen(false)}><section className="netlist-modal" role="dialog" aria-modal="true" aria-labelledby="netlist-dialog-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2 id="netlist-dialog-title">Generated SPICE netlist</h2></div><button autoFocus className="subtle-icon" aria-label="Close netlist" onClick={() => setNetlistOpen(false)}><X size={17}/></button></div><pre>{createNetlist(project)}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div></section></div>}
-    {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button autoFocus className="subtle-icon" aria-label="Close circuit checks" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><X size={17}/></button></div><p className="erc-intro">These checks look for common wiring mistakes and missing model references. They do not decide whether ngspice can solve your circuit.</p>{electricalIssues.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={`erc-severity ${issue.severity}`}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => { setSelection({ kind: 'part', id: issue.partId! }); setElectricalCheckOpen(false) }}>Select affected component</button>}{issue.wireId && <button onClick={() => { setSelection({ kind: 'wire', id: issue.wireId! }); setTool('select'); setElectricalCheckOpen(false) }}>Select wire</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalIssues.length} finding{electricalIssues.length === 1 ? '' : 's'}</span><button className="primary-small" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}>Done</button></div></section></div>}
+    {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button autoFocus className="subtle-icon" aria-label="Close circuit checks" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><X size={17}/></button></div><p className="erc-intro">These checks look for common wiring mistakes and missing model references. They do not decide whether ngspice can solve your circuit.</p>{electricalIssues.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={`erc-severity ${issue.severity}`}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => { setSelection({ kind: 'part', id: issue.partId! }); setElectricalCheckOpen(false) }}>Select affected component</button>}{issue.wireId && <button onClick={() => { setSelectedWireId(issue.wireId!); setTool('select'); setElectricalCheckOpen(false) }}>Select wire</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalIssues.length} finding{electricalIssues.length === 1 ? '' : 's'}</span><button className="primary-small" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}>Done</button></div></section></div>}
     {examplesOpen && <div className="tour-backdrop" onClick={() => { setExamplesOpen(false); setPendingExample(null); restoreDialogTriggerFocus(examplesTriggerRef) }}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="examples-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">LEARN BY EXAMPLE</span><h2 id="examples-title">Open a working circuit</h2></div><button autoFocus className="subtle-icon" aria-label="Close examples" onClick={() => { setExamplesOpen(false); setPendingExample(null); restoreDialogTriggerFocus(examplesTriggerRef) }}><X size={17}/></button></div><p className="tour-copy">Each example is a complete circuit you can inspect, edit, and simulate locally.</p>{pendingExample ? <div className="example-confirm" role="alert"><strong>Replace the current circuit?</strong><p>{pendingExample === 'hierarchy' ? 'Nested reusable divider' : pendingExample === 'rectifier' ? 'Diode half-wave rectifier' : pendingExample === 'ac-lowpass' ? 'RC low-pass frequency response' : pendingExample === 'ac-highpass' ? 'RC high-pass frequency response' : pendingExample === 'pwl' ? 'PWL waveform response' : pendingExample === 'current-source' ? 'Current source and load' : pendingExample === 'led' ? 'LED pulse response' : pendingExample === 'rlc' ? 'RLC ringing' : pendingExample === 'controlled' ? 'Voltage-controlled sources' : pendingExample === 'current-controlled' ? 'Current-controlled sources' : pendingExample === 'transistor' ? 'NPN low-side switch' : pendingExample === 'pnp' ? 'PNP high-side switch' : pendingExample === 'pjfet' ? 'P-JFET positive-rail switch' : pendingExample === 'mosfet' ? 'NMOS low-side switch' : pendingExample === 'pmos' ? 'PMOS high-side switch' : pendingExample === 'jfet' ? 'N-JFET low-side switch' : 'RC step response'} will replace the circuit open in this tab. Save your current circuit first if you want to keep it.</p><div><button className="tour-secondary" onClick={() => setPendingExample(null)}>Cancel</button><button className="primary-small" onClick={() => loadExample(pendingExample)}>Replace and open</button></div></div>  : <>
         <label className="search-box example-search"><Search size={15}/><input aria-label="Find an example" placeholder="Find an example" value={exampleQuery} onChange={(event) => setExampleQuery(event.target.value)}/>{exampleQuery && <button type="button" aria-label="Clear example search" onClick={() => setExampleQuery('')}><X size={13}/></button>}</label>
         {filteredExamples.length ? <div className="example-list">{filteredExamples.map(({ id, title, description }) => <article key={id}><div><strong>{title}</strong><p>{description}</p></div><button className="primary-small" onClick={() => setPendingExample(id)}>Open example</button></article>)}</div> : <div className="component-empty" role="status">No examples found for “{exampleQuery}”.</div>}

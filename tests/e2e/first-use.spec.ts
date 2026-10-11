@@ -475,17 +475,18 @@ test('clicking a wire selects it like clicking a component', async ({ page }) =>
     return null
   })
   expect(target).not.toBeNull()
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
   await page.mouse.click(target!.x, target!.y)
   const wire = page.locator(`.wire-line[data-wire-id="${target!.id}"]`)
-  await expect(page.getByRole('button', { name: 'Select and move (V)' })).toHaveClass(/active/)
+  await expect(page.getByRole('button', { name: /Add Wire/ })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: 'Select and move (V)' })).not.toHaveClass(/active/)
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
   await expect(wire).toHaveClass(/selected/)
-  await expect(page.locator('.inspector-heading h2')).toHaveText('Wire segment')
+  await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
   await page.mouse.click(target!.x, target!.y)
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.locator('.inspector-heading h2')).toHaveText('Wire segment')
-
-  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
+  await expect(resistor).toHaveClass(/selected/)
   const before = await resistor.getAttribute('transform')
   const bounds = await resistor.boundingBox()
   expect(bounds).not.toBeNull()
@@ -494,6 +495,8 @@ test('clicking a wire selects it like clicking a component', async ({ page }) =>
   await page.mouse.move(bounds!.x + bounds!.width / 2 + 30, bounds!.y + bounds!.height / 2, { steps: 4 })
   await page.mouse.up()
   await expect.poll(() => resistor.getAttribute('transform')).not.toBe(before)
+  await expect(wire).toHaveClass(/selected/)
+  await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
 })
 
 test('reused sheet interface edits update block pins and attached wires', async ({ page }) => {
@@ -1352,6 +1355,7 @@ test('wire segments move independently and wheel zoom preserves their geometry',
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
+  await page.getByRole('button', { name: /Add Wire/ }).click()
   const svg = page.locator('svg.schematic')
   const matrix = await svg.evaluate((element) => {
     const { a, b, c, d, e, f } = element.getScreenCTM()!
@@ -1369,7 +1373,7 @@ test('wire segments move independently and wheel zoom preserves their geometry',
   expect(moved).toEqual([[300, 330], [400, 330]])
   const wire = page.locator('.wire-line[data-wire-id="editable-wire"]')
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.locator('.inspector-heading h2')).toHaveText('Wire segment')
+  await expect(page.locator('.inspector-heading h2')).toHaveText('Circuit settings')
 
   const beforeZoom = Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))
   await page.locator('svg.schematic').evaluate((element) => {
