@@ -1,6 +1,7 @@
 import { analyzeConnectivity } from './connectivity'
 import { wireNetAt, type Point } from './geometry'
 import type { Part, Project } from './project'
+import type { Trace } from '../engine/contract'
 
 export type ProbeTarget = { kind: 'node'; name: string } | { kind: 'part'; id: string }
 
@@ -8,6 +9,67 @@ export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref'>): string
   if (part.kind === 'currentSource') return `i(@${part.ref}[current])`
   const currentName = part.kind === 'diode' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' ? 'id' : 'i'
   return `i(@${part.ref}[${currentName}])`
+}
+
+/** Build result vectors for voltage measured from pin 1 to pin 2. */
+export function deriveComponentVoltageTraces(traces: readonly Trace[], positiveVector: string, negativeVector: string, ref: string, vectorRef = ref): Trace[] {
+  const positiveName = positiveVector.toLowerCase()
+  const negativeName = negativeVector.toLowerCase()
+  const matching = (name: string) => traces.filter((trace) => trace.id.toLowerCase() === name || trace.baseId?.toLowerCase() === name || trace.id.toLowerCase().startsWith(`${name}::sweep-`))
+  const positiveGround = positiveName === 'v(0)'
+  const negativeGround = negativeName === 'v(0)'
+  if (positiveGround && negativeGround) return []
+  const positive = positiveGround ? [] : matching(positiveName)
+  const negative = negativeGround ? [] : matching(negativeName)
+  if ((!positiveGround && !positive.length) || (!negativeGround && !negative.length)) return []
+
+  const sources = positiveGround ? negative : positive
+  const outputId = `v(${vectorRef.toLowerCase()})`
+  return sources.flatMap((source) => {
+    const sameSweep = (candidate: Trace) => candidate.sweep?.index === source.sweep?.index
+    const p = positiveGround ? undefined : positive.find(sameSweep)
+    const n = negativeGround ? undefined : negative.find(sameSweep)
+    const axisSource = p ?? n ?? source
+    if ((!positiveGround && !p) || (!negativeGround && !n) || (p && n && (p.axis.length !== n.axis.length || p.values.length !== n.values.length)) || axisSource.axis.length !== axisSource.values.length) return []
+    if (p && n && p.axis.some((value, index) => value !== n.axis[index])) return []
+    const values = new Float64Array(axisSource.values.length)
+    const imaginaryValues = p?.imaginaryValues || n?.imaginaryValues ? new Float64Array(axisSource.values.length) : undefined
+    for (let index = 0; index < values.length; index += 1) {
+      values[index] = (p?.values[index] ?? 0) - (n?.values[index] ?? 0)
+      if (imaginaryValues) imaginaryValues[index] = (p?.imaginaryValues?.[index] ?? 0) - (n?.imaginaryValues?.[index] ?? 0)
+    }
+    const sweep = source.sweep
+    const id = sweep ? `${outputId}::sweep-${sweep.index}` : outputId
+    return [{
+      id,
+      baseId: outputId,
+      label: `V(${ref})${sweep ? ` · ${sweep.label}` : ''}`,
+      unit: 'V',
+      axisLabel: axisSource.axisLabel,
+      axisUnit: axisSource.axisUnit,
+      axis: axisSource.axis,
+      values,
+      ...(imaginaryValues ? { imaginaryValues } : {}),
+      ...(sweep ? { sweep } : {}),
+    }]
+  })
+}
+
+export function groundVoltageTrace(reference: Trace): Trace {
+  const outputId = 'v(0)'
+  const id = reference.sweep ? `${outputId}::sweep-${reference.sweep.index}` : outputId
+  return {
+    id,
+    baseId: outputId,
+    label: `V(0) · ground${reference.sweep ? ` · ${reference.sweep.label}` : ''}`,
+    unit: 'V',
+    axisLabel: reference.axisLabel,
+    axisUnit: reference.axisUnit,
+    axis: reference.axis,
+    values: new Float64Array(reference.values.length),
+    ...(reference.imaginaryValues ? { imaginaryValues: new Float64Array(reference.values.length) } : {}),
+    ...(reference.sweep ? { sweep: reference.sweep } : {}),
+  }
 }
 
 export function resolveProbeTarget(project: Project, point: Point, tolerance = 12): ProbeTarget | null {

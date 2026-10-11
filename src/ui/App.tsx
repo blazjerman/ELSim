@@ -15,7 +15,7 @@ import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analy
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
 import { canMoveWireSegment, componentPins, EDITOR_GRID_SIZE, moveWireAnchors, moveWireSegment, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
-import { componentCurrentVector, resolveProbeTarget } from '../domain/probe'
+import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
@@ -438,17 +438,22 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
 function TraceToggles({ traces, selectedIds, onToggle, ariaLabel, colorFor }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; ariaLabel: string; colorFor: (index: number) => string }) {
   const [filter, setFilter] = useState('')
   const [visibleLimit, setVisibleLimit] = useState(100)
+  const selected = useMemo(() => traces.flatMap((trace, index) => selectedIds.includes(trace.id) ? [{ trace, index }] : []), [selectedIds, traces])
+  const available = useMemo(() => traces.flatMap((trace, index) => !selectedIds.includes(trace.id) ? [{ trace, index }] : []), [selectedIds, traces])
   const matching = useMemo(() => {
     const query = filter.trim().toLocaleLowerCase()
-    return traces.flatMap((trace, index) => !query || `${trace.label} ${trace.id}`.toLocaleLowerCase().includes(query) ? [{ trace, index }] : [])
-  }, [filter, traces])
-  const visible = traces.length > 100 ? matching.slice(0, visibleLimit) : matching
+    return available.filter(({ trace }) => !query || `${trace.label} ${trace.id}`.toLocaleLowerCase().includes(query))
+  }, [available, filter])
+  const visible = available.length > 100 ? matching.slice(0, visibleLimit) : matching
   const remaining = Math.max(0, matching.length - visible.length)
   return <div className="trace-selector">
-    {traces.length > 12 && <div className="trace-filter"><Search size={12} aria-hidden="true"/><input type="search" aria-label={`Filter ${ariaLabel.toLocaleLowerCase()}`} placeholder="Filter by name…" value={filter} onChange={(event) => { setFilter(event.target.value); setVisibleLimit(100) }}/><span aria-live="polite">{matching.length} / {traces.length}</span></div>}
-    <div className={`trace-toggles${traces.length > 12 ? ' trace-toggles-many' : ''}`} role="group" aria-label={ariaLabel}>{visible.map(({ trace, index }) => <button key={trace.id} aria-pressed={selectedIds.includes(trace.id)} className={selectedIds.includes(trace.id) ? 'selected' : ''} onClick={() => onToggle(trace.id)}><span style={{ background: colorFor(index) }}/>{trace.label}</button>)}</div>
-    {remaining > 0 && <button className="trace-show-more" onClick={() => setVisibleLimit((limit) => Math.min(matching.length, limit + 100))}>Show next {Math.min(100, remaining)} traces ({remaining} remaining)</button>}
-    {filter.trim() && matching.length === 0 && <div className="trace-filter-empty" role="status">No traces match “{filter.trim()}”.</div>}
+    {selected.length > 0 && <div className="trace-toggles trace-toggles-selected" role="group" aria-label={`Selected ${ariaLabel.toLocaleLowerCase()}`}>{selected.map(({ trace, index }) => <button key={trace.id} aria-pressed="true" className="selected" onClick={() => onToggle(trace.id)}><span style={{ background: colorFor(index) }}/>{trace.label}<span className="trace-remove" aria-hidden="true">×</span></button>)}</div>}
+    <details className="trace-picker"><summary>{selected.length ? 'Add traces' : 'Choose traces'} <span>{available.length}</span></summary>
+      {available.length > 12 && <div className="trace-filter"><Search size={12} aria-hidden="true"/><input type="search" aria-label={`Filter ${ariaLabel.toLocaleLowerCase()}`} placeholder="Filter by name…" value={filter} onChange={(event) => { setFilter(event.target.value); setVisibleLimit(100) }}/><span aria-live="polite">{matching.length} / {available.length}</span></div>}
+      <div className={`trace-toggles${available.length > 12 ? ' trace-toggles-many' : ''}`} role="group" aria-label={ariaLabel}>{visible.map(({ trace, index }) => <button key={trace.id} aria-pressed="false" onClick={() => onToggle(trace.id)}><span style={{ background: colorFor(index) }}/>{trace.label}</button>)}</div>
+      {remaining > 0 && <button className="trace-show-more" onClick={() => setVisibleLimit((limit) => Math.min(matching.length, limit + 100))}>Show next {Math.min(100, remaining)} traces ({remaining} remaining)</button>}
+      {filter.trim() && matching.length === 0 && <div className="trace-filter-empty" role="status">No traces match “{filter.trim()}”.</div>}
+    </details>
   </div>
 }
 
@@ -913,7 +918,7 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
   </div>
 }
 
-function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, setNotice, beginEdit, endEdit, onProbe, onSwitchChanged, simulationResult, sampleIndex, onSampleChange }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
+function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, onSampleChange }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
@@ -921,6 +926,8 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | null>(null)
+  const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
   const [scrubIndex, setScrubIndex] = useState<number | null>(sampleIndex)
   useLayoutEffect(() => {
     const element = svg.current
@@ -935,6 +942,12 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     measure()
     return () => observer.disconnect()
   }, [])
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setContextMenu(null) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [contextMenu])
   const resultIsCurrent = simulationResult?.analysis === 'tran' && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt
   const transientAxis = resultIsCurrent ? simulationResult.traces[0]?.axis : undefined
   const resultConnectivity = useMemo(() => resultIsCurrent ? analyzeConnectivity(project) : null, [project, resultIsCurrent])
@@ -1222,6 +1235,8 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     setLabelDraft(null)
   }
   const viewBox = `${viewportLeft} ${viewportTop} ${viewWidth} ${viewHeight}`
+  const contextPart = contextMenu?.kind === 'part' ? project.parts.find((part) => part.id === contextMenu.id) : undefined
+  const contextPinNames = contextPart ? contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name) : []
   const wireFlows = useMemo(() => {
     if (!resultIsCurrent || !resultConnectivity) return new Map<string, ReturnType<typeof wireCurrentFlow>>()
     return new Map(project.wires.map((wire) => [wire.id, wireCurrentFlow(project, resultConnectivity, wire, (part) => resultValue(componentCurrentVector(part)))]))
@@ -1231,7 +1246,33 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
       <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Shift-click parts to select several · drag to move · Ctrl/⌘+C/V copies parts, wire paths, and selected labels · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
-    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire paths and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={beginPan} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onWheel={(event) => {
+    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire paths and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={(event) => { setContextMenu(null); beginPan(event) }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onContextMenu={(event) => {
+      event.preventDefault()
+      const element = event.target instanceof Element ? event.target : null
+      const partElement = element?.closest<SVGGElement>('[data-part-id]')
+      const wireElement = element?.closest<SVGGElement>('[data-wire-id]')
+      const wrapper = event.currentTarget.parentElement
+      if (!wrapper) return
+      const bounds = wrapper.getBoundingClientRect()
+      const x = Math.max(4, Math.min(bounds.width - 220, event.clientX - bounds.left))
+      const y = Math.max(4, Math.min(bounds.height - 210, event.clientY - bounds.top))
+      if (partElement?.dataset.partId) {
+        const id = partElement.dataset.partId
+        setSelection({ kind: 'part', id })
+        setSelectedPartIds([id])
+        setContextPinPair({ positive: 0, negative: 1 })
+        setContextMenu({ kind: 'part', id, x, y })
+      } else if (wireElement?.dataset.wireId) {
+        const id = wireElement.dataset.wireId
+        const point = pointFromEvent(event)
+        const hit = wireNetAt(project, point, 12)
+        const connectivity = analyzeConnectivity(project)
+        const node = hit ? connectivity.wireNets.get(hit.wireId) : undefined
+        setSelection({ kind: 'wire', id })
+        setSelectedPartIds([])
+        setContextMenu({ kind: 'wire', id, x, y, point: hit ? { x: hit.point.x, y: hit.point.y } : point, ...(node ? { node } : {}) })
+      } else setContextMenu(null)
+    }} onWheel={(event) => {
       event.preventDefault()
       const rect = event.currentTarget.getBoundingClientRect(), view = event.currentTarget.viewBox.baseVal
       const scale = Math.min(rect.width / view.width, rect.height / view.height)
@@ -1252,6 +1293,21 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
     </svg>
+    {contextMenu && <div className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : 'Wire options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      {contextPart ? <>
+        <div className="context-menu-heading">{contextPart.ref} · {kindNames[contextPart.kind]}</div>
+        {contextPinNames.length === 2 && <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 0, 1); setContextMenu(null) }}>Plot voltage across {contextPinNames[0]} → {contextPinNames[1]}</button>}
+        {contextPinNames.length > 2 && <div className="context-pin-picker"><strong>Voltage between pins</strong><label>Positive<select aria-label="Positive voltage pin" value={contextPinPair.positive} onChange={(event) => setContextPinPair((pair) => ({ ...pair, positive: Number(event.target.value) }))}>{contextPinNames.map((name, index) => <option key={`${name}-${index}`} value={index}>{index + 1} · {name}</option>)}</select></label><label>Negative<select aria-label="Negative voltage pin" value={contextPinPair.negative} onChange={(event) => setContextPinPair((pair) => ({ ...pair, negative: Number(event.target.value) }))}>{contextPinNames.map((name, index) => <option key={`${name}-${index}`} value={index}>{index + 1} · {name}</option>)}</select></label><button role="menuitem" disabled={contextPinPair.positive === contextPinPair.negative} onClick={() => { onProbeVoltage(contextPart.id, contextPinPair.positive, contextPinPair.negative); setContextMenu(null) }}>Plot pin-to-pin voltage</button></div>}
+        {contextPart.kind !== 'ground' && <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id }); setContextMenu(null) }}>Plot current through component</button>}
+        {contextPart.kind === 'switch' && <button role="menuitem" onClick={() => { togglePart(contextPart.id); setContextMenu(null) }}>Switch {contextPart.value.toLowerCase() === 'on' ? 'off' : 'on'}</button>}
+        <button role="menuitem" onClick={() => setContextMenu(null)}>Edit properties</button>
+      </> : contextMenu.kind === 'wire' ? <>
+        <div className="context-menu-heading">{contextMenu.node ? 'Net ' + contextMenu.node : 'Wire'}</div>
+        <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node }); setContextMenu(null) }}>Plot voltage to ground</button>
+        <button role="menuitem" onClick={() => { const existing = project.netLabels.find((label) => Math.hypot(label.x - contextMenu.point.x, label.y - contextMenu.point.y) < 1); setLabelDraft({ ...contextMenu.point, id: existing?.id, name: existing?.name ?? contextMenu.node ?? 'net' }); setContextMenu(null) }}>{project.netLabels.some((label) => Math.hypot(label.x - contextMenu.point.x, label.y - contextMenu.point.y) < 1) ? 'Edit net label' : 'Add net label'}</button>
+        <button role="menuitem" onClick={() => setContextMenu(null)}>Select wire</button>
+      </> : null}
+    </div>}
     {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}
       <div className="canvas-footer"><span><Grid2X2 size={13}/> Snap to grid</span>{transientAxis?.length ? <label className="simulation-scrubber"><span>Simulation time</span><input aria-label="Simulation time" type="range" min="0" max={transientAxis.length - 1} step="1" value={activeSample} onChange={(event) => { const index = Number(event.target.value); setScrubIndex(index); onSampleChange(index) }}/><output>{transientAxis[activeSample].toPrecision(4)} s</output></label> : <span>Scroll to zoom · Space/middle-drag to pan</span>}<span>{project.parts.length} components</span></div>
   </div>
@@ -2246,15 +2302,56 @@ export default function App() {
     if (!rawName) { setNotice('This sheet is not open through a block instance. Open it from the parent block to cross-probe its internal nodes.'); return }
     const traceId = rawName.toLowerCase()
     if (!simulationResult) { setNotice('Run the circuit first, then add voltage and current probes.'); return }
-    const trace = simulationResult.traces.find((item) => item.id === traceId || item.baseId === traceId)
+    let availableTraces = simulationResult.traces
+    if (traceId === 'v(0)' && !availableTraces.some((item) => item.id === traceId || item.baseId === traceId)) {
+      const references = availableTraces.filter((trace, index) => !availableTraces.slice(0, index).some((previous) => previous.sweep?.index === trace.sweep?.index))
+      const groundTraces = references.map(groundVoltageTrace)
+      availableTraces = [...availableTraces, ...groundTraces]
+      setSimulationResult({ ...simulationResult, traces: availableTraces })
+    }
+    const trace = availableTraces.find((item) => item.id === traceId || item.baseId === traceId)
     if (!trace) { setNotice(`No ${target.kind === 'node' ? 'voltage' : 'current'} vector is available for ${target.kind === 'node' ? target.name : projectRef.current.parts.find((item) => item.id === target.id)?.ref ?? 'that component'}. Run again to refresh results.`); return }
-    const relatedIds = simulationResult.traces.filter((item) => item.id === traceId || item.baseId === traceId).map((item) => item.id)
+    const relatedIds = availableTraces.filter((item) => item.id === traceId || item.baseId === traceId).map((item) => item.id)
+    if (traceId === 'v(0)') relatedIds.push(...availableTraces.filter((item) => item.baseId === traceId).map((item) => item.id))
     const nextSelection = [...new Set([...selectedTraceIds, ...relatedIds])]
     setSelectedTraceIds(nextSelection)
     savePlotSettings((settings) => ({ ...settings, selectedTraceIds: nextSelection }))
     setAnalysisTab('waveforms')
     if (hierarchyWalkthroughStep === 3 && target.kind === 'part' && target.id === 'core-r1') setHierarchyWalkthroughStep(4)
     setNotice(target.kind === 'part' ? `Added ${trace.label} to the waveform plot. ${['npn', 'pnp'].includes(projectRef.current.parts.find((item) => item.id === target.id)?.kind ?? '') ? 'Positive collector current enters the collector terminal.' : 'Positive current flows from pin 1 to pin 2.'}` : `Added ${trace.label} to the waveform plot.`)
+  }
+  const addComponentVoltageProbe = (partId: string, positivePin = 0, negativePin = 1) => {
+    const currentProject = projectRef.current
+    const part = currentProject.parts.find((item) => item.id === partId)
+    if (!part || !simulationResult) { setNotice('Run the circuit first, then choose a component voltage probe.'); return }
+    const connectivity = analyzeConnectivity(currentProject)
+    const positiveNet = pinNet(connectivity, part, positivePin)
+    const negativeNet = pinNet(connectivity, part, negativePin)
+    if (positiveNet === 'unconnected' || negativeNet === 'unconnected') { setNotice(`${part.ref} needs both selected pins connected before its voltage can be plotted.`); return }
+    const scopeSheetId = typeof simulationResult.metadata.settings.scopeSheetId === 'string' ? simulationResult.metadata.settings.scopeSheetId : currentProject.rootSheetId
+    const scopePath = (() => { try { const value = JSON.parse(String(simulationResult.metadata.settings.scopeInstancePath ?? '[]')); return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value as string[] : [] } catch { return [] } })()
+    const activePath = sheetInstancePath.slice(0, scopePath.length).every((id, index) => id === scopePath[index])
+      ? sheetInstancePath.slice(scopePath.length)
+      : findSheetInstancePath(currentProject.activeSheetId, scopeSheetId) ?? []
+    const vectorFor = (net: string) => net === '0' ? 'v(0)' : hierarchyNodeVector(currentProject, currentProject.activeSheetId, activePath, net, scopeSheetId)
+    const positiveVector = vectorFor(positiveNet)
+    const negativeVector = vectorFor(negativeNet)
+    if (!positiveVector || !negativeVector) { setNotice('This sheet is not open through a block instance. Open it from the parent block to add a component voltage trace.'); return }
+    const byId = new Map(currentProject.sheets.flatMap((sheet) => sheet.parts.map((item) => [item.id, item] as const)))
+    const ref = [...activePath.map((id) => byId.get(id)?.ref).filter((value): value is string => Boolean(value)), part.ref].join('.')
+    const vectorRef = positivePin === 0 && negativePin === 1 ? ref : `${ref}.p${positivePin + 1}-${negativePin + 1}`
+    const derived = deriveComponentVoltageTraces(simulationResult.traces, positiveVector, negativeVector, ref, vectorRef)
+    if (!derived.length) { setNotice(`Could not find both solved pin voltages for ${ref}. Run the simulation again and try the probe.`); return }
+    const existingIds = new Set(simulationResult.traces.map((trace) => trace.id))
+    const additions = derived.filter((trace) => !existingIds.has(trace.id))
+    if (additions.length) setSimulationResult({ ...simulationResult, traces: [...simulationResult.traces, ...additions] })
+    const ids = derived.map((trace) => trace.id)
+    const nextSelection = [...new Set([...selectedTraceIds, ...ids])]
+    setSelectedTraceIds(nextSelection)
+    savePlotSettings((settings) => ({ ...settings, selectedTraceIds: nextSelection }))
+    setAnalysisTab('waveforms')
+    const pinName = (index: number) => part.modelPins?.[index] ?? componentDefinitionFor(part.kind).pins[index]?.name ?? `pin ${index + 1}`
+    setNotice(`Added V(${ref}) across pin ${positivePin + 1} (${pinName(positivePin)}) and pin ${negativePin + 1} (${pinName(negativePin)}).`)
   }
   const exportWaveformCsv = () => {
     if (!simulationResult) return
@@ -2662,7 +2759,7 @@ export default function App() {
       <main className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button ref={sheetSettingsTriggerRef} className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => setSheetSettingsOpen(true)}><SlidersHorizontal size={15}/></button></div>
         {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p></div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
-        <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
+        <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div>{simulationResult && <details className="run-details"><summary>Run details</summary><div className="run-details-popover"><h3>Reproducible run record</h3><button className="run-report-download" onClick={downloadRunReport}><Download size={12}/> Download report · JSON</button><p className="run-report-note">The JSON report includes inputs and provenance, not waveform samples. Use Export CSV for the solved vectors.</p><dl><div><dt>Engine</dt><dd>{simulationResult.metadata.engine} {simulationResult.metadata.engineVersion}</dd></div><div><dt>Run ID</dt><dd><code>{simulationResult.metadata.runId}</code></dd></div><div><dt>Started</dt><dd>{simulationResult.metadata.startedAt}</dd></div><div><dt>Completed</dt><dd>{simulationResult.metadata.completedAt}</dd></div><div><dt>Netlist / sweep SHA-256</dt><dd><code>{simulationResult.metadata.netlistHash}</code></dd></div></dl><h4>Simulation settings</h4><pre>{JSON.stringify(simulationResult.metadata.settings, null, 2)}</pre><h4>Project model libraries</h4><p>Hashes identify stored source files; some may not be referenced by this run.</p>{simulationResult.metadata.modelAssets?.length ? <ul>{simulationResult.metadata.modelAssets.map((asset) => <li key={asset.id}><strong>{asset.filename}</strong><code>{asset.sha256}</code></li>)}</ul> : <p>No imported model files were recorded for this run.</p>}</div></details>}<div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <><button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button><button className="subtle-icon" title="Tile open plot windows" aria-label="Tile open plot windows" onClick={tilePlotWindows} disabled={(waveformDetached ? 1 : 0) + additionalPlotPanels.length < 2}><Grid2X2 size={15}/></button><button className="subtle-icon" title="Add independent plot panel" aria-label="Add independent plot panel" onClick={addPlotPanel} disabled={!simulationResult || additionalPlotPanels.length >= 8}><Plus size={15}/></button></>}</div></div>
           <div className="analysis-content">

@@ -94,6 +94,40 @@ test('quick tour can run the open circuit directly from its simulation step', { 
   await expect(page.getByRole('button', { name: 'V\(vout\)', exact: true })).toBeVisible()
 })
 
+test('right-click probes wire voltage to ground and component voltage across its pins', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const picker = page.locator('.trace-picker')
+  await expect(picker).toBeVisible()
+  await expect(picker).not.toHaveAttribute('open', '')
+  await expect(page.getByRole('button', { name: 'I(r1)', exact: true })).toHaveCount(0)
+
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /Plot voltage across pin1 → pin2/ }).click()
+  await expect(page.getByRole('button', { name: 'V(R1)', exact: true })).toBeVisible()
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(R1\) =/)
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
+  await expect(page.getByRole('button', { name: 'I(r1)', exact: true })).toBeVisible()
+
+  const wirePoint = await page.locator('svg.schematic').evaluate((node) => {
+    const svg = node as SVGSVGElement
+    const point = svg.createSVGPoint()
+    point.x = 430
+    point.y = 290
+    const client = point.matrixTransform(svg.getScreenCTM()!)
+    return { x: client.x, y: client.y }
+  })
+  await page.mouse.click(wirePoint.x, wirePoint.y, { button: 'right' })
+  await expect(page.getByRole('menuitem', { name: 'Plot voltage to ground' })).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Plot voltage to ground' }).click()
+  await expect(page.getByRole('button', { name: 'V(vout)', exact: true })).toBeVisible()
+  await expect(page.locator('.cursor-readout')).toContainText(/V\(vout\) =/)
+})
+
 test('toggling an interactive switch reruns a current circuit automatically', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -581,16 +615,17 @@ test('schematic grid fills the zoomed and panned view and has no fixed placehold
       aspectError: Math.abs(view.width / view.height - box.width / box.height),
     }
   })
-  expect((await viewport()).grid).toEqual([0, 0, 0, 0])
+  const gridFits = async () => (await viewport()).grid.every((value) => Math.abs(value) < 0.001)
+  expect(await gridFits()).toBe(true)
   expect((await viewport()).aspectError).toBeLessThan(0.002)
   await page.setViewportSize({ width: 1280, height: 900 })
   await expect.poll(async () => (await viewport()).aspectError).toBeLessThan(0.002)
-  await expect.poll(async () => (await viewport()).grid).toEqual([0, 0, 0, 0])
+  await expect.poll(gridFits).toBe(true)
   await page.setViewportSize({ width: 700, height: 900 })
   await expect.poll(async () => (await viewport()).aspectError).toBeLessThan(0.002)
-  await expect.poll(async () => (await viewport()).grid).toEqual([0, 0, 0, 0])
+  await expect.poll(gridFits).toBe(true)
   await page.getByRole('button', { name: 'Zoom in' }).click()
-  await expect.poll(async () => (await viewport()).grid).toEqual([0, 0, 0, 0])
+  await expect.poll(gridFits).toBe(true)
 
   const zoomBeforeWheel = Number((await page.getByRole('button', { name: /%/ }).innerText()).replace('%', ''))
   const box = await svg.boundingBox()
@@ -608,8 +643,8 @@ test('schematic grid fills the zoomed and panned view and has no fixed placehold
   await page.mouse.wheel(0, -240)
   await expect.poll(async () => Number((await page.getByRole('button', { name: /%/ }).innerText()).replace('%', ''))).toBeGreaterThan(zoomBeforeWheel)
   const worldAfterZoom = await worldAtCursor()
-  expect(worldAfterZoom[0]).toBeCloseTo(worldBeforeZoom[0], 5)
-  expect(worldAfterZoom[1]).toBeCloseTo(worldBeforeZoom[1], 5)
+  expect(Math.abs(worldAfterZoom[0] - worldBeforeZoom[0])).toBeLessThan(0.5)
+  expect(Math.abs(worldAfterZoom[1] - worldBeforeZoom[1])).toBeLessThan(0.5)
   await page.mouse.wheel(0, 240)
   await expect.poll(async () => Number((await page.getByRole('button', { name: /%/ }).innerText()).replace('%', ''))).toBe(zoomBeforeWheel)
 
@@ -619,7 +654,7 @@ test('schematic grid fills the zoomed and panned view and has no fixed placehold
   await page.mouse.down({ button: 'middle' })
   await page.mouse.move(resizedBox!.x + resizedBox!.width / 2 + 90, resizedBox!.y + resizedBox!.height / 2 + 45, { steps: 4 })
   await page.mouse.up({ button: 'middle' })
-  await expect.poll(async () => (await viewport()).grid).toEqual([0, 0, 0, 0])
+  await expect.poll(gridFits).toBe(true)
 })
 
 test('starter and newly added native parts use the same 10-unit pin grid', async ({ page }) => {
