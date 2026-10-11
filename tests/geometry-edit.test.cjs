@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
+const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { componentPins, EDITOR_GRID_SIZE, snapToEditorGrid, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
@@ -95,6 +95,26 @@ test('flip state validates while older project records remain valid', () => {
   invalid.parts[1].flipX = 'yes'
   assert.throws(() => validateProject(invalid), /malformed component/)
   assert.equal(validateProject(project).parts[1].flipX, undefined)
+})
+
+test('reorientation detects topology changes while allowing isolated parts to rotate and flip', () => {
+  const project = createStarterProject()
+  const rotated = structuredClone(project)
+  rotated.parts.find((part) => part.id === 'p-r1').rotation = 90
+  assert.equal(hasSameElectricalConnectivity(project, rotated), false, 'rotating a wired resistor moves its pins off the stationary wires')
+
+  const flipped = structuredClone(project)
+  flipped.parts.find((part) => part.id === 'p-r1').flipX = true
+  assert.equal(hasSameElectricalConnectivity(project, flipped), false, 'flipping a wired resistor swaps its pin-to-net assignments')
+
+  const isolated = structuredClone(project)
+  isolated.parts = [{ id: 'free-part', kind: 'resistor', ref: 'R1', value: '1k', x: 300, y: 300, rotation: 0 }]
+  isolated.wires = []
+  isolated.netLabels = []
+  const reoriented = structuredClone(isolated)
+  reoriented.parts[0].rotation = 90
+  reoriented.parts[0].flipX = true
+  assert.equal(hasSameElectricalConnectivity(isolated, reoriented), true, 'an isolated part can change orientation without changing any conductor membership')
 })
 
 test('imported symbol pin offsets drive electrical pin locations for built-in part kinds', () => {

@@ -7,7 +7,7 @@ import {
   Save, Scan, Search, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
-import { analyzeConnectivity, pinNet } from '../domain/connectivity'
+import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
 import { createPartClipboard, type PartClipboard } from '../domain/partClipboard'
 import { fitEditorView } from '../domain/editorView'
 import { checkCircuit } from '../domain/electricalCheck'
@@ -2300,6 +2300,13 @@ export default function App() {
   }
   const updateSelected = (patch: Partial<Part>) => {
     if (!selected) return
+    if (patch.rotation !== undefined || patch.flipX !== undefined) {
+      const proposed = { ...project, parts: project.parts.map((part) => part.id === selected.id ? { ...part, ...patch } : part) }
+      if (!hasSameElectricalConnectivity(project, proposed)) {
+        setNotice(`${selected.ref} cannot be reoriented while its pins are connected. Move the affected wires or labels first.`)
+        return
+      }
+    }
     setProject((current) => {
       const before = current.parts.find((part) => part.id === selected.id)
       if (!before) return current

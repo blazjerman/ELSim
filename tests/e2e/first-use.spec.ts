@@ -1107,9 +1107,21 @@ test('component hotkeys choose parts and newly placed parts stay unselected', as
 
 test('r rotates a selected part and component shortcuts do not replace an active selection', async ({ page }) => {
   await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = [project.parts.find((part: { id: string }) => part.id === 'p-r1')]
+    project.wires = []
+    project.junctions = []
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
   const initialRotation = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1').rotation)
   await page.keyboard.press('r')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1').rotation)).toBe((initialRotation + 90) % 360)
+  await page.keyboard.press('y')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1').flipX)).toBe(true)
   for (const shortcut of ['N', 'c', 'p', 'v']) {
     await page.keyboard.press(shortcut)
     await expect(page.locator('.component-card[aria-pressed="true"]')).toHaveCount(0)
@@ -1117,6 +1129,75 @@ test('r rotates a selected part and component shortcuts do not replace an active
   await page.keyboard.press('Escape')
   await page.keyboard.press('N')
   await expect(page.locator('.component-card').filter({ hasText: 'N-channel MOSFET' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('reorientation preserves connected pins and wire topology survives a project archive round trip', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.push({ id: 'free-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 700, y: 560, rotation: 0 })
+    project.sheets[0].parts = project.parts
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await resistor.click()
+  await page.keyboard.press('r')
+  await expect(resistor).toHaveAttribute('transform', /rotate\(0\)/)
+  await expect(page.locator('.toast')).toContainText('R1 cannot be reoriented while its pins are connected')
+  await page.getByRole('button', { name: 'Flip selected horizontally (Y)' }).click()
+  await expect(resistor).toHaveAttribute('transform', /rotate\(0\)/)
+  await expect(page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-r1').flipX)).resolves.toBeUndefined()
+
+  const freePart = page.locator('.circuit-part[data-part-id="free-r2"]')
+  await freePart.click()
+  await page.keyboard.press('r')
+  await page.keyboard.press('y')
+  await expect.poll(() => page.evaluate(() => {
+    const part = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((item: { id: string }) => item.id === 'free-r2')
+    return [part.rotation, part.flipX]
+  })).toEqual([90, true])
+
+  const svg = page.locator('svg.schematic')
+  const matrix = await svg.evaluate((element) => {
+    const { a, b, c, d, e, f } = (element as SVGSVGElement).getScreenCTM()!
+    return { a, b, c, d, e, f }
+  })
+  const toScreen = (x: number, y: number) => ({ x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f })
+  await page.mouse.move(toScreen(180, 440).x, toScreen(180, 440).y)
+  const handles = page.locator('.wire-endpoint-handles circle')
+  await expect(handles).toHaveCount(2)
+  const start = toScreen(180, 470), end = toScreen(200, 470)
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.find((wire: { id: string }) => wire.id === 'w-3-seg-2').points)).toEqual([[200, 470], [180, 410]])
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/\.elsim$/)
+  const archivePath = await download.path()
+  expect(archivePath).not.toBeNull()
+  const archive = readFileSync(archivePath!)
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.name = 'Temporary project before archive reopen'
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.locator('input[accept^=".elsim,.json"]').setInputFiles({ name: 'topology-round-trip.elsim', mimeType: 'application/vnd.elsim.project+zip', buffer: archive })
+  await expect(page.getByRole('button', { name: 'RC step response' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const part = project.parts.find((item: { id: string }) => item.id === 'free-r2')
+    const wire = project.wires.find((item: { id: string }) => item.id === 'w-3-seg-2')
+    return { rotation: part.rotation, flipX: part.flipX, points: wire.points }
+  })).toEqual({ rotation: 90, flipX: true, points: [[200, 470], [180, 410]] })
 })
 
 test('wire tool stays armed while component placement ends after one drop', async ({ page }) => {
