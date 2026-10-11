@@ -62,6 +62,10 @@ export function hierarchyComponentCurrentVector(project: Project, sheetId: strin
     const device = [...refs, `${part.ref.toLowerCase()}_p`].join('.')
     return `i(l.${device})`
   }
+  if (part.kind === 'potentiometer') {
+    const device = [...refs, `${part.ref.toLowerCase()}_a`].join('.')
+    return `i(@r.${device}[i])`
+  }
   const currentName = part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
   if (!refs.length) return `i(@${part.ref.toLowerCase()}[${currentName}])`
   const deviceType = part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmos' || part.kind === 'pmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : 'g'

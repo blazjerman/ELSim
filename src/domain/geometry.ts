@@ -49,6 +49,7 @@ export function componentPins(part: Part): PinLocation[] {
   else if (part.kind === 'source') local = [[0, -50], [0, 50]]
   else if (part.kind === 'currentSource') local = [[-50, 0], [50, 0]]
   else if (part.kind === 'transformer') local = [[-50, -30], [-50, 30], [50, -30], [50, 30]]
+  else if (part.kind === 'potentiometer') local = [[0, -50], [50, 0], [0, 50]]
   else if (part.kind === 'capacitor') local = [[-50, 0], [50, 0]]
   else local = [[-50, 0], [50, 0]]
   const angle = part.rotation * Math.PI / 180

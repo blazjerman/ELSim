@@ -149,6 +149,7 @@
             "source",
             "currentSource",
             "resistor",
+            "potentiometer",
             "lamp",
             "capacitor",
             "ground",
@@ -540,6 +541,12 @@
           "maxLength": 64,
           "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
           "description": "Magnetic coupling coefficient greater than zero and at most one for the built-in coupled-inductor transformer."
+        },
+        "wiperPosition": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "Potentiometer wiper fraction from upper terminal to lower terminal, from 0.001 to 0.999."
         },
         "symbolAssetId": {
           "type": "string",

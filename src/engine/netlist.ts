@@ -265,7 +265,7 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
 }
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
@@ -346,11 +346,14 @@ function hierarchicalSaveVectors(project: Project): string[] {
     }
     if (path.length) for (const part of sheet.parts) {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmos' || part.kind === 'pmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
+      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmos' || part.kind === 'pmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : part.kind === 'switch' ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
       if (part.kind === 'transformer') {
         saves.add(`.save i(l.${device}_p)`)
         saves.add(`.save i(l.${device}_s)`)
+      } else if (part.kind === 'potentiometer') {
+        saves.add(`.save @r.${[...path, `${part.ref.toLowerCase()}_a`].join('.')}[i]`)
+        saves.add(`.save @r.${[...path, `${part.ref.toLowerCase()}_b`].join('.')}[i]`)
       } else if (part.kind === 'source') saves.add(`.save i(${type}.${device})`)
       else {
         const current = part.kind === 'currentSource' ? 'current' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
@@ -620,6 +623,23 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       append(`${secondary} ${secondaryPositive} ${secondaryNegative} ${secondaryInductance}`, part.id, 'component')
       append(`K${part.ref} ${primary} ${secondary} ${coupling}`, part.id, 'component')
     }
+    else if (part.kind === 'potentiometer') {
+      const wiper = pinNet(connectivity, part, 1)
+      const lower = pinNet(connectivity, part, 2)
+      const totalResistance = componentMagnitude(spiceSheetParameterDefault(part.value, sheetParameters) ?? part.value, 'potentiometer')
+      const position = Number(part.wiperPosition ?? '0.5')
+      const upperResistance = (totalResistance ?? 0) * position
+      const lowerResistance = (totalResistance ?? 0) * (1 - position)
+      const internalNameConflict = project.parts.some((other) => other.id !== part.id && [`R${part.ref}_A`, `R${part.ref}_B`].some((name) => name.toLowerCase() === other.ref.toLowerCase()))
+      if (internalNameConflict || totalResistance === null || totalResistance <= 0 || !Number.isFinite(position) || position < 0.001 || position > 0.999 || !Number.isFinite(upperResistance) || !Number.isFinite(lowerResistance) || upperResistance <= 0 || lowerResistance <= 0) {
+        const message = internalNameConflict ? `${part.ref} internal resistor names conflict with another component reference.` : `${part.ref} needs a positive finite total resistance and a wiper position from 0.001 to 0.999.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}`, part.id, 'component')
+      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}`, part.id, 'component')
+    }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const elementCondition = part.kind === 'inductor' || part.kind === 'capacitor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined
       const initialCurrent = elementCondition && 'current' in elementCondition ? spiceScalar(elementCondition.current.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/a$/i, ''), '') : null
@@ -866,7 +886,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 }
 
 export function referencePrefixForKind(kind: Part['kind']): string {
-  return ({ source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[kind]
+  return ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[kind]
 }
 
 export function nextRef(parts: Part[], kind: Part['kind']): string {

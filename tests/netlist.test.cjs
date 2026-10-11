@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createAcHighPassExampleProject, createAcLowPassExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createAcHighPassExampleProject, createAcLowPassExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -44,6 +44,26 @@ test('AC transformer example emits coupled windings with the selected turns rati
   assert.match(createNetlistArtifact(overflow).text, /ERROR: T1 needs a positive finite primary inductance/i)
 })
 
+test('potentiometer wiper divides total resistance and validates its travel', () => {
+  const project = createPotentiometerExampleProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^RPOT1_A VIN VOUT 5000(?:\.0+)?$/m)
+  assert.match(artifact.text, /^RPOT1_B VOUT 0 5000(?:\.0+)?$/m)
+  const moved = structuredClone(project)
+  moved.parts.find((part) => part.kind === 'potentiometer').wiperPosition = '0.25'
+  const movedNetlist = createNetlistArtifact(moved)
+  assert.match(movedNetlist.text, /^RPOT1_A VIN VOUT 2500(?:\.0+)?$/m)
+  assert.match(movedNetlist.text, /^RPOT1_B VOUT 0 7500(?:\.0+)?$/m)
+  const invalid = structuredClone(project)
+  invalid.parts.find((part) => part.kind === 'potentiometer').wiperPosition = '1'
+  assert.throws(() => validateProject(invalid), /wiper position/i)
+  const colliding = structuredClone(project)
+  colliding.parts.push({ id: 'collision-r1', kind: 'resistor', ref: 'RPOT1_A', value: '1 kΩ', x: 800, y: 500, rotation: 0 })
+  assert.throws(() => validateProject(colliding), /internal resistor names/i)
+  assert.match(createNetlistArtifact(colliding).text, /ERROR: POT1 internal resistor names conflict/i)
+})
+
 test('polarized capacitor metadata changes its symbol but not its simulated netlist', () => {
   const project = createStarterProject()
   const original = createNetlistArtifact(project)
@@ -54,6 +74,22 @@ test('polarized capacitor metadata changes its symbol but not its simulated netl
   const malformed = structuredClone(validated)
   malformed.parts.find((part) => part.kind === 'resistor').polarized = true
   assert.throws(() => validateProject(malformed), /invalid capacitor polarity metadata/i)
+})
+
+test('potentiometer wiper divides total resistance and validates its travel', () => {
+  const project = createPotentiometerExampleProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^RPOT1_A VIN VOUT 5000(?:\.0+)?$/m)
+  assert.match(artifact.text, /^RPOT1_B VOUT 0 5000(?:\.0+)?$/m)
+  const moved = structuredClone(project)
+  moved.parts.find((part) => part.kind === 'potentiometer').wiperPosition = '0.25'
+  const movedNetlist = createNetlistArtifact(moved)
+  assert.match(movedNetlist.text, /^RPOT1_A VIN VOUT 2500(?:\.0+)?$/m)
+  assert.match(movedNetlist.text, /^RPOT1_B VOUT 0 7500(?:\.0+)?$/m)
+  const invalid = structuredClone(project)
+  invalid.parts.find((part) => part.kind === 'potentiometer').wiperPosition = '1'
+  assert.throws(() => validateProject(invalid), /wiper position/i)
 })
 
 test('polarized capacitor metadata changes its symbol but not its simulated netlist', () => {

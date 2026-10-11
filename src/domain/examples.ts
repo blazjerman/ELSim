@@ -151,6 +151,34 @@ export function createVoltageDividerExampleProject(): Project {
   return project
 }
 
+/** A three-terminal adjustable divider whose wiper position sets the output voltage. */
+export function createPotentiometerExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'pot-v1', kind: 'source', ref: 'V1', value: '10 V', sourceMode: 'dc', x: 280, y: 360, rotation: 0 }
+  const potentiometer: Part = { id: 'pot-p1', kind: 'potentiometer', componentDefinitionId: 'elsim.potentiometer', ref: 'POT1', value: '10 kΩ', wiperPosition: '0.5', x: 560, y: 360, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Potentiometer voltage divider'
+  project.parts = [source, potentiometer]
+  project.wires = []
+  project.junctions = []
+  const wiperPin = componentPins(potentiometer)[1]
+  project.wires = [{ id: 'pot-wiper-output', points: [[wiperPin.x, wiperPin.y], [wiperPin.x + 50, wiperPin.y]] }]
+  project.netLabels = [
+    labelAt('pot-vin-source', 'VIN', source, 0), labelAt('pot-vin-upper', 'VIN', potentiometer, 0),
+    { id: 'pot-vout', name: 'VOUT', x: wiperPin.x + 50, y: wiperPin.y, visible: true },
+    labelAt('pot-ground-source', '0', source, 1), labelAt('pot-ground-lower', '0', potentiometer, 2),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VOUT)'], ranges: {} }
+  project.view = { zoom: 1, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A beginner Zener shunt regulator with a 12 V source and a 5.1 V model. */
 export function createZenerRegulatorExampleProject(): Project {
   const project = createStarterProject()
