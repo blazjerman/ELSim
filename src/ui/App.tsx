@@ -27,6 +27,7 @@ import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentDefaultValue, componentDefinitionFor, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { timeMagnitude } from '../domain/componentValue'
 import { measurementCrossingCountError, measurementThresholdError } from '../domain/measurementSettings'
+import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
 import { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
@@ -1812,7 +1813,10 @@ export default function App() {
   useEffect(() => {
     let mounted = true
     const engineModuleUrl = new URL(`${import.meta.env.BASE_URL}engine/ngspice.mjs`, window.location.origin)
-    fetch(engineModuleUrl, { method: 'HEAD' }).then((response) => { if (mounted) setEngineAssetAvailable(response.ok) }).catch(() => { if (mounted) setEngineAssetAvailable(false) })
+    const engineWasmUrl = new URL(`${import.meta.env.BASE_URL}engine/ngspice.wasm`, window.location.origin)
+    Promise.all([fetch(engineModuleUrl, { method: 'HEAD' }), fetch(engineWasmUrl, { method: 'HEAD' })])
+      .then(([moduleResponse, wasmResponse]) => { if (mounted) setEngineAssetAvailable(hasNgspiceRuntimeAssets(moduleResponse, wasmResponse)) })
+      .catch(() => { if (mounted) setEngineAssetAvailable(false) })
     return () => { mounted = false; activeWorkerRef.current?.terminate(); activeWorkerRef.current = null }
   }, [])
   const setProject = (fn: (current: Project) => Project) => setProjectState((current) => {
