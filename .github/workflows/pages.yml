@@ -66,6 +66,11 @@ jobs:
           git -C "$RUNNER_TEMP/ngspice" checkout --detach "$commit"
           echo "NGSPICE_SOURCE=$RUNNER_TEMP/ngspice" >> "$GITHUB_ENV"
 
+      - name: Build ngspice WebAssembly and its redistribution materials
+        env:
+          JOBS: 2
+        run: ./tools/build-ngspice-wasm.sh
+
       - name: Build the app and browser simulation engine
         env:
           VITE_BASE_PATH: /ELSim/
