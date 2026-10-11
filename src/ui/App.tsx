@@ -345,26 +345,19 @@ function usePartUiState(id: string): number {
   return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
-const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, voltage, current, animationScale, animationSpeed, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; voltage?: number; current?: number; animationScale: number; animationSpeed: number; symbol?: ImportedSymbol; detailed?: boolean }) {
+const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, voltage, current, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; voltage?: number; current?: number; symbol?: ImportedSymbol; detailed?: boolean }) {
   const uiState = usePartUiState(part.id)
   const selected = (uiState & 1) !== 0
   const focusable = (uiState & 2) !== 0
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
-  const currentGlow = Math.min(1, Math.sqrt(Math.abs(current ?? 0) / 0.005) * 0.8 * animationScale)
+  const currentGlow = Math.min(1, Math.sqrt(Math.abs(current ?? 0) / 0.005) * 0.8)
   const lampGlow = Math.min(0.9, Math.max(0, Math.abs((voltage ?? 0) * (current ?? 0)) / (part.animationNominalPower ?? 10)))
   const inductorEnergy = part.kind === 'inductor' && current !== undefined
     ? 0.5 * (componentMagnitude(part.value, 'inductor') ?? Number.NaN) * current * current
     : undefined
-  const componentFlowPath = part.kind === 'ground' || part.kind === 'subcircuit' ? undefined
-    : part.kind === 'source' ? 'M0 -18V18'
-      : part.kind === 'npn' || part.kind === 'pnp' ? 'M32 -36V36'
-        : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'njfet' || part.kind === 'pjfet' ? 'M0 -36V36'
-          : 'M-38 0H38'
   const currentDescription = part.kind === 'npn' || part.kind === 'pnp' ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the collector terminal`
     : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'njfet' || part.kind === 'pjfet' ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the drain terminal`
       : `flowing ${current !== undefined && current < 0 ? 'from pin 2 toward pin 1' : 'from pin 1 toward pin 2'}`
-  const componentFlowOpacity = current === undefined ? 0 : Math.min(1, Math.sqrt(Math.abs(current) / 0.005) * 0.8 * animationScale)
-  const componentFlowDuration = current === undefined ? 1 : Math.max(0.18, Math.min(2.5, 1.2 / (Math.log10(1 + Math.abs(current) * 1000) + 0.5) / animationSpeed))
   const channelCurrentGlow = currentGlow
   const channelCurrentForward = (current ?? 0) >= 0
   const customOffsets = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout) : []
@@ -409,20 +402,17 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     {(part.kind === 'njfet' || part.kind === 'pjfet') && <><line x1="0" y1="-50" x2="0" y2="-22" {...common}/><line x1="0" y1="-22" x2="0" y2="22" {...common}/><line x1="0" y1="22" x2="0" y2="50" {...common}/><line x1="-50" y1="0" x2="-14" y2="0" {...common}/><path d={part.kind === 'njfet' ? 'M-18 -5L-10 0L-18 5' : 'M-10 -5L-18 0L-10 5'} {...common}/><path className="transistor-current-indicator" d={channelCurrentForward ? 'M15 -37V-25M15 -25L12 -30M15 -25L18 -30' : 'M15 -25V-37M15 -37L12 -32M15 -37L18 -32'} fill="none" stroke="#79d9a4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={channelCurrentGlow} aria-hidden="true"/></>}
     {symbol ? <g className="imported-symbol-art" aria-label={`${symbol.name} imported symbol`}>{symbol.primitives.map((primitive, index) => primitive.kind === 'line' ? <line key={index} x1={primitive.x1} y1={primitive.y1} x2={primitive.x2} y2={primitive.y2} {...common}/> : primitive.kind === 'polyline' ? <polyline key={index} points={primitive.points.map(([x, y]) => `${x},${y}`).join(' ')} {...common}/> : primitive.kind === 'text' ? <text key={index} x={primitive.x} y={primitive.y} textAnchor={primitive.alignment === 'Left' ? 'start' : primitive.alignment === 'Right' ? 'end' : 'middle'} fontSize={primitive.size * 4} fill={common.stroke} stroke="none">{primitive.text}</text> : primitive.kind === 'rectangle' ? <rect key={index} x={Math.min(primitive.x1, primitive.x2)} y={Math.min(primitive.y1, primitive.y2)} width={Math.abs(primitive.x2 - primitive.x1)} height={Math.abs(primitive.y2 - primitive.y1)} {...common}/> : primitive.kind === 'circle' ? <ellipse key={index} cx={(primitive.x1 + primitive.x2) / 2} cy={(primitive.y1 + primitive.y2) / 2} rx={Math.abs(primitive.x2 - primitive.x1) / 2} ry={Math.abs(primitive.y2 - primitive.y1) / 2} {...common}/> : <path key={index} d={symbolArcPath(primitive)} {...common}/>)}{symbol.pins.map((pin, index) => <g key={index}><circle cx={pin.x} cy={pin.y} r="3" fill="#86e3b7"/><text x={pin.x + (pin.orientation === 'R' ? -6 : 6)} y={pin.y - 6} textAnchor={pin.orientation === 'R' ? 'end' : 'start'} className="subcircuit-pin-label">{pin.name}</text></g>)}</g> : part.kind === 'subcircuit' && <><rect x={-customWidth / 2} y={-customHeight / 2} width={customWidth} height={customHeight} rx="4" {...common}/>{customOffsets.map(([x, y], index) => { const side = part.sheetPortLayout?.[index]?.side ?? (x < 0 ? 'left' : 'right'); const vertical = side === 'top' || side === 'bottom'; const direction = part.sheetPortLayout?.[index]?.direction ?? 'inout'; return <g key={index}><title>{`${part.modelPins?.[index]} · ${direction} · ${side}`}</title><line x1={vertical ? x : x < 0 ? x + 20 : x - 20} y1={vertical ? y < 0 ? y + 20 : y - 20 : y} x2={x} y2={y} {...common}/><text x={vertical ? x : x < 0 ? -customWidth / 2 + 8 : customWidth / 2 - 8} y={vertical ? y < 0 ? y + 14 : y - 8 : y + 4} textAnchor={vertical ? 'middle' : x < 0 ? 'start' : 'end'} className="subcircuit-pin-label">{part.modelPins?.[index]}</text></g> })}</>}
     {part.kind === 'ground' && <><line x1="0" y1="-20" x2="0" y2="0" {...common}/><line x1="-18" y1="0" x2="18" y2="0" {...common}/><line x1="-12" y1="7" x2="12" y2="7" {...common}/><line x1="-6" y1="14" x2="6" y2="14" {...common}/></>}
-    {componentFlowPath && current !== undefined && Math.abs(current) > 1e-12 && <path className={`component-current-flow${current < 0 ? ' reverse' : ''}`} d={componentFlowPath} fill="none" stroke="#f0c674" strokeWidth={2.5 * animationScale} strokeDasharray={`${3 * animationScale} ${7 * animationScale}`} strokeLinecap="round" strokeDashoffset="0" opacity={componentFlowOpacity} style={{ animationDuration: `${componentFlowDuration}s` }} aria-hidden="true"/>}
     </g>
     <text className="part-ref" x="0" y={part.kind === 'subcircuit' ? -customHeight / 2 - 9 : part.kind === 'ground' ? 34 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp','njfet','pjfet','nmos','pmos'].includes(part.kind) ? -68 : -29}>{part.kind === 'subcircuit' ? `${part.ref} · ${part.value || part.modelName}` : part.ref}</text>
     {part.value && part.kind !== 'subcircuit' && <text className="part-value" x="0" y={part.kind === 'ground' ? 48 : ['vcvs','vccs','cccs','ccvs','behavioral','npn','pnp','njfet','pjfet','nmos','pmos'].includes(part.kind) ? 76 : 43}>{part.kind === 'npn' || part.kind === 'pnp' ? `β ${part.value}` : part.kind === 'behavioral' ? `${part.behavioralOutput === 'current' ? 'I' : 'V'}=f(...)` : part.value}</text>}</> : null}
   </g>
 })
 
-const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, tool, animationRevision, animationScale, animationSpeed, componentSample, onSelect, onPointerDown, onNavigate, onProbe, onSwitchToggle, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
+const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, tool, animationRevision, componentSample, onSelect, onPointerDown, onNavigate, onProbe, onSwitchToggle, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
   parts: Part[]
   symbolsById: Map<string, ImportedSymbol>
   tool: ToolMode
   animationRevision: object
-  animationScale: number
-  animationSpeed: number
   componentSample: (part: Part) => { voltage?: number; current?: number }
   onSelect: (id: string, additive?: boolean) => void
   onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void
@@ -439,7 +429,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
     const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
     const margin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
     const detailed = part.x >= viewportLeft - margin && part.x <= viewportRight + margin && part.y >= viewportTop - margin && part.y <= viewportBottom + margin
-    return <CircuitPart key={part.id} part={part} symbol={symbol} detailed={detailed} onSelect={onSelect} onPointerDown={onPointerDown} onNavigate={onNavigate} tool={tool} onProbe={onProbe} onSwitchToggle={onSwitchToggle} animationScale={animationScale} animationSpeed={animationSpeed} {...componentSample(part)}/>
+    return <CircuitPart key={part.id} part={part} symbol={symbol} detailed={detailed} onSelect={onSelect} onPointerDown={onPointerDown} onNavigate={onNavigate} tool={tool} onProbe={onProbe} onSwitchToggle={onSwitchToggle} {...componentSample(part)}/>
   })}</>
 })
 
@@ -1301,7 +1291,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       <CanvasNetLabelLayer labels={project.netLabels} selectedId={selection?.kind === 'label' ? selection.id : undefined} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
-      <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} animationScale={animationScale} animationSpeed={animationSpeed} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
+      <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
     </svg>
     {contextMenu && <div className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : 'Wire options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
       {contextPart ? <>
