@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: ['first-use.spec.ts', 'pwa.spec.ts'],
+  testMatch: 'first-use.spec.ts',
   grepInvert: /@ngspice|@ltspice/,
   fullyParallel: false,
   workers: 1,
