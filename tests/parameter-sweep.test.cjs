@@ -35,6 +35,25 @@ test('single and nested parameter sweeps produce deterministic, bounded combinat
   assert.match(control, /alter R1 1\.00000000e\+3\nalter C1 1\.00000000e-5\nrun\nwrite \/result-0\.raw all/)
 })
 
+test('declared global parameters produce alterparam cases and a reset before each run', () => {
+  const project = createStarterProject()
+  project.sheets[0].parameters = [{ id: 'param-gain', name: 'GAIN', defaultValue: '1k' }]
+  project.parts.find((part) => part.ref === 'R1').value = '{GAIN}'
+  project.simulation.parameterSweeps = [{ component: '$param:GAIN', globalParameter: 'GAIN', start: '1k', stop: '3k', points: 3 }]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 3)
+  assert.deepEqual(runs.map((run) => Number(run.values[0].value)), [1000, 2000, 3000])
+  assert.equal(runs[0].values[0].globalParameter, 'GAIN')
+  assert.equal(runs[2].label, 'GAIN=3000')
+  const deck = createNetlistArtifact(validated).text
+  assert.match(deck, /^\.param GAIN=1k$/m)
+  const control = addResultControl(deck, runs)
+  assert.match(control, /alterparam GAIN=1\.00000000e\+3\nreset\nrun\nwrite \/result-0\.raw all/)
+  assert.match(control, /alterparam GAIN=3\.00000000e\+3\nreset\nrun\nwrite \/result-2\.raw all/)
+  assert.throws(() => validateProject({ ...validated, simulation: { ...validated.simulation, parameterSweeps: [{ ...validated.simulation.parameterSweeps[0], globalParameter: 'MISSING', component: '$param:MISSING' }] } }), /declared global project parameter/)
+})
+
 test('three distinct parameters produce bounded Cartesian combinations and protocol commands', () => {
   const project = createStarterProject()
   const source = project.parts.find((part) => part.kind === 'source')

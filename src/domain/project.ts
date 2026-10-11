@@ -62,7 +62,7 @@ export type PlotSettings = {
   panels?: PlotPanel[]
 }
 export type SourceSweepParameter = 'pulse.initial' | 'pulse.high' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pwl.scale' | `pwl.point.${number}` | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
-export type ParameterSweep = { component: string; parameter?: string; sourceParameter?: SourceSweepParameter; start: string; stop: string; points: number }
+export type ParameterSweep = { component: string; parameter?: string; sourceParameter?: SourceSweepParameter; globalParameter?: string; start: string; stop: string; points: number }
 export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'avg' | 'rms'; vector: string; from?: string; to?: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either' }
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
 export type AssetProvenance = { sourceUrl?: string; licenseReference?: string; rightsNotes?: string }
@@ -232,6 +232,8 @@ export function validateProject(input: unknown): Project {
   }
   const allowed = new Set<PartKind>(['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'subcircuit'])
   if (allowed.size !== Object.keys(componentDefinitionByKind).length || [...allowed].some((kind) => componentDefinitionByKind[kind]?.kind !== kind)) throw new Error('Built-in component definition registry does not match supported component kinds.')
+  const rootSheetRaw = Array.isArray(data.sheets) ? (data.sheets as { id?: unknown; parameters?: unknown }[]).find((sheet) => sheet?.id === data.rootSheetId) : undefined
+  const rootParameterNames = Array.isArray(rootSheetRaw?.parameters) ? (rootSheetRaw.parameters as { name?: unknown }[]).flatMap((parameter) => typeof parameter?.name === 'string' ? [parameter.name] : []) : []
   const activeSheetRaw = Array.isArray(data.sheets) ? (data.sheets as { id?: unknown; parameters?: unknown }[]).find((sheet) => sheet?.id === data.activeSheetId) : undefined
   const activeParameterNames = Array.isArray(activeSheetRaw?.parameters) ? (activeSheetRaw.parameters as { name?: unknown }[]).flatMap((parameter) => typeof parameter?.name === 'string' ? [parameter.name] : []) : []
   const refs = new Set<string>()
@@ -414,7 +416,10 @@ export function validateProject(input: unknown): Project {
     let combinations = 1
     for (const sweep of simulation.parameterSweeps) {
       if (!sweep || typeof sweep.component !== 'string' || !sweep.component.trim()) throw new Error('Parameter stepping settings are malformed.')
-      const component = data.parts.find((part) => (part as Part).ref.toLowerCase() === sweep.component.toLowerCase()) as Part | undefined
+      const globalParameterSweep = typeof sweep.globalParameter === 'string'
+      const parameterTarget = globalParameterSweep ? rootParameterNames.find((name) => name.toLowerCase() === sweep.globalParameter!.toLowerCase()) : undefined
+      const component = globalParameterSweep ? undefined : data.parts.find((part) => (part as Part).ref.toLowerCase() === sweep.component.toLowerCase()) as Part | undefined
+      if (globalParameterSweep && (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.globalParameter!) || !parameterTarget || sweep.component.toLowerCase() !== `$param:${parameterTarget}`.toLowerCase())) throw new Error('Parameter stepping target must name a declared global project parameter.')
       const modelSweep = typeof sweep.parameter === 'string'
       const sourceFieldSweep = sweep.sourceParameter !== undefined
       const sourceMode = component?.sourceMode ?? (component?.kind === 'source' ? 'pulse' : 'dc')
@@ -426,7 +431,7 @@ export function validateProject(input: unknown): Project {
       const selectedModel = component?.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === component.deviceModel!.toLowerCase()) : undefined
       const modelParameter = modelSweep && selectedModel?.parameters.find((parameter) => parameter.name.toLowerCase() === sweep.parameter!.toLowerCase())
       const waveformSweep = !modelSweep && (component?.kind === 'source' || component?.kind === 'currentSource') && ['pulse', 'pwl', 'sine', 'exp', 'sffm'].includes(component.sourceMode ?? '')
-      if (!component || (modelSweep && (sourceFieldSweep || !supportedDevice || !selectedModel || !modelParameter || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.parameter!))) || (sourceFieldSweep && (modelSweep || !validSourceTarget)) || (!modelSweep && !sourceFieldSweep && !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component.kind)) || (!modelSweep && !sourceFieldSweep && component.kind === 'source' && component.sourceMode !== 'dc' && !waveformSweep) || (!modelSweep && !sourceFieldSweep && component.kind === 'currentSource' && component.sourceMode !== 'dc' && component.sourceMode !== undefined && !waveformSweep) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose distinct scalar DC, PULSE/PWL, SINE, EXP, or SFFM sources, R/C/L parts, a valid source waveform field, or numeric parameters on selected imported device models, with 2–10 steps.')
+      if ((!globalParameterSweep && !component) || (globalParameterSweep && (modelSweep || sourceFieldSweep)) || (modelSweep && (sourceFieldSweep || !supportedDevice || !selectedModel || !modelParameter || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.parameter!))) || (sourceFieldSweep && (modelSweep || !validSourceTarget)) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component!.kind)) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && component!.kind === 'source' && component!.sourceMode !== 'dc' && !waveformSweep) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && component!.kind === 'currentSource' && component!.sourceMode !== 'dc' && component!.sourceMode !== undefined && !waveformSweep) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose a declared parameter, distinct scalar DC, PULSE/PWL, SINE, EXP, or SFFM sources, R/C/L parts, a valid source waveform field, or numeric parameters on selected imported device models, with 2–10 steps.')
       const parseComponentValue = (value: string): number | null => {
         const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/[ΩΩ]|ohms?|[vVaAfFhH]$/gi, '')
         const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
@@ -443,7 +448,7 @@ export function validateProject(input: unknown): Project {
       const frequencyField = sourceField === 'frequency' || sourceField === 'carrierFrequency' || sourceField === 'signalFrequency'
       const timeField = ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(sourceField ?? '')
       const positiveTimeField = ['period', 'riseTau', 'fallTau'].includes(sourceField ?? '')
-      if (start === null || stop === null || start === stop || (frequencyField && (start <= 0 || stop <= 0)) || (timeField && (start < 0 || stop < 0 || (positiveTimeField && (start <= 0 || stop <= 0)))) || (!sweep.parameter && !sourceFieldSweep && !['source', 'currentSource'].includes(component.kind) && (start <= 0 || stop <= 0))) throw new Error(`${component.ref} needs valid, different parameter start and stop values; passive values, source frequencies, and positive time constants must be positive.`)
+      if (start === null || stop === null || start === stop || (frequencyField && (start <= 0 || stop <= 0)) || (timeField && (start < 0 || stop < 0 || (positiveTimeField && (start <= 0 || stop <= 0)))) || (!globalParameterSweep && !sweep.parameter && !sourceFieldSweep && !['source', 'currentSource'].includes(component!.kind) && (start <= 0 || stop <= 0))) throw new Error(`${globalParameterSweep ? parameterTarget : component!.ref} needs valid, different parameter start and stop values; passive values, source frequencies, and positive time constants must be positive.`)
       sweepRefs.add(sweep.component.toLowerCase())
       combinations *= sweep.points
     }

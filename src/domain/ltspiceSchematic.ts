@@ -202,6 +202,42 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     project.simulation.dcSweep = { source, start, stop, step }
     return
   }
+  if (command === '.step') {
+    const match = directive.trim().match(/^\.step\s+param\s+([A-Za-z_][A-Za-z0-9_]*)\s+(?:(list)\s+)?(.+)$/i)
+    const parameterName = match?.[1]
+    const listMode = Boolean(match?.[2])
+    const values = match?.[3].trim().split(/[\s,]+/).filter(Boolean) ?? []
+    const sheet = project.sheets.find((candidate) => candidate.id === project.activeSheetId)
+    const declared = sheet?.parameters?.find((parameter) => parameter.name.toLowerCase() === parameterName?.toLowerCase())
+    const magnitudes = values.map(scalarMagnitude)
+    let start: string | undefined, stop: string | undefined, points = 0
+    if (listMode && values.length >= 2 && values.length <= 10 && magnitudes.every((value): value is number => value !== null)) {
+      const delta = magnitudes[1] - magnitudes[0]
+      const arithmetic = magnitudes.every((value, index) => Math.abs(value - (magnitudes[0] + delta * index)) <= Math.max(1, Math.abs(value)) * 1e-10)
+      if (arithmetic && delta !== 0) { start = values[0]; stop = values.at(-1); points = values.length }
+    } else if (!listMode && values.length === 3 && magnitudes.every((value): value is number => value !== null)) {
+      const [first, last, increment] = magnitudes
+      const intervals = (last - first) / increment
+      const rounded = Math.round(intervals)
+      if (increment !== 0 && intervals > 0 && Math.abs(intervals - rounded) < 1e-9 && rounded >= 1 && rounded < 10) {
+        start = values[0]; stop = values[1]; points = rounded + 1
+      }
+    }
+    if (!match || !declared || !start || !stop || points < 2 || points > 10 || project.simulation.analysis !== 'tran') {
+      const reason = !match ? 'expected .step param NAME START STOP INCREMENT or .step param NAME list VALUE...' : !declared ? `parameter ${parameterName} is not declared by .param` : project.simulation.analysis !== 'tran' ? 'ELSim parameter stepping currently supports transient analysis only' : 'only bounded arithmetic lists of 2–10 numeric values are supported'
+      warnings.push(`Line ${line}: .step ${recordExcerpt(directive.replace(/^\.step\s*/i, ''))} was not imported: ${reason}; original source is preserved.`)
+      return
+    }
+    const sweeps = project.simulation.parameterSweeps ?? []
+    if (sweeps.length >= 3 || sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === declared.name.toLowerCase())) {
+      warnings.push(`Line ${line}: .step for ${declared.name} exceeds ELSim’s three-distinct-parameter limit or duplicates an earlier step; original source is preserved.`)
+      return
+    }
+    const existingCases = sweeps.reduce((count, sweep) => count * sweep.points, 1)
+    if (existingCases * points > 10) { warnings.push(`Line ${line}: .step for ${declared.name} would exceed ELSim’s ten-case limit; original source is preserved.`); return }
+    project.simulation.parameterSweeps = [...sweeps, { component: `$param:${declared.name}`, globalParameter: declared.name, start, stop, points }]
+    return
+  }
   if (command === '.include' || command === '.inc' || command === '.lib') {
     const dependency = baseName(tokens[0] ?? '')
     if (!knownLibraries.has(dependency)) warnings.push(`Line ${line}: ${command} dependency “${tokens.join(' ')}” is missing; import its model library separately.`)
@@ -733,7 +769,10 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     portNames.add(flag.name.toLowerCase())
   }
   project.sheets[0].ports = ports
-  for (const record of textRecords) for (const directive of record.text.split(/\n|!\s+(?=\.)/).map((item) => item.trim()).filter(Boolean)) applyDirective(project, directive, warnings, record.line, knownLibraries)
+  const directives = textRecords.flatMap((record) => record.text.split(/\n|!\s+(?=\.)/).map((item) => ({ directive: item.trim(), line: record.line })).filter(({ directive }) => Boolean(directive)))
+  for (const entry of directives.filter(({ directive }) => /^\.param\b/i.test(directive))) applyDirective(project, entry.directive, warnings, entry.line, knownLibraries)
+  for (const entry of directives.filter(({ directive }) => /^\.(?:tran|ac|dc|op)\b/i.test(directive))) applyDirective(project, entry.directive, warnings, entry.line, knownLibraries)
+  for (const entry of directives.filter(({ directive }) => !/^\.(?:param|tran|ac|dc|op)\b/i.test(directive))) applyDirective(project, entry.directive, warnings, entry.line, knownLibraries)
   const hasImportedInitialConditions = (project.simulation.initialConditions ?? []).length > 0
   if (project.simulation.analysis !== 'tran' && hasImportedInitialConditions) {
     warnings.push('Imported instance or .ic initial conditions require transient analysis; they were skipped because the imported analysis is not transient.')

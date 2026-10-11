@@ -1,0 +1,20 @@
+ELSim declared global parameter stepping
+.param RLOAD=1k
+V1 in 0 PULSE(0 5 0 1u 1u 10m 20m)
+R1 in out {RLOAD}
+C1 out 0 1u
+.tran 1u 4m
+.save all @r1[i]
+.control
+set filetype=ascii
+alterparam RLOAD=1k
+reset
+run
+write /result-0.raw all
+alterparam RLOAD=3k
+reset
+run
+write /result-1.raw all
+quit
+.endc
+.end

@@ -285,6 +285,11 @@ export function analyzeLtspiceSchematicCompatibility(source: string, availableLi
       }
       continue
     }
+    if (command === 'step') {
+      if (/^\.step\s+param\s+[A-Za-z_][A-Za-z0-9_]*\s+(?:list\s+)?[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?(?:[\s,]+[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?){1,9}$/i.test(directive)) continue
+      warnings.push({ sourceLine: index + 1, feature: 'Unsupported .step sweep form', excerpt: directive.slice(0, 160), impact: 'ELSim imports bounded numeric linear .step param ranges and arithmetic lists. Other LTspice sweep forms are preserved but are not simulated.', suggestion: 'Use a numeric parameter range or arithmetic list with at most 10 total cases, or configure the sweep in ELSim after import.' })
+      continue
+    }
     if (['param', 'tran', 'ac', 'dc', 'op', 'ic', 'meas', 'measure', 'global'].includes(command)) continue
     warnings.push({ sourceLine: index + 1, feature: `Unsupported .${command} schematic directive`, excerpt: directive.slice(0, 160), impact: 'ELSim preserved the original schematic text but did not apply this directive to the project or generated netlist.', suggestion: 'Check the compatibility matrix for supported syntax. Set an equivalent ELSim option or remove the directive only if the model author confirms it is not needed.' })
   }

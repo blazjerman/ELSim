@@ -40,6 +40,33 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
   assert.notEqual(positive, pinNet(connectivity, pins, 1))
 })
 
+test('imports bounded LTspice .step param ranges and arithmetic lists independent of directive order', () => {
+  const asc = [
+    'Version 4',
+    'TEXT 0 100 Left 2 !.step param RLOAD 1k 5k 2k',
+    'TEXT 0 120 Left 2 !.step param CLOAD list 1u 2u 3u',
+    'TEXT 0 140 Left 2 !.tran 0 5m 0 10u',
+    'TEXT 0 160 Left 2 !.param RLOAD=1k CLOAD=1u',
+  ].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'stepped.asc')
+  assert.deepEqual(warnings, [])
+  assert.equal(project.simulation.parameterSweeps.length, 2)
+  assert.deepEqual(project.simulation.parameterSweeps.map(({ globalParameter, start, stop, points }) => ({ globalParameter, start, stop, points })), [
+    { globalParameter: 'RLOAD', start: '1k', stop: '5k', points: 3 },
+    { globalParameter: 'CLOAD', start: '1u', stop: '3u', points: 3 },
+  ])
+  assert.match(createNetlistArtifact(project).text, /^\.param RLOAD=1k$/m)
+  assert.match(createNetlistArtifact(project).text, /^\.param CLOAD=1u$/m)
+})
+
+test('unsupported LTspice .step forms remain in source and explain the import limitation', () => {
+  const asc = ['Version 4', 'TEXT 0 100 Left 2 !.param R=1k', 'TEXT 0 120 Left 2 !.step dec param R 10 1k 100k'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'unsupported-step.asc')
+  assert.equal(project.simulation.parameterSweeps, undefined)
+  assert.match(warnings.join('\n'), /expected \.step param NAME START STOP INCREMENT/)
+  assert.equal(project.importedSchematicSource.originalText, asc)
+})
+
 test('imports LTspice parameters with whitespace and safe braced arithmetic without truncating unsupported expressions', () => {
   const asc = ['Version 4', 'TEXT 0 100 Left 2 !.param RLOAD = 10k CLOAD={1u} GAIN={RLOAD * 2} MIXED={if(RLOAD > 1k, {2k}, 1k)}'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'parameters.asc')

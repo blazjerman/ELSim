@@ -201,6 +201,8 @@ test('schematic compatibility checks attribute unresolved dependencies and untra
     'TEXT 0 80 Left 2 !.save @m1[id]',
     'TEXT 0 100 Left 2 !.control',
     'TEXT 0 120 Left 2 !.tran 0 1m',
+    'TEXT 0 140 Left 2 !.step param LOAD 1k 3k 1k',
+    'TEXT 0 160 Left 2 !.step dec param LOAD 10 1k 100k',
   ].join('\n')
   const warnings = analyzeLtspiceSchematicCompatibility(source, ['known.lib'])
   assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
@@ -208,10 +210,11 @@ test('schematic compatibility checks attribute unresolved dependencies and untra
     [4, 'LTspice simulation options are not applied'],
     [6, 'Partially supported .save vectors'],
     [7, 'Unsupported .control schematic directive'],
+    [10, 'Unsupported .step sweep form'],
   ])
   assert.match(warnings[0].suggestion, /filename matches the directive/)
   assert.match(warnings[2].impact, /placed-component current/)
-  assert.deepEqual(analyzeLtspiceSchematicCompatibility(source, ['missing.lib', 'known.lib']).map(({ sourceLine }) => sourceLine), [4, 6, 7])
+  assert.deepEqual(analyzeLtspiceSchematicCompatibility(source, ['missing.lib', 'known.lib']).map(({ sourceLine }) => sourceLine), [4, 6, 7, 10])
 })
 
 test('imports and flattens an unambiguous single-section model library', () => {

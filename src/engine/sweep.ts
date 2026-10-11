@@ -2,7 +2,7 @@ import type { ParameterSweep, Project, SourceSweepParameter } from '../domain/pr
 import { componentMagnitude } from '../domain/componentValue'
 import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 
-export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; sourceParameter?: SourceSweepParameter; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
+export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; sourceParameter?: SourceSweepParameter; globalParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
 
 function componentUnit(kind: string): string {
   return kind === 'source' ? 'V' : kind === 'currentSource' ? 'A' : kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
@@ -77,6 +77,19 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
   if (settings.length > 3) throw new Error('Parameter stepping supports at most three components.')
   let combinations: { values: { component: string; value: string }[]; label: string }[] = [{ values: [], label: '' }]
   for (const sweep of settings) {
+    if (sweep.globalParameter) {
+      const declared = project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters?.find((parameter) => parameter.name.toLowerCase() === sweep.globalParameter!.toLowerCase())
+      const start = scalarMagnitude(sweep.start), stop = scalarMagnitude(sweep.stop)
+      if (!declared || !/^\$param:[A-Za-z_][A-Za-z0-9_]*$/i.test(sweep.component) || start === null || stop === null || start === stop) throw new Error(`Global parameter ${sweep.globalParameter} needs a declared parameter and valid, different numeric endpoints.`)
+      const values = Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
+      combinations = combinations.flatMap((combination) => values.map((value) => {
+        const display = Number(value.toPrecision(5))
+        const target = declared.name
+        const label = combination.label ? `${combination.label}, ${target}=${display}` : `${target}=${display}`
+        return { values: [...combination.values, { component: `$param:${declared.name}`, value: value.toExponential(8), globalParameter: declared.name }], label }
+      }))
+      continue
+    }
     const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
     if (!part) throw new Error(`${sweep.component} is no longer in the circuit.`)
     const values = buildValues(project, sweep)

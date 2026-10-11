@@ -616,7 +616,7 @@ function FloatingPlotPanel({ panel, index, onBoundsChange, onClose, onDock, onDo
   </section>
 }
 
-function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string }[] }[]; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
+function ParameterSweepEditor({ parts, sweeps, models, parameters: globalParameters, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string }[] }[]; parameters: { name: string; defaultValue: string }[]; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
   const modelFor = (part?: Part) => models.find((model) => model.name.toLowerCase() === part?.deviceModel?.toLowerCase())
   const numericModelParameters = (part?: Part) => modelFor(part)?.parameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) ?? []
   const modelRange = (value: string) => { const magnitude = componentMagnitude(value, 'resistor'); return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` } }
@@ -648,6 +648,9 @@ function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove
   }
   const supportedSourceModes = ['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm']
   const eligible = parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === undefined || supportedSourceModes.includes(part.sourceMode))) || (part.kind === 'source' && supportedSourceModes.includes(part.sourceMode ?? 'pulse')) || numericModelParameters(part).length > 0)
+  const numericParameters = globalParameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)
+  const targetCount = eligible.length + numericParameters.length
+  const parameterOptions = globalParameters.filter((parameter) => numericParameters.includes(parameter) || sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase()))
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
@@ -658,32 +661,39 @@ function ParameterSweepEditor({ parts, sweeps, models, onAdd, onChange, onRemove
       return <div className="parameter-sweep-card" key={`${sweep.component}-${index}`}>
         <div className="parameter-sweep-heading"><strong>Parameter {index + 1}</strong><button type="button" aria-label={`Remove parameter ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
         <label className="field-label">Component or device<select aria-label={`Parameter ${index + 1} component`} value={sweep.component} onChange={(event) => {
+          if (event.target.value.startsWith('$param:')) {
+            const parameter = globalParameters.find((item) => item.name.toLowerCase() === event.target.value.slice('$param:'.length).toLowerCase())
+            if (!parameter) return
+            const magnitude = componentMagnitude(parameter.defaultValue, 'resistor')
+            onChange(index, { component: `$param:${parameter.name}`, globalParameter: parameter.name, parameter: undefined, sourceParameter: undefined, start: parameter.defaultValue, stop: magnitude === null ? parameter.defaultValue : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` })
+            return
+          }
           const nextPart = eligible.find((item) => item.ref === event.target.value)
           if (!nextPart) return
           const parameters = numericModelParameters(nextPart)
           if (parameters.length) {
             const parameter = parameters[0]
             const { start, stop } = modelRange(parameter.defaultValue)
-            onChange(index, { component: nextPart.ref, parameter: parameter.name, sourceParameter: undefined, start, stop })
+            onChange(index, { component: nextPart.ref, globalParameter: undefined, parameter: parameter.name, sourceParameter: undefined, start, stop })
             return
           }
           if (nextPart.sourceMode === 'pwl') {
-            onChange(index, { component: nextPart.ref, parameter: undefined, sourceParameter: undefined, start: '1', stop: '2' })
+            onChange(index, { component: nextPart.ref, globalParameter: undefined, parameter: undefined, sourceParameter: undefined, start: '1', stop: '2' })
             return
           }
           const sourceAmplitude = nextPart.sourceMode === 'sine' ? nextPart.sine?.amplitude : nextPart.sourceMode === 'exp' ? nextPart.exp?.pulsed : nextPart.sourceMode === 'sffm' ? nextPart.sffm?.amplitude : undefined
           const startValue = sourceAmplitude ?? nextPart.value
           const magnitude = componentMagnitude(startValue, nextPart.kind)
           const unit = nextPart.kind === 'source' ? 'V' : nextPart.kind === 'currentSource' ? 'A' : nextPart.kind === 'resistor' || nextPart.kind === 'lamp' ? 'Ω' : nextPart.kind === 'capacitor' ? 'F' : 'H'
-          onChange(index, { component: nextPart.ref, parameter: undefined, sourceParameter: undefined, start: startValue, stop: magnitude === null ? startValue : `${(magnitude * 2).toExponential(5)} ${unit}` })
-        }}>{eligible.map((item) => <option key={item.id} value={item.ref} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && other.component.toLowerCase() === item.ref.toLowerCase())}>{item.ref} · {kindNames[item.kind]}</option>)}</select></label>
+          onChange(index, { component: nextPart.ref, globalParameter: undefined, parameter: undefined, sourceParameter: undefined, start: startValue, stop: magnitude === null ? startValue : `${(magnitude * 2).toExponential(5)} ${unit}` })
+        }}>{parameterOptions.map((parameter) => <option key={`param:${parameter.name}`} value={`$param:${parameter.name}`} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && other.globalParameter?.toLowerCase() === parameter.name.toLowerCase())}>Global · {parameter.name}</option>)}{eligible.map((item) => <option key={item.id} value={item.ref} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && !other.globalParameter && other.component.toLowerCase() === item.ref.toLowerCase())}>{item.ref} · {kindNames[item.kind]}</option>)}</select></label>
         {modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())) && <label className="field-label">Imported model parameter<select aria-label={`Parameter ${index + 1} model parameter`} value={sweep.parameter ?? ''} onChange={(event) => { const parameter = numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).find((item) => item.name === event.target.value); if (!parameter) return; const { start, stop } = modelRange(parameter.defaultValue); onChange(index, { parameter: parameter.name, sourceParameter: undefined, start, stop }) }}>{numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).map((parameter) => <option key={parameter.name} value={parameter.name}>{parameter.name} · default {parameter.defaultValue}</option>)}</select></label>}
         {(() => { const selected = parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase()); const mode = selected ? sourceMode(selected) : ''; const labels: Record<string, string> = { 'pulse.initial': 'Initial level', 'pulse.high': 'High level', 'pulse.delay': 'Delay', 'pulse.rise': 'Rise time', 'pulse.fall': 'Fall time', 'pulse.width': 'Pulse width', 'pulse.period': 'Period', 'pwl.scale': 'All point amplitudes', 'sine.offset': 'Offset', 'sine.amplitude': 'Amplitude', 'sine.frequency': 'Frequency', 'sine.delay': 'Delay', 'sine.damping': 'Damping factor', 'sine.phase': 'Phase', 'exp.initial': 'Initial level', 'exp.pulsed': 'Pulsed level', 'exp.riseDelay': 'Rise delay', 'exp.riseTau': 'Rise time constant', 'exp.fallDelay': 'Fall delay', 'exp.fallTau': 'Fall time constant', 'sffm.offset': 'Offset', 'sffm.amplitude': 'Amplitude', 'sffm.carrierFrequency': 'Carrier frequency', 'sffm.modulationIndex': 'Modulation index', 'sffm.signalFrequency': 'Signal frequency' }; if (mode === 'pwl' && selected) for (let point = 1; point <= (selected.kind === 'currentSource' ? selected.currentPwl?.length ?? 0 : selected.pwl?.length ?? 0); point += 1) labels[`pwl.point.${point}`] = `Point ${point} amplitude`; const options = Object.entries(labels).filter(([value]) => value.startsWith(`${mode}.`) || (mode === 'pwl' && value.startsWith('pwl.'))).map(([value, label]) => ({ value, label })); const defaultParameter = mode === 'pulse' ? 'pulse.high' : mode === 'sine' ? 'sine.amplitude' : mode === 'exp' ? 'exp.pulsed' : mode === 'sffm' ? 'sffm.amplitude' : mode === 'pwl' ? 'pwl.scale' : undefined; return options.length && selected ? <label className="field-label">Source waveform parameter<select aria-label={`Parameter ${index + 1} source parameter`} value={sweep.sourceParameter ?? defaultParameter ?? ''} onChange={(event) => { const sourceParameter = event.target.value as ParameterSweep['sourceParameter']; if (!sourceParameter) return; const range = sourceRange(selected, sourceParameter); onChange(index, { parameter: undefined, sourceParameter, start: range.start, stop: range.stop }) }}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label> : null })()}
         <div className="parameter-sweep-inputs"><label className="field-label">Start<input aria-label={`Parameter ${index + 1} start value`} value={sweep.start} onChange={(event) => onChange(index, { start: event.target.value })}/></label><label className="field-label">Stop<input aria-label={`Parameter ${index + 1} stop value`} value={sweep.stop} onChange={(event) => onChange(index, { stop: event.target.value })}/></label></div>
         <label className="field-label">Number of values<input aria-label={`Parameter ${index + 1} number of values`} type="number" min="2" max={maxPoints} value={sweep.points} onChange={(event) => onChange(index, { points: Number(event.target.value) })}/></label>
       </div>
     })}
-    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= 3 || eligible.length <= sweeps.length || combinations * 2 > 10}>{sweeps.length ? 'Add another parameter' : 'Add parameter stepping'}</button>
+    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= 3 || targetCount <= sweeps.length || combinations * 2 > 10}>{sweeps.length ? 'Add another parameter' : 'Add parameter stepping'}</button>
     <div className="field-hint">{combinations} simulation case{combinations === 1 ? '' : 's'} selected · maximum 10 · each result is plotted as a separate trace.</div>
   </div>
 }
@@ -2296,8 +2306,17 @@ export default function App() {
       || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined))
       || importedDeviceModels.some((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)))
       .filter((part) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase()))
+    const parameters = project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []
+    const availableParameter = parameters.find((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null && !configured.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase()))
     const part = parts.find((candidate) => importedDeviceModels.some((model) => model.name.toLowerCase() === candidate.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null))) ?? parts[0]
-    if (!part || configured.length >= 3) { setNotice('Parameter stepping supports up to three distinct R/C/L values, scalar DC sources, or numeric parameters on imported device models.'); return }
+    if ((!part && !availableParameter) || configured.length >= 3) { setNotice('Parameter stepping supports up to three distinct project parameters, R/C/L values, scalar DC sources, or numeric parameters on imported device models.'); return }
+    if (!part && availableParameter) {
+      const magnitude = componentMagnitude(availableParameter.defaultValue, 'resistor')
+      const sweep: ParameterSweep = { component: `$param:${availableParameter.name}`, globalParameter: availableParameter.name, start: availableParameter.defaultValue, stop: magnitude === null ? availableParameter.defaultValue : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}`, points: 3 }
+      setProject((current) => ({ ...current, simulation: { ...current.simulation, parameterSweeps: [...(current.simulation.parameterSweeps ?? []), sweep] } }))
+      return
+    }
+    if (!part) return
     const model = importedDeviceModels.find((candidate) => candidate.name.toLowerCase() === part.deviceModel?.toLowerCase())
     const modelParameter = model?.parameters.find((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)
     if (modelParameter) {
@@ -2540,7 +2559,7 @@ export default function App() {
               <label className="field-label">Step<input data-analysis-setting="dcStep" aria-invalid={Boolean(analysisSettingError('dcStep'))} aria-describedby={analysisSettingError('dcStep') ? 'analysis-error-dcStep' : undefined} value={project.simulation.dcSweep?.step ?? '0.1 V'} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, dcSweep: { ...(current.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }), step: event.target.value } } }))}/>{analysisSettingError('dcStep') && <small id="analysis-error-dcStep" className="field-error" role="alert">{analysisSettingError('dcStep')}</small>}</label>
             </>}
           </div>
-    <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} models={importedDeviceModels} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
+    <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} models={importedDeviceModels} parameters={project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
     {project.simulation.analysis === 'tran' && <>
       <TransientMeasurementEditor project={project} measurements={project.simulation.transientMeasurements ?? []} onAdd={addMeasurement} onChange={updateMeasurement} onRemove={removeMeasurement}/>
       <InitialConditionEditor conditions={project.simulation.initialConditions ?? []} nodes={[...new Set(project.netLabels.map((label) => label.name).filter((node) => node !== '0'))]} inductors={project.parts.filter((part) => part.kind === 'inductor').map((part) => part.ref)} capacitors={project.parts.filter((part) => part.kind === 'capacitor').map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAdd={addInitialCondition} onAddCurrent={addInductorInitialCondition} onAddCapacitorVoltage={addCapacitorInitialCondition} onChange={updateInitialCondition} onRemove={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/>
