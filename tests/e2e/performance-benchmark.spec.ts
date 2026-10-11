@@ -3,6 +3,31 @@ import { performance } from 'node:perf_hooks'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
+async function addVoltageTrace(page: import('@playwright/test').Page, name: string, toCurrentWindow: boolean) {
+  const label = page.getByRole('button', { name: new RegExp(`^Net label ${name}$`, 'i') }).first()
+  const point = await label.evaluate((element, labelName) => {
+    const text = element.querySelector('text')
+    if (!text) throw new Error(`Net label ${labelName} has no visible text target`)
+    const rect = text.getBoundingClientRect()
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+  }, name)
+  await page.mouse.click(point.x, point.y, { button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot voltage to ground' }).click()
+  const chooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
+  if (toCurrentWindow) await chooser.getByRole('radio', { name: /Add to current window/ }).check()
+  await chooser.getByRole('button', { name: 'Open waveform' }).click()
+  return page.locator('.plot-window').last()
+}
+
+async function addComponentCurrentTrace(page: import('@playwright/test').Page, ref: string, toCurrentWindow: boolean) {
+  await page.locator(`.circuit-part[aria-label^="${ref},"]`).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
+  const chooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
+  if (toCurrentWindow) await chooser.getByRole('radio', { name: /Add to current window/ }).check()
+  await chooser.getByRole('button', { name: 'Open waveform' }).click()
+  return page.locator('.plot-window').last()
+}
+
 test('measure result animation scrubbing for 500 components and 1,000 vectors', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
@@ -11,6 +36,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(4)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const sourceTemplate = project.parts.find((part: { kind: string }) => part.kind === 'source')
@@ -164,15 +190,17 @@ test('measure a million-sample transient through the browser ngspice worker and 
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(4)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.simulation.analysis = 'tran'
     project.simulation.stopTime = '1 s'
     project.simulation.maxStep = '1 µs'
-    project.plotSettings.selectedTraceIds = ['V(vout)']
+    project.plotSettings.selectedTraceIds = []
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
+  await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(4)
   const before = await page.evaluate(() => {
     const perf = performance as Performance & { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }
     const watch = { last: performance.now(), maxIntervalDelayMs: 0 }
@@ -193,27 +221,20 @@ test('measure a million-sample transient through the browser ngspice worker and 
   await expect(slider).toBeVisible()
   const maxSample = Number(await slider.getAttribute('max'))
   expect(maxSample).toBeGreaterThan(1_000_000)
-  const trace = page.getByRole('button', { name: 'V(vout)', exact: true })
-  await expect(trace).toBeVisible()
-  if (!(await trace.getAttribute('class'))?.includes('selected')) await trace.click()
-  await expect(trace).toHaveClass(/selected/)
-  const traceButtons = page.locator('.trace-toggles button')
-  const availableTraceCount = await traceButtons.count()
-  expect(availableTraceCount).toBeGreaterThanOrEqual(4)
-  const requestedTraceCount = Math.min(5, availableTraceCount)
-  for (let index = 0; index < requestedTraceCount; index += 1) {
-    const traceButton = traceButtons.nth(index)
-    if (!(await traceButton.getAttribute('class'))?.includes('selected')) await traceButton.click()
-  }
-  const selectedTraceCount = await page.locator('.trace-toggles button.selected').count()
-  expect(selectedTraceCount).toBeGreaterThanOrEqual(4)
-  const renderedTraceCount = await page.locator('.waveform-chart polyline').count()
+  const plot = await addVoltageTrace(page, 'vout', false)
+  await expect(plot.getByRole('button', { name: 'Disable V(vout)' })).toBeVisible()
+  await addVoltageTrace(page, 'vin', true)
+  await addComponentCurrentTrace(page, 'R1', true)
+  await addComponentCurrentTrace(page, 'C1', true)
+  const selectedTraceCount = await plot.locator('.trace-selected-item').count()
+  expect(selectedTraceCount).toBe(4)
+  const renderedTraceCount = await plot.locator('.waveform-chart polyline').count()
   expect(renderedTraceCount).toBe(selectedTraceCount)
   const scrubTimes: number[] = []
   for (const key of ['End', 'Home', 'End']) {
     const scrubStarted = performance.now()
     await slider.press(key)
-    await expect(page.locator('.cursor-readout')).toContainText('V(vout)')
+    await expect(plot.locator('.cursor-readout')).toContainText('V(vout)')
     scrubTimes.push(Number((performance.now() - scrubStarted).toFixed(2)))
   }
   const after = await page.evaluate(() => {
@@ -224,7 +245,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
       usedHeapBytes: perf.memory?.usedJSHeapSize ?? null,
       totalHeapBytes: perf.memory?.totalJSHeapSize ?? null,
       maxIntervalDelayMs: win.__largeTransientWatch?.maxIntervalDelayMs ?? null,
-      renderedTraceCount: document.querySelectorAll('.waveform-chart polyline').length,
+      renderedTraceCount: document.querySelectorAll('.plot-window .waveform-chart polyline').length,
     }
   })
   expect(pageErrors).toEqual([])
