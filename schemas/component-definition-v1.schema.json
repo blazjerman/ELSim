@@ -35,6 +35,7 @@
         "ground",
         "inductor",
         "diode",
+        "zener",
         "led",
         "switch",
         "vcvs",

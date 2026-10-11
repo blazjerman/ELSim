@@ -107,6 +107,33 @@ export function createVoltageDividerExampleProject(): Project {
   return project
 }
 
+/** A beginner Zener shunt regulator with a 12 V source and a 5.1 V model. */
+export function createZenerRegulatorExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'zener-v1', kind: 'source', ref: 'V1', value: '12 V', sourceMode: 'dc', x: 260, y: 360, rotation: 0 }
+  const resistor: Part = { id: 'zener-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 500, y: 300, rotation: 0 }
+  const zener: Part = { id: 'zener-d1', kind: 'zener', ref: 'DZ1', value: 'Default 5.1 V Zener', x: 740, y: 300, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Zener voltage reference'
+  project.parts = [source, resistor, zener]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('zener-input-source', 'VIN', source, 0), labelAt('zener-input-resistor', 'VIN', resistor, 0),
+    labelAt('zener-output-resistor', 'VZ', resistor, 1), labelAt('zener-output-cathode', 'VZ', zener, 1),
+    labelAt('zener-ground-source', '0', source, 1), labelAt('zener-ground-anode', '0', zener, 0),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VZ)', 'I(DZ1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -10, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A driven series RLC circuit whose ringing is visible in the capacitor voltage. */
 export function createRlcExampleProject(): Project {
   const project = createStarterProject()

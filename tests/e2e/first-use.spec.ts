@@ -408,7 +408,7 @@ test('component shortcuts are case-sensitive and future Falstad shortcuts stay r
   await page.keyboard.press('Escape')
   const shortcuts: [string, string][] = [
     ['r', 'Resistor'], ['e', 'Lamp'], ['c', 'Capacitor'], ['Shift+L', 'Inductor'], ['v', 'Voltage source'],
-    ['i', 'Current source'], ['d', 'Diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
+    ['i', 'Current source'], ['d', 'Diode'], ['z', 'Zener diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
     ['Shift+G', 'VCCS'], ['Shift+F', 'CCCS'], ['Shift+H', 'CCVS'], ['b', 'Behavioral source'], ['n', 'NPN transistor'],
     ['p', 'PNP transistor'], ['j', 'N-channel JFET'], ['Shift+J', 'P-channel JFET'], ['N', 'N-channel MOSFET'],
     ['P', 'P-channel MOSFET'], ['g', 'Ground'],
@@ -419,7 +419,7 @@ test('component shortcuts are case-sensitive and future Falstad shortcuts stay r
     await expect(card, `${shortcut} should select ${label}`).toHaveAttribute('aria-pressed', 'true')
     await page.keyboard.press('Escape')
   }
-  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+C', 'Polarized capacitor'], ['Shift+S', 'SPDT switch'], ['Shift+T', 'Transformer'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['z', 'Zener diode'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
+  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+C', 'Polarized capacitor'], ['Shift+S', 'SPDT switch'], ['Shift+T', 'Transformer'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
     await page.keyboard.press(shortcut)
     await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
   }
@@ -2169,6 +2169,31 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await expect(page.getByLabel('Guided example')).toContainText('operating-point table')
   await expectAvailableTrace(page, 'V(vout)')
   await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*5\.000000 V/i })).toBeVisible()
+})
+
+test('Zener shortcut and guided regulator example solve near the 5.1 V breakdown point', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('z')
+  await expect(page.locator('.component-card').filter({ hasText: 'Zener diode' })).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Zener voltage reference' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Zener voltage reference')
+  await expect(page.getByLabel('Guided example')).toContainText('near 5.1 V')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(vz)')
+  await expectAvailableTrace(page, 'I(DZ1)')
+  const result = await page.locator('.plot-window').getByRole('row').filter({ hasText: /V\(vz\)/i }).first().innerText()
+  const voltage = Number(result.match(/([+-]?[\d.]+)\s*V/i)?.[1])
+  expect(Number.isFinite(voltage), result).toBe(true)
+  expect(voltage).toBeGreaterThan(4.8)
+  expect(voltage).toBeLessThan(5.4)
 })
 
 test('diode rectifier example clips the negative half-cycle in the browser engine', { tag: '@ngspice' }, async ({ page }) => {

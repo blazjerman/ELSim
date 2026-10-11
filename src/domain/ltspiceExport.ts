@@ -23,11 +23,11 @@ export type LtspiceExportResult = {
 
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
-  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', led: 'D', switch: 'R',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', zener: 'D', led: 'D', switch: 'R',
   vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', zener: 'D', led: 'D', switch: 'R', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -367,6 +367,7 @@ function modelValue(part: Part, project: Project, sheet: ProjectSheet, sheetSymb
     const value2 = acScalar === undefined ? undefined : `AC ${acScalar} ${phaseScalar}`
     return { value: output, ...(value2 ? { value2 } : {}) }
   }
+  if (part.kind === 'zener') return { value: part.deviceModel ?? 'DZENER' }
   if (part.kind === 'diode' || part.kind === 'led') return { value: part.deviceModel ?? 'DDEFAULT' }
   if (part.kind === 'npn' || part.kind === 'pnp') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
   if (part.kind === 'njfet' || part.kind === 'pjfet') return { value: part.deviceModel ?? `ELSIM_MODEL_${spiceIdentifier(sheet.id).toUpperCase()}_${part.ref}` }
@@ -502,7 +503,7 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       if (!part) continue
       if (project.simulation.analysis === 'dc' && (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() !== project.simulation.dcSweep?.source.toLowerCase()) continue
       if (sweep.parameter) {
-        const supportedDevice = ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(part.kind)
+        const supportedDevice = ['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(part.kind)
         const model = part.deviceModel ? (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models.map((definition) => ({ asset, definition }))).find(({ definition }) => definition.name.toLowerCase() === part.deviceModel!.toLowerCase()) : undefined
         const modelParameter = model?.definition.parameters.find((entry) => entry.name.toLowerCase() === sweep.parameter!.toLowerCase())
         if (!supportedDevice || !model || !modelParameter) continue
@@ -631,6 +632,7 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
     rows.push(`SYMATTR Value ${mappedOutput.value}`)
     if (mappedOutput.value2) rows.push(`SYMATTR Value2 ${mappedOutput.value2}`)
     if (mappedOutput.spiceLine) rows.push(`SYMATTR SpiceLine ${mappedOutput.spiceLine}`)
+    if (part.kind === 'zener' && !part.deviceModel) losses.push({ severity: 'info', sourceId: part.id, title: 'Educational Zener model generated', explanation: 'A 5.1 V DZENER model with a 1 mA knee current is written into this schematic.' })
     if (part.kind === 'diode' || part.kind === 'led') {
       if (!part.deviceModel) losses.push({ severity: 'info', sourceId: part.id, title: 'Default diode model generated', explanation: 'A generic DDEFAULT model is written into this schematic.' })
     }
@@ -642,6 +644,7 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
     addDirective(`.step param ${sweep.parameter} list ${sweep.values.join(' ')}`)
   }
   if (sheet.parts.some((part) => (part.kind === 'diode' || part.kind === 'led') && !part.deviceModel)) addDirective('.model DDEFAULT D')
+  if (sheet.parts.some((part) => part.kind === 'zener' && !part.deviceModel)) addDirective('.model DZENER D(BV=5.1 IBV=1m)')
   for (const part of sheet.parts) {
     if ((part.kind === 'npn' || part.kind === 'pnp') && !part.deviceModel) {
       const beta = scalar(part.value)
