@@ -472,7 +472,6 @@ function useTraceVisibility(selectedIds: string[], onRemove: (id: string) => voi
 
 function TraceToggles({ traces, selectedIds, disabledIds, onToggleVisibility, onRemove, ariaLabel, colorFor }: { traces: Trace[]; selectedIds: string[]; disabledIds: string[]; onToggleVisibility: (id: string) => void; onRemove: (id: string) => void; ariaLabel: string; colorFor: (index: number) => string }) {
   const selected = traces.flatMap((trace, index) => selectedIds.includes(trace.id) ? [{ trace, index }] : [])
-  if (selected.length === 0) return null
   return <div className="trace-selector"><div className="trace-toggles trace-toggles-selected" role="group" aria-label={`Selected ${ariaLabel.toLocaleLowerCase()}`}>{selected.map(({ trace, index }) => {
     const disabled = disabledIds.includes(trace.id)
     return <span key={trace.id} className={`trace-selected-item${disabled ? ' disabled' : ''}`}>

@@ -100,7 +100,7 @@
 .trace-show-more{align-self:flex-start;background:transparent;color:#96b9a0;border:1px solid #354139;border-radius:4px;padding:3px 6px;font-size:8px}.trace-show-more:hover{color:#d3ddd5;border-color:#526456}
 
 /* Keep waveform probe controls and cursor values in separate, non-overlapping rows. */
-.waveform-view .trace-selector{flex:0 0 auto;max-height:26px;min-height:22px}
+.waveform-view .trace-selector{box-sizing:border-box;flex:0 0 24px;height:24px;min-height:24px;max-height:24px}
 .waveform-view .trace-toggles-selected{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;max-height:24px}
 .trace-selected-item{display:inline-flex;align-items:center;flex:0 0 auto;gap:0}
 .trace-toggles .trace-selected-item .trace-visibility{border-radius:4px 0 0 4px}
