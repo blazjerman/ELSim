@@ -23,7 +23,7 @@ export type LtspiceExportResult = {
 
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
-  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', diode: 'D', zener: 'D', led: 'D', switch: 'R',
+  source: 'V', currentSource: 'I', resistor: 'R', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'R',
   vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
@@ -584,6 +584,10 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
     const importedAttributes = Object.keys(part.extensions?.ltspice?.attributes ?? {})
     if (importedAttributes.length) losses.push({ severity: 'warning', sourceId: part.id, title: 'Imported LTspice attributes omitted', explanation: `The generated schematic does not write the retained attributes: ${importedAttributes.join(', ')}.` })
     const pins = componentPins(part)
+    if (part.kind === 'transformer') {
+      blockers.push({ sourceId: part.id, message: 'The built-in coupled-inductor transformer is not supported by LTspice export yet.' })
+      continue
+    }
     if (part.kind === 'ground') {
       const pin = pins[0]
       if (pin) rows.push(`FLAG ${checkCoordinate(pin.x, part.id, blockers)} ${checkCoordinate(pin.y, part.id, blockers)} 0`)

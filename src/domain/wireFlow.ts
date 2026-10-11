@@ -27,6 +27,10 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
     const current = currentForPart(part)
     return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex === 0 ? -current : current }
   }
+  if (part.kind === 'transformer') {
+    const current = currentForPin?.(part, pinIndex) ?? (pinIndex < 2 ? currentForPart(part) : undefined)
+    return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex % 2 === 0 ? -current : current }
+  }
   const twoTerminal = ['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'switch', 'behavioral'].includes(part.kind)
   if (!twoTerminal || pinIndex > 1) return {}
   const current = currentForPart(part)

@@ -153,6 +153,7 @@
             "capacitor",
             "ground",
             "inductor",
+            "transformer",
             "diode",
             "zener",
             "led",
@@ -527,6 +528,12 @@
         "polarized": {
           "type": "boolean",
           "description": "Render a positive and negative terminal marker on a polarized capacitor."
+        },
+        "turnsRatio": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "Positive secondary-to-primary turns ratio for the built-in coupled-inductor transformer."
         },
         "symbolAssetId": {
           "type": "string",

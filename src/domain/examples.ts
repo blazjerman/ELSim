@@ -96,6 +96,34 @@ export function createCurrentSourceExampleProject(): Project {
   return project
 }
 
+/** A guided AC step-up transformer using an ideal coupled-inductor model. */
+export function createTransformerExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'transformer-v1', kind: 'source', ref: 'V1', value: '0 V', sourceMode: 'dc', acMagnitude: '1 V', acPhase: '0', x: 250, y: 380, rotation: 0 }
+  const transformer: Part = { id: 'transformer-t1', kind: 'transformer', ref: 'T1', value: '10 H', turnsRatio: '2', x: 500, y: 380, rotation: 0 }
+  const load: Part = { id: 'transformer-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 760, y: 380, rotation: 90 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'AC step-up transformer'
+  project.parts = [source, transformer, load]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('transformer-vin-source', 'VIN', source, 0), labelAt('transformer-vin-primary', 'VIN', transformer, 0),
+    labelAt('transformer-ground-source', '0', source, 1), labelAt('transformer-ground-primary', '0', transformer, 1),
+    labelAt('transformer-vout-secondary', 'VOUT', transformer, 2), labelAt('transformer-vout-load', 'VOUT', load, 0),
+    labelAt('transformer-ground-secondary', '0', transformer, 3), labelAt('transformer-ground-load', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '10 kHz' } }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -10, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A first voltage-divider lesson with a predictable 5 V midpoint. */
 export function createVoltageDividerExampleProject(): Project {
   const project = createStarterProject()

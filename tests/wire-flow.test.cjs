@@ -7,6 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { wireCurrentFlowSegments } = require(path.join(build, 'domain/wireFlow.js'))
 const { createStarterProject } = require(path.join(build, 'domain/project.js'))
+const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('current animates across each independent starter wire segment, including ground return', () => {
   const project = createStarterProject()
@@ -73,4 +74,23 @@ test('transistor terminal currents resolve otherwise unknown wire branches', () 
   const pinCurrents = new Map([['Q1:0', 0.005], ['Q1:1', 0.0001], ['Q1:2', -0.0051]])
   const flows = wireCurrentFlowSegments(project, connectivity, (part) => currents.get(part.ref), (part, pin) => pinCurrents.get(`${part.ref}:${pin}`))
   assert.ok(flows.get('q-collector-wire').length > 0)
+})
+
+test('transformer wire animation uses independent primary and secondary winding currents', () => {
+  const project = createStarterProject()
+  const transformer = { id: 'p-t1', kind: 'transformer', ref: 'T1', value: '10 H', turnsRatio: '2', x: 500, y: 380, rotation: 0 }
+  const pins = componentPins(transformer)
+  project.parts = [transformer]
+  project.netLabels = []
+  project.wires = pins.map((pin, index) => ({
+    id: `transformer-pin-${index}`,
+    points: [[pin.x - 20, pin.y], [pin.x, pin.y]],
+  }))
+  const connectivity = analyzeConnectivity(project)
+  const pinCurrents = new Map([['0', 0.004], ['1', 0.004], ['2', -0.002], ['3', -0.002]])
+  const flows = wireCurrentFlowSegments(project, connectivity, () => 0.004, (part, pin) => pinCurrents.get(String(pin)))
+  assert.equal(flows.get('transformer-pin-0')[0].magnitude, 0.004)
+  assert.equal(flows.get('transformer-pin-1')[0].magnitude, 0.004)
+  assert.equal(flows.get('transformer-pin-2')[0].magnitude, 0.002)
+  assert.equal(flows.get('transformer-pin-3')[0].magnitude, 0.002)
 })
