@@ -255,6 +255,7 @@ test('LTspice schematic import preserves and reports duplicate model library fil
 
 test('component shortcuts are case-sensitive and future Falstad shortcuts stay reserved', async ({ page }) => {
   await page.goto('/')
+  await page.keyboard.press('Escape')
   const shortcuts: [string, string][] = [
     ['r', 'Resistor'], ['e', 'Lamp'], ['c', 'Capacitor'], ['Shift+L', 'Inductor'], ['v', 'Voltage source'],
     ['i', 'Current source'], ['d', 'Diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
@@ -889,6 +890,7 @@ test('starter and newly added native parts use the same 10-unit pin grid', async
 
 test('component hotkeys choose parts and newly placed parts stay unselected', async ({ page }) => {
   await page.goto('/')
+  await page.keyboard.press('Escape')
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
   await page.keyboard.press('r')
   await expect(resistor).toHaveAttribute('aria-pressed', 'true')
@@ -906,11 +908,25 @@ test('component hotkeys choose parts and newly placed parts stay unselected', as
   const newPart = page.locator(`.circuit-part[data-part-id="${newPartId}"]`)
   await expect(newPart).not.toHaveClass(/selected/)
   await expect(page.locator('.inspector-heading h2')).not.toHaveText('R2')
-  await expect(page.getByRole('button', { name: 'Rotate selected (.)' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Rotate selected (r)' })).toBeDisabled()
 
   await page.getByRole('textbox', { name: 'Find a component' }).fill('capacitor')
   await page.keyboard.press('Enter')
   await expect(page.locator('.component-card').filter({ hasText: 'Capacitor' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('r rotates a selected part and component shortcuts do not replace an active selection', async ({ page }) => {
+  await page.goto('/')
+  const initialRotation = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1').rotation)
+  await page.keyboard.press('r')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1').rotation)).toBe((initialRotation + 90) % 360)
+  for (const shortcut of ['N', 'c', 'p', 'v']) {
+    await page.keyboard.press(shortcut)
+    await expect(page.locator('.component-card[aria-pressed="true"]')).toHaveCount(0)
+  }
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('N')
+  await expect(page.locator('.component-card').filter({ hasText: 'N-channel MOSFET' })).toHaveAttribute('aria-pressed', 'true')
 })
 
 test('wire tool stays armed while component placement ends after one drop', async ({ page }) => {

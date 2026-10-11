@@ -1,12 +1,12 @@
 # Keyboard shortcuts
 
-Letters are case-sensitive. In the browser, holding Shift changes `event.key`, so `n` and `N` are different shortcuts. Component shortcuts arm placement; click or drag on the schematic to place the selected part.
+Letters are case-sensitive. In the browser, holding Shift changes `event.key`, so `n` and `N` are different shortcuts. With no schematic selection, component shortcuts arm placement; click or drag on the schematic to place the selected part. While an item is selected, component shortcuts do not switch the placement tool. Press `r` to rotate the selected part. Press Escape or click blank space to clear the selection before choosing another part by shortcut.
 
 ## Available components
 
 | Key | Component |
 | --- | --- |
-| `r` | Resistor |
+| `r` | Resistor when nothing is selected; rotates the selected part otherwise |
 | `c` | Capacitor |
 | `L` | Inductor |
 | `v` | Voltage source |
@@ -53,7 +53,7 @@ These keys are recognized and show a “reserved for a future component” messa
 | `;` | Net-label tool |
 | `?` | Probe tool |
 | `=` | Toggle wire-crossing junction |
-| `.` | Rotate selected component |
+| `r` | Rotate selected component (takes precedence over resistor placement) |
 | `y` | Flip selected component |
 | `/` | Focus component search |
 | `Ctrl/⌘+Enter` | Run simulation |
