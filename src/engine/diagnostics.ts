@@ -9,7 +9,7 @@ export function firstNgspiceError(stdout: string, stderr: string, status: number
     const location = lines.slice(explicitIndex + 1, explicitIndex + 3).find((line) => /line\s+no\.?\s*\d+/i.test(line))
     return location ? `${explicit} ${location.trim()}` : explicit
   }
-  const solverFailure = lines.find((line) => /\btimestep too small\b|\bfailed to converge\b|\bconvergence failure\b|\bno convergence\b/i.test(line))
+  const solverFailure = lines.find((line) => /\btime\s*step too small\b|\bfailed to converge\b|\bconvergence failure\b|\bno convergence(?:\s+(?:achieved|possible|found)\b|[.:;]|$)/i.test(line))
   if (solverFailure) return solverFailure.trim()
   const analysisError = lines.find((line) => /no writable vector|not available or has zero length|Error during/i.test(line))
   if (analysisError) return analysisError.trim()

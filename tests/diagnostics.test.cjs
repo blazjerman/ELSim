@@ -49,6 +49,7 @@ test('fatal timestep and convergence messages are surfaced even without an Error
   const message = 'doAnalyses: TRAN: Timestep too small; time = 1.2e-6, timestep = 1e-18'
   assert.equal(firstNgspiceError(message, '', 0), message)
   assert.equal(firstNgspiceError('Warning: source stepping failed; trying gmin stepping\nTransient analysis completed', '', 0), undefined)
+  assert.equal(firstNgspiceError('No convergence problems found; transient analysis completed', '', 0), undefined)
   const diagnostic = diagnosticForNgspice(message, artifact)
   assert.match(diagnostic.hint, /component values and switch states/i)
   assert.match(diagnostic.hint, /smaller maximum time step/i)
