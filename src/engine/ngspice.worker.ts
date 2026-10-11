@@ -8,6 +8,7 @@ import type { TransientMeasurement } from '../domain/project'
 import { needsLtspiceFullDeckTranslation } from '../domain/subcircuitLibrary'
 
 const worker = self as DedicatedWorkerGlobalScope
+const profileWorker = import.meta.env.DEV && import.meta.env.VITE_ELSIM_PROFILE === '1'
 type NgspiceModule = { FS: { writeFile(path: string, data: string): void; readFile(path: string, options: { encoding: 'utf8' }): string }; callMain(args: string[]): number }
 type NgspiceFactory = (options: { noInitialRun: boolean; locateFile: (path: string) => string; print: (...parts: string[]) => void; printErr: (...parts: string[]) => void }) => Promise<NgspiceModule>
 
@@ -36,9 +37,12 @@ function makeTraces(rawText: string): Trace[] {
 async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = []): Promise<void> {
   const stdout: string[] = []
   const stderr: string[] = []
+  const profileStarted = profileWorker ? performance.now() : 0
+  let moduleLoadMs = 0, solverMs = 0, resultProcessingMs = 0
   try {
     worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.05, message: 'Loading ngspice WebAssembly' } satisfies EngineResponse)
     const engineBaseUrl = new URL(import.meta.env.BASE_URL, worker.location.origin)
+    const moduleLoadStarted = profileWorker ? performance.now() : 0
     const loaded = await import(/* @vite-ignore */ new URL('engine/ngspice.mjs', engineBaseUrl).href) as { default: NgspiceFactory }
     const module = await loaded.default({
       noInitialRun: true,
@@ -46,19 +50,23 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       print: (...parts) => stdout.push(parts.join(' ')),
       printErr: (...parts) => stderr.push(parts.join(' ')),
     })
+    if (profileWorker) moduleLoadMs = performance.now() - moduleLoadStarted
     const runDeck = addResultControl(artifact.text, parameterSweep, measurements)
     if (needsLtspiceFullDeckTranslation(runDeck)) {
       module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
     }
     module.FS.writeFile('/project.cir', runDeck)
     worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` } satisfies EngineResponse)
+    const solverStarted = profileWorker ? performance.now() : 0
     const status = module.callMain(['-b', '/project.cir'])
+    if (profileWorker) solverMs = performance.now() - solverStarted
     const output = stdout.join('\n')
     const message = firstNgspiceError(output, stderr.join('\n'), status)
     if (message) {
       worker.postMessage({ type: 'error', requestId, error: diagnosticForNgspice(message, artifact) } satisfies EngineResponse)
       return
     }
+    const resultProcessingStarted = profileWorker ? performance.now() : 0
     const traces = parameterSweep?.length
       ? parameterSweep.flatMap((sweep, index) => makeTraces(module.FS.readFile(`/result-${index}.raw`, { encoding: 'utf8' })).map((trace) => ({
         ...trace,
@@ -81,6 +89,10 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics],
       analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc',
       measurements: measurementOutput.results,
+    }
+    if (profileWorker) {
+      resultProcessingMs = performance.now() - resultProcessingStarted
+      console.info('[ELSim worker profile]', JSON.stringify({ analysis: metadata.settings.analysis, moduleLoadMs, solverMs, resultProcessingMs, totalMs: performance.now() - profileStarted, traceCount: traces.length }))
     }
     worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse, transferableTraceBuffers(traces))
   } catch (error) {

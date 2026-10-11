@@ -162,7 +162,11 @@ test('measure a million-sample transient through the browser ngspice worker and 
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the browser transient benchmark').toEqual([])
   const pageErrors: string[] = []
+  const workerProfiles: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
+  page.on('console', (message) => {
+    if (message.text().startsWith('[ELSim worker profile]')) workerProfiles.push(message.text())
+  })
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(4)
@@ -234,6 +238,10 @@ test('measure a million-sample transient through the browser ngspice worker and 
     }
   })
   expect(pageErrors).toEqual([])
+  if (process.env.VITE_ELSIM_PROFILE === '1') {
+    expect(workerProfiles).toHaveLength(1)
+    console.log(workerProfiles[0])
+  }
   console.log(JSON.stringify({ benchmark: 'browser-million-sample-multi-trace-transient-v3', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, heapBefore: before, heapAfter: after }, null, 2))
 })
 
