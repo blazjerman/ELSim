@@ -451,6 +451,40 @@ test('schematic wire segments and net labels can be selected from the keyboard',
   await expect.poll(async () => Number(await label.locator('text').getAttribute('y'))).toBe(labelY + 10)
 })
 
+test('clicking a wire selects it like clicking a component', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Select tool' }).click()
+  const target = await page.locator('svg.schematic').evaluate((svgElement) => {
+    const svg = svgElement as SVGSVGElement
+    for (const wire of svg.querySelectorAll<SVGGElement>('.wire-line')) {
+      const line = wire.querySelector<SVGPolylineElement>('polyline[stroke="transparent"]')
+      if (!line) continue
+      const points = line.points
+      for (let segment = 1; segment < points.numberOfItems; segment += 1) {
+        const start = points.getItem(segment - 1), end = points.getItem(segment)
+        for (const fraction of [0.15, 0.25, 0.75, 0.85]) {
+          const point = svg.createSVGPoint()
+          point.x = start.x + (end.x - start.x) * fraction
+          point.y = start.y + (end.y - start.y) * fraction
+          const screen = point.matrixTransform(svg.getScreenCTM()!)
+          const hit = document.elementFromPoint(screen.x, screen.y)?.closest('.wire-line')
+          if (hit === wire) return { id: wire.dataset.wireId!, x: screen.x, y: screen.y }
+        }
+      }
+    }
+    return null
+  })
+  expect(target).not.toBeNull()
+  await page.mouse.click(target!.x, target!.y)
+  const wire = page.locator(`.wire-line[data-wire-id="${target!.id}"]`)
+  await expect(wire).toHaveAttribute('aria-pressed', 'true')
+  await expect(wire).toHaveClass(/selected/)
+  await expect(page.locator('.inspector-heading h2')).toHaveText('Wire segment')
+  await page.mouse.click(target!.x, target!.y)
+  await expect(wire).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.inspector-heading h2')).toHaveText('Wire segment')
+})
+
 test('reused sheet interface edits update block pins and attached wires', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
