@@ -2084,6 +2084,8 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await expect(page.getByLabel('Guided example')).toContainText('Equal 1 kΩ resistors share the 10 V supply evenly')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByLabel('Guided example')).toContainText('TRY THIS NEXT')
+  await expect(page.getByLabel('Guided example')).toContainText('operating-point table')
   await expectAvailableTrace(page, 'V(vout)')
   await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*5\.000000 V/i })).toBeVisible()
 })
