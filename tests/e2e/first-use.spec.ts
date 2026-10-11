@@ -1543,6 +1543,38 @@ test('wire segments move independently and wheel zoom preserves their geometry',
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual(moved)
 })
 
+test('wire mode does not select or move an existing wire', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = []
+    project.wires = [{ id: 'wire-mode-existing', points: [[300, 300], [400, 300]] }]
+    project.junctions = []
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: [], wires: project.wires, junctions: [], netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const wire = page.locator('.wire-line[data-wire-id="wire-mode-existing"]')
+  const matrix = await page.locator('svg.schematic').evaluate((element) => {
+    const { a, b, c, d, e, f } = element.getScreenCTM()!
+    return { a, b, c, d, e, f }
+  })
+  const toScreen = (x: number, y: number) => ({ x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f })
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
+  await page.getByRole('button', { name: 'Draw wire (W)' }).click()
+  await expect(wire).not.toHaveClass(/selected/)
+  await expect(wire).toHaveAttribute('aria-pressed', 'false')
+  const start = toScreen(350, 300), end = toScreen(350, 330)
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 3 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(2)
+  await expect(wire).not.toHaveClass(/selected/)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual(before)
+})
+
 test('dragging a wire endpoint moves only that connection point', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
