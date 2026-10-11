@@ -19,6 +19,8 @@
     "ngspice-source.tar.gz",
     "ngspice-relink-objects.tar.gz",
     "ngspice-COPYING.txt",
+    "emscripten-LICENSE.txt",
+    "emscripten-musl-COPYRIGHT.txt",
     "ngspice-link.map",
     "ngspice-linked-object-inventory.json",
     "THIRD_PARTY_NOTICES.md"
@@ -29,6 +31,8 @@
     "ngspice.mjs": "",
     "ngspice.wasm": "",
     "ngspice-COPYING.txt": "",
+    "emscripten-LICENSE.txt": "",
+    "emscripten-musl-COPYRIGHT.txt": "",
     "ngspice-link.map": "",
     "ngspice-source.tar.gz": "",
     "ngspice-relink-objects.tar.gz": "",

@@ -1503,6 +1503,31 @@ test('wire segments move independently and wheel zoom preserves their geometry',
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual(moved)
 })
 
+test('moving a component leaves independent wire geometry in place', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = [{ id: 'independent-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 330, rotation: 0 }]
+    project.wires = [{ id: 'stationary-wire', points: [[400, 330], [500, 330]] }]
+    project.netLabels = []
+    project.junctions = []
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, netLabels: [], junctions: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const part = page.locator('.circuit-part[data-part-id="independent-resistor"]')
+  const bounds = await part.boundingBox()
+  expect(bounds).not.toBeNull()
+  const origin = { x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 }
+  const wireBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
+  await page.mouse.move(origin.x, origin.y)
+  await page.mouse.down()
+  await page.mouse.move(origin.x + 30, origin.y, { steps: 3 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts[0].x)).toBe(380)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual(wireBefore)
+})
+
 test('wire mode does not select or move an existing wire', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {

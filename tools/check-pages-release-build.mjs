@@ -11,6 +11,8 @@ const requiredEngineFiles = [
   'ngspice.mjs',
   'ngspice.wasm',
   'ngspice-COPYING.txt',
+  'emscripten-LICENSE.txt',
+  'emscripten-musl-COPYRIGHT.txt',
   'ngspice-source.tar.gz',
   'ngspice-relink-objects.tar.gz',
   'ngspice-link.map',
