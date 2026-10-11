@@ -10,6 +10,7 @@ const requiredArtifacts = [
   'ngspice-COPYING.txt',
   'emscripten-LICENSE.txt',
   'emscripten-musl-COPYRIGHT.txt',
+  'emscripten-compiler-rt-LICENSE.txt',
   'ngspice-link.map',
   'ngspice-linked-object-inventory.json',
   'ngspice-source.tar.gz',
@@ -96,7 +97,7 @@ export async function checkNgspiceRelease(root = defaultRoot) {
   }
 
   const sourceMaterials = review.sourceMaterials;
-  const requiredSourceMaterials = ['ngspice-source.tar.gz', 'ngspice-relink-objects.tar.gz', 'ngspice-COPYING.txt', 'emscripten-LICENSE.txt', 'emscripten-musl-COPYRIGHT.txt', 'ngspice-link.map', 'ngspice-linked-object-inventory.json', 'THIRD_PARTY_NOTICES.md'];
+  const requiredSourceMaterials = ['ngspice-source.tar.gz', 'ngspice-relink-objects.tar.gz', 'ngspice-COPYING.txt', 'emscripten-LICENSE.txt', 'emscripten-musl-COPYRIGHT.txt', 'emscripten-compiler-rt-LICENSE.txt', 'ngspice-link.map', 'ngspice-linked-object-inventory.json', 'THIRD_PARTY_NOTICES.md'];
   if (!Array.isArray(sourceMaterials) || !requiredSourceMaterials.every((name) => sourceMaterials.includes(name))) {
     fail(`review sourceMaterials must include ${requiredSourceMaterials.join(', ')}`);
   } else {

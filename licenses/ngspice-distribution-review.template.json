@@ -21,6 +21,7 @@
     "ngspice-COPYING.txt",
     "emscripten-LICENSE.txt",
     "emscripten-musl-COPYRIGHT.txt",
+    "emscripten-compiler-rt-LICENSE.txt",
     "ngspice-link.map",
     "ngspice-linked-object-inventory.json",
     "THIRD_PARTY_NOTICES.md"
@@ -33,6 +34,7 @@
     "ngspice-COPYING.txt": "",
     "emscripten-LICENSE.txt": "",
     "emscripten-musl-COPYRIGHT.txt": "",
+    "emscripten-compiler-rt-LICENSE.txt": "",
     "ngspice-link.map": "",
     "ngspice-linked-object-inventory.json": "",
     "ngspice-source.tar.gz": "",

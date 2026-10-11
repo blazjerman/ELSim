@@ -51,8 +51,9 @@ else
 fi
 EMSCRIPTEN_LICENSE="$EMSCRIPTEN_ROOT/LICENSE"
 MUSL_COPYRIGHT="$EMSCRIPTEN_ROOT/system/lib/libc/musl/COPYRIGHT"
-if [[ ! -f "$EMSCRIPTEN_LICENSE" || ! -f "$MUSL_COPYRIGHT" ]]; then
-  echo "Could not locate Emscripten LICENSE and bundled musl COPYRIGHT under $EMSCRIPTEN_ROOT" >&2
+COMPILER_RT_LICENSE="$EMSCRIPTEN_ROOT/system/lib/compiler-rt/LICENSE.TXT"
+if [[ ! -f "$EMSCRIPTEN_LICENSE" || ! -f "$MUSL_COPYRIGHT" || ! -f "$COMPILER_RT_LICENSE" ]]; then
+  echo "Could not locate Emscripten LICENSE, bundled musl COPYRIGHT, and compiler-rt LICENSE.TXT under $EMSCRIPTEN_ROOT" >&2
   exit 2
 fi
 
@@ -99,6 +100,7 @@ cp "$BUILD_DIR/src/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice.wasm"
 cp "$NGSPICE_SOURCE/COPYING" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"
 cp "$EMSCRIPTEN_LICENSE" "$ROOT_DIR/public/engine/emscripten-LICENSE.txt"
 cp "$MUSL_COPYRIGHT" "$ROOT_DIR/public/engine/emscripten-musl-COPYRIGHT.txt"
+cp "$COMPILER_RT_LICENSE" "$ROOT_DIR/public/engine/emscripten-compiler-rt-LICENSE.txt"
 cp "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$ROOT_DIR/public/engine/THIRD_PARTY_NOTICES.md"
 git -C "$NGSPICE_SOURCE" archive --format=tar "$PINNED_COMMIT" | gzip -n > "$ROOT_DIR/public/engine/ngspice-source.tar.gz"
 mapfile -t RELINK_OBJECTS < <(find "$BUILD_DIR" -type f \( -name '*.o' -o -name '*.a' \) -printf '%P\n' | sort)
@@ -126,9 +128,9 @@ node "$ROOT_DIR/tools/inventory-ngspice-link-map.mjs" \
   printf 'Redistribution: check licenses/ngspice-distribution-review.json; do not distribute unless it approves these exact generated artifacts and source materials.\n'
   printf 'Source commit: %s (must match the approved review record)\n' "$PINNED_COMMIT"
   printf 'Source materials: ngspice-source.tar.gz and ngspice-relink-objects.tar.gz.\n'
-  printf 'Toolchain notices: emscripten-LICENSE.txt and emscripten-musl-COPYRIGHT.txt.\n'
+  printf 'Toolchain notices: emscripten-LICENSE.txt, emscripten-musl-COPYRIGHT.txt, and emscripten-compiler-rt-LICENSE.txt.\n'
   printf 'See adjacent THIRD_PARTY_NOTICES.md, ngspice-COPYING.txt, ngspice-link.map, ngspice-linked-object-inventory.json, and ngspice-SHA256SUMS.txt.\n'
 } > "$ROOT_DIR/public/engine/ngspice-build-info.txt"
-(cd "$ROOT_DIR/public/engine" && sha256sum ngspice.mjs ngspice.wasm ngspice-COPYING.txt emscripten-LICENSE.txt emscripten-musl-COPYRIGHT.txt ngspice-link.map ngspice-linked-object-inventory.json THIRD_PARTY_NOTICES.md ngspice-source.tar.gz ngspice-relink-objects.tar.gz ngspice-build-info.txt > ngspice-SHA256SUMS.txt)
+(cd "$ROOT_DIR/public/engine" && sha256sum ngspice.mjs ngspice.wasm ngspice-COPYING.txt emscripten-LICENSE.txt emscripten-musl-COPYRIGHT.txt emscripten-compiler-rt-LICENSE.txt ngspice-link.map ngspice-linked-object-inventory.json THIRD_PARTY_NOTICES.md ngspice-source.tar.gz ngspice-relink-objects.tar.gz ngspice-build-info.txt > ngspice-SHA256SUMS.txt)
 cat "$ROOT_DIR/public/engine/ngspice-SHA256SUMS.txt"
 du -h "$ROOT_DIR/public/engine/ngspice.mjs" "$ROOT_DIR/public/engine/ngspice.wasm" "$ROOT_DIR/public/engine/ngspice-source.tar.gz" "$ROOT_DIR/public/engine/ngspice-relink-objects.tar.gz" "$ROOT_DIR/public/engine/ngspice-COPYING.txt"

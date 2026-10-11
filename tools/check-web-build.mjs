@@ -9,6 +9,7 @@ const forbiddenEngineFiles = new Set([
   'ngspice.mjs',
   'ngspice.wasm',
   'ngspice-COPYING.txt',
+  'emscripten-compiler-rt-LICENSE.txt',
   'ngspice-link.map',
   'ngspice-source.tar.gz',
   'ngspice-relink-objects.tar.gz',

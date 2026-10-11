@@ -11,7 +11,7 @@ await mkdir(engine, { recursive: true })
 await mkdir(path.join(temp, 'licenses'), { recursive: true })
 await mkdir(path.join(temp, 'engine', 'wasm'), { recursive: true })
 const commit = 'a'.repeat(40)
-const artifacts = ['ngspice.mjs', 'ngspice.wasm', 'ngspice-COPYING.txt', 'emscripten-LICENSE.txt', 'emscripten-musl-COPYRIGHT.txt', 'ngspice-link.map', 'ngspice-linked-object-inventory.json', 'ngspice-source.tar.gz', 'ngspice-relink-objects.tar.gz', 'THIRD_PARTY_NOTICES.md', 'ngspice-build-info.txt']
+const artifacts = ['ngspice.mjs', 'ngspice.wasm', 'ngspice-COPYING.txt', 'emscripten-LICENSE.txt', 'emscripten-musl-COPYRIGHT.txt', 'emscripten-compiler-rt-LICENSE.txt', 'ngspice-link.map', 'ngspice-linked-object-inventory.json', 'ngspice-source.tar.gz', 'ngspice-relink-objects.tar.gz', 'THIRD_PARTY_NOTICES.md', 'ngspice-build-info.txt']
 const hash = async (file) => createHash('sha256').update(await readFile(file)).digest('hex')
 
 try {
@@ -30,7 +30,7 @@ try {
     linkedComponents: [{ sourcePath: 'src/example.c', license: 'BSD-like', obligations: 'retain notice' }],
     reviewedLinkedObjects: [{ objectPath: 'src/example.o', sourcePath: 'src/example.c', license: 'BSD-like', obligations: 'retain notice' }],
     sourceAndRelinkingMaterials: true,
-    sourceMaterials: ['ngspice-source.tar.gz', 'ngspice-relink-objects.tar.gz', 'ngspice-COPYING.txt', 'emscripten-LICENSE.txt', 'emscripten-musl-COPYRIGHT.txt', 'ngspice-link.map', 'ngspice-linked-object-inventory.json', 'THIRD_PARTY_NOTICES.md'],
+    sourceMaterials: ['ngspice-source.tar.gz', 'ngspice-relink-objects.tar.gz', 'ngspice-COPYING.txt', 'emscripten-LICENSE.txt', 'emscripten-musl-COPYRIGHT.txt', 'emscripten-compiler-rt-LICENSE.txt', 'ngspice-link.map', 'ngspice-linked-object-inventory.json', 'THIRD_PARTY_NOTICES.md'],
     noticesVerified: true,
     artifactSha256,
     buildChecksumSha256: artifactSha256['ngspice-SHA256SUMS.txt'],

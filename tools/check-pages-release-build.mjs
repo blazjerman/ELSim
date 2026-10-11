@@ -13,6 +13,7 @@ const requiredEngineFiles = [
   'ngspice-COPYING.txt',
   'emscripten-LICENSE.txt',
   'emscripten-musl-COPYRIGHT.txt',
+  'emscripten-compiler-rt-LICENSE.txt',
   'ngspice-source.tar.gz',
   'ngspice-relink-objects.tar.gz',
   'ngspice-link.map',
@@ -44,5 +45,6 @@ const headers = await readFile(path.join(output, '_headers'), 'utf8')
 assert.ok(headers.includes("script-src 'self' 'wasm-unsafe-eval'"), 'deployed CSP must allow WebAssembly compilation')
 const serviceWorker = await readFile(path.join(output, 'sw.js'), 'utf8')
 assert.ok(serviceWorker.includes('./engine/ngspice.wasm'), 'offline app shell must precache the engine WASM')
+assert.ok(serviceWorker.includes('./engine/emscripten-compiler-rt-LICENSE.txt'), 'offline app shell must precache the compiler runtime license')
 assert.ok(serviceWorker.includes('./LICENSE') && serviceWorker.includes('./licenses/npm-dependencies.json'), 'offline app shell must precache the app license and dependency inventory')
 console.log('Pages deploy bundle contains a base-aware app, ngspice WebAssembly engine, and license/source materials.')
