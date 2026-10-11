@@ -34,6 +34,7 @@
     "emscripten-LICENSE.txt": "",
     "emscripten-musl-COPYRIGHT.txt": "",
     "ngspice-link.map": "",
+    "ngspice-linked-object-inventory.json": "",
     "ngspice-source.tar.gz": "",
     "ngspice-relink-objects.tar.gz": "",
     "THIRD_PARTY_NOTICES.md": "",

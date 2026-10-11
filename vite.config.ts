@@ -57,6 +57,8 @@ export default defineConfig(({ command, mode }) => {
         }
         const notices = readFileSync(path.join(root, 'THIRD_PARTY_NOTICES.md'))
         assets.push({ path: './THIRD_PARTY_NOTICES.md', source: notices })
+        assets.push({ path: './LICENSE', source: readFileSync(path.join(root, 'LICENSE')) })
+        assets.push({ path: './licenses/npm-dependencies.json', source: readFileSync(path.join(root, 'licenses/npm-dependencies.json')) })
         const engineDirectory = path.join(root, 'public/engine')
         const engineFiles = command === 'build' && mode === 'release' && existsSync(engineDirectory)
           ? readdirSync(engineDirectory, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name).sort()
@@ -79,6 +81,10 @@ export default defineConfig(({ command, mode }) => {
         const output = path.join(root, 'dist')
         mkdirSync(output, { recursive: true })
         copyFileSync(path.join(root, 'THIRD_PARTY_NOTICES.md'), path.join(output, 'THIRD_PARTY_NOTICES.md'))
+        copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'))
+        const licenses = path.join(output, 'licenses')
+        mkdirSync(licenses, { recursive: true })
+        copyFileSync(path.join(root, 'licenses/npm-dependencies.json'), path.join(licenses, 'npm-dependencies.json'))
       },
     }],
     worker: { format: 'es' },

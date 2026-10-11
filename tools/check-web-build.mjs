@@ -28,6 +28,8 @@ async function visit(directory) {
 try {
   await access(path.join(output, 'index.html'))
   await access(path.join(output, 'THIRD_PARTY_NOTICES.md'))
+  await access(path.join(output, 'LICENSE'))
+  await access(path.join(output, 'licenses/npm-dependencies.json'))
   try {
     await access(engineDirectory)
     throw new Error('Standard web build unexpectedly contains an engine directory; only the qualified release build may package ngspice.')
