@@ -5,15 +5,44 @@ import { test, expect, type Locator } from '@playwright/test'
 
 async function rightClickNetLabel(page: import('@playwright/test').Page, name: string) {
   const labels = page.getByRole('button', { name: `Net label ${name.toUpperCase()}` })
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    for (let index = 0; index < await labels.count(); index += 1) {
-      const text = labels.nth(index).locator('text')
-      const box = await text.boundingBox()
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const blocked: { box: { x: number; y: number; width: number; height: number }; plot: Locator }[] = []
+    const labelCount = await labels.count()
+    for (let index = 0; index < labelCount; index += 1) {
+      const label = labels.nth(index)
+      const box = await label.evaluate((element) => {
+        const text = element.querySelector('text')
+        if (!text) return null
+        const rect = text.getBoundingClientRect()
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      })
       if (!box) continue
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' })
-      return
+      const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      let coveringPlot: Locator | undefined
+      const plots = page.locator('.plot-window')
+      for (let plotIndex = await plots.count() - 1; plotIndex >= 0; plotIndex -= 1) {
+        const plot = plots.nth(plotIndex)
+        const plotBox = await plot.boundingBox()
+        if (plotBox && point.x >= plotBox.x && point.x <= plotBox.x + plotBox.width && point.y >= plotBox.y && point.y <= plotBox.y + plotBox.height) {
+          coveringPlot = plot
+          break
+        }
+      }
+      if (!coveringPlot) {
+        await page.mouse.click(point.x, point.y, { button: 'right' })
+        return
+      }
+      blocked.push({ box, plot: coveringPlot })
     }
-    if (attempt === 0) await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+    const obstructed = blocked.at(-1)
+    if (obstructed) {
+      const plotBox = await obstructed.plot.boundingBox()
+      if (!plotBox) continue
+      const labelCenter = obstructed.box.x + obstructed.box.width / 2
+      const screenCenter = (page.viewportSize()?.width ?? 1280) / 2
+      if (labelCenter < screenCenter) await movePlotWindowRight(page, obstructed.plot)
+      else await movePlotWindowLeft(page, obstructed.plot)
+    } else if (attempt === 0) await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   }
   throw new Error(`No visible, unobstructed label for net ${name} can be right-clicked`)
 }
@@ -30,6 +59,15 @@ async function rightClickWire(page: import('@playwright/test').Page, selector: s
     const screen = position.matrixTransform(svg.getScreenCTM()!)
     return { x: screen.x, y: screen.y }
   })
+  const plots = page.locator('.plot-window')
+  for (let index = await plots.count() - 1; index >= 0; index -= 1) {
+    const plot = plots.nth(index)
+    const box = await plot.boundingBox()
+    if (!box || point.x < box.x || point.x > box.x + box.width || point.y < box.y || point.y > box.y + box.height) continue
+    if (point.x < (page.viewportSize()?.width ?? 1280) / 2) await movePlotWindowRight(page, plot)
+    else await movePlotWindowLeft(page, plot)
+    break
+  }
   await page.mouse.click(point.x, point.y, { button: 'right' })
 }
 
@@ -1299,8 +1337,9 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   const firstWindow = page.locator('.plot-window')
   await expect(firstWindow).toHaveCount(1)
   const windowTop = (await firstWindow.boundingBox())!.y
-  const workspaceTop = (await page.locator('.workspace').boundingBox())!.y
-  expect(windowTop).toBeGreaterThan(workspaceTop)
+  const toolbar = (await page.locator('.canvas-toolbar').boundingBox())!
+  const toolbarBottom = toolbar.y + toolbar.height
+  expect(windowTop).toBeGreaterThan(toolbarBottom)
   await expect(firstWindow.getByRole('button', { name: /Disable V\(R1\)/ })).toBeVisible()
   await expect(firstWindow.getByRole('img', { name: /Transient waveforms from/ })).toBeVisible()
   await expect(firstWindow).toHaveCSS('resize', 'both')
@@ -2130,7 +2169,7 @@ test('voltage source SINE waveform is editable and runs in the browser ngspice e
   await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 SIN\(1 2 1k 0 0 90\)/)
   await page.getByRole('slider', { name: 'Simulation time' }).press('End')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')
-  await expect(source.locator('title')).toContainText(/3(?:\.0+)? V across pins/)
+  await expect(source.locator('title').first()).toContainText(/3(?:\.0+)? V across pins/)
 })
 
 test('LTspice voltage EXP waveform is editable and simulates in the browser engine', { tag: '@ngspice' }, async ({ page }) => {

@@ -23,6 +23,7 @@ test('probe hit testing respects rotation and electrical pins', () => {
 
 test('component current vectors use ngspice device-specific names', () => {
   assert.equal(componentCurrentVector({ kind: 'resistor', ref: 'R1' }), 'i(@R1[i])')
+  assert.equal(componentCurrentVector({ kind: 'source', ref: 'VSENSE' }), 'i(VSENSE)')
   assert.equal(componentCurrentVector({ kind: 'led', ref: 'D1' }), 'i(@D1[id])')
   assert.equal(componentCurrentVector({ kind: 'diode', ref: 'D2' }), 'i(@D2[id])')
   assert.equal(componentCurrentVector({ kind: 'vcvs', ref: 'E1' }), 'i(@E1[i])')

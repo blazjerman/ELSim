@@ -1792,8 +1792,8 @@ export default function App() {
   const createWaveformWindow = (traceIds: string[]) => {
     if (additionalPlotPanels.length >= 8) { setNotice('Close a waveform window before opening another. A project can show up to eight windows.'); return null }
     const offset = (additionalPlotPanels.length % 5) * 26
-    const workspaceTop = Math.max(48, Math.ceil(document.querySelector('.workspace')?.getBoundingClientRect().top ?? 112))
-    const top = workspaceTop + 8 + offset
+    const canvasToolbarBottom = Math.max(48, Math.ceil(document.querySelector('.canvas-toolbar')?.getBoundingClientRect().bottom ?? document.querySelector('.workspace')?.getBoundingClientRect().top ?? 112))
+    const top = canvasToolbarBottom + 8 + offset
     const width = Math.max(320, Math.min(820, Math.floor(window.innerWidth * 0.48)))
     const height = Math.max(220, Math.min(640, Math.floor(window.innerHeight * 0.62), window.innerHeight - top - 16))
     const panel: PlotPanel = {
@@ -1809,7 +1809,7 @@ export default function App() {
     const windows = additionalPlotPanels
     if (windows.length < 2) return
     const gap = 12
-    const top = Math.max(48, Math.ceil(document.querySelector('.workspace')?.getBoundingClientRect().top ?? 112)) + gap
+    const top = Math.max(48, Math.ceil(document.querySelector('.canvas-toolbar')?.getBoundingClientRect().bottom ?? document.querySelector('.workspace')?.getBoundingClientRect().top ?? 112)) + gap
     const width = window.innerWidth - gap * 2
     const height = window.innerHeight - top - gap
     const maxColumns = Math.max(1, Math.floor((width + gap) / (360 + gap)))

@@ -13,28 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  release-review:
-    runs-on: ubuntu-latest
-    outputs:
-      approved: ${{ steps.review.outputs.approved }}
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v6
-
-      - name: Check for an approved engine distribution review
-        id: review
-        shell: bash
-        run: |
-          if node -e "try { process.exit(JSON.parse(require('fs').readFileSync('licenses/ngspice-distribution-review.json', 'utf8')).status === 'approved' ? 0 : 1) } catch { process.exit(1) }"; then
-            echo "approved=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "approved=false" >> "$GITHUB_OUTPUT"
-            echo "Pages deployment skipped: no approved ngspice distribution review record is present." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
   build:
-    needs: release-review
-    if: needs.release-review.outputs.approved == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -52,33 +31,8 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Set up Emscripten
-        uses: emscripten-core/setup-emsdk@v15
-        with:
-          version: 5.0.7
-          actions-cache-folder: emsdk-cache
-
-      - name: Check out pinned ngspice source
-        shell: bash
-        run: |
-          commit="$(tr -d '[:space:]' < engine/wasm/UPSTREAM_COMMIT)"
-          git clone https://git.code.sf.net/p/ngspice/ngspice "$RUNNER_TEMP/ngspice"
-          git -C "$RUNNER_TEMP/ngspice" checkout --detach "$commit"
-          echo "NGSPICE_SOURCE=$RUNNER_TEMP/ngspice" >> "$GITHUB_ENV"
-
-      - name: Build ngspice WebAssembly and its redistribution materials
-        env:
-          JOBS: 2
-        run: ./tools/build-ngspice-wasm.sh
-
-      - name: Build the app and browser simulation engine
-        env:
-          VITE_BASE_PATH: /ELSim/
-          JOBS: 2
-        run: npm run build:release
-
-      - name: Verify deploy bundle includes the app, WASM engine, and notices
-        run: node tools/check-pages-release-build.mjs
+      - name: Build and verify the engine-free Pages preview
+        run: npm run build:pages
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -86,8 +40,7 @@ jobs:
           path: dist
 
   deploy:
-    needs: [release-review, build]
-    if: needs.release-review.outputs.approved == 'true' && needs.build.result == 'success'
+    needs: build
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
