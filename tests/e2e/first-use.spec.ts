@@ -453,7 +453,7 @@ test('schematic wire segments and net labels can be selected from the keyboard',
 
 test('clicking a wire selects it like clicking a component', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Select tool' }).click()
+  await page.getByRole('button', { name: /Add Wire/ }).click()
   const target = await page.locator('svg.schematic').evaluate((svgElement) => {
     const svg = svgElement as SVGSVGElement
     for (const wire of svg.querySelectorAll<SVGGElement>('.wire-line')) {
@@ -477,12 +477,23 @@ test('clicking a wire selects it like clicking a component', async ({ page }) =>
   expect(target).not.toBeNull()
   await page.mouse.click(target!.x, target!.y)
   const wire = page.locator(`.wire-line[data-wire-id="${target!.id}"]`)
+  await expect(page.getByRole('button', { name: 'Select and move (V)' })).toHaveClass(/active/)
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
   await expect(wire).toHaveClass(/selected/)
   await expect(page.locator('.inspector-heading h2')).toHaveText('Wire segment')
   await page.mouse.click(target!.x, target!.y)
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('.inspector-heading h2')).toHaveText('Wire segment')
+
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const before = await resistor.getAttribute('transform')
+  const bounds = await resistor.boundingBox()
+  expect(bounds).not.toBeNull()
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(bounds!.x + bounds!.width / 2 + 30, bounds!.y + bounds!.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(() => resistor.getAttribute('transform')).not.toBe(before)
 })
 
 test('reused sheet interface edits update block pins and attached wires', async ({ page }) => {
