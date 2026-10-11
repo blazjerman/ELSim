@@ -459,26 +459,27 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   })}</>
 })
 
-function TraceToggles({ traces, selectedIds, onToggle, ariaLabel, colorFor }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; ariaLabel: string; colorFor: (index: number) => string }) {
-  const [filter, setFilter] = useState('')
-  const [visibleLimit, setVisibleLimit] = useState(100)
-  const selected = useMemo(() => traces.flatMap((trace, index) => selectedIds.includes(trace.id) ? [{ trace, index }] : []), [selectedIds, traces])
-  const available = useMemo(() => traces.flatMap((trace, index) => !selectedIds.includes(trace.id) ? [{ trace, index }] : []), [selectedIds, traces])
-  const matching = useMemo(() => {
-    const query = filter.trim().toLocaleLowerCase()
-    return available.filter(({ trace }) => !query || `${trace.label} ${trace.id}`.toLocaleLowerCase().includes(query))
-  }, [available, filter])
-  const visible = available.length > 100 ? matching.slice(0, visibleLimit) : matching
-  const remaining = Math.max(0, matching.length - visible.length)
-  return <div className="trace-selector">
-    {selected.length > 0 && <div className="trace-toggles trace-toggles-selected" role="group" aria-label={`Selected ${ariaLabel.toLocaleLowerCase()}`}>{selected.map(({ trace, index }) => <button key={trace.id} aria-pressed="true" className="selected" onClick={() => onToggle(trace.id)}><span style={{ background: colorFor(index) }}/>{trace.label}<span className="trace-remove" aria-hidden="true">×</span></button>)}</div>}
-    <details className="trace-picker"><summary>{selected.length ? 'Add traces' : 'Choose traces'} <span>{available.length}</span></summary>
-      {available.length > 12 && <div className="trace-filter"><Search size={12} aria-hidden="true"/><input type="search" aria-label={`Filter ${ariaLabel.toLocaleLowerCase()}`} placeholder="Filter by name…" value={filter} onChange={(event) => { setFilter(event.target.value); setVisibleLimit(100) }}/><span aria-live="polite">{matching.length} / {available.length}</span></div>}
-      <div className={`trace-toggles${available.length > 12 ? ' trace-toggles-many' : ''}`} role="group" aria-label={ariaLabel}>{visible.map(({ trace, index }) => <button key={trace.id} aria-pressed="false" onClick={() => onToggle(trace.id)}><span style={{ background: colorFor(index) }}/>{trace.label}</button>)}</div>
-      {remaining > 0 && <button className="trace-show-more" onClick={() => setVisibleLimit((limit) => Math.min(matching.length, limit + 100))}>Show next {Math.min(100, remaining)} traces ({remaining} remaining)</button>}
-      {filter.trim() && matching.length === 0 && <div className="trace-filter-empty" role="status">No traces match “{filter.trim()}”.</div>}
-    </details>
-  </div>
+function useTraceVisibility(selectedIds: string[], onRemove: (id: string) => void) {
+  const [disabledIds, setDisabledIds] = useState<string[]>([])
+  const toggleVisibility = (id: string) => setDisabledIds((current) => current.includes(id) ? current.filter((candidate) => candidate !== id) : [...current, id])
+  const remove = (id: string) => {
+    setDisabledIds((current) => current.filter((candidate) => candidate !== id))
+    onRemove(id)
+  }
+  const visibleIds = selectedIds.filter((id) => !disabledIds.includes(id))
+  return { disabledIds, visibleIds, toggleVisibility, remove }
+}
+
+function TraceToggles({ traces, selectedIds, disabledIds, onToggleVisibility, onRemove, ariaLabel, colorFor }: { traces: Trace[]; selectedIds: string[]; disabledIds: string[]; onToggleVisibility: (id: string) => void; onRemove: (id: string) => void; ariaLabel: string; colorFor: (index: number) => string }) {
+  const selected = traces.flatMap((trace, index) => selectedIds.includes(trace.id) ? [{ trace, index }] : [])
+  if (selected.length === 0) return null
+  return <div className="trace-selector"><div className="trace-toggles trace-toggles-selected" role="group" aria-label={`Selected ${ariaLabel.toLocaleLowerCase()}`}>{selected.map(({ trace, index }) => {
+    const disabled = disabledIds.includes(trace.id)
+    return <span key={trace.id} className={`trace-selected-item${disabled ? ' disabled' : ''}`}>
+      <button aria-label={`${disabled ? 'Enable' : 'Disable'} ${trace.label}`} aria-pressed={!disabled} className="trace-visibility" onClick={() => onToggleVisibility(trace.id)}><span style={{ background: colorFor(index) }}/>{trace.label}</button>
+      <button aria-label={`Remove ${trace.label} from waveform`} title={`Remove ${trace.label}`} className="trace-remove" onClick={() => onRemove(trace.id)}>×</button>
+    </span>
+  })}</div></div>
 }
 
 function useResponsivePlotSize() {
@@ -505,7 +506,8 @@ function useResponsivePlotSize() {
 }
 
 function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange, sampleIndex, onSampleChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; sampleIndex: number | null; onSampleChange: (index: number | null) => void; measurements: MeasurementResult[] }) {
-  const shown = useMemo(() => traces.filter((trace) => selectedIds.includes(trace.id)), [traces, selectedIds])
+  const traceVisibility = useTraceVisibility(selectedIds, onToggle)
+  const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIds.includes(trace.id)), [traces, traceVisibility.visibleIds])
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const plotSize = useResponsivePlotSize()
   const width = plotSize.size.width, height = plotSize.size.height, left = 42, right = width - 12, top = 8, bottom = height - 21
@@ -578,7 +580,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} x2={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
     </svg>
-    <TraceToggles traces={traces} selectedIds={selectedIds} onToggle={onToggle} ariaLabel="Available waveform traces" colorFor={(index) => colors[index % colors.length]}/>
+    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIds} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={(index) => colors[index % colors.length]}/>
     {cursorIndex !== null && <div className="cursor-readout">{shown.map((trace) => { const index = nearestAxisIndex(trace.axis, axis?.[cursorIndex] ?? 0, 0, Math.max(0, trace.axis.length - 1)); return <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span> })}</div>}
     {shown.some((trace) => trace.unit === 'A') && <div className="current-sign-note">{shown.some((trace) => /^I\(Q/i.test(trace.label)) ? 'Transistor collector current is positive into the collector terminal.' : 'Positive component current is from pin 1 to pin 2.'}</div>}
     {shown.length === 0 && <div className="stale-note">Choose a trace above or use Probe in the schematic.</div>}
@@ -588,11 +590,12 @@ function WaveformPlot({ traces, selectedIds, onToggle, stale, onExport, range, o
 }
 
 function OperatingPointView({ traces, selectedIds, onToggle, stale, onExport }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void }) {
-  const shown = traces.filter((trace) => selectedIds.includes(trace.id))
+  const traceVisibility = useTraceVisibility(selectedIds, onToggle)
+  const shown = traces.filter((trace) => traceVisibility.visibleIds.includes(trace.id))
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
   return <div className="waveform-view op-view">
     <div className="waveform-title"><strong>{stale ? 'Previous circuit revision' : 'DC operating point'}</strong><span>{traces.length} vectors · one solved bias point</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <TraceToggles traces={traces} selectedIds={selectedIds} onToggle={onToggle} ariaLabel="Available operating-point traces" colorFor={(index) => colors[index % colors.length]}/>
+    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIds} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="operating-point traces" colorFor={(index) => colors[index % colors.length]}/>
     {shown.length ? <div className="op-table-wrap"><table className="op-table"><thead><tr><th>Vector</th><th>Value</th><th>Unit</th></tr></thead><tbody>{shown.map((trace) => <tr key={trace.id}><td><span style={{ color: colors[traces.indexOf(trace) % colors.length] }}>●</span> {trace.label}</td><td>{trace.values[0].toPrecision(7)}</td><td>{trace.unit}</td></tr>)}</tbody></table></div> : <div className="op-empty">Select a voltage or current vector to inspect its DC value.</div>}
     {shown.some((trace) => trace.unit === 'A') && <div className="current-sign-note">{shown.some((trace) => /^I\(Q/i.test(trace.label)) ? 'Transistor collector current is positive into the collector terminal.' : 'Positive component current flows from pin 1 to pin 2.'}</div>}
     {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh these values.</div>}
@@ -600,7 +603,8 @@ function OperatingPointView({ traces, selectedIds, onToggle, stale, onExport }: 
 }
 
 function AcPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
-  const shown = traces.filter((trace) => selectedIds.includes(trace.id))
+  const traceVisibility = useTraceVisibility(selectedIds, onToggle)
+  const shown = traces.filter((trace) => traceVisibility.visibleIds.includes(trace.id))
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const [mode, setMode] = useState<'magnitude' | 'phase'>('magnitude')
   const [cursorIndex, setCursorIndex] = useState<number | null>(null)
@@ -651,14 +655,15 @@ function AcPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRange
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(frequencies[cursorIndex])} x2={xFor(frequencies[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 5} className="plot-tick">{minFrequency.toPrecision(3)} Hz</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{maxFrequency.toPrecision(3)} Hz</text>
     </svg>
-    <TraceToggles traces={traces} selectedIds={selectedIds} onToggle={onToggle} ariaLabel="Available AC result vectors" colorFor={(index) => colors[index % colors.length]}/>
+    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIds} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="AC result vectors" colorFor={(index) => colors[index % colors.length]}/>
     {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <div className="cursor-readout">{shown.map((trace) => { const real = trace.values[cursorIndex], imaginary = trace.imaginaryValues?.[cursorIndex] ?? 0; const readout = mode === 'magnitude' ? `${(20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE)).toPrecision(5)} dB` : `${(Math.atan2(imaginary, real) * 180 / Math.PI).toPrecision(5)}°`; return <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {readout}</span> })}</div>}
     {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh the plot.</div>}
   </div>
 }
 
 function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, onRangeChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; stale: boolean; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
-  const shown = traces.filter((trace) => selectedIds.includes(trace.id))
+  const traceVisibility = useTraceVisibility(selectedIds, onToggle)
+  const shown = traces.filter((trace) => traceVisibility.visibleIds.includes(trace.id))
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const [cursorIndex, setCursorIndex] = useState<number | null>(null)
   useEffect(() => setCursorIndex(null), [traces])
@@ -701,7 +706,7 @@ function DcSweepPlot({ traces, selectedIds, onToggle, stale, onExport, range, on
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(axis[cursorIndex])} x2={xFor(axis[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 5} className="plot-tick">{x0.toPrecision(3)} {traces[0]?.axisUnit}</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{x1.toPrecision(3)} {traces[0]?.axisUnit}</text>
     </svg>
-    <TraceToggles traces={traces} selectedIds={selectedIds} onToggle={onToggle} ariaLabel="Available DC sweep vectors" colorFor={(index) => colors[index % colors.length]}/>
+    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIds} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="DC sweep vectors" colorFor={(index) => colors[index % colors.length]}/>
     {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <div className="cursor-readout">{shown.map((trace) => <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</div>}
     {stale && <div className="stale-note" role="status">The circuit changed after this run. Run again to refresh the plot.</div>}
   </div>
