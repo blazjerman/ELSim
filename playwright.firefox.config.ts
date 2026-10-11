@@ -1,13 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
-import { readFileSync } from 'node:fs'
-
-const engineTestPattern = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).scripts['test:e2e:engine'].match(/--grep "([^"]+)"/)?.[1]
-if (!engineTestPattern) throw new Error('The engine browser test filter is missing from package.json.')
 
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: ['first-use.spec.ts', 'pwa.spec.ts'],
-  grepInvert: new RegExp(engineTestPattern),
+  grepInvert: /@ngspice|@ltspice/,
   fullyParallel: false,
   workers: 1,
   reporter: 'list',

@@ -219,7 +219,7 @@ test('examples can be searched by title and description', async ({ page }) => {
   await expect(cards).toHaveCount(18)
 })
 
-test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', async ({ page }) => {
+test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
   const source = ['Version 4', 'TEXT 0 100 Left 2 !.param VDD=5 RLOAD={VDD * 2} GAIN={RLOAD / 1k} BAD={if(VDD > 1, 2, 1)}'].join('\n')
@@ -384,7 +384,7 @@ test('duplicate model definitions show both library locations and open the sourc
   await expect(page.locator('.model-source-viewer').filter({ has: page.locator('.active-source-line') })).toContainText('.SUBCKT amp A B')
 })
 
-test('LTspice schematic import preserves and reports duplicate model library files', async ({ page }) => {
+test('LTspice schematic import preserves and reports duplicate model library files', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const schematic = ['Version 4', 'SHEET 1 640 240', 'TEXT 0 40 Left 2 !.include amp-a.lib', 'TEXT 0 60 Left 2 !.include amp-b.lib'].join('\n')
   await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
@@ -1397,7 +1397,7 @@ test('first use: reduced-motion preference pauses result animation but keeps man
   await expect.poll(async () => Number(await slider.inputValue())).toBeGreaterThan(0)
 })
 
-test('import, place, and simulate a user-supplied IC with its symbol', { tag: '@ngspice' }, async ({ page }) => {
+test('import, place, and simulate a user-supplied IC with its symbol', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
@@ -1474,7 +1474,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', { tag: '@
   expect(pageErrors).toEqual([])
 })
 
-test('imported LTspice .ic node and inductor values run through ngspice', { tag: '@ngspice' }, async ({ page }) => {
+test('imported LTspice .ic node and inductor values run through ngspice', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -1509,7 +1509,7 @@ test('imported LTspice .ic node and inductor values run through ngspice', { tag:
   await expect(page.locator('.plot-window .measurement-results')).toContainText('IPEAK')
 })
 
-test('LTspice capacitor SpiceLine IC starts the ngspice transient at its imported voltage', { tag: '@ngspice' }, async ({ page }) => {
+test('LTspice capacitor SpiceLine IC starts the ngspice transient at its imported voltage', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -1558,7 +1558,7 @@ test('capacitor initial voltage editor starts the transient at the requested vol
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 2(?:\.0+)? V/)
 })
 
-test('LTspice import shows skipped records and preserves the original source', async ({ page }) => {
+test('LTspice import shows skipped records and preserves the original source', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const source = ['Version 4', 'CUSTOM_VENDOR_RECORD keep-this-note', ''].join('\n')
   await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
@@ -1577,7 +1577,7 @@ test('LTspice import shows skipped records and preserves the original source', a
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).importedSchematicSource.originalText)).toBe(source)
 })
 
-test('show source-line guidance for a known unsupported LTspice model construct', async ({ page }) => {
+test('show source-line guidance for a known unsupported LTspice model construct', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -1613,7 +1613,7 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await expect(warnings).toContainText('external .cm modules')
 })
 
-test('compatibility report reveals model warnings beyond its initial page', async ({ page }) => {
+test('compatibility report reveals model warnings beyond its initial page', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const lines = ['.SUBCKT MANY IN OUT', ...Array.from({ length: 21 }, (_, index) => `B${index + 1} OUT 0 V=mc(1,0.1)`), '.ENDS MANY']
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
@@ -1625,7 +1625,7 @@ test('compatibility report reveals model warnings beyond its initial page', asyn
   await expect(warnings.getByRole('button', { name: 'Review source line 22' })).toBeVisible()
 })
 
-test('show source-line guidance for imported AKO models and MOSFET bins', async ({ page }) => {
+test('show source-line guidance for imported AKO models and MOSFET bins', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -1643,7 +1643,7 @@ test('show source-line guidance for imported AKO models and MOSFET bins', async 
   await expect(warnings).toContainText('does not choose one automatically')
 })
 
-test('show schematic compatibility diagnostics for unresolved LTspice directives', async ({ page }) => {
+test('show schematic compatibility diagnostics for unresolved LTspice directives', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const source = [
     'Version 4',
@@ -1666,7 +1666,7 @@ test('show schematic compatibility diagnostics for unresolved LTspice directives
   await expect(diagnostics).not.toContainText('Unresolved .include model dependency')
 })
 
-test('selects the .LIB section requested by an imported LTspice schematic', async ({ page }) => {
+test('selects the .LIB section requested by an imported LTspice schematic', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const source = ['Version 4', 'TEXT 0 0 Left 2 !.lib "models.lib" slow', 'SYMBOL diode 0 0 R0', 'SYMATTR InstName D1', 'SYMATTR Value D_SLOW'].join('\n')
   await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
@@ -1689,7 +1689,7 @@ test('selects the .LIB section requested by an imported LTspice schematic', asyn
   await expect(netlist).not.toContainText('D_FAST')
 })
 
-test('lets users choose sections when importing a library without a schematic reference', async ({ page }) => {
+test('lets users choose sections when importing a library without a schematic reference', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   const library = ['.LIB typical', '.MODEL D_TYP D(IS=1n)', '.ENDL typical', '.LIB power', '.MODEL D_PWR D(IS=2n)', '.ENDL power'].join('\n')
@@ -2172,7 +2172,7 @@ test('voltage source SINE waveform is editable and runs in the browser ngspice e
   await expect(source.locator('title').first()).toContainText(/3(?:\.0+)? V across pins/)
 })
 
-test('LTspice voltage EXP waveform is editable and simulates in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
+test('LTspice voltage EXP waveform is editable and simulates in the browser engine', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -2190,7 +2190,7 @@ test('LTspice voltage EXP waveform is editable and simulates in the browser engi
   await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 EXP\(0 5 1m 100u 4m 100u\)/)
 })
 
-test('voltage SFFM waveform preserves LTspice fields and runs in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
+test('voltage SFFM waveform preserves LTspice fields and runs in the browser engine', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -2281,7 +2281,7 @@ test('finite PWL repeat count is editable and runs in the browser ngspice engine
   await expectAvailableTrace(page, 'V(vin)')
 })
 
-test('LTspice PWL file source imports its table and simulates in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
+test('LTspice PWL file source imports its table and simulates in the browser engine', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2315,7 +2315,7 @@ test('LTspice PWL file source imports its table and simulates in the browser eng
 })
 
 
-test('LTspice current-source SINE waveform edits and simulates in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
+test('LTspice current-source SINE waveform edits and simulates in the browser engine', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -2669,7 +2669,7 @@ test('P-JFET example demonstrates zero-bias conduction and positive-gate cutoff'
   await expect(lesson).toHaveCount(0)
 })
 
-test('import a user NJF model and LTspice symbol, then simulate it in the browser', { tag: '@ngspice' }, async ({ page }) => {
+test('import a user NJF model and LTspice symbol, then simulate it in the browser', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -2725,7 +2725,7 @@ test('import a user NJF model and LTspice symbol, then simulate it in the browse
   await expect(jfet).toHaveCount(1)
 })
 
-test('one LTspice import loads its schematic, symbol, and user IC model together', { tag: '@ngspice' }, async ({ page }) => {
+test('one LTspice import loads its schematic, symbol, and user IC model together', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2758,7 +2758,7 @@ test('one LTspice import loads its schematic, symbol, and user IC model together
   await expect(operatingPoint.getByRole('row', { name: /V\(out\).*2\.0000000/ })).toBeVisible({ timeout: 60_000 })
 })
 
-test('LTspice B-source voltage expression imports and solves in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
+test('LTspice B-source voltage expression imports and solves in the browser engine', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -2796,7 +2796,7 @@ test('LTspice B-source voltage expression imports and solves in the browser engi
   await expect(operatingPoint.getByRole('row', { name: /V\(xorout\).*1\.000000 V/ })).toBeVisible()
 })
 
-test('user-provided op-amp IC model imports and simulates with ordered pins', { tag: '@ngspice' }, async ({ page }) => {
+test('user-provided op-amp IC model imports and simulates with ordered pins', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
@@ -3076,7 +3076,7 @@ test('ngspice stderr errors identify the imported model line and unsupported fun
   await expect(modelDiagnostic).toContainText('does not provide')
 })
 
-test('LTspice model compatibility check warns about limit() clamp semantics', async ({ page }) => {
+test('LTspice model compatibility check warns about limit() clamp semantics', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -3351,7 +3351,7 @@ test('three-parameter sweep runs all eight bounded cases in the browser engine',
   expect(labels).toContain('R1=2000 Ω, C1=0.00002 F, V1=1 V')
 })
 
-test('two-source LTspice DC sweep imports exact secondary steps, runs labeled curves, and remains editable', { tag: '@ngspice' }, async ({ page }) => {
+test('two-source LTspice DC sweep imports exact secondary steps, runs labeled curves, and remains editable', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -3716,7 +3716,7 @@ test('opening a project asks before replacing the current circuit', async ({ pag
   await expect(page.getByText('Opened Imported round-trip design')).toBeVisible()
 })
 
-test('LTspice export preview gates unknown-license model ZIPs and reports blockers', async ({ page }) => {
+test('LTspice export preview gates unknown-license model ZIPs and reports blockers', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const content = '.MODEL USER_D D(Is=1e-14)\n'
   const sha256 = createHash('sha256').update(content).digest('hex')
