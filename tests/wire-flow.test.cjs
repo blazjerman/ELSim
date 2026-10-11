@@ -25,6 +25,18 @@ test('wire direction follows agreeing branch-current vectors and pin order', () 
   assert.deepEqual(wireCurrentFlow(project, connectivity, project.wires[0], currentForPart), { forward: false, magnitude: 0.005 })
 })
 
+test('default source-to-ground return lead receives the solved current in the rendered wire sections', () => {
+  const project = createStarterProject()
+  const connectivity = analyzeConnectivity(project)
+  const currents = new Map([['V1', -0.005], ['R1', 0.005], ['C1', 0.005]])
+  const flows = wireCurrentFlowSegments(project, connectivity, (part) => currents.get(part.ref))
+  assert.deepEqual(flows.get('w-3'), [{
+    points: [[540, 450], [540, 470], [180, 470], [180, 410]],
+    forward: true,
+    magnitude: 0.005,
+  }])
+})
+
 test('wire animation is omitted when current vectors disagree', () => {
   const project = createStarterProject()
   const connectivity = analyzeConnectivity(project)
