@@ -581,7 +581,6 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIds} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={(index) => colors[index % colors.length]}/>
     <div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => { const index = nearestAxisIndex(trace.axis, axis?.[cursorIndex] ?? 0, 0, Math.max(0, trace.axis.length - 1)); return <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span> })}</div>
-    {shown.length === 0 && <div className="stale-note">Choose a trace above or use Probe in the schematic.</div>}
     {measurements.length > 0 && <div className="measurement-results"><div className="form-section-title">MEASUREMENTS</div><table className="op-table"><thead><tr><th>Name</th><th>Operation</th><th>Value</th></tr></thead><tbody>{measurements.map((measurement) => <tr key={`${measurement.sweep?.index ?? 0}-${measurement.id}`}><td>{measurement.id}{measurement.sweep ? ` · ${measurement.sweep.label}` : ''}</td><td>{measurement.operation === 'delay' ? `DELAY ${measurement.vector} → ${measurement.targetVector ?? 'target'}` : `${measurement.operation.toUpperCase()} ${measurement.vector}${measurement.from || measurement.to ? ` · ${measurement.from ? `from ${measurement.from}` : ''}${measurement.from && measurement.to ? ' ' : ''}${measurement.to ? `to ${measurement.to}` : ''}` : ''}`}</td><td>{measurement.value.toPrecision(7)} {measurement.unit}</td></tr>)}</tbody></table></div>}
   </div>
 }
@@ -1005,7 +1004,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number; crossing: boolean } | null>(null)
   const [hoveredWireId, setHoveredWireId] = useState<string>()
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
-  const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | { kind: 'label'; id: string; x: number; y: number; node?: string } | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
   useLayoutEffect(() => {
     const element = svg.current
@@ -1490,12 +1489,29 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       const element = event.target instanceof Element ? event.target : null
       const partElement = element?.closest<SVGGElement>('[data-part-id]')
       const wireElement = element?.closest<SVGGElement>('[data-wire-id]')
+      const labelElement = element?.closest<SVGGElement>('[data-net-label-id]')
+      const pointerPoint = pointFromEvent(event)
+      const labelAtPointer = [...project.netLabels].reverse().find((label) => {
+        const text = svg.current?.querySelector<SVGTextElement>(`[data-net-label-id="${CSS.escape(label.id)}"] text`)
+        const glyph = text?.getBBox()
+        if (label.visible === false || !glyph) return false
+        const padding = 3
+        return pointerPoint.x >= glyph.x - padding && pointerPoint.x <= glyph.x + glyph.width + padding && pointerPoint.y >= glyph.y - padding && pointerPoint.y <= glyph.y + glyph.height + padding
+      })
+      const labelId = labelElement?.dataset.netLabelId ?? labelAtPointer?.id
       const wrapper = event.currentTarget.parentElement
       if (!wrapper) return
       const bounds = wrapper.getBoundingClientRect()
       const x = Math.max(4, Math.min(bounds.width - 220, event.clientX - bounds.left))
       const y = Math.max(4, Math.min(bounds.height - 210, event.clientY - bounds.top))
-      if (partElement?.dataset.partId) {
+      if (labelId) {
+        const label = project.netLabels.find((item) => item.id === labelId)
+        if (!label) { setContextMenu(null); return }
+        setSelection({ kind: 'label', id: label.id })
+        setSelectedNetLabelIds([label.id])
+        const node = label.name === '0' ? undefined : label.name
+        setContextMenu({ kind: 'label', id: label.id, x, y, ...(node ? { node } : {}) })
+      } else if (partElement?.dataset.partId) {
         const id = partElement.dataset.partId
         setSelection({ kind: 'part', id })
         setSelectedPartIds([id])
@@ -1536,7 +1552,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       {hoveredWire && tool === 'select' && <g className="wire-endpoint-handles" aria-label="Wire endpoints" onPointerEnter={() => setHoveredWireId(hoveredWire.id)}>{([0, 1] as const).map((index) => <circle key={index} cx={hoveredWire.points[index][0]} cy={hoveredWire.points[index][1]} r="7" onPointerDown={(event) => beginWirePointDrag(event, hoveredWire.id, index)} onClick={(event) => event.stopPropagation()}><title>Drag this wire endpoint</title></circle>)}</g>}
     </svg>
-    {contextMenu && <div className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : 'Wire options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+    {contextMenu && <div className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : contextMenu.kind === 'label' ? `Options for net ${project.netLabels.find((label) => label.id === contextMenu.id)?.name ?? ''}` : contextMenu.kind === 'wire' ? 'Wire options' : 'Schematic options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
       {contextPart ? <>
         <div className="context-menu-heading">{contextPart.ref} · {kindNames[contextPart.kind]}</div>
         {contextPinNames.length === 2 && <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 0, 1); setContextMenu(null) }}>Plot voltage across {contextPinNames[0]} → {contextPinNames[1]}</button>}
@@ -1544,6 +1560,10 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
         {contextPart.kind !== 'ground' && <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id }); setContextMenu(null) }}>Plot current through component</button>}
         {contextPart.kind === 'switch' && <button role="menuitem" onClick={() => { togglePart(contextPart.id); setContextMenu(null) }}>Switch {contextPart.value.toLowerCase() === 'on' ? 'off' : 'on'}</button>}
         <button role="menuitem" onClick={() => setContextMenu(null)}>Edit properties</button>
+      </> : contextMenu.kind === 'label' ? <>
+        <div className="context-menu-heading">Net {contextMenu.node ?? '0'}</div>
+        <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node }); setContextMenu(null) }}>Plot voltage to ground</button>
+        <button role="menuitem" onClick={() => { const label = project.netLabels.find((item) => item.id === contextMenu.id); if (label) setLabelDraft({ id: label.id, name: label.name, x: label.x, y: label.y }); setContextMenu(null) }}>Edit net label</button>
       </> : contextMenu.kind === 'wire' ? <>
         <div className="context-menu-heading">{contextMenu.node ? 'Net ' + contextMenu.node : 'Wire'}</div>
         <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node }); setContextMenu(null) }}>Plot voltage to ground</button>
@@ -1949,7 +1969,7 @@ export default function App() {
   const changeDcSweepSource = (sourceRef: string) => setProject((current) => {
     const previous = dcSweepSources.find((part) => part.ref.toLowerCase() === (current.simulation.dcSweep?.source ?? 'V1').toLowerCase())
     const next = dcSweepSources.find((part) => part.ref.toLowerCase() === sourceRef.toLowerCase())
-    const changedQuantity = previous && next && (previous.kind === 'currentSource') !== (next.kind === 'currentSource')
+    const changedQuantity = Boolean(next && (!previous || (previous.kind === 'currentSource') !== (next.kind === 'currentSource')))
     const defaults = next?.kind === 'currentSource'
       ? { source: sourceRef, start: '0 A', stop: '10 mA', step: '1 mA' }
       : { source: sourceRef, start: '0 V', stop: '5 V', step: '0.1 V' }
@@ -2750,7 +2770,7 @@ export default function App() {
     const sweeps = current.simulation.parameterSweeps ?? []
     const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, sweep) => total * sweep.points, 1)
     const updated = sweeps.map((sweep, item) => item === index
-      ? { ...sweep, ...patch, ...((patch.points !== undefined || patch.start !== undefined || patch.stop !== undefined) ? { listValues: undefined } : {}), ...(patch.points !== undefined ? { points: Math.max(2, Math.min(patch.points, Math.floor(10 / otherPoints))) } : {}) }
+      ? { ...sweep, ...patch, ...((patch.listValues === undefined && (patch.points !== undefined || patch.start !== undefined || patch.stop !== undefined)) ? { listValues: undefined } : {}), ...(patch.points !== undefined ? { points: Math.max(2, Math.min(patch.points, Math.floor(10 / otherPoints))) } : {}) }
       : sweep)
     return { ...current, simulation: { ...current.simulation, parameterSweeps: updated } }
   })
