@@ -1115,12 +1115,18 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   }
   const beginDrag = (event: PointerEvent<SVGGElement>, kind: 'part' | 'wire' | 'label', id: string) => {
     if (pendingComponent) return
-    if (tool !== 'select' || event.button !== 0 || spacePan) return
+    if (event.button !== 0 || spacePan) return
     if (kind === 'part' && event.shiftKey) return
     const part = kind === 'part' ? project.parts.find((item) => item.id === id) : undefined
     const wire = kind === 'wire' ? project.wires.find((item) => item.id === id) : undefined
     const label = kind === 'label' ? project.netLabels.find((item) => item.id === id) : undefined
     if (!part && !wire && !label) return
+    const point = pointFromEvent(event)
+    // Keep Wire armed for repeated drawing, while still letting users grab
+    // component bodies to move them. Pin hits continue to start a wire.
+    const movingPartWithWireArmed = tool === 'wire' && kind === 'part' && part
+      && componentPins(part).every((pin) => Math.hypot(point.x - pin.x, point.y - pin.y) > 16)
+    if (tool !== 'select' && !movingPartWithWireArmed) return
     event.stopPropagation()
     const group = kind === 'part' && selectedPartIds.length > 1 && selectedPartIds.includes(id)
       ? project.parts.filter((item) => selectedPartIds.includes(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y }))
@@ -1129,7 +1135,6 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     else if (kind !== 'part') setSelectedPartIds([])
     setSelection({ kind, id })
     beginEdit()
-    const point = pointFromEvent(event)
     drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, points: wire?.points.map(([x,y]) => [x,y]), group }
     event.currentTarget.setPointerCapture(event.pointerId)
   }

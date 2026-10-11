@@ -772,6 +772,13 @@ test('wire and component palette selections stay armed for drag placement', asyn
   await dragOnCanvas(500, 160, 560, 160)
   await expect(wireCard).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wireCount + 1)
+  // The Wire tool stays armed, but a drag on a component body moves that
+  // component instead of starting another wire.
+  await dragOnCanvas(360, 290, 380, 290)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-r1').x)).toBe(380)
+  await expect(wireCard).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wireCount + 1)
+  await expect(page.locator('.circuit-part[data-part-id="p-r1"]')).toHaveClass(/selected/)
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
   await resistor.click()
   await dragOnCanvas(500, 300, 500, 340)
@@ -1349,6 +1356,9 @@ test('wire segments move independently and wheel zoom preserves their geometry',
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).not.toEqual(before)
   const moved = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
   expect(moved).toEqual([[300, 330], [400, 330]])
+  const wire = page.locator('.wire-line[data-wire-id="editable-wire"]')
+  await expect(wire).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.inspector-heading h2')).toHaveText('Wire segment')
 
   const beforeZoom = Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))
   await page.locator('svg.schematic').evaluate((element) => {
