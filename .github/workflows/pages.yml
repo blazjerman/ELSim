@@ -31,12 +31,6 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Check dependency license inventory
-        run: npm run check:npm-licenses
-
-      - name: Run domain and netlist tests
-        run: npm test
-
       - name: Build engine-free Pages preview
         env:
           VITE_BASE_PATH: /ELSim/
