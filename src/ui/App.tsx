@@ -495,7 +495,9 @@ function useResponsivePlotSize() {
         : { width: rect.width, height: rect.height })
     }
     const observer = new ResizeObserver(measure)
-    observer.observe(element)
+    // Observe the flex container instead of the SVG itself. SVG viewBox changes can
+    // affect its intrinsic size and make resize notifications lag behind a window resize.
+    observer.observe(element.parentElement ?? element)
     measure()
     return () => observer.disconnect()
   }, [])
