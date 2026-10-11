@@ -1,5 +1,6 @@
 const identity = (value: number) => value
 const sampledIndices = new WeakMap<object, Map<string, number[]>>()
+const sampledRanges = new WeakMap<object, Map<string, [number, number]>>()
 
 /** Pick a bounded set of sample indices while retaining each bucket's extrema. */
 export function extremaIndices(values: ArrayLike<number>, start: number, end: number, maxPoints: number, map: (value: number, index: number) => number = identity): number[] {
@@ -47,16 +48,29 @@ function cacheIndices(values: ArrayLike<number>, cacheable: boolean, existing: M
   return indices
 }
 
-/** Scan a visible range without allocating a copy or spreading a large vector. */
-export function valueRange(values: ArrayLike<number>, start: number, end: number, map: (value: number, index: number) => number = (value) => value): [number, number] | null {
+/** Scan an immutable result-vector range without allocating a copy or spreading a large vector. */
+export function valueRange(values: ArrayLike<number>, start: number, end: number, map: (value: number, index: number) => number = identity): [number, number] | null {
   const first = Math.max(0, Math.floor(start))
   const last = Math.min(values.length - 1, Math.floor(end))
   if (first > last) return null
+  const key = `${first}:${last}`
+  const cacheable = map === identity && typeof values === 'object' && values !== null
+  const cache = cacheable ? sampledRanges.get(values) : undefined
+  const cached = cache?.get(key)
+  if (cached) return cached
   let minimum = Infinity, maximum = -Infinity
   for (let index = first; index <= last; index += 1) {
     const value = map(values[index], index)
     if (value < minimum) minimum = value
     if (value > maximum) maximum = value
   }
-  return [minimum, maximum]
+  const range: [number, number] = [minimum, maximum]
+  if (cacheable) {
+    const ranges = cache ?? new Map<string, [number, number]>()
+    // Keep the range cache bounded per result vector, just like sampled indices.
+    if (ranges.size >= 16) ranges.clear()
+    ranges.set(key, range)
+    if (!cache) sampledRanges.set(values as object, ranges)
+  }
+  return range
 }
