@@ -45,6 +45,15 @@ test('nonzero exit without an actionable ngspice error has a status fallback', (
   assert.equal(firstNgspiceError('simulation completed', '', 0), undefined)
 })
 
+test('fatal timestep and convergence messages are surfaced even without an Error prefix', () => {
+  const message = 'doAnalyses: TRAN: Timestep too small; time = 1.2e-6, timestep = 1e-18'
+  assert.equal(firstNgspiceError(message, '', 0), message)
+  assert.equal(firstNgspiceError('Warning: source stepping failed; trying gmin stepping\nTransient analysis completed', '', 0), undefined)
+  const diagnostic = diagnosticForNgspice(message, artifact)
+  assert.match(diagnostic.hint, /component values and switch states/i)
+  assert.match(diagnostic.hint, /smaller maximum time step/i)
+})
+
 test('common floating-node failures include beginner recovery guidance', () => {
   const diagnostic = diagnosticForNgspice('singular matrix: check nodes', artifact)
   assert.equal(diagnostic.hint, 'Add a ground symbol and check for floating nodes or open connections.')
