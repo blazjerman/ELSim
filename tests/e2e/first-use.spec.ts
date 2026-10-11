@@ -253,6 +253,27 @@ test('LTspice schematic import preserves and reports duplicate model library fil
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets.map((asset: { filename: string }) => asset.filename))).toEqual(['amp-a.lib', 'amp-b.lib'])
 })
 
+test('every component shortcut selects its matching palette item', async ({ page }) => {
+  await page.goto('/')
+  const shortcuts: [string, string][] = [
+    ['r', 'Resistor'], ['a', 'Lamp'], ['c', 'Capacitor'], ['l', 'Inductor'], ['v', 'Voltage source'],
+    ['i', 'Current source'], ['d', 'Diode'], ['e', 'LED'], ['s', 'Switch'], ['g', 'VCVS'],
+    ['k', 'VCCS'], ['f', 'CCCS'], ['h', 'CCVS'], ['b', 'Behavioral source'], ['q', 'NPN transistor'],
+    ['t', 'PNP transistor'], ['j', 'N-channel JFET'], ['z', 'P-channel JFET'], ['x', 'N-channel MOSFET'],
+    ['2', 'P-channel MOSFET'], ['0', 'Ground'],
+  ]
+  for (const [shortcut, label] of shortcuts) {
+    const card = page.locator('.component-card').filter({ has: page.locator('.component-label').getByText(label, { exact: true }) })
+    await page.keyboard.press(shortcut)
+    await expect(card, `${shortcut} should select ${label}`).toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.press('Escape')
+  }
+  await page.keyboard.press('v')
+  await expect(page.locator('.component-card').filter({ has: page.locator('.component-label').getByText('Voltage source', { exact: true }) })).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('m')
+  await expect(page.getByRole('button', { name: 'Select and move (M)' })).toHaveClass(/active/)
+})
+
 test('component cards explain behavior on hover and keyboard focus', async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
@@ -461,7 +482,7 @@ test('schematic wire segments and net labels can be selected from the keyboard',
 
 test('wire selection stays separate from the inspector and active tool', async ({ page }) => {
   await page.goto('/')
-  const selectTool = page.getByRole('button', { name: 'Select and move (V)' })
+  const selectTool = page.getByRole('button', { name: 'Select and move (M)' })
   await selectTool.click()
   const target = await page.locator('svg.schematic').evaluate((svgElement) => {
     const svg = svgElement as SVGSVGElement
