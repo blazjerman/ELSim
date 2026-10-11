@@ -175,6 +175,30 @@ test('warns for verified LTspice behavioral functions and caret operator mismatc
   assert.equal(source.includes('V(IN)^2'), true)
 })
 
+test('flags additional LTspice functions rejected by the pinned browser ngspice engine', () => {
+  const source = [
+    '.SUBCKT functions IN OUT',
+    'B1 OUT 0 V=cbrt(V(IN))',
+    'B2 OUT 0 V=atan2(V(IN),1)',
+    'B3 OUT 0 V=mod(V(IN),2)',
+    'B4 OUT 0 V=pwrs(V(IN),2)',
+    'B5 OUT 0 V=arccos(V(IN))',
+    'B6 OUT 0 V=arcsin(V(IN))',
+    'B7 OUT 0 V=arctan(V(IN))',
+    'B8 OUT 0 V=noise()',
+    'B9 OUT 0 V=smallsig()',
+    '.ENDS functions',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    ...Array.from({ length: 9 }, (_, index) => [index + 2, 'LTspice B-source function unavailable in browser ngspice']),
+  ])
+  assert.match(warnings[0].impact, /no such function/)
+  assert.match(warnings.at(-1).impact, /expression syntax error/)
+  assert.match(warnings[0].suggestion, /does not rewrite/)
+  assert.equal(source.includes('cbrt(V(IN))'), true)
+})
+
 test('dialect warnings retain continuation line numbers and ignore dollar signs inside quotes', () => {
   const source = [
     '.SUBCKT compat IN OUT',

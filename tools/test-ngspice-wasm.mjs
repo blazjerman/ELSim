@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -252,6 +254,22 @@ for (const fixture of fixtures) {
     }
   }
   process.stdout.write(`PASS ${fixture}\n`)
+}
+
+// Keep the compatibility assistant's warnings tied to failures from the shipped pinned WASM engine.
+const unsupportedFunctionDir = mkdtempSync(path.join(tmpdir(), 'elsim-ngspice-unsupported-functions-'))
+try {
+  const unsupportedFunctions = ['cbrt(V(in))', 'atan2(V(in),1)', 'mod(V(in),2)', 'pwrs(V(in),2)', 'arccos(V(in))', 'arcsin(V(in))', 'arctan(V(in))', 'noise()', 'smallsig()']
+  for (const [index, expression] of unsupportedFunctions.entries()) {
+    const deckPath = path.join(unsupportedFunctionDir, `unsupported-${index + 1}.cir`)
+    writeFileSync(deckPath, `* ${expression}\nV1 in 0 DC 0.5\nB1 out 0 V=${expression}\nR1 out 0 1k\n.op\n.end\n`)
+    const result = await runInWorker(deckPath)
+    assert.notEqual(result.status, 0, `${expression}: expected the pinned browser ngspice engine to reject this LTspice-only function`)
+    assert.match(result.stderr, /no such function|YYparse error/i, `${expression}: expected an unsupported-function or expression-syntax diagnostic`)
+    process.stdout.write(`PASS unsupported LTspice B-source function ${expression}\n`)
+  }
+} finally {
+  rmSync(unsupportedFunctionDir, { recursive: true, force: true })
 }
 
 // Exercise the same ngspice control commands generated for pulse-source stepping.
