@@ -203,30 +203,42 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     return
   }
   if (command === '.step') {
-    const match = directive.trim().match(/^\.step\s+param\s+([A-Za-z_][A-Za-z0-9_]*)\s+(?:(list)\s+)?(.+)$/i)
-    const parameterName = match?.[1]
-    const listMode = Boolean(match?.[2])
-    const values = match?.[3].trim().split(/[\s,]+/).filter(Boolean) ?? []
+    const match = directive.trim().match(/^\.step\s+(?:(dec|oct|lin)\s+)?param\s+([A-Za-z_][A-Za-z0-9_]*)\s+(.+)$/i)
+    const mode = match?.[1]?.toLowerCase() ?? 'lin'
+    const parameterName = match?.[2]
+    const body = match?.[3].trim() ?? ''
+    const listMode = /^list\s+/i.test(body)
+    const values = (listMode ? body.replace(/^list\s+/i, '') : body).split(/[\s,]+/).filter(Boolean)
     const sheet = project.sheets.find((candidate) => candidate.id === project.activeSheetId)
     const declared = sheet?.parameters?.find((parameter) => parameter.name.toLowerCase() === parameterName?.toLowerCase())
     const magnitudes = values.map(scalarMagnitude)
     let start: string | undefined, stop: string | undefined, points = 0
     let listValues: string[] | undefined
-    if (listMode && values.length >= 2 && values.length <= 10 && magnitudes.every((value): value is number => value !== null)) {
+    if (listMode && mode === 'lin' && values.length >= 2 && values.length <= 10 && magnitudes.every((value): value is number => value !== null)) {
       const delta = magnitudes[1] - magnitudes[0]
       const arithmetic = magnitudes.every((value, index) => Math.abs(value - (magnitudes[0] + delta * index)) <= Math.max(1, Math.abs(value)) * 1e-10)
       if (arithmetic && delta !== 0) { start = values[0]; stop = values.at(-1); points = values.length }
       else { start = values[0]; stop = values.at(-1); points = values.length; listValues = values }
-    } else if (!listMode && values.length === 3 && magnitudes.every((value): value is number => value !== null)) {
+    } else if (!listMode && mode === 'lin' && values.length === 3 && magnitudes.every((value): value is number => value !== null)) {
       const [first, last, increment] = magnitudes
       const intervals = (last - first) / increment
       const rounded = Math.round(intervals)
       if (increment !== 0 && intervals > 0 && Math.abs(intervals - rounded) < 1e-9 && rounded >= 1 && rounded < 10) {
         start = values[0]; stop = values[1]; points = rounded + 1
       }
+    } else if (!listMode && (mode === 'dec' || mode === 'oct') && values.length === 3 && magnitudes.every((value): value is number => value !== null)) {
+      const [density, first, last] = magnitudes
+      const base = mode === 'dec' ? 10 : 2
+      const intervals = Math.log(last / first) / Math.log(base) * density
+      const rounded = Math.round(intervals)
+      if (Number.isInteger(density) && density > 0 && first > 0 && last > first && Number.isFinite(intervals) && Math.abs(intervals - rounded) < 1e-9 && rounded >= 1 && rounded < 10) {
+        start = values[1]; stop = values[2]; points = rounded + 1
+        listValues = Array.from({ length: points }, (_, index) => (index === points - 1 ? last : first * base ** (index / density)).toPrecision(12))
+      }
     }
     if (!match || !declared || !start || !stop || points < 2 || points > 10 || project.simulation.analysis !== 'tran') {
-      const reason = !match ? 'expected .step param NAME START STOP INCREMENT or .step param NAME list VALUE...' : !declared ? `parameter ${parameterName} is not declared by .param` : project.simulation.analysis !== 'tran' ? 'ELSim parameter stepping currently supports transient analysis only' : 'only bounded arithmetic lists of 2–10 numeric values are supported'
+      const expected = mode === 'dec' || mode === 'oct' ? `.step ${mode} param NAME POINTS_PER_${mode === 'dec' ? 'DECADE' : 'OCTAVE'} START STOP with a range aligned to that spacing` : '.step param NAME START STOP INCREMENT or .step param NAME list VALUE...'
+      const reason = !match ? `expected ${expected}` : !declared ? `parameter ${parameterName} is not declared by .param` : project.simulation.analysis !== 'tran' ? 'ELSim parameter stepping currently supports transient analysis only' : mode === 'dec' || mode === 'oct' ? 'only positive, aligned logarithmic ranges with 2–10 total values are supported' : 'only bounded numeric lists or ranges with 2–10 values are supported'
       warnings.push(`Line ${line}: .step ${recordExcerpt(directive.replace(/^\.step\s*/i, ''))} was not imported: ${reason}; original source is preserved.`)
       return
     }

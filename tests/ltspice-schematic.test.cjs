@@ -6,6 +6,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { parseLtspiceSchematic } = require(path.join(build, 'domain/ltspiceSchematic.js'))
 const { analyzeConnectivity, pinNet } = require(path.join(build, 'domain/connectivity.js'))
 const { createNetlist, createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
+const { prepareParameterSweep } = require(path.join(build, 'engine/sweep.js'))
 
 const symbol = {
   id: 'symbol-res', filename: 'res.asy', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
@@ -63,8 +64,25 @@ test('unsupported LTspice .step forms remain in source and explain the import li
   const asc = ['Version 4', 'TEXT 0 100 Left 2 !.param R=1k', 'TEXT 0 120 Left 2 !.step dec param R 10 1k 100k'].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'unsupported-step.asc')
   assert.equal(project.simulation.parameterSweeps, undefined)
-  assert.match(warnings.join('\n'), /expected \.step param NAME START STOP INCREMENT/)
+  assert.match(warnings.join('\n'), /only positive, aligned logarithmic ranges with 2–10 total values are supported/)
   assert.equal(project.importedSchematicSource.originalText, asc)
+})
+
+test('imports aligned LTspice dec/oct parameter sweeps as bounded logarithmic value lists', () => {
+  const asc = ['Version 4', 'TEXT 0 100 Left 2 !.param RLOG=1k', 'TEXT 0 120 Left 2 !.step dec param RLOG 5 1k 10k', 'TEXT 0 140 Left 2 !.tran 0 1m'].join('\n')
+  const { project, warnings } = parseLtspiceSchematic(asc, 'log-step.asc')
+  assert.deepEqual(warnings, [])
+  const [sweep] = project.simulation.parameterSweeps
+  assert.equal(sweep.globalParameter, 'RLOG')
+  assert.equal(sweep.points, 6)
+  assert.equal(sweep.listValues.length, 6)
+  const values = prepareParameterSweep(project).map((run) => Number(run.values[0].value))
+  assert.ok(Math.abs(values[0] - 1000) < 1e-8)
+  assert.ok(Math.abs(values.at(-1) - 10000) < 1e-8)
+  for (let index = 1; index < values.length; index += 1) assert.ok(Math.abs(values[index] / values[index - 1] - 10 ** 0.2) < 1e-8)
+  const unaligned = parseLtspiceSchematic(['Version 4', 'TEXT 0 100 Left 2 !.param RLOG=1k', 'TEXT 0 120 Left 2 !.step oct param RLOG 2 1k 5k'].join('\n'), 'unaligned-step.asc')
+  assert.equal(unaligned.project.simulation.parameterSweeps, undefined)
+  assert.match(unaligned.warnings.join('\n'), /aligned logarithmic ranges/)
 })
 
 test('imports LTspice parameters with whitespace and safe braced arithmetic without truncating unsupported expressions', () => {

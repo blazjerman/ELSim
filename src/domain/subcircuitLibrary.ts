@@ -286,8 +286,8 @@ export function analyzeLtspiceSchematicCompatibility(source: string, availableLi
       continue
     }
     if (command === 'step') {
-      if (/^\.step\s+param\s+[A-Za-z_][A-Za-z0-9_]*\s+(?:list\s+)?[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?(?:[\s,]+[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?){1,9}$/i.test(directive)) continue
-      warnings.push({ sourceLine: index + 1, feature: 'Unsupported .step sweep form', excerpt: directive.slice(0, 160), impact: 'ELSim imports bounded numeric linear .step param ranges and arithmetic lists. Other LTspice sweep forms are preserved but are not simulated.', suggestion: 'Use a numeric parameter range or arithmetic list with at most 10 total cases, or configure the sweep in ELSim after import.' })
+      if (/^\.step\s+(?:(?:dec|oct|lin)\s+)?param\s+[A-Za-z_][A-Za-z0-9_]*\s+(?:list\s+)?[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?(?:[\s,]+[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?(?:v|a|s|hz)?){1,9}$/i.test(directive)) continue
+      warnings.push({ sourceLine: index + 1, feature: 'Unsupported .step sweep form', excerpt: directive.slice(0, 160), impact: 'ELSim imports bounded numeric linear and aligned dec/oct parameter ranges plus explicit numeric lists. Other LTspice sweep forms are preserved but are not simulated.', suggestion: 'Use a numeric range or explicit list with at most 10 total cases, or configure the sweep in ELSim after import.' })
       continue
     }
     if (['param', 'tran', 'ac', 'dc', 'op', 'ic', 'meas', 'measure', 'global'].includes(command)) continue
