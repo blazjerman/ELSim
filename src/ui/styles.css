@@ -111,3 +111,4 @@
 .component-placement-preview path{stroke:#a4e8bb;stroke-width:1.5}
 .selection-box{fill:#73c99722;stroke:#91e5ad;stroke-width:1.5;stroke-dasharray:5 3;vector-effect:non-scaling-stroke}.selection-box.crossing{fill:#67a9e822;stroke:#86c5f5}
 .wire-connection-dot{fill:#a9d8b7;stroke:#152019;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.component-subtitle{left:40px;right:8px;max-width:calc(100% - 48px);overflow:hidden;text-overflow:ellipsis;text-align:right;white-space:nowrap}

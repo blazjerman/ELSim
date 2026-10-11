@@ -346,6 +346,19 @@ test('component cards explain behavior on hover and keyboard focus', async ({ pa
   await expect.poll(() => resistor.evaluate((element) => getComputedStyle(element, '::after').visibility)).toBe('visible')
 })
 
+test('component subtitles stay clear of icons in the left library panel', async ({ page }) => {
+  await page.goto('/')
+  const overlaps = await page.locator('.component-card').evaluateAll((cards) => cards.flatMap((card) => {
+    const icon = card.querySelector('.component-icon')?.getBoundingClientRect()
+    const subtitle = card.querySelector('.component-subtitle')?.getBoundingClientRect()
+    if (!icon || !subtitle) return []
+    return icon.right > subtitle.left && icon.left < subtitle.right && icon.bottom > subtitle.top && icon.top < subtitle.bottom
+      ? [card.textContent?.trim() ?? card.getAttribute('aria-label')]
+      : []
+  }))
+  expect(overlaps).toEqual([])
+})
+
 test('AC source validation focuses its inspector field before simulation', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')
