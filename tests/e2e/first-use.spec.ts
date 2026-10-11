@@ -3252,8 +3252,11 @@ test('waveform click moves the cursor, wheel zooms horizontally, and drag keeps 
   expect(box).not.toBeNull()
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.55)
   await page.mouse.wheel(0, -250)
+  await expect.poll(() => page.evaluate(() => {
+    const range = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.tran
+    return range.end - range.start
+  })).toBeLessThan(zoomedRange.end - zoomedRange.start)
   const wheelRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.tran)
-  expect(wheelRange.end - wheelRange.start).toBeLessThan(zoomedRange.end - zoomedRange.start)
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.55)
   await page.mouse.down()
   await page.mouse.move(box!.x + box!.width * 0.58, box!.y + box!.height * 0.55, { steps: 5 })
