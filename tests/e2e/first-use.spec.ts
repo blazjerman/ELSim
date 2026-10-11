@@ -173,7 +173,7 @@ async function scrubToTime(slider: Locator, targetSeconds: number) {
   await slider.fill(String(bestIndex))
 }
 
-test('quick tour explains the current workspace and project save flow', async ({ page }) => {
+test('quick tour explains the current workspace and project save flow', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Open quick tour' }).click()
   const dialog = page.locator('.tour-dialog[role="dialog"]')
@@ -203,13 +203,13 @@ test('quick tour explains the current workspace and project save flow', async ({
   await expect(dialog).toHaveCount(0)
 })
 
-test('examples can be searched by title and description', async ({ page }) => {
+test('examples can be searched by title and description', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   const search = dialog.getByRole('textbox', { name: 'Find an example' })
   const cards = dialog.locator('.example-list article')
-  await expect(cards).toHaveCount(18)
+  await expect(cards).toHaveCount(20)
   await search.fill('P-JFET')
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('P-JFET positive-rail switch')
@@ -219,7 +219,7 @@ test('examples can be searched by title and description', async ({ page }) => {
   await search.fill('no such circuit')
   await expect(dialog.getByRole('status')).toContainText('No examples found')
   await dialog.getByRole('button', { name: 'Clear example search' }).click()
-  await expect(cards).toHaveCount(18)
+  await expect(cards).toHaveCount(20)
 })
 
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', { tag: '@ltspice' }, async ({ page }) => {
@@ -423,7 +423,7 @@ test('LTspice schematic import preserves and reports duplicate model library fil
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets.map((asset: { filename: string }) => asset.filename))).toEqual(['amp-a.lib', 'amp-b.lib'])
 })
 
-test('component shortcuts are case-sensitive and future Falstad shortcuts stay reserved', async ({ page }) => {
+test('component shortcuts are case-sensitive and future Falstad shortcuts stay reserved', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.keyboard.press('Escape')
   const shortcuts: [string, string][] = [
@@ -456,7 +456,7 @@ test('component shortcuts are case-sensitive and future Falstad shortcuts stay r
   await expect(page.getByRole('button', { name: 'Select and move (M)' })).toHaveClass(/active/)
 })
 
-test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', async ({ page }) => {
+test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const parts = page.locator('.circuit-part')
   const count = await parts.count()
@@ -770,7 +770,7 @@ test('wire animation refreshes after moving a component and changing its value',
   expect(editedCurrent).toBeLessThan(initialCurrent)
 })
 
-test('schematic components use one roving tab stop and arrow-key spatial navigation', async ({ page }) => {
+test('schematic components use one roving tab stop and arrow-key spatial navigation', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
   await expect(resistor).toHaveAttribute('role', 'button')
@@ -808,7 +808,7 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(page.getByText('S1 switched on. Run simulation to calculate the updated circuit.')).toBeVisible()
 })
 
-test('schematic wire segments and net labels can be selected from the keyboard', async ({ page }) => {
+test('schematic wire segments and net labels can be selected from the keyboard', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const wire = page.getByRole('button', { name: /^Wire segment from/ }).first()
   await expect(wire).toHaveAttribute('tabindex', '0')
