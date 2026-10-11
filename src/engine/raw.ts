@@ -34,7 +34,25 @@ export function parseAsciiRawFile(text: string): ParsedRawFile {
   const marker = /(?:^|\r?\n)Values:\s*(?:\r?\n)/i.exec(text)
   if (!marker) throw new Error('ngspice did not write an ASCII raw data Values section.')
   const header = text.slice(0, marker.index)
-  const data = text.slice(marker.index + marker[0].length).split(/\r?\n/).filter((line) => line.trim() !== '')
+  let dataOffset = marker.index + marker[0].length
+  let dataLineStart = 0, dataLineEnd = 0
+  const nextDataLine = () => {
+    while (dataOffset < text.length) {
+      const start = dataOffset
+      const newline = text.indexOf('\n', dataOffset)
+      let end = newline < 0 ? text.length : newline
+      dataOffset = newline < 0 ? text.length : newline + 1
+      if (end > start && text.charCodeAt(end - 1) === 13) end -= 1
+      let first = start
+      while (first < end && text.charCodeAt(first) <= 32) first += 1
+      if (first < end) {
+        dataLineStart = first
+        dataLineEnd = end
+        return true
+      }
+    }
+    return false
+  }
   const title = header.match(/^Title:\s*(.*)$/im)?.[1]?.trim() ?? 'ngspice results'
   const plotName = header.match(/^Plotname:\s*(.*)$/im)?.[1]?.trim() ?? 'Analysis'
   const flags = header.match(/^Flags:\s*(.*)$/im)?.[1]?.trim().toLowerCase().split(/\s+/) ?? []
@@ -60,25 +78,65 @@ export function parseAsciiRawFile(text: string): ParsedRawFile {
   if (isComplex && !isFrequency) throw new Error(`Complex ngspice raw data is unsupported for ${plotName}.`)
   if (isFrequency && !isComplex) throw new Error('ngspice AC analysis must contain complex frequency-domain vectors.')
   if (isOperatingPoint && pointCount !== 1) throw new Error('ngspice operating-point raw data must contain exactly one sample.')
-  if (data.length < pointCount * variableCount) throw new Error('ngspice raw data ended before all numeric points were read.')
   const axis = new Float64Array(pointCount)
-  for (let point = 0, lineIndex = 0; point < pointCount; point++) {
+  for (let point = 0; point < pointCount; point++) {
     if (hasTimeAxis || isFrequency || isDcSweep) {
-      const axisTokens = data[lineIndex++].trim().split(/\s+/)
-      const pair = axisTokens[1]?.match(/^([^,]+),([^,]+)$/)
-      if (Number(axisTokens[0]) !== point || (!pair && axisTokens.length < 2)) throw new Error(`Malformed ngspice ${isFrequency ? 'frequency' : isDcSweep ? 'DC sweep' : 'time'} sample index ${point}.`)
-      axis[point] = finiteNumber(pair?.[1] ?? axisTokens[1], `point ${point}, ${isFrequency ? 'frequency' : isDcSweep ? 'DC sweep' : 'time'}`)
-      if (isFrequency) finiteNumber(pair?.[2] ?? '0', `point ${point}, frequency imaginary part`)
+      if (!nextDataLine()) throw new Error('ngspice raw data ended before all numeric points were read.')
+      let cursor = dataLineStart
+      while (cursor < dataLineEnd && text.charCodeAt(cursor) > 32) cursor += 1
+      const pointEnd = cursor
+      while (cursor < dataLineEnd && text.charCodeAt(cursor) <= 32) cursor += 1
+      const valueStart = cursor
+      while (cursor < dataLineEnd && text.charCodeAt(cursor) > 32) cursor += 1
+      const valueEnd = cursor
+      let comma = -1, extraComma = false
+      for (let index = valueStart; index < valueEnd; index += 1) if (text.charCodeAt(index) === 44) {
+        if (comma < 0) comma = index
+        else extraComma = true
+      }
+      const paired = comma > valueStart && comma < valueEnd - 1 && !extraComma
+      if (Number(text.slice(dataLineStart, pointEnd)) !== point || valueStart >= valueEnd) throw new Error(`Malformed ngspice ${isFrequency ? 'frequency' : isDcSweep ? 'DC sweep' : 'time'} sample index ${point}.`)
+      axis[point] = finiteNumber(text.slice(valueStart, paired ? comma : valueEnd), `point ${point}, ${isFrequency ? 'frequency' : isDcSweep ? 'DC sweep' : 'time'}`)
+      if (isFrequency) finiteNumber(paired ? text.slice(comma + 1, valueEnd) : '0', `point ${point}, frequency imaginary part`)
     } else {
-      const tokens = data[lineIndex++].trim().split(/\s+/)
-      if (Number(tokens[0]) !== point || tokens.length < 2) throw new Error(`Malformed ngspice operating-point sample index ${point}.`)
-      variables[0].values[point] = finiteNumber(tokens.at(-1)!, `point ${point}, ${variables[0].name}`)
+      if (!nextDataLine()) throw new Error('ngspice raw data ended before all numeric points were read.')
+      let cursor = dataLineStart
+      while (cursor < dataLineEnd && text.charCodeAt(cursor) > 32) cursor += 1
+      const pointEnd = cursor
+      let tokenCount = pointEnd > dataLineStart ? 1 : 0
+      let lastStart = dataLineStart, lastEnd = pointEnd
+      while (cursor < dataLineEnd) {
+        while (cursor < dataLineEnd && text.charCodeAt(cursor) <= 32) cursor += 1
+        if (cursor >= dataLineEnd) break
+        lastStart = cursor
+        while (cursor < dataLineEnd && text.charCodeAt(cursor) > 32) cursor += 1
+        lastEnd = cursor
+        tokenCount += 1
+      }
+      if (Number(text.slice(dataLineStart, pointEnd)) !== point || tokenCount < 2) throw new Error(`Malformed ngspice operating-point sample index ${point}.`)
+      variables[0].values[point] = finiteNumber(text.slice(lastStart, lastEnd), `point ${point}, ${variables[0].name}`)
     }
     for (let variable = 1; variable < variableCount; variable++) {
-      const tokens = data[lineIndex++].trim().split(/\s+/)
-      const pair = tokens.at(-1)?.match(/^([^,]+),([^,]+)$/)
-      variables[variable].values[point] = finiteNumber(pair?.[1] ?? tokens.at(-1)!, `point ${point}, ${variables[variable].name}`)
-      if (isComplex) variables[variable].imaginaryValues![point] = finiteNumber(pair?.[2] ?? '', `point ${point}, ${variables[variable].name} imaginary part`)
+      if (!nextDataLine()) throw new Error('ngspice raw data ended before all numeric points were read.')
+      let tokenStart = dataLineStart
+      while (tokenStart < dataLineEnd && text.charCodeAt(tokenStart) <= 32) tokenStart += 1
+      let tokenEnd = tokenStart
+      while (tokenEnd < dataLineEnd && text.charCodeAt(tokenEnd) > 32) tokenEnd += 1
+      while (tokenEnd < dataLineEnd) {
+        while (tokenEnd < dataLineEnd && text.charCodeAt(tokenEnd) <= 32) tokenEnd += 1
+        if (tokenEnd >= dataLineEnd) break
+        tokenStart = tokenEnd
+        while (tokenEnd < dataLineEnd && text.charCodeAt(tokenEnd) > 32) tokenEnd += 1
+      }
+      if (tokenStart >= tokenEnd) throw new Error('ngspice raw data ended before all numeric points were read.')
+      let comma = -1, extraComma = false
+      for (let index = tokenStart; index < tokenEnd; index += 1) if (text.charCodeAt(index) === 44) {
+        if (comma < 0) comma = index
+        else extraComma = true
+      }
+      const paired = comma > tokenStart && comma < tokenEnd - 1 && !extraComma
+      variables[variable].values[point] = finiteNumber(text.slice(tokenStart, paired ? comma : tokenEnd), `point ${point}, ${variables[variable].name}`)
+      if (isComplex) variables[variable].imaginaryValues![point] = finiteNumber(paired ? text.slice(comma + 1, tokenEnd) : '0', `point ${point}, ${variables[variable].name} imaginary part`)
     }
   }
   const axisVector = isDcSweep ? variables[0].name : ''
