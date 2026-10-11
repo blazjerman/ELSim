@@ -2725,9 +2725,23 @@ export default function App() {
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
       }
     }
-    worker.onerror = (event) => {
+    worker.onerror = (event: ErrorEvent) => {
       setRunState('error')
-      setNotice(`ngspice worker failed: ${event.message}`)
+      const errorMessage = typeof event.message === 'string' && event.message.trim()
+        ? event.message.trim()
+        : event.error instanceof Error && event.error.message.trim()
+          ? event.error.message.trim()
+          : ''
+      const location = event.filename ? ` (${event.filename}${event.lineno ? `:${event.lineno}` : ''})` : ''
+      setNotice(errorMessage
+        ? `ngspice worker failed: ${errorMessage}${location}`
+        : `ngspice worker stopped unexpectedly${location}. The browser provided no error details; check the local engine files and try again.`)
+      worker.terminate()
+      if (activeWorkerRef.current === worker) activeWorkerRef.current = null
+    }
+    worker.onmessageerror = () => {
+      setRunState('error')
+      setNotice('ngspice worker returned data the app could not read. Try again; if it repeats, include the project and generated netlist when reporting the issue.')
       worker.terminate()
       if (activeWorkerRef.current === worker) activeWorkerRef.current = null
     }
