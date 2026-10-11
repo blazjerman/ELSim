@@ -760,6 +760,7 @@ test('first use: run the RC starter and inspect its solved waveform', { tag: '@n
   const sourceGroundReturn = page.locator('[data-wire-id="w-3"] .wire-current-flow')
   await expect(sourceGroundReturn).toHaveCount(1)
   await expect(sourceGroundReturn).toHaveAttribute('data-current-magnitude', /^(?!0(?:\.0+)?$).+/)
+  await expect(sourceGroundReturn).toHaveAttribute('points', /180,410/)
   const returnDashOffset = Number(await sourceGroundReturn.getAttribute('stroke-dashoffset'))
   await expect.poll(async () => Number(await sourceGroundReturn.getAttribute('stroke-dashoffset'))).not.toBe(returnDashOffset)
   const activeFlow = page.locator('.wire-current-flow:not([data-current-magnitude="0"])').first()

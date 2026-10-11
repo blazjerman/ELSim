@@ -1282,7 +1282,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   const contextPinNames = contextPart ? contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name) : []
   const wireFlows = useMemo(() => {
     if (!currentAnimationEnabled || !resultIsCurrent || !resultConnectivity) return new Map<string, WireCurrentFlowSegment[]>()
-    return wireCurrentFlowSegments(project, resultConnectivity, (part) => resultValue(componentCurrentVector(part)))
+    return wireCurrentFlowSegments(project, resultConnectivity, (part) => resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`))
   }, [project, resultIsCurrent, resultConnectivity, activeSample, simulationResult, currentAnimationEnabled])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
