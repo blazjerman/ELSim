@@ -32,6 +32,15 @@ test('wire animation is omitted when current vectors disagree', () => {
   assert.equal(flow, null)
 })
 
+test('zero current keeps a hidden flow path available through direction reversals', () => {
+  const project = createStarterProject()
+  const connectivity = analyzeConnectivity(project)
+  const flow = wireCurrentFlow(project, connectivity, project.wires[0], () => 0)
+  assert.ok(flow)
+  assert.equal(flow.magnitude, 0)
+  assert.equal(typeof flow.forward, 'boolean')
+})
+
 test('an intermediate ground symbol does not suppress current flow on a continuous lead', () => {
   const project = createStarterProject()
   const connectivity = analyzeConnectivity(project)

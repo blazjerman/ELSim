@@ -832,13 +832,15 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, tool, spacePan, mo
   onSelect: (id: string) => void
 }) {
   const points = wire.points.map(([x, y]) => `${x},${y}`).join(' ')
-  const glow = flow ? Math.min(1, (0.2 + Math.log10(1 + flow.magnitude * 1000) * 0.22) * animationScale) : 0
-  const duration = flow ? Math.max(0.18, Math.min(2.5, 1.6 / (Math.log10(1 + flow.magnitude * 1000) + 0.5) / animationSpeed)) : 1
+  const flowPoints = (flow?.forward === false ? [...wire.points].reverse() : wire.points).map(([x, y]) => `${x},${y}`).join(' ')
+  const currentStrength = flow ? Math.min(1, Math.sqrt(flow.magnitude / 0.01)) : 0
+  const glow = flow && flow.magnitude > 1e-12 ? Math.min(1, (0.12 + currentStrength * 0.88) * animationScale) : 0
+  const duration = 0.8 / animationSpeed
   return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}`} role="button" tabIndex={0} aria-label={`Wire path with ${wire.points.length - 1} segment${wire.points.length === 2 ? '' : 's'}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'probe') event.stopPropagation(); else if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } }}>
     <polyline points={points} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/>
     <polyline points={points} fill="none" stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     {tool === 'select' && wire.points.slice(0, -1).map((point, index) => movableSegments[index] && <polyline key={`segment-hit-${index}`} points={`${point[0]},${point[1]} ${wire.points[index + 1][0]},${wire.points[index + 1][1]}`} fill="none" stroke="transparent" strokeWidth="12" strokeLinecap="round" style={{ pointerEvents: 'stroke', cursor: 'move' }} onPointerDown={(event) => onBeginSegmentDrag(event, wire.id, index)}><title>Drag to reroute this wire segment</title></polyline>)}
-    {flow && <polyline className={`wire-current-flow${flow.forward ? '' : ' reverse'}`} points={points} fill="none" stroke="#f0c674" strokeWidth={3.5 * animationScale} strokeLinecap="round" strokeDasharray={`${3 * animationScale} ${15 * animationScale}`} strokeDashoffset="0" opacity={glow} style={{ animationDuration: `${duration}s` }}><title>Conventional current {flow.forward ? 'from the first to last wire endpoint' : 'from the last to first wire endpoint'} · {flow.magnitude.toPrecision(4)} A</title></polyline>}
+    {flow && <polyline className="wire-current-flow" data-current-direction={flow.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={flow.magnitude} points={flowPoints} fill="none" stroke="#f0c674" strokeWidth={(2.2 + currentStrength * 2.2) * animationScale} strokeLinecap="round" strokeDasharray={`${3 * animationScale} ${15 * animationScale}`} strokeDashoffset="0" opacity={glow} style={{ animationDuration: `${duration}s` }}><title>Conventional current {flow.forward ? 'from the first to last wire endpoint' : 'from the last to first wire endpoint'} · {flow.magnitude.toPrecision(4)} A</title></polyline>}
     <circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/>
   </g>
 })
@@ -940,7 +942,6 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
-  const [scrubIndex, setScrubIndex] = useState<number | null>(sampleIndex)
   useLayoutEffect(() => {
     const element = svg.current
     if (!element) return
@@ -976,8 +977,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     }
     return index
   }, [simulationResult])
-  const activeSample = transientAxis?.length ? Math.max(0, Math.min(transientAxis.length - 1, scrubIndex ?? transientAxis.length - 1)) : 0
-  useEffect(() => { setScrubIndex(sampleIndex ?? (resultIsCurrent && transientAxis?.length ? transientAxis.length - 1 : null)) }, [simulationResult, sampleIndex])
+  const activeSample = transientAxis?.length ? Math.max(0, Math.min(transientAxis.length - 1, sampleIndex ?? transientAxis.length - 1)) : 0
   const resultValue = (id: string): number | undefined => {
     const trace = tracesByVector.get(id.toLowerCase())
     if (!trace) return undefined
@@ -1321,7 +1321,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       </> : null}
     </div>}
     {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}
-      <div className="canvas-footer"><span><Grid2X2 size={13}/> Snap to grid</span>{transientAxis?.length ? <label className="simulation-scrubber"><span>Simulation time</span><input aria-label="Simulation time" type="range" min="0" max={transientAxis.length - 1} step="1" value={activeSample} onChange={(event) => { const index = Number(event.target.value); setScrubIndex(index); onSampleChange(index) }}/><output>{transientAxis[activeSample].toPrecision(4)} s</output></label> : <span>Scroll to zoom · Space/middle-drag to pan</span>}<span>{project.parts.length} components</span></div>
+      <div className="canvas-footer"><span><Grid2X2 size={13}/> Snap to grid</span>{transientAxis?.length ? <label className="simulation-scrubber"><span>Simulation time</span><input aria-label="Simulation time" type="range" min="0" max={transientAxis.length - 1} step="1" value={activeSample} onChange={(event) => onSampleChange(Number(event.target.value))}/><output>{transientAxis[activeSample].toPrecision(4)} s</output></label> : <span>Scroll to zoom · Space/middle-drag to pan</span>}<span>{project.parts.length} components</span></div>
   </div>
 }
 

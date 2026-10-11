@@ -56,17 +56,22 @@ export function wireCurrentFlow(
     : currentForPart(part)
   const firstCurrent = first ? branchCurrent(first) : undefined
   const lastCurrent = last ? branchCurrent(last) : undefined
-  if (!firstCurrent && !lastCurrent) return null
+  if (firstCurrent === undefined && lastCurrent === undefined) return null
   const current = firstCurrent ?? lastCurrent
-  if (current === undefined || !Number.isFinite(current) || Math.abs(current) < 1e-12) return null
+  if (current === undefined || !Number.isFinite(current)) return null
+
+  // Keep a zero-current path mounted but invisible. Removing and remounting
+  // its animation at every zero crossing would reset its travel phase.
+  const magnitude = Math.max(Math.abs(firstCurrent ?? 0), Math.abs(lastCurrent ?? 0))
+  const firstForward = firstCurrent === undefined || !first ? undefined : (first.pinIndex === 1) === (firstCurrent > 0)
+  const lastForward = lastCurrent === undefined || !last ? undefined : (last.pinIndex === 0) === (lastCurrent > 0)
+  if (magnitude < 1e-12) return { forward: firstForward ?? lastForward ?? true, magnitude: 0 }
 
   // If both ends have device currents, require KCL consistency before using
   // either vector. The sign at each pin determines the same wire direction.
-  const firstForward = firstCurrent === undefined || !first ? undefined : (first.pinIndex === 1) === (firstCurrent > 0)
-  const lastForward = lastCurrent === undefined || !last ? undefined : (last.pinIndex === 0) === (lastCurrent > 0)
   if (firstForward !== undefined && lastForward !== undefined) {
     const tolerance = Math.max(1e-9, Math.max(Math.abs(firstCurrent!), Math.abs(lastCurrent!)) * 0.05)
     if (firstForward !== lastForward || Math.abs(Math.abs(firstCurrent!) - Math.abs(lastCurrent!)) > tolerance) return null
   }
-  return { forward: firstForward ?? lastForward!, magnitude: Math.abs(current) }
+  return { forward: firstForward ?? lastForward!, magnitude }
 }
