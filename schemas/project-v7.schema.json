@@ -118,10 +118,12 @@
       ],
       "properties": {
         "x": {
-          "type": "number"
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
         },
         "y": {
-          "type": "number"
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
         }
       }
     },
@@ -182,10 +184,12 @@
           "type": "string"
         },
         "x": {
-          "type": "number"
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
         },
         "y": {
-          "type": "number"
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
         },
         "rotation": {
           "enum": [
@@ -707,10 +711,12 @@
             "type": "array",
             "prefixItems": [
               {
-                "type": "number"
+                "type": "number",
+                "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
               },
               {
-                "type": "number"
+                "type": "number",
+                "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
               }
             ],
             "minItems": 2,
@@ -738,10 +744,12 @@
           "pattern": "^(0|[A-Za-z_][A-Za-z0-9_.$]*)$"
         },
         "x": {
-          "type": "number"
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
         },
         "y": {
-          "type": "number"
+          "type": "number",
+          "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."
         },
         "visible": {
           "type": "boolean",

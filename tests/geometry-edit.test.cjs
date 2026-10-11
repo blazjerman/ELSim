@@ -5,9 +5,42 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { canMoveWireSegment, componentPins, moveWireAnchors, moveWireSegment, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
+const { canMoveWireSegment, componentPins, EDITOR_GRID_SIZE, moveWireAnchors, moveWireSegment, snapToEditorGrid, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
+
+test('native component pins and the RC starter share one 10-unit placement grid', () => {
+  const project = createStarterProject()
+  const coordinates = [
+    ...project.parts.flatMap((part) => [part.x, part.y, ...componentPins(part).flatMap((pin) => [pin.x, pin.y])]),
+    ...project.wires.flatMap((wire) => wire.points.flat()),
+    ...project.netLabels.flatMap((label) => [label.x, label.y]),
+  ]
+  assert.ok(coordinates.every((value) => value % EDITOR_GRID_SIZE === 0))
+  for (const kind of ['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'subcircuit']) {
+    const part = { id: kind, kind, ref: `X_${kind}`, value: '', x: 200, y: 200, rotation: 0, modelPins: ['A', 'B', 'C', 'D', 'E'] }
+    assert.ok(componentPins(part).every((pin) => pin.x % EDITOR_GRID_SIZE === 0 && pin.y % EDITOR_GRID_SIZE === 0), `${kind} pins align`)
+  }
+  assert.equal(snapToEditorGrid(375), 380)
+  assert.equal(snapToEditorGrid(374), 370)
+})
+
+test('opening a manually edited project snaps its stored geometry before net validation', () => {
+  const project = createStarterProject()
+  project.parts.find((part) => part.id === 'p-r1').x = 361
+  project.wires[0].points[2][0] = 313
+  project.netLabels[0].x = 244
+  const opened = validateProject(project)
+  assert.equal(opened.parts.find((part) => part.id === 'p-r1').x, 360)
+  assert.deepEqual(opened.wires[0].points[2], [310, 290])
+  assert.equal(opened.netLabels[0].x, 240)
+  const storedValues = [
+    ...opened.parts.flatMap((part) => [part.x, part.y, ...componentPins(part).flatMap((pin) => [pin.x, pin.y])]),
+    ...opened.wires.flatMap((wire) => wire.points.flat()),
+    ...opened.netLabels.flatMap((label) => [label.x, label.y]),
+  ]
+  assert.ok(storedValues.every((value) => value % EDITOR_GRID_SIZE === 0))
+})
 
 test('fit view centers and bounds distant parts, wire points, and labels', () => {
   const project = createStarterProject()
@@ -44,8 +77,8 @@ test('horizontal flip geometry updates indexed pin anchors and detects crossed s
   const part = project.parts.find((item) => item.id === 'p-r1')
   const before = analyzeConnectivity(project)
   const flipped = { ...part, flipX: true }
-  assert.deepEqual(componentPins(part).map(({ x, y }) => [x, y]), [[313, 290], [417, 290]])
-  assert.deepEqual(componentPins(flipped).map(({ x, y }) => [x, y]), [[417, 290], [313, 290]])
+  assert.deepEqual(componentPins(part).map(({ x, y }) => [x, y]), [[310, 290], [410, 290]])
+  assert.deepEqual(componentPins(flipped).map(({ x, y }) => [x, y]), [[410, 290], [310, 290]])
   const candidate = structuredClone(project)
   candidate.wires = moveWireAnchors(candidate.wires, componentPins(part), componentPins(flipped))
   candidate.parts = candidate.parts.map((item) => item.id === part.id ? flipped : item)
@@ -108,7 +141,7 @@ test('starter-circuit lead segment can be rerouted without moving its attached s
   const wire = project.wires.find((item) => item.id === 'w-1')
   assert.equal(canMoveWireSegment(project, wire, 0), true)
   const wires = moveWireSegment(project, wire.id, 0, 40, 0)
-  assert.deepEqual(wires.find((item) => item.id === wire.id).points.slice(0, 4), [[185, 313], [225, 313], [225, 290], [313, 290]])
+  assert.deepEqual(wires.find((item) => item.id === wire.id).points.slice(0, 4), [[180, 310], [220, 310], [220, 290], [310, 290]])
 })
 
 test('rerouting between connected terminals inserts a dogleg and keeps pin connectivity', () => {
@@ -117,20 +150,20 @@ test('rerouting between connected terminals inserts a dogleg and keeps pin conne
     { id: 'edit-r', kind: 'resistor', ref: 'R8', value: '1 kΩ', x: 700, y: 600, rotation: 0 },
     { id: 'edit-c', kind: 'capacitor', ref: 'C8', value: '1 µF', x: 852, y: 600, rotation: 0 },
   )
-  project.wires.push({ id: 'terminal-lead', points: [[752, 600], [802, 600]] })
+  project.wires.push({ id: 'terminal-lead', points: [[750, 600], [802, 600]] })
   const before = analyzeConnectivity(project)
   assert.equal(before.pinNets.get('edit-r:1'), before.pinNets.get('edit-c:0'))
   const wires = moveWireSegment(project, 'terminal-lead', 0, 0, 20)
   project.wires = wires
   const after = analyzeConnectivity(project)
-  assert.deepEqual(project.wires.find((wire) => wire.id === 'terminal-lead').points, [[752, 600], [752, 620], [802, 620], [802, 600]])
+  assert.deepEqual(project.wires.find((wire) => wire.id === 'terminal-lead').points, [[750, 600], [750, 620], [802, 620], [802, 600]])
   assert.equal(after.pinNets.get('edit-r:1'), after.pinNets.get('edit-c:0'))
 })
 
 test('a segment with an interior pin branch cannot be dragged', () => {
   const project = createStarterProject()
   project.wires.push({ id: 'branched', points: [[700, 600], [800, 600]] })
-  project.parts.push({ id: 'branch-ground', kind: 'ground', ref: 'GND', value: '', x: 750, y: 622, rotation: 0 })
+  project.parts.push({ id: 'branch-ground', kind: 'ground', ref: 'GND', value: '', x: 750, y: 620, rotation: 0 })
   const wire = project.wires.find((item) => item.id === 'branched')
   assert.equal(canMoveWireSegment(project, wire, 0), false)
   assert.equal(moveWireSegment(project, wire.id, 0, 0, 20), project.wires)

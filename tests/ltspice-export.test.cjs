@@ -205,8 +205,8 @@ test('exports original educational JFET models and round-trips N/P JFET pin orde
   const models = modelText ? [{ id: 'jfet-models', filename: 'models.lib', sha256: sha256(modelText), content: modelText, licenseStatus: 'unknown', importedAt: new Date().toISOString() }] : []
   const restored = parseLtspiceSchematic(asc.content, asc.path, symbols, models).project
   assert.deepEqual(restored.parts.filter((part) => part.ref === 'J1' || part.ref === 'J2').map(({ ref, kind, symbolPinOffsets }) => ({ ref, kind, symbolPinOffsets })), [
-    { ref: 'J1', kind: 'njfet', symbolPinOffsets: [[0, -52], [-52, 0], [0, 52]] },
-    { ref: 'J2', kind: 'pjfet', symbolPinOffsets: [[0, -52], [-52, 0], [0, 52]] },
+    { ref: 'J1', kind: 'njfet', symbolPinOffsets: [[0, -50], [-50, 0], [0, 50]] },
+    { ref: 'J2', kind: 'pjfet', symbolPinOffsets: [[0, -50], [-50, 0], [0, 50]] },
   ])
 })
 
@@ -287,7 +287,7 @@ test('exports capacitor voltage initial conditions and round-trips generated lab
 test('blocks capacitor voltage IC export when both capacitor pins share one net', async () => {
   const project = createStarterProject()
   project.simulation.initialConditions = [{ element: 'C1', voltage: '2.5' }]
-  project.wires.push({ id: 'short-capacitor', points: [[540, 355], [540, 455]] })
+  project.wires.push({ id: 'short-capacitor', points: [[540, 350], [540, 450]] })
   project.sheets[0].wires = project.wires
   const output = await exportLtspiceProject(project)
   assert.equal(output.files.length, 0)
@@ -791,7 +791,7 @@ test('keeps generated semiconductor models beside the sheet that owns their inst
   assert.match(childFile.content, /SYMATTR Value DDEFAULT/)
 })
 
-test('exports diagonal wires and preserves pin, label, endpoint, and explicit-junction connectivity', async () => {
+test('exports diagonal wires after normalizing ELSim-authored coordinates to the editor grid', async () => {
   const project = createStarterProject()
   project.name = 'Diagonal wire test'
   project.parts = [
@@ -813,11 +813,11 @@ test('exports diagonal wires and preserves pin, label, endpoint, and explicit-ju
     assert.deepEqual(output.blockers, [])
     const asc = output.files.find((file) => file.path.endsWith('.asc'))
     if (source.junctions.length) {
-      assert.match(asc.content, /WIRE 452 400 500 450/)
-      assert.match(asc.content, /WIRE 452 500 500 450/)
+      assert.match(asc.content, /WIRE 450 400 500 450/)
+      assert.match(asc.content, /WIRE 450 500 500 450/)
     } else {
-      assert.match(asc.content, /WIRE 452 400 548 500/)
-      assert.match(asc.content, /WIRE 452 500 548 400/)
+      assert.match(asc.content, /WIRE 450 400 550 500/)
+      assert.match(asc.content, /WIRE 450 500 550 400/)
     }
     const symbols = output.files.filter((file) => file.path.endsWith('.asy')).map((file, index) => ({ id: `diagonal-symbol-${index}`, filename: file.path, sha256: sha256(file.content), content: file.content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }))
     const restored = parseLtspiceSchematic(asc.content, asc.path, symbols)
@@ -971,20 +971,20 @@ test('blocks behavioral export when an expression has incompatible LTspice opera
   assert.ok(switchReferenceOutput.blockers.some((blocker) => /current through S1.*generated resistor references/.test(blocker.message)))
 })
 
-test('blocks fractional coordinates without returning rounded LTspice files', async () => {
+test('normalizes fractional ELSim project coordinates before export', async () => {
   const partProject = createStarterProject()
   partProject.parts[0].x += 0.5
   partProject.sheets[0].parts = partProject.parts
   const partOutput = await exportLtspiceProject(partProject)
-  assert.equal(partOutput.files.length, 0)
-  assert.ok(partOutput.blockers.some((blocker) => blocker.sourceId === partProject.parts[0].id && /Coordinate .* is not a supported integer/.test(blocker.message)))
+  assert.ok(partOutput.files.length > 0)
+  assert.equal(partOutput.blockers.some((blocker) => /Coordinate .* is not a supported integer/.test(blocker.message)), false)
 
   const wireProject = createStarterProject()
   wireProject.wires[0].points[0][0] += 0.5
   wireProject.sheets[0].wires = wireProject.wires
   const wireOutput = await exportLtspiceProject(wireProject)
-  assert.equal(wireOutput.files.length, 0)
-  assert.ok(wireOutput.blockers.some((blocker) => blocker.sourceId === wireProject.wires[0].id && /Coordinate .* is not a supported integer/.test(blocker.message)))
+  assert.ok(wireOutput.files.length > 0)
+  assert.equal(wireOutput.blockers.some((blocker) => /Coordinate .* is not a supported integer/.test(blocker.message)), false)
 })
 
 test('native MOSFETs export as M devices with generated educational models', async () => {

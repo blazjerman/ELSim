@@ -739,7 +739,7 @@ test('four-terminal voltage-controlled sources keep SPICE output and control pin
   assert.match(artifact.text, /^E1 n\d+ n\d+ n\d+ n\d+ 2$/m)
   assert.match(artifact.text, /^G1 n\d+ n\d+ n\d+ n\d+ 1m$/m)
   assert.equal(artifact.sourceMap.filter((entry) => ['p-e1', 'p-g1'].includes(entry.sourceId)).length, 2)
-  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'E1')).map(({ x, y }) => [x - 720, y - 280]), [[-52, 0], [52, 0], [0, -52], [0, 52]])
+  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'E1')).map(({ x, y }) => [x - 720, y - 280]), [[-50, 0], [50, 0], [0, -50], [0, 50]])
 })
 
 test('NPN and PNP parts create separate educational BJT models in C-B-E pin order', () => {
@@ -749,12 +749,12 @@ test('NPN and PNP parts create separate educational BJT models in C-B-E pin orde
     { id: 'p-q2', kind: 'pnp', ref: 'Q2', value: '60', x: 820, y: 400, rotation: 0 },
   )
   project.netLabels.push(
-    { id: 'q1-c', name: 'q1collector', x: 735, y: 248, visible: false },
-    { id: 'q1-b', name: 'q1base', x: 648, y: 300, visible: false },
-    { id: 'q1-e', name: 'q1emitter', x: 735, y: 352, visible: false },
-    { id: 'q2-c', name: 'q2collector', x: 855, y: 348, visible: false },
-    { id: 'q2-b', name: 'q2base', x: 768, y: 400, visible: false },
-    { id: 'q2-e', name: 'q2emitter', x: 855, y: 452, visible: false },
+    { id: 'q1-c', name: 'q1collector', x: 740, y: 250, visible: false },
+    { id: 'q1-b', name: 'q1base', x: 650, y: 300, visible: false },
+    { id: 'q1-e', name: 'q1emitter', x: 740, y: 350, visible: false },
+    { id: 'q2-c', name: 'q2collector', x: 860, y: 350, visible: false },
+    { id: 'q2-b', name: 'q2base', x: 770, y: 400, visible: false },
+    { id: 'q2-e', name: 'q2emitter', x: 860, y: 450, visible: false },
   )
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
@@ -762,7 +762,7 @@ test('NPN and PNP parts create separate educational BJT models in C-B-E pin orde
   assert.match(artifact.text, /^\.model ELSIM_MODEL_Q1 NPN\(IS=1e-14 BF=100/m)
   assert.match(artifact.text, /^Q2 q2collector q2base q2emitter ELSIM_MODEL_Q2$/m)
   assert.match(artifact.text, /^\.model ELSIM_MODEL_Q2 PNP\(IS=1e-14 BF=60/m)
-  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'Q1')).map(({ x, y }) => [x - 700, y - 300]), [[35, -52], [-52, 0], [35, 52]])
+  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'Q1')).map(({ x, y }) => [x - 700, y - 300]), [[40, -50], [-50, 0], [40, 50]])
   project.parts.find((part) => part.ref === 'Q1').value = '0'
   assert.throws(() => validateProject(project), /integer from 1 to 1000/)
 })
@@ -774,14 +774,14 @@ test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin ord
     { id: 'm-p1', kind: 'pmos', ref: 'M2', value: '0', x: 820, y: 400, rotation: 0 },
   )
   project.netLabels.push(
-    { id: 'm1-d', name: 'm1drain', x: 700, y: 248, visible: false },
-    { id: 'm1-g', name: 'm1gate', x: 648, y: 300, visible: false },
-    { id: 'm1-s', name: 'm1source', x: 700, y: 352, visible: false },
-    { id: 'm1-b', name: 'm1bulk', x: 752, y: 300, visible: false },
-    { id: 'm2-d', name: 'm2drain', x: 820, y: 348, visible: false },
-    { id: 'm2-g', name: 'm2gate', x: 768, y: 400, visible: false },
-    { id: 'm2-s', name: 'm2source', x: 820, y: 452, visible: false },
-    { id: 'm2-b', name: 'm2bulk', x: 872, y: 400, visible: false },
+    { id: 'm1-d', name: 'm1drain', x: 700, y: 250, visible: false },
+    { id: 'm1-g', name: 'm1gate', x: 650, y: 300, visible: false },
+    { id: 'm1-s', name: 'm1source', x: 700, y: 350, visible: false },
+    { id: 'm1-b', name: 'm1bulk', x: 750, y: 300, visible: false },
+    { id: 'm2-d', name: 'm2drain', x: 820, y: 350, visible: false },
+    { id: 'm2-g', name: 'm2gate', x: 770, y: 400, visible: false },
+    { id: 'm2-s', name: 'm2source', x: 820, y: 450, visible: false },
+    { id: 'm2-b', name: 'm2bulk', x: 870, y: 400, visible: false },
   )
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
@@ -789,7 +789,7 @@ test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin ord
   assert.match(artifact.text, /^\.model ELSIM_MODEL_M1 NMOS \(LEVEL=1 VTO=2 KP=20u LAMBDA=0\.02\)$/m)
   assert.match(artifact.text, /^M2 m2drain m2gate m2source m2bulk ELSIM_MODEL_M2$/m)
   assert.match(artifact.text, /^\.model ELSIM_MODEL_M2 PMOS \(LEVEL=1 VTO=-2 KP=20u LAMBDA=0\.02\)$/m)
-  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'M1')).map(({ x, y }) => [x - 700, y - 300]), [[0, -52], [-52, 0], [0, 52], [52, 0]])
+  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'M1')).map(({ x, y }) => [x - 700, y - 300]), [[0, -50], [-50, 0], [0, 50], [50, 0]])
   project.modelAssets = [{ id: 'mos-model', filename: 'user.lib', sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(), content: '.model WRONG PMOS (LEVEL=1 VTO=-2 KP=20u)' }]
   project.parts.find((part) => part.ref === 'M1').deviceModel = 'WRONG'
   assert.match(createNetlistArtifact(project).diagnostics.map(({ message }) => message).join('\n'), /not a NMOS model/i)
@@ -807,7 +807,7 @@ test('N- and P-channel JFETs generate J devices in D-G-S order and matching teac
   assert.match(artifact.text, /^\.model ELSIM_MODEL_J1 NJF \(VTO=-2 BETA=1m LAMBDA=0\.02\)$/m)
   assert.match(artifact.text, /^J2 .* ELSIM_MODEL_J2$/m)
   assert.match(artifact.text, /^\.model ELSIM_MODEL_J2 PJF \(VTO=2 BETA=1m LAMBDA=0\.02\)$/m)
-  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'J1')).map(({ x, y }) => [x - 700, y - 300]), [[0, -52], [-52, 0], [0, 52]])
+  assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'J1')).map(({ x, y }) => [x - 700, y - 300]), [[0, -50], [-50, 0], [0, 50]])
   assert.equal(nextRef(project.parts, 'njfet'), 'J3')
 })
 
@@ -823,7 +823,7 @@ test('imported subcircuits place ordered pins and generate X-device netlists wit
     { id: 'x-vee', name: 'xvee', x: 840, y: 362, visible: false },
   )
   const validated = validateProject(project)
-  assert.deepEqual(componentPins(validated.parts.at(-1)).map(({ x, y }) => [x - 760, y - 350]), [[-80, -12], [80, -12], [-80, 12], [80, 12]])
+  assert.deepEqual(componentPins(validated.parts.at(-1)).map(({ x, y }) => [x - 760, y - 350]), [[-80, -10], [80, -10], [-80, 10], [80, 10]])
   const artifact = createNetlistArtifact(validated)
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^X1 xinput xoutput xvcc xvee gain PARAMS: GAIN=3$/m)

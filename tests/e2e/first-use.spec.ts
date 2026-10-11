@@ -102,8 +102,8 @@ test('toggling an interactive switch reruns a current circuit automatically', { 
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts.push({ id: 'p-interactive-switch', kind: 'switch', ref: 'S1', value: 'Off', x: 365, y: 190, rotation: 0 })
     project.wires.push(
-      { id: 'w-switch-left', points: [[313, 290], [313, 190]] },
-      { id: 'w-switch-right', points: [[417, 190], [417, 290]] },
+      { id: 'w-switch-left', points: [[310, 290], [310, 190]] },
+      { id: 'w-switch-right', points: [[410, 190], [410, 290]] },
     )
     project.sheets[0].parts = project.parts
     project.sheets[0].wires = project.wires
@@ -523,7 +523,7 @@ test('copy and paste an explicitly selected net label with its global connection
   await expect(page.locator('.toast')).toContainText('same electrical node')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).netLabels
     .filter((label: { name: string }) => label.name === 'vout')
-    .map((label: { x: number; y: number }) => [label.x, label.y]))).toEqual([[475, 290], [515, 330]])
+    .map((label: { x: number; y: number }) => [label.x, label.y]))).toEqual([[470, 290], [510, 330]])
   await expect(page.locator('.canvas-label').filter({ hasText: 'vout' })).toHaveCount(2)
 })
 
@@ -595,9 +595,23 @@ test('schematic grid fills the zoomed and panned view and has no fixed placehold
   const zoomBeforeWheel = Number((await page.getByRole('button', { name: /%/ }).innerText()).replace('%', ''))
   const box = await svg.boundingBox()
   expect(box).not.toBeNull()
-  await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * 0.35)
+  const cursorX = box!.x + box!.width * 0.3, cursorY = box!.y + box!.height * 0.35
+  const worldAtCursor = () => svg.evaluate((element, point) => {
+    const svgPoint = element.createSVGPoint()
+    svgPoint.x = point.x
+    svgPoint.y = point.y
+    const screenPoint = svgPoint.matrixTransform(element.getScreenCTM()!.inverse())
+    return [screenPoint.x, screenPoint.y]
+  }, { x: cursorX, y: cursorY })
+  const worldBeforeZoom = await worldAtCursor()
+  await page.mouse.move(cursorX, cursorY)
   await page.mouse.wheel(0, -240)
   await expect.poll(async () => Number((await page.getByRole('button', { name: /%/ }).innerText()).replace('%', ''))).toBeGreaterThan(zoomBeforeWheel)
+  const worldAfterZoom = await worldAtCursor()
+  expect(worldAfterZoom[0]).toBeCloseTo(worldBeforeZoom[0], 5)
+  expect(worldAfterZoom[1]).toBeCloseTo(worldBeforeZoom[1], 5)
+  await page.mouse.wheel(0, 240)
+  await expect.poll(async () => Number((await page.getByRole('button', { name: /%/ }).innerText()).replace('%', ''))).toBe(zoomBeforeWheel)
 
   const resizedBox = await svg.boundingBox()
   expect(resizedBox).not.toBeNull()
@@ -606,6 +620,24 @@ test('schematic grid fills the zoomed and panned view and has no fixed placehold
   await page.mouse.move(resizedBox!.x + resizedBox!.width / 2 + 90, resizedBox!.y + resizedBox!.height / 2 + 45, { steps: 4 })
   await page.mouse.up({ button: 'middle' })
   await expect.poll(async () => (await viewport()).grid).toEqual([0, 0, 0, 0])
+})
+
+test('starter and newly added native parts use the same 10-unit pin grid', async ({ page }) => {
+  await page.goto('/')
+  const readGridErrors = () => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const offGrid: string[] = []
+    const pinOffsets: Record<string, [number, number][]> = {
+      source: [[0, -50], [0, 50]], currentSource: [[-50, 0], [50, 0]], resistor: [[-50, 0], [50, 0]], lamp: [[-50, 0], [50, 0]], capacitor: [[-50, 0], [50, 0]], ground: [[0, -20]], inductor: [[-50, 0], [50, 0]], diode: [[-50, 0], [50, 0]], led: [[-50, 0], [50, 0]], switch: [[-50, 0], [50, 0]], vcvs: [[-50, 0], [50, 0], [0, -50], [0, 50]], vccs: [[-50, 0], [50, 0], [0, -50], [0, 50]],
+    }
+    for (const part of project.parts) for (const value of [part.x, part.y, ...pinOffsets[part.kind]?.flatMap(([x, y]) => [part.x + x, part.y + y]) ?? []]) if (value % 10 !== 0) offGrid.push(`${part.ref}:${value}`)
+    for (const wire of project.wires) for (const [x, y] of wire.points) if (x % 10 !== 0 || y % 10 !== 0) offGrid.push(`wire:${x},${y}`)
+    for (const label of project.netLabels) if (label.x % 10 !== 0 || label.y % 10 !== 0) offGrid.push(`label:${label.x},${label.y}`)
+    return offGrid
+  })
+  expect(await readGridErrors()).toEqual([])
+  await page.locator('.component-card').filter({ hasText: 'Resistor' }).click()
+  await expect.poll(readGridErrors).toEqual([])
 })
 
 test('first use: run the RC starter and inspect its solved waveform', { tag: '@ngspice' }, async ({ page }) => {

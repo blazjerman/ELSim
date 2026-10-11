@@ -1,4 +1,4 @@
-import { componentPins } from './geometry'
+import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
@@ -111,26 +111,60 @@ export type Project = {
   sheets: ProjectSheet[]
 }
 
+function snapSceneGeometryToGrid(scene: Record<string, unknown>): void {
+  if (Array.isArray(scene.parts)) for (const part of scene.parts) {
+    if (!part || typeof part !== 'object' || Array.isArray(part)) continue
+    const item = part as Record<string, unknown>
+    if (typeof item.x === 'number' && Number.isFinite(item.x)) item.x = snapToEditorGrid(item.x)
+    if (typeof item.y === 'number' && Number.isFinite(item.y)) item.y = snapToEditorGrid(item.y)
+  }
+  if (Array.isArray(scene.wires)) for (const wire of scene.wires) {
+    if (!wire || typeof wire !== 'object' || Array.isArray(wire)) continue
+    const points = (wire as Record<string, unknown>).points
+    if (!Array.isArray(points)) continue
+    for (const point of points) if (Array.isArray(point) && point.length >= 2) {
+      if (typeof point[0] === 'number' && Number.isFinite(point[0])) point[0] = snapToEditorGrid(point[0])
+      if (typeof point[1] === 'number' && Number.isFinite(point[1])) point[1] = snapToEditorGrid(point[1])
+    }
+  }
+  for (const key of ['junctions', 'netLabels'] as const) if (Array.isArray(scene[key])) for (const point of scene[key] as unknown[]) {
+    if (!point || typeof point !== 'object' || Array.isArray(point)) continue
+    const item = point as Record<string, unknown>
+    if (typeof item.x === 'number' && Number.isFinite(item.x)) item.x = snapToEditorGrid(item.x)
+    if (typeof item.y === 'number' && Number.isFinite(item.y)) item.y = snapToEditorGrid(item.y)
+  }
+}
+
+function snapProjectGeometryToGrid(project: Record<string, unknown>): void {
+  // Imported schematics keep their source coordinate system. ELSim-authored
+  // scenes, including hand-edited project JSON, always use the editor grid.
+  if (project.importedSchematicSource || Array.isArray(project.importedChildSchematicSources) && project.importedChildSchematicSources.length > 0) return
+  snapSceneGeometryToGrid(project)
+  if (Array.isArray(project.sheets)) for (const sheet of project.sheets) {
+    if (sheet && typeof sheet === 'object' && !Array.isArray(sheet)) snapSceneGeometryToGrid(sheet as Record<string, unknown>)
+  }
+}
+
 const starter: Project = {
   format: 'elsim-project',
   version: 7,
   name: 'RC step response',
   updatedAt: new Date().toISOString(),
   parts: [
-    { id: 'p-v1', kind: 'source', ref: 'V1', value: '5 V', x: 185, y: 365, rotation: 0 },
-    { id: 'p-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 365, y: 290, rotation: 0 },
-    { id: 'p-c1', kind: 'capacitor', ref: 'C1', value: '10 µF', x: 540, y: 405, rotation: 90 },
-    { id: 'p-gnd', kind: 'ground', ref: 'GND', value: '', x: 185, y: 490, rotation: 0 },
+    { id: 'p-v1', kind: 'source', ref: 'V1', value: '5 V', x: 180, y: 360, rotation: 0 },
+    { id: 'p-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 360, y: 290, rotation: 0 },
+    { id: 'p-c1', kind: 'capacitor', ref: 'C1', value: '10 µF', x: 540, y: 400, rotation: 90 },
+    { id: 'p-gnd', kind: 'ground', ref: 'GND', value: '', x: 180, y: 490, rotation: 0 },
   ],
   wires: [
-    { id: 'w-1', points: [[185, 313], [185, 290], [313, 290]] },
-    { id: 'w-2', points: [[417, 290], [540, 290], [540, 355]] },
-    { id: 'w-3', points: [[540, 455], [540, 468], [185, 468], [185, 417]] },
+    { id: 'w-1', points: [[180, 310], [180, 290], [310, 290]] },
+    { id: 'w-2', points: [[410, 290], [540, 290], [540, 350]] },
+    { id: 'w-3', points: [[540, 450], [540, 470], [180, 470], [180, 410]] },
   ],
   junctions: [],
   netLabels: [
-    { id: 'label-vin', name: 'vin', x: 245, y: 290, visible: true },
-    { id: 'label-vout', name: 'vout', x: 475, y: 290, visible: true },
+    { id: 'label-vin', name: 'vin', x: 240, y: 290, visible: true },
+    { id: 'label-vout', name: 'vout', x: 470, y: 290, visible: true },
   ],
   view: { zoom: 1, panX: 0, panY: 0 },
   plotSettings: { selectedTraceIds: [], ranges: {} },
@@ -233,6 +267,9 @@ export function validateProject(input: unknown): Project {
   if (data.version !== 7 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
     throw new Error('This project format is not supported. Expected ELSim project version 7.')
   }
+  // Normalize legacy v7 files and hand-edited JSON before any connectivity
+  // checks. The app's saved geometry has one canonical 10-unit grid.
+  snapProjectGeometryToGrid(data)
   const allowed = new Set<PartKind>(['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'subcircuit'])
   if (allowed.size !== Object.keys(componentDefinitionByKind).length || [...allowed].some((kind) => componentDefinitionByKind[kind]?.kind !== kind)) throw new Error('Built-in component definition registry does not match supported component kinds.')
   const rootSheetRaw = Array.isArray(data.sheets) ? (data.sheets as { id?: unknown; parameters?: unknown }[]).find((sheet) => sheet?.id === data.rootSheetId) : undefined

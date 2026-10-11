@@ -137,8 +137,8 @@ function pinDirection([x, y]: [number, number]): 'R' | 'L' | 'U' | 'D' {
 }
 
 function generatedPinOffsets(part: Part): [number, number][] {
-  if (part.kind === 'nmos' || part.kind === 'pmos') return [[0, -52], [-52, 0], [0, 52], [52, 0]]
-  if (part.kind === 'njfet' || part.kind === 'pjfet') return [[0, -52], [-52, 0], [0, 52]]
+  if (part.kind === 'nmos' || part.kind === 'pmos') return [[0, -50], [-50, 0], [0, 50], [50, 0]]
+  if (part.kind === 'njfet' || part.kind === 'pjfet') return [[0, -50], [-50, 0], [0, 50]]
   return localPinOffsets(part)
 }
 

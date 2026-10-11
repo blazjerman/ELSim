@@ -125,7 +125,7 @@ test('still warns when one component terminal is attached only to a dangling wir
 
 test('flags a two-terminal part whose pins are electrically shorted', () => {
   const project = createStarterProject()
-  project.wires.push({ id: 'short-r1', points: [[313, 290], [417, 290]] })
+  project.wires.push({ id: 'short-r1', points: [[310, 290], [410, 290]] })
   const issue = checkCircuit(project).find((item) => item.id === 'shorted:p-r1')
   assert.equal(issue.severity, 'warning')
   assert.equal(issue.partId, 'p-r1')
@@ -149,8 +149,8 @@ test('ground inside an instantiated child sheet counts as the shared SPICE node 
   project.netLabels = root.netLabels
   const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
   core.netLabels = core.netLabels.filter((label) => label.name !== 'B')
-  core.parts.push({ id: 'nested-ground', kind: 'ground', ref: 'GND3', value: '', x: 500, y: 322, rotation: 0 })
-  core.wires.push({ id: 'nested-ground-wire', points: [[352, 300], [500, 300]] })
+  core.parts.push({ id: 'nested-ground', kind: 'ground', ref: 'GND3', value: '', x: 500, y: 320, rotation: 0 })
+  core.wires.push({ id: 'nested-ground-wire', points: [[350, 300], [500, 300]] })
 
   assert.equal(checkCircuit(project).some((issue) => issue.id === 'ground'), false)
 })
