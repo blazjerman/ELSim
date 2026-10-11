@@ -466,12 +466,13 @@ function useTraceVisibility(selectedIds: string[], onRemove: (id: string) => voi
     setDisabledIds((current) => current.filter((candidate) => candidate !== id))
     onRemove(id)
   }
-  const visibleIds = selectedIds.filter((id) => !disabledIds.includes(id))
+  const visibleIds = useMemo(() => selectedIds.filter((id) => !disabledIds.includes(id)), [selectedIds, disabledIds])
   return { disabledIds, visibleIds, toggleVisibility, remove }
 }
 
 function TraceToggles({ traces, selectedIds, disabledIds, onToggleVisibility, onRemove, ariaLabel, colorFor }: { traces: Trace[]; selectedIds: string[]; disabledIds: string[]; onToggleVisibility: (id: string) => void; onRemove: (id: string) => void; ariaLabel: string; colorFor: (index: number) => string }) {
-  const selected = traces.flatMap((trace, index) => selectedIds.includes(trace.id) ? [{ trace, index }] : [])
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const selected = useMemo(() => traces.flatMap((trace, index) => selectedIdSet.has(trace.id) ? [{ trace, index }] : []), [traces, selectedIdSet])
   return <div className="trace-selector"><div className="trace-toggles trace-toggles-selected" role="group" aria-label={`Selected ${ariaLabel.toLocaleLowerCase()}`}>{selected.map(({ trace, index }) => {
     const disabled = disabledIds.includes(trace.id)
     return <span key={trace.id} className={`trace-selected-item${disabled ? ' disabled' : ''}`}>
