@@ -589,6 +589,106 @@ test('wire current animation keeps moving while transient playback advances', as
   expect(Math.abs(after - before)).toBeGreaterThan(1)
 })
 
+test('ngspice current animates through the grounded RC return wire', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const time = page.getByRole('slider', { name: 'Simulation time' })
+  const lastSample = Number(await time.getAttribute('max'))
+  await time.fill(String(Math.max(1, Math.round(lastSample * 0.05))))
+  const returnWire = page.locator('.wire-line[data-wire-id="w-3-seg-2"] .wire-current-flow')
+  await expect(returnWire).toBeVisible()
+  const current = Number(await returnWire.getAttribute('data-current-magnitude'))
+  expect(current).toBeGreaterThan(1e-6)
+  await expect(returnWire).toHaveAttribute('data-current-direction', 'first-to-last')
+})
+
+test('ngspice current splits evenly across parallel resistor wire branches', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.push({ id: 'parallel-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 360, y: 390, rotation: 0 })
+    project.wires.push(
+      { id: 'parallel-left', points: [[310, 290], [310, 390]] },
+      { id: 'parallel-right', points: [[410, 290], [410, 390]] },
+    )
+    project.sheets[0].parts = project.parts
+    project.sheets[0].wires = project.wires
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const time = page.getByRole('slider', { name: 'Simulation time' })
+  const lastSample = Number(await time.getAttribute('max'))
+  await time.fill(String(Math.max(1, Math.round(lastSample * 0.05))))
+  const left = page.locator('.wire-line[data-wire-id="parallel-left"] .wire-current-flow')
+  const right = page.locator('.wire-line[data-wire-id="parallel-right"] .wire-current-flow')
+  await expect(left).toBeVisible()
+  await expect(right).toBeVisible()
+  const leftCurrent = Number(await left.getAttribute('data-current-magnitude'))
+  const rightCurrent = Number(await right.getAttribute('data-current-magnitude'))
+  expect(leftCurrent).toBeGreaterThan(1e-6)
+  expect(rightCurrent).toBeGreaterThan(1e-6)
+  expect(leftCurrent).toBeCloseTo(rightCurrent, 10)
+  await expect(left).toHaveAttribute('data-current-direction', 'first-to-last')
+  await expect(right).toHaveAttribute('data-current-direction', 'last-to-first')
+})
+
+test('wire animation refreshes after moving a component and changing its value', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  const svg = page.locator('svg.schematic')
+  const screenPoint = async (x: number, y: number) => svg.evaluate((element, point) => {
+    const target = (element as SVGSVGElement).createSVGPoint()
+    target.x = point.x
+    target.y = point.y
+    const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  }, { x, y })
+  const dragComponent = async (fromX: number, toX: number) => {
+    const start = await screenPoint(fromX, 360)
+    const end = await screenPoint(toX, 360)
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(end.x, end.y, { steps: 6 })
+    await page.mouse.up()
+  }
+  const setEarlySample = async () => {
+    const time = page.getByRole('slider', { name: 'Simulation time' })
+    const lastSample = Number(await time.getAttribute('max'))
+    await time.fill(String(Math.max(1, Math.round(lastSample * 0.05))))
+  }
+  const returnFlow = page.locator('.wire-line[data-wire-id="w-3-seg-2"] .wire-current-flow')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await setEarlySample()
+  const initialCurrent = Number(await returnFlow.getAttribute('data-current-magnitude'))
+  expect(initialCurrent).toBeGreaterThan(1e-6)
+
+  await dragComponent(180, 280)
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(returnFlow).toHaveCount(0)
+  await dragComponent(280, 180)
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  await page.locator('[data-part-setting="p-r1:value"]').fill('2k')
+  await expect(page.locator('.result-stale-warning')).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await setEarlySample()
+  const editedCurrent = Number(await returnFlow.getAttribute('data-current-magnitude'))
+  expect(editedCurrent).toBeGreaterThan(1e-6)
+  expect(editedCurrent).toBeLessThan(initialCurrent)
+})
+
 test('schematic components use one roving tab stop and arrow-key spatial navigation', async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
@@ -2224,6 +2324,24 @@ test('transistor switch example demonstrates base drive and collector switching'
   await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('NPN low-side switch')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.wires.push(
+      { id: 'switch-base-probe-wire', points: [[500, 500], [560, 500]] },
+      { id: 'switch-collector-probe-wire', points: [[650, 450], [700, 450]] },
+      { id: 'switch-emitter-probe-wire', points: [[650, 550], [700, 550]] },
+    )
+    project.netLabels.push(
+      { id: 'switch-base-wire-label', name: 'BASE', x: 500, y: 500, visible: true },
+      { id: 'switch-collector-wire-label', name: 'COLLECTOR', x: 700, y: 450, visible: true },
+      { id: 'switch-emitter-wire-label', name: '0', x: 700, y: 550, visible: true },
+    )
+    project.sheets[0].parts = project.parts
+    project.sheets[0].wires = project.wires
+    project.sheets[0].netLabels = project.netLabels
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(base)')
@@ -2232,6 +2350,18 @@ test('transistor switch example demonstrates base drive and collector switching'
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
+  const baseWire = page.locator('.wire-line[data-wire-id="switch-base-probe-wire"] .wire-current-flow')
+  const collectorWire = page.locator('.wire-line[data-wire-id="switch-collector-probe-wire"] .wire-current-flow')
+  const emitterWire = page.locator('.wire-line[data-wire-id="switch-emitter-probe-wire"] .wire-current-flow')
+  const baseCurrent = Number(await baseWire.getAttribute('data-current-magnitude'))
+  const collectorCurrent = Number(await collectorWire.getAttribute('data-current-magnitude'))
+  const emitterCurrent = Number(await emitterWire.getAttribute('data-current-magnitude'))
+  expect(baseCurrent).toBeGreaterThan(1e-6)
+  expect(collectorCurrent).toBeGreaterThan(1e-6)
+  expect(emitterCurrent).toBeCloseTo(baseCurrent + collectorCurrent, 5)
+  await expect(baseWire).toHaveAttribute('data-current-direction', 'first-to-last')
+  await expect(collectorWire).toHaveAttribute('data-current-direction', 'last-to-first')
+  await expect(emitterWire).toHaveAttribute('data-current-direction', 'first-to-last')
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(base\) = 0\.7/)
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(collector\) = 0\./)
   const transistor = page.locator('.circuit-part[data-part-id="switch-q1"]')
