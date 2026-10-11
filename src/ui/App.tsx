@@ -8,7 +8,7 @@ import {
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
-import { createPartClipboard, type PartClipboard } from '../domain/partClipboard'
+import { createPartClipboard, resolvePartClipboard, type PartClipboard } from '../domain/partClipboard'
 import { fitEditorView } from '../domain/editorView'
 import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
@@ -2369,7 +2369,9 @@ export default function App() {
   const duplicateSelected = () => selectedParts.length && pasteParts(createPartClipboard(project, selectedParts.map((part) => part.id), [], selectedWireIds), 80, 60)
   const pasteParts = (clipboard = copiedParts.current, offsetX = 40, offsetY = 40) => {
     if (!clipboard || (!clipboard.parts.length && !clipboard.netLabels.length && !clipboard.wires.length)) return
-    const sources = clipboard.parts
+    const resolved = resolvePartClipboard(project, clipboard)
+    if ('error' in resolved) { setNotice(resolved.error); return }
+    const sources = resolved.parts
     const pastedIds = sources.map(() => `p-${crypto.randomUUID()}`)
     const pastedWires = clipboard.wires.map((wire) => ({ id: `w-${crypto.randomUUID()}`, points: [[wire.points[0][0] + offsetX, wire.points[0][1] + offsetY], [wire.points[1][0] + offsetX, wire.points[1][1] + offsetY]] as [[number, number], [number, number]] }))
     const pastedLabels = clipboard.netLabels.map((label) => ({ ...label, id: `label-${crypto.randomUUID()}`, x: label.x + offsetX, y: label.y + offsetY }))
@@ -2390,7 +2392,7 @@ export default function App() {
         }
         parts = [...parts, pasted]
       })
-      return { ...current, parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))], netLabels: [...current.netLabels, ...pastedLabels] }
+      return { ...current, sheets: [...current.sheets, ...resolved.sheets], parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))], netLabels: [...current.netLabels, ...pastedLabels] }
     })
     const lastPartId = pastedIds.at(-1)
     const lastLabel = pastedLabels.at(-1)
@@ -2508,11 +2510,6 @@ export default function App() {
       }
       if ((event.ctrlKey || event.metaKey) && key === 'v' && (copiedParts.current?.parts.length || copiedParts.current?.netLabels.length || copiedParts.current?.wires.length)) {
         event.preventDefault()
-        const unavailableSheet = copiedParts.current.parts.find((source) => source.sheetId && !project.sheets.some((sheet) => sheet.id === source.sheetId))
-        if (unavailableSheet) {
-          setNotice('This copied block belongs to a different project and its sheet definition is unavailable.')
-          return
-        }
         pasteParts(copiedParts.current)
         return
       }

@@ -976,6 +976,35 @@ test('shift selection moves, copies, pastes, and deletes a group of parts', asyn
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial)
 })
 
+test('copying a hierarchical block into a new project preserves nested definitions and instance parameters', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  await page.locator('.example-list article').filter({ hasText: 'Nested reusable divider' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('alert').getByRole('button', { name: 'Replace and open' }).click()
+  const outerInstance = page.locator('.circuit-part[aria-label^="X2,"]')
+  await expect(outerInstance).toBeVisible()
+  await outerInstance.evaluate((element) => (element as SVGGElement).focus())
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Control+c')
+  await expect(page.getByText(/Copied X2 and/)).toBeVisible()
+
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'New', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(4)
+  await page.keyboard.press('Control+v')
+
+  const pastedInstance = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(pastedInstance).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const instance = project.parts.find((part: { ref: string }) => part.ref === 'X1')
+    const outer = project.sheets.find((sheet: { id: string }) => sheet.id === instance.sheetId)
+    const innerInstance = outer?.parts.find((part: { ref: string }) => part.ref === 'XCORE')
+    const inner = project.sheets.find((sheet: { id: string }) => sheet.id === innerInstance?.sheetId)
+    return { outer: outer?.name, inner: inner?.name, nestedReferenceResolves: Boolean(inner), override: instance.sheetParameters?.RINPUT }
+  })).toEqual({ outer: 'Parameterized divider', inner: 'Core resistor', nestedReferenceResolves: true, override: '2k' })
+})
+
 test('copy and paste an explicitly selected net label with its global connection semantics', async ({ page }) => {
   await page.goto('/')
   await page.locator('.canvas-label').filter({ hasText: 'vout' }).click()
