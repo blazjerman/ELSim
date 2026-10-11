@@ -93,18 +93,11 @@ function makeWireGrid(createStarterProject, componentPins, count) {
   const wires = []
   for (let index = 0; index < resistors.length; index += 1) {
     if (index % columns === columns - 1 || index + 1 >= resistors.length) continue
-    const [left, right] = componentPins(resistors[index])
+    const [, right] = componentPins(resistors[index])
     const [nextLeft] = componentPins(resistors[index + 1])
-    const leadX = right.x, endX = nextLeft.x, y = right.y
-    const startX = leadX + 32
-    const middleX = leadX + 64
-    const farX = leadX + 96
-    wires.push({
-      id: `wire-bench-${index + 1}`,
-      points: [[leadX, y], [startX, y], [startX, y + 16], [middleX, y + 16], [middleX, y - 16], [farX, y - 16], [farX, y], [endX, y]],
-    })
+    wires.push({ id: `wire-bench-${index + 1}`, points: [[right.x, right.y], [nextLeft.x, nextLeft.y]] })
   }
-  project.name = `Benchmark multi-segment wire grid (${count} resistors)`
+  project.name = `Benchmark endpoint wire grid (${count} resistors)`
   project.parts = resistors
   project.wires = wires
   project.junctions = []
@@ -261,7 +254,7 @@ try {
     if (artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error(`Wire-heavy benchmark fixture ${count} produced netlist errors.`)
     if (connectivity.value.pinNets.size !== count * 2) throw new Error(`Wire-heavy benchmark fixture ${count} lost one or more component pins in connectivity analysis.`)
     const wireSegments = project.wires.reduce((sum, wire) => sum + wire.points.length - 1, 0)
-    if (wireSegments !== project.wires.length * 7) throw new Error(`Wire-heavy benchmark fixture ${count} does not have the expected routed segments.`)
+    if (wireSegments !== project.wires.length || project.wires.some((wire) => wire.points.length !== 2)) throw new Error(`Wire-heavy benchmark fixture ${count} must use independent two-endpoint wire segments.`)
     wireResults.push({
       resistors: count,
       parts: project.parts.length,
