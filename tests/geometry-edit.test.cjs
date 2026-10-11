@@ -42,6 +42,20 @@ test('opening a manually edited project snaps its stored geometry before net val
   assert.ok(storedValues.every((value) => value % EDITOR_GRID_SIZE === 0))
 })
 
+test('legacy multi-point wires migrate into independent two-endpoint segments', () => {
+  const project = createStarterProject()
+  project.version = 7
+  const legacy = { id: 'legacy-polyline', points: [[600, 600], [640, 600], [640, 660]] }
+  project.wires = [...project.wires, legacy]
+  project.sheets[0].wires = project.wires
+  const opened = validateProject(project)
+  assert.deepEqual(opened.wires.slice(-2), [
+    { id: 'legacy-polyline', points: [[600, 600], [640, 600]] },
+    { id: 'legacy-polyline-seg-1', points: [[640, 600], [640, 660]] },
+  ])
+  assert.ok(opened.wires.every((wire) => wire.points.length === 2))
+})
+
 test('fit view centers and bounds distant parts, wire points, and labels', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'far-part', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 1800, y: 1200, rotation: 0 })
@@ -129,6 +143,37 @@ test('endpoint T connections join automatically and are not junction-toggle targ
   assert.equal(wireCrossingAt(project, { x: 750, y: 700 }), null)
   const connectivity = analyzeConnectivity(project)
   assert.equal(connectivity.wireNets.get('tee-h'), connectivity.wireNets.get('tee-v'))
+})
+
+test('crossing, junction, endpoint, and branch edits recalculate topology after each change', () => {
+  const project = createStarterProject()
+  project.parts = []
+  project.netLabels = []
+  project.wires = [
+    { id: 'sequence-h', points: [[700, 700], [800, 700]] },
+    { id: 'sequence-v', points: [[750, 650], [750, 750]] },
+  ]
+  project.junctions = []
+  const sameNet = () => {
+    const nets = analyzeConnectivity(project).wireNets
+    return nets.get('sequence-h') === nets.get('sequence-v')
+  }
+
+  assert.equal(sameNet(), false, 'bare crossing stays separate')
+  project.junctions = [{ x: 750, y: 700 }]
+  assert.equal(sameNet(), true, 'explicit junction connects the crossing')
+  project.junctions = []
+  assert.equal(sameNet(), false, 'removing junction separates the wires')
+  project.wires[1] = { ...project.wires[1], points: [[760, 650], [760, 750]] }
+  assert.equal(sameNet(), false, 'moving a full crossing wire does not create a junction')
+  project.wires[0] = { ...project.wires[0], points: [[700, 700], [760, 700]] }
+  assert.equal(sameNet(), true, 'moving one endpoint onto the other conductor creates a T connection')
+  project.wires[0] = { ...project.wires[0], points: [[700, 700], [740, 700]] }
+  assert.equal(sameNet(), false, 'moving that endpoint away opens the connection again')
+  project.wires.push({ id: 'sequence-branch', points: [[720, 700], [720, 760]] })
+  const branched = analyzeConnectivity(project).wireNets
+  assert.equal(branched.get('sequence-branch'), branched.get('sequence-h'), 'branch endpoint joins the horizontal wire')
+  assert.notEqual(branched.get('sequence-branch'), branched.get('sequence-v'), 'the branch does not short to the nearby crossing wire')
 })
 
 test('connectivity broadphase preserves crossings on long overflow segments', () => {

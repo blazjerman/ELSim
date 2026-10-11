@@ -1528,6 +1528,29 @@ test('moving a component leaves independent wire geometry in place', async ({ pa
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual(wireBefore)
 })
 
+test('deleting a component keeps its independent wire and selected wires use the common delete action', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = [{ id: 'independent-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 330, rotation: 0 }]
+    project.wires = [{ id: 'independent-wire', points: [[400, 330], [500, 330]] }]
+    project.netLabels = []
+    project.junctions = []
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, netLabels: [], junctions: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.locator('.circuit-part[data-part-id="independent-resistor"]').click()
+  await page.getByRole('button', { name: 'Delete selected (Delete)' }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(0)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)).toEqual([{ id: 'independent-wire', points: [[400, 330], [500, 330]] }])
+
+  await page.locator('.wire-line[data-wire-id="independent-wire"]').click({ position: { x: 40, y: 0 } })
+  await expect(page.getByRole('button', { name: 'Delete selected (Delete)' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Delete selected (Delete)' }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(0)
+})
+
 test('wire mode does not select or move an existing wire', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {

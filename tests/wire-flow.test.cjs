@@ -25,7 +25,10 @@ test('current animates across each independent starter wire segment, including g
 test('a parallel branch splits trunk animation into sections with their own currents', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'p-r2', kind: 'resistor', ref: 'R2', value: '2 kΩ', x: 500, y: 200, rotation: 0 })
-  project.wires.push({ id: 'w-branch', points: [[470, 290], [470, 200], [450, 200]] })
+  project.wires.push(
+    { id: 'w-branch-vertical', points: [[470, 290], [470, 200]] },
+    { id: 'w-branch-horizontal', points: [[470, 200], [450, 200]] },
+  )
   const connectivity = analyzeConnectivity(project)
   const currents = new Map([['R1', 0.005], ['C1', 0.003], ['R2', 0.002]])
   const flows = wireCurrentFlowSegments(project, connectivity, (part) => currents.get(part.ref))
@@ -33,7 +36,8 @@ test('a parallel branch splits trunk animation into sections with their own curr
     { points: [[410, 290], [470, 290]], forward: true, magnitude: 0.005 },
     { points: [[470, 290], [540, 290]], forward: true, magnitude: 0.003 },
   ])
-  assert.deepEqual(flows.get('w-branch'), [{ points: [[470, 290], [470, 200], [450, 200]], forward: true, magnitude: 0.002 }])
+  assert.deepEqual(flows.get('w-branch-vertical'), [{ points: [[470, 290], [470, 200]], forward: true, magnitude: 0.002 }])
+  assert.deepEqual(flows.get('w-branch-horizontal'), [{ points: [[470, 200], [450, 200]], forward: true, magnitude: 0.002 }])
 })
 
 test('a wire loop does not suppress animation on a bridge connected to the loop', () => {
@@ -41,7 +45,10 @@ test('a wire loop does not suppress animation on a bridge connected to the loop'
   project.parts.push({ id: 'p-i-loop', kind: 'currentSource', ref: 'Iloop', value: '1 mA', x: 700, y: 290, rotation: 0 })
   project.wires.push(
     { id: 'loop-feed-a', points: [[800, 290], [750, 290]] },
-    { id: 'loop-feed-b', points: [[820, 290], [840, 290], [840, 250], [650, 250], [650, 290]] },
+    { id: 'loop-feed-b1', points: [[820, 290], [840, 290]] },
+    { id: 'loop-feed-b2', points: [[840, 290], [840, 250]] },
+    { id: 'loop-feed-b3', points: [[840, 250], [650, 250]] },
+    { id: 'loop-feed-b4', points: [[650, 250], [650, 290]] },
     { id: 'loop-top', points: [[800, 290], [820, 290]] },
     { id: 'loop-right', points: [[820, 290], [820, 330]] },
     { id: 'loop-bottom', points: [[820, 330], [800, 330]] },
@@ -51,9 +58,9 @@ test('a wire loop does not suppress animation on a bridge connected to the loop'
   const currents = new Map([['V1', -0.005], ['R1', 0.005], ['C1', 0.005], ['Iloop', 0.001]])
   const flows = wireCurrentFlowSegments(project, connectivity, (part) => currents.get(part.ref))
   assert.equal(flows.get('loop-feed-a').length, 1)
-  assert.equal(flows.get('loop-feed-b').length, 1)
+  for (const id of ['loop-feed-b1', 'loop-feed-b2', 'loop-feed-b3', 'loop-feed-b4']) assert.equal(flows.get(id).length, 1, id)
   assert.equal(flows.get('loop-feed-a')[0].magnitude, 0.001)
-  assert.equal(flows.get('loop-feed-b')[0].magnitude, 0.001)
+  for (const id of ['loop-feed-b1', 'loop-feed-b2', 'loop-feed-b3', 'loop-feed-b4']) assert.equal(flows.get(id)[0].magnitude, 0.001, id)
   for (const id of ['loop-top', 'loop-right', 'loop-bottom', 'loop-left']) assert.equal(flows.get(id).length, 0, id)
 })
 

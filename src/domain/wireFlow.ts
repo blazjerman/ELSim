@@ -5,7 +5,7 @@ import type { Part, Project } from './project'
 export type WireCurrentFlow = { forward: boolean; magnitude: number }
 export type WireCurrentFlowSegment = WireCurrentFlow & { points: [number, number][] }
 
-type FlowEdge = { wireId: string; segmentIndex: number; points: [number, number][]; from: string; to: string }
+type FlowEdge = { wireId: string; points: [number, number][]; from: string; to: string }
 type Injection = { value?: number; ignored?: boolean }
 
 function coordinateKey(point: { x: number; y: number }): string {
@@ -36,7 +36,7 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
 /**
  * Resolve the current separately on each geometric wire section. A tapped
  * wire carries different currents on either side of its branch, so a single
- * flow value for the whole polyline is not physically meaningful. Sections in
+ * flow value for the whole segment is not physically meaningful. Sections in
  * ideal-wire loops are omitted, while bridge sections attached to a loop are
  * still animated because their current is unambiguous.
  */
@@ -68,30 +68,28 @@ export function wireCurrentFlowSegments(
   const edges: FlowEdge[] = []
   const edgesByWire = new Map(project.wires.map((wire) => [wire.id, [] as FlowEdge[]]))
   for (const wire of project.wires) {
-    for (let segmentIndex = 0; segmentIndex < wire.points.length - 1; segmentIndex += 1) {
-      const net = connectivity.wireNets.get(wire.id)
-      if (!net) continue
-      const a = wire.points[segmentIndex], b = wire.points[segmentIndex + 1]
-      const dx = b[0] - a[0], dy = b[1] - a[1], lengthSquared = dx * dx + dy * dy
-      if (!lengthSquared) continue
-      const candidates = Math.abs(dy) <= 0.01
-        ? pointsByY.get(yCoordinateKey(a[1])) ?? []
-        : Math.abs(dx) <= 0.01
-          ? pointsByX.get(xCoordinateKey(a[0])) ?? []
-          : candidatePoints
-      const points = candidates
-        .filter((point) => pointOnSegment(point, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }, 0.01))
-        .map((point) => ({ point: [point.x, point.y] as [number, number], t: ((point.x - a[0]) * dx + (point.y - a[1]) * dy) / lengthSquared }))
-        .sort((left, right) => left.t - right.t)
-        .filter((entry, index, list) => index === 0 || coordinateKey({ x: entry.point[0], y: entry.point[1] }) !== coordinateKey({ x: list[index - 1].point[0], y: list[index - 1].point[1] }))
-      for (let index = 0; index < points.length - 1; index += 1) {
-        const fromPoint = points[index].point, toPoint = points[index + 1].point
-        const from = graphNodeKey(net, { x: fromPoint[0], y: fromPoint[1] }), to = graphNodeKey(net, { x: toPoint[0], y: toPoint[1] })
-        if (from !== to) {
-          const edge = { wireId: wire.id, segmentIndex, points: [fromPoint, toPoint] as [number, number][], from, to }
-          edges.push(edge)
-          edgesByWire.get(wire.id)!.push(edge)
-        }
+    const net = connectivity.wireNets.get(wire.id)
+    if (!net) continue
+    const [a, b] = wire.points
+    const dx = b[0] - a[0], dy = b[1] - a[1], lengthSquared = dx * dx + dy * dy
+    if (!lengthSquared) continue
+    const candidates = Math.abs(dy) <= 0.01
+      ? pointsByY.get(yCoordinateKey(a[1])) ?? []
+      : Math.abs(dx) <= 0.01
+        ? pointsByX.get(xCoordinateKey(a[0])) ?? []
+        : candidatePoints
+    const points = candidates
+      .filter((point) => pointOnSegment(point, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }, 0.01))
+      .map((point) => ({ point: [point.x, point.y] as [number, number], t: ((point.x - a[0]) * dx + (point.y - a[1]) * dy) / lengthSquared }))
+      .sort((left, right) => left.t - right.t)
+      .filter((entry, index, list) => index === 0 || coordinateKey({ x: entry.point[0], y: entry.point[1] }) !== coordinateKey({ x: list[index - 1].point[0], y: list[index - 1].point[1] }))
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const fromPoint = points[index].point, toPoint = points[index + 1].point
+      const from = graphNodeKey(net, { x: fromPoint[0], y: fromPoint[1] }), to = graphNodeKey(net, { x: toPoint[0], y: toPoint[1] })
+      if (from !== to) {
+        const edge = { wireId: wire.id, points: [fromPoint, toPoint] as [number, number][], from, to }
+        edges.push(edge)
+        edgesByWire.get(wire.id)!.push(edge)
       }
     }
   }

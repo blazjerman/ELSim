@@ -79,15 +79,13 @@ export function closestPoint(point: Point, a: Point, b: Point): Point & { distan
 export function wireNetAt(project: Project, point: Point, tolerance = 8): { point: Point; wireId: string; distance: number } | null {
   let best: { point: Point; wireId: string; distance: number } | null = null
   for (const wire of project.wires) {
-    for (let index = 0; index < wire.points.length - 1; index += 1) {
-      const near = closestPoint(point, { x: wire.points[index][0], y: wire.points[index][1] }, { x: wire.points[index + 1][0], y: wire.points[index + 1][1] })
-      if (near.distance <= tolerance && (!best || near.distance < best.distance)) {
-        const a = wire.points[index], b = wire.points[index + 1]
-        let snapped = { x: near.x, y: near.y }
-        if (Math.abs(a[1] - b[1]) < 0.01) snapped = { x: Math.max(Math.min(a[0], b[0]), Math.min(Math.max(a[0], b[0]), snapToEditorGrid(near.x))), y: a[1] }
-        else if (Math.abs(a[0] - b[0]) < 0.01) snapped = { x: a[0], y: Math.max(Math.min(a[1], b[1]), Math.min(Math.max(a[1], b[1]), snapToEditorGrid(near.y))) }
-        best = { point: snapped, wireId: wire.id, distance: near.distance }
-      }
+    const [a, b] = wire.points
+    const near = closestPoint(point, { x: a[0], y: a[1] }, { x: b[0], y: b[1] })
+    if (near.distance <= tolerance && (!best || near.distance < best.distance)) {
+      let snapped = { x: near.x, y: near.y }
+      if (Math.abs(a[1] - b[1]) < 0.01) snapped = { x: Math.max(Math.min(a[0], b[0]), Math.min(Math.max(a[0], b[0]), snapToEditorGrid(near.x))), y: a[1] }
+      else if (Math.abs(a[0] - b[0]) < 0.01) snapped = { x: a[0], y: Math.max(Math.min(a[1], b[1]), Math.min(Math.max(a[1], b[1]), snapToEditorGrid(near.y))) }
+      best = { point: snapped, wireId: wire.id, distance: near.distance }
     }
   }
   return best
@@ -107,23 +105,19 @@ export function wireCrossingAt(project: Project, point: Point, tolerance = 12): 
     const left = project.wires[leftWire]
     for (let rightWire = leftWire + 1; rightWire < project.wires.length; rightWire += 1) {
       const right = project.wires[rightWire]
-      for (let leftSegment = 0; leftSegment < left.points.length - 1; leftSegment += 1) {
-        const a = left.points[leftSegment], b = left.points[leftSegment + 1]
-        for (let rightSegment = 0; rightSegment < right.points.length - 1; rightSegment += 1) {
-          const c = right.points[rightSegment], d = right.points[rightSegment + 1]
-          const rx = b[0] - a[0], ry = b[1] - a[1]
-          const sx = d[0] - c[0], sy = d[1] - c[1]
-          const denominator = rx * sy - ry * sx
-          if (Math.abs(denominator) < 1e-9) continue
-          const qx = c[0] - a[0], qy = c[1] - a[1]
-          const t = (qx * sy - qy * sx) / denominator
-          const u = (qx * ry - qy * rx) / denominator
-          if (t <= 1e-6 || t >= 1 - 1e-6 || u <= 1e-6 || u >= 1 - 1e-6) continue
-          const crossing = { x: a[0] + t * rx, y: a[1] + t * ry }
-          const distance = Math.hypot(point.x - crossing.x, point.y - crossing.y)
-          if (distance <= bestDistance) { nearest = crossing; bestDistance = distance }
-        }
-      }
+      const [a, b] = left.points
+      const [c, d] = right.points
+      const rx = b[0] - a[0], ry = b[1] - a[1]
+      const sx = d[0] - c[0], sy = d[1] - c[1]
+      const denominator = rx * sy - ry * sx
+      if (Math.abs(denominator) < 1e-9) continue
+      const qx = c[0] - a[0], qy = c[1] - a[1]
+      const t = (qx * sy - qy * sx) / denominator
+      const u = (qx * ry - qy * rx) / denominator
+      if (t <= 1e-6 || t >= 1 - 1e-6 || u <= 1e-6 || u >= 1 - 1e-6) continue
+      const crossing = { x: a[0] + t * rx, y: a[1] + t * ry }
+      const distance = Math.hypot(point.x - crossing.x, point.y - crossing.y)
+      if (distance <= bestDistance) { nearest = crossing; bestDistance = distance }
     }
   }
   return nearest

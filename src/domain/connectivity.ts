@@ -34,7 +34,7 @@ class DisjointSet {
   values(): string[] { return [...this.parents.keys()] }
 }
 
-type Segment = { wireId: string; index: number; a: [number, number]; b: [number, number]; token: string }
+type Segment = { wireId: string; a: [number, number]; b: [number, number]; token: string }
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number }
 
 /** A broadphase only: callers still apply the existing exact geometry predicates. */
@@ -80,7 +80,7 @@ function pointBounds(x: number, y: number, padding = 0): Bounds {
   return { minX: x - padding, minY: y - padding, maxX: x + padding, maxY: y + padding }
 }
 
-function pointToken(wireId: string, index: number) { return `wire:${wireId}:${index}` }
+function wireToken(wireId: string) { return `wire:${wireId}` }
 function pinToken(partId: string, index: number) { return `pin:${partId}:${index}` }
 function close(a: number, b: number) { return Math.abs(a - b) < 1e-5 }
 function samePoint(a: { x: number; y: number }, b: { x: number; y: number }) { return close(a.x, b.x) && close(a.y, b.y) }
@@ -101,30 +101,23 @@ function belongsToSegment(point: { x: number; y: number }, segment: Segment) {
   return pointOnSegment(point, { x: segment.a[0], y: segment.a[1] }, { x: segment.b[0], y: segment.b[1] }, 1e-4)
 }
 
-function connectedTokens(project: Project): { dsu: DisjointSet; segments: Segment[]; pinIds: string[]; wireIds: string[]; groundToken: string } {
+function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: string } {
   const dsu = new DisjointSet()
   const groundToken = 'global:ground'
   dsu.add(groundToken)
-  const pinIds: string[] = []
-  const wireIds: string[] = []
   const segments: Segment[] = []
   const pins = project.parts.flatMap((part) => componentPins(part).map((pin) => ({ part, pin })))
 
   for (const { part, pin } of pins) {
     const token = pinToken(part.id, pin.index)
-    pinIds.push(token)
     dsu.add(token)
     if (part.kind === 'ground') dsu.union(token, groundToken)
   }
 
   for (const wire of project.wires) {
-    wireIds.push(wire.id)
-    const vertexTokens = wire.points.map((_, index) => pointToken(wire.id, index))
-    vertexTokens.forEach((token) => dsu.add(token))
-    for (let index = 1; index < vertexTokens.length; index += 1) dsu.union(vertexTokens[0], vertexTokens[index])
-    for (let index = 0; index < wire.points.length - 1; index += 1) {
-      segments.push({ wireId: wire.id, index, a: wire.points[index], b: wire.points[index + 1], token: vertexTokens[index] })
-    }
+    const token = wireToken(wire.id)
+    dsu.add(token)
+    segments.push({ wireId: wire.id, a: wire.points[0], b: wire.points[1], token })
   }
 
   const segmentGrid = new SpatialGrid<Segment>()
@@ -183,11 +176,11 @@ function connectedTokens(project: Project): { dsu: DisjointSet; segments: Segmen
     else labelsByName.set(key, token)
   }
 
-  return { dsu, segments, pinIds, wireIds, groundToken }
+  return { dsu, groundToken }
 }
 
 export function analyzeConnectivity(project: Project): Connectivity {
-  const { dsu, segments, groundToken } = connectedTokens(project)
+  const { dsu, groundToken } = connectedTokens(project)
   const tokens = dsu.values()
   const groups = new Map<string, string[]>()
   for (const token of tokens) {
@@ -227,11 +220,8 @@ export function analyzeConnectivity(project: Project): Connectivity {
     }
   }
   const wireNets = new Map<string, string>()
-  const firstSegmentByWire = new Map<string, Segment>()
-  for (const segment of segments) if (!firstSegmentByWire.has(segment.wireId)) firstSegmentByWire.set(segment.wireId, segment)
   for (const wire of project.wires) {
-    const segment = firstSegmentByWire.get(wire.id)
-    if (segment) wireNets.set(wire.id, nameByRoot.get(dsu.find(segment.token)) ?? `n${autoIndex++}`)
+    wireNets.set(wire.id, nameByRoot.get(dsu.find(wireToken(wire.id))) ?? `n${autoIndex++}`)
   }
   return { pinNets, pinLabels, wireNets, diagnostics }
 }
