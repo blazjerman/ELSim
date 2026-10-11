@@ -75,12 +75,20 @@ export function resolvePartClipboard(project: Project, clipboard: PartClipboard,
   })
   const modelAssets = resolveAssets(project.modelAssets ?? [], clipboard.modelAssets ?? [], createId)
   const symbolAssets = resolveAssets(project.symbolAssets ?? [], clipboard.symbolAssets ?? [], createId)
-  const parts = clipboard.parts.map((part) => ({
+  const remapSymbol = (part: Part): Part => ({
     ...part,
-    ...(part.sheetId && idMap.has(part.sheetId) ? { sheetId: idMap.get(part.sheetId)! } : {}),
     ...(part.symbolAssetId && symbolAssets.ids.has(part.symbolAssetId) ? { symbolAssetId: symbolAssets.ids.get(part.symbolAssetId)! } : {}),
+  })
+  const parts = clipboard.parts.map((part) => ({
+    ...remapSymbol(part),
+    ...(part.sheetId && idMap.has(part.sheetId) ? { sheetId: idMap.get(part.sheetId)! } : {}),
   }))
-  return { parts, sheets, modelAssets: modelAssets.assets, symbolAssets: symbolAssets.assets }
+  return {
+    parts,
+    sheets: sheets.map((sheet) => ({ ...sheet, parts: sheet.parts.map(remapSymbol) })),
+    modelAssets: modelAssets.assets,
+    symbolAssets: symbolAssets.assets,
+  }
 }
 
 /** Copy wire geometry attached to selected pins. Pasted geometry is translated,
@@ -122,10 +130,11 @@ export function createPartClipboard(project: Project, selectedPartIds: readonly 
     const sheet = definitions.get(id)
     return sheet ? [cloneSheet(sheet)] : []
   })
+  const copiedParts = [...parts, ...sheets.flatMap((sheet) => sheet.parts)]
   const dependencyAnalysis = (project.modelAssets?.length ?? 0) > 0 ? analyzeModelDependencies(project.modelAssets!) : null
-  const requiredModelIds = dependencyAnalysis ? requiredModelAssetIds(dependencyAnalysis, parts) : new Set<string>()
+  const requiredModelIds = dependencyAnalysis ? requiredModelAssetIds(dependencyAnalysis, copiedParts) : new Set<string>()
   const modelAssets = project.modelAssets?.filter((asset) => requiredModelIds.has(asset.id)).map((asset) => ({ ...asset, ...(asset.selectedSections ? { selectedSections: [...asset.selectedSections] } : {}) }))
-  const symbolIds = new Set(parts.flatMap((part) => part.symbolAssetId ? [part.symbolAssetId] : []))
+  const symbolIds = new Set(copiedParts.flatMap((part) => part.symbolAssetId ? [part.symbolAssetId] : []))
   const symbolAssets = project.symbolAssets?.filter((asset) => symbolIds.has(asset.id)).map((asset) => ({ ...asset }))
   return {
     parts, wires, junctions, netLabels,

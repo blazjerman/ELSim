@@ -165,3 +165,33 @@ test('copying an imported IC carries its transitive model libraries and custom s
   assert.equal(resolved.symbolAssets[0].id, 'asset-generated-2')
   assert.equal(resolved.parts[0].symbolAssetId, 'asset-generated-2')
 })
+
+test('copying a hierarchy includes nested IC assets and remaps its symbol reference', () => {
+  const source = createStarterProject()
+  const root = source.sheets[0]
+  const topBlock = { id: 'x-outer', kind: 'subcircuit', ref: 'XOUTER', value: 'Outer', x: 500, y: 360, rotation: 0, sheetId: 'sheet-outer', modelPins: ['IN', 'OUT'] }
+  const nestedIc = { id: 'x-user', kind: 'subcircuit', ref: 'XUSER', value: 'USER_TOP', modelName: 'USER_TOP', modelPins: ['IN', 'OUT'], componentDefinitionId: 'imported:test', symbolAssetId: 'symbol-user', x: 700, y: 360, rotation: 0 }
+  source.parts = [topBlock]
+  source.sheets = [
+    { ...root, parts: [topBlock] },
+    { ...root, id: 'sheet-outer', name: 'Outer', parentSheetId: root.id, parts: [nestedIc], ports: [{ id: 'outer-in', name: 'IN' }, { id: 'outer-out', name: 'OUT' }] },
+  ]
+  source.modelAssets = [
+    { id: 'model-top', filename: 'user-top.lib', content: '.SUBCKT USER_TOP IN OUT\nXCORE IN OUT USER_CORE\n.ENDS USER_TOP\n', sha256: 'top-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'model-core', filename: 'user-core.lib', content: '.SUBCKT USER_CORE IN OUT\nRCORE IN OUT 1k\n.ENDS USER_CORE\n', sha256: 'core-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+  ]
+  source.symbolAssets = [{ id: 'symbol-user', filename: 'user-top.asy', content: 'Version 4\n', sha256: 'symbol-hash', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
+
+  const clipboard = createPartClipboard(source, ['x-outer'])
+  assert.deepEqual(clipboard.modelAssets.map((asset) => asset.filename).sort(), ['user-core.lib', 'user-top.lib'])
+  assert.deepEqual(clipboard.symbolAssets.map((asset) => asset.filename), ['user-top.asy'])
+
+  const destination = createStarterProject()
+  destination.symbolAssets = [{ ...source.symbolAssets[0], content: 'Version 4\nRECTANGLE Normal 0 0 1 1\n', sha256: 'different-symbol-hash' }]
+  const resolved = resolvePartClipboard(destination, clipboard, () => 'fresh')
+  assert.equal('error' in resolved, false)
+  const copiedChild = resolved.sheets.find((sheet) => sheet.name === 'Outer')
+  assert.ok(copiedChild)
+  assert.equal(copiedChild.parts[0].symbolAssetId, 'asset-fresh')
+  assert.equal(resolved.symbolAssets[0].id, 'asset-fresh')
+})
