@@ -11,7 +11,7 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build && node tools/check-web-build.mjs",
-    "build:pages": "vite build && node tools/check-web-build.mjs",
+    "build:pages": "vite build --mode release && node tools/check-pages-release-build.mjs",
     "test": "node tests/run-netlist-tests.cjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --grep-invert \"@ngspice\"",

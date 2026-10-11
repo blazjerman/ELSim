@@ -68,7 +68,8 @@ cd "$BUILD_DIR"
   CXX="$(command -v em++)"
 
 # The static artifacts do not include optional XSPICE Verilog/VHDL shared
-# adapters; retain the other XSPICE modules used by the analog engine.
+# adapters. The table code model is GPL-2.0-or-later, so omit it from the
+# browser build rather than linking it into this mixed-license application.
 python3 "$ROOT_DIR/tools/configure-ngspice-xspice-subdirs.py" \
   "$BUILD_DIR/src/xspice/Makefile"
 
