@@ -209,6 +209,17 @@ The Chromium selection result varied between 133.0 and 147.1 ms before label cul
 
 The selection path now updates the selected/focusable part controls immediately through the external store and schedules the inspector/app selection state at transition priority. This preserves a responsive canvas highlight while moving the larger application render out of the urgent input lane. The 5,000-part Chromium benchmark measured 7.7 ms median / 8.1 ms p95 input-to-next-frame; Firefox measured 3 ms / 4 ms. Editor-ready measured 1,157 ms in Chromium and 1,622 ms in Firefox, with 10,682 SVG elements and 120 mounted labels in both. Focused keyboard navigation, inspector update, visible-label selection, and group-edit tests pass. These are local single-run observations, not release budgets; repeatability and broader interaction coverage remain necessary.
 
+### Repeatability run (2026-10-11)
+
+The 5,000-part editor benchmark ran three independent times in each supported browser on the same Linux host (12th Gen Intel Core i7-12700F, 20 logical CPUs, 16 GiB RAM). Each run reloaded a fresh page and measured five separate selection updates; the reported per-run p95 is the maximum of those five samples.
+
+| Browser | Editor-ready range (ms) | Selection median range (ms) | Selection max-of-5 range (ms) | Mounted labels | SVG elements |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Chromium | 1,144–1,184 | 7.9–8.1 | 8.1–8.9 | 120 / 10,000 | 10,682 |
+| Firefox | 1,638–1,656 | 3 | 4 | 120 / 10,000 | 10,682 |
+
+All six runs passed. This supports run-to-run stability on this host only; it does not establish performance across other hardware. Firefox does not expose the performance.memory fields used by this benchmark, and Chromium's page-heap readings do not include the ngspice worker's WebAssembly linear memory. Browser/worker peak-memory measurement and an additional hardware baseline remain open.
+
 ### Browser waveform transport check
 
 The worker now shares one parsed axis across all traces and transfers unique axis/value buffers to the UI, avoiding per-trace axis copies and a structured-clone copy of result vectors. The UI validates shared typed vectors once per response. A Playwright `MessageChannel` check used six 100,000-sample traces (5.6 MB total including one shared axis); both clone and transfer preserved values and shared-axis identity, and transfer detached the sender buffers as expected.

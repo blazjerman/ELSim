@@ -429,7 +429,6 @@ test('measure high-sample multi-trace rendering for a nonlinear diode circuit', 
 })
 
 test('record large-project editor render and selection input-to-frame timings', async ({ page, browserName }) => {
-  test.setTimeout(180_000)
   test.setTimeout(120_000)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
