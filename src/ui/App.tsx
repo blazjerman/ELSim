@@ -916,17 +916,31 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
 function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, setNotice, beginEdit, endEdit, onProbe, onSwitchChanged, simulationResult, sampleIndex, onSampleChange }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
+  const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
   const drag = useRef<{ kind: 'part' | 'wire' | 'segment' | 'label' | 'pan'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; segmentIndex?: number; group?: { id: string; x: number; y: number }[] } | null>(null)
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
   const [scrubIndex, setScrubIndex] = useState<number | null>(sampleIndex)
+  useLayoutEffect(() => {
+    const element = svg.current
+    if (!element) return
+    const measure = () => {
+      const { width, height } = element.getBoundingClientRect()
+      if (width <= 0 || height <= 0) return
+      setViewportSize((current) => Math.abs(current.width - width) < 0.25 && Math.abs(current.height - height) < 0.25 ? current : { width, height })
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    measure()
+    return () => observer.disconnect()
+  }, [])
   const resultIsCurrent = simulationResult?.analysis === 'tran' && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt
   const transientAxis = resultIsCurrent ? simulationResult.traces[0]?.axis : undefined
   const resultConnectivity = useMemo(() => resultIsCurrent ? analyzeConnectivity(project) : null, [project, resultIsCurrent])
-  const viewWidth = 760 / project.view.zoom, viewHeight = 600 / project.view.zoom
-  const viewportLeft = (760 - viewWidth) / 2 - project.view.panX
-  const viewportTop = (600 - viewHeight) / 2 - project.view.panY
+  const viewWidth = viewportSize.width / project.view.zoom, viewHeight = viewportSize.height / project.view.zoom
+  const viewportLeft = (380 - viewWidth / 2) - project.view.panX
+  const viewportTop = (300 - viewHeight / 2) - project.view.panY
   const tracesByVector = useMemo(() => {
     const index = new Map<string, Trace>()
     for (const trace of simulationResult?.traces ?? []) {
@@ -1207,18 +1221,17 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     setNotice(labelDraft.id ? `Net label renamed to ${name}.` : `Net label ${name} added.`)
     setLabelDraft(null)
   }
-  const viewBox = `${(760 - viewWidth) / 2 - project.view.panX} ${(600 - viewHeight) / 2 - project.view.panY} ${viewWidth} ${viewHeight}`
+  const viewBox = `${viewportLeft} ${viewportTop} ${viewWidth} ${viewHeight}`
   const wireFlows = useMemo(() => {
     if (!resultIsCurrent || !resultConnectivity) return new Map<string, ReturnType<typeof wireCurrentFlow>>()
     return new Map(project.wires.map((wire) => [wire.id, wireCurrentFlow(project, resultConnectivity, wire, (part) => resultValue(componentCurrentVector(part)))]))
   }, [project, resultIsCurrent, resultConnectivity, activeSample, simulationResult])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
-      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project))}><Scan size={15}/></IconButton></div>
+      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
       <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Shift-click parts to select several · drag to move · Ctrl/⌘+C/V copies parts, wire paths, and selected labels · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
     <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire paths and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={beginPan} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onWheel={(event) => {
-      if (!event.ctrlKey && !event.metaKey) return
       event.preventDefault()
       const rect = event.currentTarget.getBoundingClientRect(), view = event.currentTarget.viewBox.baseVal
       const scale = Math.min(rect.width / view.width, rect.height / view.height)
@@ -1227,8 +1240,8 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       const anchorX = view.x + fractionX * view.width, anchorY = view.y + fractionY * view.height
       setView((current) => {
         const zoom = Math.max(.1, Math.min(2.5, current.zoom * Math.exp(-event.deltaY * .002)))
-        const width = 760 / zoom, height = 600 / zoom
-        return { ...current, zoom, panX: (760 - width) / 2 - (anchorX - fractionX * width), panY: (600 - height) / 2 - (anchorY - fractionY * height) }
+        const width = viewportSize.width / zoom, height = viewportSize.height / zoom
+        return { ...current, zoom, panX: 380 - width / 2 - (anchorX - fractionX * width), panY: 300 - height / 2 - (anchorY - fractionY * height) }
       })
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
@@ -1240,7 +1253,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
     </svg>
     {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}
-    <div className="canvas-footer"><span><Grid2X2 size={13}/> Snap to grid</span>{transientAxis?.length ? <label className="simulation-scrubber"><span>Simulation time</span><input aria-label="Simulation time" type="range" min="0" max={transientAxis.length - 1} step="1" value={activeSample} onChange={(event) => { const index = Number(event.target.value); setScrubIndex(index); onSampleChange(index) }}/><output>{transientAxis[activeSample].toPrecision(4)} s</output></label> : <span>Ctrl/⌘ + scroll to zoom · Space/middle-drag to pan</span>}<span>{project.parts.length} components</span></div>
+      <div className="canvas-footer"><span><Grid2X2 size={13}/> Snap to grid</span>{transientAxis?.length ? <label className="simulation-scrubber"><span>Simulation time</span><input aria-label="Simulation time" type="range" min="0" max={transientAxis.length - 1} step="1" value={activeSample} onChange={(event) => { const index = Number(event.target.value); setScrubIndex(index); onSampleChange(index) }}/><output>{transientAxis[activeSample].toPrecision(4)} s</output></label> : <span>Scroll to zoom · Space/middle-drag to pan</span>}<span>{project.parts.length} components</span></div>
   </div>
 }
 

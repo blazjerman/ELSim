@@ -23,8 +23,8 @@ test('fit view centers and bounds distant parts, wire points, and labels', () =>
   const centerX = (Math.min(...content.map(({ x }) => x)) + Math.max(...content.map(({ x }) => x))) / 2
   const centerY = (Math.min(...content.map(({ y }) => y)) + Math.max(...content.map(({ y }) => y))) / 2
   const viewWidth = 760 / view.zoom, viewHeight = 600 / view.zoom
-  const viewLeft = (760 - viewWidth) / 2 - view.panX
-  const viewTop = (600 - viewHeight) / 2 - view.panY
+  const viewLeft = 380 - viewWidth / 2 - view.panX
+  const viewTop = 300 - viewHeight / 2 - view.panY
   assert.equal(viewLeft + viewWidth / 2, centerX)
   assert.equal(viewTop + viewHeight / 2, centerY)
   for (const point of content) {
@@ -32,6 +32,11 @@ test('fit view centers and bounds distant parts, wire points, and labels', () =>
     assert.ok(point.y >= viewTop && point.y <= viewTop + viewHeight)
   }
   assert.ok(view.zoom >= .1 && view.zoom <= 2.5)
+
+  const resizedView = fitEditorView(project, { width: 390, height: 500 })
+  assert.equal(resizedView.panX, 380 - centerX)
+  assert.equal(resizedView.panY, 300 - centerY)
+  assert.ok(resizedView.zoom < view.zoom)
 })
 
 test('horizontal flip geometry updates indexed pin anchors and detects crossed starter wires', () => {

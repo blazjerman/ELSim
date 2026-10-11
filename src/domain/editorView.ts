@@ -17,7 +17,7 @@ export function fitEditorView(project: Project, viewport = { width: 760, height:
     viewport.width / Math.max(1, maxX - minX + padding * 2),
     viewport.height / Math.max(1, maxY - minY + padding * 2)))
   const centerX = (minX + maxX) / 2, centerY = (minY + maxY) / 2
-  // The canvas viewBox center is (viewport / 2) - pan, so invert the
-  // content-center offset when converting the target bounds to pan values.
-  return { ...project.view, zoom, panX: viewport.width / 2 - centerX, panY: viewport.height / 2 - centerY }
+  // Keep the canvas world origin centered at (380, 300), independent of its
+  // responsive pixel dimensions. The viewport dimensions affect fit zoom only.
+  return { ...project.view, zoom, panX: 380 - centerX, panY: 300 - centerY }
 }

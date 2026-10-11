@@ -570,24 +570,42 @@ test('schematic grid fills the zoomed and panned view and has no fixed placehold
   await expect(page.getByText('INPUT', { exact: true })).toHaveCount(0)
   await expect(page.getByText('OUTPUT', { exact: true })).toHaveCount(0)
   const svg = page.locator('svg.schematic')
-  const grid = async () => svg.evaluate((element) => {
+  const viewport = async () => svg.evaluate((element) => {
     const view = element.viewBox.baseVal
     const rect = element.querySelector('rect[fill="url(#large-grid)"]')!
-    return [rect.getAttribute('x'), rect.getAttribute('y'), rect.getAttribute('width'), rect.getAttribute('height')]
+    const box = element.getBoundingClientRect()
+    return {
+      grid: [rect.getAttribute('x'), rect.getAttribute('y'), rect.getAttribute('width'), rect.getAttribute('height')]
       .map(Number)
-      .map((value, index) => Number(value.toFixed(5)) - Number([view.x, view.y, view.width, view.height][index].toFixed(5)))
+      .map((value, index) => Number(value.toFixed(5)) - Number([view.x, view.y, view.width, view.height][index].toFixed(5))),
+      aspectError: Math.abs(view.width / view.height - box.width / box.height),
+    }
   })
-  expect(await grid()).toEqual([0, 0, 0, 0])
+  expect((await viewport()).grid).toEqual([0, 0, 0, 0])
+  expect((await viewport()).aspectError).toBeLessThan(0.002)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect.poll(async () => (await viewport()).aspectError).toBeLessThan(0.002)
+  await expect.poll(async () => (await viewport()).grid).toEqual([0, 0, 0, 0])
+  await page.setViewportSize({ width: 700, height: 900 })
+  await expect.poll(async () => (await viewport()).aspectError).toBeLessThan(0.002)
+  await expect.poll(async () => (await viewport()).grid).toEqual([0, 0, 0, 0])
   await page.getByRole('button', { name: 'Zoom in' }).click()
-  await expect.poll(grid).toEqual([0, 0, 0, 0])
+  await expect.poll(async () => (await viewport()).grid).toEqual([0, 0, 0, 0])
 
+  const zoomBeforeWheel = Number((await page.getByRole('button', { name: /%/ }).innerText()).replace('%', ''))
   const box = await svg.boundingBox()
   expect(box).not.toBeNull()
-  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+  await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * 0.35)
+  await page.mouse.wheel(0, -240)
+  await expect.poll(async () => Number((await page.getByRole('button', { name: /%/ }).innerText()).replace('%', ''))).toBeGreaterThan(zoomBeforeWheel)
+
+  const resizedBox = await svg.boundingBox()
+  expect(resizedBox).not.toBeNull()
+  await page.mouse.move(resizedBox!.x + resizedBox!.width / 2, resizedBox!.y + resizedBox!.height / 2)
   await page.mouse.down({ button: 'middle' })
-  await page.mouse.move(box!.x + box!.width / 2 + 90, box!.y + box!.height / 2 + 45, { steps: 4 })
+  await page.mouse.move(resizedBox!.x + resizedBox!.width / 2 + 90, resizedBox!.y + resizedBox!.height / 2 + 45, { steps: 4 })
   await page.mouse.up({ button: 'middle' })
-  await expect.poll(grid).toEqual([0, 0, 0, 0])
+  await expect.poll(async () => (await viewport()).grid).toEqual([0, 0, 0, 0])
 })
 
 test('first use: run the RC starter and inspect its solved waveform', { tag: '@ngspice' }, async ({ page }) => {
