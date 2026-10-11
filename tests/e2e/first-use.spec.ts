@@ -548,9 +548,10 @@ test('schematic wire segments and net labels can be selected from the keyboard',
   await page.keyboard.press('Space')
   await expect(wire).toHaveClass(/selected/)
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
-  const wireBefore = await wire.locator('polyline').first().getAttribute('points')
+  const wireLine = wire.locator('line').nth(1)
+  const wireBefore = await wireLine.getAttribute('x1')
   await page.keyboard.press('Shift+ArrowRight')
-  await expect.poll(() => wire.locator('polyline').first().getAttribute('points')).not.toBe(wireBefore)
+  await expect.poll(() => wireLine.getAttribute('x1')).not.toBe(wireBefore)
 
   const label = page.getByRole('button', { name: 'Net label vin' })
   await expect(label).toHaveAttribute('tabindex', '0')
@@ -570,20 +571,14 @@ test('wire selection stays separate from the inspector and active tool', async (
   const target = await page.locator('svg.schematic').evaluate((svgElement) => {
     const svg = svgElement as SVGSVGElement
     for (const wire of svg.querySelectorAll<SVGGElement>('.wire-line')) {
-      const line = wire.querySelector<SVGPolylineElement>('polyline[stroke="transparent"]')
+      const line = wire.querySelector<SVGLineElement>('line[stroke="transparent"]')
       if (!line) continue
-      const points = line.points
-      for (let segment = 1; segment < points.numberOfItems; segment += 1) {
-        const start = points.getItem(segment - 1), end = points.getItem(segment)
-        for (const fraction of [0.5]) {
-          const point = svg.createSVGPoint()
-          point.x = start.x + (end.x - start.x) * fraction
-          point.y = start.y + (end.y - start.y) * fraction
-          const screen = point.matrixTransform(svg.getScreenCTM()!)
-          const hit = document.elementFromPoint(screen.x, screen.y)?.closest('.wire-line')
-          if (hit === wire) return { id: wire.dataset.wireId!, x: screen.x, y: screen.y }
-        }
-      }
+      const point = svg.createSVGPoint()
+      point.x = (line.x1.baseVal.value + line.x2.baseVal.value) / 2
+      point.y = (line.y1.baseVal.value + line.y2.baseVal.value) / 2
+      const screen = point.matrixTransform(svg.getScreenCTM()!)
+      const hit = document.elementFromPoint(screen.x, screen.y)?.closest('.wire-line')
+      if (hit === wire) return { id: wire.dataset.wireId!, x: screen.x, y: screen.y }
     }
     return null
   })
@@ -1378,7 +1373,7 @@ test('junction tool toggles a crossing connection in the schematic', async ({ pa
     return { x: matrix.a * 350 + matrix.c * 300 + matrix.e, y: matrix.b * 350 + matrix.d * 300 + matrix.f }
   })
 
-  await page.getByRole('button', { name: 'Toggle a wire crossing junction (J)' }).click()
+  await page.getByRole('button', { name: 'Toggle a wire crossing junction (=)' }).click()
   await svg.click({ position: { x: crossing.x - box!.x, y: crossing.y - box!.y } })
   await expect(page.getByText('Junction added. The crossing wires are now connected.')).toBeVisible()
   await expect(svg.locator('title', { hasText: 'Connected wire junction' })).toBeAttached()
@@ -1545,7 +1540,7 @@ test('deleting a component keeps its independent wire and selected wires use the
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(0)
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)).toEqual([{ id: 'independent-wire', points: [[400, 330], [500, 330]] }])
 
-  await page.locator('.wire-line[data-wire-id="independent-wire"]').click({ position: { x: 40, y: 0 } })
+  await page.locator('.wire-line[data-wire-id="independent-wire"]').click()
   await expect(page.getByRole('button', { name: 'Delete selected (Delete)' })).toBeEnabled()
   await page.getByRole('button', { name: 'Delete selected (Delete)' }).click()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(0)

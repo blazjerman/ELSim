@@ -1178,8 +1178,11 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       && componentPins(part).every((pin) => Math.hypot(point.x - pin.x, point.y - pin.y) > 16)
     if (tool !== 'select' && !movingPartWithWireArmed) return
     event.stopPropagation()
-    const alreadySelected = selectedPartIds.includes(id) || selectedWireIds.includes(id) || selectedNetLabelIds.includes(id)
-    const partIds = alreadySelected ? selectedPartIds : kind === 'part' ? [id] : []
+    const preserveMixedSelection = kind === 'part' && (selectedWireIds.length > 0 || selectedNetLabelIds.length > 0)
+    const alreadySelected = preserveMixedSelection || selectedPartIds.includes(id) || selectedWireIds.includes(id) || selectedNetLabelIds.includes(id)
+    const partIds = alreadySelected
+      ? kind === 'part' && !selectedPartIds.includes(id) ? [...selectedPartIds, id] : selectedPartIds
+      : kind === 'part' ? [id] : []
     const wireIds = alreadySelected ? selectedWireIds : kind === 'wire' ? [id] : []
     const labelIds = alreadySelected ? selectedNetLabelIds : kind === 'label' ? [id] : []
     const group = {
@@ -1191,6 +1194,8 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       setSelectedPartIds(partIds)
       setSelectedWireIds(wireIds)
       setSelectedNetLabelIds(labelIds)
+    } else if (kind === 'part' && !selectedPartIds.includes(id)) {
+      setSelectedPartIds(partIds)
     }
     if (kind === 'wire') { if (!alreadySelected) setSelectedWireId(id) }
     else setSelection({ kind, id })
