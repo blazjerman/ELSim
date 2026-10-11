@@ -11,7 +11,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 const { verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
-test('project ZIP archive is deterministic and round-trips the complete v7 project', () => {
+test('project ZIP archive is deterministic and round-trips the complete v8 project', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'ac'
   project.parts[1].flipX = true
@@ -68,7 +68,7 @@ test('v2 projects migrate to a root sheet and validate nested sheet ownership', 
   delete old.rootSheetId
   delete old.sheets
   const migrated = validateProject(old)
-  assert.equal(migrated.version, 7)
+  assert.equal(migrated.version, 8)
   assert.equal(migrated.rootSheetId, 'sheet-main')
   assert.equal(migrated.sheets.length, 1)
   assert.deepEqual(migrated.sheets[0].parts, migrated.parts)
@@ -93,25 +93,25 @@ test('v3 migration and active child-sheet scene round-trip', () => {
   v3.version = 3
   delete v3.activeSheetId
   const migrated = validateProject(v3)
-  assert.equal(migrated.version, 7)
+  assert.equal(migrated.version, 8)
   assert.equal(migrated.activeSheetId, migrated.rootSheetId)
   const v4 = structuredClone(current)
   v4.version = 4
   delete v4.sheets[0].ports
   const migratedV4 = validateProject(v4)
-  assert.equal(migratedV4.version, 7)
+  assert.equal(migratedV4.version, 8)
   assert.deepEqual(migratedV4.sheets[0].ports, [])
   assert.deepEqual(migratedV4.sheets[0].parameters, [])
   const v5 = structuredClone(current)
   v5.version = 5
   delete v5.sheets[0].parameters
   const migratedV5 = validateProject(v5)
-  assert.equal(migratedV5.version, 7)
+  assert.equal(migratedV5.version, 8)
   assert.deepEqual(migratedV5.sheets[0].parameters, [])
   const v6 = structuredClone(current)
   v6.version = 6
   const migratedV6 = validateProject(v6)
-  assert.equal(migratedV6.version, 7)
+  assert.equal(migratedV6.version, 8)
   assert.deepEqual(migratedV6.sheets[0].ports, [])
 
   const child = { id: 'sheet-driver', name: 'Driver', parentSheetId: 'sheet-main', parts: [{ id: 'p-child-r', kind: 'resistor', ref: 'Rchild', value: '2k', x: 200, y: 200, rotation: 0 }], wires: [], junctions: [], netLabels: [], view: { zoom: 1.2, panX: 10, panY: 20 }, ports: [] }
@@ -204,7 +204,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const mismatch = structuredClone(restored)
   mismatch.parts.at(-1).symbolPinOffsets[0] = [0, 0]
   assert.throws(() => validateProject(mismatch), /symbol pin order or coordinates do not match/)
-  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v7.schema.json'), 'utf8'))
+  const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v8.schema.json'), 'utf8'))
   assert.equal(schema.properties.symbolAssets.maxItems, 32)
   assert.equal(schema.properties.importedSchematicSource.$ref, '#/$defs/ltspiceSchematicSource')
   assert.equal(schema.properties.importedChildSchematicSources.maxItems, 63)

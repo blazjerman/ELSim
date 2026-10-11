@@ -7,14 +7,14 @@ import {
   Save, Scan, Search, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
-import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
+import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { createPartClipboard, type PartClipboard } from '../domain/partClipboard'
 import { fitEditorView } from '../domain/editorView'
 import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
-import { canMoveWireSegment, canTranslateWire, componentPins, EDITOR_GRID_SIZE, moveWireAnchors, moveWireSegment, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { componentPins, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
@@ -40,14 +40,6 @@ type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = 'all' | 'basics' | 'semiconductors' | 'controlled'
 type Selection = { kind: 'part' | 'wire' | 'label'; id: string } | null
 type ExampleId = 'rc' | 'ac-lowpass' | 'ac-highpass' | 'led' | 'rlc' | 'controlled' | 'current-controlled' | 'transistor' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'voltage-divider'
-
-function stationaryWireAnchors(project: Project, movingPartIds: ReadonlySet<string>) {
-  return [
-    ...project.parts.filter((part) => !movingPartIds.has(part.id)).flatMap(componentPins),
-    ...project.junctions,
-    ...project.netLabels.map(({ x, y }) => ({ x, y })),
-  ]
-}
 
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
 const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: string; help: string }[] = [
@@ -826,20 +818,21 @@ function measurementVectorChoices(project: Project) {
   return { nodes: nodes.map((name) => ({ value: `V(${name})`, label: name })), currents }
 }
 
-const CanvasWire = memo(function CanvasWire({ wire, selected, tool, spacePan, movableSegments, flow, animationEnabled, animationScale, animationSpeed, onProbe, onBeginDrag, onBeginSegmentDrag, onSelect }: {
+const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spacePan, flow, animationEnabled, animationScale, animationSpeed, onProbe, onBeginDrag, onBeginEndpointDrag, onSelect, onHover }: {
   wire: Project['wires'][number]
   selected: boolean
+  hovered: boolean
   tool: ToolMode
   spacePan: boolean
-  movableSegments: boolean[]
   flow: WireCurrentFlowSegment[]
   animationEnabled: boolean
   animationScale: number
   animationSpeed: number
   onProbe: (id: string) => void
   onBeginDrag: (event: PointerEvent<SVGGElement>, id: string) => void
-  onBeginSegmentDrag: (event: PointerEvent<SVGPolylineElement>, id: string, index: number) => void
+  onBeginEndpointDrag: (event: PointerEvent<SVGCircleElement>, id: string, endpoint: 0 | 1) => void
   onSelect: (id: string) => void
+  onHover: (id?: string) => void
 }) {
   const points = wire.points.map(([x, y]) => `${x},${y}`).join(' ')
   const flowPaths = useRef(new Map<string, SVGPolylineElement>())
@@ -872,10 +865,10 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, tool, spacePan, mo
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
   }, [wire.id, animationEnabled, flow.length > 0])
-  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}`} role="button" tabIndex={0} aria-label={`Wire path with ${wire.points.length - 1} segment${wire.points.length === 2 ? '' : 's'}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'probe') event.stopPropagation(); else if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } }}>
+  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'probe') event.stopPropagation(); else if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } }}>
     <polyline points={points} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/>
     <polyline points={points} fill="none" stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    {tool === 'select' && wire.points.slice(0, -1).map((point, index) => movableSegments[index] && <polyline key={`segment-hit-${index}`} points={`${point[0]},${point[1]} ${wire.points[index + 1][0]},${wire.points[index + 1][1]}`} fill="none" stroke="transparent" strokeWidth="12" strokeLinecap="round" style={{ pointerEvents: 'stroke', cursor: 'move' }} onPointerDown={(event) => onBeginSegmentDrag(event, wire.id, index)}><title>Drag to reroute this wire segment</title></polyline>)}
+    {hovered && tool === 'select' && <g className="wire-endpoint-handles" aria-label="Wire endpoints">{([0, 1] as const).map((index) => <circle key={index} cx={wire.points[index][0]} cy={wire.points[index][1]} r="6" onPointerDown={(event) => onBeginEndpointDrag(event, wire.id, index)}><title>Drag this wire endpoint to connect it elsewhere</title></circle>)}</g>}
     {flow.map((segment, index) => {
       const key = segment.points.map(([x, y]) => `${x},${y}`).join(' ')
       const phaseKey = `${wire.id}:${index}`
@@ -974,13 +967,16 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
   </div>
 }
 
-function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, onSampleChange, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
+function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, pendingComponent, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, onSampleChange, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
-  const drag = useRef<{ kind: 'part' | 'wire' | 'segment' | 'label' | 'pan'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; segmentIndex?: number; group?: { id: string; x: number; y: number }[] } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-end' | 'wire-create' | 'component-create' | 'label' | 'pan'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; points?: [number, number][]; endpointIndex?: 0 | 1; group?: { id: string; x: number; y: number }[] } | null>(null)
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
+  const [wirePreviewEnd, setWirePreviewEnd] = useState<{ x: number; y: number } | null>(null)
+  const [componentPreview, setComponentPreview] = useState<{ x: number; y: number } | null>(null)
+  const [hoveredWireId, setHoveredWireId] = useState<string>()
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
@@ -1098,19 +1094,8 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       setLabelDraft({ x: target.x, y: target.y, id: existing?.id, name: existing?.name ?? 'net' })
       return
     }
-    if (tool !== 'wire') { setSelection(null); setSelectedPartIds([]); return }
-    const point = pointFromEvent(event)
-    const nearest = resolveNode(point)
-    if (!nearest) { setNotice('Start and end wires on a component pin or an existing wire.'); return }
-    const snapped = { x: nearest.x, y: nearest.y }
-    if (!wireStart) { setWireStart(snapped); setNotice('Wire started. Click another pin or wire to finish it.'); return }
-    const from = wireStart, to = snapped
-    const points = [[from.x, from.y], [to.x, from.y], [to.x, to.y]] as [number, number][]
-    const compact = points.filter((point, index) => index === 0 || point[0] !== points[index - 1][0] || point[1] !== points[index - 1][1])
-    if (compact.length < 2) { setWireStart(null); return }
-    setProject((current) => ({ ...current, wires: [...current.wires, { id: `w-${crypto.randomUUID()}`, points: compact }] }))
-    setWireStart(null)
-    setNotice('Wire added. Connectivity is derived from the pin and wire geometry.')
+    if (tool === 'wire') return
+    setSelection(null); setSelectedPartIds([])
   }
   const probeWire = (wireId: string) => {
     const wire = project.wires.find((candidate) => candidate.id === wireId)
@@ -1119,14 +1104,37 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     if (target?.kind === 'node') onProbe(target)
     else setNotice('This wire is not connected to a net yet.')
   }
+  const beginWireCreation = (event: PointerEvent<SVGSVGElement>) => {
+    if (pendingComponent && tool === 'select' && event.button === 0 && !spacePan) {
+      event.preventDefault()
+      event.stopPropagation()
+      const point = pointFromEvent(event)
+      const anchor = { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
+      setComponentPreview(anchor)
+      drag.current = { kind: 'component-create', id: pendingComponent, pointer: event.pointerId, x: anchor.x, y: anchor.y, originX: anchor.x, originY: anchor.y }
+      suppressCanvasClick.current = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+      return
+    }
+    if (tool !== 'wire' || event.button !== 0 || spacePan) return
+    event.preventDefault()
+    event.stopPropagation()
+    const point = pointFromEvent(event)
+    const anchor = resolveNode(point) ?? { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
+    setWireStart(anchor)
+    setWirePreviewEnd(anchor)
+    drag.current = { kind: 'wire-create', id: 'new-wire', pointer: event.pointerId, x: anchor.x, y: anchor.y, originX: anchor.x, originY: anchor.y }
+    suppressCanvasClick.current = true
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
   const beginDrag = (event: PointerEvent<SVGGElement>, kind: 'part' | 'wire' | 'label', id: string) => {
+    if (pendingComponent) return
     if (tool !== 'select' || event.button !== 0 || spacePan) return
     if (kind === 'part' && event.shiftKey) return
     const part = kind === 'part' ? project.parts.find((item) => item.id === id) : undefined
     const wire = kind === 'wire' ? project.wires.find((item) => item.id === id) : undefined
     const label = kind === 'label' ? project.netLabels.find((item) => item.id === id) : undefined
     if (!part && !wire && !label) return
-    if (wire && !canTranslateWire(project, wire)) return
     event.stopPropagation()
     const group = kind === 'part' && selectedPartIds.length > 1 && selectedPartIds.includes(id)
       ? project.parts.filter((item) => selectedPartIds.includes(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y }))
@@ -1197,24 +1205,24 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   const probePart = useCallback((id: string) => partEventHandlers.current.probe({ kind: 'part', id }), [])
   const togglePart = useCallback((id: string) => partEventHandlers.current.toggleSwitch(id), [])
   const navigateFocusedPart = useCallback((id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => partEventHandlers.current.navigatePart(id, key), [])
-  const beginSegmentDrag = (event: PointerEvent<SVGPolylineElement>, wireId: string, segmentIndex: number) => {
-    if (tool !== 'select' || event.button !== 0 || spacePan) return
-    const wire = project.wires.find((item) => item.id === wireId)
-    if (!wire || !canMoveWireSegment(project, wire, segmentIndex)) return
+  const beginWireEndpointDrag = (event: PointerEvent<SVGCircleElement>, id: string, endpointIndex: 0 | 1) => {
+    event.preventDefault()
     event.stopPropagation()
-    setSelection({ kind: 'wire', id: wireId })
+    if (tool !== 'select' || spacePan) return
+    const wire = project.wires.find((item) => item.id === id)
+    if (!wire) return
+    setSelection({ kind: 'wire', id })
     beginEdit()
     const point = pointFromEvent(event)
-    drag.current = { kind: 'segment', id: wireId, segmentIndex, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, points: wire.points.map(([x, y]) => [x, y]) }
+    drag.current = { kind: 'wire-end', id, endpointIndex, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, points: [[...wire.points[0]], [...wire.points[1]]] }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
-  const wireEventHandlers = useRef({ beginDrag, beginSegmentDrag, probeWire })
-  wireEventHandlers.current = { beginDrag, beginSegmentDrag, probeWire }
+  const wireEventHandlers = useRef({ beginDrag, beginWireEndpointDrag, probeWire })
+  wireEventHandlers.current = { beginDrag, beginWireEndpointDrag, probeWire }
   const beginWireDrag = useCallback((event: PointerEvent<SVGGElement>, id: string) => wireEventHandlers.current.beginDrag(event, 'wire', id), [])
-  const beginWireSegmentDrag = useCallback((event: PointerEvent<SVGPolylineElement>, id: string, index: number) => wireEventHandlers.current.beginSegmentDrag(event, id, index), [])
+  const beginWireEndpointDragStable = useCallback((event: PointerEvent<SVGCircleElement>, id: string, endpoint: 0 | 1) => wireEventHandlers.current.beginWireEndpointDrag(event, id, endpoint), [])
   const probeWireStable = useCallback((id: string) => wireEventHandlers.current.probeWire(id), [])
   const selectWire = useCallback((id: string) => { setSelectedPartIds([]); setSelection({ kind: 'wire', id }) }, [setSelectedPartIds, setSelection])
-  const wireMovableSegments = useMemo(() => new Map(project.wires.map((wire) => [wire.id, tool === 'select' ? wire.points.slice(0, -1).map((_, index) => canMoveWireSegment(project, wire, index)) : []])), [project, tool])
   const beginPan = (event: PointerEvent<SVGSVGElement>) => {
     if (event.button !== 1 && !(event.button === 0 && spacePan)) return
     event.preventDefault()
@@ -1237,41 +1245,78 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
       return
     }
     const point = pointFromEvent(event)
+    if (drag.current.kind === 'wire-create') {
+      const end = resolveNode(point) ?? { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
+      setWirePreviewEnd(end)
+      if (end.x !== drag.current.originX || end.y !== drag.current.originY) suppressCanvasClick.current = true
+      return
+    }
+    if (drag.current.kind === 'component-create') {
+      const position = { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
+      drag.current.x = position.x
+      drag.current.y = position.y
+      setComponentPreview({ x: snapToEditorGrid((drag.current.originX + position.x) / 2), y: snapToEditorGrid((drag.current.originY + position.y) / 2) })
+      suppressCanvasClick.current = true
+      return
+    }
     const deltaX = Math.round((point.x - drag.current.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     const deltaY = Math.round((point.y - drag.current.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     if (deltaX !== 0 || deltaY !== 0) suppressCanvasClick.current = true
-    const { id, kind, originX, originY, points, segmentIndex, group } = drag.current
+    const { id, kind, originX, originY, points, endpointIndex, group } = drag.current
     setProject((current) => {
-      if (kind === 'segment') {
-        const base = points ? { ...current, wires: current.wires.map((wire) => wire.id === id ? { ...wire, points } : wire) } : current
-        const wires = moveWireSegment(base, id, segmentIndex ?? -1, deltaX, deltaY)
-        return wires === base.wires ? current : { ...current, wires }
-      }
-      if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: points.map(([x, y]) => [x + deltaX, y + deltaY]) } : wire) }
+      if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: [[points[0][0] + deltaX, points[0][1] + deltaY], [points[1][0] + deltaX, points[1][1] + deltaY]] } : wire) }
+      if (kind === 'wire-end') return { ...current, wires: current.wires.map((wire) => wire.id === id && points && endpointIndex !== undefined ? { ...wire, points: points.map((point, index) => index === endpointIndex ? [point[0] + deltaX, point[1] + deltaY] : point) as [[number, number], [number, number]] } : wire) }
       if (kind === 'label') return { ...current, netLabels: current.netLabels.map((label) => label.id === id ? { ...label, x: originX + deltaX, y: originY + deltaY } : label) }
       if (kind === 'part' && group?.length) {
         const movedParts = new Map<string, Part>()
-        let wires = current.wires
         for (const origin of group) {
           const moving = current.parts.find((part) => part.id === origin.id)
           if (!moving) continue
           const moved = { ...moving, x: origin.x + deltaX, y: origin.y + deltaY }
           movedParts.set(origin.id, moved)
-          wires = moveWireAnchors(wires, componentPins(moving), componentPins(moved), stationaryWireAnchors(current, new Set(group.map(({ id }) => id))))
         }
-        return { ...current, parts: current.parts.map((part) => movedParts.get(part.id) ?? part), wires }
+        return { ...current, parts: current.parts.map((part) => movedParts.get(part.id) ?? part) }
       }
       const moving = current.parts.find((part) => part.id === id)
       if (!moving) return current
       const moved = { ...moving, x: originX + deltaX, y: originY + deltaY }
-      return {
-        ...current,
-        parts: current.parts.map((part) => part.id === id ? moved : part),
-        wires: moveWireAnchors(current.wires, componentPins(moving), componentPins(moved), stationaryWireAnchors(current, new Set([moving.id]))),
-      }
+      return { ...current, parts: current.parts.map((part) => part.id === id ? moved : part) }
     })
   }
-  const endDrag = () => {
+  const endDrag = (event: PointerEvent<SVGSVGElement>) => {
+    if (drag.current?.kind === 'component-create') {
+      const placement = drag.current
+      const kind = placement.id as PartKind
+      const end = { x: snapToEditorGrid(pointFromEvent(event).x), y: snapToEditorGrid(pointFromEvent(event).y) }
+      const dx = end.x - placement.originX, dy = end.y - placement.originY
+      const position = { x: snapToEditorGrid((end.x + placement.originX) / 2), y: snapToEditorGrid((end.y + placement.originY) / 2) }
+      let rotation: Part['rotation'] = 0
+      if (Math.hypot(dx, dy) >= EDITOR_GRID_SIZE) {
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI
+        const target = ((Math.round(angle / 90) * 90) % 360 + 360) % 360
+        const exemplar: Part = { id: 'placement', kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: 'X', value: '', x: 0, y: 0, rotation: 0 }
+        const pins = componentPins(exemplar)
+        const native = pins.length > 1 ? Math.atan2(pins[1].y - pins[0].y, pins[1].x - pins[0].x) * 180 / Math.PI : 0
+        rotation = (((target - Math.round(native / 90) * 90) % 360 + 360) % 360) as Part['rotation']
+      }
+      onPlaceComponent(kind, position.x, position.y, rotation)
+      setComponentPreview(null)
+      drag.current = null
+      return
+    }
+    if (drag.current?.kind === 'wire-create') {
+      const start = { x: drag.current.originX, y: drag.current.originY }
+      const point = pointFromEvent(event)
+      const end = resolveNode(point) ?? { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
+      if (Math.hypot(end.x - start.x, end.y - start.y) >= EDITOR_GRID_SIZE) {
+        setProject((current) => ({ ...current, wires: [...current.wires, { id: `w-${crypto.randomUUID()}`, points: [[start.x, start.y], [end.x, end.y]] }] }))
+        setNotice('Wire segment placed.')
+      }
+      setWireStart(null)
+      setWirePreviewEnd(null)
+      drag.current = null
+      return
+    }
     if (drag.current?.kind === 'pan' && drag.current.id === 'middle') suppressCanvasClick.current = false
     if (drag.current?.kind !== 'pan' && drag.current) endEdit()
     drag.current = null
@@ -1296,12 +1341,13 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     if (!currentAnimationEnabled || !resultIsCurrent || !resultConnectivity) return new Map<string, WireCurrentFlowSegment[]>()
     return wireCurrentFlowSegments(project, resultConnectivity, (part) => resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`))
   }, [project, resultIsCurrent, resultConnectivity, activeSample, simulationResult, currentAnimationEnabled])
+  const orderedWires = useMemo(() => hoveredWireId ? [...project.wires.filter((wire) => wire.id !== hoveredWireId), ...project.wires.filter((wire) => wire.id === hoveredWireId)] : project.wires, [project.wires, hoveredWireId])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
-      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
-      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Click terminals to connect' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Shift-click parts to select several · drag to move · Ctrl/⌘+C/V copies parts, wire paths, and selected labels · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
+      <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
+      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Drag anywhere on the grid to place a wire' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Shift-click parts to select several · drag to move · Ctrl/⌘+C/V copies parts, wire segments, and selected labels · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
-    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire paths and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={(event) => { setContextMenu(null); beginPan(event) }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onContextMenu={(event) => {
+    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire paths and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event) }} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onContextMenu={(event) => {
       event.preventDefault()
       const element = event.target instanceof Element ? event.target : null
       const partElement = element?.closest<SVGGElement>('[data-part-id]')
@@ -1342,10 +1388,12 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
-      {project.wires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selection?.kind === 'wire' && selection.id === wire.id} tool={tool} spacePan={spacePan} movableSegments={wireMovableSegments.get(wire.id) ?? []} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onBeginSegmentDrag={beginWireSegmentDrag} onSelect={selectWire}/>) }
+      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selection?.kind === 'wire' && selection.id === wire.id} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onBeginEndpointDrag={beginWireEndpointDragStable} onSelect={selectWire} onHover={setHoveredWireId}/>) }
       <CanvasNetLabelLayer labels={project.netLabels} selectedId={selection?.kind === 'label' ? selection.id : undefined} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
-      {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
+      {wireStart && wirePreviewEnd && <line x1={wireStart.x} y1={wireStart.y} x2={wirePreviewEnd.x} y2={wirePreviewEnd.y} stroke="#a4e8bb" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>}
+      {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3" pointerEvents="none"/>}
+      {componentPreview && <g className="component-placement-preview" pointerEvents="none"><circle cx={componentPreview.x} cy={componentPreview.y} r="8"/><path d={`M ${componentPreview.x - 5} ${componentPreview.y} H ${componentPreview.x + 5} M ${componentPreview.x} ${componentPreview.y - 5} V ${componentPreview.y + 5}`}/></g>}
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
     </svg>
     {contextMenu && <div className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : 'Wire options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
@@ -1389,6 +1437,7 @@ export default function App() {
   const [selection, setSelection] = useState<Selection>({ kind: 'part', id: 'p-r1' })
   const [selectedPartIds, setSelectedPartIds] = useState<string[]>(['p-r1'])
   const [tool, setTool] = useState<ToolMode>('select')
+  const [pendingComponentKind, setPendingComponentKind] = useState<PartKind | null>(null)
   const [netlistOpen, setNetlistOpen] = useState(false)
   const [ltspiceExport, setLtspiceExport] = useState<LtspiceExportResult | null>(null)
   const [ltspiceExportBusy, setLtspiceExportBusy] = useState(false)
@@ -1603,7 +1652,7 @@ export default function App() {
   const setProject = (fn: (current: Project) => Project) => setProjectState((current) => {
     const next = fn(current)
     if (next === current) return current
-    const snapshot = { ...current, parts: current.parts.map((part) => ({ ...part })), wires: current.wires.map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x, y] as [number, number]) })), netLabels: current.netLabels.map((label) => ({ ...label })) }
+    const snapshot = { ...current, parts: current.parts.map((part) => ({ ...part })), wires: current.wires.map((wire) => ({ ...wire, points: [[...wire.points[0]], [...wire.points[1]]] as [[number, number], [number, number]] })), netLabels: current.netLabels.map((label) => ({ ...label })) }
     if (!editGroup.current) history.current = { past: [...history.current.past, snapshot].slice(-100), future: [] }
     const scene = { parts: next.parts, wires: next.wires, junctions: next.junctions, netLabels: next.netLabels, view: next.view }
     return { ...next, sheets: next.sheets.map((sheet) => sheet.id === next.activeSheetId ? { ...sheet, ...scene } : sheet), updatedAt: new Date().toISOString() }
@@ -1862,6 +1911,8 @@ export default function App() {
     const matchesSearch = `${label} ${subtitle} ${kindNames[kind]}`.toLowerCase().includes(componentQuery.trim().toLowerCase())
     return (componentQuery.trim() || matchesCategory) && matchesSearch
   })
+  const wireCardVisible = (componentCategory === 'all' || componentCategory === 'basics')
+    && (!componentQuery.trim() || 'wire connection segment'.includes(componentQuery.trim().toLowerCase()))
   const normalizedExampleQuery = exampleQuery.trim().toLocaleLowerCase()
   const filteredExamples = exampleCatalog.filter(({ title, description }) => `${title} ${description}`.toLocaleLowerCase().includes(normalizedExampleQuery))
   const startTour = () => {
@@ -2119,14 +2170,14 @@ export default function App() {
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this LTspice schematic.') }
     event.target.value = ''
   }
-  const addPart = (kind: PartKind) => {
+  const addPart = (kind: PartKind, x?: number, y?: number, rotation: Part['rotation'] = 0) => {
     const id = `p-${crypto.randomUUID()}`
-    const placeX = snapToEditorGrid(Math.max(190, Math.min(620, 260 + (project.parts.length % 4) * 90)))
-    const placeY = snapToEditorGrid(380 + (Math.floor(project.parts.length / 4) % 2) * 90)
-    const part: Part = { id, kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: nextRef(project.parts, kind), value: componentDefaultValue(kind) || (kind === 'behavioral' ? 'V(vin) * 2' : kind === 'ground' || kind === 'subcircuit' ? '' : '1'), x: placeX, y: placeY, rotation: 0, ...(kind === 'behavioral' ? { behavioralOutput: 'voltage' as const } : {}), ...(kind === 'lamp' ? { animationNominalPower: Number(componentDefinitionFor(kind).properties.find((property) => property.key === 'animationNominalPower')?.defaultValue ?? 10) } : {}) }
+    const placeX = x ?? snapToEditorGrid(Math.max(190, Math.min(620, 260 + (project.parts.length % 4) * 90)))
+    const placeY = y ?? snapToEditorGrid(380 + (Math.floor(project.parts.length / 4) % 2) * 90)
+    const part: Part = { id, kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: nextRef(project.parts, kind), value: componentDefaultValue(kind) || (kind === 'behavioral' ? 'V(vin) * 2' : kind === 'ground' || kind === 'subcircuit' ? '' : '1'), x: placeX, y: placeY, rotation, ...(kind === 'behavioral' ? { behavioralOutput: 'voltage' as const } : {}), ...(kind === 'lamp' ? { animationNominalPower: Number(componentDefinitionFor(kind).properties.find((property) => property.key === 'animationNominalPower')?.defaultValue ?? 10) } : {}) }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
     setSelection({ kind: 'part', id })
-    setNotice(`${componentDefinitionFor(kind).name} added. Connect its pins before simulation.`)
+    setNotice(`${componentDefinitionFor(kind).name} placed. Select a different tool or component when you are done placing them.`)
   }
   const addSubcircuit = (model: { name: string; pins: string[]; definition: ReturnType<typeof importedSubcircuitComponentDefinition> }, symbol?: (typeof importedSymbols)[number]) => {
     const orderedPins = model.definition.pins.map((pin) => pin.name)
@@ -2147,27 +2198,11 @@ export default function App() {
   }
   const updateSelected = (patch: Partial<Part>) => {
     if (!selected) return
-    if (patch.rotation !== undefined || patch.flipX !== undefined) {
-      const transformed = { ...selected, ...patch }
-      const candidate: Project = {
-        ...project,
-        parts: project.parts.map((part) => part.id === selected.id ? transformed : part),
-        wires: moveWireAnchors(project.wires, componentPins(selected), componentPins(transformed), stationaryWireAnchors(project, new Set([selected.id]))),
-      }
-      if (!hasSameElectricalConnectivity(project, candidate)) {
-        setNotice('This orientation change would change circuit connectivity. Reroute the attached wires first, then try again.')
-        return
-      }
-    }
     setProject((current) => {
       const before = current.parts.find((part) => part.id === selected.id)
       if (!before) return current
       const after = { ...before, ...patch }
-      return {
-        ...current,
-        parts: current.parts.map((part) => part.id === selected.id ? after : part),
-        wires: moveWireAnchors(current.wires, componentPins(before), componentPins(after), stationaryWireAnchors(current, new Set([before.id]))),
-      }
+      return { ...current, parts: current.parts.map((part) => part.id === selected.id ? after : part) }
     })
   }
   const rotateSelected = () => selected && updateSelected({ rotation: ((selected.rotation + 90) % 360) as Part['rotation'] })
@@ -2177,7 +2212,7 @@ export default function App() {
     if (!clipboard || (!clipboard.parts.length && !clipboard.netLabels.length && !clipboard.wires.length)) return
     const sources = clipboard.parts
     const pastedIds = sources.map(() => `p-${crypto.randomUUID()}`)
-    const pastedWires = clipboard.wires.map((wire) => ({ id: `w-${crypto.randomUUID()}`, points: wire.points.map(([x, y]) => [x + offsetX, y + offsetY] as [number, number]) }))
+    const pastedWires = clipboard.wires.map((wire) => ({ id: `w-${crypto.randomUUID()}`, points: [[wire.points[0][0] + offsetX, wire.points[0][1] + offsetY], [wire.points[1][0] + offsetX, wire.points[1][1] + offsetY]] as [[number, number], [number, number]] }))
     const pastedLabels = clipboard.netLabels.map((label) => ({ ...label, id: `label-${crypto.randomUUID()}`, x: label.x + offsetX, y: label.y + offsetY }))
     setProject((current) => {
       let parts = [...current.parts]
@@ -2272,7 +2307,7 @@ export default function App() {
         const delta = event.key === 'ArrowLeft' ? [-EDITOR_GRID_SIZE, 0] : event.key === 'ArrowRight' ? [EDITOR_GRID_SIZE, 0] : event.key === 'ArrowUp' ? [0, -EDITOR_GRID_SIZE] : [0, EDITOR_GRID_SIZE]
         if (selection?.kind === 'wire') {
           event.preventDefault()
-          setProject((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === selection.id ? { ...wire, points: wire.points.map(([x, y]) => [x + delta[0], y + delta[1]] as [number, number]) } : wire) }))
+          setProject((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === selection.id ? { ...wire, points: [[wire.points[0][0] + delta[0], wire.points[0][1] + delta[1]], [wire.points[1][0] + delta[0], wire.points[1][1] + delta[1]]] } : wire) }))
           return
         }
         if (selection?.kind === 'label') {
@@ -2314,15 +2349,15 @@ export default function App() {
       if ((event.ctrlKey || event.metaKey) && key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return }
       if ((event.ctrlKey || event.metaKey) && key === 'y') { event.preventDefault(); redo(); return }
       if (event.ctrlKey || event.metaKey || event.altKey) return
-      if (key === 'v') setTool('select')
-      else if (key === 'w') setTool('wire')
-      else if (key === 'n') setTool('label')
-      else if (key === 'p') setTool('probe')
-      else if (key === 'j') setTool('junction')
+      if (key === 'v') { setPendingComponentKind(null); setTool('select') }
+      else if (key === 'w') { setPendingComponentKind(null); setTool('wire') }
+      else if (key === 'n') { setPendingComponentKind(null); setTool('label') }
+      else if (key === 'p') { setPendingComponentKind(null); setTool('probe') }
+      else if (key === 'j') { setPendingComponentKind(null); setTool('junction') }
       else if (key === 'r' && selected) rotateSelected()
       else if (key === 'f' && selected) flipSelected()
       else if ((key === 'delete' || key === 'backspace') && selection) { event.preventDefault(); deleteSelection() }
-      else if (key === 'escape') setSelection(null)
+      else if (key === 'escape') { setPendingComponentKind(null); setSelection(null) }
     }
     const onKeyUp = (event: KeyboardEvent) => { if (event.code === 'Space') setSpacePan(false) }
     const onBlur = () => setSpacePan(false)
@@ -2780,7 +2815,7 @@ export default function App() {
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
-      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={15}/></IconButton><IconButton title="Wire tool" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (F)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
+      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (F)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select><ChevronDown size={13}/></label>
       {simulationResult?.analysis === 'tran' && <div className="menu-group playback-controls" aria-label="Result playback"><IconButton title={playbackRunning ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!playbackRunning && (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1) setSampleIndex(0); setPlaybackRunning((running) => !running) }} active={playbackRunning} disabled={!playbackAvailable}>{playbackRunning ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton><IconButton title="Rewind result playback to the first solved sample" onClick={() => { setPlaybackRunning(false); setSampleIndex(0) }} disabled={!playbackAvailable}><RotateCcw size={14}/></IconButton><details className="animation-tuning"><summary aria-label="Current animation settings" title="Current animation size and speed"><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div>}
@@ -2796,7 +2831,7 @@ export default function App() {
         <button className={mobilePane === 'properties' ? 'active' : ''} aria-pressed={mobilePane === 'properties'} onClick={() => setMobilePane('properties')}>Properties</button>
       </nav>
       <aside className={`library-panel${mobilePane === 'components' ? ' mobile-active' : ''}`}>
-        <div className="panel-heading"><div><span className="eyebrow">DESIGN</span><h2>Components</h2></div><span className="library-count" aria-label={`${filteredPalette.length} components shown`}>{filteredPalette.length}</span></div>
+        <div className="panel-heading"><div><span className="eyebrow">DESIGN</span><h2>Components</h2></div><span className="library-count" aria-label={`${filteredPalette.length + Number(wireCardVisible)} components shown`}>{filteredPalette.length + Number(wireCardVisible)}</span></div>
         <label className="search-box"><Search size={15}/><input ref={componentSearchRef} aria-label="Find a component" placeholder="Find a component" value={componentQuery} onChange={(event) => setComponentQuery(event.target.value)}/>{componentQuery ? <button type="button" aria-label="Clear component search" onClick={() => { setComponentQuery(''); componentSearchRef.current?.focus() }}><X size={13}/></button> : <kbd>/</kbd>}</label>
         <div className="library-categories" role="group" aria-label="Component category">
           <button className={`category${componentCategory === 'all' ? ' active' : ''}`} aria-pressed={componentCategory === 'all'} onClick={() => setComponentCategory('all')}><Grid2X2 size={14}/> All parts</button>
@@ -2805,7 +2840,7 @@ export default function App() {
           <button className={`category${componentCategory === 'controlled' ? ' active' : ''}`} aria-pressed={componentCategory === 'controlled'} onClick={() => setComponentCategory('controlled')}><Activity size={14}/> Controlled sources</button>
         </div>
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'all' ? 'ALL COMPONENTS' : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
-        {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, label, Icon, subtitle, help }) => <button key={kind} className="component-card" onClick={() => addPart(kind)} title={`Add ${label}`} aria-label={`Add ${label}. ${help}`} data-help={help}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span></button>)}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
+        {filteredPalette.length || wireCardVisible ? <div className="component-grid">{wireCardVisible && <button className="component-card" aria-pressed={tool === 'wire'} onClick={() => { setPendingComponentKind(null); setTool('wire'); setNotice('Wire selected. Drag anywhere on the grid to place one segment.') }} title="Select Wire to place" aria-label="Add Wire. Place a straight wire segment anywhere on the schematic."><span className="component-icon icon-wire"><Cable size={18}/></span><span className="component-label">Wire</span><span className="component-subtitle">2 endpoints</span></button>}{filteredPalette.map(({ kind, label, Icon, subtitle, help }) => <button key={kind} className={`component-card${pendingComponentKind === kind ? ' active' : ''}`} aria-pressed={pendingComponentKind === kind} onClick={() => { setPendingComponentKind(kind); setTool('select'); setNotice(`${label} selected. Drag on the schematic to place it and set its orientation.`) }} title={`Select ${label} to place`} aria-label={`Add ${label}. ${help}`} data-help={help}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span></button>)}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
         {project.sheets.some((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)) && <div className="imported-models"><div className="component-list-label">PROJECT BLOCKS</div>{project.sheets.filter((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)).map((sheet) => <div className="imported-model" key={sheet.id}><div><strong>{sheet.name}</strong><span>{sheet.ports.length} ordered ports · {sheet.ports.map((port) => port.name).join(', ')}</span><small>Defined by this project</small><button className="place-model" onClick={() => placeSheetBlock(sheet)}>Place block</button></div><button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button></div>)}</div>}
         {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Model dependency report"><strong>MODEL DEPENDENCIES</strong>{modelDependencyAnalysis.missing.length > 0 && <><p>These references are not present in the imported project libraries. Import the library that defines each name before running a circuit that uses it.</p><ul>{modelDependencyAnalysis.missing.slice(0, 20).map((dependency, index) => <li key={`${dependency.assetId}:${dependency.sourceLine}:${index}`}><code>{dependency.modelName}</code> ({dependency.kind}) · {dependency.filename}:{dependency.sourceLine}, in {dependency.owner}</li>)}</ul>{modelDependencyAnalysis.missing.length > 20 && <p>{modelDependencyAnalysis.missing.length - 20} additional missing references are omitted.</p>}</>}{modelDependencyAnalysis.recursiveChains.length > 0 && <><p>A circuit that instantiates one of these recursive call chains will fail in ngspice.</p><ul>{modelDependencyAnalysis.recursiveChains.map((chain) => <li key={chain.join(':')}>{chain.join(' → ')}</li>)}</ul></>}</div>}
         {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Conflicting model definitions"><strong>CONFLICTING MODEL DEFINITIONS</strong><p>More than one imported file defines the same model name. ELSim preserves both files; ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.</p><ul>{modelDependencyAnalysis.conflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.name}`}><code>{conflict.kind === 'subcircuit' ? '.SUBCKT' : '.MODEL'} {conflict.name}</code><ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>{definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => setModelSourceReview({ assetId: definition.assetId, line: definition.sourceLine })}>Review definition</button></li>)}</ul></li>)}</ul></div>}
@@ -2826,7 +2861,7 @@ export default function App() {
       <main className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button ref={sheetSettingsTriggerRef} className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => setSheetSettingsOpen(true)}><SlidersHorizontal size={15}/></button></div>
         {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p></div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
-        <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
+        <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} onPlaceComponent={addPart} onClearPendingComponent={() => setPendingComponentKind(null)} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div>{simulationResult && <details className="run-details"><summary>Run details</summary><div className="run-details-popover"><h3>Reproducible run record</h3><button className="run-report-download" onClick={downloadRunReport}><Download size={12}/> Download report · JSON</button><p className="run-report-note">The JSON report includes inputs and provenance, not waveform samples. Use Export CSV for the solved vectors.</p><dl><div><dt>Engine</dt><dd>{simulationResult.metadata.engine} {simulationResult.metadata.engineVersion}</dd></div><div><dt>Run ID</dt><dd><code>{simulationResult.metadata.runId}</code></dd></div><div><dt>Started</dt><dd>{simulationResult.metadata.startedAt}</dd></div><div><dt>Completed</dt><dd>{simulationResult.metadata.completedAt}</dd></div><div><dt>Netlist / sweep SHA-256</dt><dd><code>{simulationResult.metadata.netlistHash}</code></dd></div></dl><h4>Simulation settings</h4><pre>{JSON.stringify(simulationResult.metadata.settings, null, 2)}</pre><h4>Project model libraries</h4><p>Hashes identify stored source files; some may not be referenced by this run.</p>{simulationResult.metadata.modelAssets?.length ? <ul>{simulationResult.metadata.modelAssets.map((asset) => <li key={asset.id}><strong>{asset.filename}</strong><code>{asset.sha256}</code></li>)}</ul> : <p>No imported model files were recorded for this run.</p>}</div></details>}<div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <><button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button><button className="subtle-icon" title="Tile open plot windows" aria-label="Tile open plot windows" onClick={tilePlotWindows} disabled={(waveformDetached ? 1 : 0) + additionalPlotPanels.length < 2}><Grid2X2 size={15}/></button><button className="subtle-icon" title="Add independent plot panel" aria-label="Add independent plot panel" onClick={addPlotPanel} disabled={!simulationResult || additionalPlotPanels.length >= 8}><Plus size={15}/></button></>}</div></div>
           <div className="analysis-content">

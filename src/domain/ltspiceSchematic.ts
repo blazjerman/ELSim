@@ -1003,7 +1003,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     for (const point of points) { minX = Math.min(minX, point.x); maxX = Math.max(maxX, point.x); minY = Math.min(minY, point.y); maxY = Math.max(maxY, point.y) }
     const dx = 380 - (minX + maxX) / 2, dy = 300 - (minY + maxY) / 2
     project.parts = project.parts.map((part) => ({ ...part, x: part.x + dx, y: part.y + dy }))
-    project.wires = project.wires.map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) }))
+    project.wires = project.wires.map((wire) => ({ ...wire, points: [[wire.points[0][0] + dx, wire.points[0][1] + dy], [wire.points[1][0] + dx, wire.points[1][1] + dy]] as [[number, number], [number, number]] }))
     project.netLabels = project.netLabels.map((label) => ({ ...label, x: label.x + dx, y: label.y + dy }))
   project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, view: project.view }
     const width = maxX - minX, height = maxY - minY

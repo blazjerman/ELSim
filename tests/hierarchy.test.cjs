@@ -245,7 +245,7 @@ test('v6 sheet blocks migrate to automatic bidirectional ports without changing 
   legacy.sheets[0].parts = legacy.parts
   legacy.sheets[1].ports = legacy.sheets[1].ports.map(({ id, name }) => ({ id, name }))
   const migrated = validateProject(legacy)
-  assert.equal(migrated.version, 7)
+  assert.equal(migrated.version, 8)
   assert.deepEqual(migrated.sheets[1].ports.map(({ side, direction }) => [side, direction]), [['auto', 'inout'], ['auto', 'inout']])
   assert.deepEqual(componentPins(migrated.parts[1]).map(({ x, y }) => [x, y]), before)
 })

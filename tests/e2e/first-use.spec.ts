@@ -672,7 +672,56 @@ test('starter and newly added native parts use the same 10-unit pin grid', async
   })
   expect(await readGridErrors()).toEqual([])
   await page.locator('.component-card').filter({ hasText: 'Resistor' }).click()
+  const svg = page.locator('svg.schematic')
+  const screenPoint = (x: number, y: number) => svg.evaluate((element, point) => {
+    const svg = element as SVGSVGElement
+    const location = svg.createSVGPoint()
+    location.x = point.x
+    location.y = point.y
+    const screen = location.matrixTransform(svg.getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  }, { x, y })
+  const start = await screenPoint(500, 300)
+  const end = await screenPoint(500, 340)
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
+  const placed = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R2'))
+  expect(placed).toMatchObject({ x: 500, y: 320, rotation: 90 })
+  await expect(page.locator('.component-card').filter({ hasText: 'Resistor' })).toHaveAttribute('aria-pressed', 'true')
+  const secondStart = await screenPoint(500, 180)
+  const secondEnd = await screenPoint(540, 180)
+  await page.mouse.move(secondStart.x, secondStart.y); await page.mouse.down(); await page.mouse.move(secondEnd.x, secondEnd.y, { steps: 4 }); await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R3'))).toBe(true)
   await expect.poll(readGridErrors).toEqual([])
+})
+
+test('wire and component palette selections stay armed for drag placement', async ({ page }) => {
+  await page.goto('/')
+  const svg = page.locator('svg.schematic')
+  const screenPoint = (x: number, y: number) => svg.evaluate((element, point) => {
+    const target = (element as SVGSVGElement).createSVGPoint()
+    target.x = point.x; target.y = point.y
+    const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  }, { x, y })
+  const dragOnCanvas = async (x1: number, y1: number, x2: number, y2: number) => {
+    const start = await screenPoint(x1, y1), end = await screenPoint(x2, y2)
+    await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
+  }
+  const wireCard = page.locator('.component-card').filter({ hasText: 'Wire' })
+  const wireCount = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)
+  await wireCard.click()
+  await dragOnCanvas(500, 160, 560, 160)
+  await expect(wireCard).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wireCount + 1)
+  const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
+  await resistor.click()
+  await dragOnCanvas(500, 300, 500, 340)
+  await expect(resistor).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
 })
 
 test('first use: run the RC starter and inspect its solved waveform', { tag: '@ngspice' }, async ({ page }) => {
@@ -1218,7 +1267,7 @@ test('junction tool toggles a crossing connection in the schematic', async ({ pa
   await expect(svg.locator('title', { hasText: 'Connected wire junction' })).toHaveCount(0)
 })
 
-test('wire segment drag reroutes its path and viewport gestures preserve the circuit', async ({ page }) => {
+test('wire objects move independently and viewport gestures preserve the circuit', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
@@ -1244,7 +1293,7 @@ test('wire segment drag reroutes its path and viewport gestures preserve the cir
   await page.mouse.up()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).not.toEqual(before)
   const rerouted = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
-  expect(rerouted).toEqual([[300, 330], [400, 330], [400, 350]])
+  expect(rerouted).toEqual([[300, 330], [400, 330], [400, 380]])
 
   await page.keyboard.down('Space')
   const panStart = toScreen(600, 500)
@@ -1265,7 +1314,7 @@ test('wire segment drag reroutes its path and viewport gestures preserve the cir
   await expect.poll(async () => Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))).toBeGreaterThan(beforeZoom)
 })
 
-test('moving the starter voltage source keeps its ground and input-label anchors connected', async ({ page }) => {
+test('moving a component leaves all wire objects fixed in place', async ({ page }) => {
   await page.goto('/')
   const svg = page.locator('svg.schematic')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')
@@ -1276,17 +1325,14 @@ test('moving the starter voltage source keeps its ground and input-label anchors
     const start = point(180, 360), end = point(280, 360)
     return { start: { x: start.x, y: start.y }, end: { x: end.x, y: end.y } }
   })
+  const wiresBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)
   await page.mouse.move(screenPoints.start.x, screenPoints.start.y)
   await page.mouse.down()
   await page.mouse.move(screenPoints.end.x, screenPoints.end.y, { steps: 6 })
   await page.mouse.up()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-v1').x)).toBe(280)
   const moved = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
-  const returnWire = moved.wires.find((wire: { id: string }) => wire.id === 'w-3')
-  const inputWire = moved.wires.find((wire: { id: string }) => wire.id === 'w-1')
-  expect(returnWire.points).toContainEqual([180, 470])
-  expect(returnWire.points).toContainEqual([280, 410])
-  expect(inputWire.points).toContainEqual([240, 290])
+  expect(moved.wires).toEqual(wiresBefore)
 })
 
 test('RLC example opens and solves with capacitor-voltage and inductor-current probes', { tag: '@ngspice' }, async ({ page }) => {
@@ -2131,6 +2177,20 @@ test('circuit checks can select the affected component and orphan wire', async (
 test('inspector rejects a duplicate case-insensitive SPICE reference before saving', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: /Add Resistor/ }).click()
+  const svg = page.locator('svg.schematic')
+  const start = await svg.evaluate((element) => {
+    const svg = element as SVGSVGElement
+    const point = svg.createSVGPoint(); point.x = 500; point.y = 160
+    const screen = point.matrixTransform(svg.getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
+  const end = await svg.evaluate((element) => {
+    const svg = element as SVGSVGElement
+    const point = svg.createSVGPoint(); point.x = 540; point.y = 160
+    const screen = point.matrixTransform(svg.getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
+  await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
   const newPartId = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R2').id)
   const reference = page.getByLabel('Reference designator')
   await reference.fill('C9')
@@ -2397,7 +2457,7 @@ test('phone-width workspace switches panels without horizontal page scrolling', 
 
   await page.getByRole('button', { name: 'Components', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
-  await expect(page.locator('button[title="Add Resistor"]')).toBeVisible()
+  await expect(page.locator('button[title="Select Resistor to place"]')).toBeVisible()
   await page.getByRole('button', { name: 'Properties', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'R1' })).toBeVisible()
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)

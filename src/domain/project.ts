@@ -54,7 +54,7 @@ export type Part = {
   sheetPortLayout?: { side: 'auto' | 'left' | 'right' | 'top' | 'bottom'; direction: 'input' | 'output' | 'inout' }[]
 }
 
-export type Wire = { id: string; points: [number, number][] }
+export type Wire = { id: string; points: [[number, number], [number, number]] }
 export type NetLabel = { id: string; name: string; x: number; y: number; visible: boolean }
 export type PlotRange = { start: number; end: number }
 export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>> }
@@ -92,7 +92,7 @@ export function sheetModelName(sheetId: string): string {
 
 export type Project = {
   format: 'elsim-project'
-  version: 7
+  version: 8
   name: string
   updatedAt: string
   parts: Part[]
@@ -147,7 +147,7 @@ function snapProjectGeometryToGrid(project: Record<string, unknown>): void {
 
 const starter: Project = {
   format: 'elsim-project',
-  version: 7,
+  version: 8,
   name: 'RC step response',
   updatedAt: new Date().toISOString(),
   parts: [
@@ -157,9 +157,13 @@ const starter: Project = {
     { id: 'p-gnd', kind: 'ground', ref: 'GND', value: '', x: 180, y: 490, rotation: 0 },
   ],
   wires: [
-    { id: 'w-1', points: [[180, 310], [180, 290], [310, 290]] },
-    { id: 'w-2', points: [[410, 290], [540, 290], [540, 350]] },
-    { id: 'w-3', points: [[540, 450], [540, 470], [180, 470], [180, 410]] },
+    { id: 'w-1', points: [[180, 310], [180, 290]] },
+    { id: 'w-1-seg-1', points: [[180, 290], [310, 290]] },
+    { id: 'w-2', points: [[410, 290], [540, 290]] },
+    { id: 'w-2-seg-1', points: [[540, 290], [540, 350]] },
+    { id: 'w-3', points: [[540, 450], [540, 470]] },
+    { id: 'w-3-seg-1', points: [[540, 470], [180, 470]] },
+    { id: 'w-3-seg-2', points: [[180, 470], [180, 410]] },
   ],
   junctions: [],
   netLabels: [
@@ -206,6 +210,37 @@ function migrateV6(input: Record<string, unknown>): Project {
   return project
 }
 
+function splitWirePaths(wires: unknown): unknown {
+  if (!Array.isArray(wires)) return wires
+  const originalIds = new Set(wires.flatMap((wire) => wire && typeof wire.id === 'string' ? [wire.id] : []))
+  const usedIds = new Set<string>()
+  const result: unknown[] = []
+  for (const value of wires) {
+    if (!value || typeof value !== 'object' || !Array.isArray((value as { points?: unknown }).points)) { result.push(value); continue }
+    const wire = value as { id: string; points: [number, number][] }
+    const points = wire.points
+    if (points.length < 2) { result.push(value); continue }
+    for (let index = 0; index < points.length - 1; index += 1) {
+      let id = wire.id
+      if (index > 0) {
+        let suffix = index
+        id = `${wire.id}-seg-${suffix}`
+        while (usedIds.has(id) || originalIds.has(id)) id = `${wire.id}-seg-${++suffix}`
+      }
+      usedIds.add(id)
+      result.push({ id, points: [points[index], points[index + 1]] })
+    }
+  }
+  return result
+}
+
+function migrateV7(input: Record<string, unknown>): Project {
+  const project = { ...input, version: 8 } as unknown as Project
+  project.wires = splitWirePaths(project.wires) as Wire[]
+  project.sheets = (project.sheets ?? []).map((sheet) => ({ ...sheet, wires: splitWirePaths(sheet.wires) as Wire[] }))
+  return project
+}
+
 function migrateV2(input: Record<string, unknown>): Project {
   const project = { ...input, version: 7 } as unknown as Project
   project.rootSheetId = 'sheet-main'
@@ -236,15 +271,15 @@ function migrateV1(input: Record<string, unknown>): Project {
     })
   }
   return {
-    format: 'elsim-project', version: 7,
+    format: 'elsim-project', version: 8,
     name: typeof input.name === 'string' ? input.name : 'Imported project',
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
     parts: oldParts.map(({ nodes: _nodes, ...part }) => part),
-    wires: oldWires.map(({ node: _node, ...wire }) => wire),
+    wires: splitWirePaths(oldWires.map(({ node: _node, ...wire }) => wire)) as Wire[],
     junctions: [], netLabels,
     view: input.view as Project['view'] ?? { zoom: 1, panX: 0, panY: 0 },
     simulation: input.simulation as Project['simulation'] ?? { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
-    rootSheetId: 'sheet-main', activeSheetId: 'sheet-main', sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: oldParts.map(({ nodes: _nodes, ...part }) => part), wires: oldWires.map(({ node: _node, ...wire }) => wire), junctions: [], netLabels, view: input.view as Project['view'] ?? { zoom: 1, panX: 0, panY: 0 }, ports: [] }],
+    rootSheetId: 'sheet-main', activeSheetId: 'sheet-main', sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: oldParts.map(({ nodes: _nodes, ...part }) => part), wires: splitWirePaths(oldWires.map(({ node: _node, ...wire }) => wire)) as Wire[], junctions: [], netLabels, view: input.view as Project['view'] ?? { zoom: 1, panX: 0, panY: 0 }, ports: [] }],
   }
 }
 
@@ -264,11 +299,14 @@ export function validateProject(input: unknown): Project {
   if (data.version === 4 && Array.isArray(data.sheets)) return validateProject(migrateV4(data))
   if (data.version === 5 && Array.isArray(data.sheets)) return validateProject(migrateV5(data))
   if (data.version === 6 && Array.isArray(data.sheets)) return validateProject(migrateV6(data))
-  if (data.version !== 7 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
-    throw new Error('This project format is not supported. Expected ELSim project version 7.')
+  if (data.version === 7 && Array.isArray(data.sheets)) return validateProject(migrateV7(data))
+  if (data.version !== 8 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
+    throw new Error('This project format is not supported. Expected ELSim project version 8.')
   }
-  // Normalize legacy v7 files and hand-edited JSON before any connectivity
-  // checks. The app's saved geometry has one canonical 10-unit grid.
+  // Normalize hand-edited JSON before any connectivity checks. The app's
+  // saved geometry has one canonical 10-unit grid.
+  data.wires = splitWirePaths(data.wires)
+  if (Array.isArray(data.sheets)) data.sheets = data.sheets.map((sheet) => sheet && typeof sheet === 'object' ? { ...sheet, wires: splitWirePaths((sheet as Record<string, unknown>).wires) } : sheet)
   snapProjectGeometryToGrid(data)
   const allowed = new Set<PartKind>(['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'ground', 'inductor', 'diode', 'led', 'switch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'subcircuit'])
   if (allowed.size !== Object.keys(componentDefinitionByKind).length || [...allowed].some((kind) => componentDefinitionByKind[kind]?.kind !== kind)) throw new Error('Built-in component definition registry does not match supported component kinds.')
@@ -331,7 +369,7 @@ export function validateProject(input: unknown): Project {
   }
   const wireIds = new Set<string>()
   for (const wire of data.wires as Wire[]) {
-    if (!wire || typeof wire.id !== 'string' || !wire.id || wireIds.has(wire.id) || !Array.isArray(wire.points) || wire.points.length < 2 || wire.points.some((point) => !Array.isArray(point) || point.length !== 2 || !point.every((value) => typeof value === 'number' && Number.isFinite(value)))) {
+    if (!wire || typeof wire.id !== 'string' || !wire.id || wireIds.has(wire.id) || !Array.isArray(wire.points) || wire.points.length !== 2 || wire.points.some((point) => !Array.isArray(point) || point.length !== 2 || !point.every((value) => typeof value === 'number' && Number.isFinite(value)))) {
       throw new Error('Project contains a malformed wire.')
     }
     wireIds.add(wire.id)

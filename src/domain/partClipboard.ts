@@ -25,7 +25,7 @@ export function createPartClipboard(project: Project, selectedPartIds: readonly 
     // schematic branches into a local copy operation.
     return parts.some((part) => componentPins(part).some((pin) => wire.points.slice(1).some((point, index) =>
       pointOnSegment(pin, { x: wire.points[index][0], y: wire.points[index][1] }, { x: point[0], y: point[1] }))))
-  }).map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x, y] as [number, number]) }))
+  }).map((wire) => ({ ...wire, points: [[...wire.points[0]], [...wire.points[1]]] as [[number, number], [number, number]] }))
   const copiedWireIds = new Set(wires.map((wire) => wire.id))
   const junctions = project.junctions.filter((junction) => {
     const crossingWires = wires.filter((wire) => wire.points.slice(1).some((point, index) =>

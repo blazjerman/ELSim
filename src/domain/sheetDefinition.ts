@@ -45,7 +45,7 @@ export function updateSheetDefinition(
     return {
       ...sheet,
       parts,
-      wires: sheet.wires.map((wire) => ({ ...wire, points: wire.points.map(movePoint) })),
+      wires: sheet.wires.map((wire) => ({ ...wire, points: [movePoint(wire.points[0]), movePoint(wire.points[1])] as [[number, number], [number, number]] })),
       junctions: sheet.junctions.map(({ x, y }) => { const [nextX, nextY] = movePoint([x, y]); return { x: nextX, y: nextY } }),
       netLabels: sheet.netLabels.map((label) => { const [x, y] = movePoint([label.x, label.y]); return { ...label, x, y } }),
     }
