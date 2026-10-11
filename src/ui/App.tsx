@@ -20,7 +20,7 @@ import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { updateSheetDefinition } from '../domain/sheetDefinition'
-import { wireCurrentFlow } from '../domain/wireFlow'
+import { wireCurrentFlowSegments, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentDefaultValue, componentDefinitionFor, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { timeMagnitude } from '../domain/componentValue'
@@ -817,13 +817,14 @@ function measurementVectorChoices(project: Project) {
   return { nodes: nodes.map((name) => ({ value: `V(${name})`, label: name })), currents }
 }
 
-const CanvasWire = memo(function CanvasWire({ wire, selected, tool, spacePan, movableSegments, flow, animationScale, animationSpeed, onProbe, onBeginDrag, onBeginSegmentDrag, onSelect }: {
+const CanvasWire = memo(function CanvasWire({ wire, selected, tool, spacePan, movableSegments, flow, animationEnabled, animationScale, animationSpeed, onProbe, onBeginDrag, onBeginSegmentDrag, onSelect }: {
   wire: Project['wires'][number]
   selected: boolean
   tool: ToolMode
   spacePan: boolean
   movableSegments: boolean[]
-  flow: ReturnType<typeof wireCurrentFlow> | null
+  flow: WireCurrentFlowSegment[]
+  animationEnabled: boolean
   animationScale: number
   animationSpeed: number
   onProbe: (id: string) => void
@@ -832,15 +833,45 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, tool, spacePan, mo
   onSelect: (id: string) => void
 }) {
   const points = wire.points.map(([x, y]) => `${x},${y}`).join(' ')
-  const flowPoints = (flow?.forward === false ? [...wire.points].reverse() : wire.points).map(([x, y]) => `${x},${y}`).join(' ')
-  const currentStrength = flow ? Math.min(1, Math.sqrt(flow.magnitude / 0.01)) : 0
-  const glow = flow && flow.magnitude > 1e-12 ? Math.min(1, (0.12 + currentStrength * 0.88) * animationScale) : 0
-  const duration = 0.8 / animationSpeed
+  const flowPaths = useRef(new Map<string, SVGPolylineElement>())
+  const flowRef = useRef(flow)
+  const phases = useRef(new Map<string, number>())
+  const speedRef = useRef(animationSpeed)
+  const scaleRef = useRef(animationScale)
+  flowRef.current = flow
+  speedRef.current = animationSpeed
+  scaleRef.current = animationScale
+  useEffect(() => {
+    if (!animationEnabled || !flow.length) return
+    let frame = 0
+    let previous = performance.now()
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const tick = (now: number) => {
+      const elapsed = Math.min(0.05, Math.max(0, (now - previous) / 1000))
+      previous = now
+      const currentFlows = flowRef.current
+      if (!reducedMotion.matches) for (const current of currentFlows) {
+        if (current.magnitude <= 1e-12) continue
+        const key = current.points.map(([x, y]) => `${x},${y}`).join(' ')
+        const phase = (phases.current.get(key) ?? 0) + elapsed * 18 * speedRef.current * Math.min(1, Math.sqrt(current.magnitude / 0.01)) * (current.forward ? 1 : -1)
+        phases.current.set(key, phase % 18)
+        flowPaths.current.get(key)?.setAttribute('stroke-dashoffset', `${-phase * scaleRef.current}`)
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [wire.id, animationEnabled, flow.length > 0])
   return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}`} role="button" tabIndex={0} aria-label={`Wire path with ${wire.points.length - 1} segment${wire.points.length === 2 ? '' : 's'}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'probe') event.stopPropagation(); else if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } }}>
     <polyline points={points} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/>
     <polyline points={points} fill="none" stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     {tool === 'select' && wire.points.slice(0, -1).map((point, index) => movableSegments[index] && <polyline key={`segment-hit-${index}`} points={`${point[0]},${point[1]} ${wire.points[index + 1][0]},${wire.points[index + 1][1]}`} fill="none" stroke="transparent" strokeWidth="12" strokeLinecap="round" style={{ pointerEvents: 'stroke', cursor: 'move' }} onPointerDown={(event) => onBeginSegmentDrag(event, wire.id, index)}><title>Drag to reroute this wire segment</title></polyline>)}
-    {flow && <polyline className="wire-current-flow" data-current-direction={flow.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={flow.magnitude} points={flowPoints} fill="none" stroke="#f0c674" strokeWidth={(2.2 + currentStrength * 2.2) * animationScale} strokeLinecap="round" strokeDasharray={`${3 * animationScale} ${15 * animationScale}`} strokeDashoffset="0" opacity={glow} style={{ animationDuration: `${duration}s` }}><title>Conventional current {flow.forward ? 'from the first to last wire endpoint' : 'from the last to first wire endpoint'} · {flow.magnitude.toPrecision(4)} A</title></polyline>}
+    {flow.map((segment) => {
+      const key = segment.points.map(([x, y]) => `${x},${y}`).join(' ')
+      const currentStrength = Math.min(1, Math.sqrt(segment.magnitude / 0.01))
+      const glow = segment.magnitude > 1e-12 ? Math.min(1, (0.12 + currentStrength * 0.88) * animationScale) : 0
+      return <polyline key={key} ref={(element) => { if (element) flowPaths.current.set(key, element); else flowPaths.current.delete(key) }} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={(2.2 + currentStrength * 2.2) * animationScale} strokeLinecap="round" strokeDasharray={`${3 * animationScale} ${15 * animationScale}`} strokeDashoffset={-(phases.current.get(key) ?? 0) * animationScale} opacity={glow}><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first wire endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
+    })}
     <circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/>
   </g>
 })
@@ -932,7 +963,7 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
   </div>
 }
 
-function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, onSampleChange, animationScale, animationSpeed }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void; animationScale: number; animationSpeed: number }) {
+function Schematic({ project, selection, setSelection, selectedPartIds, setSelectedPartIds, setProject, setView, spacePan, tool, setTool, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, onSampleChange, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; selection: Selection; setSelection: (selection: Selection) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; onSampleChange: (index: number | null) => void; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
@@ -1250,9 +1281,9 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   const contextPart = contextMenu?.kind === 'part' ? project.parts.find((part) => part.id === contextMenu.id) : undefined
   const contextPinNames = contextPart ? contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name) : []
   const wireFlows = useMemo(() => {
-    if (!resultIsCurrent || !resultConnectivity) return new Map<string, ReturnType<typeof wireCurrentFlow>>()
-    return new Map(project.wires.map((wire) => [wire.id, wireCurrentFlow(project, resultConnectivity, wire, (part) => resultValue(componentCurrentVector(part)))]))
-  }, [project, resultIsCurrent, resultConnectivity, activeSample, simulationResult])
+    if (!currentAnimationEnabled || !resultIsCurrent || !resultConnectivity) return new Map<string, WireCurrentFlowSegment[]>()
+    return wireCurrentFlowSegments(project, resultConnectivity, (part) => resultValue(componentCurrentVector(part)))
+  }, [project, resultIsCurrent, resultConnectivity, activeSample, simulationResult, currentAnimationEnabled])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
       <div className="canvas-toolset"><IconButton title="Select and move (V)" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (P)" active={tool === 'probe'} onClick={() => setTool('probe')}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (J)" active={tool === 'junction'} onClick={() => setTool('junction')}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
@@ -1299,7 +1330,7 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
-      {project.wires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selection?.kind === 'wire' && selection.id === wire.id} tool={tool} spacePan={spacePan} movableSegments={wireMovableSegments.get(wire.id) ?? []} flow={wireFlows.get(wire.id) ?? null} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onBeginSegmentDrag={beginWireSegmentDrag} onSelect={selectWire}/>) }
+      {project.wires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selection?.kind === 'wire' && selection.id === wire.id} tool={tool} spacePan={spacePan} movableSegments={wireMovableSegments.get(wire.id) ?? []} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onBeginSegmentDrag={beginWireSegmentDrag} onSelect={selectWire}/>) }
       <CanvasNetLabelLayer labels={project.netLabels} selectedId={selection?.kind === 'label' ? selection.id : undefined} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3"/>}
@@ -1389,9 +1420,11 @@ export default function App() {
     const value = Number(localStorage.getItem('elsim:current-animation-speed'))
     return value > 0 ? Math.min(3, Math.max(0.25, value)) : 1
   })
+  const [currentAnimationEnabled, setCurrentAnimationEnabled] = useState(() => localStorage.getItem('elsim:current-animation-enabled') !== 'false')
   const prefersReducedMotionRef = useRef(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   useEffect(() => { localStorage.setItem('elsim:current-animation-scale', String(animationScale)) }, [animationScale])
   useEffect(() => { localStorage.setItem('elsim:current-animation-speed', String(animationSpeed)) }, [animationSpeed])
+  useEffect(() => { localStorage.setItem('elsim:current-animation-enabled', String(currentAnimationEnabled)) }, [currentAnimationEnabled])
   const [electricalCheckOpen, setElectricalCheckOpen] = useState(false)
   const [spacePan, setSpacePan] = useState(false)
   const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>(() => project.plotSettings?.selectedTraceIds ?? [])
@@ -2738,7 +2771,7 @@ export default function App() {
       <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => setTool('select')}><MousePointer2 size={15}/></IconButton><IconButton title="Wire tool" active={tool === 'wire'} onClick={() => setTool('wire')}><Cable size={15}/></IconButton><IconButton title="Place or edit net label (N)" active={tool === 'label'} onClick={() => setTool('label')}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (R)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (F)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select><ChevronDown size={13}/></label>
-      {simulationResult?.analysis === 'tran' && <div className="menu-group playback-controls" aria-label="Result playback"><IconButton title={playbackRunning ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!playbackRunning && (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1) setSampleIndex(0); setPlaybackRunning((running) => !running) }} active={playbackRunning} disabled={!playbackAvailable}>{playbackRunning ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton><IconButton title="Rewind result playback to the first solved sample" onClick={() => { setPlaybackRunning(false); setSampleIndex(0) }} disabled={!playbackAvailable}><RotateCcw size={14}/></IconButton><details className="animation-tuning"><summary aria-label="Current animation settings" title="Current animation size and speed"><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div>}
+      {simulationResult?.analysis === 'tran' && <div className="menu-group playback-controls" aria-label="Result playback"><IconButton title={playbackRunning ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!playbackRunning && (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1) setSampleIndex(0); setPlaybackRunning((running) => !running) }} active={playbackRunning} disabled={!playbackAvailable}>{playbackRunning ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton><IconButton title="Rewind result playback to the first solved sample" onClick={() => { setPlaybackRunning(false); setSampleIndex(0) }} disabled={!playbackAvailable}><RotateCcw size={14}/></IconButton><details className="animation-tuning"><summary aria-label="Current animation settings" title="Current animation size and speed"><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div>}
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit <span>{electricalIssues.length}</span></button>
       <button className="run-button" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={15} fill="currentColor"/> Run simulation</button>
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
@@ -2781,7 +2814,7 @@ export default function App() {
       <main className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button ref={sheetSettingsTriggerRef} className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => setSheetSettingsOpen(true)}><SlidersHorizontal size={15}/></button></div>
         {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p></div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
-        <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} animationScale={animationScale} animationSpeed={animationSpeed}/>
+        <Schematic project={project} selection={selection} setSelection={setSelection} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} onSampleChange={setSampleIndex} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
         <section className={`analysis-panel${waveformDetached ? ' waveform-parked' : ''}`}>
           <div className="analysis-header"><div className="analysis-tabs"><button className={analysisTab === 'waveforms' ? 'active' : ''} onClick={() => setAnalysisTab('waveforms')}><Activity size={15}/> Waveforms</button><button className={analysisTab === 'netlist' ? 'active' : ''} onClick={() => setAnalysisTab('netlist')}><Command size={14}/> Netlist</button></div>{simulationResult && <details className="run-details"><summary>Run details</summary><div className="run-details-popover"><h3>Reproducible run record</h3><button className="run-report-download" onClick={downloadRunReport}><Download size={12}/> Download report · JSON</button><p className="run-report-note">The JSON report includes inputs and provenance, not waveform samples. Use Export CSV for the solved vectors.</p><dl><div><dt>Engine</dt><dd>{simulationResult.metadata.engine} {simulationResult.metadata.engineVersion}</dd></div><div><dt>Run ID</dt><dd><code>{simulationResult.metadata.runId}</code></dd></div><div><dt>Started</dt><dd>{simulationResult.metadata.startedAt}</dd></div><div><dt>Completed</dt><dd>{simulationResult.metadata.completedAt}</dd></div><div><dt>Netlist / sweep SHA-256</dt><dd><code>{simulationResult.metadata.netlistHash}</code></dd></div></dl><h4>Simulation settings</h4><pre>{JSON.stringify(simulationResult.metadata.settings, null, 2)}</pre><h4>Project model libraries</h4><p>Hashes identify stored source files; some may not be referenced by this run.</p>{simulationResult.metadata.modelAssets?.length ? <ul>{simulationResult.metadata.modelAssets.map((asset) => <li key={asset.id}><strong>{asset.filename}</strong><code>{asset.sha256}</code></li>)}</ul> : <p>No imported model files were recorded for this run.</p>}</div></details>}<div className="analysis-actions"><span className={`engine-badge ${runState === 'error' || engineAssetAvailable === false ? 'needs-engine' : ''}`}><span className="engine-dot"/>{runState === 'loading' ? 'Loading ngspice' : runState === 'running' ? 'Simulation running' : runState === 'error' ? 'ngspice error' : engineAssetAvailable === false ? 'Engine build missing' : simulationResult ? 'ngspice WASM · ready' : 'ngspice WASM · idle'}</span>{analysisTab === 'waveforms' && <><button className="subtle-icon" title={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} aria-label={waveformDetached ? 'Restore waveform panel' : 'Detach waveform panel'} onClick={() => setWaveformDetached((value) => !value)}>{waveformDetached ? <ArrowDown size={16}/> : <Square size={14}/>}</button><button className="subtle-icon" title="Tile open plot windows" aria-label="Tile open plot windows" onClick={tilePlotWindows} disabled={(waveformDetached ? 1 : 0) + additionalPlotPanels.length < 2}><Grid2X2 size={15}/></button><button className="subtle-icon" title="Add independent plot panel" aria-label="Add independent plot panel" onClick={addPlotPanel} disabled={!simulationResult || additionalPlotPanels.length >= 8}><Plus size={15}/></button></>}</div></div>
           <div className="analysis-content">

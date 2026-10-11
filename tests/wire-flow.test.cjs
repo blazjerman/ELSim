@@ -6,6 +6,7 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { wireCurrentFlow } = require(path.join(build, 'domain/wireFlow.js'))
+const { wireCurrentFlowSegments } = require(path.join(build, 'domain/wireFlow.js'))
 const { createStarterProject } = require(path.join(build, 'domain/project.js'))
 
 test('wire direction follows agreeing branch-current vectors and pin order', () => {
@@ -63,4 +64,18 @@ test('a component lead on a split branch animates using its solved component cur
   // entire trunk polyline. Keep its animation hidden until it can be segmented.
   const trunk = wireCurrentFlow(project, connectivity, project.wires.find((wire) => wire.id === 'w-2'), (part) => new Map([['R1', 0.005], ['C1', 0.003], ['R2', 0.002]]).get(part.ref))
   assert.equal(trunk, null)
+})
+
+test('a parallel branch splits its trunk and gives each wire section the solved current', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-r2', kind: 'resistor', ref: 'R2', value: '2 kΩ', x: 500, y: 200, rotation: 0 })
+  project.wires.push({ id: 'w-branch', points: [[470, 290], [470, 200], [450, 200]] })
+  const connectivity = analyzeConnectivity(project)
+  const currents = new Map([['R1', 0.005], ['C1', 0.003], ['R2', 0.002]])
+  const flows = wireCurrentFlowSegments(project, connectivity, (part) => currents.get(part.ref))
+  assert.deepEqual(flows.get('w-2').map(({ points, forward, magnitude }) => ({ points, forward, magnitude })), [
+    { points: [[410, 290], [470, 290]], forward: true, magnitude: 0.005 },
+    { points: [[470, 290], [540, 290], [540, 350]], forward: true, magnitude: 0.003 },
+  ])
+  assert.deepEqual(flows.get('w-branch').map(({ forward, magnitude }) => ({ forward, magnitude })), [{ forward: true, magnitude: 0.002 }])
 })
