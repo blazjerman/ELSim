@@ -21,6 +21,7 @@ import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { updateSheetDefinition } from '../domain/sheetDefinition'
 import { wireCurrentFlowSegments, type WireCurrentFlowSegment } from '../domain/wireFlow'
+import { registerWireAnimation } from './wireAnimation'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentDefaultValue, componentDefinitionFor, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { timeMagnitude } from '../domain/componentValue'
@@ -835,49 +836,33 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
   onHover: (id?: string) => void
 }) {
   const points = wire.points.map(([x, y]) => `${x},${y}`).join(' ')
-  const flowPaths = useRef(new Map<string, SVGPolylineElement>())
-  const flowRef = useRef(flow)
-  const phases = useRef(new Map<string, number>())
-  const speedRef = useRef(animationSpeed)
-  const scaleRef = useRef(animationScale)
-  flowRef.current = flow
-  speedRef.current = animationSpeed
-  scaleRef.current = animationScale
-  useEffect(() => {
-    if (!animationEnabled || !flow.length) return
-    let frame = 0
-    let previous = performance.now()
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const tick = (now: number) => {
-      const elapsed = Math.min(0.05, Math.max(0, (now - previous) / 1000))
-      previous = now
-      const currentFlows = flowRef.current
-      if (!reducedMotion.matches) for (const [index, current] of currentFlows.entries()) {
-        if (current.magnitude <= 1e-12) continue
-        const pathKey = current.points.map(([x, y]) => `${x},${y}`).join(' ')
-        const phaseKey = `${wire.id}:${index}`
-        const phase = (phases.current.get(phaseKey) ?? 0) + elapsed * 18 * speedRef.current * Math.min(1, Math.sqrt(current.magnitude / 0.01)) * (current.forward ? 1 : -1)
-        phases.current.set(phaseKey, phase % 18)
-        flowPaths.current.get(pathKey)?.setAttribute('stroke-dashoffset', `${-phase * scaleRef.current}`)
-      }
-      frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [wire.id, animationEnabled, flow.length > 0])
   return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'probe') event.stopPropagation(); else if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } }}>
     <polyline points={points} fill="none" stroke="transparent" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round"/>
     <polyline points={points} fill="none" stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     {hovered && tool === 'select' && <g className="wire-endpoint-handles" aria-label="Wire endpoints">{([0, 1] as const).map((index) => <circle key={index} cx={wire.points[index][0]} cy={wire.points[index][1]} r="6" onPointerDown={(event) => onBeginEndpointDrag(event, wire.id, index)}><title>Drag this wire endpoint to connect it elsewhere</title></circle>)}</g>}
     {flow.map((segment, index) => {
-      const key = segment.points.map(([x, y]) => `${x},${y}`).join(' ')
-      const phaseKey = `${wire.id}:${index}`
       const currentStrength = Math.min(1, Math.sqrt(segment.magnitude / 0.01))
       const glow = segment.magnitude > 1e-12 ? Math.min(1, (0.12 + currentStrength * 0.88) * animationScale) : 0
-      return <polyline key={key} ref={(element) => { if (element) flowPaths.current.set(key, element); else flowPaths.current.delete(key) }} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={(2.2 + currentStrength * 2.2) * animationScale} strokeLinecap="round" strokeDasharray={`${3 * animationScale} ${15 * animationScale}`} strokeDashoffset={-(phases.current.get(phaseKey) ?? 0) * animationScale} opacity={glow}><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first wire endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
+      return <WireFlowPath key={`${wire.id}:${index}`} wireId={wire.id} index={index} segment={segment} enabled={animationEnabled} scale={animationScale} speed={animationSpeed} strength={currentStrength} opacity={glow}/>
     })}
     <circle cx={wire.points[0][0]} cy={wire.points[0][1]} r="2.5" fill="#95b29f"/>
   </g>
+})
+
+const WireFlowPath = memo(function WireFlowPath({ wireId, index, segment, enabled, scale, speed, strength, opacity }: {
+  wireId: string
+  index: number
+  segment: WireCurrentFlowSegment
+  enabled: boolean
+  scale: number
+  speed: number
+  strength: number
+  opacity: number
+}) {
+  const key = `${wireId}:${index}`
+  const config = enabled ? { key, magnitude: segment.magnitude, forward: segment.forward, speed, scale } : undefined
+  const ref = useCallback((element: SVGPolylineElement | null) => registerWireAnimation(key, element, config), [key, config?.magnitude, config?.forward, config?.speed, config?.scale])
+  return <polyline ref={ref} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={(2.2 + strength * 2.2) * scale} strokeLinecap="round" strokeDasharray={`${3 * scale} ${15 * scale}`} opacity={opacity}><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
 })
 
 function TransientMeasurementEditor({ project, measurements, onAdd, onChange, onRemove }: { project: Project; measurements: TransientMeasurement[]; onAdd: () => void; onChange: (index: number, patch: Partial<TransientMeasurement>) => void; onRemove: (index: number) => void }) {
@@ -1339,7 +1324,21 @@ function Schematic({ project, selection, setSelection, selectedPartIds, setSelec
   const contextPinNames = contextPart ? contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name) : []
   const wireFlows = useMemo(() => {
     if (!currentAnimationEnabled || !resultIsCurrent || !resultConnectivity) return new Map<string, WireCurrentFlowSegment[]>()
-    return wireCurrentFlowSegments(project, resultConnectivity, (part) => resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`))
+    return wireCurrentFlowSegments(
+      project,
+      resultConnectivity,
+      (part) => resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`),
+      (part, pinIndex) => {
+        const pinVector = part.kind === 'npn' || part.kind === 'pnp'
+          ? ['ic', 'ib', 'ie'][pinIndex]
+          : part.kind === 'njfet' || part.kind === 'pjfet'
+            ? ['id', 'ig', 'is'][pinIndex]
+          : part.kind === 'nmos' || part.kind === 'pmos'
+            ? ['id', 'ig', 'is', 'ib'][pinIndex]
+            : undefined
+        return pinVector ? resultValue(`i(@${part.ref}[${pinVector}])`) : undefined
+      },
+    )
   }, [project, resultIsCurrent, resultConnectivity, activeSample, simulationResult, currentAnimationEnabled])
   const orderedWires = useMemo(() => hoveredWireId ? [...project.wires.filter((wire) => wire.id !== hoveredWireId), ...project.wires.filter((wire) => wire.id === hoveredWireId)] : project.wires, [project.wires, hoveredWireId])
   return <div className="canvas-wrap">

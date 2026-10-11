@@ -11,11 +11,17 @@ type Injection = { value?: number; ignored?: boolean }
 function coordinateKey(point: { x: number; y: number }): string {
   return `${Math.round(point.x * 1000)},${Math.round(point.y * 1000)}`
 }
+function xCoordinateKey(value: number): string { return String(Math.round(value * 1000)) }
+function yCoordinateKey(value: number): string { return String(Math.round(value * 1000)) }
 
 function graphNodeKey(net: string, point: { x: number; y: number }): string { return `${net}:${coordinateKey(point)}` }
 
-function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: Part) => number | undefined): Injection {
+function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: Part) => number | undefined, currentForPin?: (part: Part, pinIndex: number) => number | undefined): Injection {
   if (part.kind === 'ground') return { ignored: true }
+  if (['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(part.kind)) {
+    const current = currentForPin?.(part, pinIndex)
+    return current === undefined || !Number.isFinite(current) ? {} : { value: -current }
+  }
   if (part.kind === 'vcvs' || part.kind === 'vccs') {
     if (pinIndex >= 2) return { value: 0 }
     const current = currentForPart(part)
@@ -31,22 +37,36 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
  * Resolve the current separately on each geometric wire section. A tapped
  * wire carries different currents on either side of its branch, so a single
  * flow value for the whole polyline is not physically meaningful. Sections in
- * conductor loops are omitted because ideal-wire current division is ambiguous.
+ * ideal-wire loops are omitted, while bridge sections attached to a loop are
+ * still animated because their current is unambiguous.
  */
 export function wireCurrentFlowSegments(
   project: Project,
   connectivity: Connectivity,
   currentForPart: (part: Part) => number | undefined,
+  currentForPin?: (part: Part, pinIndex: number) => number | undefined,
 ): Map<string, WireCurrentFlowSegment[]> {
   const result = new Map(project.wires.map((wire) => [wire.id, [] as WireCurrentFlowSegment[]]))
   const pins = project.parts.flatMap((part) => componentPins(part).map((pin) => ({ part, pin })))
-  const candidatePoints = [
-    ...project.wires.flatMap((wire) => wire.points.map(([x, y]) => ({ x, y }))),
-    ...pins.map(({ pin }) => ({ x: pin.x, y: pin.y })),
-    ...project.junctions,
-    ...project.netLabels.map(({ x, y }) => ({ x, y })),
-  ]
+  const candidatePointMap = new Map([
+    ...project.wires.flatMap((wire) => wire.points.map(([x, y]) => [{ x, y } as const, coordinateKey({ x, y })] as const)),
+    ...pins.map(({ pin }) => [{ x: pin.x, y: pin.y } as const, coordinateKey(pin)] as const),
+    ...project.junctions.map((point) => [point, coordinateKey(point)] as const),
+    ...project.netLabels.map(({ x, y }) => [{ x, y } as const, coordinateKey({ x, y })] as const),
+  ].map(([point, key]) => [key, point] as const))
+  const candidatePoints = [...candidatePointMap.values()]
+  const pointsByX = new Map<string, typeof candidatePoints>(), pointsByY = new Map<string, typeof candidatePoints>()
+  for (const point of candidatePoints) {
+    const xKey = xCoordinateKey(point.x), yKey = yCoordinateKey(point.y)
+    const sameX = pointsByX.get(xKey) ?? []
+    sameX.push(point)
+    pointsByX.set(xKey, sameX)
+    const sameY = pointsByY.get(yKey) ?? []
+    sameY.push(point)
+    pointsByY.set(yKey, sameY)
+  }
   const edges: FlowEdge[] = []
+  const edgesByWire = new Map(project.wires.map((wire) => [wire.id, [] as FlowEdge[]]))
   for (const wire of project.wires) {
     for (let segmentIndex = 0; segmentIndex < wire.points.length - 1; segmentIndex += 1) {
       const net = connectivity.wireNets.get(wire.id)
@@ -54,7 +74,12 @@ export function wireCurrentFlowSegments(
       const a = wire.points[segmentIndex], b = wire.points[segmentIndex + 1]
       const dx = b[0] - a[0], dy = b[1] - a[1], lengthSquared = dx * dx + dy * dy
       if (!lengthSquared) continue
-      const points = candidatePoints
+      const candidates = Math.abs(dy) <= 0.01
+        ? pointsByY.get(yCoordinateKey(a[1])) ?? []
+        : Math.abs(dx) <= 0.01
+          ? pointsByX.get(xCoordinateKey(a[0])) ?? []
+          : candidatePoints
+      const points = candidates
         .filter((point) => pointOnSegment(point, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }, 0.01))
         .map((point) => ({ point: [point.x, point.y] as [number, number], t: ((point.x - a[0]) * dx + (point.y - a[1]) * dy) / lengthSquared }))
         .sort((left, right) => left.t - right.t)
@@ -62,15 +87,23 @@ export function wireCurrentFlowSegments(
       for (let index = 0; index < points.length - 1; index += 1) {
         const fromPoint = points[index].point, toPoint = points[index + 1].point
         const from = graphNodeKey(net, { x: fromPoint[0], y: fromPoint[1] }), to = graphNodeKey(net, { x: toPoint[0], y: toPoint[1] })
-        if (from !== to) edges.push({ wireId: wire.id, segmentIndex, points: [fromPoint, toPoint], from, to })
+        if (from !== to) {
+          const edge = { wireId: wire.id, segmentIndex, points: [fromPoint, toPoint] as [number, number][], from, to }
+          edges.push(edge)
+          edgesByWire.get(wire.id)!.push(edge)
+        }
       }
     }
   }
 
   const adjacency = new Map<string, FlowEdge[]>()
   for (const edge of edges) {
-    adjacency.set(edge.from, [...(adjacency.get(edge.from) ?? []), edge])
-    adjacency.set(edge.to, [...(adjacency.get(edge.to) ?? []), edge])
+    const from = adjacency.get(edge.from) ?? []
+    from.push(edge)
+    adjacency.set(edge.from, from)
+    const to = adjacency.get(edge.to) ?? []
+    to.push(edge)
+    adjacency.set(edge.to, to)
   }
   const injections = new Map<string, Injection[]>()
   for (const { part, pin } of pins) {
@@ -78,7 +111,7 @@ export function wireCurrentFlowSegments(
     if (!net) continue
     const key = graphNodeKey(net, pin)
     if (!adjacency.has(key)) continue
-    const injection = knownPinInjection(part, pin.index, currentForPart)
+    const injection = knownPinInjection(part, pin.index, currentForPart, currentForPin)
     injections.set(key, [...(injections.get(key) ?? []), injection])
   }
 
@@ -98,7 +131,34 @@ export function wireCurrentFlowSegments(
         if (!nodes.has(neighbor)) visit.push(neighbor)
       }
     }
-    if (componentEdges.size !== nodes.size - 1) continue
+    // Tarjan bridge search. Edges on ideal conductor cycles have ambiguous
+    // current division; bridges remain solvable even when attached to a loop.
+    const discovery = new Map<string, number>(), low = new Map<string, number>(), bridges = new Set<FlowEdge>()
+    let clock = 0
+    for (const root of nodes) {
+      if (discovery.has(root)) continue
+      discovery.set(root, clock); low.set(root, clock); clock += 1
+      const stack = [{ node: root, parent: undefined as FlowEdge | undefined, index: 0 }]
+      while (stack.length) {
+        const frame = stack.at(-1)!
+        const links = adjacency.get(frame.node) ?? []
+        if (frame.index < links.length) {
+          const edge = links[frame.index++]
+          if (edge === frame.parent) continue
+          const neighbor = edge.from === frame.node ? edge.to : edge.from
+          if (!discovery.has(neighbor)) {
+            discovery.set(neighbor, clock); low.set(neighbor, clock); clock += 1
+            stack.push({ node: neighbor, parent: edge, index: 0 })
+          } else low.set(frame.node, Math.min(low.get(frame.node)!, discovery.get(neighbor)!))
+          continue
+        }
+        stack.pop()
+        if (!frame.parent) continue
+        const parent = frame.parent.from === frame.node ? frame.parent.to : frame.parent.from
+        low.set(parent, Math.min(low.get(parent)!, low.get(frame.node)!))
+        if (low.get(frame.node)! > discovery.get(parent)!) bridges.add(frame.parent)
+      }
+    }
 
     const parent = new Map<string, string | null>([[start, null]])
     const parentEdge = new Map<string, FlowEdge>()
@@ -137,6 +197,7 @@ export function wireCurrentFlowSegments(
     }
     const total = subtree.get(start)!
     for (const edge of componentEdges) {
+      if (!bridges.has(edge)) continue
       const child = parentEdge.get(edge.to) === edge ? edge.to : edge.from
       const childTotal = subtree.get(child)!
       const complement = { sum: total.sum - childTotal.sum, unknown: total.unknown - childTotal.unknown, count: total.count - childTotal.count }
@@ -144,7 +205,7 @@ export function wireCurrentFlowSegments(
       const right = child === edge.to ? childTotal : complement
       const source = left.unknown === 0 && left.count > 0 ? left : right.unknown === 0 && right.count > 0 ? right : null
       if (!source) continue
-      if (left.unknown === 0 && right.unknown === 0) {
+      if (left.unknown === 0 && right.unknown === 0 && left.count > 0 && right.count > 0) {
         const tolerance = Math.max(1e-9, Math.max(Math.abs(left.sum), Math.abs(right.sum)) * 0.05)
         if (Math.abs(left.sum + right.sum) > tolerance) continue
       }
@@ -154,7 +215,7 @@ export function wireCurrentFlowSegments(
   }
 
   for (const wire of project.wires) {
-    const pieces = edges.filter((edge) => edge.wireId === wire.id).map((edge) => ({ edge, flow: edgeFlows.get(edge) }))
+    const pieces = (edgesByWire.get(wire.id) ?? []).map((edge) => ({ edge, flow: edgeFlows.get(edge) }))
     const merged: WireCurrentFlowSegment[] = []
     for (const { edge, flow } of pieces) {
       if (!flow) continue

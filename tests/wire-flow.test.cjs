@@ -35,3 +35,35 @@ test('a parallel branch splits trunk animation into sections with their own curr
   ])
   assert.deepEqual(flows.get('w-branch'), [{ points: [[470, 290], [470, 200], [450, 200]], forward: true, magnitude: 0.002 }])
 })
+
+test('a wire loop does not suppress animation on a bridge connected to the loop', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-i-loop', kind: 'currentSource', ref: 'Iloop', value: '1 mA', x: 700, y: 290, rotation: 0 })
+  project.wires.push(
+    { id: 'loop-feed-a', points: [[800, 290], [750, 290]] },
+    { id: 'loop-feed-b', points: [[820, 290], [840, 290], [840, 250], [650, 250], [650, 290]] },
+    { id: 'loop-top', points: [[800, 290], [820, 290]] },
+    { id: 'loop-right', points: [[820, 290], [820, 330]] },
+    { id: 'loop-bottom', points: [[820, 330], [800, 330]] },
+    { id: 'loop-left', points: [[800, 330], [800, 290]] },
+  )
+  const connectivity = analyzeConnectivity(project)
+  const currents = new Map([['V1', -0.005], ['R1', 0.005], ['C1', 0.005], ['Iloop', 0.001]])
+  const flows = wireCurrentFlowSegments(project, connectivity, (part) => currents.get(part.ref))
+  assert.equal(flows.get('loop-feed-a').length, 1)
+  assert.equal(flows.get('loop-feed-b').length, 1)
+  assert.equal(flows.get('loop-feed-a')[0].magnitude, 0.001)
+  assert.equal(flows.get('loop-feed-b')[0].magnitude, 0.001)
+  for (const id of ['loop-top', 'loop-right', 'loop-bottom', 'loop-left']) assert.equal(flows.get(id).length, 0, id)
+})
+
+test('transistor terminal currents resolve otherwise unknown wire branches', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-q1', kind: 'npn', ref: 'Q1', value: 'NPN', x: 650, y: 290, rotation: 0 })
+  project.wires.push({ id: 'q-collector-wire', points: [[690, 240], [750, 240]] })
+  const connectivity = analyzeConnectivity(project)
+  const currents = new Map([['V1', -0.005], ['R1', undefined], ['C1', undefined]])
+  const pinCurrents = new Map([['Q1:0', 0.005], ['Q1:1', 0.0001], ['Q1:2', -0.0051]])
+  const flows = wireCurrentFlowSegments(project, connectivity, (part) => currents.get(part.ref), (part, pin) => pinCurrents.get(`${part.ref}:${pin}`))
+  assert.ok(flows.get('q-collector-wire').length > 0)
+})

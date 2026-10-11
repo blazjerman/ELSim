@@ -100,8 +100,10 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     const ref = line.match(/^\s*([RCLDSEGFHQBJIM][A-Za-z0-9_]+)\s+/i)?.[1]
     if (!ref) return []
     if (analysisType === 'ac' && /^[CL]/i.test(ref)) return []
-    const current = ref[0].toUpperCase() === 'D' || ref[0].toUpperCase() === 'J' || ref[0].toUpperCase() === 'M' ? 'id' : ref[0].toUpperCase() === 'Q' ? 'ic' : ref[0].toUpperCase() === 'I' ? 'current' : 'i'
-    return [`@${ref}[${current}]`]
+    const kind = ref[0].toUpperCase()
+    const current = kind === 'D' || kind === 'J' || kind === 'M' ? 'id' : kind === 'Q' ? 'ic' : kind === 'I' ? 'current' : 'i'
+    const terminalCurrents = kind === 'Q' ? ['ib', 'ie'] : kind === 'M' ? ['ig', 'is', 'ib'] : kind === 'J' ? ['ig', 'is'] : []
+    return [`@${ref}[${current}]`, ...terminalCurrents.map((name) => `@${ref}[${name}]`)]
   })
   const hasSourceCurrentVector = (measurement: TransientMeasurement) => /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.vector.trim()) || (measurement.operation === 'delay' && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.targetVector.trim()))
   const threshold = (value: string, vector: string) => String(componentMagnitude(value, vector.trim().toLowerCase().startsWith('i(') ? 'currentSource' : 'source'))

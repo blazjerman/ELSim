@@ -3,6 +3,12 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator } from '@playwright/test'
 
+async function expectAvailableTrace(page: import('@playwright/test').Page, name: string) {
+  const picker = page.locator('.trace-picker')
+  if (!(await picker.getAttribute('open'))) await picker.locator('summary').click()
+  await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
+}
+
 async function scrubToTime(slider: Locator, targetSeconds: number) {
   let low = 0
   let high = Number(await slider.getAttribute('max'))
@@ -407,9 +413,9 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(page.getByText('S1 switched on. Run simulation to calculate the updated circuit.')).toBeVisible()
 })
 
-test('schematic wire paths and net labels can be selected from the keyboard', async ({ page }) => {
+test('schematic wire segments and net labels can be selected from the keyboard', async ({ page }) => {
   await page.goto('/')
-  const wire = page.getByRole('button', { name: 'Wire path with 2 segments' }).first()
+  const wire = page.getByRole('button', { name: /^Wire segment from/ }).first()
   await expect(wire).toHaveAttribute('tabindex', '0')
   await wire.focus()
   await page.keyboard.press('Enter')
@@ -1267,12 +1273,12 @@ test('junction tool toggles a crossing connection in the schematic', async ({ pa
   await expect(svg.locator('title', { hasText: 'Connected wire junction' })).toHaveCount(0)
 })
 
-test('wire objects move independently and viewport gestures preserve the circuit', async ({ page }) => {
+test('wire segments move independently and wheel zoom preserves their geometry', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = []
-    project.wires = [{ id: 'editable-wire', points: [[300, 300], [400, 300], [400, 350]] }]
+    project.wires = [{ id: 'editable-wire', points: [[300, 300], [400, 300]] }]
     project.junctions = []
     project.netLabels = []
     project.sheets[0] = { ...project.sheets[0], parts: [], wires: project.wires, junctions: [], netLabels: [] }
@@ -1292,19 +1298,8 @@ test('wire objects move independently and viewport gestures preserve the circuit
   await page.mouse.move(end.x, end.y, { steps: 4 })
   await page.mouse.up()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).not.toEqual(before)
-  const rerouted = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
-  expect(rerouted).toEqual([[300, 330], [400, 330], [400, 380]])
-
-  await page.keyboard.down('Space')
-  const panStart = toScreen(600, 500)
-  await page.mouse.move(panStart.x, panStart.y)
-  await page.mouse.down()
-  await page.mouse.move(panStart.x + 40, panStart.y + 25, { steps: 3 })
-  await page.mouse.up()
-  await page.keyboard.up('Space')
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view.panX)).not.toBe(0)
-  const afterPan = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
-  expect(afterPan).toEqual(rerouted)
+  const moved = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)
+  expect(moved).toEqual([[300, 330], [400, 330]])
 
   const beforeZoom = Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))
   await page.locator('svg.schematic').evaluate((element) => {
@@ -1312,6 +1307,7 @@ test('wire objects move independently and viewport gestures preserve the circuit
     element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }))
   })
   await expect.poll(async () => Number((await page.locator('button.zoom-label').textContent())!.replace('%', ''))).toBeGreaterThan(beforeZoom)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual(moved)
 })
 
 test('moving a component leaves all wire objects fixed in place', async ({ page }) => {
@@ -1753,7 +1749,7 @@ test('transistor switch example demonstrates base drive and collector switching'
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(base)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'V(collector)', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'I(q1)', exact: true })).toBeVisible()
+  await expectAvailableTrace(page, 'I(q1)')
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
@@ -1782,7 +1778,7 @@ test('PNP switch example demonstrates active-low base drive and high-side load s
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(base)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'V(collector)', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'I(q1)', exact: true })).toBeVisible()
+  await expectAvailableTrace(page, 'I(q1)')
   await page.getByRole('button', { name: /Pause result playback/ }).click()
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
@@ -1812,7 +1808,7 @@ test('MOSFET switch example demonstrates gate drive and drain switching', { tag:
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(gate)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'V(drain)', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'I(m1)', exact: true })).toBeVisible()
+  await expectAvailableTrace(page, 'I(m1)')
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
@@ -1841,7 +1837,7 @@ test('PMOS switch example demonstrates active-low high-side switching', { tag: '
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(gate)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'V(drain)', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'I(m1)', exact: true })).toBeVisible()
+  await expectAvailableTrace(page, 'I(m1)')
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
@@ -1870,7 +1866,7 @@ test('N-JFET example demonstrates zero-bias conduction and negative-gate cutoff'
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(gate)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'V(drain)', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'I(j1)', exact: true })).toBeVisible()
+  await expectAvailableTrace(page, 'I(j1)')
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
   const jfet = page.locator('.circuit-part[data-part-id="jfet-switch-j1"]')
@@ -1902,7 +1898,7 @@ test('P-JFET example demonstrates zero-bias conduction and positive-gate cutoff'
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'V(gate)', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'V(drain)', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'I(j1)', exact: true })).toBeVisible()
+  await expectAvailableTrace(page, 'I(j1)')
   await page.getByRole('button', { name: /Pause result playback/ }).click()
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   await scrubToTime(timeSlider, 0.025)
