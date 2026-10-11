@@ -3,31 +3,6 @@ import { performance } from 'node:perf_hooks'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
-async function addVoltageTrace(page: import('@playwright/test').Page, name: string, toCurrentWindow: boolean) {
-  const label = page.getByRole('button', { name: new RegExp(`^Net label ${name}$`, 'i') }).first()
-  const point = await label.evaluate((element, labelName) => {
-    const text = element.querySelector('text')
-    if (!text) throw new Error(`Net label ${labelName} has no visible text target`)
-    const rect = text.getBoundingClientRect()
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
-  }, name)
-  await page.mouse.click(point.x, point.y, { button: 'right' })
-  await page.getByRole('menuitem', { name: 'Plot voltage to ground' }).click()
-  const chooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
-  if (toCurrentWindow) await chooser.getByRole('radio', { name: /Add to current window/ }).check()
-  await chooser.getByRole('button', { name: 'Open waveform' }).click()
-  return page.locator('.plot-window').last()
-}
-
-async function addComponentCurrentTrace(page: import('@playwright/test').Page, ref: string, toCurrentWindow: boolean) {
-  await page.locator(`.circuit-part[aria-label^="${ref},"]`).click({ button: 'right' })
-  await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
-  const chooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
-  if (toCurrentWindow) await chooser.getByRole('radio', { name: /Add to current window/ }).check()
-  await chooser.getByRole('button', { name: 'Open waveform' }).click()
-  return page.locator('.plot-window').last()
-}
-
 test('measure result animation scrubbing for 500 components and 1,000 vectors', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
@@ -197,6 +172,13 @@ test('measure a million-sample transient through the browser ngspice worker and 
     project.simulation.stopTime = '1 s'
     project.simulation.maxStep = '1 µs'
     project.plotSettings.selectedTraceIds = []
+    const traces = ['v(vout)', 'v(vin)', 'i(@r1[i])', 'i(@c1[i])']
+    project.plotSettings.panels = traces.map((_, index) => ({
+      id: `million-sample-panel-${index + 1}`,
+      bounds: { x: 12 + (index % 2) * 628, y: 128 + Math.floor(index / 2) * 356, width: 600, height: 340 },
+      selectedTraceIds: traces,
+      ranges: {},
+    }))
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
@@ -221,20 +203,23 @@ test('measure a million-sample transient through the browser ngspice worker and 
   await expect(slider).toBeVisible()
   const maxSample = Number(await slider.getAttribute('max'))
   expect(maxSample).toBeGreaterThan(1_000_000)
-  const plot = await addVoltageTrace(page, 'vout', false)
-  await expect(plot.getByRole('button', { name: 'Disable V(vout)' })).toBeVisible()
-  await addVoltageTrace(page, 'vin', true)
-  await addComponentCurrentTrace(page, 'R1', true)
-  await addComponentCurrentTrace(page, 'C1', true)
-  const selectedTraceCount = await plot.locator('.trace-selected-item').count()
-  expect(selectedTraceCount).toBe(4)
-  const renderedTraceCount = await plot.locator('.waveform-chart polyline').count()
+  const plots = page.locator('.plot-window')
+  await expect(plots).toHaveCount(4)
+  for (let index = 0; index < 4; index += 1) {
+    const plot = plots.nth(index)
+    await expect(plot.locator('.trace-selected-item')).toHaveCount(4)
+    await expect(plot.getByRole('button', { name: 'Disable V(vout)' })).toBeVisible()
+    await expect(plot.locator('.waveform-chart polyline')).toHaveCount(4)
+  }
+  const selectedTraceCount = await page.locator('.plot-window .trace-selected-item').count()
+  const renderedTraceCount = await page.locator('.plot-window .waveform-chart polyline').count()
+  expect(selectedTraceCount).toBe(16)
   expect(renderedTraceCount).toBe(selectedTraceCount)
   const scrubTimes: number[] = []
   for (const key of ['End', 'Home', 'End']) {
     const scrubStarted = performance.now()
     await slider.press(key)
-    await expect(plot.locator('.cursor-readout')).toContainText('V(vout)')
+    await expect(plots.first().locator('.cursor-readout')).toContainText('V(vout)')
     scrubTimes.push(Number((performance.now() - scrubStarted).toFixed(2)))
   }
   const after = await page.evaluate(() => {

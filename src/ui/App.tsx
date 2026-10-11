@@ -22,6 +22,7 @@ import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { updateSheetDefinition } from '../domain/sheetDefinition'
 import { wireCurrentFlowSegments, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
+import { getSimulationCursor, setSimulationCursor, useSimulationCursor } from './simulationCursor'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentDefaultValue, componentDefinitionFor, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { timeMagnitude } from '../domain/componentValue'
@@ -482,6 +483,10 @@ function TraceToggles({ traces, selectedIds, disabledIds, onToggleVisibility, on
   })}</div></div>
 }
 
+const PlotPolylineSet = memo(function PlotPolylineSet({ plots }: { plots: { id: string; points: string; color: string }[] }) {
+  return <>{plots.map((plot) => <polyline key={plot.id} points={plot.points} fill="none" stroke={plot.color} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}</>
+})
+
 function useResponsivePlotSize() {
   const ref = useRef<SVGSVGElement>(null)
   const [size, setSize] = useState({ width: 760, height: 160 })
@@ -505,7 +510,8 @@ function useResponsivePlotSize() {
   return { ref, size }
 }
 
-function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, sampleIndex, onSampleChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; sampleIndex: number | null; onSampleChange: (index: number | null) => void; measurements: MeasurementResult[] }) {
+function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; measurements: MeasurementResult[] }) {
+  const cursorIndex = useSimulationCursor()
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIds.includes(trace.id)), [traces, traceVisibility.visibleIds])
   const navigation = usePlotWindow(traces, range, onRangeChange)
@@ -546,8 +552,6 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchorIndex / Math.max(1, (axis?.length ?? 1) - 1))
   }
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
-  const [cursorIndex, setCursorIndex] = useState<number | null>(sampleIndex)
-  useEffect(() => setCursorIndex(sampleIndex), [traces, sampleIndex])
   const plotPaths = useMemo(() => shown.map((trace) => {
     const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
     const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
@@ -567,8 +571,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const rect = event.currentTarget.getBoundingClientRect()
     const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left)))
     const next = nearestAxisIndex(axis, minTime + fraction * (maxTime - minTime), first, Math.min(last, axis.length - 1))
-    setCursorIndex(next)
-    onSampleChange(next)
+    setSimulationCursor(next)
   }
   const cursorTime = cursorIndex === null || !axis ? null : axis[cursorIndex]
   return <div className="waveform-view">
@@ -576,7 +579,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds`} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
       {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const v = voltageRange[1] - (line / 3) * (voltageRange[1] - voltageRange[0]); const a = currentRange[1] - (line / 3) * (currentRange[1] - currentRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{v.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{a.toPrecision(3)} A</text>}</g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
-      {plotPaths.map((plot) => <polyline key={plot.id} points={plot.points} fill="none" stroke={plot.color} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
+      <PlotPolylineSet plots={plotPaths}/>
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} x2={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
     </svg>
@@ -659,7 +662,7 @@ function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange 
     <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`AC ${mode} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz`} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); setCursorIndex(nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1))) }}>
       {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} {mode === 'magnitude' ? 'dB' : '°'}</text></g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
-      {plotPaths.map((plot) => <polyline key={plot.id} points={plot.points} fill="none" stroke={plot.color} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
+      <PlotPolylineSet plots={plotPaths}/>
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(frequencies[cursorIndex])} x2={xFor(frequencies[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 5} className="plot-tick">{minFrequency.toPrecision(3)} Hz</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{maxFrequency.toPrecision(3)} Hz</text>
     </svg>
@@ -721,7 +724,7 @@ function DcSweepPlot({ traces, selectedIds, onToggle, onExport, range, onRangeCh
     <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}`} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); setCursorIndex(nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1))) }}>
       {[0, 1, 2, 3].map((line) => { const value = max - line / 3 * span; return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)}</text></g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
-      {plotPaths.map((plot) => <polyline key={plot.id} points={plot.points} fill="none" stroke={plot.color} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}
+      <PlotPolylineSet plots={plotPaths}/>
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(axis[cursorIndex])} x2={xFor(axis[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 5} className="plot-tick">{x0.toPrecision(3)} {traces[0]?.axisUnit}</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{x1.toPrecision(3)} {traces[0]?.axisUnit}</text>
     </svg>
@@ -730,11 +733,21 @@ function DcSweepPlot({ traces, selectedIds, onToggle, onExport, range, onRangeCh
   </div>
 }
 
-function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, sampleIndex, onSampleChange }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc', range: PlotRange) => void; sampleIndex: number | null; onSampleChange: (index: number | null) => void }) {
+function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc', range: PlotRange) => void }) {
   if (result.analysis === 'op') return <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport}/>
   if (result.analysis === 'ac') return <AcPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} onExport={onExport}/>
   if (result.analysis === 'dc') return <DcSweepPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.dc} onRangeChange={(range) => onRangeChange('dc', range)} onExport={onExport}/>
-  return <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} sampleIndex={sampleIndex} onSampleChange={onSampleChange} onExport={onExport} measurements={result.measurements}/>
+  return <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} onExport={onExport} measurements={result.measurements}/>
+}
+
+function SimulationPlaybackControls({ axis, available, running, onRunningChange }: { axis?: Float64Array; available: boolean; running: boolean; onRunningChange: (running: boolean) => void }) {
+  const sampleIndex = useSimulationCursor()
+  const activeSample = axis?.length ? Math.max(0, Math.min(axis.length - 1, sampleIndex ?? axis.length - 1)) : 0
+  return <div className="menu-group playback-controls" aria-label="Result playback">
+    <IconButton title={running ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!running && (sampleIndex ?? 0) >= (axis?.length ?? 1) - 1) setSimulationCursor(0); onRunningChange(!running) }} active={running} disabled={!available}>{running ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton>
+    <IconButton title="Rewind result playback to the first solved sample" onClick={() => { onRunningChange(false); setSimulationCursor(0) }} disabled={!available}><RotateCcw size={14}/></IconButton>
+    {axis?.length ? <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" type="range" min="0" max={axis.length - 1} step="1" value={activeSample} disabled={!available} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><output>{axis[activeSample].toPrecision(4)} s</output></label> : null}
+  </div>
 }
 
 function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onActivate, children }: { panel: PlotPanel; index: number; title: string; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onActivate: () => void; children: ReactNode }) {
@@ -1018,7 +1031,8 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
   </div>
 }
 
-function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, setView, spacePan, tool, setTool, pendingComponent, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, sampleIndex, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; setSelection: (selection: Selection) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; sampleIndex: number | null; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
+function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, setView, spacePan, tool, setTool, pendingComponent, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; setSelection: (selection: Selection) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
+  const sampleIndex = useSimulationCursor()
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
@@ -1658,7 +1672,6 @@ export default function App() {
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
   const [switchSolveQueued, setSwitchSolveQueued] = useState(false)
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
-  const [sampleIndex, setSampleIndex] = useState<number | null>(null)
   const [playbackRunning, setPlaybackRunning] = useState(false)
   const [animationScale, setAnimationScale] = useState(() => {
     const value = Number(localStorage.getItem('elsim:current-animation-scale'))
@@ -1721,16 +1734,16 @@ export default function App() {
   const transientAxis = simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
   const simulationResultStale = Boolean(simulationResult && simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt)
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && !simulationResultStale)
-  const activePlaybackSample = transientAxis?.length ? Math.max(0, Math.min(transientAxis.length - 1, sampleIndex ?? transientAxis.length - 1)) : 0
   useEffect(() => {
     if (!playbackRunning || !playbackAvailable || !transientAxis) return
     const stride = Math.max(1, Math.ceil(transientAxis.length / 120))
-    const timer = window.setInterval(() => setSampleIndex((index) => Math.min((index ?? 0) + stride, transientAxis.length - 1)), Math.max(10, Math.round(33 / animationSpeed)))
+    const timer = window.setInterval(() => {
+      const next = Math.min((getSimulationCursor() ?? 0) + stride, transientAxis.length - 1)
+      setSimulationCursor(next)
+      if (next >= transientAxis.length - 1) setPlaybackRunning(false)
+    }, Math.max(10, Math.round(33 / animationSpeed)))
     return () => window.clearInterval(timer)
   }, [playbackRunning, playbackAvailable, transientAxis, animationSpeed])
-  useEffect(() => {
-    if (playbackRunning && (!playbackAvailable || (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1)) setPlaybackRunning(false)
-  }, [playbackRunning, playbackAvailable, sampleIndex, transientAxis])
   const connectivity = useMemo(() => analyzeConnectivity(project), [project])
   const electricalIssues = useMemo(() => checkCircuit(project, connectivity), [project, connectivity])
   const analysisSettingErrors = validateAnalysisSettings(project)
@@ -1911,7 +1924,7 @@ export default function App() {
     setSelection(null)
     setSelectedWireId(null)
     setSimulationResult(null)
-    setSampleIndex(null)
+    setSimulationCursor(null)
     setNotice(`Created ${name} inside ${parent?.name ?? 'the project'}.`)
   }
   const activeSheet = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
@@ -2286,7 +2299,7 @@ export default function App() {
       setImportWarnings(imported.warnings)
       setSelectedTraceIds([])
       setSimulationResult(null)
-      setSampleIndex(null)
+      setSimulationCursor(null)
       history.current = { past: [], future: [] }
       setSelection(null)
       setSelectedWireId(null)
@@ -2701,7 +2714,7 @@ export default function App() {
         }
         setSimulationResult(response.result)
         const transientSamples = response.result.analysis === 'tran' ? response.result.traces[0]?.axis.length ?? 1 : 0
-        setSampleIndex(response.result.analysis === 'tran' ? 0 : null)
+        setSimulationCursor(response.result.analysis === 'tran' ? 0 : null)
         setPlaybackRunning(!prefersReducedMotionRef.current && response.result.analysis === 'tran' && transientSamples > 1)
         const savedTraceIds = projectRef.current.plotSettings?.selectedTraceIds ?? []
         const restoredTraces = savedTraceIds.filter((id) => response.result.traces.some((trace) => trace.id === id))
@@ -2933,7 +2946,7 @@ export default function App() {
     setRunState('idle')
     setSimulationResult(null)
     setPlaybackRunning(false)
-    setSampleIndex(null)
+    setSimulationCursor(null)
     setSheetInstancePath([])
     setProjectState(next)
     const lessons = {
@@ -2986,7 +2999,7 @@ export default function App() {
       <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (r)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (Y)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection && !selectedPartIds.length && !selectedWireIds.length && !selectedNetLabelIds.length}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, analysis: event.target.value as Project['simulation']['analysis'] } }))}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option></select><ChevronDown size={13}/></label>
-      {simulationResult?.analysis === 'tran' && <div className="menu-group playback-controls" aria-label="Result playback"><IconButton title={playbackRunning ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!playbackRunning && (sampleIndex ?? 0) >= (transientAxis?.length ?? 1) - 1) setSampleIndex(0); setPlaybackRunning((running) => !running) }} active={playbackRunning} disabled={!playbackAvailable}>{playbackRunning ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton><IconButton title="Rewind result playback to the first solved sample" onClick={() => { setPlaybackRunning(false); setSampleIndex(0) }} disabled={!playbackAvailable}><RotateCcw size={14}/></IconButton>{transientAxis?.length ? <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" type="range" min="0" max={transientAxis.length - 1} step="1" value={activePlaybackSample} disabled={!playbackAvailable} onChange={(event) => { setPlaybackRunning(false); setSampleIndex(Number(event.target.value)) }}/><output>{transientAxis[activePlaybackSample].toPrecision(4)} s</output></label> : null}<details className="animation-tuning"><summary aria-label="Current animation settings" title="Current animation size and speed"><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div>}
+      {simulationResult?.analysis === 'tran' && <><SimulationPlaybackControls axis={transientAxis} available={playbackAvailable} running={playbackRunning} onRunningChange={setPlaybackRunning}/><div className="menu-group"><details className="animation-tuning"><summary aria-label="Current animation settings" title="Current animation size and speed"><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div></>}
       {simulationResultStale && <div className="result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</div>}
       <div className="menu-group waveform-window-actions"><IconButton title="Open generated netlist" aria-label="Netlist" onClick={() => setNetlistOpen(true)}><Command size={14}/></IconButton><IconButton title="Tile waveform windows" aria-label="Tile waveform windows" onClick={tilePlotWindows} disabled={additionalPlotPanels.length < 2}><Grid2X2 size={14}/></IconButton>{simulationResult && <IconButton title="Download simulation run report" aria-label="Download simulation run report" onClick={downloadRunReport}><Download size={14}/></IconButton>}</div>
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit <span>{electricalIssues.length}</span></button>
@@ -3031,11 +3044,11 @@ export default function App() {
       <main className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <button key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><span className="sheet-dot"/>{sheet.name}{sheet.id === project.activeSheetId && <MoreHorizontal size={15}/>}</button>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button ref={sheetSettingsTriggerRef} className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => setSheetSettingsOpen(true)}><SlidersHorizontal size={15}/></button></div>
         {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p></div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
-        <Schematic project={project} setSelection={setSelection} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} onPlaceComponent={addPart} onClearPendingComponent={() => setPendingComponentKind(null)} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} sampleIndex={sampleIndex} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
+        <Schematic project={project} setSelection={setSelection} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} setView={setView} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} onPlaceComponent={addPart} onClearPendingComponent={() => setPendingComponentKind(null)} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
       </main>
 
       {additionalPlotPanels.map((panel, index) => <FloatingPlotPanel key={panel.id} panel={panel} index={index} title={waveformWindowTitle(panel, index)} onBoundsChange={(bounds) => updatePlotPanel(panel.id, (current) => ({ ...current, bounds }))} onClose={() => saveAdditionalPlotPanels(additionalPlotPanels.filter((item) => item.id !== panel.id))} onActivate={() => { if (index !== additionalPlotPanels.length - 1) saveAdditionalPlotPanels([...additionalPlotPanels.filter((item) => item.id !== panel.id), panel]) }}>
-        {simulationResult ? <ResultPlot result={simulationResult} selectedIds={panel.selectedTraceIds} onToggle={(traceId) => togglePlotPanelTrace(panel.id, traceId)} onExport={() => exportWaveformCsv(panel.selectedTraceIds)} ranges={panel.ranges} onRangeChange={(analysis, range) => changePlotPanelRange(panel.id, analysis, range)} sampleIndex={sampleIndex} onSampleChange={setSampleIndex}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
+        {simulationResult ? <ResultPlot result={simulationResult} selectedIds={panel.selectedTraceIds} onToggle={(traceId) => togglePlotPanelTrace(panel.id, traceId)} onExport={() => exportWaveformCsv(panel.selectedTraceIds)} ranges={panel.ranges} onRangeChange={(analysis, range) => changePlotPanelRange(panel.id, analysis, range)}/> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
       </FloatingPlotPanel>)}
 
       <aside className={`inspector-panel${mobilePane === 'properties' ? ' mobile-active' : ''}`}>
