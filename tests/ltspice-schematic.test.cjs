@@ -43,20 +43,20 @@ test('imports ordinary wires, flags, components, symbol pin order, and transient
 test('imports bounded LTspice .step param ranges and arithmetic lists independent of directive order', () => {
   const asc = [
     'Version 4',
-    'TEXT 0 100 Left 2 !.step param RLOAD 1k 5k 2k',
-    'TEXT 0 120 Left 2 !.step param CLOAD list 1u 2u 3u',
+    'TEXT 0 100 Left 2 !.step param RLOAD 1k 3k 2k',
+    'TEXT 0 120 Left 2 !.step param RALT list 1k 2k 5k',
     'TEXT 0 140 Left 2 !.tran 0 5m 0 10u',
-    'TEXT 0 160 Left 2 !.param RLOAD=1k CLOAD=1u',
+    'TEXT 0 160 Left 2 !.param RLOAD=1k RALT=1k',
   ].join('\n')
   const { project, warnings } = parseLtspiceSchematic(asc, 'stepped.asc')
   assert.deepEqual(warnings, [])
   assert.equal(project.simulation.parameterSweeps.length, 2)
-  assert.deepEqual(project.simulation.parameterSweeps.map(({ globalParameter, start, stop, points }) => ({ globalParameter, start, stop, points })), [
-    { globalParameter: 'RLOAD', start: '1k', stop: '5k', points: 3 },
-    { globalParameter: 'CLOAD', start: '1u', stop: '3u', points: 3 },
+  assert.deepEqual(project.simulation.parameterSweeps.map(({ globalParameter, start, stop, points, listValues }) => ({ globalParameter, start, stop, points, listValues })), [
+    { globalParameter: 'RLOAD', start: '1k', stop: '3k', points: 2, listValues: undefined },
+    { globalParameter: 'RALT', start: '1k', stop: '5k', points: 3, listValues: ['1k', '2k', '5k'] },
   ])
   assert.match(createNetlistArtifact(project).text, /^\.param RLOAD=1k$/m)
-  assert.match(createNetlistArtifact(project).text, /^\.param CLOAD=1u$/m)
+  assert.match(createNetlistArtifact(project).text, /^\.param RALT=1k$/m)
 })
 
 test('unsupported LTspice .step forms remain in source and explain the import limitation', () => {

@@ -2054,19 +2054,22 @@ test('declared global parameter sweep edits and simulates through the browser ng
     project.sheets[0].parameters = [{ id: 'param-rload', name: 'RLOAD', defaultValue: '1k' }]
     project.parts.find((part: { ref: string }) => part.ref === 'R1').value = '{RLOAD}'
     project.sheets[0].parts = project.parts
-    project.simulation.parameterSweeps = [{ component: '$param:RLOAD', globalParameter: 'RLOAD', start: '1k', stop: '3k', points: 3 }]
+    project.simulation.parameterSweeps = [{ component: '$param:RLOAD', globalParameter: 'RLOAD', listValues: ['1k', '2k', '5k'], start: '1k', stop: '5k', points: 3 }]
     localStorage.setItem(key, JSON.stringify(project))
   })
   await page.reload()
   await page.keyboard.press('Escape')
   await expect(page.locator('.parameter-sweep-card')).toHaveCount(1)
   await expect(page.getByLabel('Parameter 1 component')).toHaveValue('$param:RLOAD')
+  await page.getByLabel('Parameter 1 discrete values').fill('1k, 4k, 5k')
+  await page.getByLabel('Parameter 1 discrete values').blur()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.parameterSweeps[0].listValues)).toEqual(['1k', '4k', '5k'])
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Parameter sweep complete · 3 cases/)).toBeVisible({ timeout: 60_000 })
   const labels = await page.locator('.trace-toggles button').evaluateAll((buttons) => buttons.map((button) => button.textContent?.split('·').slice(1).join('·').trim()).filter(Boolean))
   expect(labels).toContain('RLOAD=1000')
-  expect(labels).toContain('RLOAD=2000')
-  expect(labels).toContain('RLOAD=3000')
+  expect(labels).toContain('RLOAD=4000')
+  expect(labels).toContain('RLOAD=5000')
 })
 
 test('pulse source high levels can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {

@@ -397,11 +397,11 @@ const outputMaxima = parameterSweepResult.rawFiles.map((raw) => Math.max(...real
 assert.ok(outputMaxima[0] > outputMaxima[1] && outputMaxima[1] > outputMaxima[2], 'increasing R must reduce the RC output peak')
 process.stdout.write('PASS parameter-sweep-transient-vectors\n')
 
-const globalParameterSweepResult = await runInWorker(path.join(root, 'engine/wasm/fixtures', 'global-parameter-sweep.cir'), false, ['/result-0.raw', '/result-1.raw'])
+const globalParameterSweepResult = await runInWorker(path.join(root, 'engine/wasm/fixtures', 'global-parameter-sweep.cir'), false, ['/result-0.raw', '/result-1.raw', '/result-2.raw'])
 assert.equal(globalParameterSweepResult.status, 0, `global-parameter-sweep: ngspice exited with a nonzero status: ${globalParameterSweepResult.stderr}`)
-assert.equal(globalParameterSweepResult.rawFiles.length, 2)
+assert.equal(globalParameterSweepResult.rawFiles.length, 3)
 const globalParameterMaxima = globalParameterSweepResult.rawFiles.map((raw) => Math.max(...realRawVector(raw, 'v(out)')))
-assert.ok(globalParameterMaxima[0] > globalParameterMaxima[1] + 0.8, `increasing global RLOAD should visibly slow the RC response, got ${globalParameterMaxima.join(', ')}`)
+assert.ok(globalParameterMaxima[0] > globalParameterMaxima[1] + 0.4 && globalParameterMaxima[1] > globalParameterMaxima[2] + 0.4, `increasing global RLOAD should visibly slow the RC response, got ${globalParameterMaxima.join(', ')}`)
 process.stdout.write('PASS global-parameter-alterparam-sweep\n')
 
 const sourceSweepPaths = Array.from({ length: 4 }, (_, index) => `/result-${index}.raw`)

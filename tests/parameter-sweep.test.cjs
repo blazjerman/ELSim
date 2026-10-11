@@ -54,6 +54,21 @@ test('declared global parameters produce alterparam cases and a reset before eac
   assert.throws(() => validateProject({ ...validated, simulation: { ...validated.simulation, parameterSweeps: [{ ...validated.simulation.parameterSweeps[0], globalParameter: 'MISSING', component: '$param:MISSING' }] } }), /declared global project parameter/)
 })
 
+test('non-arithmetic global parameter lists preserve each requested value exactly', () => {
+  const project = createStarterProject()
+  project.sheets[0].parameters = [{ id: 'param-rload', name: 'RLOAD', defaultValue: '1k' }]
+  project.parts.find((part) => part.ref === 'R1').value = '{RLOAD}'
+  project.simulation.parameterSweeps = [{ component: '$param:RLOAD', globalParameter: 'RLOAD', listValues: ['1k', '2k', '5k'], start: '1k', stop: '5k', points: 3 }]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => Number(run.values[0].value)), [1000, 2000, 5000])
+  assert.deepEqual(runs.map((run) => run.label), ['RLOAD=1000', 'RLOAD=2000', 'RLOAD=5000'])
+  assert.match(addResultControl(createNetlistArtifact(validated).text, runs), /alterparam RLOAD=5\.00000000e\+3\nreset\nrun\nwrite \/result-2\.raw all/)
+  const malformed = structuredClone(project)
+  malformed.simulation.parameterSweeps[0].listValues = ['1k', 'invalid', '5k']
+  assert.throws(() => validateProject(malformed), /discrete sweep values must be numeric/)
+})
+
 test('three distinct parameters produce bounded Cartesian combinations and protocol commands', () => {
   const project = createStarterProject()
   const source = project.parts.find((part) => part.kind === 'source')

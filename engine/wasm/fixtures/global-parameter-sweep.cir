@@ -11,10 +11,14 @@ alterparam RLOAD=1k
 reset
 run
 write /result-0.raw all
-alterparam RLOAD=3k
+alterparam RLOAD=2k
 reset
 run
 write /result-1.raw all
+alterparam RLOAD=5k
+reset
+run
+write /result-2.raw all
 quit
 .endc
 .end

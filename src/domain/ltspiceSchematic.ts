@@ -211,10 +211,12 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     const declared = sheet?.parameters?.find((parameter) => parameter.name.toLowerCase() === parameterName?.toLowerCase())
     const magnitudes = values.map(scalarMagnitude)
     let start: string | undefined, stop: string | undefined, points = 0
+    let listValues: string[] | undefined
     if (listMode && values.length >= 2 && values.length <= 10 && magnitudes.every((value): value is number => value !== null)) {
       const delta = magnitudes[1] - magnitudes[0]
       const arithmetic = magnitudes.every((value, index) => Math.abs(value - (magnitudes[0] + delta * index)) <= Math.max(1, Math.abs(value)) * 1e-10)
       if (arithmetic && delta !== 0) { start = values[0]; stop = values.at(-1); points = values.length }
+      else { start = values[0]; stop = values.at(-1); points = values.length; listValues = values }
     } else if (!listMode && values.length === 3 && magnitudes.every((value): value is number => value !== null)) {
       const [first, last, increment] = magnitudes
       const intervals = (last - first) / increment
@@ -235,7 +237,7 @@ function applyDirective(project: Project, directive: string, warnings: string[],
     }
     const existingCases = sweeps.reduce((count, sweep) => count * sweep.points, 1)
     if (existingCases * points > 10) { warnings.push(`Line ${line}: .step for ${declared.name} would exceed ELSim’s ten-case limit; original source is preserved.`); return }
-    project.simulation.parameterSweeps = [...sweeps, { component: `$param:${declared.name}`, globalParameter: declared.name, start, stop, points }]
+    project.simulation.parameterSweeps = [...sweeps, { component: `$param:${declared.name}`, globalParameter: declared.name, ...(listValues ? { listValues } : {}), start, stop, points }]
     return
   }
   if (command === '.include' || command === '.inc' || command === '.lib') {

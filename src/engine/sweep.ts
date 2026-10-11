@@ -80,8 +80,9 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
     if (sweep.globalParameter) {
       const declared = project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters?.find((parameter) => parameter.name.toLowerCase() === sweep.globalParameter!.toLowerCase())
       const start = scalarMagnitude(sweep.start), stop = scalarMagnitude(sweep.stop)
-      if (!declared || !/^\$param:[A-Za-z_][A-Za-z0-9_]*$/i.test(sweep.component) || start === null || stop === null || start === stop) throw new Error(`Global parameter ${sweep.globalParameter} needs a declared parameter and valid, different numeric endpoints.`)
-      const values = Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
+      const explicitValues = sweep.listValues?.map(scalarMagnitude)
+      if (!declared || !/^\$param:[A-Za-z_][A-Za-z0-9_]*$/i.test(sweep.component) || start === null || stop === null || (!explicitValues && start === stop) || (explicitValues && (explicitValues.length !== sweep.points || explicitValues.some((value) => value === null)))) throw new Error(`Global parameter ${sweep.globalParameter} needs a declared parameter and valid numeric values.`)
+      const values = explicitValues ? explicitValues as number[] : Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
       combinations = combinations.flatMap((combination) => values.map((value) => {
         const display = Number(value.toPrecision(5))
         const target = declared.name
