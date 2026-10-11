@@ -253,14 +253,14 @@ test('LTspice schematic import preserves and reports duplicate model library fil
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets.map((asset: { filename: string }) => asset.filename))).toEqual(['amp-a.lib', 'amp-b.lib'])
 })
 
-test('every component shortcut selects its matching palette item', async ({ page }) => {
+test('component shortcuts are case-sensitive and future Falstad shortcuts stay reserved', async ({ page }) => {
   await page.goto('/')
   const shortcuts: [string, string][] = [
-    ['r', 'Resistor'], ['a', 'Lamp'], ['c', 'Capacitor'], ['l', 'Inductor'], ['v', 'Voltage source'],
-    ['i', 'Current source'], ['d', 'Diode'], ['e', 'LED'], ['s', 'Switch'], ['g', 'VCVS'],
-    ['k', 'VCCS'], ['f', 'CCCS'], ['h', 'CCVS'], ['b', 'Behavioral source'], ['q', 'NPN transistor'],
-    ['t', 'PNP transistor'], ['j', 'N-channel JFET'], ['z', 'P-channel JFET'], ['x', 'N-channel MOSFET'],
-    ['2', 'P-channel MOSFET'], ['0', 'Ground'],
+    ['r', 'Resistor'], ['e', 'Lamp'], ['c', 'Capacitor'], ['Shift+L', 'Inductor'], ['v', 'Voltage source'],
+    ['i', 'Current source'], ['d', 'Diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
+    ['Shift+G', 'VCCS'], ['Shift+F', 'CCCS'], ['Shift+H', 'CCVS'], ['b', 'Behavioral source'], ['n', 'NPN transistor'],
+    ['p', 'PNP transistor'], ['j', 'N-channel JFET'], ['Shift+J', 'P-channel JFET'], ['N', 'N-channel MOSFET'],
+    ['P', 'P-channel MOSFET'], ['g', 'Ground'],
   ]
   for (const [shortcut, label] of shortcuts) {
     const card = page.locator('.component-card').filter({ has: page.locator('.component-label').getByText(label, { exact: true }) })
@@ -268,8 +268,16 @@ test('every component shortcut selects its matching palette item', async ({ page
     await expect(card, `${shortcut} should select ${label}`).toHaveAttribute('aria-pressed', 'true')
     await page.keyboard.press('Escape')
   }
-  await page.keyboard.press('v')
-  await expect(page.locator('.component-card').filter({ has: page.locator('.component-label').getByText('Voltage source', { exact: true }) })).toHaveAttribute('aria-pressed', 'true')
+  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+C', 'Polarized capacitor'], ['Shift+S', 'SPDT switch'], ['Shift+T', 'Transformer'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['z', 'Zener diode'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
+    await page.keyboard.press(shortcut)
+    await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
+  }
+  for (const [key, label] of [['@', 'NAND gate'], ['#', 'NOR gate']] as const) {
+    await page.evaluate((shortcut) => window.dispatchEvent(new KeyboardEvent('keydown', { key: shortcut, bubbles: true })), key)
+    await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
+  }
+  await page.keyboard.press('w')
+  await expect(page.getByRole('button', { name: 'Draw wire (W)' })).toHaveClass(/active/)
   await page.keyboard.press('m')
   await expect(page.getByRole('button', { name: 'Select and move (M)' })).toHaveClass(/active/)
 })
@@ -898,7 +906,7 @@ test('component hotkeys choose parts and newly placed parts stay unselected', as
   const newPart = page.locator(`.circuit-part[data-part-id="${newPartId}"]`)
   await expect(newPart).not.toHaveClass(/selected/)
   await expect(page.locator('.inspector-heading h2')).not.toHaveText('R2')
-  await expect(page.getByRole('button', { name: 'Rotate selected (O)' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Rotate selected (.)' })).toBeDisabled()
 
   await page.getByRole('textbox', { name: 'Find a component' }).fill('capacitor')
   await page.keyboard.press('Enter')
