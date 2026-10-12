@@ -382,6 +382,10 @@ Starting a simulation now keeps the current immutable `Project` root as its run 
 
 Paste builds cloned parts in one local array and assigns new references from a prebuilt case-insensitive set, with a next-index cursor per SPICE prefix. This removes both repeated array copies and rebuilding/scanning the full reference set for every pasted part. A Node microbenchmark with 5,000 existing resistors and 5,000 pasted resistors measured the previous array-plus-`nextRef` loop at 3,641.27 ms median / 3,687.09 ms max, versus 2.94 ms median / 3.51 ms max for one reference set plus append (three versus five runs). This isolates array and reference allocation; it is not an end-to-end browser paste measurement. The focused Firefox full-circuit regression confirms every pasted component has a unique reference, every newly pasted component and wire is selected, and no original wire is selected. The earlier array-only microbenchmark is superseded by this combined measurement.
 
+### Connection-dot viewport index (2026-10-13)
+
+The 4,900-wire fixture produces 9,800 wire connection dots. The rendering path previously copied each point into an object with a generated ID, then built the general object viewport index (including per-object ID and bounds maps). A point-specialized index retains point coordinates directly and only generates SVG keys for visible points. In one same-host Node benchmark run, building the old generic index took 3.832 ms median / 5.383 ms p95, versus 1.453 ms / 2.305 ms for the specialized point index. Query time was similar (0.018 ms versus 0.021 ms median), with identical 45 visible points and source order on the 1,600-by-1,000 viewport. This measures index setup/query, not end-to-end frame time; dot derivation itself remained 15.755 ms median / 36.030 ms p95. The point index falls back to a direct candidate pass for extremely broad viewports rather than iterating unbounded empty grid cells.
+
 
 ### On-demand netlist generation (2026-10-12)
 

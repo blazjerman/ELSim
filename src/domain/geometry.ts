@@ -69,6 +69,39 @@ export function createViewportIndex<T extends { id: string }>(items: readonly T[
   }
 }
 
+/** Build a compact viewport broadphase for point decorations such as wire dots. */
+export function createPointViewportIndex<T extends Point>(points: readonly T[], radius = 0, cellSize = 256) {
+  if (!Number.isFinite(radius) || radius < 0 || !Number.isFinite(cellSize) || cellSize <= 0) throw new RangeError('Point viewport index limits must be positive.')
+  const cells = new Map<string, number[]>()
+  const cellKey = (x: number, y: number) => `${x},${y}`
+  points.forEach((point, index) => {
+    const left = Math.floor((point.x - radius) / cellSize), right = Math.floor((point.x + radius) / cellSize)
+    const top = Math.floor((point.y - radius) / cellSize), bottom = Math.floor((point.y + radius) / cellSize)
+    for (let x = left; x <= right; x += 1) for (let y = top; y <= bottom; y += 1) {
+      const key = cellKey(x, y)
+      const entries = cells.get(key)
+      if (entries) entries.push(index)
+      else cells.set(key, [index])
+    }
+  })
+  return (bounds: ViewportBounds): T[] => {
+    const left = Math.floor(bounds.left / cellSize), right = Math.floor(bounds.right / cellSize)
+    const top = Math.floor(bounds.top / cellSize), bottom = Math.floor(bounds.bottom / cellSize)
+    const candidates = new Set<number>()
+    if ((right - left + 1) * (bottom - top + 1) > 4096) {
+      for (let index = 0; index < points.length; index += 1) candidates.add(index)
+    } else {
+      for (let x = left; x <= right; x += 1) for (let y = top; y <= bottom; y += 1) {
+        for (const index of cells.get(cellKey(x, y)) ?? []) candidates.add(index)
+      }
+    }
+    return [...candidates].sort((a, b) => a - b).flatMap((index) => {
+      const point = points[index]
+      return point.x + radius >= bounds.left && point.x - radius <= bounds.right && point.y + radius >= bounds.top && point.y - radius <= bounds.bottom ? [point] : []
+    })
+  }
+}
+
 /** Build a reusable spatial broadphase for viewport queries over static wires. */
 export function createWireViewportIndex(wires: readonly Wire[], cellSize = 256, maxCellsPerWire = 64) {
   const query = createViewportIndex(wires, (wire) => {

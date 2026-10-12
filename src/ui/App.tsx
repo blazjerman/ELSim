@@ -14,7 +14,7 @@ import { moveSelectedSceneObjects } from '../domain/sceneEdit'
 import type { ElectricalIssue } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
-import { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, retainConnectedJunctions, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, retainConnectedJunctions, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector } from '../domain/probe'
 import { hierarchyComponentCurrentVector, hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
@@ -118,10 +118,9 @@ const CanvasConnectionDotLayer = memo(function CanvasConnectionDotLayer({ dots, 
   viewportRight: number
   viewportBottom: number
 }) {
-  const indexedDots = useMemo(() => dots.map((dot) => ({ ...dot, id: `${Math.round(dot.x * 1000)}:${Math.round(dot.y * 1000)}` })), [dots])
-  const dotViewportIndex = useMemo(() => createViewportIndex(indexedDots, (dot) => ({ left: dot.x - 8, top: dot.y - 8, right: dot.x + 8, bottom: dot.y + 8 })), [indexedDots])
+  const dotViewportIndex = useMemo(() => createPointViewportIndex(dots, 8), [dots])
   const visibleDots = dotViewportIndex({ left: viewportLeft, top: viewportTop, right: viewportRight, bottom: viewportBottom })
-  return <>{visibleDots.map(({ x, y, id }) => <circle key={id} className="wire-connection-dot" data-x={x} data-y={y} cx={x} cy={y} r="4" pointerEvents="none"/>)}</>
+  return <>{visibleDots.map(({ x, y }) => <circle key={`${Math.round(x * 1000)}:${Math.round(y * 1000)}`} className="wire-connection-dot" data-x={x} data-y={y} cx={x} cy={y} r="4" pointerEvents="none"/>)}</>
 })
 
 const CanvasJunctionLayer = memo(function CanvasJunctionLayer({ junctions, viewportLeft, viewportTop, viewportRight, viewportBottom }: {

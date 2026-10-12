@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
@@ -62,6 +62,19 @@ test('wire-connection dot broadphase preserves exact pin, T-join, and crossing g
   }
   assert.deepEqual(wireConnectionDotPoints(project), [...expected.values()])
   assert.deepEqual(wireConnectionDotPoints(project).map(({ x, y }) => [x, y]), [[-50, 0], [50, 0], [0, 0]])
+})
+
+test('point viewport index matches padded full-scan membership and source order', () => {
+  const points = Array.from({ length: 500 }, (_, index) => ({ x: (index % 25) * 80 - 960, y: Math.floor(index / 25) * 80 - 760, id: `dot-${index}` }))
+  points.push({ x: 255, y: 255, id: 'cell-edge' }, { x: -255, y: -255, id: 'negative-cell-edge' })
+  const bounds = { left: 0, top: 0, right: 300, bottom: 300 }
+  const radius = 8
+  const indexed = createPointViewportIndex(points, radius)
+  const expected = points.filter((point) => point.x + radius >= bounds.left && point.x - radius <= bounds.right && point.y + radius >= bounds.top && point.y - radius <= bounds.bottom)
+  assert.deepEqual(indexed(bounds), expected)
+  const broadBounds = { left: -40_000, top: -40_000, right: 40_000, bottom: 40_000 }
+  assert.deepEqual(indexed(broadBounds), points, 'very broad queries preserve order without iterating every empty cell')
+  assert.throws(() => createPointViewportIndex(points, -1), /limits must be positive/)
 })
 
 test('mixed selection movement shifts only selected scene objects from their drag snapshot', () => {

@@ -199,7 +199,7 @@ try {
   const build = createRequire(import.meta.url)
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
-  const { componentPins, createViewportIndex, createWireViewportIndex, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
+  const { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
   const { moveSelectedSceneObjects } = build(path.join(output, 'domain/sceneEdit.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
   const { createWireCurrentFlowSampler } = build(path.join(output, 'domain/wireFlow.js'))
@@ -316,7 +316,24 @@ try {
 
       const dots = measure(() => wireConnectionDotPoints(project))
       if (dots.value.length !== wireSegments * 2) throw new Error(`Wire-grid fixture expected ${wireSegments * 2} pin-connection dots; got ${dots.value.length}.`)
-      connectionDots = { count: dots.value.length, medianMs: dots.medianMs, p95Ms: dots.p95Ms }
+      const indexedDots = dots.value.map((dot) => ({ ...dot, id: `${Math.round(dot.x * 1000)}:${Math.round(dot.y * 1000)}` }))
+      const genericDotBuild = measure(() => createViewportIndex(indexedDots, (dot) => ({ left: dot.x - 8, top: dot.y - 8, right: dot.x + 8, bottom: dot.y + 8 })), 1, 5)
+      const pointDotBuild = measure(() => createPointViewportIndex(dots.value, 8), 1, 5)
+      const genericDotQuery = measure(() => genericDotBuild.value(bounds), 2, 7)
+      const pointDotQuery = measure(() => pointDotBuild.value(bounds), 2, 7)
+      const pointKeys = (items) => items.map(({ x, y }) => `${Math.round(x * 1000)}:${Math.round(y * 1000)}`)
+      if (JSON.stringify(pointKeys(genericDotQuery.value)) !== JSON.stringify(pointKeys(pointDotQuery.value))) throw new Error('Point viewport index changed visible connection-dot membership or z-order.')
+      connectionDots = {
+        count: dots.value.length,
+        compute: { medianMs: dots.medianMs, p95Ms: dots.p95Ms },
+        viewport: {
+          genericIndexBuild: { medianMs: genericDotBuild.medianMs, p95Ms: genericDotBuild.p95Ms },
+          genericQuery: { medianMs: genericDotQuery.medianMs, p95Ms: genericDotQuery.p95Ms },
+          pointIndexBuild: { medianMs: pointDotBuild.medianMs, p95Ms: pointDotBuild.p95Ms },
+          pointQuery: { medianMs: pointDotQuery.medianMs, p95Ms: pointDotQuery.p95Ms },
+          visibleCount: pointDotQuery.value.length,
+        },
+      }
 
       const selected = { parts: project.parts, wires: project.wires, netLabels: project.netLabels }
       const movement = measure(() => moveSelectedSceneObjects(project, selected, 10, 10), 2, 7)
