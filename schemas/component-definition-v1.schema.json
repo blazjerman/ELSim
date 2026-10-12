@@ -244,6 +244,21 @@
         "items": { "$ref": "#/properties/symbolGeometry/items" }
       }
     },
+    "symbolAnimations": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$", "maxLength": 64 },
+      "additionalProperties": {
+        "type": "object",
+        "maxProperties": 32,
+        "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$", "maxLength": 64 },
+        "additionalProperties": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/properties/symbolGeometry/items" }
+        }
+      }
+    },
     "properties": {
       "type": "array",
       "maxItems": 64,

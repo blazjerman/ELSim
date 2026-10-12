@@ -145,7 +145,13 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   }
   const definitionSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8'))
   assert.ok(definitionSchema.properties.symbolVariants)
+  assert.ok(definitionSchema.properties.symbolAnimations)
   assert.equal(definitionSchema.properties.symbolGeometry.items.oneOf.find((primitive) => primitive.properties?.kind?.const === 'text').properties.pin.maximum, 64)
+  for (const kind of ['source', 'currentSource', 'resistor', 'lamp', 'transformer', 'diode', 'zener', 'led', 'switch', 'voltageSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'inverter', 'logicGate']) {
+    const variants = componentDefinitionFor(kind).symbolAnimations.currentDirection
+    for (const direction of ['forward', 'reverse']) assert.ok(variants[direction].some((primitive) => primitive.className === 'component-current-arrow' && primitive.kind === 'path'), `${kind} ${direction} current arrow is definition geometry`)
+    assert.notEqual(variants.forward[0].d, variants.reverse[0].d, `${kind} direction variants differ`)
+  }
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
   assert.deepEqual(componentDefinitionFor('lamp').symbolGeometry.map(({ kind }) => kind), ['line', 'circle', 'line', 'path'])
   assert.ok(componentDefinitionFor('lamp').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.className === 'lamp-filament'))

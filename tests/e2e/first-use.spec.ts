@@ -4366,6 +4366,7 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', {
   await expectAvailableTrace(page, 'V(out)')
   const operatingPoint = page.locator('.plot-window').last().locator('.op-table')
   await expect(operatingPoint.getByRole('row', { name: /V\(out\).*1\.000000 V/i })).toBeVisible()
+  for (const partId of ['isource-i1', 'isource-r1']) await expect(page.locator(`.circuit-part[data-part-id="${partId}"] .component-current-arrow`)).toHaveCount(1)
   for (const wireId of ['isource-output-link', 'isource-ground-drop', 'isource-ground-return', 'isource-ground-rise']) {
     const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`)
     await expectWireFlow(flow, 'first-to-last')
