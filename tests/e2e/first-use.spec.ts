@@ -3914,6 +3914,7 @@ test('voltage-controlled switch example toggles the load with its control pulse'
   await dialog.locator('.example-list article').filter({ hasText: 'Voltage-controlled switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Voltage-controlled switch')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(ctrl)')
@@ -3924,6 +3925,11 @@ test('voltage-controlled switch example toggles the load with its control pulse'
   const finalSample = Number(await timeSlider.getAttribute('max'))
   await timeSlider.fill(String(Math.floor(finalSample * 0.25)))
   await expect(switchSymbol).toHaveAttribute('data-state', 'closed')
+  for (const wireId of ['vswitch-feed', 'vswitch-output-wire', 'vswitch-return-vertical', 'vswitch-return-horizontal', 'vswitch-return-supply']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    await expect(flow).toHaveAttribute('data-current-magnitude', /\d/)
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.004)
+  }
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 4\.9+/)
   await timeSlider.fill(String(Math.floor(finalSample * 0.75)))
   await expect(switchSymbol).toHaveAttribute('data-state', 'open')

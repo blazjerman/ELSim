@@ -111,6 +111,36 @@ test('transistor terminal currents resolve otherwise unknown wire branches', () 
   assert.ok(flows.get('q-collector-wire').length > 0)
 })
 
+test('voltage-controlled switch animates conduction current but not its control pins', () => {
+  const project = createStarterProject()
+  const source = { id: 'p-v1', kind: 'source', ref: 'V1', value: '5 V', x: 100, y: 300, rotation: 0 }
+  const controlledSwitch = { id: 'p-s1', kind: 'voltageSwitch', ref: 'S1', value: '0 V', x: 500, y: 300, rotation: 0 }
+  const resistor = { id: 'p-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 700, y: 300, rotation: 0 }
+  const ground = { id: 'p-gnd', kind: 'ground', ref: 'GND', value: '', x: 100, y: 400, rotation: 0 }
+  project.parts = [source, controlledSwitch, resistor, ground]
+  project.netLabels = []
+  project.wires = [
+    { id: 'switch-feed', points: [[100, 250], [450, 300]] },
+    { id: 'switch-output', points: [[550, 300], [650, 300]] },
+    { id: 'switch-load', points: [[750, 300], [100, 380]] },
+    { id: 'switch-return', points: [[100, 380], [100, 350]] },
+    { id: 'switch-control-positive', points: [[500, 250], [520, 250]] },
+    { id: 'switch-control-negative', points: [[500, 350], [520, 350]] },
+  ]
+  const connectivity = analyzeConnectivity(project)
+  const currents = new Map([['V1', -0.002], ['S1', 0.002], ['R1', 0.002]])
+  const flows = wireCurrentFlowSegments(project, connectivity, (part) => currents.get(part.ref))
+
+  for (const id of ['switch-feed', 'switch-output', 'switch-load', 'switch-return']) {
+    assert.equal(flows.get(id).length, 1, id)
+    assert.equal(flows.get(id)[0].magnitude, 0.002, id)
+  }
+  for (const id of ['switch-control-positive', 'switch-control-negative']) {
+    assert.equal(flows.get(id).length, 1, id)
+    assert.equal(flows.get(id)[0].magnitude, 0, id)
+  }
+})
+
 test('transformer wire animation uses independent primary and secondary winding currents', () => {
   const project = createStarterProject()
   const transformer = { id: 'p-t1', kind: 'transformer', ref: 'T1', value: '10 H', turnsRatio: '2', x: 500, y: 380, rotation: 0 }

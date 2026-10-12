@@ -38,7 +38,7 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
     const current = currentForPin?.(part, pinIndex)
     return current === undefined || !Number.isFinite(current) ? {} : { value: -current }
   }
-  if (part.kind === 'vcvs' || part.kind === 'vccs') {
+  if (part.kind === 'vcvs' || part.kind === 'vccs' || part.kind === 'voltageSwitch') {
     if (pinIndex >= 2) return { value: 0 }
     const current = currentForPart(part)
     return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex === 0 ? -current : current }

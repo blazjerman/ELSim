@@ -129,6 +129,8 @@ Cursor update isolation (2026-10-12): The transient plot shell no longer subscri
 
 Capacitor charge animation regression (2026-10-12): Firefox now runs the existing local ngspice runtime, scrubs a solved transient from 10 ms to 30 ms, and verifies both the visible capacitor plate extension and glow scale increase with the solved charge Q = C × V. The focused test passes in 4.5 seconds without rebuilding WASM.
 
+Voltage-controlled switch current-flow follow-up (2026-10-12): The wire sampler now maps `I(Sx)` onto conduction pins 1–2 and leaves control pins 3–4 at zero current. The switch example now draws explicit feed, output, and ground-return wire segments, so the full solved load current is visible along its path. Unit coverage and the focused Firefox/ngspice switch workflow verify all five wire segments animate at the expected current.
+
 **M1.5 Beginner experience.** Onboarding, searchable components, example circuits, hover explanations, sensible simulation presets, and accessible colors/keyboard operations. Acceptance: scripted first-use test reaches a working circuit without knowledge of netlists.
 
 Example confirmation follow-up (2026-10-12): the replace-circuit prompt now reads the selected example's title from the same catalog used by the picker, removing the duplicated per-example title conditional and keeping the confirmation text aligned as examples are added or renamed. TypeScript checking passes.
