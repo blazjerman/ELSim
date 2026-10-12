@@ -49,6 +49,30 @@ test('noise analysis defaults to a labeled non-ground node and available current
   assert.match(artifact.text, /^\.noise V\(OUT\) I1 dec 10 1 1Meg$/im)
 })
 
+test('noise analysis resolves label aliases to their emitted node and rejects grounded labels', () => {
+  const project = createCurrentSourceExampleProject()
+  const output = project.netLabels.find((label) => label.name === 'OUT')
+  project.netLabels.push({ ...output, id: 'out-alias', name: 'OUT_ALIAS' })
+  project.sheets[0] = { ...project.sheets[0], netLabels: project.netLabels }
+  project.simulation.analysis = 'noise'
+  project.simulation.noiseSweep = { outputNode: 'OUT_ALIAS', inputSource: 'I1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
+  assert.deepEqual(validateAnalysisSettings(project), [])
+  const aliasArtifact = createNetlistArtifact(project)
+  assert.match(aliasArtifact.text, /^\.noise V\(OUT\) I1 dec 10 1 1Meg$/im)
+  assert.doesNotMatch(aliasArtifact.text, /^\.noise V\(OUT_ALIAS\)/im)
+
+  const groundProject = createCurrentSourceExampleProject()
+  const ground = groundProject.netLabels.find((label) => label.name === '0')
+  groundProject.netLabels.push({ ...ground, id: 'ground-alias', name: 'GND' })
+  groundProject.sheets[0] = { ...groundProject.sheets[0], netLabels: groundProject.netLabels }
+  groundProject.simulation.analysis = 'noise'
+  groundProject.simulation.noiseSweep = { outputNode: 'GND', inputSource: 'I1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
+  assert.equal(validateAnalysisSettings(groundProject).find((error) => error.field === 'noiseOutput')?.field, 'noiseOutput')
+  const groundArtifact = createNetlistArtifact(groundProject)
+  assert.match(groundArtifact.diagnostics.find((diagnostic) => diagnostic.sourceId === 'analysis:noise').message, /non-ground output node/i)
+  assert.doesNotMatch(groundArtifact.text, /^\.noise /m)
+})
+
 test('global temperature emits one top-level SPICE directive and is validated in Celsius', () => {
   const project = createStarterProject()
   project.simulation.temperature = '85'

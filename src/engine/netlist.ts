@@ -1,4 +1,5 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
+import type { Connectivity } from '../domain/connectivity'
 import { sheetModelName, type Part, type PartKind, type Project } from '../domain/project'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
@@ -141,7 +142,7 @@ function spiceSffm(part: Part, parameters: Project['sheets'][number]['parameters
 export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
-export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
+export function validateAnalysisSettings(project: Project, connectivity?: Connectivity): AnalysisSettingError[] {
   const errors: AnalysisSettingError[] = []
   const add = (field: AnalysisSettingField, message: string, sourceId?: string, settingPath?: string) => errors.push({ field, message, ...(sourceId ? { sourceId } : {}), ...(settingPath ? { settingPath } : {}) })
   const temperature = Number(project.simulation.temperature ?? '27')
@@ -230,8 +231,9 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
     }
   } else if (project.simulation.analysis === 'noise') {
     const sweep = project.simulation.noiseSweep ?? { outputNode: '', inputSource: '', scale: 'dec' as const, points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
-    const labels = project.netLabels.map((label) => label.name.toLowerCase())
-    if (!sweep.outputNode.trim() || !labels.includes(sweep.outputNode.trim().toLowerCase())) add('noiseOutput', 'Choose a labeled output node for noise analysis.')
+    const resolved = connectivity ?? analyzeConnectivity(project)
+    const output = project.netLabels.find((label) => label.name.toLowerCase() === sweep.outputNode.trim().toLowerCase())
+    if (!output || resolved.labelNets.get(output.id) === '0') add('noiseOutput', 'Choose a labeled non-ground output node for noise analysis.')
     if (!project.parts.some((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.inputSource.trim().toLowerCase())) add('noiseSource', 'Choose an independent voltage or current source as the noise input.')
     if (!['dec', 'oct', 'lin'].includes(sweep.scale)) add('noiseScale', 'Choose a decade, octave, or linear noise sweep.')
     if (!Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000) add('noisePoints', 'Enter from 1 to 10,000 noise points per decade/octave or total linear points.')
@@ -872,11 +874,12 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const start = spiceFrequency(sweep.startFrequency), stop = spiceFrequency(sweep.stopFrequency)
     const source = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.inputSource.trim().toLowerCase())
     const output = project.netLabels.find((label) => label.name.toLowerCase() === sweep.outputNode.trim().toLowerCase())
-    if (!output || !source || !['dec', 'oct', 'lin'].includes(sweep.scale) || !Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000 || !start || !stop || Number(start) <= 0 || Number(stop) <= Number(start)) {
-      const message = 'Noise analysis needs a labeled output node, an independent input source, a supported scale, 1–10,000 points, and positive increasing frequencies.'
+    const outputNet = output ? connectivity.labelNets.get(output.id) : undefined
+    if (!output || !outputNet || outputNet === '0' || !source || !['dec', 'oct', 'lin'].includes(sweep.scale) || !Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000 || !start || !stop || Number(start) <= 0 || Number(stop) <= Number(start)) {
+      const message = 'Noise analysis needs a labeled non-ground output node, an independent input source, a supported scale, 1–10,000 points, and positive increasing frequencies.'
       append(`* ERROR: ${message}`, 'analysis:noise', 'analysis')
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:noise', line: rows.length })
-    } else append(`.noise V(${output.name}) ${source.ref} ${sweep.scale} ${sweep.points} ${start} ${stop}`, 'analysis:noise', 'analysis')
+    } else append(`.noise V(${outputNet}) ${source.ref} ${sweep.scale} ${sweep.points} ${start} ${stop}`, 'analysis:noise', 'analysis')
   } else if (project.simulation.analysis === 'dc') {
     const sweep = project.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
     const start = spiceSweepValue(sweep.start), stop = spiceSweepValue(sweep.stop), step = spiceSweepValue(sweep.step)

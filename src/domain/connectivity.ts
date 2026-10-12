@@ -5,6 +5,7 @@ export type Connectivity = {
   pinNets: Map<string, string>
   pinLabels: Map<string, string[]>
   wireNets: Map<string, string>
+  labelNets: Map<string, string>
   diagnostics: { severity: 'warning' | 'error'; message: string }[]
 }
 
@@ -223,7 +224,9 @@ export function analyzeConnectivity(project: Project): Connectivity {
   for (const wire of project.wires) {
     wireNets.set(wire.id, nameByRoot.get(dsu.find(wireToken(wire.id))) ?? `n${autoIndex++}`)
   }
-  return { pinNets, pinLabels, wireNets, diagnostics }
+  const labelNets = new Map<string, string>()
+  for (const label of project.netLabels) labelNets.set(label.id, nameByRoot.get(dsu.find(`label:${label.id}`)) ?? '0')
+  return { pinNets, pinLabels, wireNets, labelNets, diagnostics }
 }
 
 export function pinNet(connectivity: Connectivity, part: Part, pinIndex: number): string {

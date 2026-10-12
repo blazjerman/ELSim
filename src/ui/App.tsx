@@ -1869,7 +1869,7 @@ export default function App() {
   }, [playbackRunning, playbackAvailable, transientAxis, animationSpeed])
   const connectivity = useMemo(() => analyzeConnectivity(project), [project])
   const electricalIssues = useMemo(() => checkCircuit(project, connectivity), [project, connectivity])
-  const analysisSettingErrors = validateAnalysisSettings(project)
+  const analysisSettingErrors = validateAnalysisSettings(project, connectivity)
   const analysisSettingError = (field: AnalysisSettingField, sourceId?: string) => analysisSettingErrors.find((error) => error.field === field && (sourceId === undefined || error.sourceId === sourceId))?.message
   const pwlCountValidationError = (sourceId: string) => analysisSettingErrors.find((error) => error.field === 'pwlPoints' && error.sourceId === sourceId && error.settingPath?.endsWith('.points'))?.message
   const modelLibraryRevision = useMemo(() => JSON.stringify((project.modelAssets ?? []).map((asset) => [asset.id, asset.filename, asset.sha256, asset.selectedSections ?? []])), [project.modelAssets])
@@ -2160,10 +2160,11 @@ export default function App() {
   })
   const capacitorParts = useMemo(() => project.parts.filter((part) => part.kind === 'capacitor'), [project.parts])
   const inductorParts = useMemo(() => project.parts.filter((part) => part.kind === 'inductor'), [project.parts])
-  const labeledNodeNames = useMemo(() => [...new Set(project.netLabels.map((label) => label.name).filter((name) => name !== '0'))], [project.netLabels])
+  const labeledNodeNames = useMemo(() => [...new Set(project.netLabels.filter((label) => connectivity.labelNets.get(label.id) !== '0').map((label) => label.name))], [project.netLabels, connectivity])
   const changeAnalysis = (analysis: Project['simulation']['analysis']) => setProject((current) => {
     if (analysis !== 'noise') return { ...current, simulation: { ...current.simulation, analysis } }
-    const nodes = [...new Set(current.netLabels.map((label) => label.name).filter((name) => name !== '0'))]
+    const resolved = analyzeConnectivity(current)
+    const nodes = [...new Set(current.netLabels.filter((label) => resolved.labelNets.get(label.id) !== '0').map((label) => label.name))]
     const sources = current.parts.filter((part) => part.kind === 'source' || part.kind === 'currentSource')
     const existing = current.simulation.noiseSweep
     const outputNode = nodes.find((name) => name.toLowerCase() === existing?.outputNode.toLowerCase()) ?? nodes.find((name) => name.toLowerCase() === 'vout') ?? nodes[0] ?? 'vout'

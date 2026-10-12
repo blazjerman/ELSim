@@ -326,6 +326,28 @@ test('large imported-model dependency reports are navigable regions, not live st
   await expect(page.locator('[role="status"][aria-label="Model dependency report"]')).toHaveCount(0)
 })
 
+test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const output = project.netLabels.find((label: { name: string }) => label.name.toLowerCase() === 'vout')
+    project.netLabels.push({ ...output, id: 'label-vout-alias', name: 'VOUT_ALIAS' }, { id: 'label-ground-alias', name: 'GND', x: 180, y: 470, visible: true })
+    const active = project.sheets.find((sheet: { id: string }) => sheet.id === project.activeSheetId)
+    active.netLabels = project.netLabels
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByLabel('Analysis type', { exact: true }).selectOption('noise')
+  const outputNode = page.getByLabel('Output node')
+  const options = await outputNode.locator('option').allTextContents()
+  expect(options.map((option) => option.toLowerCase())).toContain('vout_alias')
+  expect(options.map((option) => option.toLowerCase())).not.toContain('gnd')
+  await outputNode.selectOption({ label: 'VOUT_ALIAS' })
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/\.noise V\(vout\) V1 dec 10 1 1Meg/i)
+  await expect(page.locator('.netlist-modal pre')).not.toContainText(/\.noise V\(VOUT_ALIAS\)/i)
+})
+
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
