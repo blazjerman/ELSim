@@ -2388,6 +2388,13 @@ test('logic gate lesson simulates the four input truth-table states', { tag: ['@
   await expect(gateType).toHaveValue('and')
   await gateType.selectOption('nand')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'logic-and')?.logicOperation)).toBe('nand')
+  await page.locator('.circuit-part[data-part-id="logic-and"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot output voltage to ground' }).click()
+  const outputProbe = page.getByRole('dialog', { name: 'V(BAND)' })
+  await outputProbe.getByRole('button', { name: 'Open waveform' }).click()
+  const outputPlot = page.locator('.plot-window').last()
+  await expect(outputPlot.locator('.trace-toggles button', { hasText: 'V(BAND)' })).toBeVisible()
+  await expect(outputPlot.locator('.cursor-readout')).toContainText(/V\(BAND\) =/)
 })
 
 test('potentiometer example adjusts the simulated output with its wiper', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

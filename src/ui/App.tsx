@@ -1324,6 +1324,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       {contextPart ? <>
         <div className="context-menu-heading">{contextPart.ref} · {kindNames[contextPart.kind]}</div>
         {contextPinNames.length === 2 && <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 0, 1); setContextMenu(null) }}>Plot voltage across {contextPinNames[0]} → {contextPinNames[1]}</button>}
+        {(contextPart.kind === 'logicGate' || contextPart.kind === 'inverter') && <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, contextPart.kind === 'inverter' ? 1 : 2, -1); setContextMenu(null) }}>Plot output voltage to ground</button>}
         {contextPinNames.length > 2 && <div className="context-pin-picker"><strong>Voltage between pins</strong><label>Positive<select aria-label="Positive voltage pin" value={contextPinPair.positive} onChange={(event) => setContextPinPair((pair) => ({ ...pair, positive: Number(event.target.value) }))}>{contextPinNames.map((name, index) => <option key={`${name}-${index}`} value={index}>{index + 1} · {name}</option>)}</select></label><label>Negative<select aria-label="Negative voltage pin" value={contextPinPair.negative} onChange={(event) => setContextPinPair((pair) => ({ ...pair, negative: Number(event.target.value) }))}>{contextPinNames.map((name, index) => <option key={`${name}-${index}`} value={index}>{index + 1} · {name}</option>)}</select></label><button role="menuitem" disabled={contextPinPair.positive === contextPinPair.negative} onClick={() => { onProbeVoltage(contextPart.id, contextPinPair.positive, contextPinPair.negative); setContextMenu(null) }}>Plot pin-to-pin voltage</button></div>}
         {contextPart.kind !== 'ground' && <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id }); setContextMenu(null) }}>{contextPart.kind === 'potentiometer' ? 'Plot upper-to-wiper current' : 'Plot current through component'}</button>}
         {contextPart.kind === 'switch' && <button role="menuitem" onClick={() => { togglePart(contextPart.id); setContextMenu(null) }}>Switch {contextPart.value.toLowerCase() === 'on' ? 'off' : 'on'}</button>}
@@ -2399,7 +2400,7 @@ export default function App() {
     if (!part || !simulationResult) { setNotice('Run the circuit first, then choose a component voltage probe.'); return }
     const connectivity = analyzeConnectivity(currentProject)
     const positiveNet = pinNet(connectivity, part, positivePin)
-    const negativeNet = pinNet(connectivity, part, negativePin)
+    const negativeNet = negativePin < 0 ? '0' : pinNet(connectivity, part, negativePin)
     if (positiveNet === 'unconnected' || negativeNet === 'unconnected') { setNotice(`${part.ref} needs both selected pins connected before its voltage can be plotted.`); return }
     const scopeSheetId = typeof simulationResult.metadata.settings.scopeSheetId === 'string' ? simulationResult.metadata.settings.scopeSheetId : currentProject.rootSheetId
     const scopePath = (() => { try { const value = JSON.parse(String(simulationResult.metadata.settings.scopeInstancePath ?? '[]')); return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value as string[] : [] } catch { return [] } })()
@@ -2412,18 +2413,18 @@ export default function App() {
     if (!positiveVector || !negativeVector) { setNotice('This sheet is not open through a block instance. Open it from the parent block to add a component voltage trace.'); return }
     const byId = new Map(currentProject.sheets.flatMap((sheet) => sheet.parts.map((item) => [item.id, item] as const)))
     const ref = [...activePath.map((id) => byId.get(id)?.ref).filter((value): value is string => Boolean(value)), part.ref].join('.')
-    const vectorRef = positivePin === 0 && negativePin === 1 ? ref : `${ref}.p${positivePin + 1}-${negativePin + 1}`
+    const vectorRef = negativePin < 0 ? `${ref}.p${positivePin + 1}-gnd` : positivePin === 0 && negativePin === 1 ? ref : `${ref}.p${positivePin + 1}-${negativePin + 1}`
     const derived = deriveComponentVoltageTraces(simulationResult.traces, positiveVector, negativeVector, ref, vectorRef)
     if (!derived.length) { setNotice(`Could not find both solved pin voltages for ${ref}. Run the simulation again and try the probe.`); return }
     const existingIds = new Set(simulationResult.traces.map((trace) => trace.id))
     const additions = derived.filter((trace) => !existingIds.has(trace.id))
     if (additions.length) setSimulationResult({ ...simulationResult, traces: [...simulationResult.traces, ...additions] })
     const ids = derived.map((trace) => trace.id)
-    const pinName = (index: number) => part.modelPins?.[index] ?? componentDefinitionFor(part.kind).pins[index]?.name ?? `pin ${index + 1}`
+    const pinName = (index: number) => index < 0 ? 'ground' : part.modelPins?.[index] ?? componentDefinitionFor(part.kind).pins[index]?.name ?? `pin ${index + 1}`
     waveformReturnFocusRef.current = document.querySelector<SVGElement>(`[data-part-id="${CSS.escape(partId)}"]`)
     setWaveformDestination(additionalPlotPanels.length ? 'current' : 'new')
     setPendingWaveformTrace({ traceIds: ids, label: `V(${ref})` })
-    setNotice(`Voltage is measured from pin ${positivePin + 1} (${pinName(positivePin)}) to pin ${negativePin + 1} (${pinName(negativePin)}).`)
+    setNotice(`Voltage is measured from pin ${positivePin + 1} (${pinName(positivePin)}) to ${negativePin < 0 ? 'ground' : `pin ${negativePin + 1} (${pinName(negativePin)})`}.`)
   }
   const exportWaveformCsv = (traceIds: string[] = selectedTraceIds) => {
     if (!simulationResult) return
