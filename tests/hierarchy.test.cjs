@@ -10,7 +10,7 @@ const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
 const { preferredSheetInstancePath } = require(path.join(build, 'domain/hierarchyNavigation.js'))
-const { deleteSheetDefinition, nextBlockSheetName, renameSheetDefinition, updateSheetDefinition } = require(path.join(build, 'domain/sheetDefinition.js'))
+const { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, renameSheetDefinition, updateSheetDefinition } = require(path.join(build, 'domain/sheetDefinition.js'))
 
 test('current-source probes use ngspice current parameters in root and nested sheets', () => {
   const project = createCurrentSourceExampleProject()
@@ -114,6 +114,37 @@ test('deleting a sheet protects references and nested sheets, then returns to it
   assert.equal(deleted.activeSheetId, project.rootSheetId)
   assert.equal(deleted.parts, deleted.sheets[0].parts)
   assert.doesNotThrow(() => validateProject(deleted))
+})
+
+test('duplicating a reusable sheet clones nested definitions with fresh identities', () => {
+  const project = createBlockProject()
+  const nested = {
+    id: 'sheet-core', name: 'Core', parentSheetId: 'sheet-load', parts: [], wires: [], junctions: [],
+    netLabels: [{ id: 'core-in-label', name: 'IN', x: 100, y: 100, visible: true }],
+    ports: [{ id: 'core-in', name: 'IN' }], view: { zoom: 1, panX: 0, panY: 0 },
+  }
+  project.sheets[1].parts = [{
+    id: 'nested-block', kind: 'subcircuit', componentDefinitionId: 'elsim.subcircuit', ref: 'XCORE',
+    value: 'Core', modelName: sheetModelName(nested.id), modelPins: ['IN'], sheetId: nested.id, x: 500, y: 300, rotation: 0,
+  }]
+  project.sheets.push(nested)
+
+  let nextId = 0
+  const duplicated = duplicateSheetDefinition(project, 'sheet-load', () => `copy-${++nextId}`)
+  const copy = duplicated.sheets.find((sheet) => sheet.name === 'Block 1')
+  assert.ok(copy)
+  assert.notEqual(copy.id, 'sheet-load')
+  assert.equal(copy.parentSheetId, project.rootSheetId)
+  assert.notEqual(copy.ports[0].id, project.sheets[1].ports[0].id)
+  assert.notEqual(copy.parts[0].id, project.sheets[1].parts[0].id)
+  const copiedNested = duplicated.sheets.find((sheet) => sheet.parentSheetId === copy.id)
+  assert.ok(copiedNested)
+  assert.notEqual(copiedNested.id, nested.id)
+  assert.equal(copy.parts[0].sheetId, copiedNested.id)
+  assert.equal(copy.parts[0].modelName, sheetModelName(copiedNested.id))
+  assert.equal(duplicated.activeSheetId, copy.id)
+  assert.doesNotThrow(() => validateProject(duplicated))
+  assert.equal(project.sheets.length, 3)
 })
 
 test('editing a reused sheet definition updates instance pins and keeps surviving wires attached', () => {

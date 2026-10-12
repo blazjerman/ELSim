@@ -4441,6 +4441,22 @@ test('@ui-smoke reusable sheets can be renamed and reject duplicate sibling name
   await expect(page.locator('.sheet-tab.active')).toContainText('Block 2')
 })
 
+test('@ui-smoke a reusable child sheet can be duplicated independently', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await page.getByRole('button', { name: 'Sheet ports and block settings' }).click()
+  await page.getByRole('button', { name: 'Duplicate sheet' }).click()
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 2')
+  await expect(page.locator('.sheet-tab')).toHaveCount(3)
+  await expect.poll(() => page.evaluate(() => { const saved = localStorage.getItem('elsim:project:v7'); return saved ? JSON.parse(saved).sheets.map((sheet: { name: string }) => sheet.name) : null })).toEqual(['Main circuit', 'Block 1', 'Block 2'])
+  await page.getByRole('button', { name: 'Done' }).click()
+  await page.keyboard.press('Control+z')
+  await expect(page.locator('.sheet-tab')).toHaveCount(2)
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 1')
+})
+
 test('@ui-smoke an unused child sheet can be deleted after confirmation', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Add sheet' }).click()

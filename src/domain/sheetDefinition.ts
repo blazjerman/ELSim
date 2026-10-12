@@ -1,5 +1,5 @@
 import { componentPins } from './geometry'
-import type { Project, ProjectSheet } from './project'
+import { sheetModelName, type Project, type ProjectSheet } from './project'
 
 /** Choose a numbered child-sheet name that cannot collide with a sibling. */
 export function nextBlockSheetName(project: Project, parentSheetId: string): string {
@@ -12,6 +12,56 @@ export function nextBlockSheetName(project: Project, parentSheetId: string): str
   }
   while (names.includes(`block ${next}`)) next += 1
   return `Block ${next}`
+}
+
+/** Duplicate a reusable sheet and its nested definitions as an independent subtree. */
+export function duplicateSheetDefinition(project: Project, sheetId: string, createId: () => string = () => crypto.randomUUID()): Project {
+  const source = project.sheets.find((sheet) => sheet.id === sheetId)
+  if (!source) throw new Error(`Sheet ${sheetId} does not exist.`)
+  if (source.parentSheetId === null || source.id === project.rootSheetId) throw new Error('The root circuit cannot be duplicated as a reusable block.')
+
+  const subtree = new Set([source.id])
+  let expanded = true
+  while (expanded) {
+    expanded = false
+    for (const sheet of project.sheets) {
+      if (sheet.parentSheetId && subtree.has(sheet.parentSheetId) && !subtree.has(sheet.id)) {
+        subtree.add(sheet.id)
+        expanded = true
+      }
+    }
+  }
+  const idMap = new Map([...subtree].map((id) => [id, `sheet-${createId()}`]))
+  const rootName = nextBlockSheetName(project, source.parentSheetId)
+  const nameMap = new Map([...subtree].map((id) => [id, id === source.id ? rootName : project.sheets.find((sheet) => sheet.id === id)!.name]))
+  const clones = project.sheets.filter((sheet) => subtree.has(sheet.id)).map((sheet): ProjectSheet => ({
+    ...sheet,
+    id: idMap.get(sheet.id)!,
+    name: nameMap.get(sheet.id)!,
+    parentSheetId: sheet.id === source.id ? source.parentSheetId : idMap.get(sheet.parentSheetId!)!,
+    parts: sheet.parts.map((part) => {
+      const childId = part.sheetId ? idMap.get(part.sheetId) : undefined
+      return {
+        ...part,
+        id: `p-${createId()}`,
+        ...(childId ? { sheetId: childId, value: nameMap.get(part.sheetId!)!, modelName: sheetModelName(childId) } : {}),
+        ...(part.modelPins ? { modelPins: [...part.modelPins] } : {}),
+        ...(part.sheetPortLayout ? { sheetPortLayout: part.sheetPortLayout.map((port) => ({ ...port })) } : {}),
+        ...(part.sheetParameters ? { sheetParameters: { ...part.sheetParameters } } : {}),
+        ...(part.symbolPinOffsets ? { symbolPinOffsets: part.symbolPinOffsets.map(([x, y]) => [x, y] as [number, number]) } : {}),
+      }
+    }),
+    wires: sheet.wires.map((wire) => ({ ...wire, id: `w-${createId()}`, points: [[...wire.points[0]], [...wire.points[1]]] as [[number, number], [number, number]] })),
+    junctions: sheet.junctions.map((junction) => ({ ...junction })),
+    netLabels: sheet.netLabels.map((label) => ({ ...label, id: `label-${createId()}` })),
+    view: { ...sheet.view },
+    ports: sheet.ports.map((port) => ({ ...port, id: `port-${createId()}` })),
+    ...(sheet.parameters ? { parameters: sheet.parameters.map((parameter) => ({ ...parameter, id: `param-${createId()}` })) } : {}),
+  }))
+  const activeSheetId = idMap.get(source.id)!
+  const sheets = [...project.sheets, ...clones]
+  const active = sheets.find((sheet) => sheet.id === activeSheetId)!
+  return { ...project, sheets, activeSheetId, parts: active.parts, wires: active.wires, junctions: active.junctions, netLabels: active.netLabels, view: active.view }
 }
 
 /** Rename a sheet and keep all placed instances' visible names in sync. */
