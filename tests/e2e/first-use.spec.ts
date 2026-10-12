@@ -209,7 +209,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   const search = dialog.getByRole('textbox', { name: 'Find an example' })
   const cards = dialog.locator('.example-list article')
-  await expect(cards).toHaveCount(23)
+  await expect(cards).toHaveCount(24)
   await search.fill('P-JFET')
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('P-JFET positive-rail switch')
@@ -219,7 +219,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   await search.fill('no such circuit')
   await expect(dialog.getByRole('status')).toContainText('No examples found')
   await dialog.getByRole('button', { name: 'Clear example search' }).click()
-  await expect(cards).toHaveCount(23)
+  await expect(cards).toHaveCount(24)
 })
 
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -2248,6 +2248,25 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await expect(page.getByLabel('Guided example')).toContainText('operating-point table')
   await expectAvailableTrace(page, 'V(vout)')
   await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*5\.000000 V/i })).toBeVisible()
+})
+
+test('imported op-amp lesson opens its IC model and solves the feedback gain', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Imported op-amp IC' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Imported op-amp IC')
+  await expect(page.getByLabel('Guided example')).toContainText('five-pin op-amp')
+  await expect(page.locator('.imported-symbol-art text').filter({ hasText: 'EDUCATIONAL OP-AMP' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'XU1')?.modelPins)).toEqual(['INP', 'INM', 'VPOS', 'VNEG', 'OUT'])
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(VOUT)')
+  const table = page.locator('.plot-window').last().locator('.op-table')
+  await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('1.499')
 })
 
 test('potentiometer example adjusts the simulated output with its wiper', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

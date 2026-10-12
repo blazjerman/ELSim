@@ -1,5 +1,69 @@
 import { componentPins } from './geometry'
 import { createStarterProject, sheetModelName, type Part, type Project, type ProjectSheet } from './project'
+import { importedSubcircuitComponentDefinition } from './componentDefinitions'
+import { parseSubcircuitLibrary } from './subcircuitLibrary'
+import { parseLtspiceSymbol } from './ltspiceSymbol'
+import { educationalOpampLibrary, educationalOpampSymbol } from './educationalOpamp'
+
+const educationalOpampLibrarySha256 = '80d08a37e8dd734b66cbe9a2f0afd2a72e395de6b984ffc6148a652b0131418e'
+
+/** A beginner-friendly user IC example using the original ELSim educational op-amp model. */
+export function createImportedOpampExampleProject(): Project {
+  const project = createStarterProject()
+  const library = {
+    id: 'example-opamp-library', filename: 'user-opamp.lib', content: educationalOpampLibrary,
+    sha256: educationalOpampLibrarySha256, licenseStatus: 'unknown' as const, importedAt: '2026-10-12T00:00:00.000Z',
+  }
+  const symbol = {
+    id: 'example-opamp-symbol', filename: 'educational-opamp.asy', content: educationalOpampSymbol,
+    sha256: 'a651b4aae2eafe57988545728337897ac9f5c437e0ec7212ced961ea6279791d',
+    licenseStatus: 'unknown' as const, importedAt: '2026-10-12T00:00:00.000Z',
+  }
+  const parsedSymbol = parseLtspiceSymbol(symbol.content, symbol.filename)
+  const model = parseSubcircuitLibrary(library.content).subcircuits.find((candidate) => candidate.name === 'ELSIM_EDU_OPAMP')
+  if (!model) throw new Error('The educational op-amp example library is missing its subcircuit.')
+  const part: Part = {
+    id: 'example-opamp-xu1', kind: 'subcircuit', ref: 'XU1', value: model.name, modelName: model.name,
+    componentDefinitionId: importedSubcircuitComponentDefinition(model, { assetId: library.id, filename: library.filename, sha256: library.sha256 }).id,
+    modelPins: [...model.pins], modelParameters: {}, symbolAssetId: symbol.id,
+    symbolPinOffsets: parsedSymbol.pins.map(({ x, y }) => [x, y]),
+    x: 520, y: 400, rotation: 0,
+  }
+  const input: Part = { id: 'example-opamp-vin', kind: 'source', ref: 'VIN', value: '0.5 V', sourceMode: 'dc', x: 240, y: 400, rotation: 0 }
+  const positiveSupply: Part = { id: 'example-opamp-vcc', kind: 'source', ref: 'VCC', value: '5 V', sourceMode: 'dc', x: 520, y: 270, rotation: 0 }
+  const negativeSupply: Part = { id: 'example-opamp-vee', kind: 'source', ref: 'VEE', value: '5 V', sourceMode: 'dc', x: 700, y: 270, rotation: 0 }
+  const feedback: Part = { id: 'example-opamp-rf', kind: 'resistor', ref: 'RF', value: '20 kΩ', x: 720, y: 320, rotation: 90 }
+  const lower: Part = { id: 'example-opamp-rg', kind: 'resistor', ref: 'RG', value: '10 kΩ', x: 360, y: 460, rotation: 0 }
+  const load: Part = { id: 'example-opamp-rload', kind: 'resistor', ref: 'RLOAD', value: '10 kΩ', x: 680, y: 500, rotation: 90 }
+  const parts = [input, positiveSupply, negativeSupply, part, feedback, lower, load]
+  const pins = new Map(parts.map((item) => [item.id, componentPins(item)]))
+  const label = (id: string, name: string, partId: string, pinIndex: number) => {
+    const pin = pins.get(partId)![pinIndex]
+    return { id, name, x: pin.x, y: pin.y, visible: true }
+  }
+  project.name = 'Imported op-amp IC'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    label('example-opamp-vin-source', 'VIN', input.id, 0), label('example-opamp-vin-pin', 'VIN', part.id, 0),
+    label('example-opamp-vcc-pin', 'VPOS', part.id, 2), label('example-opamp-vcc-source', 'VPOS', positiveSupply.id, 0),
+    label('example-opamp-vee-pin', 'VNEG', part.id, 3), label('example-opamp-vee-source', 'VNEG', negativeSupply.id, 1),
+    label('example-opamp-ground-input', '0', input.id, 1), label('example-opamp-ground-vcc', '0', positiveSupply.id, 1),
+    label('example-opamp-ground-vee', '0', negativeSupply.id, 0),
+    label('example-opamp-feedback-out', 'VOUT', part.id, 4), label('example-opamp-feedback-rf', 'VOUT', feedback.id, 0),
+    label('example-opamp-feedback-xu1', 'FB', part.id, 1), label('example-opamp-feedback-rf-rg', 'FB', feedback.id, 1), label('example-opamp-feedback-rg', 'FB', lower.id, 0),
+    label('example-opamp-ground-rg', '0', lower.id, 1), label('example-opamp-load-out', 'VOUT', load.id, 0), label('example-opamp-load-ground', '0', load.id, 1),
+  ]
+  project.modelAssets = [library]
+  project.symbolAssets = [symbol]
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(FB)', 'V(VOUT)', 'I(RLOAD)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -20, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
 
 export function createLedExampleProject(): Project {
   const project = createStarterProject()
