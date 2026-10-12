@@ -423,6 +423,39 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await expect(page.getByRole('complementary', { name: 'Component library' })).toBeVisible()
   await expect(page.getByRole('main', { name: 'Schematic workspace' })).toBeVisible()
   await expect(page.getByRole('complementary', { name: 'Properties inspector' })).toBeVisible()
+  const contrastRatios = await page.evaluate(() => {
+    const luminance = (color: string) => {
+      const channels = color.match(/[\d.]+/g)?.slice(0, 3).map(Number)
+      if (!channels || channels.length !== 3) throw new Error(`Cannot parse rendered color: ${color}`)
+      const linear = channels.map((channel) => {
+        const value = channel / 255
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      })
+      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
+    }
+    const ratio = (foreground: string, background: string) => {
+      const [light, dark] = [luminance(foreground), luminance(background)].sort((a, b) => b - a)
+      return Number(((light + 0.05) / (dark + 0.05)).toFixed(2))
+    }
+    const colorPair = (foreground: Element | null, background: Element | null) => {
+      if (!foreground || !background) throw new Error('A contrast sample is missing from the rendered workspace')
+      return ratio(getComputedStyle(foreground).color, getComputedStyle(background).backgroundColor)
+    }
+    const card = document.querySelector('.component-card')
+    const button = document.querySelector('.run-button')
+    return {
+      bodyText: colorPair(document.querySelector('body'), document.documentElement),
+      componentLabel: colorPair(card?.querySelector('.component-label') ?? null, card),
+      componentSubtitle: colorPair(card?.querySelector('.component-subtitle') ?? null, card),
+      runButton: colorPair(button, button),
+      toolbarText: colorPair(document.querySelector('.project-title'), document.querySelector('.topbar')),
+    }
+  })
+  expect(contrastRatios.bodyText, 'body text must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
+  expect(contrastRatios.componentLabel, 'component labels must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
+  expect(contrastRatios.componentSubtitle, 'component subtitles must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
+  expect(contrastRatios.runButton, 'Run button text must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
+  expect(contrastRatios.toolbarText, 'toolbar text must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
   const expectNamedFormControls = async () => {
     const unnamed = await page.locator('input:not([type="hidden"]), select, textarea, [role="textbox"], [role="combobox"], [role="checkbox"], [role="radio"], [role="switch"], [role="slider"], [role="spinbutton"]').evaluateAll((controls) => controls.flatMap((control) => {
       const element = control as HTMLElement & { labels?: NodeListOf<HTMLLabelElement> }
