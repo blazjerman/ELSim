@@ -421,7 +421,7 @@ function SimulationPlaybackControls({ axis, available, running, onRunningChange 
   return <div className="menu-group playback-controls" role="group" aria-label="Result playback">
     <IconButton title={running ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!running && (sampleIndex ?? 0) >= (axis?.length ?? 1) - 1) setSimulationCursor(0); onRunningChange(!running) }} active={running} disabled={!available}>{running ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton>
     <IconButton title="Rewind result playback to the first solved sample" onClick={() => { onRunningChange(false); setSimulationCursor(0) }} disabled={!available}><RotateCcw size={14}/></IconButton>
-    {axis?.length ? <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" type="range" min="0" max={axis.length - 1} step="1" value={activeSample} disabled={!available} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><output>{axis[activeSample].toPrecision(4)} s</output></label> : null}
+    {axis?.length ? <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" aria-valuetext={`${axis[activeSample].toPrecision(4)} seconds`} type="range" min="0" max={axis.length - 1} step="1" value={activeSample} disabled={!available} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><output>{axis[activeSample].toPrecision(4)} s</output></label> : null}
   </div>
 }
 
