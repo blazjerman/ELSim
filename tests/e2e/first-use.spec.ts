@@ -1681,7 +1681,7 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 854)
 })
 
-test('global simulation temperature is passed to ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('global simulation temperature is passed to ngspice', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
@@ -4256,7 +4256,7 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   await expect(cursorLabels.nth(0)).toHaveText(await cursorLabels.nth(1).innerText())
 })
 
-test('noise analysis runs in browser ngspice and plots output noise density', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('noise analysis runs in browser ngspice and plots output noise density', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
   await page.locator('svg.schematic').click({ position: { x: 700, y: 80 } })
@@ -4267,10 +4267,37 @@ test('noise analysis runs in browser ngspice and plots output noise density', { 
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expect(page.locator('.plot-window')).toContainText('Noise spectral density')
   await expect(page.locator('.plot-window')).toContainText('Output noise')
-  await expect(page.locator('.plot-window')).toContainText('V/√Hz')
+  await expect(page.locator('.plot-window')).toContainText('Input-referred noise')
+  await expect(page.locator('.plot-window')).toContainText('Noise density · mixed units')
+  const plot = page.locator('.plot-window').last()
+  const chart = plot.getByRole('group', { name: /Noise density from/ })
+  await chart.click({ position: { x: (await chart.boundingBox())!.width * 0.55, y: 40 } })
+  await expect(plot.locator('.cursor-readout')).toContainText('V/√Hz')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlist = await page.locator('.netlist-modal pre').innerText()
   expect(netlist).toMatch(/\.noise V\(vout\) V1 dec 10 1 1Meg/i)
+})
+
+test('current-source noise analysis picks the circuit node and labels input noise in amperes', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Current source and load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.locator('svg.schematic').click({ position: { x: 700, y: 80 } })
+  await page.getByLabel('Analysis type', { exact: true }).selectOption('noise')
+  await expect(page.getByLabel('Output node')).toHaveValue('OUT')
+  await expect(page.getByLabel('Input source')).toHaveValue('I1')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const plot = page.locator('.plot-window').last()
+  await expect(plot).toContainText('Output noise')
+  await expect(plot).toContainText('Input-referred noise')
+  await expect(plot).toContainText('Noise density · mixed units')
+  const chart = plot.getByRole('group', { name: /Noise density from/ })
+  await chart.click({ position: { x: (await chart.boundingBox())!.width * 0.55, y: 40 } })
+  await expect(plot.locator('.cursor-readout')).toContainText('A/√Hz')
 })
 
 test('DC sweep waveform supports source cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

@@ -36,6 +36,19 @@ test('noise analysis generates ngspice settings and biases the selected input so
   assert.equal(validateAnalysisSettings(project).find((error) => error.field === 'noiseStartFrequency')?.field, 'noiseStartFrequency')
 })
 
+test('noise analysis defaults to a labeled non-ground node and available current source', () => {
+  const project = createCurrentSourceExampleProject()
+  project.simulation.analysis = 'noise'
+  project.simulation.noiseSweep = undefined
+  const validated = validateProject(project)
+  assert.equal(validated.simulation.noiseSweep.outputNode, 'OUT')
+  assert.equal(validated.simulation.noiseSweep.inputSource, 'I1')
+  const artifact = createNetlistArtifact(validated)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^I1 0 OUT DC 1m AC 1m 0$/m)
+  assert.match(artifact.text, /^\.noise V\(OUT\) I1 dec 10 1 1Meg$/im)
+})
+
 test('global temperature emits one top-level SPICE directive and is validated in Celsius', () => {
   const project = createStarterProject()
   project.simulation.temperature = '85'

@@ -2161,7 +2161,15 @@ export default function App() {
   const capacitorParts = useMemo(() => project.parts.filter((part) => part.kind === 'capacitor'), [project.parts])
   const inductorParts = useMemo(() => project.parts.filter((part) => part.kind === 'inductor'), [project.parts])
   const labeledNodeNames = useMemo(() => [...new Set(project.netLabels.map((label) => label.name).filter((name) => name !== '0'))], [project.netLabels])
-  const changeAnalysis = (analysis: Project['simulation']['analysis']) => setProject((current) => ({ ...current, simulation: { ...current.simulation, analysis, ...(analysis === 'noise' && !current.simulation.noiseSweep ? { noiseSweep: { outputNode: current.netLabels.find((label) => label.name.toLowerCase() === 'vout')?.name ?? current.netLabels[0]?.name ?? 'vout', inputSource: current.parts.find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' } } : {}) } }))
+  const changeAnalysis = (analysis: Project['simulation']['analysis']) => setProject((current) => {
+    if (analysis !== 'noise') return { ...current, simulation: { ...current.simulation, analysis } }
+    const nodes = [...new Set(current.netLabels.map((label) => label.name).filter((name) => name !== '0'))]
+    const sources = current.parts.filter((part) => part.kind === 'source' || part.kind === 'currentSource')
+    const existing = current.simulation.noiseSweep
+    const outputNode = nodes.find((name) => name.toLowerCase() === existing?.outputNode.toLowerCase()) ?? nodes.find((name) => name.toLowerCase() === 'vout') ?? nodes[0] ?? 'vout'
+    const inputSource = sources.find((part) => part.ref.toLowerCase() === existing?.inputSource.toLowerCase())?.ref ?? sources[0]?.ref ?? 'V1'
+    return { ...current, simulation: { ...current.simulation, analysis, noiseSweep: { scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz', ...existing, outputNode, inputSource } } }
+  })
   const updateNoiseSweep = (patch: Partial<NonNullable<Project['simulation']['noiseSweep']>>) => setProject((current) => ({ ...current, simulation: { ...current.simulation, noiseSweep: { outputNode: 'vout', inputSource: 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz', ...current.simulation.noiseSweep, ...patch } } }))
   const selected = selection?.kind === 'part' ? partsById.get(selection.id) ?? null : null
   const selectedParts = useMemo(() => {
@@ -2890,7 +2898,7 @@ export default function App() {
           })[0]
           initialTraces = varying?.map((trace) => trace.id) ?? []
         }
-        if (!initialTraces.length && response.result.analysis === 'noise') initialTraces = response.result.traces.filter((trace) => trace.id === 'onoise_spectrum').map((trace) => trace.id)
+        if (!initialTraces.length && response.result.analysis === 'noise') initialTraces = response.result.traces.filter((trace) => trace.id === 'onoise_spectrum' || trace.id === 'inoise_spectrum').map((trace) => trace.id)
         if (!initialTraces.length && response.result.analysis !== 'noise') initialTraces = response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.baseId ?? trace.id)).slice(0, response.result.analysis === 'op' ? undefined : response.result.analysis === 'dc' ? undefined : 2).map((trace) => trace.id)
         setSelectedTraceIds(initialTraces)
         savePlotSettings((settings) => ({ ...settings, selectedTraceIds: initialTraces }))
