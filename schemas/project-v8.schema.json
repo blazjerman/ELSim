@@ -551,6 +551,11 @@
           "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
           "description": "Magnetic coupling coefficient greater than zero and at most one for the built-in coupled-inductor transformer."
         },
+        "seriesResistance": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional nonnegative series resistance (ohms) for capacitor ESR or inductor winding loss."
+        },
         "wiperPosition": {
           "type": "string",
           "maxLength": 64,

@@ -1483,6 +1483,16 @@ test('uppercase C places a polarized capacitor with editable polarity marks', as
   await expect(toggle).toBeChecked()
   await toggle.uncheck()
   await expect(page.locator('.circuit-part[data-polarized="true"]')).toHaveCount(0)
+  const esr = page.getByRole('textbox', { name: 'Capacitor equivalent series resistance' })
+  await esr.fill('-1 Ω')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(esr).toBeFocused()
+  await esr.fill('50 mΩ')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-c1').seriesResistance)).toBe('50 mΩ')
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  const netlist = await page.locator('.netlist-panel pre').innerText()
+  expect(netlist).toMatch(/^RC1_ESR vout __ELSIM_p-c1_ESR 50m$/m)
+  expect(netlist).toMatch(/^C1 __ELSIM_p-c1_ESR 0 10u$/m)
 })
 
 test('r rotates a selected part and component shortcuts do not replace an active selection', async ({ page }) => {

@@ -23,6 +23,32 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('capacitor ESR and inductor winding resistance netlist in series while preserving ideal defaults', () => {
+  const project = createRlcExampleProject()
+  const ideal = createNetlistArtifact(project)
+  assert.deepEqual(ideal.diagnostics, [])
+  assert.match(ideal.text, /^L1 R_L L_C 10m$/m)
+  assert.match(ideal.text, /^C1 L_C 0 100u$/m)
+  project.parts.find((part) => part.ref === 'L1').seriesResistance = '2 Ω'
+  project.parts.find((part) => part.ref === 'C1').seriesResistance = '50 mΩ'
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^RL1_ESR R_L __ELSIM_rlc_l1_ESR 2$/m)
+  assert.match(artifact.text, /^L1 __ELSIM_rlc_l1_ESR L_C 10m$/m)
+  assert.match(artifact.text, /^RC1_ESR L_C __ELSIM_rlc_c1_ESR 50m$/m)
+  assert.match(artifact.text, /^C1 __ELSIM_rlc_c1_ESR 0 100u$/m)
+  assert.equal(artifact.sourceMap.filter((source) => source.sourceId === 'rlc-l1' && source.role === 'component').length, 2)
+  assert.equal(artifact.sourceMap.filter((source) => source.sourceId === 'rlc-c1' && source.role === 'component').length, 2)
+})
+
+test('series resistance must be a nonnegative numeric resistance', () => {
+  const project = createRlcExampleProject()
+  project.parts.find((part) => part.ref === 'L1').seriesResistance = '-1 Ω'
+  assert.throws(() => validateProject(project), /series resistance must be a nonnegative numeric resistance/i)
+  project.parts.find((part) => part.ref === 'L1').seriesResistance = 'not a resistance'
+  assert.throws(() => validateProject(project), /series resistance must be a nonnegative numeric resistance/i)
+})
+
 test('noise analysis generates ngspice settings and biases the selected input source for AC noise', () => {
   const project = createStarterProject()
   project.simulation.analysis = 'noise'

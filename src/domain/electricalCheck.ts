@@ -122,6 +122,10 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         detail,
         partId: topLevelInstanceId,
       })
+      if ((part.kind === 'capacitor' || part.kind === 'inductor') && part.seriesResistance !== undefined) {
+        const resistance = componentMagnitude(part.seriesResistance, 'resistor')
+        if (resistance === null || resistance < 0) invalidValue('Enter a nonnegative numeric series resistance with an optional SI prefix, such as 0.2 Ω or 50 mΩ.')
+      }
       if (part.kind === 'source' && (part.sourceMode === undefined || part.sourceMode === 'dc') && componentMagnitude(part.value, part.kind) === null && !isSheetParameter(part.value)) {
         invalidValue('Enter a numeric voltage with an optional SI prefix, or use a parameter declared on this sheet.')
       } else if (part.kind === 'currentSource' && componentMagnitude(part.value, part.kind) === null && !isSheetParameter(part.value)) {

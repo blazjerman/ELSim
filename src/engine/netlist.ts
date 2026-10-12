@@ -668,7 +668,32 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${negative} ${value}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
+      let elementPositive = positive
+      if ((part.kind === 'capacitor' || part.kind === 'inductor') && part.seriesResistance !== undefined) {
+        const resistance = spiceScalar(part.seriesResistance, '')
+        const resistanceMagnitude = componentMagnitude(part.seriesResistance, 'resistor')
+        if (resistance === null || resistanceMagnitude === null || resistanceMagnitude < 0) {
+          const message = `${part.ref} series resistance must be a nonnegative numeric resistance.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        if (resistanceMagnitude > 0) {
+          const referenceBase = `R${part.ref.slice(0, 24)}_ESR`
+          let seriesReference = referenceBase
+          let suffix = 2
+          while (usedReferences.has(seriesReference.toLowerCase())) seriesReference = `${referenceBase}_${suffix++}`
+          usedReferences.add(seriesReference.toLowerCase())
+          const nodeBase = `__ELSIM_${part.id.slice(0, 32).replace(/[^A-Za-z0-9_]/g, '_')}_ESR`
+          let internalNode = nodeBase
+          let nodeSuffix = 2
+          while (usedNodes.has(internalNode.toLowerCase())) internalNode = `${nodeBase}_${nodeSuffix++}`
+          usedNodes.add(internalNode.toLowerCase())
+          append(`${seriesReference} ${positive} ${internalNode} ${resistance}`, part.id, 'component')
+          elementPositive = internalNode
+        }
+      }
+      append(`${part.ref} ${elementPositive} ${negative} ${value}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led') {
       const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
