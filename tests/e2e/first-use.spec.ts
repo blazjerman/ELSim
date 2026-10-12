@@ -1181,7 +1181,10 @@ test('connection inspector uses ordered, friendly pin labels from component defi
   examples = page.getByRole('dialog', { name: 'Open a working circuit' })
   await examples.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
-  await page.locator('.circuit-part[data-part-id="switch-q1"]').click()
+  const npn = page.locator('.circuit-part[data-part-id="switch-q1"]')
+  await expect(npn.locator('line[x1="-10"][y1="-22"][x2="-10"][y2="22"]')).toHaveCount(1)
+  await expect(npn.locator('path[d="M11 24L22 38M22 38L21 30M22 38L14 37"]')).toHaveCount(1)
+  await npn.click()
   await expect(page.locator('.form-section').filter({ has: page.getByText('CONNECTIONS') })).toContainText('Collector current is positive into the collector')
 })
 
