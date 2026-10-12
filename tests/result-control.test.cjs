@@ -46,8 +46,9 @@ test('AC result control avoids unsupported capacitor and inductor branch-current
 })
 
 test('AC result control removes generated hierarchy current saves so node voltages remain available', () => {
-  const ac = addResultControl('.save i(l.x1_t1_p)\n.save i(l.x1_t1_s)\nV1 in 0 AC 1\n.ac dec 20 10 1meg\n.end')
-  assert.doesNotMatch(ac, /^\.save\b/m)
+  const ac = addResultControl('.save v(x1.mid)\n.save i(l.x1_t1_p)\n.save i(l.x1_t1_s)\n.save @r.x1.rload[i]\nV1 in 0 AC 1\n.ac dec 20 10 1meg\n.end')
+  assert.match(ac, /^\.save v\(x1\.mid\)$/m)
+  assert.doesNotMatch(ac, /^\.save (?:i\(|@r\.x1\.rload)/m)
   assert.match(ac, /ac dec 20 10 1meg\nwrite \/result\.raw all/)
 })
 

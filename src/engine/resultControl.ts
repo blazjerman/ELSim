@@ -124,7 +124,8 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   commands.push('quit', '.endc', '.end')
   rows.splice(endLine, 1, ...waveformParameterRows, ...measurementRows, ...save, ...commands)
   if (analysisType === 'ac' || analysisType === 'noise') {
-    for (let index = rows.length - 1; index >= 0; index -= 1) if (/^\s*\.save\b/i.test(rows[index])) rows.splice(index, 1)
+    const currentSave = /^\s*\.save\s+(?:i\(|@[A-Za-z0-9_.]+\[(?:i|current|id|ic|ib|ie|ig|is)\])/i
+    for (let index = rows.length - 1; index >= 0; index -= 1) if (currentSave.test(rows[index])) rows.splice(index, 1)
   }
   return rows.join('\n') + '\n'
 }
