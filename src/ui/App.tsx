@@ -1227,18 +1227,30 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     if (!origin || project.parts.length < 2) return
     const horizontal = key === 'ArrowLeft' || key === 'ArrowRight'
     const sign = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1
-    const directional = project.parts.filter((part) => part.id !== id && sign * (horizontal ? part.x - origin.x : part.y - origin.y) > 0)
-    const rank = (part: Part) => {
-      const primary = Math.abs(horizontal ? part.x - origin.x : part.y - origin.y)
-      const secondary = Math.abs(horizontal ? part.y - origin.y : part.x - origin.x)
-      return primary + secondary * 2
+    const nearest = (directionalOnly: boolean) => {
+      let best: Part | undefined
+      let bestRank = Number.POSITIVE_INFINITY
+      for (const part of project.parts) {
+        if (part.id === id) continue
+        const primaryDelta = horizontal ? part.x - origin.x : part.y - origin.y
+        if (directionalOnly && sign * primaryDelta <= 0) continue
+        const secondaryDelta = horizontal ? part.y - origin.y : part.x - origin.x
+        const rank = Math.abs(primaryDelta) + Math.abs(secondaryDelta) * 2
+        if (rank < bestRank) { best = part; bestRank = rank }
+      }
+      return best
     }
-    const ordered = (directional.length ? directional : project.parts.filter((part) => part.id !== id))
-      .slice().sort((left, right) => rank(left) - rank(right))
-    const target = ordered[0]
+    const target = nearest(true) ?? nearest(false)
     if (!target) return
-    setSelectedPartIds([target.id])
-    setSelection({ kind: 'part', id: target.id })
+    const nextSelected = [target.id]
+    selectedPartIdsRef.current = nextSelected
+    updatePartUiState(nextSelected, target.id)
+    startTransition(() => {
+      setSelectedPartIds(nextSelected)
+      setSelectedWireIds([])
+      setSelectedNetLabelIds([])
+      setSelection({ kind: 'part', id: target.id })
+    })
     setView((view) => ({ ...view, panX: 380 - target.x, panY: 300 - target.y }))
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const element = [...(svg.current?.querySelectorAll<SVGGElement>('.circuit-part') ?? [])].find((part) => part.dataset.partId === target.id)
