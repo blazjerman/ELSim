@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test'
 test.use({ baseURL: 'http://127.0.0.1:4183' })
 
 test('production app shell opens offline and preserves local project edits', async ({ page, context }) => {
+  test.setTimeout(90_000)
   await page.addInitScript(() => {
     const testWindow = window as Window & { __cspViolations?: string[] }
     const storageKey = 'elsim:test:csp-violations'
@@ -29,6 +30,11 @@ test('production app shell opens offline and preserves local project edits', asy
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true)
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', /manifest\.webmanifest$/)
   await expect.poll(() => page.evaluate(async () => (await (await fetch('/manifest.webmanifest')).json()).name)).toBe('ELSim Circuit Workbench')
+  const cachedRuntime = await page.evaluate(async () => {
+    const [moduleResponse, wasmResponse] = await Promise.all([fetch('/engine/ngspice.mjs'), fetch('/engine/ngspice.wasm')])
+    return { moduleOk: moduleResponse.ok, wasmOk: wasmResponse.ok, wasmType: wasmResponse.headers.get('content-type') }
+  })
+  expect(cachedRuntime).toEqual({ moduleOk: true, wasmOk: true, wasmType: 'application/wasm' })
 
   await page.locator('svg.schematic .circuit-part').filter({ has: page.locator('.part-ref', { hasText: 'R1' }) }).click()
   const valueField = page.getByLabel('Resistance (Ω)', { exact: true })
@@ -36,12 +42,22 @@ test('production app shell opens offline and preserves local project edits', asy
   await valueField.fill('2.2k')
   await valueField.press('Enter')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-r1')?.value)).toBe('2.2k')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
 
   await context.setOffline(true)
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
   await expect(page.locator('svg.schematic .circuit-part.selected .part-ref')).toHaveText('R1')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'p-r1')?.value)).toBe('2.2k')
+  const offlineRuntime = await page.evaluate(async () => {
+    const [moduleResponse, wasmResponse] = await Promise.all([fetch('/engine/ngspice.mjs', { method: 'HEAD' }), fetch('/engine/ngspice.wasm', { method: 'HEAD' })])
+    return { moduleOk: moduleResponse.ok, moduleType: moduleResponse.headers.get('content-type'), wasmOk: wasmResponse.ok, wasmType: wasmResponse.headers.get('content-type') }
+  })
+  expect(offlineRuntime).toEqual({ moduleOk: true, moduleType: 'text/javascript', wasmOk: true, wasmType: 'application/wasm' })
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(/5 result vectors/)).toBeVisible()
 
   await page.getByRole('button', { name: 'Examples' }).click()
   const examples = page.getByRole('dialog', { name: 'Open a working circuit' })

@@ -11,6 +11,7 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build && node tools/check-web-build.mjs",
+    "build:offline": "npm run typecheck && vite build --mode offline",
     "build:pages": "npm run typecheck && npm run check:pages-base",
     "test": "node tests/run-netlist-tests.cjs",
     "test:e2e": "playwright test",
