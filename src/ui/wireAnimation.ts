@@ -58,7 +58,11 @@ function tick(now: number) {
   for (const [key, config] of configurations) {
     const element = elements.get(key)
     if (!element || config.magnitude <= 1e-12) continue
-    const phase = (phases.get(key) ?? 0) + elapsed * 18 * config.speed * Math.min(1, Math.sqrt(config.magnitude / 0.01)) * (config.forward ? 1 : -1)
+    // Stronger simulated current moves the dots faster, while the speed
+    // control stays a global multiplier. The square-root response keeps
+    // useful motion visible across typical circuit current magnitudes.
+    const currentFactor = Math.min(4, Math.max(0.2, Math.sqrt(config.magnitude / 0.001)))
+    const phase = (phases.get(key) ?? 0) + elapsed * 18 * config.speed * currentFactor * (config.forward ? 1 : -1)
     const wrapped = ((phase % 18) + 18) % 18
     phases.set(key, wrapped)
     element.setAttribute('stroke-dashoffset', `${-wrapped * config.scale}`)
