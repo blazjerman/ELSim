@@ -1407,7 +1407,7 @@ export default function App() {
   const [examplesOpen, setExamplesOpen] = useState(false)
   const [exampleQuery, setExampleQuery] = useState('')
   const [pendingExample, setPendingExample] = useState<ExampleId | null>(null)
-  const [exampleLesson, setExampleLesson] = useState<{ title: string; guidance: string } | null>(null)
+  const [exampleLesson, setExampleLesson] = useState<{ id: ExampleId; title: string; guidance: string } | null>(null)
   const [hierarchyWalkthroughStep, setHierarchyWalkthroughStep] = useState<number | null>(null)
   const [sheetSettingsOpen, setSheetSettingsOpen] = useState(false)
   const [sheetInstancePath, setSheetInstancePath] = useState<string[]>([])
@@ -1518,7 +1518,9 @@ export default function App() {
   const transientAxis = simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
   const simulationResultStale = Boolean(simulationResult && simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt)
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && !simulationResultStale)
-  const lessonNextStep = simulationResult && !simulationResultStale ? simulationResult.analysis === 'tran'
+  const lessonNextStep = simulationResult && !simulationResultStale ? exampleLesson?.id === 'voltage-divider'
+    ? 'Select R2, change its resistance to 2 kΩ in Properties, and run again. The midpoint should rise from 5 V to about 6.67 V.'
+    : simulationResult.analysis === 'tran'
     ? 'Pause playback, then move the Time slider. Click the waveform to place the cursor and read each selected voltage or current at that moment.'
     : simulationResult.analysis === 'ac'
       ? 'Click the plot to move the frequency cursor. Compare input and output magnitudes in the readout at the selected frequency.'
@@ -2819,7 +2821,7 @@ export default function App() {
       'logic-gates': { title: 'Compare basic digital logic gates', guidance: 'Run the transient. VA changes every 20 ms and VB every 10 ms, so the input pair visits all four truth-table combinations. Compare AND, OR, NAND, NOR, XOR, XNOR, and NOT. Inputs switch at 2.5 V; each output is an ideal 0 V or 5 V behavioral source.' },
       'logic-gates-3v3': { title: 'Use gates with a 3.3 V logic supply', guidance: 'Run the transient and compare A, B, and the gate outputs. This lesson uses 0 V / 3.3 V input pulses, a 1.65 V threshold, and 0 V / 3.3 V gate outputs. Select a gate to edit its threshold or output levels.' },
     } as const
-    setExampleLesson(lessons[example])
+    setExampleLesson({ id: example, ...lessons[example] })
     setSelectedTraceIds(next.plotSettings?.selectedTraceIds ?? [])
     setImportWarnings([])
     setCompatibilityDiagnostic(null)

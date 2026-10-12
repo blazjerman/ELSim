@@ -2307,9 +2307,16 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expect(page.getByLabel('Guided example')).toContainText('TRY THIS NEXT')
-  await expect(page.getByLabel('Guided example')).toContainText('operating-point table')
+  await expect(page.getByLabel('Guided example')).toContainText('Select R2, change its resistance to 2 kΩ')
   await expectAvailableTrace(page, 'V(vout)')
-  await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*5\.000000 V/i })).toBeVisible()
+  const outputRow = page.locator('.plot-window').getByRole('row', { name: /V\(vout\)/i })
+  await expect(outputRow).toContainText('5.000000 V')
+  await page.locator('.circuit-part[data-part-id="divider-r2"]').click()
+  await page.locator('[data-part-setting="divider-r2:value"]').fill('2 kΩ')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(outputRow).toContainText('6.666667 V')
 })
 
 test('imported op-amp lesson opens its IC model and solves the feedback gain', { tag: '@ngspice' }, async ({ page }) => {
