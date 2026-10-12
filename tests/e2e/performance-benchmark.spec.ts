@@ -653,23 +653,23 @@ test('record large-project editor render and selection input-to-frame timings', 
   console.log(JSON.stringify({ benchmark: 'editor-large-project-v7', browser: browserName, inputTiming: 'selection uses synthetic event dispatch; group drag uses Playwright pointer dispatch through the next animation frame', selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), fullSelectionDragInputToFrameMs: Number(groupDragInputToFrameMs.toFixed(2)), zoomInputToTwoFramesMedianMs: Number(navigationTimes[Math.floor(navigationTimes.length / 2)].toFixed(2)), zoomInputToTwoFramesP95Ms: Number(navigationTimes.at(-1)!.toFixed(2)), draggedSelectedObjects: 15_000, selectedLabelsMounted, results, transport }, null, 2))
 })
 
-test('measure selection latency in a large routed-wire schematic', async ({ page, browserName }) => {
+test('measure selection and navigation latency in a 5000-part wire schematic', async ({ page, browserName }) => {
   test.setTimeout(60_000)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    const parts = Array.from({ length: 1000 }, (_, index) => ({
+    const parts = Array.from({ length: 5000 }, (_, index) => ({
       id: `wire-bench-part-${index + 1}`, kind: 'resistor', ref: `R${index + 1}`, value: '1k',
       x: 120 + (index % 24) * 100, y: 120 + Math.floor(index / 24) * 70, rotation: 0,
     }))
-    const wires = Array.from({ length: 1200 }, (_, index) => {
+    const wires = Array.from({ length: 4900 }, (_, index) => {
       const x = 80 + (index % 32) * 24
       const y = 80 + Math.floor(index / 32) * 24
       return { id: `wire-bench-wire-${index + 1}`, points: [[x, y], [x + 20, y + 20]] }
     })
-    project.name = 'Wire rendering benchmark'
+    project.name = 'Large wire rendering benchmark'
     project.parts = parts
     project.wires = wires
     project.junctions = []
@@ -682,8 +682,13 @@ test('measure selection latency in a large routed-wire schematic', async ({ page
   })
   const started = performance.now()
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(1000)
-  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(1200)
+  const mountedPartLocator = page.locator('svg.schematic .circuit-part')
+  await expect.poll(() => mountedPartLocator.count()).toBeGreaterThan(0)
+  const mountedPartCount = await mountedPartLocator.count()
+  expect(mountedPartCount).toBeLessThan(5000)
+  const mountedWireCount = await page.locator('svg.schematic .wire-line').count()
+  expect(mountedWireCount).toBeGreaterThan(0)
+  expect(mountedWireCount).toBeLessThan(4900)
   const renderMs = performance.now() - started
   const samples = []
   for (let index = 0; index < 7; index += 1) {
@@ -701,8 +706,27 @@ test('measure selection latency in a large routed-wire schematic', async ({ page
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }))
     requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now() - started)))
   }))
-  await expect(page.getByText('Selected all 1000 components, 1200 wires, and 0 labels.')).toBeVisible()
-  expect(await page.locator('svg.schematic .circuit-part.selected').count()).toBe(1000)
-  expect(await page.locator('svg.schematic .wire-line.selected').count()).toBe(1200)
-  console.log(JSON.stringify({ benchmark: 'editor-wire-heavy-selection-v2', browser: browserName, parts: 1000, wires: 1200, wireEndpointsPerSegment: 2, renderMs: Number(renderMs.toFixed(2)), selectionMedianMs: Number(samples[3].toFixed(2)), selectionP95Ms: Number(samples[6].toFixed(2)), selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)) }, null, 2))
+  await expect(page.getByText('Selected all 5000 components, 4900 wires, and 0 labels.')).toBeVisible()
+  expect(await page.locator('svg.schematic .circuit-part.selected').count()).toBe(mountedPartCount)
+  expect(await page.locator('svg.schematic .wire-line.selected').count()).toBe(mountedWireCount)
+  const navigationSamples = []
+  for (const deltaY of [120, -120, 120, -120, 120, -120, 120]) {
+    const svg = page.locator('svg.schematic')
+    const box = await svg.boundingBox()
+    expect(box).not.toBeNull()
+    const zoomLabel = page.getByRole('button', { name: /%/ })
+    const beforeZoom = Number((await zoomLabel.innerText()).replace('%', ''))
+    const started = performance.now()
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+    await page.mouse.wheel(0, deltaY)
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+    const afterZoom = Number((await zoomLabel.innerText()).replace('%', ''))
+    navigationSamples.push({ elapsedMs: performance.now() - started, changed: beforeZoom !== afterZoom })
+  }
+  const changedNavigationSamples = navigationSamples.filter((sample) => sample.changed)
+  expect(changedNavigationSamples.length).toBeGreaterThanOrEqual(3)
+  const navigationTimes = changedNavigationSamples.map((sample) => sample.elapsedMs).sort((a, b) => a - b)
+  await page.getByTitle('Fit all circuit content in view').click()
+  await expect.poll(() => mountedPartLocator.count()).toBeGreaterThan(mountedPartCount)
+  console.log(JSON.stringify({ benchmark: 'editor-wire-heavy-navigation-v5', browser: browserName, parts: 5000, wires: 4900, mountedParts: mountedPartCount, mountedWires: mountedWireCount, wireEndpointsPerSegment: 2, renderMs: Number(renderMs.toFixed(2)), selectionMedianMs: Number(samples[3].toFixed(2)), selectionP95Ms: Number(samples[6].toFixed(2)), selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), zoomSamplesChanged: changedNavigationSamples.length, zoomInputToTwoFramesMedianMs: Number(navigationTimes[Math.floor(navigationTimes.length / 2)].toFixed(2)), zoomInputToTwoFramesP95Ms: Number(navigationTimes.at(-1)!.toFixed(2)) }, null, 2))
 })

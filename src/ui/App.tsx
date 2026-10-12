@@ -486,11 +486,13 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   viewportRight: number
   viewportBottom: number
 }) {
+  const focusedPartId = document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId
   return <>{parts.map((part) => {
     const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
     const margin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
     const detailed = part.x >= viewportLeft - margin && part.x <= viewportRight + margin && part.y >= viewportTop - margin && part.y <= viewportBottom + margin
     const animate = animationEnabled && part.kind !== 'subcircuit' && part.x >= viewportLeft - 100 && part.x <= viewportRight + 100 && part.y >= viewportTop - 100 && part.y <= viewportBottom + 100
+    if (!detailed && part.id !== focusedPartId) return null
     return <CircuitPart key={part.id} part={part} symbol={symbol} detailed={detailed} animate={animate} componentSample={componentSample} onSelect={onSelect} onPointerDown={onPointerDown} onNavigate={onNavigate} tool={tool} onProbe={onProbe} onSwitchToggle={onSwitchToggle}/>
   })}</>
 })
@@ -952,10 +954,12 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const viewWidth = viewportSize.width / view.zoom, viewHeight = viewportSize.height / view.zoom
   const viewportLeft = (380 - viewWidth / 2) - view.panX
   const viewportTop = (300 - viewHeight / 2) - view.panY
-  const animatedWireIds = useMemo(() => {
+  const visibleWires = useMemo(() => {
     const bounds = { left: viewportLeft, top: viewportTop, right: viewportLeft + viewWidth, bottom: viewportTop + viewHeight }
-    return new Set(project.wires.filter((wire) => wireSegmentOverlapsBounds(wire, bounds)).map((wire) => wire.id))
+    const focusedWireId = document.activeElement?.closest<SVGGElement>('.wire-line')?.dataset.wireId
+    return project.wires.filter((wire) => wire.id === focusedWireId || wireSegmentOverlapsBounds(wire, bounds))
   }, [project.wires, viewportLeft, viewportTop, viewWidth, viewHeight])
+  const animatedWireIds = useMemo(() => new Set(visibleWires.map((wire) => wire.id)), [visibleWires])
   const tracesByVector = useMemo(() => {
     const index = new Map<string, Trace>()
     for (const trace of simulationResult?.traces ?? []) {
@@ -1227,10 +1231,11 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     if (!target) return
     setSelectedPartIds([target.id])
     setSelection({ kind: 'part', id: target.id })
-    requestAnimationFrame(() => {
+    setView((view) => ({ ...view, panX: 380 - target.x, panY: 300 - target.y }))
+    requestAnimationFrame(() => requestAnimationFrame(() => {
       const element = [...(svg.current?.querySelectorAll<SVGGElement>('.circuit-part') ?? [])].find((part) => part.dataset.partId === target.id)
       element?.focus()
-    })
+    }))
   }
   const partEventHandlers = useRef({ beginDrag, probe: onProbe, toggleSwitch, navigatePart })
   partEventHandlers.current = { beginDrag, probe: onProbe, toggleSwitch, navigatePart }
@@ -1483,7 +1488,10 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       animatedWireIds,
     )
   }, [wireFlowSampler, resultValueAt, animatedWireIds])
-  const orderedWires = useMemo(() => hoveredWireId ? [...project.wires.filter((wire) => wire.id !== hoveredWireId), ...project.wires.filter((wire) => wire.id === hoveredWireId)] : project.wires, [project.wires, hoveredWireId])
+  const orderedWires = useMemo(() => {
+    const wires = hoveredWireId ? [...visibleWires.filter((wire) => wire.id !== hoveredWireId), ...visibleWires.filter((wire) => wire.id === hoveredWireId)] : visibleWires
+    return wires
+  }, [visibleWires, hoveredWireId])
   const renderWire = (wire: Wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireIdSet.has(wire.id)} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>
   const hoveredWire = project.wires.find((wire) => wire.id === selectedWireIds.at(-1)) ?? project.wires.find((wire) => wire.id === hoveredWireId)
   const wireConnectionDots = useMemo(() => wireConnectionDotPoints(project), [project.parts, project.wires])
