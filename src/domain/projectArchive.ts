@@ -179,7 +179,9 @@ function readEntries(bytes: Uint8Array): Map<string, Uint8Array> {
     if (localPath !== path || localFlags !== flags || localMethod !== method || localCrc !== expectedCrc || localCompressedSize !== compressedSize || localSize !== size) throw new Error(`Project archive entry ${path} has mismatched local and central headers.`)
     if (dataRanges.some((range) => localOffset < range.end && dataOffset + size > range.start)) throw new Error(`Project archive entry ${path} overlaps another entry.`)
     dataRanges.push({ start: localOffset, end: dataOffset + size, path })
-    const data = bytes.slice(dataOffset, dataOffset + size)
+    // Keep entry data as views into the already-bounded archive buffer. Copying
+    // each file here can double peak memory while opening large project files.
+    const data = bytes.subarray(dataOffset, dataOffset + size)
     if (crc32(data) !== expectedCrc) throw new Error(`Project archive entry ${path} failed its CRC integrity check.`)
     entries.set(path, data)
     offset = end
