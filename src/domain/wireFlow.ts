@@ -1,6 +1,6 @@
 import { componentPins, pointOnSegment } from './geometry'
 import type { Connectivity } from './connectivity'
-import type { Part, Project } from './project'
+import type { Part, Project, Wire } from './project'
 
 export type WireCurrentFlow = { forward: boolean; magnitude: number }
 export type WireCurrentFlowSegment = WireCurrentFlow & { points: [number, number][] }
@@ -207,14 +207,48 @@ export function createWireCurrentFlowSampler(
     if (componentIndex !== undefined) pinsByComponent[componentIndex].push(flowPin)
   }
 
-  return (currentForPart, currentForPin, wireIds) => {
-    const requestedWires = wireIds ? project.wires.filter((wire) => wireIds.has(wire.id)) : project.wires
-    const result = new Map(requestedWires.map((wire) => [wire.id, [] as WireCurrentFlowSegment[]]))
-    const requestedComponents = new Set<number>()
-    for (const wire of requestedWires) for (const edge of edgesByWire.get(wire.id) ?? []) {
+  // Viewport culling passes the same visible-wire set for every playback
+  // sample. Resolve that set to its wires and connected graph components once
+  // rather than scanning every wire and edge on every animation frame.
+  const wireById = new Map(project.wires.map((wire) => [wire.id, wire]))
+  const componentByWire = new Map<string, number>()
+  for (const [wireId, wireEdges] of edgesByWire) {
+    for (const edge of wireEdges) {
       const componentIndex = componentByNode.get(edge.from)
-      if (componentIndex !== undefined) requestedComponents.add(componentIndex)
+      if (componentIndex !== undefined) {
+        componentByWire.set(wireId, componentIndex)
+        break
+      }
     }
+  }
+  let cachedWireIds: ReadonlySet<string> | undefined
+  let cachedRequestedWires: Wire[] | undefined
+  let cachedRequestedComponents: Set<number> | undefined
+
+  return (currentForPart, currentForPin, wireIds) => {
+    let requestedWires: Wire[]
+    let requestedComponents: Set<number>
+    if (!wireIds) {
+      requestedWires = project.wires
+      requestedComponents = new Set(componentByWire.values())
+    } else if (wireIds === cachedWireIds && cachedRequestedWires && cachedRequestedComponents) {
+      requestedWires = cachedRequestedWires
+      requestedComponents = cachedRequestedComponents
+    } else {
+      requestedWires = []
+      requestedComponents = new Set<number>()
+      for (const id of wireIds) {
+        const wire = wireById.get(id)
+        if (!wire) continue
+        requestedWires.push(wire)
+        const componentIndex = componentByWire.get(id)
+        if (componentIndex !== undefined) requestedComponents.add(componentIndex)
+      }
+      cachedWireIds = wireIds
+      cachedRequestedWires = requestedWires
+      cachedRequestedComponents = requestedComponents
+    }
+    const result = new Map(requestedWires.map((wire) => [wire.id, [] as WireCurrentFlowSegment[]]))
     const injections = new Map<string, Injection[]>()
     for (const componentIndex of requestedComponents) {
       for (const { part, pinIndex, key } of pinsByComponent[componentIndex]) {

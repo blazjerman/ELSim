@@ -323,3 +323,7 @@ Worker-produced traces all reference the same immutable axis array. Transient cu
 ### Large-schematic zoom latency (2026-10-12)
 
 Firefox on the documented i7-12700F host measured pointer-wheel zoom on a 5,000-part / 10,000-label schematic through two animation frames. Before viewport-state isolation, median/p95 were 148/175 ms. Live zoom and pan state now updates inside the schematic; the view is committed to the project after 200 ms of inactivity, and its pending value is included in project export and autosave. One same-host run after the change measured 17/40 ms median/p95, an 88% median and 77% p95 reduction. The focused Firefox regression checks wheel zoom and middle-button pan, waits for persistence, reloads, and verifies the restored viewBox. Typecheck and the focused browser regression pass. This is one before/after pair, not a release budget; a full build or WASM rebuild was not run.
+
+### Visible-wire current sampling (2026-10-12)
+
+The wire-flow sampler now resolves a stable visible-wire set to its wire objects and connected graph components once, then reuses that selection on subsequent cursor samples. Current injections and branch flow magnitudes are still recalculated per sample. This removes a scan of every project wire from each playback frame on large sheets. The focused wire-flow suite verifies both cached-set reuse and updated values as current changes; TypeScript checking passes. A per-frame browser timing comparison has not yet been recorded, so no numeric speedup is claimed.

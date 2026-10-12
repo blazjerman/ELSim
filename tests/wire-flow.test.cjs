@@ -60,6 +60,9 @@ test('a precomputed wire sampler updates flow values across playback samples', (
   const visibleOnly = sample((part) => secondCurrents.get(part.ref), undefined, new Set(['w-1']))
   assert.deepEqual([...visibleOnly.keys()], ['w-1'])
   assert.deepEqual(visibleOnly.get('w-1'), second.get('w-1'))
+  const reusedVisibleSet = new Set(['w-1'])
+  assert.equal(sample((part) => secondCurrents.get(part.ref), undefined, reusedVisibleSet).get('w-1')[0].magnitude, 0.002)
+  assert.equal(sample((part) => part.ref === 'R1' ? 0.001 : undefined, undefined, reusedVisibleSet).get('w-1')[0].magnitude, 0.001)
 })
 
 test('visible-wire sampling skips disconnected wire networks but keeps their full-circuit results', () => {
