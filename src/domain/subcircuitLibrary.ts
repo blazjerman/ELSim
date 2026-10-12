@@ -86,7 +86,7 @@ function logicalLines(source: string): LogicalLine[] {
   return result
 }
 
-function inspectLibrarySections(source: string): { sections: string[]; lines: { line: LogicalLine; section: string | null }[] } {
+function inspectLibrarySections(source: string): { sections: string[]; lines: { line: LogicalLine; section: string | null }[]; logical: LogicalLine[] } {
   const sourceLines = logicalLines(source)
   if (sourceLines.length > MAX_LIBRARY_LINES) throw new Error('Model libraries are limited to 100,000 lines.')
   const sections: string[] = []
@@ -125,7 +125,7 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     lines.push({ line, section: activeSection })
   }
   if (activeSection) throw new Error(`.LIB ${activeSection} has no matching .ENDL.`)
-  return { sections, lines }
+  return { sections, lines, logical: sourceLines }
 }
 
 /** List safe, named .LIB sections without interpreting model contents. */
@@ -355,7 +355,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
   if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
   const inspected = inspectLibrarySections(source)
-  const logical = logicalLines(source)
+  const logical = inspected.logical
   if (logical.length > MAX_LIBRARY_LINES) throw new Error('Model libraries are limited to 100,000 lines.')
   let selected = selectedSections
   if (inspected.sections.length > 1 && !selected) throw new Error('This model library contains multiple .LIB sections. Select the section or sections referenced by your schematic before importing it.')
