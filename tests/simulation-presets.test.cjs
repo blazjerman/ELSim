@@ -31,3 +31,14 @@ test('transient presets accept SPICE time suffixes and reject invalid stop times
   assert.equal(transientPresetMaxStep('bad-time', 'standard'), null)
   assert.equal(transientPresetMaxStep('{TSTOP}', 'standard'), null)
 })
+
+test('transient presets size the retained interval when a start-saving time is set', () => {
+  assert.equal(transientPresetMaxStep('100 ms', 'detailed', '20 ms'), '1.600000e-5 s')
+  assert.equal(transientPresetMaxStep('100 ms', 'quick', '20 ms'), '3.200000e-4 s')
+  assert.equal(transientPresetMaxStep('100 ms', 'standard', '100 ms'), null)
+  const project = createStarterProject()
+  project.simulation.startSavingTime = '20 ms'
+  const updated = applyTransientResolutionPreset(project, 'detailed')
+  assert.equal(updated.simulation.maxStep, '1.600000e-5 s')
+  assert.equal(project.simulation.maxStep, '100 µs')
+})

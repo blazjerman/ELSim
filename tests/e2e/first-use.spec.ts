@@ -1203,12 +1203,14 @@ test('transient start-saving time is persisted and appears in the generated netl
   await page.goto('/')
   await page.keyboard.press('Escape')
   await page.getByLabel('Start saving at (optional)').fill('20 ms')
+  await page.getByRole('group', { name: 'Transient resolution presets' }).getByRole('button', { name: 'Detailed' }).click()
+  await expect(page.getByLabel('Maximum step')).toHaveValue('1.600000e-5 s')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText('.tran 100u 100m 20m 100u')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.tran 1.600000e-5 100m 20m 1.600000e-5')
   await expect.poll(() => page.evaluate(() => {
     const saved = localStorage.getItem('elsim:project:v7')
-    return saved ? JSON.parse(saved).simulation.startSavingTime : null
-  })).toBe('20 ms')
+    return saved ? [JSON.parse(saved).simulation.startSavingTime, JSON.parse(saved).simulation.maxStep] : null
+  })).toEqual(['20 ms', '1.600000e-5 s'])
 })
 
 test('ngspice stores transient results only after the selected start time', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

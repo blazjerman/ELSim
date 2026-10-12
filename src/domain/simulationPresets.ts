@@ -20,14 +20,15 @@ function timeMagnitude(value: string): number | null {
 }
 
 /** Return a maximum step targeting a predictable number of points over the stop time. */
-export function transientPresetMaxStep(stopTime: string, preset: TransientResolutionPreset): string | null {
+export function transientPresetMaxStep(stopTime: string, preset: TransientResolutionPreset, startSavingTime = '0 s'): string | null {
   const stop = timeMagnitude(stopTime)
-  if (stop === null || stop <= 0) return null
-  const maxStep = stop / sampleTargets[preset]
+  const startSaving = startSavingTime.trim() ? timeMagnitude(startSavingTime) : 0
+  if (stop === null || stop <= 0 || startSaving === null || startSaving < 0 || startSaving >= stop) return null
+  const maxStep = (stop - startSaving) / sampleTargets[preset]
   return Number.isFinite(maxStep) && maxStep > 0 ? `${maxStep.toExponential(6)} s` : null
 }
 
 export function applyTransientResolutionPreset(project: Project, preset: TransientResolutionPreset): Project {
-  const maxStep = transientPresetMaxStep(project.simulation.stopTime, preset)
+  const maxStep = transientPresetMaxStep(project.simulation.stopTime, preset, project.simulation.startSavingTime)
   return maxStep ? { ...project, simulation: { ...project.simulation, maxStep } } : project
 }
