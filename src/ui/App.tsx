@@ -820,11 +820,20 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     const menu = contextMenuRef.current
     const wrapper = menu?.parentElement
     if (!contextMenu || !menu || !wrapper) return
-    const bounds = wrapper.getBoundingClientRect()
-    const menuBounds = menu.getBoundingClientRect()
-    const x = Math.max(4, Math.min(contextMenu.x, bounds.width - menuBounds.width - 4))
-    const y = Math.max(4, Math.min(contextMenu.y, bounds.height - menuBounds.height - 4))
-    if (x !== contextMenu.x || y !== contextMenu.y) setContextMenu((current) => current ? { ...current, x, y } : null)
+    const reposition = () => {
+      if (!menu.isConnected) return
+      const bounds = wrapper.getBoundingClientRect()
+      const menuBounds = menu.getBoundingClientRect()
+      const x = Math.max(4, Math.min(contextMenu.x, bounds.width - menuBounds.width - 4))
+      const y = Math.max(4, Math.min(contextMenu.y, bounds.height - menuBounds.height - 4))
+      if (x !== contextMenu.x || y !== contextMenu.y) setContextMenu((current) => current ? { ...current, x, y } : null)
+    }
+    reposition()
+    const observer = new ResizeObserver(reposition)
+    observer.observe(wrapper)
+    observer.observe(menu)
+    window.addEventListener('resize', reposition)
+    return () => { observer.disconnect(); window.removeEventListener('resize', reposition) }
   }, [contextMenu])
   useLayoutEffect(() => {
     const element = svg.current
@@ -849,7 +858,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     }
     window.addEventListener('keydown', close)
     return () => window.removeEventListener('keydown', close)
-  }, [contextMenu])
+  }, [contextMenu?.kind, contextMenu?.id])
   const resultIsCurrent = simulationResult?.analysis === 'tran' && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt
   const transientAxis = resultIsCurrent ? simulationResult.traces[0]?.axis : undefined
   const resultConnectivity = useMemo(() => resultIsCurrent ? analyzeConnectivity(project) : null, [project.parts, project.wires, project.junctions, project.netLabels, resultIsCurrent])

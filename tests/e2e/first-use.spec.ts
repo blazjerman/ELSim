@@ -290,14 +290,17 @@ test('schematic context menu stays inside the canvas near the phone viewport edg
   })
   const menu = page.getByRole('menu', { name: 'Options for R1' })
   await expect(menu).toBeVisible()
-  const menuBounds = await menu.boundingBox()
-  const canvasBounds = await page.locator('.canvas-wrap').boundingBox()
-  expect(menuBounds).not.toBeNull()
-  expect(canvasBounds).not.toBeNull()
-  expect(menuBounds!.x).toBeGreaterThanOrEqual(canvasBounds!.x)
-  expect(menuBounds!.y).toBeGreaterThanOrEqual(canvasBounds!.y)
-  expect(menuBounds!.x + menuBounds!.width).toBeLessThanOrEqual(canvasBounds!.x + canvasBounds!.width)
-  expect(menuBounds!.y + menuBounds!.height).toBeLessThanOrEqual(canvasBounds!.y + canvasBounds!.height)
+  const expectInsideCanvas = async () => {
+    const menuBounds = await menu.boundingBox()
+    const canvasBounds = await page.locator('.canvas-wrap').boundingBox()
+    if (!menuBounds || !canvasBounds) return false
+    return menuBounds.x >= canvasBounds.x && menuBounds.y >= canvasBounds.y
+      && menuBounds.x + menuBounds.width <= canvasBounds.x + canvasBounds.width
+      && menuBounds.y + menuBounds.height <= canvasBounds.y + canvasBounds.height
+  }
+  await expect.poll(expectInsideCanvas).toBe(true)
+  await page.setViewportSize({ width: 320, height: 500 })
+  await expect.poll(expectInsideCanvas).toBe(true)
 })
 
 test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
