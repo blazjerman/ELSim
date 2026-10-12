@@ -3,7 +3,9 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
+import { createImportedOpampExampleProject } from '../../src/domain/examples'
 import { createStarterProject } from '../../src/domain/project'
+import { createProjectArchive } from '../../src/domain/projectArchive'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
 import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
 
@@ -3062,6 +3064,39 @@ test('imported op-amp lesson opens its IC model and solves the feedback gain', {
   await expectAvailableTrace(page, 'V(VOUT)')
   const table = page.locator('.plot-window').last().locator('.op-table')
   await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('1.499')
+})
+
+test('an imported IC project archive opens and simulates in a fresh browser session', { tag: ['@ngspice', '@engine-smoke'] }, async ({ browser, baseURL }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+
+  const archive = createProjectArchive(createImportedOpampExampleProject())
+  const context = await browser.newContext({ baseURL })
+  try {
+    const page = await context.newPage()
+    await page.goto('/')
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.locator('input[accept^=".elsim,.json"]').setInputFiles({
+      name: 'imported-op-amp.elsim',
+      mimeType: 'application/vnd.elsim.project+zip',
+      buffer: Buffer.from(archive),
+    })
+
+    await expect(page.locator('.project-title')).toHaveText('Imported op-amp IC')
+    await expect(page.locator('.imported-symbol-art text').filter({ hasText: 'EDUCATIONAL OP-AMP' })).toBeVisible()
+    await expect.poll(() => page.evaluate(() => {
+      const saved = localStorage.getItem('elsim:project:v7')
+      return saved ? JSON.parse(saved).modelAssets?.[0]?.filename : null
+    })).toBe('user-opamp.lib')
+    await page.getByRole('button', { name: 'Run simulation' }).click()
+    await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+    await expectAvailableTrace(page, 'V(VOUT)')
+    const table = page.locator('.plot-window').last().locator('.op-table')
+    await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('1.499')
+  } finally {
+    await context.close()
+  }
 })
 
 test('inverting op-amp lesson demonstrates negative feedback gain', { tag: '@ngspice' }, async ({ page }) => {
