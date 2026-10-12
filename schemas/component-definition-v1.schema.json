@@ -202,7 +202,8 @@
               "cx": { "type": "number", "minimum": -1000, "maximum": 1000 },
               "cy": { "type": "number", "minimum": -1000, "maximum": 1000 },
               "r": { "type": "number", "exclusiveMinimum": 0, "maximum": 500 },
-              "fill": { "enum": ["none", "stroke"] }
+              "fill": { "enum": ["none", "stroke"] },
+              "className": { "type": "string", "pattern": "^[A-Za-z0-9 _-]+$", "maxLength": 128 }
             }
           },
           {

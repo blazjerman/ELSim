@@ -1170,6 +1170,15 @@ test('connection inspector uses ordered, friendly pin labels from component defi
 
   await page.getByRole('button', { name: 'Examples' }).click()
   examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.locator('.example-list article').filter({ hasText: 'Transformer winding currents' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  const transformer = page.locator('.circuit-part[data-part-id="transformer-t1"]')
+  await expect(transformer.locator('.transformer-winding.transformer-primary')).toHaveCount(1)
+  await expect(transformer.locator('.transformer-winding.transformer-secondary')).toHaveCount(1)
+  await expect(transformer.locator('line[x1="-6"][y1="-29"][x2="-6"][y2="29"]')).toHaveCount(1)
+
+  await page.getByRole('button', { name: 'Examples' }).click()
+  examples = page.getByRole('dialog', { name: 'Open a working circuit' })
   await examples.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await page.locator('.circuit-part[data-part-id="switch-q1"]').click()
