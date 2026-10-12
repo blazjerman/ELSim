@@ -126,6 +126,19 @@ const exampleSelection: Record<ExampleId, string> = {
   pjfet: 'pjfet-switch-j1', mosfet: 'mos-switch-m1', pmos: 'pmos-switch-m1', jfet: 'jfet-switch-j1', hierarchy: 'example-x1',
   pwl: 'p-v1', 'current-source': 'isource-i1', rectifier: 'rectifier-d1', 'bridge-rectifier': 'bridge-d1', 'voltage-divider': 'divider-r1', zener: 'zener-d1', transformer: 'transformer-t1', 'imported-opamp': 'example-opamp-xu1', 'inverting-opamp': 'example-opamp-xu1', 'logic-gates': 'logic-and', 'logic-gates-3v3': 'logic-and',
 }
+function formatLessonFrequency(frequencyHz: number): string {
+  if (frequencyHz >= 1e6) return `${Number((frequencyHz / 1e6).toPrecision(3))} MHz`
+  if (frequencyHz >= 1e3) return `${Number((frequencyHz / 1e3).toPrecision(3))} kHz`
+  return `${Number(frequencyHz.toPrecision(3))} Hz`
+}
+
+function formatLessonCapacitance(capacitanceF: number): string {
+  if (capacitanceF >= 1e-3) return `${Number((capacitanceF * 1e3).toPrecision(3))} mF`
+  if (capacitanceF >= 1e-6) return `${Number((capacitanceF * 1e6).toPrecision(3))} µF`
+  if (capacitanceF >= 1e-9) return `${Number((capacitanceF * 1e9).toPrecision(3))} nF`
+  return `${Number((capacitanceF * 1e12).toPrecision(3))} pF`
+}
+
 const componentCategoryKinds: Record<Exclude<ComponentCategory, 'all'>, PartKind[]> = {
   basics: ['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'transformer', 'source', 'currentSource', 'switch', 'ground', 'inverter', 'logicGate'],
   semiconductors: ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'],
@@ -1599,6 +1612,13 @@ export default function App() {
   const rlcInductanceText = project.parts.find((part) => part.id === 'rlc-l1')?.value ?? 'changed'
   const rlcCapacitanceText = project.parts.find((part) => part.id === 'rlc-c1')?.value ?? 'changed'
   const rlcCriticalText = rlcCriticalResistance === null ? null : `${Number(rlcCriticalResistance.toPrecision(3))} Ω`
+  const isAcFilterLesson = exampleLesson?.id === 'ac-lowpass' || exampleLesson?.id === 'ac-highpass'
+  const acFilterId = isAcFilterLesson ? exampleLesson.id : null
+  const acFilterResistance = acFilterId ? componentMagnitude(project.parts.find((part) => part.id === `${acFilterId}-r1`)?.value ?? '1 kΩ', 'resistor') : null
+  const acFilterCapacitance = acFilterId ? componentMagnitude(project.parts.find((part) => part.id === `${acFilterId}-c1`)?.value ?? '159 nF', 'capacitor') : null
+  const acFilterCutoffHz = acFilterResistance && acFilterResistance > 0 && acFilterCapacitance && acFilterCapacitance > 0 ? 1 / (2 * Math.PI * acFilterResistance * acFilterCapacitance) : null
+  const acFilterResistanceText = acFilterId ? project.parts.find((part) => part.id === `${acFilterId}-r1`)?.value ?? 'changed' : 'changed'
+  const acFilterCapacitanceText = acFilterId ? project.parts.find((part) => part.id === `${acFilterId}-c1`)?.value ?? 'changed' : 'changed'
   const lessonNextStep = exampleLesson?.id === 'rl-step' && simulationResult
     ? simulationResultStale
       ? `R1 is ${project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? 'changed'} and L1 is ${project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? 'changed'}. These plots are from the previous circuit; run again to compare the new current ramp.`
@@ -1617,6 +1637,12 @@ export default function App() {
               ? `R1 = ${rlcResistanceText} is near critical damping for L1 = ${rlcInductanceText} and C1 = ${rlcCapacitanceText}. The response should settle with little ringing. Increase R1 to about ${Number((rlcCriticalResistance * 2).toPrecision(3))} Ω and run again to compare an overdamped response.`
               : `R1 = ${rlcResistanceText} is overdamped for L1 = ${rlcInductanceText} and C1 = ${rlcCapacitanceText}; it settles without ringing but more slowly. Reduce R1 toward the critical value of about ${rlcCriticalText} to compare the fastest non-ringing response.`
           : 'Enter positive values for R1, L1, and C1, then rerun to compare the damping behavior.'
+      : isAcFilterLesson && simulationResult
+        ? simulationResultStale
+          ? `R1 is ${acFilterResistanceText} and C1 is ${acFilterCapacitanceText}. These plots are from the previous circuit; run again to compare the cutoff shift.`
+          : acFilterCutoffHz !== null && acFilterCapacitance !== null
+            ? `With R1 = ${acFilterResistanceText} and C1 = ${acFilterCapacitanceText}, the predicted cutoff is about ${formatLessonFrequency(acFilterCutoffHz)}. Double C1 to ${formatLessonCapacitance(acFilterCapacitance * 2)} and run again; the cutoff should halve to about ${formatLessonFrequency(acFilterCutoffHz / 2)}. At cutoff, VOUT is about 0.707×VIN (−3 dB).`
+            : 'Enter positive values for R1 and C1, then rerun to compare the cutoff frequency.'
       : simulationResult && !simulationResultStale ? exampleLesson?.id === 'voltage-divider'
       ? 'Select R2, change its resistance to 2 kΩ in Properties, and run again. The midpoint should rise from 5 V to about 6.67 V.'
     : simulationResult.analysis === 'tran'
