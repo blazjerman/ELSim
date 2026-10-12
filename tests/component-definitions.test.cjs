@@ -113,6 +113,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.deepEqual(componentDefinitionFor('potentiometer').pins.map(({ name }) => name), ['upper', 'wiper', 'lower'])
   assert.equal(componentDefinitionFor('potentiometer').properties.find((property) => property.key === 'wiperPosition')?.defaultValue, '0.5')
   assert.ok(componentDefinitionFor('potentiometer').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.className === 'potentiometer-track'))
+  assert.deepEqual(componentDefinitionFor('potentiometer').symbolAnimations['position.wiper'].active.map(({ className, kind }) => [className, kind]), [['potentiometer-wiper', 'line'], ['potentiometer-wiper-arrow', 'path']])
   assert.ok(componentDefinitionFor('npn').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M11 24L22 38M22 38L21 30M22 38L14 37'))
   assert.ok(componentDefinitionFor('pnp').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M22 38L11 24M11 24L19 26M11 24L13 32'))
   assert.ok(componentDefinitionFor('nmos').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M10 -5L17 0L10 5'))
