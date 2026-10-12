@@ -2368,6 +2368,36 @@ test('wire and component placement tools stay armed until cancelled', async ({ p
   await expect(capacitor).toHaveAttribute('aria-pressed', 'false')
 })
 
+test('placement preview shows component orientation and toolbar controls stay fixed', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('group', { name: 'Result playback' })).toBeVisible()
+  await expect(page.getByLabel('Simulation time')).toBeDisabled()
+  const analysis = page.getByLabel('Analysis type')
+  await analysis.selectOption('ac')
+  await expect(page.getByRole('group', { name: 'Result playback' })).toBeVisible()
+  await expect(page.getByLabel('Simulation time')).toBeDisabled()
+
+  await page.getByRole('button', { name: /Semiconductors/ }).click()
+  const transistor = page.locator('.component-card').filter({ hasText: 'NPN transistor' })
+  await transistor.click()
+  const svg = page.locator('svg.schematic')
+  const screenPoint = async (x: number, y: number) => svg.evaluate((element, point) => {
+    const target = (element as SVGSVGElement).createSVGPoint()
+    target.x = point.x; target.y = point.y
+    const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  }, { x, y })
+  const start = await screenPoint(500, 500), end = await screenPoint(580, 500)
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 3 })
+  const preview = page.locator('.component-placement-preview .circuit-part')
+  await expect(preview).toBeVisible()
+  await expect(preview).toHaveAttribute('transform', /rotate\(180\)/)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'npn')?.rotation)).toBe(180)
+})
+
 test('new voltage-controlled switches use their component definition defaults', async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()

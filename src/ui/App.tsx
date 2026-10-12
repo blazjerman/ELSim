@@ -317,6 +317,19 @@ function usePartUiState(id: string): number {
   return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
+function placementRotation(kind: PartKind, dx: number, dy: number): Part['rotation'] {
+  if (Math.hypot(dx, dy) < EDITOR_GRID_SIZE) return 0
+  const angle = Math.atan2(dy, dx) * 180 / Math.PI
+  const target = ((Math.round(angle / 90) * 90) % 360 + 360) % 360
+  const exemplar: Part = { id: 'placement', kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: 'X', value: '', x: 0, y: 0, rotation: 0 }
+  // Point the second (usually controlled/right-hand) terminal along the drag.
+  // For transistor families this is the base/gate, so dragging left-to-right
+  // puts that pin on the right and the device channel faces left.
+  const directionPin = componentPins(exemplar)[1]
+  const native = directionPin ? Math.atan2(directionPin.y, directionPin.x) * 180 / Math.PI : 0
+  return (((target - Math.round(native / 90) * 90) % 360 + 360) % 360) as Part['rotation']
+}
+
 const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, componentSample, animate = false, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; componentSample: (part: Part) => { voltage?: number; current?: number; secondaryCurrent?: number; switchClosed?: boolean; logicOutput?: number }; animate?: boolean; symbol?: ImportedSymbol; detailed?: boolean }) {
   const uiState = usePartUiState(part.id)
   const animationSample = useSimulationCursorWhen(animate)
@@ -473,7 +486,7 @@ function SimulationPlaybackControls({ axis, available, running, rate, onRateChan
   return <div className="menu-group playback-controls" role="group" aria-label="Result playback">
     <IconButton title={running ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!running && (sampleIndex ?? 0) >= (axis?.length ?? 1) - 1) setSimulationCursor(0); onRunningChange(!running) }} active={running} disabled={!available}>{running ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton>
     <IconButton title="Rewind result playback to the first solved sample" onClick={() => { onRunningChange(false); setSimulationCursor(0) }} disabled={!available}><RotateCcw size={14}/></IconButton>
-    {axis?.length ? <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" aria-valuetext={`${axis[activeSample].toPrecision(4)} seconds`} type="range" min="0" max={axis.length - 1} step="1" value={activeSample} disabled={!available} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><output>{axis[activeSample].toPrecision(4)} s</output></label> : null}
+    <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" aria-valuetext={axis?.length ? `${axis[activeSample].toPrecision(4)} seconds` : 'Unavailable'} type="range" min="0" max={Math.max(1, (axis?.length ?? 0) - 1)} step="1" value={activeSample} disabled={!available || !axis?.length} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><output>{axis?.length ? `${axis[activeSample].toPrecision(4)} s` : '— s'}</output></label>
     <label className="playback-rate-control"><span>Playback</span><select aria-label="Simulation playback speed" value={rate} disabled={!available} onChange={(event) => onRateChange(event.target.value === 'realtime' ? 'realtime' : Number(event.target.value))}>{[0.1, ...Array.from({ length: 12 }, (_, index) => (index + 1) * 0.25), 4, 5, 10].map((speed) => <option key={speed} value={speed}>{speed === 1 ? '1× · current' : `${speed}×`}</option>)}<option value="realtime">Real time · 1 s/s</option></select></label>
   </div>
 }
@@ -861,7 +874,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [wirePreviewEnd, setWirePreviewEnd] = useState<{ x: number; y: number } | null>(null)
-  const [componentPreview, setComponentPreview] = useState<{ x: number; y: number } | null>(null)
+  const [componentPreview, setComponentPreview] = useState<Part | null>(null)
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number; crossing: boolean } | null>(null)
   const [hoveredWireId, setHoveredWireId] = useState<string>()
   const [wireEndpointAnnouncement, setWireEndpointAnnouncement] = useState('')
@@ -1071,7 +1084,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       event.stopPropagation()
       const point = pointFromEvent(event)
       const anchor = { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
-      setComponentPreview(anchor)
+      setComponentPreview({ id: 'placement-preview', kind: pendingComponent, componentDefinitionId: componentDefinitionFor(pendingComponent).id, ref: '', value: componentDefaultValue(pendingComponent), x: anchor.x, y: anchor.y, rotation: 0 })
       drag.current = { kind: 'component-create', id: pendingComponent, pointer: event.pointerId, x: anchor.x, y: anchor.y, originX: anchor.x, originY: anchor.y }
       suppressCanvasClick.current = true
       event.currentTarget.setPointerCapture(event.pointerId)
@@ -1313,7 +1326,9 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       const position = { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
       drag.current.x = position.x
       drag.current.y = position.y
-      setComponentPreview({ x: snapToEditorGrid((drag.current.originX + position.x) / 2), y: snapToEditorGrid((drag.current.originY + position.y) / 2) })
+      const kind = drag.current.id as PartKind
+      const rotation = placementRotation(kind, position.x - drag.current.originX, position.y - drag.current.originY)
+      setComponentPreview((current) => current ? { ...current, x: snapToEditorGrid((drag.current!.originX + position.x) / 2), y: snapToEditorGrid((drag.current!.originY + position.y) / 2), rotation } : current)
       suppressCanvasClick.current = true
       return
     }
@@ -1399,17 +1414,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       const end = { x: snapToEditorGrid(pointFromEvent(event).x), y: snapToEditorGrid(pointFromEvent(event).y) }
       const dx = end.x - placement.originX, dy = end.y - placement.originY
       const position = { x: snapToEditorGrid((end.x + placement.originX) / 2), y: snapToEditorGrid((end.y + placement.originY) / 2) }
-      let rotation: Part['rotation'] = 0
-      if (Math.hypot(dx, dy) >= EDITOR_GRID_SIZE) {
-        const angle = Math.atan2(dy, dx) * 180 / Math.PI
-        const target = ((Math.round(angle / 90) * 90) % 360 + 360) % 360
-        const exemplar: Part = { id: 'placement', kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: 'X', value: '', x: 0, y: 0, rotation: 0 }
-        const pins = componentPins(exemplar)
-        const channelAligned = ['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(kind)
-        const alignedPin = channelAligned ? pins[2] : pins[1]
-        const native = alignedPin ? Math.atan2(alignedPin.y - pins[0].y, alignedPin.x - pins[0].x) * 180 / Math.PI : 0
-        rotation = (((target - Math.round(native / 90) * 90) % 360 + 360) % 360) as Part['rotation']
-      }
+      const rotation = placementRotation(kind, dx, dy)
       onPlaceComponent(kind, position.x, position.y, rotation, pendingPolarizedCapacitor, pendingLogicOperation)
       setComponentPreview(null)
       drag.current = null
@@ -1563,7 +1568,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
       {wireStart && wirePreviewEnd && <line x1={wireStart.x} y1={wireStart.y} x2={wirePreviewEnd.x} y2={wirePreviewEnd.y} stroke="#a4e8bb" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3" pointerEvents="none"/>}
-      {componentPreview && <g className="component-placement-preview" pointerEvents="none"><circle cx={componentPreview.x} cy={componentPreview.y} r="8"/><path d={`M ${componentPreview.x - 5} ${componentPreview.y} H ${componentPreview.x + 5} M ${componentPreview.x} ${componentPreview.y - 5} V ${componentPreview.y + 5}`}/></g>}
+      {componentPreview && <g className="component-placement-preview" aria-hidden="true" pointerEvents="none"><CircuitPart part={componentPreview} onSelect={() => {}} onPointerDown={() => {}} onNavigate={() => {}} onProbe={() => {}} onSwitchToggle={() => {}} componentSample={() => ({})} tool="select"/></g>}
       {selectionBox && <rect className={`selection-box${selectionBox.crossing ? ' crossing' : ''}`} x={selectionBox.x} y={selectionBox.y} width={selectionBox.width} height={selectionBox.height} pointerEvents="none"/>}
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationEnabled={resultIsCurrent} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       {hoveredWire && tool === 'select' && <g className="wire-endpoint-handles" role="group" aria-label="Wire endpoints" onPointerEnter={() => setHoveredWireId(hoveredWire.id)}>{([0, 1] as const).map((index) => {
@@ -1871,6 +1876,7 @@ export default function App() {
   const transientAxis = simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
   const simulationResultStale = Boolean(simulationResult && simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt)
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && !simulationResultStale)
+  const animationTuningAvailable = Boolean((simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && !simulationResultStale)
   const rcResistance = exampleLesson?.id === 'rc' ? componentMagnitude(project.parts.find((part) => part.id === 'p-r1')?.value ?? '1 kΩ', 'resistor') : null
   const rcCapacitance = exampleLesson?.id === 'rc' ? componentMagnitude(project.parts.find((part) => part.id === 'p-c1')?.value ?? '10 µF', 'capacitor') : null
   const rcSupply = exampleLesson?.id === 'rc' ? componentMagnitude(project.parts.find((part) => part.id === 'p-v1')?.value ?? '5 V', 'source') : null
@@ -3802,13 +3808,17 @@ export default function App() {
       <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (r)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (Y)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection && !selectedPartIds.length && !selectedWireIds.length && !selectedNetLabelIds.length}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => changeAnalysis(event.target.value as Project['simulation']['analysis'])}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option><option value="noise">Noise analysis</option></select><ChevronDown size={13}/></label>
-      {simulationResult?.analysis === 'tran' && <SimulationPlaybackControls axis={transientAxis} available={playbackAvailable} running={playbackRunning} rate={playbackRate} onRateChange={setPlaybackRate} onRunningChange={setPlaybackRunning}/>}{(simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && <div className="menu-group"><details className="animation-tuning"><summary aria-label="Current animation settings" title="Current animation size and speed"><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div>}
-      {simulationResultStale && <div className="result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</div>}
-      <div className="menu-group waveform-window-actions"><IconButton title="Open generated netlist" aria-label="Netlist" onClick={() => setNetlistOpen(true)}><Command size={14}/></IconButton><IconButton title="Tile waveform windows" aria-label="Tile waveform windows" onClick={tilePlotWindows} disabled={additionalPlotPanels.length < 2}><Grid2X2 size={14}/></IconButton>{simulationResult && <IconButton title="Download simulation run report" aria-label="Download simulation run report" onClick={downloadRunReport}><Download size={14}/></IconButton>}</div>
+      <SimulationPlaybackControls axis={transientAxis} available={playbackAvailable} running={playbackRunning} rate={playbackRate} onRateChange={setPlaybackRate} onRunningChange={setPlaybackRunning}/>
+      <div className="menu-group"><details className={`animation-tuning${animationTuningAvailable ? '' : ' is-disabled'}`}><summary aria-label="Current animation settings" aria-disabled={!animationTuningAvailable} tabIndex={animationTuningAvailable ? 0 : -1} title={animationTuningAvailable ? 'Current animation size and speed' : 'Run a transient or operating-point simulation to enable animation settings'} onClick={(event) => { if (!animationTuningAvailable) event.preventDefault() }}><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} disabled={!animationTuningAvailable} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div>
+      <div className="menu-group waveform-window-actions"><IconButton title="Open generated netlist" aria-label="Netlist" onClick={() => setNetlistOpen(true)}><Command size={14}/></IconButton><IconButton title="Tile waveform windows" aria-label="Tile waveform windows" onClick={tilePlotWindows} disabled={additionalPlotPanels.length < 2}><Grid2X2 size={14}/></IconButton><IconButton title={simulationResult ? 'Download simulation run report' : 'Run a simulation to create a report'} aria-label="Download simulation run report" onClick={downloadRunReport} disabled={!simulationResult}><Download size={14}/></IconButton></div>
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit <span>{electricalIssues.length}</span></button>
-      {engineAssetAvailable === false && <div className="engine-missing-notice" role="status"><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={() => setNotice('To enable simulation, follow engine/wasm/README.md and run tools/build-ngspice-wasm.sh. The runtime stays local under public/engine/.')}>Setup</button></div>}
       <button className="run-button" onClick={startSimulation} disabled={engineAssetAvailable === null || runState === 'loading' || runState === 'running'} title={engineAssetAvailable === null ? 'Checking for the local ngspice runtime' : undefined}><Play size={15} fill="currentColor"/> Run simulation</button>
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
+    </div>
+
+    <div className="toolbar-status-row" aria-live="polite">
+      <div className={`result-stale-warning${simulationResultStale ? '' : ' status-placeholder'}`} role={simulationResultStale ? 'status' : undefined} aria-hidden={!simulationResultStale}><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</div>
+      <div className={`engine-missing-notice${engineAssetAvailable === false ? '' : ' status-placeholder'}`} role={engineAssetAvailable === false ? 'status' : undefined} aria-hidden={engineAssetAvailable !== false}><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={() => setNotice('To enable simulation, follow engine/wasm/README.md and run tools/build-ngspice-wasm.sh.')}>Setup</button></div>
     </div>
 
     <div className={`workspace mobile-pane-${mobilePane}`}>

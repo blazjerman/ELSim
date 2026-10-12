@@ -117,8 +117,16 @@
 .run-report-download{display:flex;align-items:center;gap:5px;margin:0 0 9px;padding:5px 7px;border:1px solid #3b5141;border-radius:4px;background:#202b23;color:#b4e5c2;font-size:9px}.run-report-download:hover{background:#28382d}
 .wire-endpoint-handles circle{fill:#b8f0c8;stroke:#16221a;stroke-width:2;cursor:move;pointer-events:all}.wire-endpoint-handles circle:hover{fill:#f4d77c;stroke:#293020;stroke-width:2.5}.wire-line.hovered{filter:drop-shadow(0 0 2px #9be3b688)}
 .component-card[aria-pressed="true"]{background:#26382b;border-color:#8bc79b;box-shadow:0 0 0 1px #8bc79b33}
-.component-placement-preview circle{fill:#26382b;stroke:#a4e8bb;stroke-width:2;stroke-dasharray:3 2}
-.component-placement-preview path{stroke:#a4e8bb;stroke-width:1.5}
+.component-placement-preview .circuit-part{opacity:.76;filter:drop-shadow(0 0 5px #8fe0af77)}
+.component-placement-preview .circuit-part .part-hit{display:none}
+.component-placement-preview .circuit-part line,.component-placement-preview .circuit-part rect,.component-placement-preview .circuit-part circle,.component-placement-preview .circuit-part path,.component-placement-preview .circuit-part polyline,.component-placement-preview .circuit-part polygon{stroke:#a4e8bb!important}
+.status-placeholder{visibility:hidden;pointer-events:none}
+.toolbar-status-row{box-sizing:border-box;height:27px;min-height:27px;display:flex;align-items:center;gap:8px;overflow:hidden;padding:0 16px;border-bottom:1px solid #232b25;background:#131815}
+.toolbar-status-row .result-stale-warning,.toolbar-status-row .engine-missing-notice{min-width:0;max-width:min(55vw,600px);height:22px;box-sizing:border-box;padding:2px 7px;overflow:hidden;text-overflow:ellipsis;border:0;border-radius:4px;background:#241f16;white-space:nowrap}
+.toolbar-status-row .engine-missing-notice{background:#211e16}
+.animation-tuning.is-disabled>summary{opacity:.42;cursor:not-allowed}
+.animation-tuning.is-disabled>summary:hover{background:transparent;color:#aeb9b0}
+.playback-controls .icon-button:disabled,.playback-controls input:disabled,.playback-controls select:disabled{opacity:.38;cursor:not-allowed}
 .selection-box{fill:#73c99722;stroke:#91e5ad;stroke-width:1.5;stroke-dasharray:5 3;vector-effect:non-scaling-stroke}.selection-box.crossing{fill:#67a9e822;stroke:#86c5f5}
 .wire-connection-dot{fill:#a9d8b7;stroke:#152019;stroke-width:1.5;vector-effect:non-scaling-stroke}
 .component-subtitle{left:40px;right:8px;max-width:calc(100% - 48px);overflow:hidden;text-overflow:ellipsis;text-align:right;white-space:nowrap}
