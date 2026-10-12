@@ -410,16 +410,6 @@ test('nested divider walkthrough example validates, nets, and exposes deep probe
   assert.equal(hierarchyComponentCurrentVector(project, 'sheet-core', ['example-x2', 'divider-core-instance'], 'core-r1'), 'i(@r.x2.xcore.rcore[i])')
 })
 
-test('hierarchy navigation preserves the selected repeated block instance when returning to an ancestor', () => {
-  const project = validateProject(createHierarchicalExampleProject())
-  const secondInstance = project.parts.find((part) => part.id === 'example-x2')
-  const divider = project.sheets.find((sheet) => sheet.id === secondInstance.sheetId)
-  const nestedInstance = divider.parts.find((part) => part.id === 'divider-core-instance')
-  assert.deepEqual(preferredSheetInstancePath(project, divider.id, [secondInstance.id, nestedInstance.id]), [secondInstance.id])
-  assert.deepEqual(preferredSheetInstancePath(project, nestedInstance.sheetId, [secondInstance.id, nestedInstance.id]), [secondInstance.id, nestedInstance.id])
-  assert.deepEqual(preferredSheetInstancePath(project, project.rootSheetId, [secondInstance.id, nestedInstance.id]), [])
-  assert.equal(preferredSheetInstancePath(project, divider.id, ['missing-instance']), null)
-})
 
 test('hierarchy navigation preserves the selected repeated block instance when returning to an ancestor', () => {
   const project = validateProject(createHierarchicalExampleProject())
