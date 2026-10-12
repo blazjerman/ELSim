@@ -170,6 +170,37 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         })
       }
     }
+
+    const floatingByPart = new Map<string, { part: Project['parts'][number]; pins: number[] }>()
+    const pinsByNet = new Map<string, { part: Project['parts'][number]; index: number }[]>()
+    for (const part of sheet.parts) for (const pin of componentPins(part)) {
+      const net = sheetConnectivity.pinNets.get(`${part.id}:${pin.index}`)
+      if (!net || net === '0' || part.kind === 'ground') continue
+      pinsByNet.set(net, [...(pinsByNet.get(net) ?? []), { part, index: pin.index }])
+    }
+    for (const [net, pins] of pinsByNet) {
+      if (pins.length !== 1 || sheet.netLabels.some((label) => label.name.trim() === net)) continue
+      const { part, index } = pins[0]
+      const current = floatingByPart.get(part.id) ?? { part, pins: [] }
+      current.pins.push(index)
+      floatingByPart.set(part.id, current)
+    }
+    for (const { part, pins } of floatingByPart.values()) {
+      const pinNames = pins.map((index) => {
+        const declaredName = part.kind === 'subcircuit'
+          ? part.modelPins?.[index]
+          : componentDefinitionFor(part.kind).pins[index]?.name
+        if (!declaredName || /^pin\d+$/i.test(declaredName)) return `terminal ${index + 1}`
+        return /^\d+$/.test(declaredName) ? `pin ${declaredName}` : declaredName
+      })
+      issues.push({
+        id: `floating:${sheet.id}:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} has ${pins.length === 1 ? `an unconnected ${pinNames[0]} terminal` : `${pins.length} unconnected terminals (${pinNames.join(', ')})`} in ${sheet.name}`,
+        detail: `Connect the open terminal${pins.length === 1 ? '' : 's'} (${pinNames.join(', ')}) on ${sheet.name} to a wire, another component, or an intentional net label.`,
+        partId: topLevelInstanceId,
+      })
+    }
   }
 
   if (project.simulation.analysis === 'dc') {

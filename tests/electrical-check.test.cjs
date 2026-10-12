@@ -350,6 +350,16 @@ test('checks semiconductor models and educational beta in child sheets', () => {
   assert.match(betaIssue?.title, /QCORE.*Core resistor/)
 })
 
+test('reports floating terminals in a child sheet and selects its visible block', () => {
+  const project = createHierarchicalExampleProject()
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.parts.push({ id: 'isolated-child-r', kind: 'resistor', ref: 'RLOOSE', value: '1k', x: 800, y: 700, rotation: 0 })
+  const issue = checkCircuit(project).find((item) => item.id === 'floating:sheet-core:isolated-child-r')
+  assert.equal(issue?.partId, 'example-x2')
+  assert.match(issue?.title, /RLOOSE has 2 unconnected terminals.*Core resistor/)
+  assert.match(issue?.detail, /on Core resistor/)
+})
+
 test('accepts declared sheet parameters in behavioral source expressions and explains missing ones', () => {
   const project = createStarterProject()
   const behavioral = { id: 'parameter-behavioral', kind: 'behavioral', ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage', x: 700, y: 600, rotation: 0 }
