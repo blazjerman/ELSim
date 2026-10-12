@@ -1643,21 +1643,17 @@ test('imported IC symbols announce ordered pin names to assistive technology', {
   const importedModel = page.locator('.imported-model').filter({ hasText: 'USER_AMP' })
   await expect(importedModel.getByRole('button', { name: 'Add to schematic' })).toBeVisible()
   await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
-  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
-  const symbolSource = 'Version 4\nSYMATTR Prefix X\nRECTANGLE Normal -8 -8 8 8\nPIN -16 0 R\nPINATTR PinName INPUT\nPINATTR SpiceOrder 1\nPIN 16 0 L\nPINATTR PinName OUTPUT\nPINATTR SpiceOrder 2\n'
-  const symbol = parseLtspiceSymbol(symbolSource, 'user-amp.asy')
-  const symbolAsset = { id: 'symbol-accessibility', filename: 'user-amp.asy', content: symbolSource, sha256: createHash('sha256').update(symbolSource).digest('hex'), licenseStatus: 'unknown' as const, importedAt: '2026-01-01T00:00:00.000Z' }
-  await page.evaluate(({ symbolAsset, offsets }) => {
-    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    const part = project.parts.find((candidate: { ref: string }) => candidate.ref === 'X1')
-    part.symbolAssetId = symbolAsset.id
-    part.symbolPinOffsets = offsets
-    project.symbolAssets = [symbolAsset]
-    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
-  }, { symbolAsset, offsets: symbol.pins.map(({ x, y }) => [x, y]) })
-  await page.reload()
-  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toHaveAccessibleName(/pins: 1 INPUT, 2 OUTPUT/)
+  const instance = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(instance).toBeVisible()
+  await expect(instance).toHaveAccessibleName(/pins: 1 INPUT, 2 OUTPUT/)
+  const symbolSource = 'Version 4\nSYMATTR Prefix X\nRECTANGLE Normal -8 -8 8 8\nPIN -16 0 R\nPINATTR PinName NONINV\nPINATTR SpiceOrder 1\nPIN 16 0 L\nPINATTR PinName OUT\nPINATTR SpiceOrder 2\n'
+  await page.getByRole('button', { name: 'Import LTspice symbol' }).click()
+  await page.locator('input[accept=".asy,text/plain"]').setInputFiles({ name: 'user-amp.asy', mimeType: 'text/plain', buffer: Buffer.from(symbolSource) })
+  const symbolCard = page.locator('.imported-models').filter({ has: page.getByText('IMPORTED SYMBOLS', { exact: true }) }).locator('.imported-model')
+  const placeWithSymbol = symbolCard.getByRole('button', { name: 'Place USER_AMP with this symbol' })
+  await expect(placeWithSymbol).toBeVisible()
+  await placeWithSymbol.click()
+  await expect(page.locator('.circuit-part[aria-label^="X2,"]')).toHaveAccessibleName(/pins: 1 NONINV, 2 OUT/)
 })
 
 test('copy and paste an explicitly selected net label with its global connection semantics', async ({ page }) => {

@@ -406,6 +406,8 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     }).join(', ') + ((part.modelPins?.length ?? 0) > 8 ? `, and ${(part.modelPins?.length ?? 0) - 8} more pins` : '')
     : part.kind === 'subcircuit' && symbol
       ? symbol.pins.slice(0, 8).map((pin) => `${pin.spiceOrder} ${pin.name}`).join(', ') + (symbol.pins.length > 8 ? `, and ${symbol.pins.length - 8} more pins` : '')
+      : part.kind === 'subcircuit'
+        ? (part.modelPins ?? []).slice(0, 8).map((name, index) => `${index + 1} ${name}`).join(', ') + ((part.modelPins?.length ?? 0) > 8 ? `, and ${(part.modelPins?.length ?? 0) - 8} more pins` : '')
     : ''
   const accessibilityLabel = isInteractiveSwitch
     ? `${part.ref}, ${kindNames[part.kind]}, switch ${part.value.toLowerCase()}${selected ? ', selected' : ''}`
