@@ -5,6 +5,7 @@ import type { PlotPanel, PlotRange } from '../domain/project'
 import { extremaIndices, valueRange } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import { setSimulationCursor, useSimulationCursor } from './simulationCursor'
+import { setAnalysisCursor, useAnalysisCursor } from './analysisCursor'
 
 function nearestAxisIndex(axis: Float64Array, value: number, start: number, end: number): number {
   let low = start, high = end
@@ -297,20 +298,20 @@ function OperatingPointView({ traces, selectedIds, onToggle, onExport }: { trace
   </div>
 }
 
-function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
+function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const [mode, setMode] = useState<'magnitude' | 'phase'>('magnitude')
-  const [cursorIndex, setCursorIndex] = useState<number | null>(null)
-  useEffect(() => setCursorIndex(null), [traces])
+  const cursorValue = useAnalysisCursor(result)
   const colors = useMemo(() => ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d'], [])
   const plotSize = useResponsivePlotSize()
   const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = width - 12, top = 12, bottom = height - 30
   const frequencies = traces[0]?.axis ?? Float64Array.of(1, 10)
   const first = Math.floor(navigation.window.start * Math.max(0, frequencies.length - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, frequencies.length - 1)))
+  const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1)
   const minFrequency = frequencies[first] || 1, maxFrequency = frequencies[Math.min(last, frequencies.length - 1)] || 10
   const valueFor = (trace: Trace, index: number) => {
     const real = trace.values[index]
@@ -361,7 +362,7 @@ function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange 
   return <div className="waveform-view ac-view">
     <div className="waveform-title"><strong>AC frequency response</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${frequencies[cursorIndex].toPrecision(5)} Hz`}</span><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <div className="ac-mode"><button className={mode === 'magnitude' ? 'active' : ''} onClick={() => setMode('magnitude')}>Magnitude (dB)</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setMode('phase')}>Phase (°)</button></div>
-    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`AC ${mode} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz`} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); setCursorIndex(nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1))) }}>
+    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`AC ${mode} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz`} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); const index = nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1)); setAnalysisCursor(result, frequencies[index]) }}>
       {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} {mode === 'magnitude' ? 'dB' : '°'}</text></g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
@@ -373,18 +374,18 @@ function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange 
   </div>
 }
 
-function DcSweepPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
+function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(traces, range, onRangeChange)
-  const [cursorIndex, setCursorIndex] = useState<number | null>(null)
-  useEffect(() => setCursorIndex(null), [traces])
+  const cursorValue = useAnalysisCursor(result)
   const plotSize = useResponsivePlotSize()
   const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = width - 12, top = 10, bottom = height - 30
   const axis = traces[0]?.axis ?? Float64Array.of(0, 1)
   const first = Math.floor(navigation.window.start * Math.max(0, axis.length - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, axis.length - 1)))
+  const cursorIndex = cursorValue === null || axis.length === 0 ? null : nearestAxisIndex(axis, cursorValue, 0, axis.length - 1)
   const x0 = axis[first] ?? 0, x1 = axis[Math.min(last, axis.length - 1)] ?? 1
   const [dataMin, dataMax] = useMemo(() => {
     let min = Infinity, max = -Infinity
@@ -424,7 +425,7 @@ function DcSweepPlot({ traces, selectedIds, onToggle, onExport, range, onRangeCh
   }), [traces, shown, first, last, width, height, x0, x1, min, span, colors, traceIndexById])
   return <div className="waveform-view">
     <div className="waveform-title"><strong>DC sweep results</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${axis[cursorIndex].toPrecision(5)} ${traces[0]?.axisUnit}`}</span><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}`} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); setCursorIndex(nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1))) }}>
+    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}`} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const index = nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1)); setAnalysisCursor(result, axis[index]) }}>
       {[0, 1, 2, 3].map((line) => { const value = max - line / 3 * span; return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)}</text></g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
@@ -438,8 +439,8 @@ function DcSweepPlot({ traces, selectedIds, onToggle, onExport, range, onRangeCh
 
 export function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc', range: PlotRange) => void }) {
   if (result.analysis === 'op') return <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport}/>
-  if (result.analysis === 'ac') return <AcPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} onExport={onExport}/>
-  if (result.analysis === 'dc') return <DcSweepPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.dc} onRangeChange={(range) => onRangeChange('dc', range)} onExport={onExport}/>
+  if (result.analysis === 'ac') return <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} onExport={onExport}/>
+  if (result.analysis === 'dc') return <DcSweepPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.dc} onRangeChange={(range) => onRangeChange('dc', range)} onExport={onExport}/>
   return <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} onExport={onExport} measurements={result.measurements}/>
 }
 

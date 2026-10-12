@@ -1546,6 +1546,7 @@ async function openComponentVoltagePlot(page: import('@playwright/test').Page, r
   await page.locator(`.circuit-part[aria-label^="${ref},"]`).click({ button: 'right' })
   await page.getByRole('menuitem', { name: /Plot (?:pin-to-pin voltage|voltage across pin1)/ }).click()
   const chooser = page.getByRole('dialog', { name: /V\(/ })
+  await chooser.getByRole('radio', { name: /New waveform window/ }).check()
   await chooser.getByRole('button', { name: 'Open waveform' }).click()
   const plotWindow = page.locator('.plot-window').last()
   if (!hadPlotWindow) await movePlotWindowLeft(page, plotWindow)
@@ -3863,6 +3864,14 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   await page.mouse.up()
   const draggedRange = await readSavedAcRange()
   expect(draggedRange).toEqual(wheelRange)
+
+  await movePlotWindowRight(page, plotWindow)
+  const secondPlotWindow = await openComponentVoltagePlot(page)
+  const secondChart = secondPlotWindow.getByRole('img', { name: /AC magnitude from/ })
+  await secondChart.click({ position: { x: (await secondChart.boundingBox())!.width * 0.72, y: 35 } })
+  const cursorLabels = page.locator('.ac-view .waveform-title span').filter({ hasText: /Hz$/ })
+  await expect(cursorLabels).toHaveCount(2)
+  await expect(cursorLabels.nth(0)).toHaveText(await cursorLabels.nth(1).innerText())
 })
 
 test('DC sweep waveform supports source cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
@@ -3878,19 +3887,24 @@ test('DC sweep waveform supports source cursor and horizontal wheel zoom without
   await expect(page.locator('.plot-cursor')).toBeAttached()
   await expect(chart.locator('..')).toContainText(/V$/)
 
+  const readSavedDcRange = () => page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings
+    return settings.panels?.at(-1)?.ranges.dc ?? settings.ranges?.dc ?? null
+  })
   await page.getByLabel('Plot navigation').getByRole('button', { name: 'Zoom in' }).click()
-  const zoomedRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.dc)
+  await expect.poll(readSavedDcRange).not.toBeNull()
+  const zoomedRange = await readSavedDcRange()
   const box = await chart.boundingBox()
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.5)
   await page.mouse.wheel(0, -250)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.dc)).not.toEqual(zoomedRange)
-  const wheelRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.dc)
+  await expect.poll(readSavedDcRange).not.toEqual(zoomedRange)
+  const wheelRange = await readSavedDcRange()
   expect(wheelRange.end - wheelRange.start).toBeLessThan(zoomedRange.end - zoomedRange.start)
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.5)
   await page.mouse.down()
   await page.mouse.move(box!.x + box!.width * 0.58, box!.y + box!.height * 0.5, { steps: 5 })
   await page.mouse.up()
-  const draggedRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.dc)
+  const draggedRange = await readSavedDcRange()
   expect(draggedRange).toEqual(wheelRange)
 })
 
