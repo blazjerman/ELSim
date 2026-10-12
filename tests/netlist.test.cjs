@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlStepExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlStepExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -215,6 +215,17 @@ test('AC transformer example emits coupled windings with the selected turns rati
   const overflow = structuredClone(project)
   Object.assign(overflow.parts.find((part) => part.kind === 'transformer'), { value: '1e308 H', turnsRatio: '1000' })
   assert.match(createNetlistArtifact(overflow).text, /ERROR: T1 needs a positive finite primary inductance/i)
+})
+
+test('transformer-current example is ready for transient winding animation', () => {
+  const project = createTransformerCurrentExampleProject()
+  const source = project.parts.find((part) => part.ref === 'V1')
+  assert.equal(project.name, 'Transformer winding currents')
+  assert.equal(project.simulation.analysis, 'tran')
+  assert.equal(project.simulation.stopTime, '40 ms')
+  assert.equal(source.sourceMode, 'sine')
+  assert.equal(source.sine.frequency, '50 Hz')
+  assert.deepEqual(createNetlistArtifact(project).diagnostics, [])
 })
 
 test('potentiometer wiper divides total resistance and validates its travel', () => {

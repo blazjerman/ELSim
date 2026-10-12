@@ -325,6 +325,18 @@ export function createTransformerExampleProject(): Project {
   return project
 }
 
+/** A ready-to-run transient lesson for transformer winding-current animation. */
+export function createTransformerCurrentExampleProject(): Project {
+  const project = createTransformerExampleProject()
+  const source = project.parts.find((part) => part.id === 'transformer-v1')!
+  project.name = 'Transformer winding currents'
+  source.sourceMode = 'sine'
+  source.sine = { offset: '0 V', amplitude: '1 V', frequency: '50 Hz', delay: '0', damping: '0', phase: '90' }
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '40 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
+  return project
+}
+
 /** A first voltage-divider lesson with a predictable 5 V midpoint. */
 export function createVoltageDividerExampleProject(): Project {
   const project = createStarterProject()
