@@ -1164,6 +1164,12 @@ test('connection inspector uses ordered, friendly pin labels from component defi
 
   await page.getByRole('button', { name: 'Examples' }).click()
   examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.locator('.example-list article').filter({ hasText: 'Inductor current ramp' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="rl-step-l1"] path[d^="M-34 0a9 9 0 0 1 18 0"]')).toHaveCount(1)
+
+  await page.getByRole('button', { name: 'Examples' }).click()
+  examples = page.getByRole('dialog', { name: 'Open a working circuit' })
   await examples.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await page.locator('.circuit-part[data-part-id="switch-q1"]').click()
