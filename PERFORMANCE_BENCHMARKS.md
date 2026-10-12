@@ -306,3 +306,8 @@ Worker-memory API check (2026-10-12): The existing local Emscripten wrapper expo
 ### Transient saved-window comparison (2026-10-12)
 
 The benchmark now compares a 100 ms transient with full result saving against the same solve using ngspice `tstart=50 ms`. The full run retained 103,406 samples (1,654,750 raw bytes; 1,654,496 parsed vector bytes). The 50 ms window retained 51,701 samples (827,469 raw bytes; 827,216 parsed vector bytes), reductions of 50.00%, 49.99%, and 50.00%, respectively. Both runs ended at 1.887709 V on V(out), within the benchmark's exact-value parity check. This indicates lower saved-result and parser/transfer payload; it does not show reduced solver work or establish browser-memory reduction. The benchmark reused the existing ignored ngspice WASM and made no engine build.
+
+
+### Eight-window Firefox cursor refresh (2026-10-12)
+
+Two independent runs of the focused Firefox browser benchmark solved 1,000,130 transient samples and rendered eight windows with four traces each (32 SVG traces). Result-ready time was 9.99 s and 10.08 s. The three scripted cursor updates measured 100.89/95.00/32.04 ms and 97.02/85.24/31.03 ms; the final warmed update was consistently about 31–32 ms, while the first two were 85–101 ms. The 16 ms timer observed maximum interval delays of 101–104 ms during the full solve-and-render workflow. Firefox did not expose the heap metric used by this test, so no heap or worker-memory value is available. These runs verify responsive cursor updates after loading the large result, but do not establish a before/after rendering gain; the earlier 16-trace and eight-window measurements are not a clean directly comparable baseline. The test reused the local WASM runtime; no build was run.
