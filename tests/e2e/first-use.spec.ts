@@ -222,6 +222,23 @@ test('quick tour explains the current workspace and project save flow', { tag: '
   await expect(dialog).toHaveCount(0)
 })
 
+test('engine-free preview explains the local runtime requirement while keeping the editor usable', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.route('**/engine/ngspice.mjs', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))
+  await page.route('**/engine/ngspice.wasm', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))
+  await page.goto('/')
+  const notice = page.locator('.engine-missing-notice')
+  await expect(notice).toContainText('Simulation needs the local ngspice runtime.')
+  await expect(notice).toContainText('Editing and saving still work.')
+  await notice.getByRole('button', { name: 'Setup' }).click()
+  await expect(page.getByText(/follow engine\/wasm\/README\.md and run tools\/build-ngspice-wasm\.sh/i)).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/ngspice WASM is not built/i)).toBeVisible()
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  const value = page.locator('.inspector-panel input[data-part-setting$=":value"]')
+  await value.fill('2k')
+  await expect(page.locator('.circuit-part[data-part-id="p-r1"] .part-value')).toContainText('2k')
+})
+
 test('examples can be searched by title and description', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
