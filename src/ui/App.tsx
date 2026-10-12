@@ -2980,9 +2980,6 @@ export default function App() {
     const gateOperation = logicOperation ?? pendingLogicOperation ?? 'and'
     const part: Part = { id, kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: nextRef(project.parts, kind), value: componentDefaultValue(kind) || (kind === 'behavioral' ? 'V(vin) * 2' : kind === 'inverter' ? 'NOT' : kind === 'logicGate' ? gateOperation.toUpperCase() : kind === 'ground' || kind === 'subcircuit' ? '' : '1'), x: placeX, y: placeY, rotation, ...(polarized && kind === 'capacitor' ? { polarized: true } : {}), ...(kind === 'potentiometer' ? { wiperPosition: componentDefinitionFor(kind).properties.find((property) => property.key === 'wiperPosition')?.defaultValue ?? '0.5' } : {}), ...(kind === 'transformer' ? { turnsRatio: componentDefinitionFor(kind).properties.find((property) => property.key === 'turnsRatio')?.defaultValue ?? '2', coupling: componentDefinitionFor(kind).properties.find((property) => property.key === 'coupling')?.defaultValue ?? '1' } : {}), ...(kind === 'behavioral' ? { behavioralOutput: 'voltage' as const } : {}), ...(kind === 'logicGate' ? { logicOperation: gateOperation } : {}), ...(['logicGate', 'inverter'].includes(kind) ? { logicLow: '0 V', logicHigh: '5 V', logicThreshold: '2.5 V' } : {}), ...(kind === 'lamp' ? { animationNominalPower: Number(componentDefinitionFor(kind).properties.find((property) => property.key === 'animationNominalPower')?.defaultValue ?? 10) } : {}) }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
-    setPendingComponentKind(null)
-    setPendingPolarizedCapacitor(false)
-    setPendingLogicOperation(undefined)
     setSelection(null)
     setSelectedPartIds([])
     setSelectedWireId(null)

@@ -2166,8 +2166,9 @@ test('reorientation preserves connected pins and wire topology survives a projec
   })).toEqual({ rotation: 90, flipX: true, points: [[200, 470], [180, 410]] })
 })
 
-test('wire tool stays armed while component placement ends after one drop', async ({ page }) => {
+test('wire and component placement tools stay armed until cancelled', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   const svg = page.locator('svg.schematic')
   const screenPoint = (x: number, y: number) => svg.evaluate((element, point) => {
     const target = (element as SVGSVGElement).createSVGPoint()
@@ -2195,8 +2196,14 @@ test('wire tool stays armed while component placement ends after one drop', asyn
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
   await resistor.click()
   await dragOnCanvas(500, 300, 500, 340)
-  await expect(resistor).toHaveAttribute('aria-pressed', 'false')
+  await expect(resistor).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
+  await dragOnCanvas(500, 460, 500, 500)
+  await expect(resistor).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R3'))).toBe(true)
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(resistor).toHaveAttribute('aria-pressed', 'false')
 })
 
 async function openComponentVoltagePlot(page: import('@playwright/test').Page, ref = 'R1') {
