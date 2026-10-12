@@ -116,6 +116,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.ok(componentDefinitionFor('vccs').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M10 0L3 -5V5Z' && primitive.fill === 'stroke'))
   assert.ok(componentDefinitionFor('cccs').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M0 -10L-6 -2H6Z' && primitive.fill === 'stroke'))
   assert.ok(componentDefinitionFor('ccvs').symbolGeometry.some((primitive) => primitive.kind === 'line' && primitive.x1 === 0 && primitive.y1 === -13 && primitive.y2 === -1))
+  assert.equal(componentDefinitionFor('behavioral').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M0 -24L24 0L0 24L-24 0Z'), true)
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
   assert.deepEqual(componentDefinitionFor('lamp').symbolGeometry.map(({ kind }) => kind), ['line', 'circle', 'line'])
   assert.ok(project.parts.every((part) => part.componentDefinitionId === componentDefinitionFor(part.kind).id))
