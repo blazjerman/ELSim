@@ -466,14 +466,17 @@ export function createPotentiometerExampleProject(): Project {
   }
   project.name = 'Potentiometer voltage divider'
   project.parts = [source, potentiometer]
-  project.wires = []
   project.junctions = []
   const wiperPin = componentPins(potentiometer)[1]
-  project.wires = [{ id: 'pot-wiper-output', points: [[wiperPin.x, wiperPin.y], [wiperPin.x + 50, wiperPin.y]] }]
+  project.wires = [
+    { id: 'pot-supply', points: [[280, 310], [560, 310]] },
+    { id: 'pot-ground-return', points: [[280, 410], [560, 410]] },
+    { id: 'pot-wiper-output', points: [[wiperPin.x, wiperPin.y], [wiperPin.x + 50, wiperPin.y]] },
+  ]
   project.netLabels = [
-    labelAt('pot-vin-source', 'VIN', source, 0), labelAt('pot-vin-upper', 'VIN', potentiometer, 0),
+    labelAt('pot-vin-source', 'VIN', source, 0),
     { id: 'pot-vout', name: 'VOUT', x: wiperPin.x + 50, y: wiperPin.y, visible: true },
-    labelAt('pot-ground-source', '0', source, 1), labelAt('pot-ground-lower', '0', potentiometer, 2),
+    labelAt('pot-ground-source', '0', source, 1),
   ]
   project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'op' }

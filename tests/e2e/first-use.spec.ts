@@ -3238,8 +3238,13 @@ test('potentiometer example adjusts the simulated output with its wiper', { tag:
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Potentiometer voltage divider')
   await expect(page.getByLabel('Potentiometer wiper position')).toHaveValue('50')
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(3)
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  for (const wireId of ['pot-supply', 'pot-ground-return']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.0005)
+  }
   await expect(page.locator('.example-lesson-next-step')).toContainText('Move the wiper to 25% from the upper terminal')
   await expectAvailableTrace(page, 'V(vout)')
   await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*5\.000000 V/i })).toBeVisible()
