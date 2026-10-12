@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
+import { createStarterProject } from '../../src/domain/project'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
 import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
 
@@ -256,6 +257,7 @@ test('project inspector reports the current project format version', { tag: '@ui
 
 test('autosave failure is shown instead of claiming the project is saved', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.addInitScript(() => {
+    Object.defineProperty(window, 'indexedDB', { configurable: true, value: undefined })
     const setItem = Storage.prototype.setItem
     Storage.prototype.setItem = function (key, value) {
       if (key === 'elsim:project:v7') throw new DOMException('Storage quota exceeded', 'QuotaExceededError')
@@ -265,6 +267,29 @@ test('autosave failure is shown instead of claiming the project is saved', { tag
   await page.goto('/')
   await expect(page.locator('.app-status [role="status"]')).toHaveText('Local save failed. Use Save to download a copy.')
   await expect(page.getByText('This browser could not save the project locally. Use Save to download a copy.')).toBeVisible()
+})
+
+test('autosave falls back to IndexedDB and restores the latest project after reload', { tag: '@ui-smoke' }, async ({ page }) => {
+  const staleLocalProject = createStarterProject()
+  staleLocalProject.name = 'Stale local copy'
+  await page.addInitScript((projectJson) => {
+    localStorage.setItem('elsim:project:v7', projectJson)
+    localStorage.setItem('elsim:project:v7:savedAt', '1')
+    const setItem = Storage.prototype.setItem
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'elsim:project:v7') throw new DOMException('Storage quota exceeded', 'QuotaExceededError')
+      setItem.call(this, key, value)
+    }
+  }, JSON.stringify(staleLocalProject))
+  await page.goto('/')
+  const saveStatus = page.locator('.app-status [role="status"]')
+  await expect(saveStatus).toHaveText('Saved in browser recovery storage')
+  await page.once('dialog', (dialog) => dialog.accept('Recovered from IndexedDB'))
+  await page.locator('.project-title').click()
+  await expect(page.locator('.project-title')).toHaveText('Recovered from IndexedDB')
+  await expect(saveStatus).toHaveText('Saved in browser recovery storage')
+  await page.reload()
+  await expect(page.locator('.project-title')).toHaveText('Recovered from IndexedDB')
 })
 
 test('engine-free preview explains the local runtime requirement while keeping the editor usable', { tag: '@ui-smoke' }, async ({ page }) => {

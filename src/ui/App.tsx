@@ -37,6 +37,7 @@ import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef, refe
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
 import { partUiState, subscribePartUiState, updatePartUiState } from './partUiState'
+import { clearProjectAutosave, readProjectAutosave, writeProjectAutosave } from '../domain/projectAutosave'
 import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
@@ -1585,7 +1586,8 @@ export default function App() {
   const [unknownRightsConfirmed, setUnknownRightsConfirmed] = useState(false)
   const [saveWarningOpen, setSaveWarningOpen] = useState(false)
   const [notice, setNotice] = useState('')
-  const [autosaveStatus, setAutosaveStatus] = useState<'saving' | 'saved' | 'error'>('saving')
+  const [autosaveStatus, setAutosaveStatus] = useState<'saving' | 'saved' | 'recovered' | 'error'>('saving')
+  const [projectRecoveryReady, setProjectRecoveryReady] = useState(false)
   const [importWarnings, setImportWarnings] = useState<string[]>([])
   const [compatibilityDiagnostic, setCompatibilityDiagnostic] = useState<SimulationDiagnostic | null>(null)
   const [modelSourceReview, setModelSourceReview] = useState<{ assetId: string; line: number } | null>(null)
@@ -1658,10 +1660,23 @@ export default function App() {
   const projectRef = useRef(project)
   projectRef.current = project
   const autosaveTimerRef = useRef<number | null>(null)
+  const autosaveTimestampRef = useRef(0)
+  const autosaveGenerationRef = useRef(0)
   const persistProjectAutosaveRef = useRef<(notify: boolean) => void>(() => {})
   persistProjectAutosaveRef.current = (notify) => {
+    let json: string
+    try { json = JSON.stringify(projectRef.current) }
+    catch {
+      setAutosaveStatus('error')
+      if (notify) setNotice('This browser could not prepare the project for local recovery. Use Save to download a copy.')
+      return
+    }
+    const savedAt = Math.max(Date.now(), autosaveTimestampRef.current + 1)
+    autosaveTimestampRef.current = savedAt
+    const generation = ++autosaveGenerationRef.current
     try {
-      localStorage.setItem('elsim:project:v7', JSON.stringify(projectRef.current))
+      localStorage.setItem('elsim:project:v7', json)
+      localStorage.setItem('elsim:project:v7:savedAt', String(savedAt))
       localStorage.removeItem('elsim:project:v6')
       localStorage.removeItem('elsim:project:v5')
       localStorage.removeItem('elsim:project:v4')
@@ -1669,19 +1684,54 @@ export default function App() {
       localStorage.removeItem('elsim:project:v2')
       localStorage.removeItem('elsim:project:v1')
       setAutosaveStatus('saved')
+      void clearProjectAutosave().catch(() => {})
     } catch {
-      setAutosaveStatus('error')
-      if (notify) setNotice('This browser could not save the project locally. Use Save to download a copy.')
+      void writeProjectAutosave({ json, savedAt }).then(() => {
+        if (generation !== autosaveGenerationRef.current) return
+        setAutosaveStatus('recovered')
+        if (notify) setNotice('Local storage is full. The project was saved in larger browser recovery storage.')
+      }).catch(() => {
+        if (generation !== autosaveGenerationRef.current) return
+        setAutosaveStatus('error')
+        if (notify) setNotice('This browser could not save the project locally. Use Save to download a copy.')
+      })
     }
   }
   useEffect(() => {
     const flushAutosave = () => {
-      if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
+      if (autosaveTimerRef.current === null) return
+      window.clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
       persistProjectAutosaveRef.current(false)
     }
+    const flushWhenHidden = () => { if (document.visibilityState === 'hidden') flushAutosave() }
     window.addEventListener('pagehide', flushAutosave)
-    return () => window.removeEventListener('pagehide', flushAutosave)
+    document.addEventListener('visibilitychange', flushWhenHidden)
+    return () => { window.removeEventListener('pagehide', flushAutosave); document.removeEventListener('visibilitychange', flushWhenHidden) }
+  }, [])
+  useEffect(() => {
+    let active = true
+    const recoverProject = async () => {
+      let localSavedAt = 0
+      try { localSavedAt = Number(localStorage.getItem('elsim:project:v7:savedAt')) || 0 } catch { /* IndexedDB can still restore the project. */ }
+      autosaveTimestampRef.current = localSavedAt
+      try {
+        const snapshot = await readProjectAutosave()
+        if (!active) return
+        if (snapshot && snapshot.savedAt >= localSavedAt && snapshot.savedAt > 0) {
+          try {
+            setProjectState(validateProject(JSON.parse(snapshot.json)))
+            autosaveTimestampRef.current = snapshot.savedAt
+            setAutosaveStatus('recovered')
+          } catch {
+            void clearProjectAutosave().catch(() => {})
+          }
+        } else if (snapshot) void clearProjectAutosave().catch(() => {})
+      } catch { /* Keep the synchronous localStorage recovery when IndexedDB is unavailable. */ }
+      if (active) setProjectRecoveryReady(true)
+    }
+    void recoverProject()
+    return () => { active = false }
   }, [])
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -2087,6 +2137,7 @@ export default function App() {
     return requiredModelAssets.has(assetId)
   }
   useEffect(() => {
+    if (!projectRecoveryReady) return
     setAutosaveStatus('saving')
     if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
     autosaveTimerRef.current = window.setTimeout(() => {
@@ -2097,7 +2148,7 @@ export default function App() {
       if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
     }
-  }, [project])
+  }, [project, projectRecoveryReady])
   useEffect(() => {
     let active = true
     const assets = [...(project.modelAssets ?? []), ...(project.symbolAssets ?? [])]
@@ -2833,7 +2884,7 @@ export default function App() {
       if (event.code !== 'Space') return
       const target = event.target
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || Boolean(ltspiceExport) || ltspiceExportBusy
+      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady
       if (editingText || modalOpen) return
       event.preventDefault()
       setSpacePan(true)
@@ -2853,7 +2904,7 @@ export default function App() {
       if (event.key === 'Escape' && ltspiceExport) { closeLtspiceExport(); return }
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
       if (event.key === 'Escape' && saveWarningOpen) { closeSaveWarning(); return }
-      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || Boolean(ltspiceExport) || ltspiceExportBusy
+      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady
       if (event.key === '/' && !modalOpen && !editingText) { event.preventDefault(); componentSearchRef.current?.focus(); return }
       if (editingText) return
       if (modalOpen) return
@@ -2934,7 +2985,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onSpaceKeyDown, true); window.removeEventListener('keyup', onSpaceKeyUp, true); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy])
+  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
     try { await navigator.clipboard.writeText(netlist); setNotice('Generated netlist copied') }
@@ -3609,6 +3660,7 @@ export default function App() {
       'After a run, right-click a wire or component and choose a voltage or current waveform. Use the time controls in the top toolbar to inspect solved values. Schematic animations follow those same results. The Netlist tab is optional; you do not need to edit SPICE text.',
       'Use Save to download an .elsim project file containing your circuit and its project data. Later, choose Open and select that file to continue. Imported symbols and model libraries remain project assets, so review the rights notice before sharing files that contain them.',
     ][tourStep]}</p>{tourStep === 1 && <button className="tour-run-action" onClick={editTourComponentValue}>Edit resistor value</button>}{tourStep === 2 && <button className="tour-run-action" onClick={() => { setTourStep(null); void startSimulation() }}><Play size={13} fill="currentColor"/> Run this circuit now</button>}<div className="tour-progress" role="progressbar" aria-label="Quick tour progress" aria-valuemin={1} aria-valuemax={5} aria-valuenow={tourStep + 1} aria-valuetext={`Step ${tourStep + 1} of 5`}>{[0, 1, 2, 3, 4].map((step) => <span key={step} className={step <= tourStep ? 'current' : ''} aria-hidden="true"/> )}</div><div className="tour-actions"><button className="tour-skip" onClick={() => setTourStep(null)}>Skip tour</button><span/>{tourStep > 0 && <button className="tour-secondary" onClick={() => setTourPage(tourStep - 1)}>Back</button>}<button ref={tourNextButtonRef} className="primary-small" onClick={() => tourStep === 4 ? setTourStep(null) : setTourPage(tourStep + 1)}>{tourStep === 4 ? 'Finish' : 'Next'} <ArrowUp size={13}/></button></div></section></div>}
-    <footer className="app-status"><span role="status" aria-live="polite"><span className={`status-dot ${autosaveStatus}`}/>{autosaveStatus === 'saving' ? 'Saving changes locally…' : autosaveStatus === 'error' ? 'Local save failed. Use Save to download a copy.' : 'All changes saved locally'}</span><span>Original ELSim component symbols</span><span><Sparkles size={13}/> Built for curious minds</span></footer>
+    {!projectRecoveryReady && <div className="project-recovery-overlay" role="status" aria-live="polite"><span className="status-dot saving"/>Restoring your local project…</div>}
+    <footer className="app-status"><span role="status" aria-live="polite"><span className={`status-dot ${autosaveStatus}`}/>{autosaveStatus === 'saving' ? 'Saving changes locally…' : autosaveStatus === 'recovered' ? 'Saved in browser recovery storage' : autosaveStatus === 'error' ? 'Local save failed. Use Save to download a copy.' : 'All changes saved locally'}</span><span>Original ELSim component symbols</span><span><Sparkles size={13}/> Built for curious minds</span></footer>
   </div>
 }
