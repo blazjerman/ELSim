@@ -201,7 +201,8 @@
               "kind": { "const": "circle" },
               "cx": { "type": "number", "minimum": -1000, "maximum": 1000 },
               "cy": { "type": "number", "minimum": -1000, "maximum": 1000 },
-              "r": { "type": "number", "exclusiveMinimum": 0, "maximum": 500 }
+              "r": { "type": "number", "exclusiveMinimum": 0, "maximum": 500 },
+              "fill": { "enum": ["none", "stroke"] }
             }
           },
           {
