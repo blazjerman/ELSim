@@ -79,6 +79,56 @@ export function projectPinLocations(project: Project): PinLocation[] {
   return project.parts.flatMap(componentPins)
 }
 
+/** Find schematic dots at pin/wire joins and wire-to-wire endpoint joins.
+ * The spatial broadphase avoids testing every pin against every wire on edits;
+ * pointOnSegment remains the exact geometry check. */
+export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'>): Point[] {
+  const pins = project.parts.flatMap(componentPins)
+  const cellSize = 64
+  const cellKey = (x: number, y: number) => `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`
+  const segmentCells = new Map<string, Wire[]>()
+  const longSegments: Wire[] = []
+  for (const wire of project.wires) {
+    const [[x1, y1], [x2, y2]] = wire.points
+    const minX = Math.floor(Math.min(x1, x2) / cellSize), maxX = Math.floor(Math.max(x1, x2) / cellSize)
+    const minY = Math.floor(Math.min(y1, y2) / cellSize), maxY = Math.floor(Math.max(y1, y2) / cellSize)
+    if ((maxX - minX + 1) * (maxY - minY + 1) > 256) { longSegments.push(wire); continue }
+    for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
+      const key = `${x}:${y}`
+      const bucket = segmentCells.get(key)
+      if (bucket) bucket.push(wire)
+      else segmentCells.set(key, [wire])
+    }
+  }
+  const wiresAt = (point: Point): Wire[] => [...longSegments, ...(segmentCells.get(cellKey(point.x, point.y)) ?? [])]
+  const pinCells = new Map<string, PinLocation[]>()
+  for (const pin of pins) {
+    const key = cellKey(pin.x, pin.y)
+    const bucket = pinCells.get(key)
+    if (bucket) bucket.push(pin)
+    else pinCells.set(key, [pin])
+  }
+  const hasPinAt = (point: Point) => {
+    const minX = Math.floor((point.x - 0.5) / cellSize), maxX = Math.floor((point.x + 0.5) / cellSize)
+    const minY = Math.floor((point.y - 0.5) / cellSize), maxY = Math.floor((point.y + 0.5) / cellSize)
+    for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
+      if ((pinCells.get(`${x}:${y}`) ?? []).some((pin) => Math.hypot(pin.x - point.x, pin.y - point.y) < 0.5)) return true
+    }
+    return false
+  }
+  const dots = new Map<string, Point>()
+  const add = (point: Point) => dots.set(`${Math.round(point.x * 1000)},${Math.round(point.y * 1000)}`, point)
+  for (const pin of pins) {
+    if (wiresAt(pin).some((wire) => pointOnSegment(pin, { x: wire.points[0][0], y: wire.points[0][1] }, { x: wire.points[1][0], y: wire.points[1][1] }))) add({ x: pin.x, y: pin.y })
+  }
+  for (const wire of project.wires) for (const [x, y] of wire.points) {
+    const point = { x, y }
+    const connectedToWire = wiresAt(point).some((other) => other.id !== wire.id && pointOnSegment(point, { x: other.points[0][0], y: other.points[0][1] }, { x: other.points[1][0], y: other.points[1][1] }))
+    if (hasPinAt(point) || connectedToWire) add(point)
+  }
+  return [...dots.values()]
+}
+
 export function closestPoint(point: Point, a: Point, b: Point): Point & { distance: number; t: number } {
   const dx = b.x - a.x, dy = b.y - a.y
   const length = dx * dx + dy * dy

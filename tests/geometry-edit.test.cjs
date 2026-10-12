@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, EDITOR_GRID_SIZE, snapToEditorGrid, wireCrossingAt, wireSegmentOverlapsBounds } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, EDITOR_GRID_SIZE, snapToEditorGrid, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
 
@@ -23,6 +23,30 @@ test('native component pins and the RC starter share one 10-unit placement grid'
   }
   assert.equal(snapToEditorGrid(375), 380)
   assert.equal(snapToEditorGrid(374), 370)
+})
+
+test('wire-connection dot broadphase preserves exact pin, T-join, and crossing geometry', () => {
+  const project = createStarterProject()
+  project.parts = [{ id: 'dot-r1', kind: 'resistor', ref: 'R1', value: '1k', x: 0, y: 0, rotation: 0 }]
+  project.wires = [
+    { id: 'dot-long', points: [[-20000, 0], [20000, 0]] },
+    { id: 'dot-t', points: [[0, 0], [0, 100]] },
+    { id: 'dot-crossing', points: [[500, -100], [500, 100]] },
+  ]
+  const pins = project.parts.flatMap(componentPins)
+  const expected = new Map()
+  const add = (x, y) => expected.set(`${Math.round(x * 1000)},${Math.round(y * 1000)}`, { x, y })
+  for (const pin of pins) {
+    if (project.wires.some((wire) => pointOnSegment(pin, { x: wire.points[0][0], y: wire.points[0][1] }, { x: wire.points[1][0], y: wire.points[1][1] }))) add(pin.x, pin.y)
+  }
+  for (const wire of project.wires) for (const [x, y] of wire.points) {
+    const point = { x, y }
+    const connectedToPin = pins.some((pin) => Math.hypot(pin.x - x, pin.y - y) < 0.5)
+    const connectedToWire = project.wires.some((other) => other.id !== wire.id && pointOnSegment(point, { x: other.points[0][0], y: other.points[0][1] }, { x: other.points[1][0], y: other.points[1][1] }))
+    if (connectedToPin || connectedToWire) add(x, y)
+  }
+  assert.deepEqual(wireConnectionDotPoints(project), [...expected.values()])
+  assert.deepEqual(wireConnectionDotPoints(project).map(({ x, y }) => [x, y]), [[-50, 0], [50, 0], [0, 0]])
 })
 
 test('wire animation viewport culling keeps intersecting segments and excludes distant wires', () => {

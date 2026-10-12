@@ -197,7 +197,7 @@ try {
   const build = createRequire(import.meta.url)
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
-  const { componentPins } = build(path.join(output, 'domain/geometry.js'))
+  const { componentPins, wireConnectionDotPoints } = build(path.join(output, 'domain/geometry.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
   const { createWireCurrentFlowSampler } = build(path.join(output, 'domain/wireFlow.js'))
   const { checkCircuit } = build(path.join(output, 'domain/electricalCheck.js'))
@@ -271,6 +271,12 @@ try {
     const wireSegments = project.wires.reduce((sum, wire) => sum + wire.points.length - 1, 0)
     if (wireSegments !== project.wires.length || project.wires.some((wire) => wire.points.length !== 2)) throw new Error(`Wire-heavy benchmark fixture ${count} must use independent two-endpoint wire segments.`)
     let wireFlowSampling
+    let connectionDots
+    if (count === 5_000) {
+      const dots = measure(() => wireConnectionDotPoints(project))
+      if (dots.value.length !== wireSegments * 2) throw new Error(`Wire-grid fixture expected ${wireSegments * 2} pin-connection dots; got ${dots.value.length}.`)
+      connectionDots = { count: dots.value.length, medianMs: dots.medianMs, p95Ms: dots.p95Ms }
+    }
     if (count === 5_000) {
       const sampler = createWireCurrentFlowSampler(project, connectivity.value)
       const visibleWireIds = new Set(project.wires.slice(0, 20).map((wire) => wire.id))
@@ -300,6 +306,7 @@ try {
       circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
       fullCircuitChecks: { medianMs: fullCircuitChecks.medianMs, p95Ms: fullCircuitChecks.p95Ms },
       ...(wireFlowSampling ? { wireFlowSampling } : {}),
+      ...(connectionDots ? { connectionDots } : {}),
     })
   }
 

@@ -2266,6 +2266,7 @@ test('wire hover clears immediately over a component and connection dots mark jo
 
 test('connection dots render at wire T joins and component pins on a wire', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = [{ id: 'join-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 300, rotation: 0 }]

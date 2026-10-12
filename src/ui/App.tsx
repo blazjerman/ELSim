@@ -14,7 +14,7 @@ import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
-import { componentPins, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, wireCrossingAt, wireNetAt, wireSegmentOverlapsBounds } from '../domain/geometry'
+import { componentPins, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, wireConnectionDotPoints, wireCrossingAt, wireNetAt, wireSegmentOverlapsBounds } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
@@ -1250,22 +1250,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   }, [wireFlowSampler, resultValueAt, animatedWireIds])
   const orderedWires = useMemo(() => hoveredWireId ? [...project.wires.filter((wire) => wire.id !== hoveredWireId), ...project.wires.filter((wire) => wire.id === hoveredWireId)] : project.wires, [project.wires, hoveredWireId])
   const hoveredWire = hoveredWireId ? project.wires.find((wire) => wire.id === hoveredWireId) : undefined
-  const wireConnectionDots = useMemo(() => {
-    const pins = projectPinLocations(project)
-    const dots = new Map<string, { x: number; y: number }>()
-    const add = (x: number, y: number) => dots.set(`${Math.round(x * 1000)},${Math.round(y * 1000)}`, { x, y })
-    for (const pin of pins) {
-      const connected = project.wires.some((wire) => pointOnSegment(pin, { x: wire.points[0][0], y: wire.points[0][1] }, { x: wire.points[1][0], y: wire.points[1][1] }))
-      if (connected) add(pin.x, pin.y)
-    }
-    for (const wire of project.wires) for (const [x, y] of wire.points) {
-      const point = { x, y }
-      const connectedToPin = pins.some((pin) => Math.hypot(pin.x - x, pin.y - y) < .5)
-      const connectedToWire = project.wires.some((other) => other.id !== wire.id && pointOnSegment(point, { x: other.points[0][0], y: other.points[0][1] }, { x: other.points[1][0], y: other.points[1][1] }))
-      if (connectedToPin || connectedToWire) add(x, y)
-    }
-    return [...dots.values()]
-  }, [project.parts, project.wires])
+  const wireConnectionDots = useMemo(() => wireConnectionDotPoints(project), [project.parts, project.wires])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
       <div className="canvas-toolset"><IconButton title="Select and move (M)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => { onClearPendingComponent(); setSelectedWireId(null); setTool('wire'); setNotice('Wire selected. Drag anywhere on the grid to place one segment.') }}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (?)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (=)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
