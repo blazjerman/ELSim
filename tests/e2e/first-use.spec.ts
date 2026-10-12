@@ -3378,6 +3378,8 @@ test('parallel LED lesson shows separate branch currents and the effect of one r
   await dialog.locator('.example-list article').filter({ hasText: 'Parallel LEDs with separate resistors' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Parallel LEDs with separate resistors')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(11)
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   const lesson = page.locator('.example-lesson-next-step')

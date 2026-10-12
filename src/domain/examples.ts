@@ -205,7 +205,19 @@ export function createParallelLedExampleProject(): Project {
   const parts = [source, upperResistor, upperLed, lowerResistor, lowerLed]
   project.name = 'Parallel LEDs with separate resistors'
   project.parts = parts
-  project.wires = []
+  project.wires = [
+    { id: 'parallel-feed-common', points: [[280, 350], [420, 350]] },
+    { id: 'parallel-feed-upper-riser', points: [[420, 350], [420, 320]] },
+    { id: 'parallel-feed-upper', points: [[420, 320], [450, 320]] },
+    { id: 'parallel-feed-lower-riser', points: [[420, 350], [420, 480]] },
+    { id: 'parallel-feed-lower', points: [[420, 480], [450, 480]] },
+    { id: 'parallel-branch-upper', points: [[550, 320], [690, 320]] },
+    { id: 'parallel-branch-lower', points: [[550, 480], [690, 480]] },
+    { id: 'parallel-cathodes', points: [[790, 320], [790, 480]] },
+    { id: 'parallel-cathode-ground', points: [[790, 480], [790, 600]] },
+    { id: 'parallel-ground-bus', points: [[790, 600], [280, 600]] },
+    { id: 'parallel-ground-source', points: [[280, 600], [280, 450]] },
+  ]
   project.junctions = []
   project.netLabels = [
     labelAt('parallel-led-supply-source', 'SUPPLY', source, 0),
@@ -214,7 +226,7 @@ export function createParallelLedExampleProject(): Project {
     labelAt('parallel-led-r2-d2', 'LED2', lowerResistor, 1), labelAt('parallel-led-d2-anode', 'LED2', lowerLed, 0),
     labelAt('parallel-led-ground-source', '0', source, 1), labelAt('parallel-led-ground-d1', '0', upperLed, 1), labelAt('parallel-led-ground-d2', '0', lowerLed, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'op' }
   project.plotSettings = { selectedTraceIds: ['V(LED1)', 'V(LED2)', 'I(D1)', 'I(D2)'], ranges: {} }
   project.view = { zoom: 0.85, panX: -5, panY: 0 }
