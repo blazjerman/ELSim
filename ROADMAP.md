@@ -101,7 +101,7 @@ Fatal solver diagnostic follow-up (2026-10-12): The ngspice worker now recognize
 
 Transient data-window control (2026-10-12): Transient settings can optionally set ngspice `tstart` to discard stored waveform samples before a chosen time. The circuit still solves from zero so startup behavior remains electrically correct; the setting is validated against `stopTime`, saved in native project files, and exposed as “Start saving at” with an explanation in the inspector. A focused Firefox UI regression checks persistence and generated netlist output; no WASM rebuild is needed.
 
-Transient resolution presets now size their target sample interval from `tstart` to `tstop`, so Quick/Standard/Detailed remain consistent after early samples are discarded. Domain and focused Firefox UI regressions cover the calculation and saved settings.
+Transient resolution presets keep their maximum step based on the full `0`-to-`tstop` solve even when `tstart` discards earlier output. This avoids increasing solver work during startup just to target a denser retained interval; domain and focused Firefox UI regressions protect the full-duration resolution behavior.
 
 Imported-model recovery follow-up (2026-10-12): An ngspice model-card error with a mapped source line now has a Review source line action that opens the original imported library at the failing line and focuses it. A focused Firefox run uses the existing local runtime and checks the source highlight and focus.
 
