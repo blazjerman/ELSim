@@ -1,28 +1,5 @@
 type AnimationConfig = { key: string; magnitude: number; forward: boolean; currentMultiplier: number; dotSize: number; dotSpacing: number }
 
-/** Extend each end so a moving dash can pass fully beyond the wire endpoint. */
-export function extendWireAnimationPath(points: readonly (readonly [number, number])[], extension: number): [number, number][] {
-  if (points.length < 2 || extension <= 0) return points.map(([x, y]) => [x, y])
-  let firstIndex = 1
-  while (firstIndex < points.length && points[firstIndex][0] === points[0][0] && points[firstIndex][1] === points[0][1]) firstIndex++
-  let lastIndex = points.length - 2
-  while (lastIndex >= 0 && points[lastIndex][0] === points[points.length - 1][0] && points[lastIndex][1] === points[points.length - 1][1]) lastIndex--
-  if (firstIndex === points.length || lastIndex < 0) return points.map(([x, y]) => [x, y])
-  const [firstX, firstY] = points[0]
-  const firstDx = firstX - points[firstIndex][0]
-  const firstDy = firstY - points[firstIndex][1]
-  const firstLength = Math.hypot(firstDx, firstDy)
-  const [lastX, lastY] = points.at(-1)!
-  const lastDx = lastX - points[lastIndex][0]
-  const lastDy = lastY - points[lastIndex][1]
-  const lastLength = Math.hypot(lastDx, lastDy)
-  return [
-    [firstX + firstDx / firstLength * extension, firstY + firstDy / firstLength * extension],
-    ...points.map(([x, y]) => [x, y] as [number, number]),
-    [lastX + lastDx / lastLength * extension, lastY + lastDy / lastLength * extension],
-  ]
-}
-
 const elements = new Map<string, SVGPolylineElement>()
 const configurations = new Map<string, AnimationConfig>()
 const phases = new Map<string, number>()
