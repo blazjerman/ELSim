@@ -152,6 +152,19 @@ export function createLogicGatesExampleProject(): Project {
   return project
 }
 
+/** The logic-gate truth-table lesson configured for a common 3.3 V logic supply. */
+export function create3v3LogicGatesExampleProject(): Project {
+  const project = createLogicGatesExampleProject()
+  project.name = '3.3 V logic gates'
+  project.parts = project.parts.map((part) => {
+    if (part.kind === 'source') return { ...part, value: '3.3 V', pulse: { ...part.pulse!, initial: '0 V' } }
+    if (part.kind === 'logicGate' || part.kind === 'inverter') return { ...part, logicLow: '0 V', logicHigh: '3.3 V', logicThreshold: '1.65 V' }
+    return part
+  })
+  project.sheets = [{ ...project.sheets[0], parts: project.parts }]
+  return project
+}
+
 export function createLedExampleProject(): Project {
   const project = createStarterProject()
   project.name = 'LED pulse response'

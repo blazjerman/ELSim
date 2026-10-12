@@ -2410,6 +2410,26 @@ test('logic gate lesson simulates the four input truth-table states', { tag: ['@
   await expect(outputPlot.locator('.cursor-readout')).toContainText(/V\(BAND\) =/)
 })
 
+test('3.3 V logic gate example runs with matching thresholds and outputs', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: '3.3 V logic gates' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('3.3 V logic gates')
+  await page.locator('.circuit-part[data-part-id="logic-and"]').click()
+  await expect(page.getByLabel('Logic high output voltage')).toHaveValue('3.3 V')
+  await expect(page.getByLabel('Logic input threshold voltage')).toHaveValue('1.65 V')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(OUT_AND)')
+  await scrubToTime(page.getByRole('slider', { name: 'Simulation time' }), 0.005)
+  await expect(page.locator('.circuit-part[data-part-id="logic-and"]')).toHaveAttribute('data-logic-state', 'high')
+  await expect(page.locator('.plot-window').first().locator('.cursor-readout')).toContainText(/V\(out_and\) = 3\.3/i)
+})
+
 test('potentiometer example adjusts the simulated output with its wiper', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

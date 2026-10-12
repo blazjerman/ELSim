@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -77,6 +77,18 @@ test('logic gates accept custom input thresholds and logic output levels', () =>
   assert.match(artifact.text, /^BAND OUT_AND 0 V=\{0 \+ \(3\.3 - 0\) \*/m)
   assert.match(artifact.text, /V\(A\) > 1\.65/)
   assert.throws(() => validateProject({ ...project, parts: project.parts.map((part) => part.id === 'logic-and' ? { ...part, logicLow: '3.3 V', logicHigh: '0 V', logicThreshold: '1.65 V' } : part) }), /threshold strictly between low and high/)
+})
+
+test('3.3 V logic gate example aligns stimulus, threshold, and output levels', () => {
+  const project = validateProject(create3v3LogicGatesExampleProject())
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, '3.3 V logic gates')
+  assert.match(artifact.text, /^VA A 0 PULSE\(0 3\.3 0 1u 1u 20m 40m\)$/m)
+  assert.match(artifact.text, /^VB B 0 PULSE\(0 3\.3 0 1u 1u 10m 20m\)$/m)
+  assert.match(artifact.text, /^BAND OUT_AND 0 V=\{0 \+ \(3\.3 - 0\) \*/m)
+  assert.match(artifact.text, /V\(A\) > 1\.65/)
+  assert.ok(project.parts.filter((part) => part.kind === 'logicGate' || part.kind === 'inverter').every((part) => part.logicLow === '0 V' && part.logicHigh === '3.3 V' && part.logicThreshold === '1.65 V'))
 })
 
 test('AC transformer example emits coupled windings with the selected turns ratio', () => {
