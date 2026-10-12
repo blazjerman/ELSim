@@ -2323,6 +2323,23 @@ test('imported op-amp lesson opens its IC model and solves the feedback gain', {
   await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('1.499')
 })
 
+test('inverting op-amp lesson demonstrates negative feedback gain', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Inverting op-amp amplifier' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Inverting op-amp amplifier')
+  await expect(page.getByLabel('Guided example')).toContainText('about −2 times the input')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(VOUT)')
+  const table = page.locator('.plot-window').last().locator('.op-table')
+  await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('-0.999')
+})
+
 test('potentiometer example adjusts the simulated output with its wiper', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

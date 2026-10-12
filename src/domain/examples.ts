@@ -65,6 +65,50 @@ export function createImportedOpampExampleProject(): Project {
   return project
 }
 
+/** A beginner inverting-amplifier lesson using the same ordered five-pin user IC. */
+export function createInvertingOpampExampleProject(): Project {
+  const project = createImportedOpampExampleProject()
+  const amplifier = project.parts.find((part) => part.ref === 'XU1')!
+  const input = project.parts.find((part) => part.ref === 'VIN')!
+  const feedback = project.parts.find((part) => part.ref === 'RF')!
+  const inputResistor = project.parts.find((part) => part.ref === 'RG')!
+  const load = project.parts.find((part) => part.ref === 'RLOAD')!
+  amplifier.x = 520
+  amplifier.y = 400
+  inputResistor.ref = 'RIN'
+  inputResistor.value = '10 kΩ'
+  inputResistor.x = 360
+  inputResistor.y = 460
+  feedback.value = '20 kΩ'
+  feedback.x = 720
+  feedback.y = 320
+  load.value = '10 kΩ'
+  load.x = 680
+  load.y = 500
+
+  const atPin = (id: string, name: string, part: Part, pinIndex: number) => {
+    const pin = componentPins(part)[pinIndex]
+    return { id, name, x: pin.x, y: pin.y, visible: true }
+  }
+  project.name = 'Inverting op-amp amplifier'
+  project.netLabels = [
+    atPin('inverting-vin-source', 'VIN', input, 0), atPin('inverting-vin-rin', 'VIN', inputResistor, 0),
+    atPin('inverting-feedback-rin', 'FB', inputResistor, 1), atPin('inverting-feedback-opamp', 'FB', amplifier, 1),
+    atPin('inverting-ground-opamp', '0', amplifier, 0), atPin('inverting-vpos-opamp', 'VPOS', amplifier, 2),
+    atPin('inverting-vpos-source', 'VPOS', project.parts.find((part) => part.ref === 'VCC')!, 0),
+    atPin('inverting-vneg-opamp', 'VNEG', amplifier, 3), atPin('inverting-vneg-source', 'VNEG', project.parts.find((part) => part.ref === 'VEE')!, 1),
+    atPin('inverting-ground-input', '0', input, 1),
+    atPin('inverting-ground-vpos', '0', project.parts.find((part) => part.ref === 'VCC')!, 1),
+    atPin('inverting-ground-vneg', '0', project.parts.find((part) => part.ref === 'VEE')!, 0),
+    atPin('inverting-output-opamp', 'VOUT', amplifier, 4), atPin('inverting-output-rf', 'VOUT', feedback, 0),
+    atPin('inverting-output-load', 'VOUT', load, 0), atPin('inverting-feedback-rf', 'FB', feedback, 1),
+    atPin('inverting-ground-load', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(FB)', 'V(VOUT)', 'I(RIN)'], ranges: {} }
+  return project
+}
+
 export function createLedExampleProject(): Project {
   const project = createStarterProject()
   project.name = 'LED pulse response'
