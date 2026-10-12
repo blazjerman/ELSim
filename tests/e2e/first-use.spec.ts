@@ -4,7 +4,7 @@ import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
 import { createHierarchicalExampleProject, createImportedOpampExampleProject } from '../../src/domain/examples'
-import { createStarterProject, validateProject } from '../../src/domain/project'
+import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
 import { componentPins } from '../../src/domain/geometry'
 import { createProjectArchive } from '../../src/domain/projectArchive'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
@@ -5383,10 +5383,14 @@ test('circuit checks flag two declared hierarchical outputs connected to one net
 
 test('circuit checks can select the affected component and orphan wire', async ({ page }) => {
   await page.goto('/')
+  await expect(page.locator('.circuit-part[data-part-id="p-r1"]')).toBeVisible()
+  const electricalCheckModuleLoaded = () => page.evaluate(() => performance.getEntriesByType('resource').some(({ name }) => name.includes('/src/domain/electricalCheck.ts')))
+  await expect.poll(electricalCheckModuleLoaded).toBe(false)
   await page.locator('.circuit-part[data-part-id="p-r1"]').click()
   await page.locator('[data-part-setting="p-r1:value"]').fill('not-a-value')
   await page.getByRole('button', { name: /Check circuit/ }).click()
   const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  await expect.poll(electricalCheckModuleLoaded).toBe(true)
   await expect(report).toContainText('R1 has an invalid value')
   await report.getByRole('button', { name: 'Select affected component' }).first().click()
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('R1')
@@ -5466,16 +5470,18 @@ test('inspector rejects a duplicate case-insensitive SPICE reference before savi
 
 test('circuit checks distinguish a behavioral node from a same-named component', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts.push(
-      { id: 'resistor-with-node-like-name', kind: 'resistor', ref: 'R2', value: '1k', x: 760, y: 600, rotation: 0 },
-      { id: 'behavioral-with-wrong-kind-reference', kind: 'behavioral', ref: 'B1', value: 'V(vin)', behavioralOutput: 'voltage', x: 900, y: 600, rotation: 0 },
+      { id: 'resistor-with-node-like-name', kind: 'resistor', ref: 'R2', value: '1k', x: 640, y: 500, rotation: 0 },
+      { id: 'behavioral-with-wrong-kind-reference', kind: 'behavioral', ref: 'B1', value: 'V(vin)', behavioralOutput: 'voltage', x: 700, y: 500, rotation: 0 },
     )
     project.sheets[0] = { ...project.sheets[0], parts: project.parts }
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
+  await expect(page.getByRole('button', { name: /Check circuit/ })).toBeVisible()
   const behavioralPart = page.getByRole('button', { name: /^B1, Behavioral source/ })
   await behavioralPart.focus()
   await page.keyboard.press('Enter')
@@ -5512,6 +5518,7 @@ test('circuit checks explain missing transitive model dependencies and select th
 
 test('circuit checks select the component with an ambiguous imported model name', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(async () => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const contents = [
