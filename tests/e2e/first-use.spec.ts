@@ -2344,6 +2344,39 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   await expect(page.locator('.component-current-flow')).toHaveCount(0)
 })
 
+test('inductor current ramp lesson shows gradual current rise and decay after the pulse', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser workflow').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Inductor current ramp' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Inductor current ramp')
+  await expect(page.getByText('An inductor resists a sudden current change')).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const inductor = page.locator('.circuit-part[data-part-id="rl-step-l1"]')
+  const inductorTitle = inductor.locator(':scope > title')
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  const maxSample = Number(await slider.getAttribute('max'))
+  const currentAt = async (fraction: number) => {
+    await slider.fill(String(Math.floor(maxSample * fraction)))
+    await expect.poll(async () => (await inductorTitle.textContent()) ?? '').toMatch(/[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)? A,/i)
+    const title = (await inductorTitle.textContent()) ?? ''
+    const match = title.match(/([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?) A,/i)
+    expect(match).not.toBeNull()
+    return Math.abs(Number(match![1]))
+  }
+  const risingCurrent = await currentAt(0.4)
+  expect(risingCurrent).toBeGreaterThan(0.04)
+  expect(risingCurrent).toBeLessThan(0.06)
+  await expect(inductor.locator('.inductor-current-arrow')).toBeVisible()
+  const decayingCurrent = await currentAt(0.9)
+  expect(decayingCurrent).toBeLessThan(0.01)
+  expect(decayingCurrent).toBeLessThan(risingCurrent / 10)
+})
+
 test('voltage-divider example teaches and solves the equal-resistor midpoint', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

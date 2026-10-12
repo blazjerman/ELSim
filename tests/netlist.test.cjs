@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlStepExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -603,6 +603,18 @@ test('RLC ringing example is a complete series circuit with transient probes', (
   assert.match(artifact.text, /^C1 L_C 0 100u$/m)
   assert.match(artifact.text, /^\.tran 20u 40m$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(L_C)', 'I(L1)'])
+})
+
+test('RL step example has a pulse-driven series resistor and inductor with current and voltage traces', () => {
+  const project = createRlStepExampleProject()
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'Inductor current ramp')
+  assert.match(artifact.text, /^V1 VIN 0 PULSE\(0 5 0 1u 1u 5m 10m\)$/m)
+  assert.match(artifact.text, /^R1 VIN V_RL 100$/m)
+  assert.match(artifact.text, /^L1 V_RL 0 100m$/m)
+  assert.match(artifact.text, /^\.tran 50u 10m$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(V_RL)', 'I(L1)'])
 })
 
 test('VCVS amplifier example connects signal and reference pins in SPICE order', () => {

@@ -434,6 +434,37 @@ export function createRlcExampleProject(): Project {
   return project
 }
 
+/** A beginner RL step-response lesson showing the inductor's gradual current rise and decay. */
+export function createRlStepExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = {
+    id: 'rl-step-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'pulse',
+    pulse: { initial: '0 V', delay: '0', rise: '1 µs', fall: '1 µs', width: '5 ms', period: '10 ms' },
+    x: 220, y: 360, rotation: 0,
+  }
+  const resistor: Part = { id: 'rl-step-r1', kind: 'resistor', ref: 'R1', value: '100 Ω', x: 460, y: 300, rotation: 0 }
+  const inductor: Part = { id: 'rl-step-l1', kind: 'inductor', ref: 'L1', value: '100 mH', x: 700, y: 300, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Inductor current ramp'
+  project.parts = [source, resistor, inductor]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('rl-step-vin-source', 'VIN', source, 0), labelAt('rl-step-vin-resistor', 'VIN', resistor, 0),
+    labelAt('rl-step-resistor-inductor', 'V_RL', resistor, 1), labelAt('rl-step-inductor-resistor', 'V_RL', inductor, 0),
+    labelAt('rl-step-ground-inductor', '0', inductor, 1), labelAt('rl-step-ground-source', '0', source, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '10 ms', maxStep: '50 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(V_RL)', 'I(L1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -15, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A first AC sweep example showing the RC low-pass cutoff near 1 kHz. */
 export function createAcLowPassExampleProject(): Project {
   const project = createStarterProject()
