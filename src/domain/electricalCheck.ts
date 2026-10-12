@@ -73,6 +73,42 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
   }
 
+  // Child-sheet values use that sheet's own parameter scope. Report against
+  // the visible top-level block so the Circuit Checks action can still select
+  // something in the currently open schematic.
+  for (const { sheet, topLevelInstanceId } of reachableSheets) {
+    if (sheet.id === project.activeSheetId || !topLevelInstanceId) continue
+    const sheetParameters = new Set((sheet.parameters ?? []).map((parameter) => parameter.name.toLowerCase()))
+    const isSheetParameter = (value: string) => {
+      const expression = value.trim().match(/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/)
+      return Boolean(expression && sheetParameters.has(expression[1].toLowerCase()))
+    }
+    for (const part of sheet.parts) {
+      const invalidValue = (detail: string) => issues.push({
+        id: `invalid-value:${sheet.id}:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} has an invalid value in ${sheet.name}`,
+        detail,
+        partId: topLevelInstanceId,
+      })
+      if (part.kind === 'source' && (part.sourceMode === undefined || part.sourceMode === 'dc') && componentMagnitude(part.value, part.kind) === null && !isSheetParameter(part.value)) {
+        invalidValue('Enter a numeric voltage with an optional SI prefix, or use a parameter declared on this sheet.')
+      } else if (part.kind === 'currentSource' && componentMagnitude(part.value, part.kind) === null && !isSheetParameter(part.value)) {
+        invalidValue('Enter a numeric current with an optional SI prefix, or use a parameter declared on this sheet.')
+      } else if (['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) {
+        const magnitude = componentMagnitude(part.value, part.kind)
+        if (magnitude === null && !isSheetParameter(part.value)) invalidValue('Enter a numeric value with an optional SI prefix, or use a parameter declared on this sheet.')
+        else if (magnitude !== null && magnitude <= 0) issues.push({
+          id: `nonpositive-value:${sheet.id}:${part.id}`,
+          severity: 'warning',
+          title: `${part.ref} must have a positive value in ${sheet.name}`,
+          detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.',
+          partId: topLevelInstanceId,
+        })
+      }
+    }
+  }
+
   if (project.simulation.analysis === 'dc') {
     const sweepSource = project.parts.find((part) => part.ref.toLowerCase() === project.simulation.dcSweep?.source.trim().toLowerCase())
     if (!sweepSource || (sweepSource.kind !== 'source' && sweepSource.kind !== 'currentSource')) issues.push({

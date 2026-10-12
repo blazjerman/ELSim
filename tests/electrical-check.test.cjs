@@ -282,6 +282,19 @@ test('accepts declared sheet parameters in passive and current-source values but
   assert.ok(issues.some((item) => item.id === 'invalid-value:p-r1'))
 })
 
+test('checks parameter values in reachable child sheets and selects their top-level block', () => {
+  const project = createHierarchicalExampleProject()
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.parts.find((part) => part.ref === 'RCORE').value = '{MISSING}'
+  let issue = checkCircuit(project).find((item) => item.id === 'invalid-value:sheet-core:core-r1')
+  assert.equal(issue?.partId, 'example-x2')
+  assert.match(issue?.title, /RCORE.*Core resistor/)
+  assert.match(issue?.detail, /parameter declared on this sheet/)
+
+  core.parts.find((part) => part.ref === 'RCORE').value = '{RCORE}'
+  assert.equal(checkCircuit(project).some((item) => item.id === 'invalid-value:sheet-core:core-r1'), false)
+})
+
 test('accepts declared sheet parameters in behavioral source expressions and explains missing ones', () => {
   const project = createStarterProject()
   const behavioral = { id: 'parameter-behavioral', kind: 'behavioral', ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage', x: 700, y: 600, rotation: 0 }
