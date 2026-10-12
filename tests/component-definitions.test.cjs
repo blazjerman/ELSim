@@ -111,6 +111,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.ok(componentDefinitionFor('pmos').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M17 -5L10 0L17 5'))
   assert.ok(componentDefinitionFor('njfet').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M-18 -5L-10 0L-18 5'))
   assert.ok(componentDefinitionFor('pjfet').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M-10 -5L-18 0L-10 5'))
+  assert.ok(componentDefinitionFor('inverter').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d === 'M-23 -20L22 0L-23 20Z'))
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
   assert.deepEqual(componentDefinitionFor('lamp').symbolGeometry.map(({ kind }) => kind), ['line', 'circle', 'line'])
   assert.ok(project.parts.every((part) => part.componentDefinitionId === componentDefinitionFor(part.kind).id))

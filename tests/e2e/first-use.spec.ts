@@ -3647,6 +3647,19 @@ test('potentiometer static track renders from the component registry', { tag: '@
   await expect(page.locator('.circuit-part[data-part-id="pot-p1"] .potentiometer-symbol')).toHaveAttribute('data-wiper-position', '0.5')
 })
 
+test('inverter static symbol renders from the component registry', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Logic gate basics' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  const inverter = page.locator('.circuit-part[data-part-id="logic-not"]')
+  await expect(inverter.locator('path[d="M-23 -20L22 0L-23 20Z"]')).toHaveCount(1)
+  await expect(inverter.locator('circle[cx="28"][cy="0"][r="6"]')).toHaveCount(1)
+  await expect(inverter.locator('line[x1="34"][y1="0"][x2="50"][y2="0"]')).toHaveCount(1)
+})
+
 test('potentiometer example adjusts the simulated output with its wiper', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
