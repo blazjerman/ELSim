@@ -190,6 +190,38 @@ export function createLedCurrentLimiterExampleProject(): Project {
   return project
 }
 
+/** A beginner lesson showing why each parallel LED branch needs its own resistor. */
+export function createParallelLedExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'parallel-led-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'dc', x: 280, y: 400, rotation: 0 }
+  const upperResistor: Part = { id: 'parallel-led-r1', kind: 'resistor', ref: 'R1', value: '330 Ω', x: 500, y: 320, rotation: 0 }
+  const upperLed: Part = { id: 'parallel-led-d1', kind: 'led', ref: 'D1', value: 'Default LED', x: 740, y: 320, rotation: 0 }
+  const lowerResistor: Part = { id: 'parallel-led-r2', kind: 'resistor', ref: 'R2', value: '330 Ω', x: 500, y: 480, rotation: 0 }
+  const lowerLed: Part = { id: 'parallel-led-d2', kind: 'led', ref: 'D2', value: 'Default LED', x: 740, y: 480, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const parts = [source, upperResistor, upperLed, lowerResistor, lowerLed]
+  project.name = 'Parallel LEDs with separate resistors'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('parallel-led-supply-source', 'SUPPLY', source, 0),
+    labelAt('parallel-led-supply-r1', 'SUPPLY', upperResistor, 0), labelAt('parallel-led-supply-r2', 'SUPPLY', lowerResistor, 0),
+    labelAt('parallel-led-r1-d1', 'LED1', upperResistor, 1), labelAt('parallel-led-d1-anode', 'LED1', upperLed, 0),
+    labelAt('parallel-led-r2-d2', 'LED2', lowerResistor, 1), labelAt('parallel-led-d2-anode', 'LED2', lowerLed, 0),
+    labelAt('parallel-led-ground-source', '0', source, 1), labelAt('parallel-led-ground-d1', '0', upperLed, 1), labelAt('parallel-led-ground-d2', '0', lowerLed, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(LED1)', 'V(LED2)', 'I(D1)', 'I(D2)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: -5, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A beginner half-wave rectifier showing an AC input and clipped output. */
 export function createDiodeRectifierExampleProject(): Project {
   const project = createStarterProject()

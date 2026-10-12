@@ -2933,6 +2933,42 @@ test('LED current-limiter example explains and solves its resistor-limited curre
   await expect(page.locator('.plot-window').getByRole('row', { name: /I\(D1\)/i })).toBeVisible()
 })
 
+test('parallel LED lesson shows separate branch currents and the effect of one resistor', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser workflow').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Parallel LEDs with separate resistors' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Parallel LEDs with separate resistors')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const lesson = page.locator('.example-lesson-next-step')
+  await expect(lesson).toContainText('through D1')
+  await expect(lesson).toContainText('through D2')
+  await expect(lesson).toContainText('Change R2 from 330 Ω to 680 Ω')
+  const branchCurrents = async () => {
+    const text = await lesson.innerText()
+    const match = text.match(/Ngspice solved ([\d.]+) mA through D1 and ([\d.]+) mA through D2/)
+    expect(match, text).not.toBeNull()
+    return [Number(match![1]), Number(match![2])] as const
+  }
+  const [initialD1, initialD2] = await branchCurrents()
+  expect(initialD1).toBeGreaterThan(0)
+  expect(initialD2).toBeGreaterThan(0)
+  await page.locator('.circuit-part[data-part-id="parallel-led-r2"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="parallel-led-r2:value"]').fill('680 Ω')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(lesson).toContainText('The previous solve measured')
+  await lesson.getByRole('button', { name: 'Run this circuit again' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const [updatedD1, updatedD2] = await branchCurrents()
+  expect(updatedD1).toBeGreaterThan(updatedD2)
+  expect(updatedD2).toBeLessThan(initialD2 * 0.7)
+})
+
 test('Zener shortcut and guided regulator example solve near the 5.1 V breakdown point', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
