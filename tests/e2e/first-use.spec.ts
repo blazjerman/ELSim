@@ -2652,13 +2652,17 @@ test('potentiometer example adjusts the simulated output with its wiper', { tag:
   await expect(page.getByLabel('Potentiometer wiper position')).toHaveValue('50')
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.example-lesson-next-step')).toContainText('Move the wiper to 25% from the upper terminal')
   await expectAvailableTrace(page, 'V(vout)')
   await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*5\.000000 V/i })).toBeVisible()
   await page.locator('.circuit-part[data-part-id="pot-p1"]').click()
   await page.getByLabel('Potentiometer wiper position').fill('25')
-  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.example-lesson-next-step')).toContainText('wiper is at 25% from the upper terminal on a 10 V supply')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('predicted output is 7.5 V')
+  await page.locator('.example-lesson-next-step').getByRole('button', { name: 'Run this circuit again' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*7\.500000 V/i })).toBeVisible()
+  await expect(page.locator('.example-lesson-next-step')).toContainText('divider predicts VOUT = 7.5 V; ngspice solved 7.5 V')
 })
 
 test('transformer example solves the configured AC turns ratio', { tag: '@ngspice' }, async ({ page }) => {

@@ -1631,6 +1631,13 @@ export default function App() {
   const dividerR2Text = project.parts.find((part) => part.id === 'divider-r2')?.value ?? 'changed'
   const dividerSupplyText = project.parts.find((part) => part.id === 'divider-v1')?.value ?? 'changed'
   const dividerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const potentiometer = exampleLesson?.id === 'potentiometer' ? project.parts.find((part) => part.id === 'pot-p1') : undefined
+  const potentiometerPosition = potentiometer ? Number(potentiometer.wiperPosition ?? '0.5') : null
+  const potentiometerSupply = exampleLesson?.id === 'potentiometer' ? componentMagnitude(project.parts.find((part) => part.id === 'pot-v1')?.value ?? '10 V', 'source') : null
+  const potentiometerPrediction = potentiometerPosition !== null && Number.isFinite(potentiometerPosition) && potentiometerSupply !== null ? potentiometerSupply * (1 - potentiometerPosition) : null
+  const potentiometerPositionText = potentiometerPosition === null ? 'changed' : `${Number((potentiometerPosition * 100).toPrecision(3))}% from the upper terminal`
+  const potentiometerSupplyText = project.parts.find((part) => part.id === 'pot-v1')?.value ?? 'changed'
+  const potentiometerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const lessonNextStep = exampleLesson?.id === 'rl-step' && simulationResult
     ? simulationResultStale
       ? `R1 is ${project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? 'changed'} and L1 is ${project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? 'changed'}. These plots are from the previous circuit; run again to compare the new current ramp.`
@@ -1665,6 +1672,16 @@ export default function App() {
               ? 'Select R2, change its resistance from 1 kΩ to 2 kΩ, and run again. VOUT should rise from 5 V to about 6.67 V because the lower resistor takes a larger share of the supply.'
               : `For V1 = ${dividerSupplyText}, R1 = ${dividerR1Text}, and R2 = ${dividerR2Text}, the divider formula predicts VOUT = ${formatLessonVoltage(dividerPrediction)}${dividerSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(dividerSolvedOutput)}` : ''}. Make R1 and R2 equal to put VOUT halfway between VIN and ground.`
             : 'Enter a valid source voltage and positive resistor values, then rerun to compare the midpoint.'
+      : exampleLesson?.id === 'potentiometer' && simulationResult
+        ? simulationResultStale
+          ? potentiometerPrediction !== null
+            ? `The wiper is at ${potentiometerPositionText} on a ${potentiometerSupplyText} supply. The old result is stale; because the wiper is measured from the upper terminal, the predicted output is ${formatLessonVoltage(potentiometerPrediction)}. Rerun to check it.`
+            : 'Set the wiper between 0.1% and 99.9%, then rerun to compare the output.'
+          : potentiometerPrediction !== null
+            ? potentiometerPosition === 0.5 && potentiometerSupply === 10
+              ? 'Move the wiper to 25% from the upper terminal and run again. The lower section becomes 75% of the track, so VOUT should rise from 5 V to 7.5 V.'
+              : `At ${potentiometerPositionText} on ${potentiometerSupplyText}, the divider predicts VOUT = ${formatLessonVoltage(potentiometerPrediction)}${potentiometerSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(potentiometerSolvedOutput)}` : ''}. Move the wiper to 75% from the upper terminal to compare the complementary output.`
+            : 'Set a valid wiper position and source voltage, then rerun to compare the divider output.'
       : simulationResult && !simulationResultStale
         ? simulationResult.analysis === 'tran'
           ? 'Pause playback, then move the Time slider. Click the waveform to place the cursor and read each selected voltage or current at that moment.'
@@ -2959,7 +2976,7 @@ export default function App() {
       hierarchy: { title: 'Reuse one block in two places', guidance: 'Run the circuit, open X2, then open XCORE. Compare the parameter override and probe the inner resistor current.' },
       pwl: { title: 'Shape the source with PWL points', guidance: 'Run the transient and inspect V(IN) and V(OUT). Edit a point in the source properties to change the response.' },
       'current-source': { title: 'A current source sets load current', guidance: 'Run the operating point. The 1 mA through 1 kΩ produces 1 V; probe the load to confirm.' },
-      potentiometer: { title: 'The wiper adjusts the output', guidance: 'Run the operating point and probe V(VOUT). At 50%, the output is about 5 V. Change the wiper position to move the output along the 10 V supply.' },
+      potentiometer: { title: 'The wiper adjusts the output', guidance: 'Run the operating point and inspect V(VOUT). The wiper percentage is measured from the upper terminal: 50% gives about 5 V from the 10 V supply, while a smaller percentage moves the output closer to VIN.' },
       'voltage-divider': { title: 'Two resistors split a voltage', guidance: 'Run the operating point and probe V(VOUT). Equal 1 kΩ resistors share the 10 V supply evenly, so the midpoint is 5 V. Change either resistor and see how the ratio changes.' },
       zener: { title: 'A Zener diode holds a reference voltage', guidance: 'Run the operating point and probe V(VZ). The reverse-connected Zener clamps the output near 5.1 V while R1 limits current. Change the input or series resistor and observe when regulation changes.' },
       transformer: { title: 'A transformer changes AC voltage', guidance: 'Run the AC sweep and compare V(VIN) and V(VOUT). A 2:1 secondary-to-primary turns ratio gives about twice the primary voltage. The coupled-inductor model omits winding loss, leakage, and core saturation.' },
