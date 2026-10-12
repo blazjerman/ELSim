@@ -22,7 +22,7 @@ import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, renameSheetDefinition, sheetDefinitionSubtreeIds, updateSheetDefinition } from '../domain/sheetDefinition'
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
-import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
+import { extendWireAnimationPath, registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
@@ -740,7 +740,8 @@ const WireFlowPath = memo(function WireFlowPath({ wireId, index, segment, enable
   const config = enabled ? { key, magnitude: segment.magnitude, forward: segment.forward, currentMultiplier, dotSize, dotSpacing } : undefined
   const ref = useCallback((element: SVGPolylineElement | null) => registerWireAnimation(key, element), [key])
   useLayoutEffect(() => updateWireAnimation(key, config), [key, config?.magnitude, config?.forward, config?.currentMultiplier, config?.dotSize, config?.dotSpacing])
-  return <polyline ref={ref} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth="2.2" strokeLinecap="round" strokeDasharray={`${dotSize} ${dotSpacing}`} opacity="0.9"><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
+  const extendedPoints = extendWireAnimationPath(segment.points, dotSize + 1.1)
+  return <polyline ref={ref} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={extendedPoints.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth="2.2" strokeLinecap="round" strokeDasharray={`${dotSize} ${dotSpacing}`} opacity="0.9"><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
 })
 
 function TransientMeasurementEditor({ project, measurements, onAdd, onChange, onRemove }: { project: Project; measurements: TransientMeasurement[]; onAdd: () => void; onChange: (index: number, patch: Partial<TransientMeasurement>) => void; onRemove: (index: number) => void }) {

@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { registerWireAnimation, updateWireAnimation } = require(path.join(build, 'ui/wireAnimation.js'))
+const { extendWireAnimationPath, registerWireAnimation, updateWireAnimation } = require(path.join(build, 'ui/wireAnimation.js'))
 
 test('wire playback keeps dash phase while simulation samples update', () => {
   const previousWindow = global.window
@@ -137,4 +137,10 @@ test('wire playback schedules frames only while a visible wire carries current',
     global.requestAnimationFrame = previousRequest
     global.cancelAnimationFrame = previousCancel
   }
+})
+
+
+test('wire current paths extend beyond both endpoints so dots are not clipped', () => {
+  assert.deepEqual(extendWireAnimationPath([[0, 0], [10, 0]], 3), [[-3, 0], [0, 0], [10, 0], [13, 0]])
+  assert.deepEqual(extendWireAnimationPath([[0, 0], [0, 10], [10, 10]], 2), [[0, -2], [0, 0], [0, 10], [10, 10], [12, 10]])
 })
