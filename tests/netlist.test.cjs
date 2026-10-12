@@ -95,6 +95,7 @@ test('AC transformer example emits coupled windings with the selected turns rati
   const project = createTransformerExampleProject()
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^RSOURCE DRIVE VIN 10m$/m)
   assert.match(artifact.text, /^LT1_P VIN 0 10$/m)
   assert.match(artifact.text, /^LT1_S VOUT 0 4(?:0|0\.0+)$/m)
   assert.match(artifact.text, /^KT1 LT1_P LT1_S 1$/m)

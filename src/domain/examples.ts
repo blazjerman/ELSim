@@ -299,6 +299,7 @@ export function createCurrentSourceExampleProject(): Project {
 export function createTransformerExampleProject(): Project {
   const project = createStarterProject()
   const source: Part = { id: 'transformer-v1', kind: 'source', ref: 'V1', value: '0 V', sourceMode: 'dc', acMagnitude: '1 V', acPhase: '0', x: 250, y: 380, rotation: 0 }
+  const sourceResistance: Part = { id: 'transformer-rsource', kind: 'resistor', ref: 'RSOURCE', value: '10 mΩ', x: 380, y: 380, rotation: 0 }
   const transformer: Part = { id: 'transformer-t1', kind: 'transformer', ref: 'T1', value: '10 H', turnsRatio: '2', x: 500, y: 380, rotation: 0 }
   const load: Part = { id: 'transformer-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 760, y: 380, rotation: 90 }
   const labelAt = (id: string, name: string, part: Part, pin: number) => {
@@ -306,11 +307,12 @@ export function createTransformerExampleProject(): Project {
     return { id, name, x: location.x, y: location.y, visible: true }
   }
   project.name = 'AC step-up transformer'
-  project.parts = [source, transformer, load]
+  project.parts = [source, sourceResistance, transformer, load]
   project.wires = []
   project.junctions = []
   project.netLabels = [
-    labelAt('transformer-vin-source', 'VIN', source, 0), labelAt('transformer-vin-primary', 'VIN', transformer, 0),
+    labelAt('transformer-drive-source', 'DRIVE', source, 0), labelAt('transformer-drive-rsource', 'DRIVE', sourceResistance, 0),
+    labelAt('transformer-vin-rsource', 'VIN', sourceResistance, 1), labelAt('transformer-vin-primary', 'VIN', transformer, 0),
     labelAt('transformer-ground-source', '0', source, 1), labelAt('transformer-ground-primary', '0', transformer, 1),
     labelAt('transformer-vout-secondary', 'VOUT', transformer, 2), labelAt('transformer-vout-load', 'VOUT', load, 0),
     labelAt('transformer-ground-secondary', '0', transformer, 3), labelAt('transformer-ground-load', '0', load, 1),

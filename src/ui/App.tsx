@@ -1703,6 +1703,18 @@ export default function App() {
   const currentControlledPredictedVoltage = currentControlledSenseAt25Ms !== undefined && currentControlledTransresistance !== null
     ? currentControlledSenseAt25Ms * currentControlledTransresistance
     : undefined
+  const transformer = exampleLesson?.id === 'transformer' ? project.parts.find((part) => part.id === 'transformer-t1') : undefined
+  const transformerTurnsRatio = transformer ? Number(transformer.turnsRatio ?? '2') : null
+  const transformerInputTrace = simulationResult?.analysis === 'ac' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vin)') : undefined
+  const transformerOutputTrace = simulationResult?.analysis === 'ac' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)') : undefined
+  const transformerSampleIndexAt1kHz = (trace?: Trace) => trace?.axis.length && trace.values.length
+    ? trace.axis.reduce((best, frequency, index, axis) => Math.abs(axis[best] - 1000) > Math.abs(frequency - 1000) ? index : best, 0)
+    : undefined
+  const transformerInputAt1kHz = transformerInputTrace?.values[transformerSampleIndexAt1kHz(transformerInputTrace) ?? 0]
+  const transformerOutputAt1kHz = transformerOutputTrace?.values[transformerSampleIndexAt1kHz(transformerOutputTrace) ?? 0]
+  const transformerPredictedOutputAt1kHz = transformerTurnsRatio !== null && transformerInputAt1kHz !== undefined
+    ? transformerTurnsRatio * transformerInputAt1kHz
+    : undefined
   const voltageSwitch = exampleLesson?.id === 'voltage-switch' ? project.parts.find((part) => part.id === 'vswitch-s1') : undefined
   const voltageSwitchThreshold = voltageSwitch ? componentMagnitude(voltageSwitch.value, 'source') : null
   const voltageSwitchHysteresis = voltageSwitch ? componentMagnitude(voltageSwitch.voltageSwitch?.hysteresis ?? '0 V', 'source') : null
@@ -1716,7 +1728,15 @@ export default function App() {
   const voltageSwitchPredictedClosed = voltageSwitchThreshold !== null && voltageSwitchHysteresis !== null && voltageSwitchControlAt25Ms !== undefined
     ? voltageSwitchControlAt25Ms >= voltageSwitchThreshold + voltageSwitchHysteresis / 2
     : undefined
-  const lessonNextStep = exampleLesson?.id === 'current-controlled' && simulationResult
+  const lessonNextStep = exampleLesson?.id === 'transformer' && simulationResult
+    ? transformerTurnsRatio !== null && Number.isFinite(transformerTurnsRatio) && transformerInputAt1kHz !== undefined
+      ? simulationResultStale
+        ? `The old AC run had V(VIN) = ${formatLessonVoltage(transformerInputAt1kHz)} near 1 kHz. With a ${transformerTurnsRatio}:1 secondary-to-primary turns ratio, the ideal transformer predicts V(VOUT) ≈ ${transformerPredictedOutputAt1kHz !== undefined ? formatLessonVoltage(transformerPredictedOutputAt1kHz) : 'not available'}. Rerun AC to compare.`
+        : Math.abs(transformerTurnsRatio - 2) < 1e-9
+          ? `Near 1 kHz, the primary is ${formatLessonVoltage(transformerInputAt1kHz)}. A 2:1 turns ratio predicts about ${formatLessonVoltage(transformerPredictedOutputAt1kHz ?? 0)} at the secondary. Change T1's ratio from 2 to 3 and rerun AC: V(VOUT) should rise to about 3 V.`
+          : `Near 1 kHz, the ${transformerTurnsRatio}:1 ratio predicts V(VOUT) ≈ ${transformerPredictedOutputAt1kHz !== undefined ? formatLessonVoltage(transformerPredictedOutputAt1kHz) : 'not available'}; ngspice solved ${transformerOutputAt1kHz !== undefined ? formatLessonVoltage(transformerOutputAt1kHz) : 'not available'}. The ratio scales secondary voltage; the AC frequency sweep stays the same.`
+      : 'Choose a positive turns ratio, then rerun AC to compare primary and secondary voltage.'
+    : exampleLesson?.id === 'current-controlled' && simulationResult
     ? currentControlledSenseAt25Ms !== undefined && currentControlledTransresistance !== null
       ? simulationResultStale
         ? `The old run measured I(VSENSE) = ${formatLessonCurrent(currentControlledSenseAt25Ms * 1000)} at 25 ms. At H1 = ${project.parts.find((part) => part.id === 'current-h1')?.value ?? 'changed'}, V = I × transresistance predicts V_H = ${currentControlledPredictedVoltage !== undefined ? formatLessonVoltage(currentControlledPredictedVoltage) : 'not available'}. Rerun to check H1; F1's current gain remains unchanged.`

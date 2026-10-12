@@ -2716,6 +2716,15 @@ test('transformer example solves the configured AC turns ratio', { tag: '@ngspic
   const chartBox = await loadChart.boundingBox()
   await loadChart.click({ position: { x: chartBox!.width * 0.37, y: chartBox!.height / 2 } })
   await expect(loadPlot.locator('.cursor-readout')).toContainText(/V\(R1\) = 6\.02\d+ dB/i)
+  await expect(page.locator('.example-lesson-next-step')).toContainText('Change T1\'s ratio from 2 to 3')
+  await page.locator('.circuit-part[data-part-id="transformer-t1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.getByLabel('Secondary / primary turns ratio').fill('3')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('predicts V(VOUT) ≈ 3 V')
+  await page.locator('.example-lesson-next-step').getByRole('button', { name: 'Run this circuit again' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.example-lesson-next-step')).toContainText('ngspice solved 3 V')
 })
 
 test('LED current-limiter example explains and solves its resistor-limited current', { tag: '@ngspice' }, async ({ page }) => {
