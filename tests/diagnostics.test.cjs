@@ -60,6 +60,12 @@ test('common floating-node failures include beginner recovery guidance', () => {
   assert.equal(diagnostic.hint, 'Add a ground symbol and check for floating nodes or open connections.')
 })
 
+test('missing ngspice output vectors explain the analysis and name checks', () => {
+  const diagnostic = diagnosticForNgspice('no writable vector v(out)', artifact)
+  assert.match(diagnostic.hint, /selected analysis produces this voltage or current vector/)
+  assert.match(diagnostic.hint, /referenced node or component exists/)
+})
+
 test('model errors retain raw message and suggest checking model name and pin order', () => {
   const diagnostic = diagnosticForNgspice('unknown subckt MODEL_X', artifact)
   assert.equal(diagnostic.message, 'unknown subckt MODEL_X')

@@ -49,7 +49,7 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact)
     hint = 'Check component values and switch states. Try a smaller maximum time step or a small series resistance.'
   } else if (/unknown subckt|missing.*model|could not find.*model|no such model|unknown device type/.test(lower)) {
     hint = 'Check that the model is available, its name matches the component, and its pin order is correct.'
-  } else if (/no such vector|vector .* not found|not available or has zero length/.test(lower)) {
+  } else if (/no writable vector|no such vector|vector .* not found|not available or has zero length/.test(lower)) {
     hint = 'Check that the selected analysis produces this voltage or current vector and that the referenced node or component exists.'
   }
   return {
