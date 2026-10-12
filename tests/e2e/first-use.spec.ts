@@ -1692,6 +1692,17 @@ test('global simulation temperature is passed to ngspice', { tag: ['@ngspice', '
   await expect(page.locator('.netlist-modal pre')).toContainText('.temp 85')
 })
 
+test('invalid global temperature focuses its setting before simulation', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  const temperature = page.locator('[data-analysis-setting="temperature"]')
+  await temperature.fill('-274')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('#analysis-error-temperature')).toBeVisible()
+  await expect(temperature).toBeFocused()
+})
+
 test('RC starter measures average, peak-to-peak, and transferred charge with ngspice', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before testing measurement windows').toEqual([])
