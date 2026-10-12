@@ -4432,6 +4432,25 @@ test('@ui-smoke reusable sheets can be renamed and reject duplicate sibling name
   await expect(page.locator('.sheet-tab.active')).toContainText('Block 2')
 })
 
+test('@ui-smoke an unused child sheet can be deleted after confirmation', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await page.getByRole('button', { name: 'Sheet ports and block settings' }).click()
+  const deletion = page.waitForEvent('dialog')
+  const deleteClick = page.getByRole('button', { name: 'Delete sheet' }).click()
+  const dialog = await deletion
+  expect(dialog.message()).toContain('Delete “Block 1”')
+  expect(dialog.message()).toContain('undo this before closing')
+  await dialog.accept()
+  await deleteClick
+  await expect(page.locator('.sheet-tab')).toHaveCount(1)
+  await expect(page.locator('.sheet-tab.active')).toContainText('Main circuit')
+  await expect.poll(() => page.evaluate(() => { const saved = localStorage.getItem('elsim:project:v7'); return saved ? JSON.parse(saved).sheets.length : 0 })).toBe(1)
+  await page.keyboard.press('Control+z')
+  await expect(page.locator('.sheet-tab')).toHaveCount(2)
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 1')
+})
+
 test('creating a child sheet can be undone and redone', async ({ page }) => {
   await page.goto('/')
   const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })

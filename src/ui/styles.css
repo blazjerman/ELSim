@@ -124,3 +124,4 @@
 
 .waveform-destination-backdrop{position:fixed;inset:0;background:#080b09bb;z-index:30;display:grid;place-items:center;padding:20px}
 .gate-mark{font-size:15px;font-weight:700;fill:#9ed4ad;stroke:none;text-anchor:middle;pointer-events:none}
+.sheet-delete-control{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:10px 0 16px;margin-bottom:15px;border-bottom:1px solid #2b342e}.sheet-delete-button{min-height:30px;padding:0 10px;border:1px solid #513b3b;border-radius:5px;background:#251c1c;color:#e3a2a2;font-size:10px}.sheet-delete-button:hover:not(:disabled){background:#382323}.sheet-delete-button:disabled{opacity:.55;cursor:not-allowed}

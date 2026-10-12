@@ -10,7 +10,7 @@ const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
 const { preferredSheetInstancePath } = require(path.join(build, 'domain/hierarchyNavigation.js'))
-const { renameSheetDefinition, updateSheetDefinition } = require(path.join(build, 'domain/sheetDefinition.js'))
+const { deleteSheetDefinition, renameSheetDefinition, updateSheetDefinition } = require(path.join(build, 'domain/sheetDefinition.js'))
 
 test('current-source probes use ngspice current parameters in root and nested sheets', () => {
   const project = createCurrentSourceExampleProject()
@@ -79,6 +79,29 @@ test('sheet rename rejects empty, oversized, and duplicate sibling names', () =>
   assert.throws(() => renameSheetDefinition(project, 'sheet-load', '  '), /1–80 characters/)
   assert.throws(() => renameSheetDefinition(project, 'sheet-load', 'X'.repeat(81)), /1–80 characters/)
   assert.throws(() => renameSheetDefinition(project, 'sheet-load', 'other'), /already used in this hierarchy/)
+})
+
+test('deleting a sheet protects references and nested sheets, then returns to its parent', () => {
+  const project = createBlockProject()
+  assert.throws(() => deleteSheetDefinition(project, project.rootSheetId), /root circuit cannot be deleted/)
+  assert.throws(() => deleteSheetDefinition(project, 'sheet-load'), /placed instance/)
+
+  const nested = structuredClone(project)
+  nested.parts = nested.parts.filter((part) => part.id !== 'root-block')
+  nested.sheets[0] = { ...nested.sheets[0], parts: nested.parts }
+  nested.sheets.push({ id: 'sheet-inner', name: 'Inner', parentSheetId: 'sheet-load', parts: [], wires: [], junctions: [], netLabels: [], ports: [], view: { zoom: 1, panX: 0, panY: 0 } })
+  assert.throws(() => deleteSheetDefinition(nested, 'sheet-load'), /nested child sheets/)
+
+  const unused = structuredClone(project)
+  unused.parts = unused.parts.filter((part) => part.id !== 'root-block')
+  unused.sheets[0] = { ...unused.sheets[0], parts: unused.parts }
+  unused.activeSheetId = 'sheet-load'
+  unused.parts = unused.sheets[1].parts
+  const deleted = deleteSheetDefinition(unused, 'sheet-load')
+  assert.equal(deleted.sheets.some((sheet) => sheet.id === 'sheet-load'), false)
+  assert.equal(deleted.activeSheetId, project.rootSheetId)
+  assert.equal(deleted.parts, deleted.sheets[0].parts)
+  assert.doesNotThrow(() => validateProject(deleted))
 })
 
 test('editing a reused sheet definition updates instance pins and keeps surviving wires attached', () => {
