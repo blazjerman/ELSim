@@ -227,6 +227,28 @@ function useResponsivePlotSize() {
   return { ref, size }
 }
 
+function niceTickStep(span: number, targetCount: number): number {
+  const raw = Math.max(Number.MIN_VALUE, span / Math.max(1, targetCount))
+  const power = 10 ** Math.floor(Math.log10(raw))
+  const fraction = raw / power
+  return (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * power
+}
+
+function ticksInRange(min: number, max: number, step: number): number[] {
+  if (!Number.isFinite(step) || step <= 0) return []
+  const first = Math.ceil(min / step - 1e-10), last = Math.floor(max / step + 1e-10)
+  if (!Number.isFinite(first) || !Number.isFinite(last) || last < first || last - first > 200) return []
+  return Array.from({ length: last - first + 1 }, (_, index) => (first + index) * step)
+}
+
+function formatEngineeringTick(value: number, unit: string): string {
+  if (!Number.isFinite(value) || value === 0) return `0 ${unit}`
+  const exponent = Math.max(-12, Math.min(9, Math.floor(Math.log10(Math.abs(value)) / 3) * 3))
+  const prefix = ({ '-12': 'p', '-9': 'n', '-6': 'µ', '-3': 'm', '0': '', '3': 'k', '6': 'M', '9': 'G' } as Record<string, string>)[String(exponent)]
+  const scaled = Number((value / 10 ** exponent).toPrecision(3)).toString()
+  return `${scaled} ${prefix}${unit}`
+}
+
 function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; measurements: MeasurementResult[] }) {
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
@@ -274,6 +296,16 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchorIndex / Math.max(1, (axis?.length ?? 1) - 1))
   }
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
+  const valueStep = niceTickStep(scopeRange[1] - scopeRange[0], Math.max(3, Math.floor((bottom - top) / 42)))
+  const valueTicks = ticksInRange(scopeRange[0], scopeRange[1], valueStep)
+  const minorValueStep = valueStep / 5
+  const minorValueTicks = ticksInRange(scopeRange[0], scopeRange[1], minorValueStep).filter((value) => Math.abs(value / valueStep - Math.round(value / valueStep)) > 1e-8)
+  const timeStep = niceTickStep(maxTime - minTime, Math.max(3, Math.floor((right - left) / 105)))
+  const timeTicks = ticksInRange(minTime, maxTime, timeStep)
+  const minorTimeStep = timeStep / 5
+  const minorTimeTicks = ticksInRange(minTime, maxTime, minorTimeStep).filter((value) => Math.abs(value / timeStep - Math.round(value / timeStep)) > 1e-8)
+  const xForTime = (time: number) => left + ((time - minTime) / (maxTime - minTime || 1)) * (right - left)
+  const yForValue = (value: number) => bottom - ((value - scopeRange[0]) / (scopeRange[1] - scopeRange[0])) * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
     const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
     const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
@@ -309,12 +341,14 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   return <div className="waveform-view">
     <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
-      {[0, 1, 2, 3].map((line) => { const fraction = line / 3; const y = top + fraction * (bottom - top); const value = scopeRange[1] - fraction * (scopeRange[1] - scopeRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{value.toPrecision(3)} A</text>}</g> })}
-      {(hasVoltage || hasCurrent) && <g className="plot-zero-reference"><line x1={left} x2={right} y1={bottom - (0 - scopeRange[0]) / (scopeRange[1] - scopeRange[0]) * (bottom - top)} y2={bottom - (0 - scopeRange[0]) / (scopeRange[1] - scopeRange[0]) * (bottom - top)}/>{hasVoltage && <text x={left - 5} y={bottom - (0 - scopeRange[0]) / (scopeRange[1] - scopeRange[0]) * (bottom - top) + 3} textAnchor="end">0 V</text>}{hasCurrent && <text x={right + 4} y={bottom - (0 - scopeRange[0]) / (scopeRange[1] - scopeRange[0]) * (bottom - top) + 3}>0 A</text>}</g>}
+      {minorValueTicks.map((value) => <line key={`y-minor-${value}`} x1={left} x2={right} y1={yForValue(value)} y2={yForValue(value)} className="plot-grid-minor"/>)}
+      {valueTicks.map((value) => <g key={`y-major-${value}`}><line x1={left} x2={right} y1={yForValue(value)} y2={yForValue(value)} className={Math.abs(value) <= valueStep * 1e-8 ? 'plot-grid-zero' : 'plot-grid'}/>{Math.abs(value) > valueStep * 1e-8 && hasVoltage && <text x={left - 5} y={yForValue(value) + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(value, 'V')}</text>}{Math.abs(value) > valueStep * 1e-8 && hasCurrent && <text x={right + 4} y={yForValue(value) + 3} className="plot-tick">{formatEngineeringTick(value, 'A')}</text>}</g>)}
+      {minorTimeTicks.map((time) => <line key={`x-minor-${time}`} x1={xForTime(time)} x2={xForTime(time)} y1={top} y2={bottom} className="plot-grid-minor"/>)}
+      {timeTicks.map((time, index) => <g key={`x-major-${time}`}><line x1={xForTime(time)} x2={xForTime(time)} y1={top} y2={bottom} className="plot-grid"/><text x={xForTime(time)} y={height - 3} textAnchor={index === 0 ? 'start' : index === timeTicks.length - 1 ? 'end' : 'middle'} className="plot-tick">{formatEngineeringTick(time, 's')}</text></g>)}
+      {(hasVoltage || hasCurrent) && <g className="plot-zero-reference"><line x1={left} x2={right} y1={yForValue(0)} y2={yForValue(0)}/>{hasVoltage && <text x={left - 5} y={yForValue(0) + 3} textAnchor="end">0 V</text>}{hasCurrent && <text x={right + 4} y={yForValue(0) + 3}>0 A</text>}</g>}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
       <TransientCursorMarker axis={axis} first={first} last={last} minTime={minTime} maxTime={maxTime} left={left} right={right} top={top} bottom={bottom}/>
-      <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={(index) => colors[index % colors.length]}/>
     <TransientCursorReadout axis={axis} shown={shown} traceIndexById={traceIndexById} colors={colors} keyboardAnnouncement={keyboardAnnouncement}/>

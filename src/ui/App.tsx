@@ -2387,14 +2387,25 @@ export default function App() {
     const top = canvasToolbarBottom + 20
     const width = Math.max(320, Math.min(820, Math.floor(window.innerWidth * 0.48)))
     const height = Math.max(220, Math.min(640, Math.floor(window.innerHeight * 0.62), window.innerHeight - top - 16))
+    const maxX = Math.max(12, window.innerWidth - width - 12)
+    const maxY = Math.max(top, window.innerHeight - height - 12)
+    const candidates = [...new Set([maxX, 12, Math.round((12 + maxX) / 2)])].flatMap((x) => [...new Set([top, maxY, Math.round((top + maxY) / 2)])].map((y) => ({ x, y, width, height })))
+    const bounds = candidates
+      .map((candidate) => ({ candidate, overlap: additionalPlotPanels.reduce((sum, existing) => {
+        const left = Math.max(candidate.x, existing.bounds.x), right = Math.min(candidate.x + width, existing.bounds.x + existing.bounds.width)
+        const top = Math.max(candidate.y, existing.bounds.y), bottom = Math.min(candidate.y + height, existing.bounds.y + existing.bounds.height)
+        return sum + Math.max(0, right - left) * Math.max(0, bottom - top)
+      }, 0) }))
+      .sort((a, b) => a.overlap - b.overlap)[0]?.candidate ?? { x: maxX, y: top, width, height }
     const panel: PlotPanel = {
       id: crypto.randomUUID(),
-      bounds: { x: Math.max(8, window.innerWidth - width - 16), y: top, width, height },
+      bounds,
       selectedTraceIds: [...new Set(traceIds)],
       ...(componentVoltageProbe ? { componentVoltageProbes: Object.fromEntries(traceIds.map((traceId) => [traceId, componentVoltageProbe])) } : {}),
       ranges: { ...(project.plotSettings?.ranges ?? {}) },
     }
-    saveAdditionalPlotPanels(layoutWaveformPanels([...additionalPlotPanels, panel]))
+    // Creating a new scope must not retile or resize windows the user has already arranged.
+    saveAdditionalPlotPanels([...additionalPlotPanels, panel])
     return panel.id
   }
   const tilePlotWindows = () => {

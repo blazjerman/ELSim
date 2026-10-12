@@ -2551,8 +2551,10 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await resistor.click({ button: 'right' })
   await page.getByRole('menuitem', { name: /Plot voltage across/ }).click()
   const newProbe = page.getByRole('dialog', { name: 'V(R1)' })
+  const firstWindowBounds = await firstWindow.boundingBox()
   await newProbe.getByRole('button', { name: /New waveform window/ }).click()
   await expect(page.locator('.plot-window')).toHaveCount(2)
+  expect(await firstWindow.boundingBox()).toEqual(firstWindowBounds)
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', page.viewportSize()?.width ?? 854)
 
   const capacitor = page.locator('.circuit-part[data-part-id="p-c1"]')
@@ -2576,6 +2578,11 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await firstWindow.getByRole('button', { name: 'Zoom in' }).click()
   const chart = firstWindow.locator('svg.waveform-chart')
   const axisLabels = () => chart.locator('text.plot-tick').allTextContents()
+  const visibleAxisLabels = await axisLabels()
+  expect(visibleAxisLabels.some((label) => label.endsWith('V'))).toBe(true)
+  expect(visibleAxisLabels.some((label) => label.endsWith('A'))).toBe(true)
+  expect(visibleAxisLabels.some((label) => label.endsWith('s'))).toBe(true)
+  expect(await chart.locator('.plot-grid-minor').count()).toBeGreaterThan(0)
   const beforeVerticalDrag = await axisLabels()
   const chartBounds = (await chart.boundingBox())!
   await page.mouse.move(chartBounds.x + chartBounds.width / 2, chartBounds.y + chartBounds.height / 2)
