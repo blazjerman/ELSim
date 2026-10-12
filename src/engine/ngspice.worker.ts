@@ -19,12 +19,13 @@ function makeTraces(rawText: string): Trace[] {
   return parsed.variables.filter((variable) => isTraceVariable(variable.name, names)).map((variable) => {
     const lowercaseName = variable.name.toLowerCase()
     const current = lowercaseName.startsWith('i(')
-    const inner = variable.name.match(/^[vi]\((.*)\)$/i)![1]
+    const inner = variable.name.match(/^[vi]\((.*)\)$/i)?.[1] ?? variable.name
     const component = inner.match(/^@(.*)\[(?:i|id|ic)\]$/i)?.[1]
+    const noise = /^(?:inoise|onoise)_spectrum$/i.test(variable.name)
     return {
       id: lowercaseName,
-      label: `${current ? 'I' : 'V'}(${component ?? inner})`,
-      unit: current ? 'A' : 'V',
+      label: noise ? (lowercaseName.startsWith('onoise') ? 'Output noise' : 'Input-referred noise') : `${current ? 'I' : 'V'}(${component ?? inner})`,
+      unit: noise ? 'V/√Hz' : current ? 'A' : 'V',
       axisLabel: parsed.axisLabel,
       axisUnit: parsed.axisUnit,
       axis,
@@ -36,7 +37,7 @@ function makeTraces(rawText: string): Trace[] {
 
 async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = []): Promise<void> {
   const configuredAnalysis = metadata.settings.analysis
-  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' ? configuredAnalysis : undefined
+  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' || configuredAnalysis === 'noise' ? configuredAnalysis : undefined
   const stdout: string[] = []
   const stderr: string[] = []
   const profileStarted = profileWorker ? performance.now() : 0
@@ -58,7 +59,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
     }
     module.FS.writeFile('/project.cir', runDeck)
-    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : 'transient'} analysis` } satisfies EngineResponse)
+    worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 0.2, message: `Running ${metadata.settings.analysis === 'op' ? 'DC operating-point' : metadata.settings.analysis === 'ac' ? 'AC frequency-domain' : metadata.settings.analysis === 'dc' ? 'DC source sweep' : metadata.settings.analysis === 'noise' ? 'noise' : 'transient'} analysis` } satisfies EngineResponse)
     const solverStarted = profileWorker ? performance.now() : 0
     const status = module.callMain(['-b', '/project.cir'])
     if (profileWorker) solverMs = performance.now() - solverStarted
@@ -89,7 +90,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       sourceMap: artifact.sourceMap,
       traces,
       diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics],
-      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc',
+      analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise',
       measurements: measurementOutput.results,
     }
     if (profileWorker) {

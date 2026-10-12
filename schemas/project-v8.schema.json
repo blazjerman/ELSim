@@ -941,6 +941,9 @@
             },
             "dc": {
               "$ref": "#/$defs/plotRange"
+            },
+            "noise": {
+              "$ref": "#/$defs/plotRange"
             }
           }
         },
@@ -1058,6 +1061,9 @@
         },
         "dc": {
           "$ref": "#/$defs/plotRange"
+        },
+        "noise": {
+          "$ref": "#/$defs/plotRange"
         }
       }
     },
@@ -1093,7 +1099,8 @@
             "tran",
             "op",
             "ac",
-            "dc"
+            "dc",
+            "noise"
           ]
         },
         "stopTime": {
@@ -1107,6 +1114,19 @@
         "temperature": {
           "type": "string",
           "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$"
+        },
+        "noiseSweep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputNode", "inputSource", "scale", "points", "startFrequency", "stopFrequency"],
+          "properties": {
+            "outputNode": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "inputSource": { "type": "string", "pattern": "^[VI][A-Za-z0-9_]{0,63}$" },
+            "scale": { "enum": ["dec", "oct", "lin"] },
+            "points": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "startFrequency": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "stopFrequency": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
         },
         "sourceAcMagnitude": {
           "type": "string",

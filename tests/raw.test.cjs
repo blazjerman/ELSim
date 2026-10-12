@@ -83,6 +83,24 @@ Values:
  -1.000000e-03
 `
 
+const validNoiseRaw = `Title: RC noise
+Plotname: Noise Spectral Density Curves
+Flags: real
+No. Variables: 3
+No. Points: 2
+Variables:
+  0 frequency frequency grid=3
+  1 onoise_spectrum voltage-density
+  2 inoise_spectrum voltage-density
+Values:
+ 0 1.000000e+00
+ 1.000000e-08
+ 1.000000e-08
+ 1 1.000000e+01
+ 9.950000e-09
+ 1.000000e-08
+`
+
 test('ASCII raw parser preserves ngspice time, voltage, and current vectors', () => {
   const parsed = parseAsciiRawFile(validRaw)
   assert.equal(parsed.title, 'RC fixture')
@@ -146,6 +164,18 @@ Values:
   assert.equal(parsed.axisLabel, 'i-sweep')
   assert.equal(parsed.axisUnit, 'A')
   assert.deepEqual([...parsed.axis], [0, 0.01])
+})
+
+test('ASCII raw parser reads ngspice output and input-referred noise density vectors', () => {
+  const parsed = parseAsciiRawFile(validNoiseRaw)
+  assert.equal(parsed.analysis, 'noise')
+  assert.equal(parsed.axisLabel, 'Frequency')
+  assert.equal(parsed.axisUnit, 'Hz')
+  assert.equal(parsed.isComplex, false)
+  assert.deepEqual([...parsed.axis], [1, 10])
+  assert.deepEqual(parsed.variables.map((variable) => variable.name), ['onoise_spectrum', 'inoise_spectrum'])
+  assert.deepEqual([...parsed.variables[0].values], [1e-8, 9.95e-9])
+  assert.equal(isTraceVariable('onoise_spectrum', parsed.variables.map((variable) => variable.name)), true)
 })
 
 test('transient plotting accepts only voltage and current variable names', () => {

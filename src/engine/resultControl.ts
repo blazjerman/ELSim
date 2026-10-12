@@ -6,7 +6,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const rows = netlist.trimEnd().split(/\r?\n/)
   const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
   if (endLine === -1) throw new Error('Generated netlist is missing its .end directive.')
-  const analysisCommand = rows.slice(0, endLine).find((line) => /^\s*\.(?:tran|op|ac|dc)\b/i.test(line))?.trim().replace(/^\./, '')
+  const analysisCommand = rows.slice(0, endLine).find((line) => /^\s*\.(?:tran|op|ac|dc|noise)\b/i.test(line))?.trim().replace(/^\./, '')
   if (!analysisCommand) throw new Error('Generated netlist is missing its analysis directive.')
   const analysisType = analysisCommand.split(/\s+/, 1)[0].toLowerCase()
   const pulseHighSweeps = parameterSweep.flatMap((run) => run.values.filter((value) => value.pulseHigh).map((value) => value.component))
@@ -99,7 +99,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     if (insideSubcircuit) return []
     const ref = line.match(/^\s*([RCLDSEGFHQBJIM][A-Za-z0-9_]+)\s+/i)?.[1]
     if (!ref) return []
-    if (analysisType === 'ac' && /^[CL]/i.test(ref)) return []
+    if ((analysisType === 'ac' || analysisType === 'noise') && /^[CL]/i.test(ref)) return []
     const kind = ref[0].toUpperCase()
     const current = kind === 'D' || kind === 'J' || kind === 'M' ? 'id' : kind === 'Q' ? 'ic' : kind === 'I' ? 'current' : 'i'
     const terminalCurrents = kind === 'Q' ? ['ib', 'ie'] : kind === 'M' ? ['ig', 'is', 'ib'] : kind === 'J' ? ['ig', 'is'] : []
@@ -112,7 +112,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     ? `meas tran ELSIM_${measurement.id}${suffix} TRIG ${measurement.vector} VAL=${threshold(measurement.threshold, measurement.vector)} ${measurement.edge === 'either' ? 'CROSS' : measurement.edge.toUpperCase()}=${measurement.triggerCount ?? 1} TARG ${measurement.targetVector} VAL=${threshold(measurement.targetThreshold, measurement.targetVector)} ${measurement.targetEdge === 'either' ? 'CROSS' : measurement.targetEdge.toUpperCase()}=${measurement.targetCount ?? 1}`
     : `meas tran ELSIM_${measurement.id}${suffix} ${measurement.operation} ${measurement.vector}${rangeOptions(measurement)}`
   const measurementRows = analysisType !== 'tran' || parameterSweep.length ? [] : measurements.filter((measurement) => !hasSourceCurrentVector(measurement) && measurement.operation !== 'integ').map((measurement) => `.meas tran ELSIM_${measurement.id} ${measurement.operation === 'delay' ? `TRIG ${measurement.vector} VAL=${threshold(measurement.threshold, measurement.vector)} ${measurement.edge === 'either' ? 'CROSS' : measurement.edge.toUpperCase()}=${measurement.triggerCount ?? 1} TARG ${measurement.targetVector} VAL=${threshold(measurement.targetThreshold, measurement.targetVector)} ${measurement.targetEdge === 'either' ? 'CROSS' : measurement.targetEdge.toUpperCase()}=${measurement.targetCount ?? 1}` : `${measurement.operation} ${measurement.vector}${rangeOptions(measurement)}`}`)
-  const save = analysisType === 'ac' ? [] : [`.save all${deviceCurrents.length ? ` ${deviceCurrents.join(' ')}` : ''}`]
+  const save = analysisType === 'ac' || analysisType === 'noise' ? [] : [`.save all${deviceCurrents.length ? ` ${deviceCurrents.join(' ')}` : ''}`]
   const commands = ['.control', 'set filetype=ascii']
   if (parameterSweep.length) {
     parameterSweep.forEach((run, index) => {
@@ -120,7 +120,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
       if (run.values.some((value) => value.globalParameter || value.sourceParameter || value.pulseHigh || value.pwlScale || value.waveformAmplitude)) commands.push('reset')
       commands.push('run', ...measurements.map((measurement) => measurementCommand(measurement, `_${index}`)).filter((command): command is string => Boolean(command)), `write /result-${index}.raw all`)
     })
-  } else commands.push(analysisCommand, ...(/^(?:tran)\b/i.test(analysisCommand) ? measurements.map((measurement) => measurementCommand(measurement)).filter((command): command is string => Boolean(command)) : []), 'write /result.raw all')
+  } else commands.push(analysisCommand, ...(/^(?:tran)\b/i.test(analysisCommand) ? measurements.map((measurement) => measurementCommand(measurement)).filter((command): command is string => Boolean(command)) : []), ...(analysisType === 'noise' ? ['setplot noise1'] : []), 'write /result.raw all')
   commands.push('quit', '.endc', '.end')
   rows.splice(endLine, 1, ...waveformParameterRows, ...measurementRows, ...save, ...commands)
   return rows.join('\n') + '\n'

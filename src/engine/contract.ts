@@ -60,7 +60,7 @@ export type SimulationResult = {
   sourceMap: NetlistSource[]
   traces: Trace[]
   diagnostics: SimulationDiagnostic[]
-  analysis: 'tran' | 'op' | 'ac' | 'dc'
+  analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'
   measurements: MeasurementResult[]
 }
 
@@ -296,7 +296,7 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
       || !Array.isArray(result.sourceMap) || !result.sourceMap.every(isSource)
       || !Array.isArray(result.traces) || result.traces.length === 0
       || !Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)
-      || !['tran', 'op', 'ac', 'dc'].includes(String(result.analysis))
+      || !['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))
       || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return false
     const validatedVectors = new WeakSet<Float64Array>()
     return result.traces.every((trace) => isTrace(trace, validatedVectors))
@@ -340,7 +340,7 @@ export function engineResponseIssue(value: unknown): string {
       if (!isTrace(trace, validatedVectors)) return `trace ${index + 1} metadata is malformed`
     }
     if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
-    if (!['tran', 'op', 'ac', 'dc'].includes(String(result.analysis))) return 'analysis type is invalid'
+    if (!['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))) return 'analysis type is invalid'
     if (!Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return 'measurement results are malformed'
     return 'result message is incomplete'
   }

@@ -4256,6 +4256,23 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   await expect(cursorLabels.nth(0)).toHaveText(await cursorLabels.nth(1).innerText())
 })
 
+test('noise analysis runs in browser ngspice and plots output noise density', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await page.locator('svg.schematic').click({ position: { x: 700, y: 80 } })
+  await page.getByLabel('Analysis type', { exact: true }).selectOption('noise')
+  await expect(page.getByLabel('Output node')).toHaveValue('vout')
+  await expect(page.getByLabel('Input source')).toHaveValue('V1')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.plot-window')).toContainText('Noise spectral density')
+  await expect(page.locator('.plot-window')).toContainText('Output noise')
+  await expect(page.locator('.plot-window')).toContainText('V/√Hz')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = await page.locator('.netlist-modal pre').innerText()
+  expect(netlist).toMatch(/\.noise V\(vout\) V1 dec 10 1 1Meg/i)
+})
+
 test('DC sweep waveform supports source cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()

@@ -69,10 +69,10 @@ export type Part = {
 export type Wire = { id: string; points: [[number, number], [number, number]] }
 export type NetLabel = { id: string; name: string; x: number; y: number; visible: boolean }
 export type PlotRange = { start: number; end: number }
-export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>> }
+export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>> }
 export type PlotSettings = {
   selectedTraceIds: string[]
-  ranges: Partial<Record<'tran' | 'ac' | 'dc', PlotRange>>
+  ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>>
   detachedWindow?: { x: number; y: number; width: number; height: number }
   panels?: PlotPanel[]
 }
@@ -117,7 +117,7 @@ export type Project = {
   symbolAssets?: SymbolAsset[]
   importedSchematicSource?: LtspiceSchematicSource
   importedChildSchematicSources?: LtspiceSchematicSource[]
-  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc'; stopTime: string; maxStep: string; temperature?: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
+  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; stopTime: string; maxStep: string; temperature?: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
   rootSheetId: string
   activeSheetId: string
   sheets: ProjectSheet[]
@@ -184,7 +184,7 @@ const starter: Project = {
   ],
   view: { zoom: 1, panX: 0, panY: 0 },
   plotSettings: { selectedTraceIds: [], ranges: {} },
-  simulation: { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', temperature: '27', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
+  simulation: { analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs', temperature: '27', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }, noiseSweep: { outputNode: 'vout', inputSource: 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }, sourceAcMagnitude: '1 V', dcSweep: { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' } },
   rootSheetId: 'sheet-main',
   activeSheetId: 'sheet-main',
   sheets: [{ id: 'sheet-main', name: 'Main circuit', parentSheetId: null, parts: [], wires: [], junctions: [], netLabels: [], view: { zoom: 1, panX: 0, panY: 0 }, ports: [] }],
@@ -538,8 +538,10 @@ export function validateProject(input: unknown): Project {
   }
   const simulation = data.simulation as Project['simulation'] | undefined
   const view = data.view as Project['view'] | undefined
-  if (typeof data.name !== 'string' || !data.name.trim() || typeof data.updatedAt !== 'string' || !Number.isFinite(Date.parse(data.updatedAt)) || !simulation || !['tran', 'op', 'ac', 'dc'].includes(simulation.analysis) || typeof simulation.stopTime !== 'string' || !simulation.stopTime.trim() || typeof simulation.maxStep !== 'string' || !simulation.maxStep.trim() || !view || !Number.isFinite(view.zoom) || view.zoom <= 0 || !Number.isFinite(view.panX) || !Number.isFinite(view.panY)) throw new Error('Project settings are missing or malformed.')
+  if (typeof data.name !== 'string' || !data.name.trim() || typeof data.updatedAt !== 'string' || !Number.isFinite(Date.parse(data.updatedAt)) || !simulation || !['tran', 'op', 'ac', 'dc', 'noise'].includes(simulation.analysis) || typeof simulation.stopTime !== 'string' || !simulation.stopTime.trim() || typeof simulation.maxStep !== 'string' || !simulation.maxStep.trim() || !view || !Number.isFinite(view.zoom) || view.zoom <= 0 || !Number.isFinite(view.panX) || !Number.isFinite(view.panY)) throw new Error('Project settings are missing or malformed.')
   if (simulation.analysis === 'ac' && !simulation.acSweep) simulation.acSweep = { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '1 MHz' }
+  if (simulation.analysis === 'noise' && !simulation.noiseSweep) simulation.noiseSweep = { outputNode: data.netLabels?.find((label) => label.name.toLowerCase() === 'vout')?.name ?? data.netLabels?.[0]?.name ?? 'vout', inputSource: (data.parts as Part[]).find((part) => part.kind === 'source' || part.kind === 'currentSource')?.ref ?? 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz' }
+  if (simulation.noiseSweep && (typeof simulation.noiseSweep.outputNode !== 'string' || typeof simulation.noiseSweep.inputSource !== 'string' || !['dec', 'oct', 'lin'].includes(simulation.noiseSweep.scale) || !Number.isInteger(simulation.noiseSweep.points) || simulation.noiseSweep.points < 1 || simulation.noiseSweep.points > 10000 || typeof simulation.noiseSweep.startFrequency !== 'string' || typeof simulation.noiseSweep.stopFrequency !== 'string')) throw new Error('Noise sweep settings are malformed.')
   if (simulation.temperature === undefined) simulation.temperature = '27'
   if (typeof simulation.temperature !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(simulation.temperature.trim()) || !Number.isFinite(Number(simulation.temperature)) || Number(simulation.temperature) < -273.15 || Number(simulation.temperature) > 10000) throw new Error('Simulation temperature must be a number from −273.15 °C to 10000 °C.')
   if (simulation.sourceAcMagnitude === undefined) simulation.sourceAcMagnitude = '1 V'

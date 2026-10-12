@@ -23,6 +23,19 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('noise analysis generates ngspice settings and biases the selected input source for AC noise', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'noise'
+  project.simulation.noiseSweep = { outputNode: 'vout', inputSource: 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '100 kHz' }
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 vin 0 DC 5 AC 1 0$/m)
+  assert.match(artifact.text, /^\.noise V\(vout\) V1 dec 10 1 100k$/m)
+  assert.equal(validateAnalysisSettings(project).some((error) => error.field.startsWith('noise')), false)
+  project.simulation.noiseSweep.startFrequency = '0 Hz'
+  assert.equal(validateAnalysisSettings(project).find((error) => error.field === 'noiseStartFrequency')?.field, 'noiseStartFrequency')
+})
+
 test('global temperature emits one top-level SPICE directive and is validated in Celsius', () => {
   const project = createStarterProject()
   project.simulation.temperature = '85'

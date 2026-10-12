@@ -45,6 +45,14 @@ test('AC result control avoids unsupported capacitor and inductor branch-current
   assert.match(ac, /ac dec 20 10 1meg\nwrite \/result\.raw all/)
 })
 
+test('noise result control selects the spectral density plot before writing raw data', () => {
+  const control = addResultControl('V1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 10u\n.noise V(out) V1 dec 10 1 100k\n.end')
+  assert.doesNotMatch(control, /^\.save\b/m)
+  assert.match(control, /noise V\(out\) V1 dec 10 1 100k\nsetplot noise1\nwrite \/result\.raw all/)
+  const withInductor = addResultControl('V1 in 0 DC 0 AC 1\nL1 in out 1m\nR1 out 0 1k\n.noise V(out) V1 dec 10 1 100k\n.end')
+  assert.doesNotMatch(withInductor, /@L1\[i\]/)
+})
+
 test('result control rejects netlists with no end directive', () => {
   assert.throws(() => addResultControl('R1 in 0 1k'), /missing its \.end directive/)
 })
