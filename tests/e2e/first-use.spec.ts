@@ -2014,6 +2014,27 @@ test('capacitor initial voltage editor starts the transient at the requested vol
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 2(?:\.0+)? V/)
 })
 
+test('capacitor plate animation expands with charge from the solved waveform', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const capacitor = page.locator('.circuit-part[data-part-id="p-c1"]')
+  const glow = capacitor.locator('.capacitor-charge-glow').first()
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  await scrubToTime(slider, 0.01)
+  await expect.poll(async () => Number(await glow.getAttribute('data-charge-level'))).toBeGreaterThan(0)
+  const chargeLevelAt10Ms = Number(await glow.getAttribute('data-charge-level'))
+  const plateExtentAt10Ms = Math.abs(Number(await glow.getAttribute('y1')))
+  await scrubToTime(slider, 0.03)
+  await expect.poll(async () => Number(await glow.getAttribute('data-charge-level'))).toBeGreaterThan(chargeLevelAt10Ms)
+  expect(Number(await glow.getAttribute('data-charge-level'))).toBeGreaterThan(chargeLevelAt10Ms)
+  expect(Math.abs(Number(await glow.getAttribute('y1')))).toBeGreaterThan(plateExtentAt10Ms)
+  await expect(capacitor.locator(':scope > title')).toContainText('Q = C × V =')
+})
+
 test('capacitor discharge lesson compares solved RC decay before and after a resistor change', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
