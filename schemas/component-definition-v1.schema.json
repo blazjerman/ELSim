@@ -149,6 +149,20 @@
         }
       }
     },
+    "pinOffsets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "number", "minimum": -100000, "maximum": 100000 },
+          { "type": "number", "minimum": -100000, "maximum": 100000 }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
     "properties": {
       "type": "array",
       "maxItems": 64,

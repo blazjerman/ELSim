@@ -1,4 +1,5 @@
 import type { Part, Project, Wire } from './project'
+import { componentDefinitionFor } from './componentDefinitions'
 
 export type Point = { x: number; y: number }
 export type PinLocation = Point & { partId: string; index: number }
@@ -124,20 +125,8 @@ export function subcircuitPortDirectionPath(x: number, y: number, side: NonNulla
 export function componentPins(part: Part): PinLocation[] {
   let local: [number, number][]
   if (part.symbolPinOffsets) local = part.symbolPinOffsets
-  else if (part.kind === 'inverter') local = [[-50, 0], [50, 0]]
-  else if (part.kind === 'logicGate') local = [[-50, -20], [-50, 20], [50, 0]]
   else if (part.kind === 'subcircuit') local = subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout)
-  else if (part.kind === 'vcvs' || part.kind === 'vccs' || part.kind === 'voltageSwitch') local = [[-50, 0], [50, 0], [0, -50], [0, 50]]
-  else if (part.kind === 'npn' || part.kind === 'pnp') local = [[40, -50], [-50, 0], [40, 50]]
-  else if (part.kind === 'njfet' || part.kind === 'pjfet') local = [[0, -50], [-50, 0], [0, 50]]
-  else if (part.kind === 'nmos' || part.kind === 'pmos') local = [[0, -50], [-50, 0], [0, 50], [50, 0]]
-  else if (part.kind === 'ground') local = [[0, -20]]
-  else if (part.kind === 'source') local = [[0, -50], [0, 50]]
-  else if (part.kind === 'currentSource') local = [[-50, 0], [50, 0]]
-  else if (part.kind === 'transformer') local = [[-50, -30], [-50, 30], [50, -30], [50, 30]]
-  else if (part.kind === 'potentiometer') local = [[0, -50], [50, 0], [0, 50]]
-  else if (part.kind === 'capacitor') local = [[-50, 0], [50, 0]]
-  else local = [[-50, 0], [50, 0]]
+  else local = componentDefinitionFor(part.kind).pinOffsets?.map(([x, y]) => [x, y] as [number, number]) ?? []
   const angle = part.rotation * Math.PI / 180
   return local.map(([x, y], index) => ({
     partId: part.id,

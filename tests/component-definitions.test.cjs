@@ -49,6 +49,11 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     assert.equal(kindPrefix[definition.kind], definition.electricalType)
     assert.equal(componentDefaultValue(definition.kind), definition.properties.find((property) => property.key === 'value')?.defaultValue ?? '')
     for (const property of definition.properties) assert.equal(componentPropertyDefault(definition.kind, property.key), property.defaultValue)
+    if (definition.kind !== 'subcircuit') {
+      assert.equal(definition.pinOffsets.length, definition.pins.length, `${definition.kind} pin geometry count`)
+      const part = { id: `geometry-${definition.kind}`, kind: definition.kind, ref: 'U1', value: '', x: 100, y: 100, rotation: 0 }
+      assert.deepEqual(componentPins(part).map(({ x, y }) => [x - 100, y - 100]), definition.pinOffsets, `${definition.kind} pin geometry matches connectivity`)
+    }
   }
   assert.equal(componentPropertyDefault('resistor', 'missingProperty'), undefined)
   for (const part of project.parts) assert.equal(componentDefinitionFor(part.kind).pins.length, componentPins(part).length, `${part.ref} definition pin count`)

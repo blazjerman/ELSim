@@ -1080,7 +1080,10 @@ test('drag placement aligns a transistor collector-to-emitter axis with the drag
   await page.mouse.down()
   await page.mouse.move(bounds!.x + 190, bounds!.y + 110)
   await page.mouse.up()
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.filter((part: { kind: string }) => part.kind === 'npn').at(-1)?.rotation)).toBe(270)
+  await expect.poll(() => page.evaluate(() => {
+    const savedProject = localStorage.getItem('elsim:project:v7')
+    return savedProject ? JSON.parse(savedProject).parts.filter((part: { kind: string }) => part.kind === 'npn').at(-1)?.rotation : undefined
+  })).toBe(270)
 })
 
 test('component cards explain behavior on hover and keyboard focus', async ({ page }) => {
