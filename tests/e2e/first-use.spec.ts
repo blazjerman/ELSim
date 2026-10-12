@@ -406,6 +406,28 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
+test('large imported IC lists can be searched and expanded on demand', async ({ page }) => {
+  await page.goto('/')
+  const library = Array.from({ length: 52 }, (_, index) => {
+    const name = `USER_${String(index + 1).padStart(3, '0')}`
+    return `.SUBCKT ${name} IN OUT\nR1 IN OUT 1k\n.ENDS ${name}`
+  }).join('\n')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'large-user-library.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(library),
+  })
+
+  const subcircuits = page.locator('.imported-models').filter({ has: page.getByRole('textbox', { name: 'Find an imported IC' }) })
+  await expect(subcircuits.locator('.imported-model')).toHaveCount(50)
+  await expect(subcircuits.getByRole('button', { name: 'Show 2 more imported ICs' })).toBeVisible()
+  await subcircuits.getByRole('textbox', { name: 'Find an imported IC' }).fill('user_052')
+  await expect(subcircuits.locator('.imported-model')).toHaveCount(1)
+  await expect(subcircuits.locator('.imported-model').first()).toContainText('USER_052')
+  await expect(subcircuits.getByRole('button', { name: 'Show 2 more imported ICs' })).toHaveCount(0)
+})
+
 test('duplicate model definitions show both library locations and open the source line', async ({ page }) => {
   await page.goto('/')
   const picker = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
