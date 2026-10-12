@@ -2035,6 +2035,8 @@ test('capacitor discharge lesson compares solved RC decay before and after a res
     return [Number(match![1]), Number(match![2])] as const
   }
   await expect(lesson).toContainText('one time constant leaves about 37%')
+  await expect(lesson).toContainText(/Q = [\d.]+ µC/)
+  await expect(lesson).toContainText(/E = [\d.]+ µJ/)
   await expect(lesson).toContainText('Double R1 to 2 kΩ')
   const [initialVoltage, initialCurrent] = await measured()
   expect(initialVoltage).toBeGreaterThan(1.7)

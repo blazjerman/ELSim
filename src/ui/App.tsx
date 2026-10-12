@@ -163,6 +163,14 @@ function formatLessonCurrent(milliamps: number): string {
   return `${Number(milliamps.toPrecision(3))} mA`
 }
 
+function formatLessonCharge(coulombs: number): string {
+  return `${Number((coulombs * 1e6).toPrecision(3))} µC`
+}
+
+function formatLessonEnergy(joules: number): string {
+  return `${Number((joules * 1e6).toPrecision(3))} µJ`
+}
+
 function formatLessonTime(seconds: number): string {
   if (seconds < 0.1) return `${Number((seconds * 1000).toPrecision(3))} ms`
   return `${Number(seconds.toPrecision(3))} s`
@@ -1877,7 +1885,7 @@ export default function App() {
         ? simulationResultStale
           ? `The previous run started at 5 V. With R1 = ${project.parts.find((part) => part.id === 'cap-discharge-r1')?.value} and C1 = ${project.parts.find((part) => part.id === 'cap-discharge-c1')?.value}, τ = R1 × C1 = ${formatLessonTime(capacitorDischargeTimeConstant)}. The updated circuit predicts V(OUT) ≈ ${formatLessonVoltage(capacitorDischargeInitialVoltage * Math.exp(-0.01 / capacitorDischargeTimeConstant))} at 10 ms; rerun to check the discharge.`
           : capacitorDischargeVoltageAt10Ms !== undefined && capacitorDischargeCurrentAt10Ms !== undefined
-            ? `At 10 ms, ngspice solved V(OUT) = ${formatLessonVoltage(capacitorDischargeVoltageAt10Ms)} and |I(R1)| = ${formatLessonCurrent(Math.abs(capacitorDischargeCurrentAt10Ms) * 1000)}. τ = R1 × C1 = ${formatLessonTime(capacitorDischargeTimeConstant)}; one time constant leaves about 37% of the starting voltage. Double R1 to 2 kΩ and rerun: τ doubles, so the capacitor discharges more slowly and the resistor current is lower.`
+            ? `At 10 ms, ngspice solved V(OUT) = ${formatLessonVoltage(capacitorDischargeVoltageAt10Ms)} and |I(R1)| = ${formatLessonCurrent(Math.abs(capacitorDischargeCurrentAt10Ms) * 1000)}. From that solved voltage, C1 stores Q = ${formatLessonCharge(capacitorDischargeCapacitance * capacitorDischargeVoltageAt10Ms)} and E = ${formatLessonEnergy(0.5 * capacitorDischargeCapacitance * capacitorDischargeVoltageAt10Ms ** 2)}. τ = R1 × C1 = ${formatLessonTime(capacitorDischargeTimeConstant)}; one time constant leaves about 37% of the starting voltage. Double R1 to 2 kΩ and rerun: τ doubles, so the capacitor discharges more slowly and the resistor current is lower.`
             : 'Move the time cursor to 10 ms and compare V(OUT) with I(R1) to see the capacitor discharge through the resistor.'
         : 'Choose positive values for R1 and C1 and a valid capacitor starting voltage, then rerun to compare the discharge.'
     : exampleLesson?.id === 'rc' && simulationResult
