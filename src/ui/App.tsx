@@ -3193,11 +3193,22 @@ export default function App() {
     const pastedLabels = clipboard.netLabels.map((label) => ({ ...label, id: `label-${crypto.randomUUID()}`, x: label.x + offsetX, y: label.y + offsetY }))
     setProject((current) => {
       const parts = [...current.parts]
+      const usedReferences = new Set(parts.map((part) => part.ref.toLowerCase()))
+      const nextReferenceIndices = new Map<string, number>()
       sources.forEach((source, index) => {
+        const prefix = referencePrefixForKind(source.kind)
+        let referenceIndex = nextReferenceIndices.get(prefix) ?? 1
+        let reference = `${prefix}${referenceIndex}`
+        while (usedReferences.has(reference.toLowerCase())) {
+          referenceIndex += 1
+          reference = `${prefix}${referenceIndex}`
+        }
+        usedReferences.add(reference.toLowerCase())
+        nextReferenceIndices.set(prefix, referenceIndex + 1)
         const pasted: Part = {
           ...source,
           id: pastedIds[index],
-          ref: nextRef(parts, source.kind),
+          ref: reference,
           x: source.x + offsetX,
           y: source.y + offsetY,
           ...(source.modelPins ? { modelPins: [...source.modelPins] } : {}),
@@ -3206,8 +3217,9 @@ export default function App() {
           ...(source.sheetParameters ? { sheetParameters: { ...source.sheetParameters } } : {}),
           ...(source.modelParameters ? { modelParameters: { ...source.modelParameters } } : {}),
         }
-        // This array is local to the state updater. Append each cloned part
-        // once instead of copying the growing array for every pasted object.
+        // This array and reference index are local to the state updater. Append
+        // each clone once and consult one prebuilt set instead of rescanning
+        // the growing project for every pasted object.
         parts.push(pasted)
       })
       return { ...current, sheets: [...current.sheets, ...resolved.sheets], modelAssets: [...(current.modelAssets ?? []), ...resolved.modelAssets], symbolAssets: [...(current.symbolAssets ?? []), ...resolved.symbolAssets], parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))], netLabels: [...current.netLabels, ...pastedLabels] }

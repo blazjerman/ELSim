@@ -2069,10 +2069,12 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
     return {
       wires: project.wires.map((wire: { id: string }) => wire.id).filter((id: string) => !originalIds.wires.includes(id)),
       parts: project.parts.map((part: { id: string }) => part.id).filter((id: string) => !originalIds.parts.includes(id)),
+      refs: project.parts.map((part: { ref: string }) => part.ref.toLowerCase()),
     }
   }, original)
   expect(pasted.wires).toHaveLength(original.wires.length)
   expect(pasted.parts).toHaveLength(original.parts.length)
+  expect(new Set(pasted.refs).size).toBe(pasted.refs.length)
   await expect(page.locator('.wire-line.selected')).toHaveCount(pasted.wires.length)
   const selected = await page.locator('.wire-line.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-wire-id')))
   expect(new Set(selected)).toEqual(new Set(pasted.wires))
