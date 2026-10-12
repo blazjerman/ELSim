@@ -67,6 +67,7 @@ const EDITOR_SHORTCUTS = [
   ['/', 'Focus component search'], ['Escape', 'Cancel placement or clear selection'],
 ] as const
 const LOGIC_GATE_SHORTCUTS_HELP = [['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate'], ['5', 'XNOR gate'], ['@', 'NAND gate'], ['#', 'NOR gate']] as const
+const EMPTY_SYMBOL_GEOMETRY: NonNullable<ReturnType<typeof componentDefinitionFor>['symbolGeometry']> = []
 const exampleSelection: Record<ExampleId, string> = {
   potentiometer: 'pot-p1', rc: 'p-r1', 'ac-lowpass': 'ac-lowpass-c1', 'ac-highpass': 'ac-highpass-c1', led: 'p-c1', 'led-current-limiter': 'p-r1', 'led-parallel': 'parallel-led-d1', 'capacitor-discharge': 'cap-discharge-c1',
   rlc: 'rlc-l1', 'lc-energy': 'lc-energy-c1', 'rl-step': 'rl-step-l1', flyback: 'flyback-d1', controlled: 'amp-e1', 'current-controlled': 'current-f1', transistor: 'switch-q1', 'voltage-switch': 'vswitch-s1', pnp: 'pnp-switch-q1',
@@ -348,25 +349,42 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const potentiometerPosition = Number(part.wiperPosition ?? '0.5')
   const potentiometerWiperY = -24 + potentiometerPosition * 48
   const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : part.kind === 'capacitor' && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet'].includes(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
-  const capacitorChargeGeometry = part.kind === 'capacitor' && voltage !== undefined ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? [] : []
-  const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? []
-  const lampPowerGeometry = lampGlow > 0 ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? [] : []
-  const inductorFieldGeometry = currentGlow > 0 ? componentDefinition.symbolAnimations?.['field.current']?.active ?? [] : []
-  const transformerPrimaryFieldGeometry = part.kind === 'transformer' && currentGlow > 0 ? componentDefinition.symbolAnimations?.['field.primaryCurrent']?.active ?? [] : []
-  const transformerSecondaryFieldGeometry = part.kind === 'transformer' && secondaryCurrentGlow > 0 ? componentDefinition.symbolAnimations?.['field.secondaryCurrent']?.active ?? [] : []
+  const capacitorChargeGeometry = part.kind === 'capacitor' && voltage !== undefined ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
+  const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? EMPTY_SYMBOL_GEOMETRY
+  const lampPowerGeometry = lampGlow > 0 ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
+  const inductorFieldGeometry = currentGlow > 0 ? componentDefinition.symbolAnimations?.['field.current']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
+  const transformerPrimaryFieldGeometry = part.kind === 'transformer' && currentGlow > 0 ? componentDefinition.symbolAnimations?.['field.primaryCurrent']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
+  const transformerSecondaryFieldGeometry = part.kind === 'transformer' && secondaryCurrentGlow > 0 ? componentDefinition.symbolAnimations?.['field.secondaryCurrent']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const ledBrightness = Math.min(1, Math.max(0, (current ?? 0) - .0002) / .01)
-  const ledBrightnessGeometry = componentDefinition.symbolAnimations?.['brightness.current']?.[ledBrightness > 0 ? 'active' : 'inactive'] ?? []
-  const symbolGeometry = [...((symbolVariantKey ? componentDefinition.symbolVariants?.[symbolVariantKey] : undefined) ?? componentDefinition.symbolGeometry ?? []), ...capacitorChargeGeometry, ...potentiometerWiperGeometry, ...lampPowerGeometry, ...inductorFieldGeometry, ...transformerPrimaryFieldGeometry, ...transformerSecondaryFieldGeometry, ...ledBrightnessGeometry]
+  const ledBrightnessGeometry = componentDefinition.symbolAnimations?.['brightness.current']?.[ledBrightness > 0 ? 'active' : 'inactive'] ?? EMPTY_SYMBOL_GEOMETRY
+  const symbolGeometry = useMemo(() => [...((symbolVariantKey ? componentDefinition.symbolVariants?.[symbolVariantKey] : undefined) ?? componentDefinition.symbolGeometry ?? EMPTY_SYMBOL_GEOMETRY), ...capacitorChargeGeometry, ...potentiometerWiperGeometry, ...lampPowerGeometry, ...inductorFieldGeometry, ...transformerPrimaryFieldGeometry, ...transformerSecondaryFieldGeometry, ...ledBrightnessGeometry], [componentDefinition, symbolVariantKey, capacitorChargeGeometry, potentiometerWiperGeometry, lampPowerGeometry, inductorFieldGeometry, transformerPrimaryFieldGeometry, transformerSecondaryFieldGeometry, ledBrightnessGeometry])
   const layout = part.sheetPortLayout ?? []
-  const automaticLeft = layout.filter((port, index) => port.side === 'auto' && index % 2 === 0).length
-  const automaticRight = layout.filter((port, index) => port.side === 'auto' && index % 2 === 1).length
-  const verticalPins = Math.max(layout.filter((port) => port.side === 'left').length + automaticLeft, layout.filter((port) => port.side === 'right').length + automaticRight, layout.length ? 0 : Math.ceil(customOffsets.length / 2))
-  const horizontalPins = Math.max(layout.filter((port) => port.side === 'top').length, layout.filter((port) => port.side === 'bottom').length)
+  const { leftPins, rightPins, topPins, bottomPins, automaticLeft, automaticRight } = useMemo(() => layout.reduce((counts, port, index) => {
+    if (port.side === 'left') counts.leftPins++
+    else if (port.side === 'right') counts.rightPins++
+    else if (port.side === 'top') counts.topPins++
+    else if (port.side === 'bottom') counts.bottomPins++
+    else if (port.side === 'auto' && index % 2 === 0) counts.automaticLeft++
+    else if (port.side === 'auto') counts.automaticRight++
+    return counts
+  }, { leftPins: 0, rightPins: 0, topPins: 0, bottomPins: 0, automaticLeft: 0, automaticRight: 0 }), [layout])
+  const verticalPins = Math.max(leftPins + automaticLeft, rightPins + automaticRight, layout.length ? 0 : Math.ceil(customOffsets.length / 2))
+  const horizontalPins = Math.max(topPins, bottomPins)
   const customHeight = Math.max(80, (verticalPins - 1) * 20 + 50)
   const customWidth = Math.max(120, (horizontalPins - 1) * 20 + 50)
-  const symbolCoordinates = symbol ? [...symbol.primitives.flatMap((primitive) => primitive.kind === 'polyline' ? primitive.points : primitive.kind === 'text' ? [[primitive.x, primitive.y]] : [[primitive.x1, primitive.y1], [primitive.x2, primitive.y2]]), ...symbol.pins.map(({ x, y }) => [x, y])] : []
-  const symbolBounds = symbolCoordinates.length ? { minX: Math.min(...symbolCoordinates.map(([x]) => x)), minY: Math.min(...symbolCoordinates.map(([, y]) => y)), maxX: Math.max(...symbolCoordinates.map(([x]) => x)), maxY: Math.max(...symbolCoordinates.map(([, y]) => y)) } : null
-  const labelBounds = (() => {
+  const symbolBounds = useMemo(() => {
+    if (!symbol) return null
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    const include = (x: number, y: number) => { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y) }
+    for (const primitive of symbol.primitives) {
+      if (primitive.kind === 'polyline') for (const [x, y] of primitive.points) include(x, y)
+      else if (primitive.kind === 'text') include(primitive.x, primitive.y)
+      else { include(primitive.x1, primitive.y1); include(primitive.x2, primitive.y2) }
+    }
+    for (const pin of symbol.pins) include(pin.x, pin.y)
+    return Number.isFinite(minX) ? { minX, minY, maxX, maxY } : null
+  }, [symbol])
+  const labelBounds = useMemo(() => {
     const angle = part.rotation * Math.PI / 180
     const cosine = Math.cos(angle), sine = Math.sin(angle)
     // componentPins returns world coordinates already rotated. Convert pins
@@ -385,7 +403,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     if (part.kind === 'subcircuit') points.push([-customWidth / 2, -customHeight / 2], [customWidth / 2, customHeight / 2])
     const rotated = points.map(([x, y]) => [x * Math.cos(angle) - y * Math.sin(angle), x * Math.sin(angle) + y * Math.cos(angle)])
     return rotated.length ? { minX: Math.min(...rotated.map(([x]) => x)), minY: Math.min(...rotated.map(([, y]) => y)), maxX: Math.max(...rotated.map(([x]) => x)), maxY: Math.max(...rotated.map(([, y]) => y)) } : { minX: -24, minY: -24, maxX: 24, maxY: 24 }
-  })()
+  }, [part, symbolGeometry, symbolBounds, customWidth, customHeight])
   const labelAnchor = (x: number, y: number) => {
     const angle = part.rotation * Math.PI / 180
     return { x: Math.cos(angle) * x + Math.sin(angle) * y, y: -Math.sin(angle) * x + Math.cos(angle) * y }
