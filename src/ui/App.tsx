@@ -31,7 +31,6 @@ import { timeMagnitude } from '../domain/componentValue'
 import { measurementCrossingCountError, measurementThresholdError } from '../domain/measurementSettings'
 import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
-import { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
 import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type PlotTraceReference, type Project, type SymbolAsset, type TransientMeasurement, type Wire } from '../domain/project'
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef, referencePrefixForKind, validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlist'
@@ -2822,8 +2821,9 @@ export default function App() {
     setProjectState(next)
   }
 
-  const downloadProjectArchive = () => {
+  const downloadProjectArchive = async () => {
     try {
+      const { createProjectArchive } = await import('../domain/projectArchive')
       const bytes = createProjectArchive(projectRef.current)
       const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/vnd.elsim.project+zip' })
       const link = document.createElement('a')
@@ -2852,10 +2852,11 @@ export default function App() {
     catch (error) { setNotice(error instanceof Error ? error.message : 'Could not prepare the LTspice export.') }
     finally { setLtspiceExportBusy(false) }
   }
-  const downloadLtspiceExport = () => {
+  const downloadLtspiceExport = async () => {
     const result = ltspiceExport
     if (!result || result.blockers.length || (result.requiresUnknownLicenseConfirmation && !unknownRightsConfirmed)) return
     try {
+      const { createFilesZip } = await import('../domain/projectArchive')
       const bytes = createFilesZip(result.files)
       const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/zip' })
       const link = document.createElement('a')
@@ -2874,6 +2875,7 @@ export default function App() {
     try {
       if (file.size > 50 * 1024 * 1024) throw new Error('Project file exceeds the 50 MiB size limit.')
       const bytes = new Uint8Array(await file.arrayBuffer())
+      const { isProjectArchive, readProjectArchive } = await import('../domain/projectArchive')
       const projectData = isProjectArchive(bytes) ? readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
       const parsed = validateProject(projectData)
       await verifyModelAssetHashes([...(parsed.modelAssets ?? []), ...(parsed.symbolAssets ?? [])])

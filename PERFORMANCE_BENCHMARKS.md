@@ -357,3 +357,7 @@ Selected-part clipboard creation previously checked every selected pin against e
 ### Junction cleanup on wire deletion (2026-10-12)
 
 Wire deletion used to rescan every remaining segment for each explicit junction. It now queries a single wire spatial index and keeps the same exact segment predicate, retaining a junction only when at least two remaining segments meet there. A local fixture with 5,000 wires and 2,500 junctions retained all 2,500 junctions at 3.84 ms median / 13.59 ms max across nine runs. This is a current single-host measurement, not a before/after claim or budget. Unit coverage verifies both preserved multi-segment junctions and removal of junctions after their crossing wires are deleted.
+
+### On-demand project archive code (2026-10-12)
+
+Portable project ZIP creation/parsing was moved from the initial App import into the explicit save/open handlers. The production build now emits a 6.36 KB (2.45 KB gzip) `projectArchive` chunk and reduces initial JavaScript transfer from 223.1 to 221.1 KiB gzip on the existing build budget report. The main application chunk remains 582.12 KB minified and still triggers Vite’s 500 KB warning. Firefox save-with-provenance and open-project workflows pass. This change is a measured 2.0 KiB initial-transfer reduction; it does not claim a meaningful startup-time change.
