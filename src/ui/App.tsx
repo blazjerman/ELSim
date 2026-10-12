@@ -1422,6 +1422,30 @@ export default function App() {
   const activeWorkerRef = useRef<Worker | null>(null)
   const projectRef = useRef(project)
   projectRef.current = project
+  const autosaveTimerRef = useRef<number | null>(null)
+  const persistProjectAutosaveRef = useRef<(notify: boolean) => void>(() => {})
+  persistProjectAutosaveRef.current = (notify) => {
+    try {
+      localStorage.setItem('elsim:project:v7', JSON.stringify(projectRef.current))
+      localStorage.removeItem('elsim:project:v6')
+      localStorage.removeItem('elsim:project:v5')
+      localStorage.removeItem('elsim:project:v4')
+      localStorage.removeItem('elsim:project:v3')
+      localStorage.removeItem('elsim:project:v2')
+      localStorage.removeItem('elsim:project:v1')
+    } catch {
+      if (notify) setNotice('This browser could not save the project locally. Use Save to download a copy.')
+    }
+  }
+  useEffect(() => {
+    const flushAutosave = () => {
+      if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+      persistProjectAutosaveRef.current(false)
+    }
+    window.addEventListener('pagehide', flushAutosave)
+    return () => window.removeEventListener('pagehide', flushAutosave)
+  }, [])
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)')
     const updatePreference = () => {
@@ -1507,16 +1531,15 @@ export default function App() {
     return requiredModelAssets.has(assetId)
   }
   useEffect(() => {
-    try {
-      localStorage.setItem('elsim:project:v7', JSON.stringify(project))
-      localStorage.removeItem('elsim:project:v6')
-      localStorage.removeItem('elsim:project:v5')
-      localStorage.removeItem('elsim:project:v4')
-      localStorage.removeItem('elsim:project:v3')
-      localStorage.removeItem('elsim:project:v2')
-      localStorage.removeItem('elsim:project:v1')
+    if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null
+      persistProjectAutosaveRef.current(true)
+    }, 200)
+    return () => {
+      if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
     }
-    catch { setNotice('This browser could not save the project locally. Use Save to download a copy.') }
   }, [project])
   useEffect(() => {
     let active = true
