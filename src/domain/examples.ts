@@ -479,6 +479,39 @@ export function createRlStepExampleProject(): Project {
   return project
 }
 
+/** A beginner flyback lesson showing the current path through a protection diode. */
+export function createFlybackDiodeExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = {
+    id: 'flyback-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'pulse',
+    pulse: { initial: '0 V', delay: '0', rise: '1 µs', fall: '1 µs', width: '10 ms', period: '20 ms' },
+    x: 200, y: 400, rotation: 0,
+  }
+  const resistor: Part = { id: 'flyback-r1', kind: 'resistor', ref: 'R1', value: '10 Ω', x: 420, y: 350, rotation: 0 }
+  const inductor: Part = { id: 'flyback-l1', kind: 'inductor', ref: 'L1', value: '100 mH', x: 700, y: 350, rotation: 0 }
+  const diode: Part = { id: 'flyback-d1', kind: 'diode', ref: 'D1', value: 'Default diode', x: 700, y: 440, rotation: 270 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const parts = [source, resistor, inductor, diode]
+  project.name = 'Inductive flyback diode'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('flyback-drive-source', 'DRIVE', source, 0), labelAt('flyback-drive-r1', 'DRIVE', resistor, 0),
+    labelAt('flyback-coil-r1', 'COIL', resistor, 1), labelAt('flyback-coil-l1', 'COIL', inductor, 0), labelAt('flyback-coil-d1', 'COIL', diode, 1),
+    labelAt('flyback-ground-source', '0', source, 1), labelAt('flyback-ground-l1', '0', inductor, 1), labelAt('flyback-ground-d1', '0', diode, 0),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '40 ms', maxStep: '50 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(DRIVE)', 'V(COIL)', 'I(L1)', 'I(D1)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: -5, panY: -10 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A first AC sweep example showing the RC low-pass cutoff near 1 kHz. */
 export function createAcLowPassExampleProject(): Project {
   const project = createStarterProject()
