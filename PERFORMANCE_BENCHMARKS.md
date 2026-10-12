@@ -274,6 +274,8 @@ The generated schematic has twice as many net labels as parts. At 5,000 parts, o
 
 After replacing selected-ID array scans with `Set` lookups and keeping only visible plus currently focused labels mounted, the same Firefox benchmark measured Ctrl+A selection across 5,000 components and 10,000 labels at 190 ms through the next animation frame. The post-selection SVG still mounted 105 labels. This is one run and has no comparable pre-change Ctrl+A baseline; the change removes quadratic membership scans and avoids mounting 10,000 offscreen label controls at once.
 
+The wire-heavy fixture now uses 1,000 parts and 1,200 independent two-endpoint segments, matching the current document model. In Firefox, editor render was 1,444.58 ms, single-part selection was 32 ms median / 42 ms p95, and Ctrl+A selected 1,000 parts plus 1,200 wires in 125 ms through the next animation frame. The test asserts that all parts and wire segments become selected. This is one local run, not a budget.
+
 ### Memoized-connectivity Circuit Checks path (2026-10-12)
 
 The editor computes connectivity in its own memoized selector and passes that result to `checkCircuit`. The performance runner now reports both that production call and the standalone form that computes connectivity internally. On this i7-12700F / Node 18.20.4 host, the memoized path p95 was 6.841 ms for a 5,001-part named-net chain, 13.824 ms for a 5,000-resistor wire grid, and 20.824 ms for 5,000 instances of the repeated two-level hierarchy. The standalone p95 was 57.425, 62.619, and 163.777 ms respectively. Both paths returned identical issue counts (0, 201, and 4,900). The benchmark is observational; it does not establish cross-machine budgets.
