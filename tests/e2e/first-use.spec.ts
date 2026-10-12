@@ -3271,6 +3271,16 @@ test('voltage-controlled switch example toggles the load with its control pulse'
   await timeSlider.fill(String(Math.floor(finalSample * 0.75)))
   await expect(switchSymbol).toHaveAttribute('data-state', 'open')
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 0\.00+/)
+  await expect(page.locator('.example-lesson-next-step')).toContainText('Raise its threshold to 5.5 V')
+  await page.locator('.circuit-part[data-part-id="vswitch-s1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="vswitch-s1:value"]').fill('5.5 V')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('the switch should stay open')
+  await page.locator('.example-lesson-next-step').getByRole('button', { name: 'Run this circuit again' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.example-lesson-next-step')).toContainText('ngspice solved VOUT = 0.000005 V')
+  await expect(switchSymbol).toHaveAttribute('data-state', 'open')
 })
 
 test('transistor switch example demonstrates base drive and collector switching', { tag: '@ngspice' }, async ({ page }) => {
