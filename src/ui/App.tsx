@@ -706,8 +706,9 @@ const WireCurrentFlowLayer = memo(function WireCurrentFlowLayer({ wireIds, wires
   animationSpeed: number
 }) {
   const sampleIndex = useSimulationCursor()
+  const animatedWires = useMemo(() => wires.filter((wire) => wireIds.has(wire.id)), [wires, wireIds])
   const flows = useMemo(() => sampleFlows(sampleIndex), [sampleIndex, sampleFlows])
-  return <g className="wire-current-flow-layer" aria-hidden="true" pointerEvents="none">{wires.filter((wire) => wireIds.has(wire.id)).map((wire) => <g key={wire.id} data-wire-id={wire.id}>{(flows.get(wire.id) ?? []).map((segment, index) => {
+  return <g className="wire-current-flow-layer" aria-hidden="true" pointerEvents="none">{animatedWires.map((wire) => <g key={wire.id} data-wire-id={wire.id}>{(flows.get(wire.id) ?? []).map((segment, index) => {
     const currentStrength = Math.min(1, Math.sqrt(segment.magnitude / 0.01))
     const glow = segment.magnitude > 1e-12 ? Math.min(1, (0.12 + currentStrength * 0.88) * animationScale) : 0
     return <WireFlowPath key={`${wire.id}:${index}`} wireId={wire.id} index={index} segment={segment} enabled={animationEnabled} scale={animationScale} speed={animationSpeed} strength={currentStrength} opacity={glow}/>
