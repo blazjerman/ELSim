@@ -5506,6 +5506,35 @@ test('lamp palette item exposes resistance and nominal animation power', async (
   await expect(page.getByText(/no thermal filament behavior is simulated/i)).toBeVisible()
 })
 
+test('lamp glow renders from its definition animation at solved electrical power', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Current source and load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Current source and load')
+  await expect(page.locator('.app-status [role="status"]')).toHaveText('All changes saved locally')
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const lamp = project.parts.find((part: { id: string }) => part.id === 'isource-r1')
+    lamp.kind = 'lamp'
+    lamp.componentDefinitionId = 'elsim.lamp'
+    lamp.animationNominalPower = 0.0001
+    project.sheets[0].parts = project.parts
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await expect(page.locator('.project-title')).toHaveText('Current source and load')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const glow = page.locator('.circuit-part[data-part-id="isource-r1"] .lamp-glow-fill')
+  await expect(glow).toHaveCount(1)
+  await expect.poll(async () => Number(await glow.getAttribute('opacity'))).toBeGreaterThan(0)
+  await expect(page.locator('.circuit-part[data-part-id="isource-r1"] .lamp-glow-outline')).toHaveCount(1)
+})
+
 test('phone-width workspace switches panels without horizontal page scrolling', { tag: '@ngspice' }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')

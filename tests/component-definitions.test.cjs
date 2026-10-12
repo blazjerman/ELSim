@@ -146,6 +146,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   const definitionSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8'))
   assert.ok(definitionSchema.properties.symbolVariants)
   assert.ok(definitionSchema.properties.symbolAnimations)
+  assert.equal(new RegExp(definitionSchema.properties.symbolAnimations.propertyNames.pattern).test('brightness.power'), true)
   assert.equal(definitionSchema.properties.symbolGeometry.items.oneOf.find((primitive) => primitive.properties?.kind?.const === 'text').properties.pin.maximum, 64)
   for (const kind of ['source', 'currentSource', 'resistor', 'lamp', 'transformer', 'diode', 'zener', 'led', 'switch', 'voltageSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'inverter', 'logicGate']) {
     const variants = componentDefinitionFor(kind).symbolAnimations.currentDirection
@@ -155,6 +156,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
   assert.deepEqual(componentDefinitionFor('lamp').symbolGeometry.map(({ kind }) => kind), ['line', 'circle', 'line', 'path'])
   assert.ok(componentDefinitionFor('lamp').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.className === 'lamp-filament'))
+  assert.deepEqual(componentDefinitionFor('lamp').symbolAnimations['brightness.power'].active.filter((primitive) => primitive.className?.startsWith('lamp-glow-')).map(({ className, kind }) => [className, kind]), [['lamp-glow-fill', 'circle'], ['lamp-glow-outline', 'circle']])
   assert.ok(project.parts.every((part) => part.componentDefinitionId === componentDefinitionFor(part.kind).id))
 })
 

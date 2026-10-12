@@ -247,7 +247,7 @@
     "symbolAnimations": {
       "type": "object",
       "maxProperties": 32,
-      "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$", "maxLength": 64 },
+      "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z][A-Za-z0-9_-]*)*$", "maxLength": 80 },
       "additionalProperties": {
         "type": "object",
         "maxProperties": 32,
