@@ -148,6 +148,29 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       netLabels: sheet.netLabels,
     }
     const sheetConnectivity = analyzeConnectivity(sheetProject)
+    for (const part of sheet.parts) {
+      if (part.kind === 'nmos' || part.kind === 'pmos') {
+        const source = sheetConnectivity.pinNets.get(`${part.id}:2`)
+        const bulk = sheetConnectivity.pinNets.get(`${part.id}:3`)
+        if (source && bulk && source !== bulk) issues.push({
+          id: `mosfet-body-bias:${sheet.id}:${part.id}`,
+          severity: 'info',
+          title: `${part.ref} bulk and source use different nets in ${sheet.name}`,
+          detail: 'Many discrete MOSFET circuits connect bulk to source. Separate body bias may be intentional; check the device model and circuit design.',
+          partId: topLevelInstanceId,
+        })
+      }
+      if (!['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'switch'].includes(part.kind)) continue
+      const first = sheetConnectivity.pinNets.get(`${part.id}:0`)
+      const second = sheetConnectivity.pinNets.get(`${part.id}:1`)
+      if (first && first === second) issues.push({
+        id: `shorted:${sheet.id}:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} has both terminals on the same net in ${sheet.name}`,
+        detail: 'Check whether this component is intentionally bypassed or shorted.',
+        partId: topLevelInstanceId,
+      })
+    }
     for (const part of sheet.parts) if (part.kind === 'behavioral') {
       try {
         const parsed = parseBehavioralExpression(part.value)

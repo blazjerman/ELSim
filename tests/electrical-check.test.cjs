@@ -360,6 +360,25 @@ test('reports floating terminals in a child sheet and selects its visible block'
   assert.match(issue?.detail, /on Core resistor/)
 })
 
+test('reports same-net shorts and MOSFET body bias in child sheets', () => {
+  const project = createHierarchicalExampleProject()
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.netLabels.find((label) => label.id === 'core-label-b').name = 'A'
+  const bodyBiased = { id: 'core-body-biased', kind: 'nmos', ref: 'MCORE', value: 'NMOS', x: 800, y: 600, rotation: 0 }
+  core.parts.push(bodyBiased)
+  const pins = componentPins(bodyBiased)
+  core.netLabels.push(
+    { id: 'core-mos-source', name: 'MOS_SOURCE', x: pins[2].x, y: pins[2].y, visible: true },
+    { id: 'core-mos-bulk', name: 'MOS_BULK', x: pins[3].x, y: pins[3].y, visible: true },
+  )
+  const issues = checkCircuit(project)
+  const short = issues.find((item) => item.id === 'shorted:sheet-core:core-r1')
+  const body = issues.find((item) => item.id === 'mosfet-body-bias:sheet-core:core-body-biased')
+  assert.equal(short?.partId, 'example-x2')
+  assert.equal(body?.severity, 'info')
+  assert.equal(body?.partId, 'example-x2')
+})
+
 test('accepts declared sheet parameters in behavioral source expressions and explains missing ones', () => {
   const project = createStarterProject()
   const behavioral = { id: 'parameter-behavioral', kind: 'behavioral', ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage', x: 700, y: 600, rotation: 0 }
