@@ -3660,6 +3660,31 @@ test('inverter static symbol renders from the component registry', { tag: '@ui-s
   await expect(inverter.locator('line[x1="34"][y1="0"][x2="50"][y2="0"]')).toHaveCount(1)
 })
 
+test('dependent source symbols render from the component registry', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const openExample = async (title: string) => {
+    await page.getByRole('button', { name: 'Examples' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+    await dialog.locator('.example-list article').filter({ hasText: title }).getByRole('button', { name: 'Open example' }).click()
+    await page.getByRole('button', { name: 'Replace and open' }).click()
+    await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  }
+  const sourceDiamond = 'M0 -24L24 0L0 24L-24 0Z'
+  await openExample('Voltage-controlled sources')
+  const vcvs = page.locator('.circuit-part[data-part-id="amp-e1"]')
+  const vccs = page.locator('.circuit-part[data-part-id="amp-g1"]')
+  await expect(vcvs.locator(`path[d="${sourceDiamond}"]`)).toHaveCount(1)
+  await expect(vcvs.locator('line[x1="0"][y1="-50"][x2="0"][y2="-24"]')).toHaveCount(1)
+  await expect(vccs.locator('path[d="M10 0L3 -5V5Z"]')).toHaveCount(1)
+
+  await openExample('Current-controlled sources')
+  const cccs = page.locator('.circuit-part[data-part-id="current-f1"]')
+  const ccvs = page.locator('.circuit-part[data-part-id="current-h1"]')
+  await expect(cccs.locator(`path[d="${sourceDiamond}"]`)).toHaveCount(1)
+  await expect(cccs.locator('path[d="M0 -10L-6 -2H6Z"]')).toHaveCount(1)
+  await expect(ccvs.locator('line[x1="0"][y1="-13"][x2="0"][y2="-1"]')).toHaveCount(1)
+})
+
 test('potentiometer example adjusts the simulated output with its wiper', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
