@@ -1104,6 +1104,10 @@
           "type": "string",
           "minLength": 1
         },
+        "temperature": {
+          "type": "string",
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$"
+        },
         "sourceAcMagnitude": {
           "type": "string",
           "minLength": 1

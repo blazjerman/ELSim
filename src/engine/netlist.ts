@@ -138,12 +138,14 @@ function spiceSffm(part: Part, parameters: Project['sheets'][number]['parameters
   return `SFFM(${offset} ${amplitude} ${carrier} ${index} ${signal})`
 }
 
-export type AnalysisSettingField = 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
+export type AnalysisSettingField = 'temperature' | 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project): AnalysisSettingError[] {
   const errors: AnalysisSettingError[] = []
   const add = (field: AnalysisSettingField, message: string, sourceId?: string, settingPath?: string) => errors.push({ field, message, ...(sourceId ? { sourceId } : {}), ...(settingPath ? { settingPath } : {}) })
+  const temperature = Number(project.simulation.temperature ?? '27')
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test((project.simulation.temperature ?? '27').trim()) || !Number.isFinite(temperature) || temperature < -273.15 || temperature > 10000) add('temperature', 'Enter a temperature from −273.15 °C to 10000 °C.')
   const sourceParameters = project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []
   if (project.simulation.analysis === 'tran') {
     const stop = spiceMagnitude(project.simulation.stopTime, 'time')
@@ -375,6 +377,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     rows.push(text)
     sourceMap.push({ line: rows.length, sourceId, role, ...sourceExtra })
   }
+  const temperature = Number(project.simulation.temperature ?? '27')
+  if (includeHierarchyProbes && Number.isFinite(temperature) && temperature !== 27) append(`.temp ${temperature}`, 'simulation:temperature', 'generated')
   const sheetParameters = (project as Project & { _netlistSheetParameters?: Project['sheets'][number]['parameters'] })._netlistSheetParameters
     ?? (includeHierarchyProbes ? project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters : undefined)
     ?? []

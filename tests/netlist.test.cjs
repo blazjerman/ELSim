@@ -20,6 +20,19 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.match(artifact.text, /^R1 vin vout 1k$/m)
   assert.match(artifact.text, /^C1 vout 0 10u$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
+  assert.doesNotMatch(artifact.text, /^\.temp /m)
+})
+
+test('global temperature emits one top-level SPICE directive and is validated in Celsius', () => {
+  const project = createStarterProject()
+  project.simulation.temperature = '85'
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal((artifact.text.match(/^\.temp 85$/gm) ?? []).length, 1)
+  assert.equal(validateAnalysisSettings(project).some((error) => error.field === 'temperature'), false)
+  project.simulation.temperature = '-300'
+  assert.equal(validateAnalysisSettings(project).find((error) => error.field === 'temperature')?.field, 'temperature')
+  assert.throws(() => validateProject(project), /temperature must be a number/)
 })
 
 test('imported op-amp example includes its user model and ordered five-pin instance', () => {

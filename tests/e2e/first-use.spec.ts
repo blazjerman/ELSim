@@ -1681,6 +1681,17 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 854)
 })
 
+test('global simulation temperature is passed to ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByLabel('Temperature (°C)').fill('85')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('.temp 85')
+})
+
 test('RC starter measures average, peak-to-peak, and transferred charge with ngspice', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before testing measurement windows').toEqual([])
