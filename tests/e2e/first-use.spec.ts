@@ -2849,6 +2849,18 @@ test('transformer transient animation follows both solved winding currents', { t
   await expect(transformer.locator('.component-current-arrow')).toBeVisible()
   await expect(transformer.locator('.transformer-secondary-current-arrow')).toBeVisible()
   await expect(transformer.locator('.transformer-secondary-current-arrow')).toHaveAttribute('data-direction', /pin-3-to-pin-4|pin-4-to-pin-3/)
+  await transformer.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot primary winding current' }).click()
+  const primaryChooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
+  await primaryChooser.getByRole('button', { name: 'Open waveform' }).click()
+  const plot = page.locator('.plot-window').last()
+  await expect(plot.locator('.trace-toggles button', { hasText: 'I(lt1_p)' })).toBeVisible()
+  await transformer.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot secondary winding current' }).click()
+  const secondaryChooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
+  await secondaryChooser.getByRole('radio', { name: /Add to current window/ }).check()
+  await secondaryChooser.getByRole('button', { name: 'Open waveform' }).click()
+  await expect(plot.locator('.trace-toggles button', { hasText: 'I(lt1_s)' })).toBeVisible()
 })
 
 test('LED current-limiter example explains and solves its resistor-limited current', { tag: '@ngspice' }, async ({ page }) => {

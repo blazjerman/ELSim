@@ -36,7 +36,7 @@ export function hierarchyNodeVector(project: Project, sheetId: string, instanceP
 }
 
 /** Resolve a child component's branch-current vector using ngspice's flattened instance names. */
-export function hierarchyComponentCurrentVector(project: Project, sheetId: string, instancePath: string[], partId: string, scopeSheetId = project.rootSheetId): string | null {
+export function hierarchyComponentCurrentVector(project: Project, sheetId: string, instancePath: string[], partId: string, scopeSheetId = project.rootSheetId, transformerWinding: 'P' | 'S' = 'P'): string | null {
   let sheet: ProjectSheet | undefined = project.sheets.find((candidate) => candidate.id === scopeSheetId)
   if (!sheet) return null
   const refs: string[] = []
@@ -59,7 +59,7 @@ export function hierarchyComponentCurrentVector(project: Project, sheetId: strin
     return `i(@${refs.length ? `i.${device}` : device}[current])`
   }
   if (part.kind === 'transformer') {
-    const device = [...refs, `${part.ref.toLowerCase()}_p`].join('.')
+    const device = [...refs, `${part.ref.toLowerCase()}_${transformerWinding.toLowerCase()}`].join('.')
     return `i(l.${device})`
   }
   if (part.kind === 'potentiometer') {

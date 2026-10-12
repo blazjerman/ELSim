@@ -223,6 +223,8 @@ test('nested transformer winding currents retain instance-scoped transient saves
     visible: true,
   })))
   const deck = createNetlistArtifact(validateProject(project)).text
+  assert.equal(hierarchyComponentCurrentVector(project, child.id, ['root-block'], transformer.id), 'i(l.xload.t1_p)')
+  assert.equal(hierarchyComponentCurrentVector(project, child.id, ['root-block'], transformer.id, project.rootSheetId, 'S'), 'i(l.xload.t1_s)')
   assert.match(deck, /^\.save i\(l\.xload\.t1_p\)$/mi)
   assert.match(deck, /^\.save i\(l\.xload\.t1_s\)$/mi)
 })
