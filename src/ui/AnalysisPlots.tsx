@@ -80,7 +80,7 @@ function useValueWindow(autoRange: [number, number]) {
 }
 
 function PlotNavigation({ zoom, reset, valueZoom, valuePan, disabled = false }: { zoom: (factor: number) => void; reset: () => void; valueZoom: (factor: number) => void; valuePan: (direction: -1 | 1) => void; disabled?: boolean }) {
-  return <div className="plot-navigation" aria-label="Plot navigation">
+  return <div className="plot-navigation" role="group" aria-label="Plot navigation">
     <button title="Zoom out" aria-label="Zoom out" onClick={() => zoom(1.5)} disabled={disabled}>−</button>
     <button title="Reset plot view" aria-label="Reset plot view" onClick={reset} disabled={disabled}>Reset</button>
     <button title="Zoom in" aria-label="Zoom in" onClick={() => zoom(0.67)} disabled={disabled}>+</button>

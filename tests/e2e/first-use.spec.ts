@@ -1702,7 +1702,7 @@ test('wire tool stays armed while component placement ends after one drop', asyn
 async function openComponentVoltagePlot(page: import('@playwright/test').Page, ref = 'R1') {
   const hadPlotWindow = (await page.locator('.plot-window').count()) > 0
   await page.locator(`.circuit-part[aria-label^="${ref},"]`).click({ button: 'right' })
-  await page.getByRole('menuitem', { name: /Plot (?:pin-to-pin voltage|voltage across pin1)/ }).click()
+  await page.getByRole('menuitem', { name: /Plot (?:pin-to-pin voltage|voltage across (?:pin1|terminal 1))/ }).click()
   const chooser = page.getByRole('dialog', { name: /V\(/ })
   await chooser.getByRole('radio', { name: /New waveform window/ }).check()
   await chooser.getByRole('button', { name: 'Open waveform' }).click()
@@ -4534,7 +4534,7 @@ test('waveform click moves the cursor, wheel zooms horizontally, and drag keeps 
     const settings = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings
     return settings.panels?.at(-1)?.ranges.tran ?? settings.ranges?.tran ?? null
   })
-  await page.getByLabel('Plot navigation').getByRole('button', { name: 'Zoom in' }).click()
+  await page.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Zoom in' }).click()
   await expect.poll(readSavedTransientRange).not.toBeNull()
   const zoomedRange = await readSavedTransientRange()
   expect(zoomedRange.end - zoomedRange.start).toBeLessThan(1)
@@ -4563,7 +4563,7 @@ test('waveform click moves the cursor, wheel zooms horizontally, and drag keeps 
   await chart.focus()
   await chart.press('ArrowRight')
   await expect.poll(() => timeReadout.innerText()).not.toBe(clickedTime)
-  const keyboardAnnouncement = plotWindow.locator('.sr-only[aria-live="polite"]')
+  const keyboardAnnouncement = plotWindow.locator('.waveform-view > .sr-only[aria-live="polite"]')
   await expect(keyboardAnnouncement).toContainText(/Time .* seconds/)
   await expect(keyboardAnnouncement).toContainText(/[0-9].* [VA]/)
 })
@@ -4588,7 +4588,7 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   await chart.press('ArrowRight')
   await expect.poll(() => cursorLabel.innerText()).not.toBe(clickedFrequency)
 
-  await page.getByLabel('Plot navigation').getByRole('button', { name: 'Zoom in' }).click()
+  await page.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Zoom in' }).click()
   const readSavedAcRange = () => page.evaluate(() => {
     const saved = localStorage.getItem('elsim:project:v7')
     if (!saved) return null
@@ -4687,7 +4687,7 @@ test('DC sweep waveform supports source cursor and horizontal wheel zoom without
     const settings = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings
     return settings.panels?.at(-1)?.ranges.dc ?? settings.ranges?.dc ?? null
   })
-  await page.getByLabel('Plot navigation').getByRole('button', { name: 'Zoom in' }).click()
+  await page.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Zoom in' }).click()
   await expect.poll(readSavedDcRange).not.toBeNull()
   const zoomedRange = await readSavedDcRange()
   const box = await chart.boundingBox()
