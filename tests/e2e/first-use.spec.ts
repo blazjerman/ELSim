@@ -5481,6 +5481,7 @@ test('lamp palette item exposes resistance and nominal animation power', async (
   const lamp = page.locator(`.circuit-part[data-part-id="${partId}"]`)
   await expect(lamp.locator('circle[cx="0"][cy="0"][r="19"]').first()).toBeVisible()
   await expect(lamp.locator('line[x1="-50"][y1="0"][x2="-19"][y2="0"]')).toHaveCount(1)
+  await expect(lamp.locator('path.lamp-filament')).toHaveAttribute('d', 'M-9 -9L-5 -3L5 -3L9 -9M-5 -3L-5 7M5 -3L5 7M-7 7H7')
   await page.keyboard.press('Escape')
   await lamp.click()
   await expect(page.getByLabel('Resistance (Ω)')).toHaveValue('12 Ω')
