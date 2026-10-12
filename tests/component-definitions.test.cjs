@@ -76,6 +76,8 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.equal(componentDefinitionFor('transformer').symbolGeometry.filter(({ kind }) => kind === 'line').length, 6)
   assert.equal(componentDefinitionFor('transformer').symbolAnimations['field.primaryCurrent'].active[0].className.includes('transformer-primary-current-glow'), true)
   assert.equal(componentDefinitionFor('transformer').symbolAnimations['field.secondaryCurrent'].active[0].className.includes('transformer-secondary-current-glow'), true)
+  assert.deepEqual(componentDefinitionFor('transformer').symbolAnimations.secondaryCurrentDirection.forward.map(({ className }) => className), ['transformer-secondary-current-arrow'])
+  assert.notEqual(componentDefinitionFor('transformer').symbolAnimations.secondaryCurrentDirection.forward[0].d, componentDefinitionFor('transformer').symbolAnimations.secondaryCurrentDirection.reverse[0].d)
   for (const kind of ['ground', 'diode', 'zener', 'led']) assert.ok(componentDefinitionFor(kind).symbolGeometry.length, `${kind} has definition-owned static geometry`)
   assert.deepEqual(componentDefinitionFor('led').symbolGeometry.slice(0, -1), componentDefinitionFor('diode').symbolGeometry)
   assert.equal(componentDefinitionFor('led').symbolGeometry.at(-1).className, 'led-light-rays')
