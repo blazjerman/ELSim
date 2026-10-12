@@ -121,6 +121,8 @@ Maximum plot-window profile (2026-10-12): Firefox opened the supported maximum o
 Cursor update isolation (2026-10-12): The transient plot shell no longer subscribes directly to the simulation cursor. The marker, time label, and readout update independently while static plot controls and geometry avoid parent-component rerenders. One follow-up eight-window Firefox run measured similar result-ready time and lower second/third scrub latency, but single-run variance is too high to claim a stable gain. Repeat profiling remains open; details are in `PERFORMANCE_BENCHMARKS.md`.
 
 
+Capacitor charge animation regression (2026-10-12): Firefox now runs the existing local ngspice runtime, scrubs a solved transient from 10 ms to 30 ms, and verifies both the visible capacitor plate extension and glow scale increase with the solved charge Q = C × V. The focused test passes in 4.5 seconds without rebuilding WASM.
+
 **M1.5 Beginner experience.** Onboarding, searchable components, example circuits, hover explanations, sensible simulation presets, and accessible colors/keyboard operations. Acceptance: scripted first-use test reaches a working circuit without knowledge of netlists.
 
 The logic-gate examples now include a 3.3 V variant: 0/3.3 V pulse inputs, a 1.65 V input threshold, and 0/3.3 V outputs. It exercises the user-editable logic levels with a solver-backed beginner example; domain netlist and focused Chromium/Firefox browser coverage verify this configuration.
