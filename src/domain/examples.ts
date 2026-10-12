@@ -327,7 +327,7 @@ export function createVoltageSwitchExampleProject(): Project {
   const project = createStarterProject()
   const control: Part = { id: 'vswitch-vctrl', kind: 'source', ref: 'VCTRL', value: '5 V', sourceMode: 'pulse', pulse: { initial: '0 V', delay: '0', rise: '1m', fall: '1m', width: '50m', period: '100m' }, x: 220, y: 620, rotation: 0 }
   const supply: Part = { id: 'vswitch-vcc', kind: 'source', ref: 'VCC', value: '5 V', sourceMode: 'dc', x: 280, y: 280, rotation: 0 }
-  const device: Part = { id: 'vswitch-s1', kind: 'voltageSwitch', ref: 'S1', value: '2.5 V', voltageSwitch: { onResistance: '1 Ω', offResistance: '1 GΩ', hysteresis: '0 V' }, x: 540, y: 400, rotation: 0 }
+  const device: Part = { id: 'vswitch-s1', kind: 'voltageSwitch', ref: 'S1', value: '2.5 V', voltageSwitch: { onResistance: '1 Ω', offResistance: '1 GΩ', hysteresis: '1 V' }, x: 540, y: 400, rotation: 0 }
   const load: Part = { id: 'vswitch-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 800, y: 400, rotation: 0 }
   const labelAt = (id: string, name: string, part: Part, pin: number) => {
     const location = componentPins(part)[pin]

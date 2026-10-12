@@ -2692,10 +2692,13 @@ test('voltage-controlled switch example toggles the load with its control pulse'
   await expectAvailableTrace(page, 'V(vout)')
   await expectAvailableTrace(page, 'I(S1)')
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  const switchSymbol = page.locator('.circuit-part[data-part-id="vswitch-s1"] .voltage-switch-symbol')
   const finalSample = Number(await timeSlider.getAttribute('max'))
   await timeSlider.fill(String(Math.floor(finalSample * 0.25)))
+  await expect(switchSymbol).toHaveAttribute('data-state', 'closed')
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 4\.9+/)
   await timeSlider.fill(String(Math.floor(finalSample * 0.75)))
+  await expect(switchSymbol).toHaveAttribute('data-state', 'open')
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 0\.00+/)
 })
 

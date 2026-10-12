@@ -851,8 +851,8 @@ test('voltage-controlled switch emits four-terminal device and its own model', (
   const project = createVoltageSwitchExampleProject()
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^S1 VCC VOUT CTRL 0 ELSIM_S1_SW$/m)
-  assert.match(artifact.text, /^\.model ELSIM_S1_SW SW\(Ron=1 Roff=1g Vt=2\.5 Vh=0\)$/m)
+  assert.match(artifact.text, /^S1 VCC VOUT CTRL 0 ELSIM_S1_SW OFF$/m)
+  assert.match(artifact.text, /^\.model ELSIM_S1_SW SW\(Ron=1 Roff=1g Vt=2\.5 Vh=1\)$/m)
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
 })
 

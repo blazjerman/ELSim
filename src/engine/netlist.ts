@@ -767,7 +767,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = allocateName(`ELSIM_${part.ref}_SW`, usedModelNames)
-      append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${model}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${model} OFF`, part.id, 'component')
       voltageSwitchModels.push({ name: model, onResistance, offResistance, threshold: value ?? '0', hysteresis })
     }
     else if (part.kind === 'vcvs' || part.kind === 'vccs') {

@@ -279,7 +279,7 @@ function usePartUiState(id: string): number {
   return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
-const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, voltage, current, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; voltage?: number; current?: number; symbol?: ImportedSymbol; detailed?: boolean }) {
+const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, voltage, current, switchClosed, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; voltage?: number; current?: number; switchClosed?: boolean; symbol?: ImportedSymbol; detailed?: boolean }) {
   const uiState = usePartUiState(part.id)
   const selected = (uiState & 1) !== 0
   const focusable = (uiState & 2) !== 0
@@ -346,7 +346,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     {(part.kind === 'diode' || part.kind === 'zener') && <><line x1="-50" y1="0" x2="-17" y2="0" {...common}/><path d="M-17 -16L14 0L-17 16Z" {...common}/>{part.kind === 'zener' ? <path d="M9 -17L17 -17L17 -9M17 9L17 17L9 17" {...common}/> : <line x1="17" y1="-17" x2="17" y2="17" {...common}/>}<line x1="17" y1="0" x2="50" y2="0" {...common}/></>}
     {part.kind === 'led' && <><line x1="-50" y1="0" x2="-17" y2="0" {...common}/><path d="M-17 -16L14 0L-17 16Z" {...common}/><line x1="17" y1="-17" x2="17" y2="17" {...common}/><line x1="17" y1="0" x2="50" y2="0" {...common}/><path d="M-7 -23l10 -10m-2 0h4v4M5 -19l10 -10m-2 0h4v4" fill="none" stroke="#ff766d" strokeWidth="2" opacity={Math.min(1, Math.max(0, (current ?? 0) - .0002) / .01)} pointerEvents="none"/><circle cx="0" cy="0" r="21" fill="#ff766d" opacity={Math.min(.3, Math.max(0, (current ?? 0) - .0002) * 18)} pointerEvents="none"/></>}
     {part.kind === 'switch' && <><line x1="-50" y1="0" x2="-14" y2="0" {...common}/><line x1="14" y1="0" x2="50" y2="0" {...common}/><circle cx="-14" cy="0" r="3" fill="#c6cec7"/><circle cx="14" cy="0" r="3" fill="#c6cec7"/><line x1="-12" y1="-2" x2={part.value.toLowerCase() === 'on' ? 12 : 10} y2={part.value.toLowerCase() === 'on' ? 1 : -15} {...common}/></>}
-    {part.kind === 'voltageSwitch' && <g className="voltage-switch-symbol"><line x1="-50" y1="0" x2="-17" y2="0" {...common}/><line x1="17" y1="0" x2="50" y2="0" {...common}/><circle cx="-14" cy="0" r="3" fill="#c6cec7"/><circle cx="14" cy="0" r="3" fill="#c6cec7"/><line x1="-12" y1="-2" x2="9" y2="-12" {...common}/><line x1="0" y1="-50" x2="0" y2="-24" {...common}/><line x1="0" y1="24" x2="0" y2="50" {...common}/><text className="control-pin-label" x="7" y="-36">+</text><text className="control-pin-label" x="7" y="43">−</text><title>Voltage-controlled switch. Output is pins 1–2; control is pin 3 relative to pin 4.</title></g>}
+    {part.kind === 'voltageSwitch' && <g className="voltage-switch-symbol" data-state={switchClosed === undefined ? 'unknown' : switchClosed ? 'closed' : 'open'}><line x1="-50" y1="0" x2="-17" y2="0" {...common}/><line x1="17" y1="0" x2="50" y2="0" {...common}/><circle cx="-14" cy="0" r="3" fill="#c6cec7"/><circle cx="14" cy="0" r="3" fill="#c6cec7"/><line x1="-12" y1="-2" x2={switchClosed ? 12 : 9} y2={switchClosed ? 0 : -12} {...common}/><line x1="0" y1="-50" x2="0" y2="-24" {...common}/><line x1="0" y1="24" x2="0" y2="50" {...common}/><text className="control-pin-label" x="7" y="-36">+</text><text className="control-pin-label" x="7" y="43">−</text><title>{`Voltage-controlled switch, ${switchClosed === undefined ? 'state unavailable' : switchClosed ? 'closed' : 'open'} at the displayed simulation time. Output is pins 1–2; control is pin 3 relative to pin 4.`}</title></g>}
     {(part.kind === 'vcvs' || part.kind === 'vccs') && <><line x1="-50" y1="0" x2="-24" y2="0" {...common}/><line x1="24" y1="0" x2="50" y2="0" {...common}/><line x1="0" y1="-50" x2="0" y2="-24" {...common}/><line x1="0" y1="24" x2="0" y2="50" {...common}/><path d="M0 -24L24 0L0 24L-24 0Z" {...common}/>{part.kind === 'vcvs' ? <><line x1="-6" y1="-7" x2="6" y2="-7" {...common}/><line x1="0" y1="-13" x2="0" y2="-1" {...common}/><line x1="-6" y1="8" x2="6" y2="8" {...common}/></> : <><line x1="-10" y1="0" x2="10" y2="0" {...common}/><path d="M10 0L3 -5V5Z" fill={common.stroke} stroke={common.stroke}/></>}<text className="control-pin-label" x="7" y="-46">+</text><text className="control-pin-label" x="7" y="58">−</text></>}
     {(part.kind === 'npn' || part.kind === 'pnp') && <><line x1="-50" y1="0" x2="-10" y2="0" {...common}/><line x1="-10" y1="-22" x2="-10" y2="22" {...common}/><line x1="-10" y1="-10" x2="18" y2="-29" {...common}/><line x1="18" y1="-29" x2="40" y2="-50" {...common}/><line x1="-10" y1="10" x2="18" y2="29" {...common}/><line x1="18" y1="29" x2="40" y2="50" {...common}/>{part.kind === 'npn' ? <path d="M11 24L22 38M22 38L21 30M22 38L14 37" {...common}/> : <path d="M22 38L11 24M11 24L19 26M11 24L13 32" {...common}/>}<path className="transistor-current-indicator" d={channelCurrentForward ? 'M31 -46L20 -32M20 -32L20 -39M20 -32L27 -34' : 'M20 -32L31 -46M31 -46L24 -44M31 -46L30 -39'} fill="none" stroke="#79d9a4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={channelCurrentGlow} aria-hidden="true"/></>}
     {(part.kind === 'nmos' || part.kind === 'pmos') && <><line x1="-50" y1="0" x2="-18" y2="0" {...common}/><line x1="-18" y1="-24" x2="-18" y2="24" {...common}/><line x1="-8" y1="-20" x2="-8" y2="20" {...common}/><line x1="-8" y1="-12" x2="18" y2="-12" {...common}/><line x1="0" y1="-50" x2="0" y2="-20" {...common}/><line x1="0" y1="-20" x2="18" y2="-20" {...common}/><line x1="-8" y1="12" x2="18" y2="12" {...common}/><line x1="0" y1="20" x2="0" y2="50" {...common}/><line x1="0" y1="20" x2="18" y2="20" {...common}/><line x1="18" y1="0" x2="50" y2="0" {...common}/><path d={part.kind === 'nmos' ? 'M10 -5L17 0L10 5' : 'M17 -5L10 0L17 5'} {...common}/><path className="transistor-current-indicator" d={channelCurrentForward ? 'M28 -43V-27M28 -27L24 -34M28 -27L32 -34' : 'M28 -27V-43M28 -43L24 -36M28 -43L32 -36'} fill="none" stroke="#79d9a4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity={channelCurrentGlow} aria-hidden="true"/></>}
@@ -364,7 +364,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   symbolsById: Map<string, ImportedSymbol>
   tool: ToolMode
   animationRevision: object
-  componentSample: (part: Part) => { voltage?: number; current?: number }
+  componentSample: (part: Part) => { voltage?: number; current?: number; switchClosed?: boolean }
   onSelect: (id: string, additive?: boolean) => void
   onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void
   onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void
@@ -734,6 +734,39 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     const index = trace.axis === primaryAxis ? activeSample : nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
     return trace.values[index]
   }
+  const voltageSwitchStateCache = useRef<{ result: SimulationResult | null; states: Map<string, Uint8Array> }>({ result: null, states: new Map() })
+  const voltageSwitchStateAt = (part: Part): boolean | undefined => {
+    const axis = transientAxis
+    if (part.kind !== 'voltageSwitch' || !resultConnectivity || !axis?.length || !simulationResult) return undefined
+    const cache = voltageSwitchStateCache.current
+    if (cache.result !== simulationResult) { cache.result = simulationResult; cache.states.clear() }
+    let samples = cache.states.get(part.id)
+    if (!samples) {
+      const positiveNode = pinNet(resultConnectivity, part, 2)
+      const negativeNode = pinNet(resultConnectivity, part, 3)
+      const positiveTrace = positiveNode === '0' ? undefined : tracesByVector.get(`v(${positiveNode})`.toLowerCase())
+      const negativeTrace = negativeNode === '0' ? undefined : tracesByVector.get(`v(${negativeNode})`.toLowerCase())
+      if ((positiveNode !== '0' && !positiveTrace) || (negativeNode !== '0' && !negativeTrace)) return undefined
+      const threshold = componentMagnitude(part.value, 'source')
+      const hysteresis = componentMagnitude(part.voltageSwitch?.hysteresis ?? '0 V', 'source')
+      if (threshold === null || hysteresis === null) return undefined
+      const turnOn = threshold + hysteresis / 2
+      const turnOff = threshold - hysteresis / 2
+      samples = new Uint8Array(axis.length)
+      let closed = false // The netlist explicitly initializes this device OFF.
+      for (let index = 0; index < axis.length; index += 1) {
+        const time = axis[index]
+        const positiveIndex = positiveTrace ? positiveTrace.axis === axis ? index : nearestAxisIndex(positiveTrace.axis, time, 0, positiveTrace.axis.length - 1) : 0
+        const negativeIndex = negativeTrace ? negativeTrace.axis === axis ? index : nearestAxisIndex(negativeTrace.axis, time, 0, negativeTrace.axis.length - 1) : 0
+        const controlVoltage = (positiveTrace?.values[positiveIndex] ?? 0) - (negativeTrace?.values[negativeIndex] ?? 0)
+        if (controlVoltage >= turnOn) closed = true
+        else if (controlVoltage < turnOff) closed = false
+        samples[index] = closed ? 1 : 0
+      }
+      cache.states.set(part.id, samples)
+    }
+    return Boolean(samples[Math.min(activeSample, samples.length - 1)])
+  }
   const toggleSwitch = (id: string) => {
     const part = project.parts.find((candidate) => candidate.id === id && candidate.kind === 'switch')
     if (!part) return
@@ -754,7 +787,8 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     const positive = voltageAtNode(pinNet(resultConnectivity!, part, 0))
     const negative = voltageAtNode(pinNet(resultConnectivity!, part, 1))
     const current = resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`)
-    return { voltage: positive !== undefined && negative !== undefined ? positive - negative : undefined, current }
+    const switchClosed = voltageSwitchStateAt(part)
+    return { voltage: positive !== undefined && negative !== undefined ? positive - negative : undefined, current, switchClosed }
   }
   const componentSampleRef = useRef(componentSample)
   componentSampleRef.current = componentSample
