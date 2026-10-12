@@ -353,6 +353,8 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const channelCurrentGlow = currentGlow
   const channelCurrentForward = (current ?? 0) >= 0
   const customOffsets = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout) : []
+  const componentDefinition = componentDefinitionFor(part.kind)
+  const symbolGeometry = componentDefinition.symbolVariants?.[part.logicOperation ?? ''] ?? componentDefinition.symbolGeometry
   const layout = part.sheetPortLayout ?? []
   const automaticLeft = layout.filter((port, index) => port.side === 'auto' && index % 2 === 0).length
   const automaticRight = layout.filter((port, index) => port.side === 'auto' && index % 2 === 1).length
@@ -388,31 +390,24 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     {(voltage !== undefined || current !== undefined || logicOutput !== undefined) && <title>{`${part.ref}: ${logicOutput === undefined ? '' : `output ${logicState} (${logicOutput.toPrecision(4)} V); `}${part.kind === 'lamp' ? `illustrative brightness follows solved electrical power; nominal ${part.animationNominalPower ?? 10} W; ` : part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'zener' ? 'reverse breakdown follows the selected Zener model; ' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'illustrative channel indicator follows solved drain current; ' : part.kind === 'capacitor' ? `plate charge animation follows solved charge; ${Number.isFinite(capacitorCharge) ? `Q = C × V = ${capacitorCharge!.toPrecision(4)} C; ` : ''}` : part.kind === 'inductor' ? `illustrative coil glow follows current; ${Number.isFinite(inductorEnergy) ? `magnetic field energy E = ½ L I² = ${inductorEnergy!.toPrecision(4)} J; ` : ''}` : ''}${voltage === undefined || logicOutput !== undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${currentDescription}`}`}</title>}
     <rect x={symbolBounds ? symbolBounds.minX - 14 : part.kind === 'subcircuit' ? -customWidth / 2 - 20 : -40} y={symbolBounds ? symbolBounds.minY - 24 : part.kind === 'subcircuit' ? -customHeight / 2 - 22 : -38} width={symbolBounds ? Math.max(80, symbolBounds.maxX - symbolBounds.minX + 28) : part.kind === 'subcircuit' ? customWidth + 40 : 80} height={symbolBounds ? Math.max(76, symbolBounds.maxY - symbolBounds.minY + 48) : part.kind === 'subcircuit' ? customHeight + 44 : 76} rx="9" className="part-hit" />
     {detailed || symbol ? <><g transform={part.flipX ? 'scale(-1 1)' : undefined}>
-    {componentDefinitionFor(part.kind).symbolGeometry?.map((primitive, index) => primitive.kind === 'line'
+    {symbolGeometry?.map((primitive, index) => primitive.kind === 'line'
       ? <line key={index} x1={primitive.x1} y1={primitive.y1} x2={primitive.x2} y2={primitive.y2} {...common}/>
       : primitive.kind === 'rect'
         ? <rect key={index} x={primitive.x} y={primitive.y} width={primitive.width} height={primitive.height} rx={primitive.rx ?? 0} {...common}/>
         : primitive.kind === 'circle'
-          ? <circle key={index} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={common.stroke} strokeWidth={common.strokeWidth}/>
+          ? <circle key={index} className={primitive.className} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={common.stroke} strokeWidth={common.strokeWidth}/>
           : <path key={index} className={primitive.className} d={primitive.d} fill={primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={common.stroke} strokeWidth={common.strokeWidth} strokeLinecap={common.strokeLinecap} strokeLinejoin={common.strokeLinejoin}/>)}
     {part.kind === 'potentiometer' && (() => { const position = Number(part.wiperPosition ?? '0.5'); const wiperY = -24 + position * 48; return <g className="potentiometer-symbol" data-wiper-position={part.wiperPosition ?? '0.5'}><line x1="50" y1="0" x2="16" y2={wiperY} {...common}/><path d={`M16 ${wiperY}l8 -1l-4 7Z`} fill={common.stroke}/><title>{`Potentiometer ${part.value}, wiper at ${(position * 100).toFixed(1)}% from upper terminal`}</title></g> })()}
     {part.kind === 'lamp' && <><circle cx="0" cy="0" r="19" fill="#ffd36d" opacity={lampGlow * .82} stroke="none" pointerEvents="none"/>{lampGlow > 0 && <circle className="lamp-glow-outline" cx="0" cy="0" r="19" {...common} style={{ filter: `drop-shadow(0 0 ${lampGlow * 15}px #ffd36d)` }} pointerEvents="none"/>}<path d="M-9 -9L-5 -3L5 -3L9 -9M-5 -3L-5 7M5 -3L5 7M-7 7H7" fill="none" stroke={lampGlow > .05 ? '#ffe6a8' : common.stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></>}
     {part.kind === 'inverter' && <line x1="34" y1="0" x2="50" y2="0" stroke={logicOutput === undefined ? common.stroke : logicOutputStroke} strokeWidth={3.2} strokeLinecap="round" style={logicState === 'high' ? { filter: 'drop-shadow(0 0 5px #83e6ad)' } : undefined}/>}
     {part.kind === 'logicGate' && (() => {
       const operation = part.logicOperation ?? 'and'
-      const isAnd = operation === 'and' || operation === 'nand'
-      const isXor = operation === 'xor' || operation === 'xnor'
       const inverted = operation === 'nand' || operation === 'nor' || operation === 'xnor'
-      const body = isAnd
-        ? 'M-28 -30H-12C8 -30 22 -18 22 0C22 18 8 30 -12 30H-28Z'
-        : 'M-28 -30C-8 -30 12 -18 22 0C12 18 -8 30 -28 30C-18 12 -18 -12 -28 -30Z'
-      return <g className={`logic-gate-symbol logic-gate-${operation}`} data-gate-shape={isAnd ? 'and' : isXor ? 'xor' : 'or'}>
-        <line x1="-50" y1="-20" x2="-28" y2="-20" {...common}/><line x1="-50" y1="20" x2="-28" y2="20" {...common}/>
-        <path className="logic-gate-body" d={body} {...common}/>
-        {isXor && <path className="logic-gate-xor-curve" d="M-36 -30C-26 -12 -26 12 -36 30" {...common}/>}
-        {inverted && <circle className="logic-gate-inversion-bubble" cx="29" cy="0" r="5" {...common}/>}
+      const shape = operation === 'and' || operation === 'nand' ? 'and' : operation === 'xor' || operation === 'xnor' ? 'xor' : 'or'
+      const mark = ({ and: '&', or: '≥1', nand: '&', nor: '≥1', xor: '=1', xnor: '=1' } as const)[operation]
+      return <g className={`logic-gate-symbol logic-gate-${operation}`} data-gate-shape={shape}>
         <line x1={inverted ? 34 : 22} y1="0" x2="50" y2="0" stroke={logicOutput === undefined ? common.stroke : logicOutputStroke} strokeWidth={3.2} strokeLinecap="round" style={logicState === 'high' ? { filter: 'drop-shadow(0 0 5px #83e6ad)' } : undefined}/>
-        <text x="-3" y="5" className="gate-mark">{({ and: '&', or: '≥1', nand: '&', nor: '≥1', xor: '=1', xnor: '=1' } as const)[operation]}</text>
+        <text x="-3" y="5" className="gate-mark">{mark}</text>
       </g>
     })()}
     {part.kind === 'behavioral' && (part.behavioralOutput === 'current' ? <><line x1="0" y1="12" x2="0" y2="-10" {...common}/><path d="M0 -10L-6 -2H6Z" fill={common.stroke}/></> : <><line x1="-6" y1="-7" x2="6" y2="-7" {...common}/><line x1="0" y1="-13" x2="0" y2="-1" {...common}/><line x1="-6" y1="8" x2="6" y2="8" {...common}/></>)}

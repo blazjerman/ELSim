@@ -3566,6 +3566,8 @@ test('logic gate lesson simulates the four input truth-table states', { tag: '@n
   await expect(page.locator('.circuit-part[data-part-id="logic-and"] .logic-gate-symbol')).toHaveAttribute('data-gate-shape', 'and')
   await expect(page.locator('.circuit-part[data-part-id="logic-or"] .logic-gate-symbol')).toHaveAttribute('data-gate-shape', 'or')
   await expect(page.locator('.circuit-part[data-part-id="logic-xor"] .logic-gate-symbol')).toHaveAttribute('data-gate-shape', 'xor')
+  await expect(page.locator('.circuit-part[data-part-id="logic-and"] .logic-gate-body')).toHaveAttribute('d', 'M-28 -30H-12C8 -30 22 -18 22 0C22 18 8 30 -12 30H-28Z')
+  await expect(page.locator('.circuit-part[data-part-id="logic-or"] .logic-gate-body')).toHaveAttribute('d', 'M-28 -30C-8 -30 12 -18 22 0C12 18 -8 30 -28 30C-18 12 -18 -12 -28 -30Z')
   await expect(page.locator('.circuit-part[data-part-id="logic-xor"] .logic-gate-xor-curve')).toHaveCount(1)
   await expect(page.locator('.circuit-part[data-part-id="logic-nand"] .logic-gate-inversion-bubble')).toHaveCount(1)
   await expect(page.locator('.circuit-part[data-part-id="logic-xnor"] .logic-gate-inversion-bubble')).toHaveCount(1)

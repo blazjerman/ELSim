@@ -213,10 +213,21 @@
             "properties": {
               "kind": { "const": "path" },
               "d": { "type": "string", "minLength": 1, "maxLength": 4096 },
-              "fill": { "enum": ["none", "stroke"] }
+              "fill": { "enum": ["none", "stroke"] },
+              "className": { "type": "string", "pattern": "^[A-Za-z0-9 _-]+$", "maxLength": 128 }
             }
           }
         ]
+      }
+    },
+    "symbolVariants": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$", "maxLength": 64 },
+      "additionalProperties": {
+        "type": "array",
+        "maxItems": 256,
+        "items": { "$ref": "#/properties/symbolGeometry/items" }
       }
     },
     "properties": {

@@ -7,7 +7,7 @@ export type ComponentModelParameter = { name: string; defaultValue: string }
 export type ComponentSymbolPrimitive =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'rect'; x: number; y: number; width: number; height: number; rx?: number }
-  | { kind: 'circle'; cx: number; cy: number; r: number; fill?: 'none' | 'stroke' }
+  | { kind: 'circle'; cx: number; cy: number; r: number; fill?: 'none' | 'stroke'; className?: string }
   | { kind: 'path'; d: string; fill?: 'none' | 'stroke'; className?: string }
 export type ComponentDefinition = {
   id: string
@@ -22,6 +22,7 @@ export type ComponentDefinition = {
   pins: readonly ComponentPinDefinition[]
   pinOffsets?: readonly (readonly [number, number])[]
   symbolGeometry?: readonly ComponentSymbolPrimitive[]
+  symbolVariants?: Readonly<Record<string, readonly ComponentSymbolPrimitive[]>>
   properties: readonly ComponentPropertyDefinition[]
   animationChannels: readonly string[]
   connectionHint?: string
@@ -94,6 +95,26 @@ const vccsSymbol = [
   ...voltageControlledSourceOutline,
   { kind: 'line', x1: -10, y1: 0, x2: 10, y2: 0 }, { kind: 'path', d: 'M10 0L3 -5V5Z', fill: 'stroke' },
 ] as const satisfies readonly ComponentSymbolPrimitive[]
+const andGateGeometry = [
+  { kind: 'line', x1: -50, y1: -20, x2: -28, y2: -20 }, { kind: 'line', x1: -50, y1: 20, x2: -28, y2: 20 },
+  { kind: 'path', className: 'logic-gate-body', d: 'M-28 -30H-12C8 -30 22 -18 22 0C22 18 8 30 -12 30H-28Z' },
+] as const satisfies readonly ComponentSymbolPrimitive[]
+const orGateGeometry = [
+  { kind: 'line', x1: -50, y1: -20, x2: -28, y2: -20 }, { kind: 'line', x1: -50, y1: 20, x2: -28, y2: 20 },
+  { kind: 'path', className: 'logic-gate-body', d: 'M-28 -30C-8 -30 12 -18 22 0C12 18 -8 30 -28 30C-18 12 -18 -12 -28 -30Z' },
+] as const satisfies readonly ComponentSymbolPrimitive[]
+const xorGateGeometry = [
+  ...orGateGeometry, { kind: 'path', className: 'logic-gate-xor-curve', d: 'M-36 -30C-26 -12 -26 12 -36 30' },
+] as const satisfies readonly ComponentSymbolPrimitive[]
+const inversionBubble = { kind: 'circle', cx: 29, cy: 0, r: 5, className: 'logic-gate-inversion-bubble' } as const satisfies ComponentSymbolPrimitive
+const logicGateSymbolVariants = {
+  and: andGateGeometry,
+  nand: [...andGateGeometry, inversionBubble],
+  or: orGateGeometry,
+  nor: [...orGateGeometry, inversionBubble],
+  xor: xorGateGeometry,
+  xnor: [...xorGateGeometry, inversionBubble],
+} as const satisfies Readonly<Record<string, readonly ComponentSymbolPrimitive[]>>
 const definitions = [
   { id: 'elsim.voltage-source', version: 1, kind: 'source', name: 'Voltage source', paletteSubtitle: 'V', shortcut: 'v', paletteCategory: 'basics', electricalType: 'V', symbolGeometry: [{ kind: 'line', x1: 0, y1: -50, x2: 0, y2: -24 }, { kind: 'circle', cx: 0, cy: 0, r: 24 }, { kind: 'line', x1: 0, y1: 24, x2: 0, y2: 50 }, { kind: 'line', x1: -8, y1: -7, x2: 8, y2: -7 }, { kind: 'line', x1: 0, y1: -15, x2: 0, y2: 1 }, { kind: 'line', x1: -8, y1: 9, x2: 8, y2: 9 }], pins: [{ name: 'positive', displayName: 'Positive', direction: 'output', spiceOrder: 1 }, { name: 'negative', displayName: 'Negative', direction: 'passive', spiceOrder: 2 }], pinOffsets: [[0, -50], [0, 50]], properties: [{ key: 'value', label: 'Voltage', unit: 'V', defaultValue: '5 V', required: true }, { key: 'acMagnitude', label: 'AC magnitude', unit: 'V' }, { key: 'acPhase', label: 'AC phase', unit: '°', defaultValue: '0' }], animationChannels: [] },
   { id: 'elsim.current-source', version: 1, kind: 'currentSource', name: 'Current source', paletteSubtitle: 'I', shortcut: 'i', paletteCategory: 'basics', electricalType: 'I', symbolGeometry: [{ kind: 'line', x1: -50, y1: 0, x2: -24, y2: 0 }, { kind: 'circle', cx: 0, cy: 0, r: 24 }, { kind: 'line', x1: 24, y1: 0, x2: 50, y2: 0 }, { kind: 'line', x1: -10, y1: 0, x2: 10, y2: 0 }, { kind: 'path', d: 'M10 0L2 -6V6Z', fill: 'stroke' }], pins: [{ name: 'currentOut', displayName: 'Current out', direction: 'output', spiceOrder: 1 }, { name: 'currentReturn', displayName: 'Current return', direction: 'passive', spiceOrder: 2 }], pinOffsets: [[-50, 0], [50, 0]], properties: [{ key: 'value', label: 'Current', unit: 'A', defaultValue: '1 mA', required: true }, { key: 'acMagnitude', label: 'AC magnitude', unit: 'A' }, { key: 'acPhase', label: 'AC phase', unit: '°', defaultValue: '0' }], animationChannels: ['current'] },
@@ -115,7 +136,7 @@ const definitions = [
   { id: 'elsim.ccvs', version: 1, kind: 'ccvs', name: 'Current-controlled voltage source', paletteSubtitle: 'H', shortcut: 'H', paletteCategory: 'controlled', paletteName: 'CCVS', electricalType: 'H', symbolGeometry: ccvsSymbol, pins: twoPin, pinOffsets: twoPinOffsets, properties: [{ key: 'value', label: 'Transresistance', unit: 'Ω', defaultValue: '1 kΩ', required: true }, { key: 'controlSource', label: 'Sensing voltage source', unit: '', required: true }], connectionHint: 'Output current is positive from pin 1 to pin 2. Control current follows the selected voltage source from pin 1 to pin 2.', animationChannels: [] },
   { id: 'elsim.behavioral', version: 1, kind: 'behavioral', name: 'Behavioral source', paletteSubtitle: 'B', shortcut: 'b', paletteCategory: 'controlled', electricalType: 'B', symbolGeometry: dependentSourceOutline, pins: twoPin, pinOffsets: twoPinOffsets, properties: [{ key: 'value', label: 'Expression', unit: '', defaultValue: 'V(vin) * 2', required: true }, { key: 'behavioralOutput', label: 'Output type', unit: '', defaultValue: 'voltage' }], animationChannels: [] },
   { id: 'elsim.inverter', version: 1, kind: 'inverter', name: 'Inverter', paletteSubtitle: 'NOT', shortcut: '1', paletteCategory: 'basics', electricalType: 'B', symbolGeometry: [{ kind: 'line', x1: -50, y1: 0, x2: -23, y2: 0 }, { kind: 'path', d: 'M-23 -20L22 0L-23 20Z' }, { kind: 'circle', cx: 28, cy: 0, r: 6 }], pins: [{ name: 'input', displayName: 'Input', direction: 'input', spiceOrder: 1 }, { name: 'output', displayName: 'Output', direction: 'output', spiceOrder: 2 }], pinOffsets: [[-50, 0], [50, 0]], properties: [{ key: 'logicLow', label: 'Low output', unit: 'V', defaultValue: '0 V', required: true }, { key: 'logicHigh', label: 'High output', unit: 'V', defaultValue: '5 V', required: true }, { key: 'logicThreshold', label: 'Input threshold', unit: 'V', defaultValue: '2.5 V', required: true }], animationChannels: ['output.logicState'] },
-  { id: 'elsim.logic-gate', version: 1, kind: 'logicGate', name: 'Logic gate', paletteSubtitle: 'AND', shortcut: '2', paletteCategory: 'basics', electricalType: 'B', pins: [{ name: 'inputA', displayName: 'Input A', direction: 'input', spiceOrder: 1 }, { name: 'inputB', displayName: 'Input B', direction: 'input', spiceOrder: 2 }, { name: 'output', displayName: 'Output', direction: 'output', spiceOrder: 3 }], pinOffsets: [[-50, -20], [-50, 20], [50, 0]], properties: [{ key: 'logicOperation', label: 'Gate', unit: '', defaultValue: 'and', required: true }, { key: 'logicLow', label: 'Low output', unit: 'V', defaultValue: '0 V', required: true }, { key: 'logicHigh', label: 'High output', unit: 'V', defaultValue: '5 V', required: true }, { key: 'logicThreshold', label: 'Input threshold', unit: 'V', defaultValue: '2.5 V', required: true }], animationChannels: ['output.logicState'] },
+  { id: 'elsim.logic-gate', version: 1, kind: 'logicGate', name: 'Logic gate', paletteSubtitle: 'AND', shortcut: '2', paletteCategory: 'basics', electricalType: 'B', symbolVariants: logicGateSymbolVariants, pins: [{ name: 'inputA', displayName: 'Input A', direction: 'input', spiceOrder: 1 }, { name: 'inputB', displayName: 'Input B', direction: 'input', spiceOrder: 2 }, { name: 'output', displayName: 'Output', direction: 'output', spiceOrder: 3 }], pinOffsets: [[-50, -20], [-50, 20], [50, 0]], properties: [{ key: 'logicOperation', label: 'Gate', unit: '', defaultValue: 'and', required: true }, { key: 'logicLow', label: 'Low output', unit: 'V', defaultValue: '0 V', required: true }, { key: 'logicHigh', label: 'High output', unit: 'V', defaultValue: '5 V', required: true }, { key: 'logicThreshold', label: 'Input threshold', unit: 'V', defaultValue: '2.5 V', required: true }], animationChannels: ['output.logicState'] },
   { id: 'elsim.npn', version: 1, kind: 'npn', name: 'NPN transistor', paletteSubtitle: 'Q', shortcut: 'n', paletteCategory: 'semiconductors', electricalType: 'Q', symbolGeometry: npnSymbol, pins: [{ name: 'collector', displayName: 'Collector', direction: 'passive', spiceOrder: 1 }, { name: 'base', displayName: 'Base', direction: 'input', spiceOrder: 2 }, { name: 'emitter', displayName: 'Emitter', direction: 'passive', spiceOrder: 3 }], pinOffsets: [[40, -50], [-50, 0], [40, 50]], properties: [{ key: 'value', label: 'Forward beta', unit: '', defaultValue: '100', required: true }, { key: 'deviceModel', label: 'Model', unit: '' }], connectionHint: 'The arrow distinguishes NPN and PNP. Collector current is positive into the collector.', animationChannels: ['current.collector'] },
   { id: 'elsim.pnp', version: 1, kind: 'pnp', name: 'PNP transistor', paletteSubtitle: 'Q', shortcut: 'p', paletteCategory: 'semiconductors', electricalType: 'Q', symbolGeometry: pnpSymbol, pins: [{ name: 'collector', displayName: 'Collector', direction: 'passive', spiceOrder: 1 }, { name: 'base', displayName: 'Base', direction: 'input', spiceOrder: 2 }, { name: 'emitter', displayName: 'Emitter', direction: 'passive', spiceOrder: 3 }], pinOffsets: [[40, -50], [-50, 0], [40, 50]], properties: [{ key: 'value', label: 'Forward beta', unit: '', defaultValue: '100', required: true }, { key: 'deviceModel', label: 'Model', unit: '' }], connectionHint: 'The arrow distinguishes NPN and PNP. Collector current is positive into the collector.', animationChannels: ['current.collector'] },
   { id: 'elsim.njfet', version: 1, kind: 'njfet', name: 'N-channel JFET', paletteSubtitle: 'J', shortcut: 'j', paletteCategory: 'semiconductors', electricalType: 'J', symbolGeometry: njfetSymbol, pins: [{ name: 'drain', displayName: 'Drain', direction: 'passive', spiceOrder: 1 }, { name: 'gate', displayName: 'Gate', direction: 'input', spiceOrder: 2 }, { name: 'source', displayName: 'Source', direction: 'passive', spiceOrder: 3 }], pinOffsets: [[0, -50], [-50, 0], [0, 50]], properties: [{ key: 'value', label: 'Model', unit: '', defaultValue: '' }, { key: 'deviceModel', label: 'Model', unit: '' }], connectionHint: 'SPICE terminal order is Drain, Gate, Source. The arrow indicates channel polarity; drain current is positive into the drain.', animationChannels: ['current.drain'] },
@@ -162,6 +183,7 @@ export const componentDefinitions: readonly ComponentDefinition[] = Object.freez
   pins: Object.freeze(definition.pins.map((pin) => Object.freeze({ ...pin }))),
   pinOffsets: definition.pinOffsets ? Object.freeze(definition.pinOffsets.map((offset) => Object.freeze([...offset]) as unknown as [number, number])) : undefined,
   symbolGeometry: definition.symbolGeometry ? Object.freeze(definition.symbolGeometry.map((primitive) => Object.freeze({ ...primitive }))) : undefined,
+  symbolVariants: definition.symbolVariants ? Object.freeze(Object.fromEntries(Object.entries(definition.symbolVariants).map(([key, primitives]) => [key, Object.freeze(primitives.map((primitive) => Object.freeze({ ...primitive })))]))) : undefined,
   properties: Object.freeze(definition.properties.map((property) => Object.freeze({ ...property }))),
   animationChannels: Object.freeze([...definition.animationChannels]),
 })))
