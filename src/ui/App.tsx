@@ -761,7 +761,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   }, [contextMenu])
   const resultIsCurrent = simulationResult?.analysis === 'tran' && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt
   const transientAxis = resultIsCurrent ? simulationResult.traces[0]?.axis : undefined
-  const resultConnectivity = useMemo(() => resultIsCurrent ? analyzeConnectivity(project) : null, [project, resultIsCurrent])
+  const resultConnectivity = useMemo(() => resultIsCurrent ? analyzeConnectivity(project) : null, [project.parts, project.wires, project.junctions, project.netLabels, resultIsCurrent])
   const viewWidth = viewportSize.width / project.view.zoom, viewHeight = viewportSize.height / project.view.zoom
   const viewportLeft = (380 - viewWidth / 2) - project.view.panX
   const viewportTop = (300 - viewHeight / 2) - project.view.panY
@@ -1221,7 +1221,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const contextPinNames = contextPart ? contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name) : []
   const wireFlowSampler = useMemo(() => currentAnimationEnabled && resultIsCurrent && resultConnectivity
     ? createWireCurrentFlowSampler(project, resultConnectivity)
-    : undefined, [project, resultConnectivity, resultIsCurrent, currentAnimationEnabled])
+    : undefined, [project.parts, project.wires, project.junctions, project.netLabels, resultConnectivity, resultIsCurrent, currentAnimationEnabled])
   const sampleWireFlows = useCallback((sampleIndex: number | null) => {
     if (!wireFlowSampler) return new Map<string, WireCurrentFlowSegment[]>()
     const valueAt = (id: string) => resultValueAt(id, sampleIndex)
