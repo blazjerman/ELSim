@@ -379,6 +379,20 @@ test('reports same-net shorts and MOSFET body bias in child sheets', () => {
   assert.equal(body?.partId, 'example-x2')
 })
 
+test('reports orphan wires and conflicting labels in child sheets', () => {
+  const project = createHierarchicalExampleProject()
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.wires.push({ id: 'core-orphan-wire', points: [[800, 800], [860, 800]] })
+  const aLabel = core.netLabels.find((label) => label.id === 'core-label-a')
+  core.netLabels.push({ id: 'core-conflicting-label', name: 'OTHER', x: aLabel.x, y: aLabel.y, visible: true })
+  const issues = checkCircuit(project)
+  const orphan = issues.find((item) => item.id === 'orphan-wire:sheet-core:core-orphan-wire')
+  const conflict = issues.find((item) => item.id === 'connectivity:sheet-core:0')
+  assert.equal(orphan?.partId, 'example-x2')
+  assert.equal(conflict?.partId, 'example-x2')
+  assert.match(conflict?.detail, /conflicting labels/i)
+})
+
 test('accepts declared sheet parameters in behavioral source expressions and explains missing ones', () => {
   const project = createStarterProject()
   const behavioral = { id: 'parameter-behavioral', kind: 'behavioral', ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage', x: 700, y: 600, rotation: 0 }

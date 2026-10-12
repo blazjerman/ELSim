@@ -148,6 +148,13 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       netLabels: sheet.netLabels,
     }
     const sheetConnectivity = analyzeConnectivity(sheetProject)
+    for (const [index, diagnostic] of sheetConnectivity.diagnostics.entries()) issues.push({
+      id: `connectivity:${sheet.id}:${index}`,
+      severity: 'warning',
+      title: `Conflicting net labels in ${sheet.name}`,
+      detail: diagnostic.message,
+      partId: topLevelInstanceId,
+    })
     for (const part of sheet.parts) {
       if (part.kind === 'nmos' || part.kind === 'pmos') {
         const source = sheetConnectivity.pinNets.get(`${part.id}:2`)
@@ -198,11 +205,11 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     const pinsByNet = new Map<string, { part: Project['parts'][number]; index: number }[]>()
     for (const part of sheet.parts) for (const pin of componentPins(part)) {
       const net = sheetConnectivity.pinNets.get(`${part.id}:${pin.index}`)
-      if (!net || net === '0' || part.kind === 'ground') continue
+      if (!net || part.kind === 'ground') continue
       pinsByNet.set(net, [...(pinsByNet.get(net) ?? []), { part, index: pin.index }])
     }
     for (const [net, pins] of pinsByNet) {
-      if (pins.length !== 1 || sheet.netLabels.some((label) => label.name.trim() === net)) continue
+      if (net === '0' || pins.length !== 1 || sheet.netLabels.some((label) => label.name.trim() === net)) continue
       const { part, index } = pins[0]
       const current = floatingByPart.get(part.id) ?? { part, pins: [] }
       current.pins.push(index)
@@ -221,6 +228,18 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         severity: 'warning',
         title: `${part.ref} has ${pins.length === 1 ? `an unconnected ${pinNames[0]} terminal` : `${pins.length} unconnected terminals (${pinNames.join(', ')})`} in ${sheet.name}`,
         detail: `Connect the open terminal${pins.length === 1 ? '' : 's'} (${pinNames.join(', ')}) on ${sheet.name} to a wire, another component, or an intentional net label.`,
+        partId: topLevelInstanceId,
+      })
+    }
+    for (const wire of sheet.wires) {
+      const net = sheetConnectivity.wireNets.get(wire.id)
+      const connectedToPart = net === '0' || (net !== undefined && pinsByNet.has(net))
+      const attachedLabel = net !== undefined && sheet.netLabels.some((label) => label.name.trim() === net)
+      if (!connectedToPart && !attachedLabel) issues.push({
+        id: `orphan-wire:${sheet.id}:${wire.id}`,
+        severity: 'info',
+        title: `Wire in ${sheet.name} is not attached to a component or label`,
+        detail: 'This wire may be leftover drawing. Connect it to a terminal or label, or delete it if it is not needed.',
         partId: topLevelInstanceId,
       })
     }
