@@ -305,6 +305,21 @@ test('child-sheet duplicate-reference checks select the visible block instance',
   assert.deepEqual(new Set(issues.map((item) => item.partId)), new Set(['example-x2']))
 })
 
+test('checks behavioral references in child-sheet scope and selects the visible block', () => {
+  const project = createHierarchicalExampleProject()
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.parameters.push({ id: 'core-param-gain', name: 'GAIN', defaultValue: '2' })
+  const behavioral = { id: 'core-behavioral', kind: 'behavioral', ref: 'BGAIN', value: 'GAIN*V(A)', behavioralOutput: 'voltage', x: 600, y: 400, rotation: 0 }
+  core.parts.push(behavioral)
+  assert.equal(checkCircuit(project).some((item) => item.id === 'behavioral-reference:sheet-core:core-behavioral'), false)
+
+  behavioral.value = 'MISSING*V(A)'
+  const issue = checkCircuit(project).find((item) => item.id === 'behavioral-reference:sheet-core:core-behavioral')
+  assert.equal(issue?.partId, 'example-x2')
+  assert.match(issue?.title, /undeclared parameter.*Core resistor/)
+  assert.match(issue?.detail, /unknown parameter “MISSING”/)
+})
+
 test('accepts declared sheet parameters in behavioral source expressions and explains missing ones', () => {
   const project = createStarterProject()
   const behavioral = { id: 'parameter-behavioral', kind: 'behavioral', ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage', x: 700, y: 600, rotation: 0 }

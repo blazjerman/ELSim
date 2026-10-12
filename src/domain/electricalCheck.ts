@@ -107,6 +107,38 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         })
       }
     }
+
+    const sheetProject: Project = {
+      ...project,
+      activeSheetId: sheet.id,
+      parts: sheet.parts,
+      wires: sheet.wires,
+      junctions: sheet.junctions,
+      netLabels: sheet.netLabels,
+    }
+    const sheetConnectivity = analyzeConnectivity(sheetProject)
+    for (const part of sheet.parts) if (part.kind === 'behavioral') {
+      try {
+        const parsed = parseBehavioralExpression(part.value)
+        validateBehavioralReferences(
+          parsed.references,
+          sheet.netLabels.map((label) => label.name),
+          sheet.parts.map((candidate) => candidate.ref),
+          (sheet.parameters ?? []).map((parameter) => parameter.name),
+          [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()],
+        )
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'The expression is unsupported.'
+        const isUnknownReference = /unknown node|unknown component|unknown parameter/i.test(detail)
+        issues.push({
+          id: `behavioral-reference:${sheet.id}:${part.id}`,
+          severity: 'warning',
+          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter in ${sheet.name}` : isUnknownReference ? `${part.ref} references an unknown node or component in ${sheet.name}` : `${part.ref} has an invalid behavioral expression in ${sheet.name}`,
+          detail,
+          partId: topLevelInstanceId,
+        })
+      }
+    }
   }
 
   if (project.simulation.analysis === 'dc') {
