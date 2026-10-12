@@ -44,7 +44,7 @@ type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = 'all' | 'basics' | 'semiconductors' | 'controlled'
 type ExampleTopic = 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 type Selection = { kind: 'part' | 'label'; id: string } | null
-type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'led' | 'led-current-limiter' | 'led-parallel' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
+type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'led' | 'led-current-limiter' | 'led-parallel' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
 
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
 const ResultPlot = lazy(() => import('./AnalysisPlots').then((module) => ({ default: module.ResultPlot })))
@@ -103,6 +103,7 @@ const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: stri
 const exampleCatalog: { id: ExampleId; title: string; description: string }[] = [
   { id: 'ac-lowpass', title: 'RC low-pass frequency response', description: 'Compare input and output across an AC sweep and find the approximately 1 kHz cutoff.' },
   { id: 'ac-highpass', title: 'RC high-pass frequency response', description: 'See low frequencies blocked and high frequencies passed, with a cutoff near 1 kHz.' },
+  { id: 'rlc-resonance', title: 'Parallel RLC resonance', description: 'Sweep an LC tank and find its resonant peak; change L or C to move the peak.' },
   { id: 'rc', title: 'RC step response', description: 'Watch a capacitor charge through a resistor and explore the time constant.' },
   { id: 'pwl', title: 'PWL waveform response', description: 'Drive an RC circuit with a custom three-level source and see how the capacitor follows each change.' },
   { id: 'current-source', title: 'Current source and load', description: 'See a 1 mA source drive a 1 kΩ load and produce a 1 V operating point.' },
@@ -143,14 +144,14 @@ const exampleTopicOptions: { id: ExampleTopic; label: string }[] = [
 const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
   basics: ['rc', 'capacitor-discharge', 'voltage-divider', 'potentiometer', 'current-source', 'led-current-limiter'],
   diodes: ['led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
-  ac: ['ac-lowpass', 'ac-highpass', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
+  ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
   switching: ['voltage-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
   advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'imported-opamp', 'inverting-opamp', 'common-emitter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier'],
 }
 const exampleSelection: Record<ExampleId, string> = {
   potentiometer: 'pot-p1', rc: 'p-r1', 'ac-lowpass': 'ac-lowpass-c1', 'ac-highpass': 'ac-highpass-c1', led: 'p-c1', 'led-current-limiter': 'p-r1', 'led-parallel': 'parallel-led-d1', 'capacitor-discharge': 'cap-discharge-c1',
   rlc: 'rlc-l1', 'rl-step': 'rl-step-l1', flyback: 'flyback-d1', controlled: 'amp-e1', 'current-controlled': 'current-f1', transistor: 'switch-q1', 'voltage-switch': 'vswitch-s1', pnp: 'pnp-switch-q1',
-  pjfet: 'pjfet-switch-j1', mosfet: 'mos-switch-m1', pmos: 'pmos-switch-m1', jfet: 'jfet-switch-j1', hierarchy: 'example-x1',
+  pjfet: 'pjfet-switch-j1', mosfet: 'mos-switch-m1', pmos: 'pmos-switch-m1', jfet: 'jfet-switch-j1', hierarchy: 'example-x1', 'rlc-resonance': 'resonance-l1',
   pwl: 'p-v1', 'current-source': 'isource-i1', rectifier: 'rectifier-d1', 'bridge-rectifier': 'bridge-d1', 'voltage-divider': 'divider-r1', zener: 'zener-d1', transformer: 'transformer-t1', 'transformer-current': 'transformer-t1', 'imported-opamp': 'example-opamp-xu1', 'inverting-opamp': 'example-opamp-xu1', 'common-emitter': 'common-emitter-q1', 'logic-gates': 'logic-and', 'logic-gates-3v3': 'logic-and',
 }
 function formatLessonFrequency(frequencyHz: number): string {
@@ -1821,6 +1822,25 @@ export default function App() {
   const rlcInductanceText = project.parts.find((part) => part.id === 'rlc-l1')?.value ?? 'changed'
   const rlcCapacitanceText = project.parts.find((part) => part.id === 'rlc-c1')?.value ?? 'changed'
   const rlcCriticalText = rlcCriticalResistance === null ? null : `${Number(rlcCriticalResistance.toPrecision(3))} Ω`
+  const isRlcResonanceLesson = exampleLesson?.id === 'rlc-resonance'
+  const rlcResonanceInductanceH = isRlcResonanceLesson ? componentMagnitude(project.parts.find((part) => part.id === 'resonance-l1')?.value ?? '10 mH', 'inductor') : null
+  const rlcResonanceCapacitanceF = isRlcResonanceLesson ? componentMagnitude(project.parts.find((part) => part.id === 'resonance-c1')?.value ?? '1 µF', 'capacitor') : null
+  const rlcResonanceFrequencyHz = rlcResonanceInductanceH !== null && rlcResonanceInductanceH > 0 && rlcResonanceCapacitanceF !== null && rlcResonanceCapacitanceF > 0
+    ? 1 / (2 * Math.PI * Math.sqrt(rlcResonanceInductanceH * rlcResonanceCapacitanceF))
+    : null
+  const rlcResonanceInductanceText = isRlcResonanceLesson ? project.parts.find((part) => part.id === 'resonance-l1')?.value ?? 'changed' : 'changed'
+  const rlcResonanceCapacitanceText = isRlcResonanceLesson ? project.parts.find((part) => part.id === 'resonance-c1')?.value ?? 'changed' : 'changed'
+  const rlcResonanceTrace = simulationResult?.analysis === 'ac' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)') : undefined
+  const rlcResonancePeak = useMemo(() => {
+    if (!isRlcResonanceLesson || !rlcResonanceTrace?.axis.length) return null
+    let peakIndex = 0
+    let peakMagnitude = -Infinity
+    for (let index = 0; index < rlcResonanceTrace.axis.length; index += 1) {
+      const magnitude = Math.hypot(rlcResonanceTrace.values[index] ?? 0, rlcResonanceTrace.imaginaryValues?.[index] ?? 0)
+      if (magnitude > peakMagnitude) { peakMagnitude = magnitude; peakIndex = index }
+    }
+    return { frequency: rlcResonanceTrace.axis[peakIndex], magnitudeDb: 20 * Math.log10(Math.max(peakMagnitude, Number.MIN_VALUE)) }
+  }, [isRlcResonanceLesson, rlcResonanceTrace])
   const isAcFilterLesson = exampleLesson?.id === 'ac-lowpass' || exampleLesson?.id === 'ac-highpass'
   const acFilterId = isAcFilterLesson ? exampleLesson.id : null
   const acFilterResistance = acFilterId ? componentMagnitude(project.parts.find((part) => part.id === `${acFilterId}-r1`)?.value ?? '1 kΩ', 'resistor') : null
@@ -2043,6 +2063,14 @@ export default function App() {
               ? `R1 = ${rlcResistanceText} is near critical damping for L1 = ${rlcInductanceText} and C1 = ${rlcCapacitanceText}. The response should settle with little ringing. Increase R1 to about ${Number((rlcCriticalResistance * 2).toPrecision(3))} Ω and run again to compare an overdamped response.`
               : `R1 = ${rlcResistanceText} is overdamped for L1 = ${rlcInductanceText} and C1 = ${rlcCapacitanceText}; it settles without ringing but more slowly. Reduce R1 toward the critical value of about ${rlcCriticalText} to compare the fastest non-ringing response.`
           : 'Enter positive values for R1, L1, and C1, then rerun to compare the damping behavior.'
+      : isRlcResonanceLesson && simulationResult
+        ? rlcResonanceFrequencyHz !== null && rlcResonanceInductanceH !== null && rlcResonanceCapacitanceF !== null
+          ? simulationResultStale
+            ? `L1 is ${rlcResonanceInductanceText} and C1 is ${rlcResonanceCapacitanceText}; the old plot is stale. The updated circuit predicts resonance near ${formatLessonFrequency(rlcResonanceFrequencyHz)}. Rerun to locate the new VOUT peak.`
+            : rlcResonancePeak
+              ? `For L1 = ${rlcResonanceInductanceText} and C1 = ${rlcResonanceCapacitanceText}, f₀ = 1/(2π√(LC)) predicts ${formatLessonFrequency(rlcResonanceFrequencyHz)}. Ngspice's VOUT peak is ${rlcResonancePeak.magnitudeDb.toFixed(1)} dB at ${formatLessonFrequency(rlcResonancePeak.frequency)}. Change C1 or L1 and rerun to move the peak.`
+              : `The predicted resonance is ${formatLessonFrequency(rlcResonanceFrequencyHz)}. Inspect VOUT across the AC sweep to find the peak.`
+          : 'Enter positive, valid values for L1 and C1, then rerun to calculate the resonant frequency.'
       : isAcFilterLesson && simulationResult
         ? simulationResultStale
           ? `R1 is ${acFilterResistanceText} and C1 is ${acFilterCapacitanceText}. These plots are from the previous circuit; run again to compare the cutoff shift.`
@@ -3517,6 +3545,7 @@ export default function App() {
           'imported-opamp': examples.createImportedOpampExampleProject,
           'inverting-opamp': examples.createInvertingOpampExampleProject,
           'common-emitter': examples.createCommonEmitterExampleProject,
+          'rlc-resonance': examples.createRlcResonanceExampleProject,
           'logic-gates': examples.createLogicGatesExampleProject,
           'logic-gates-3v3': examples.create3v3LogicGatesExampleProject,
         } satisfies Record<Exclude<ExampleId, 'rc'>, () => Project>
@@ -3567,6 +3596,7 @@ export default function App() {
       'imported-opamp': { title: 'Inspect and simulate a user IC', guidance: 'This five-pin op-amp is an imported subcircuit model. Inspect XU1 to see the declared pin order, then run the operating point: the 0.5 V input and 2:1 feedback network produce about 1.5 V at VOUT. This original teaching model omits bandwidth, slew rate, and input bias; it is not a physical device model.' },
       'inverting-opamp': { title: 'Negative feedback reverses and scales the input', guidance: 'Run the operating point and compare V(VIN) with V(VOUT). With the non-inverting input grounded, 10 kΩ at the input, and 20 kΩ in feedback, the output is about −2 times the input (−1 V here). Inspect V(FB) to see feedback hold the inverting input near 0 V. This original teaching model omits bandwidth, slew rate, and input bias.' },
       'common-emitter': { title: 'A transistor amplifier inverts its input', guidance: 'Run the AC sweep and compare V(VIN) with V(VOUT). RBIAS1 and RBIAS2 set Q1’s DC base voltage, while RE stabilizes its operating point. RC converts changing collector current into an output voltage; the output is amplified and about 180° out of phase in the midband. The built-in NPN model is an approximate teaching model.' },
+      'rlc-resonance': { title: 'Find the resonant frequency', guidance: 'Run the AC sweep and move the cursor along V(VOUT). The parallel L1/C1 tank has its strongest response near 1.59 kHz, from 1/(2π√(L1×C1)). Increase C1 to move the peak lower, or L1 to move it lower. R1 and RLOAD control how sharp the peak is.' },
       'logic-gates': { title: 'Compare basic digital logic gates', guidance: 'Run the transient. VA changes every 20 ms and VB every 10 ms, so the input pair visits all four truth-table combinations. Compare AND, OR, NAND, NOR, XOR, XNOR, and NOT. Inputs switch at 2.5 V; each output is an ideal 0 V or 5 V behavioral source.' },
       'logic-gates-3v3': { title: 'Use gates with a 3.3 V logic supply', guidance: 'Run the transient and compare A, B, and the gate outputs. This lesson uses 0 V / 3.3 V input pulses, a 1.65 V threshold, and 0 V / 3.3 V gate outputs. Select a gate to edit its threshold or output levels.' },
     } as const

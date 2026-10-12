@@ -846,6 +846,52 @@ export function createAcHighPassExampleProject(): Project {
 }
 
 /** A pulse-driven voltage-controlled amplifier with an explicit load. */
+/** A parallel LC tank with a damped AC response peak near its calculated resonance. */
+export function createRlcResonanceExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'resonance-v1', kind: 'source', ref: 'V1', value: '0 V', sourceMode: 'dc', acMagnitude: '1 V', acPhase: '0', x: 200, y: 400, rotation: 0 }
+  const seriesResistor: Part = { id: 'resonance-r1', kind: 'resistor', ref: 'R1', value: '100 Ω', x: 400, y: 300, rotation: 0 }
+  const inductor: Part = { id: 'resonance-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 650, y: 250, rotation: 90 }
+  const capacitor: Part = { id: 'resonance-c1', kind: 'capacitor', ref: 'C1', value: '1 µF', x: 850, y: 250, rotation: 90 }
+  const load: Part = { id: 'resonance-rload', kind: 'resistor', ref: 'RLOAD', value: '10 kΩ', x: 1000, y: 250, rotation: 90 }
+  const parts = [source, seriesResistor, inductor, capacitor, load]
+  const atPin = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Parallel RLC resonance'
+  project.parts = parts
+  project.wires = [
+    { id: 'resonance-source-rise', points: [[200, 350], [200, 300]] },
+    { id: 'resonance-source-series', points: [[200, 300], [350, 300]] },
+    { id: 'resonance-series-link', points: [[450, 300], [500, 300]] },
+    { id: 'resonance-series-rise', points: [[500, 300], [500, 200]] },
+    { id: 'resonance-tank-feed', points: [[500, 200], [650, 200]] },
+    { id: 'resonance-top-inductor-capacitor', points: [[650, 200], [850, 200]] },
+    { id: 'resonance-top-capacitor-load', points: [[850, 200], [1000, 200]] },
+    { id: 'resonance-inductor-return', points: [[650, 300], [650, 350]] },
+    { id: 'resonance-capacitor-return', points: [[850, 300], [850, 350]] },
+    { id: 'resonance-load-return', points: [[1000, 300], [1000, 350]] },
+    { id: 'resonance-bottom-inductor-capacitor', points: [[650, 350], [850, 350]] },
+    { id: 'resonance-bottom-capacitor-load', points: [[850, 350], [1000, 350]] },
+    { id: 'resonance-source-return-drop', points: [[200, 450], [200, 500]] },
+    { id: 'resonance-source-return-route', points: [[200, 500], [650, 500]] },
+    { id: 'resonance-source-return-link', points: [[650, 500], [650, 350]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    atPin('resonance-input-label', 'VIN', source, 0),
+    atPin('resonance-output-label', 'VOUT', inductor, 0),
+    atPin('resonance-ground-label', '0', source, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 40, startFrequency: '100 Hz', stopFrequency: '10 kHz' } }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: -30, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 export function createControlledSourceExampleProject(): Project {
   const project = createStarterProject()
   const source: Part = { id: 'amp-v1', kind: 'source', ref: 'V1', value: '1 V', x: 190, y: 440, rotation: 0 }
