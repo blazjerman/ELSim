@@ -2456,6 +2456,7 @@ test('wire mode does not select or move an existing wire', async ({ page }) => {
 
 test('dragging a wire endpoint moves only that connection point', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = []
@@ -2486,6 +2487,31 @@ test('dragging a wire endpoint moves only that connection point', async ({ page 
   await page.mouse.move(end.x, end.y, { steps: 3 })
   await page.mouse.up()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual([[330, 330], [400, 300]])
+})
+
+test('wire endpoints are keyboard accessible and move one grid step with arrow keys', async ({ page }) => {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = []
+    project.wires = [{ id: 'keyboard-endpoint-wire', points: [[300, 300], [400, 300]] }]
+    project.junctions = []
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: [], wires: project.wires, junctions: [], netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const wire = page.getByRole('button', { name: /Wire segment from 300, 300 to 400, 300/ })
+  await wire.focus()
+  await page.keyboard.press('Enter')
+  const endpoint = page.getByRole('button', { name: /Move wire endpoint 1 at 300, 300/ })
+  await expect(endpoint).toBeVisible()
+  await expectVisibleKeyboardControlsNamed(page)
+  await endpoint.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('button', { name: /Move wire endpoint 1 at 310, 300/ })).toBeFocused()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual([[310, 300], [400, 300]])
 })
 
 test('wire hover clears immediately over a component and connection dots mark joined pins', async ({ page }) => {
