@@ -133,6 +133,8 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants.closed.find((primitive) => primitive.kind === 'path')?.d, 'M-12 -2L12 0')
   assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants.open.find((primitive) => primitive.kind === 'path')?.d, 'M-12 -2L9 -12')
   for (const state of ['open', 'closed']) assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants[state].filter((primitive) => primitive.className === 'control-pin-label').map(({ text }) => text), ['+', '−'])
+  assert.deepEqual(componentDefinitionFor('inductor').symbolVariants.forwardCurrent.find((primitive) => primitive.className === 'inductor-current-arrow')?.d, 'M-16 -21H16M16 -21L9 -26M16 -21L9 -16')
+  assert.deepEqual(componentDefinitionFor('inductor').symbolVariants.reverseCurrent.find((primitive) => primitive.className === 'inductor-current-arrow')?.d, 'M16 -21H-16M-16 -21L-9 -26M-16 -21L-9 -16')
   for (const kind of ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet']) {
     const variants = componentDefinitionFor(kind).symbolVariants
     for (const state of ['forwardCurrent', 'reverseCurrent']) {
