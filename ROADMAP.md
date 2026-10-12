@@ -170,6 +170,8 @@ Current Pages-path slice: Vite accepts a validated absolute `VITE_BASE_PATH`, an
 
 Project validation now parses each imported model library once, then resolves all imported subcircuit and device-model references through case-insensitive indexes; this removes repeated library parsing and linear name searches per placed IC, including nested-sheet component identity checks. The browser model-analysis and dialect caches also key on source revisions (content hash, filename, and selected sections), so editing provenance notes does not reparse library text. The project archive regression validates 400 placed ICs against a 600-definition user library.
 
+Waveform plot preparation now resolves selected and disabled trace IDs with sets and maps trace IDs to palette indexes once per result. Plot visibility, color assignment, and cursor-readout preparation therefore avoid repeated list membership and `indexOf` scans as vector counts grow. Typecheck and all 28 local unit-test groups pass; no WASM rebuild is needed for this UI-only change.
+
 ## 4. Legal and open-source release policy
 
 > **Owner decision (2026-10-12): out of scope.** The owner will build the ngspice WASM locally and is not preparing a public app/runtime release. Do not spend feature-work time simplifying, auditing, or changing license handling, and do not make these checks a gate for roadmap work. Keep existing notices and checks untouched unless the owner explicitly reopens distribution work.

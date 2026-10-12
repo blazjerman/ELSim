@@ -118,25 +118,30 @@ function usePlotDragPan(onVerticalPan: (delta: number) => void) {
 
 function useTraceVisibility(selectedIds: string[], onRemove: (id: string) => void) {
   const [disabledIds, setDisabledIds] = useState<string[]>([])
+  const disabledIdSet = useMemo(() => new Set(disabledIds), [disabledIds])
   const toggleVisibility = (id: string) => setDisabledIds((current) => current.includes(id) ? current.filter((candidate) => candidate !== id) : [...current, id])
   const remove = (id: string) => {
     setDisabledIds((current) => current.filter((candidate) => candidate !== id))
     onRemove(id)
   }
-  const visibleIds = useMemo(() => selectedIds.filter((id) => !disabledIds.includes(id)), [selectedIds, disabledIds])
-  return { disabledIds, visibleIds, toggleVisibility, remove }
+  const visibleIdSet = useMemo(() => new Set(selectedIds.filter((id) => !disabledIdSet.has(id))), [selectedIds, disabledIdSet])
+  return { disabledIdSet, visibleIdSet, toggleVisibility, remove }
 }
 
-function TraceToggles({ traces, selectedIds, disabledIds, onToggleVisibility, onRemove, ariaLabel, colorFor }: { traces: Trace[]; selectedIds: string[]; disabledIds: string[]; onToggleVisibility: (id: string) => void; onRemove: (id: string) => void; ariaLabel: string; colorFor: (index: number) => string }) {
+function TraceToggles({ traces, selectedIds, disabledIds, onToggleVisibility, onRemove, ariaLabel, colorFor }: { traces: Trace[]; selectedIds: string[]; disabledIds: Set<string>; onToggleVisibility: (id: string) => void; onRemove: (id: string) => void; ariaLabel: string; colorFor: (index: number) => string }) {
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const selected = useMemo(() => traces.flatMap((trace, index) => selectedIdSet.has(trace.id) ? [{ trace, index }] : []), [traces, selectedIdSet])
   return <div className="trace-selector"><div className="trace-toggles trace-toggles-selected" role="group" aria-label={`Selected ${ariaLabel.toLocaleLowerCase()}`}>{selected.map(({ trace, index }) => {
-    const disabled = disabledIds.includes(trace.id)
+    const disabled = disabledIds.has(trace.id)
     return <span key={trace.id} className={`trace-selected-item${disabled ? ' disabled' : ''}`}>
       <button aria-label={`${disabled ? 'Enable' : 'Disable'} ${trace.label}`} aria-pressed={!disabled} className="trace-visibility" onClick={() => onToggleVisibility(trace.id)}><span style={{ background: colorFor(index) }}/>{trace.label}</button>
       <button aria-label={`Remove ${trace.label} from waveform`} title={`Remove ${trace.label}`} className="trace-remove" onClick={() => onRemove(trace.id)}>×</button>
     </span>
   })}</div></div>
+}
+
+function useTraceIndexById(traces: Trace[]) {
+  return useMemo(() => new Map(traces.map((trace, index) => [trace.id, index])), [traces])
 }
 
 const PlotPolylineSet = memo(function PlotPolylineSet({ plots }: { plots: { id: string; points: string; color: string }[] }) {
@@ -169,7 +174,8 @@ function useResponsivePlotSize() {
 function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; measurements: MeasurementResult[] }) {
   const cursorIndex = useSimulationCursor()
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
-  const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIds.includes(trace.id)), [traces, traceVisibility.visibleIds])
+  const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
+  const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const plotSize = useResponsivePlotSize()
   const width = plotSize.size.width, height = plotSize.size.height, left = 42, right = width - 12, top = 8, bottom = height - 21
@@ -220,8 +226,8 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       const y = bottom - ((trace.values[index] - minValue) / range) * (bottom - top)
       points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
     }
-    return { id: trace.id, color: colors[traces.indexOf(trace) % colors.length], points: points.join(' ') }
-  }), [shown, minTime, maxTime, width, height, voltageRange[0], voltageRange[1], currentRange[0], currentRange[1]])
+    return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points: points.join(' ') }
+  }), [shown, minTime, maxTime, width, height, voltageRange[0], voltageRange[1], currentRange[0], currentRange[1], traceIndexById])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -239,26 +245,28 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} x2={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
     </svg>
-    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIds} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={(index) => colors[index % colors.length]}/>
-    <div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => { const index = nearestAxisIndex(trace.axis, axis?.[cursorIndex] ?? 0, 0, Math.max(0, trace.axis.length - 1)); return <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span> })}</div>
+    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={(index) => colors[index % colors.length]}/>
+    <div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => { const index = nearestAxisIndex(trace.axis, axis?.[cursorIndex] ?? 0, 0, Math.max(0, trace.axis.length - 1)); return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span> })}</div>
     {measurements.length > 0 && <div className="measurement-results"><div className="form-section-title">MEASUREMENTS</div><table className="op-table"><thead><tr><th>Name</th><th>Operation</th><th>Value</th></tr></thead><tbody>{measurements.map((measurement) => <tr key={`${measurement.sweep?.index ?? 0}-${measurement.id}`}><td>{measurement.id}{measurement.sweep ? ` · ${measurement.sweep.label}` : ''}</td><td>{measurement.operation === 'delay' ? `DELAY ${measurement.vector} → ${measurement.targetVector ?? 'target'}` : `${measurement.operation.toUpperCase()} ${measurement.vector}${measurement.from || measurement.to ? ` · ${measurement.from ? `from ${measurement.from}` : ''}${measurement.from && measurement.to ? ' ' : ''}${measurement.to ? `to ${measurement.to}` : ''}` : ''}`}</td><td>{measurement.value.toPrecision(7)} {measurement.unit}</td></tr>)}</tbody></table></div>}
   </div>
 }
 
 function OperatingPointView({ traces, selectedIds, onToggle, onExport }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
-  const shown = traces.filter((trace) => traceVisibility.visibleIds.includes(trace.id))
+  const shown = traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id))
+  const traceIndexById = useTraceIndexById(traces)
   const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
   return <div className="waveform-view op-view">
     <div className="waveform-title"><strong>DC operating point</strong><span>{traces.length} vectors · one solved bias point</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIds} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="operating-point traces" colorFor={(index) => colors[index % colors.length]}/>
-    {shown.length ? <div className="op-table-wrap"><table className="op-table"><thead><tr><th>Vector</th><th>Value</th><th>Unit</th></tr></thead><tbody>{shown.map((trace) => <tr key={trace.id}><td><span style={{ color: colors[traces.indexOf(trace) % colors.length] }}>●</span> {trace.label}</td><td>{trace.values[0].toPrecision(7)}</td><td>{trace.unit}</td></tr>)}</tbody></table></div> : <div className="op-empty">Select a voltage or current vector to inspect its DC value.</div>}
+    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="operating-point traces" colorFor={(index) => colors[index % colors.length]}/>
+    {shown.length ? <div className="op-table-wrap"><table className="op-table"><thead><tr><th>Vector</th><th>Value</th><th>Unit</th></tr></thead><tbody>{shown.map((trace) => <tr key={trace.id}><td><span style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>●</span> {trace.label}</td><td>{trace.values[0].toPrecision(7)}</td><td>{trace.unit}</td></tr>)}</tbody></table></div> : <div className="op-empty">Select a voltage or current vector to inspect its DC value.</div>}
   </div>
 }
 
 function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
-  const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIds.includes(trace.id)), [traces, traceVisibility.visibleIds])
+  const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
+  const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const [mode, setMode] = useState<'magnitude' | 'phase'>('magnitude')
   const [cursorIndex, setCursorIndex] = useState<number | null>(null)
@@ -310,8 +318,8 @@ function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange 
       const y = bottom - (value - minValue) / (maxValue - minValue) * (bottom - top)
       return `${x.toFixed(2)},${y.toFixed(2)}`
     }).join(' ')
-    return { id: trace.id, points, color: colors[traces.indexOf(trace) % colors.length] }
-  }), [traces, shown, first, last, width, height, minFrequency, maxFrequency, minValue, maxValue, mode, colors])
+    return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }
+  }), [traces, shown, first, last, width, height, minFrequency, maxFrequency, minValue, maxValue, mode, colors, traceIndexById])
   return <div className="waveform-view ac-view">
     <div className="waveform-title"><strong>AC frequency response</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${frequencies[cursorIndex].toPrecision(5)} Hz`}</span><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <div className="ac-mode"><button className={mode === 'magnitude' ? 'active' : ''} onClick={() => setMode('magnitude')}>Magnitude (dB)</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setMode('phase')}>Phase (°)</button></div>
@@ -322,14 +330,15 @@ function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange 
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(frequencies[cursorIndex])} x2={xFor(frequencies[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 5} className="plot-tick">{minFrequency.toPrecision(3)} Hz</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{maxFrequency.toPrecision(3)} Hz</text>
     </svg>
-    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIds} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="AC result vectors" colorFor={(index) => colors[index % colors.length]}/>
-    <div className="cursor-readout">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && shown.map((trace) => { const real = trace.values[cursorIndex], imaginary = trace.imaginaryValues?.[cursorIndex] ?? 0; const readout = mode === 'magnitude' ? `${(20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE)).toPrecision(5)} dB` : `${(Math.atan2(imaginary, real) * 180 / Math.PI).toPrecision(5)}°`; return <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {readout}</span> })}</div>
+    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="AC result vectors" colorFor={(index) => colors[index % colors.length]}/>
+    <div className="cursor-readout">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && shown.map((trace) => { const real = trace.values[cursorIndex], imaginary = trace.imaginaryValues?.[cursorIndex] ?? 0; const readout = mode === 'magnitude' ? `${(20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE)).toPrecision(5)} dB` : `${(Math.atan2(imaginary, real) * 180 / Math.PI).toPrecision(5)}°`; return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {readout}</span> })}</div>
   </div>
 }
 
 function DcSweepPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
-  const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIds.includes(trace.id)), [traces, traceVisibility.visibleIds])
+  const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
+  const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const [cursorIndex, setCursorIndex] = useState<number | null>(null)
   useEffect(() => setCursorIndex(null), [traces])
@@ -373,8 +382,8 @@ function DcSweepPlot({ traces, selectedIds, onToggle, onExport, range, onRangeCh
         const y = bottom - (trace.values[index] - min) / span * (bottom - top)
         return `${x.toFixed(2)},${y.toFixed(2)}`
       }).join(' ')
-    return { id: trace.id, points, color: colors[traces.indexOf(trace) % colors.length] }
-  }), [traces, shown, first, last, width, height, x0, x1, min, span, colors])
+    return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }
+  }), [traces, shown, first, last, width, height, x0, x1, min, span, colors, traceIndexById])
   return <div className="waveform-view">
     <div className="waveform-title"><strong>DC sweep results</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${axis[cursorIndex].toPrecision(5)} ${traces[0]?.axisUnit}`}</span><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}`} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); setCursorIndex(nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1))) }}>
@@ -384,8 +393,8 @@ function DcSweepPlot({ traces, selectedIds, onToggle, onExport, range, onRangeCh
       {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(axis[cursorIndex])} x2={xFor(axis[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
       <text x={left} y={height - 5} className="plot-tick">{x0.toPrecision(3)} {traces[0]?.axisUnit}</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{x1.toPrecision(3)} {traces[0]?.axisUnit}</text>
     </svg>
-    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIds} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="DC sweep vectors" colorFor={(index) => colors[index % colors.length]}/>
-    <div className="cursor-readout">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && shown.map((trace) => <span key={trace.id} style={{ color: colors[traces.indexOf(trace) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</div>
+    <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="DC sweep vectors" colorFor={(index) => colors[index % colors.length]}/>
+    <div className="cursor-readout">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</div>
   </div>
 }
 
