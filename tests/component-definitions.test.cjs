@@ -76,6 +76,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   for (const kind of ['ground', 'diode', 'zener', 'led']) assert.ok(componentDefinitionFor(kind).symbolGeometry.length, `${kind} has definition-owned static geometry`)
   assert.deepEqual(componentDefinitionFor('led').symbolGeometry.slice(0, -1), componentDefinitionFor('diode').symbolGeometry)
   assert.equal(componentDefinitionFor('led').symbolGeometry.at(-1).className, 'led-light-rays')
+  assert.deepEqual(componentDefinitionFor('led').symbolAnimations['brightness.current'].active.map(({ className, kind }) => [className, kind]), [['led-glow', 'circle']])
   assert.equal(componentDefinitionFor('switch').symbolVariants.off.filter(({ kind }) => kind === 'circle').length, 2)
   assert.equal(componentDefinitionFor('voltageSwitch').symbolVariants.open.filter(({ kind }) => kind === 'circle').length, 2)
   for (const part of project.parts) assert.equal(componentDefinitionFor(part.kind).pins.length, componentPins(part).length, `${part.ref} definition pin count`)
