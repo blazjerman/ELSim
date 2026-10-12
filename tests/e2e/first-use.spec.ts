@@ -1138,6 +1138,13 @@ test('connection inspector uses ordered, friendly pin labels from component defi
   await expect(page.locator('.pin-row')).toHaveCount(2)
   await expect(page.locator('.pin-row').nth(0)).toContainText('Terminal 1')
   await expect(page.locator('.pin-row').nth(1)).toContainText('Terminal 2')
+
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.locator('.circuit-part[data-part-id="switch-q1"]').click()
+  await expect(page.locator('.form-section').filter({ has: page.getByText('CONNECTIONS') })).toContainText('Collector current is positive into the collector')
 })
 
 test('invalid pulse timing selects its source and focuses the exact setting', async ({ page }) => {

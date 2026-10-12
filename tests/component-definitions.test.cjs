@@ -67,6 +67,9 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     assert.equal(componentDefinitionFor(kind).paletteCategory, category, `${kind} palette category`)
   }
   assert.deepEqual(componentDefinitionFor('pnp').pins.map(({ name }) => name), ['collector', 'base', 'emitter'])
+  for (const kind of ['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'vcvs', 'vccs', 'cccs', 'ccvs']) {
+    assert.ok(componentDefinitionFor(kind).connectionHint, `${kind} has registry-owned terminal guidance`)
+  }
   assert.ok(componentDefinitionFor('capacitor').animationChannels.includes('charge.voltage'))
   assert.ok(componentDefinitionFor('inductor').animationChannels.includes('field.current'))
   assert.ok(componentDefinitionFor('voltageSwitch').animationChannels.includes('position.controlVoltage'))
