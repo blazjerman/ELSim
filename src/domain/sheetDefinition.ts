@@ -1,6 +1,19 @@
 import { componentPins } from './geometry'
 import type { Project, ProjectSheet } from './project'
 
+/** Choose a numbered child-sheet name that cannot collide with a sibling. */
+export function nextBlockSheetName(project: Project, parentSheetId: string): string {
+  const names = project.sheets.filter((sheet) => sheet.parentSheetId === parentSheetId).map((sheet) => sheet.name.trim().toLowerCase())
+  let next = 1
+  for (const name of names) {
+    const match = name.match(/^block\s+(\d+)$/i)
+    const number = match ? Number(match[1]) : 0
+    if (Number.isSafeInteger(number)) next = Math.max(next, number + 1)
+  }
+  while (names.includes(`block ${next}`)) next += 1
+  return `Block ${next}`
+}
+
 /** Rename a sheet and keep all placed instances' visible names in sync. */
 export function renameSheetDefinition(project: Project, sheetId: string, requestedName: string): Project {
   const definition = project.sheets.find((sheet) => sheet.id === sheetId)

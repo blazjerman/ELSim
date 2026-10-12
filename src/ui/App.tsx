@@ -20,7 +20,7 @@ import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrac
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
-import { deleteSheetDefinition, renameSheetDefinition, updateSheetDefinition } from '../domain/sheetDefinition'
+import { deleteSheetDefinition, nextBlockSheetName, renameSheetDefinition, updateSheetDefinition } from '../domain/sheetDefinition'
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
@@ -2211,8 +2211,7 @@ export default function App() {
   }
   const addSheet = () => {
     const parent = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
-    const siblings = project.sheets.filter((sheet) => sheet.parentSheetId === parent?.id)
-    const name = `Block ${siblings.length + 1}`
+    const name = nextBlockSheetName(project, parent?.id ?? project.rootSheetId)
     const sheet = { id: `sheet-${crypto.randomUUID()}`, name, parentSheetId: parent?.id ?? null, parts: [] as Part[], wires: [] as Project['wires'], junctions: [] as Project['junctions'], netLabels: [] as Project['netLabels'], view: { zoom: 1, panX: 0, panY: 0 }, ports: [] as { id: string; name: string }[], parameters: [] as NonNullable<Project['sheets'][number]['parameters']> }
     history.current = { past: [...history.current.past, structuredClone(projectRef.current)].slice(-100), future: [] }
     setProjectState((current) => ({ ...current, sheets: [...current.sheets, sheet], activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, updatedAt: new Date().toISOString() }))

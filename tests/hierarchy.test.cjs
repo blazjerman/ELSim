@@ -10,7 +10,7 @@ const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
 const { preferredSheetInstancePath } = require(path.join(build, 'domain/hierarchyNavigation.js'))
-const { deleteSheetDefinition, renameSheetDefinition, updateSheetDefinition } = require(path.join(build, 'domain/sheetDefinition.js'))
+const { deleteSheetDefinition, nextBlockSheetName, renameSheetDefinition, updateSheetDefinition } = require(path.join(build, 'domain/sheetDefinition.js'))
 
 test('current-source probes use ngspice current parameters in root and nested sheets', () => {
   const project = createCurrentSourceExampleProject()
@@ -55,6 +55,18 @@ function createBlockProject() {
   ]
   return project
 }
+
+test('new block names skip numbered names already used by sibling sheets', () => {
+  const project = createBlockProject()
+  const template = project.sheets[1]
+  project.sheets.push(
+    { ...template, id: 'sheet-block-two', name: 'Block 2', parts: [] },
+    { ...template, id: 'sheet-block-five', name: 'block 5', parts: [] },
+  )
+  assert.equal(nextBlockSheetName(project, project.rootSheetId), 'Block 6')
+  project.sheets.push({ ...template, id: 'sheet-block-six', name: 'Block 6', parts: [] })
+  assert.equal(nextBlockSheetName(project, project.rootSheetId), 'Block 7')
+})
 
 test('renaming a reusable sheet updates every placed block without changing its electrical identity', () => {
   const project = createBlockProject()

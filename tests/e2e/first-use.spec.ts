@@ -4451,6 +4451,24 @@ test('@ui-smoke an unused child sheet can be deleted after confirmation', async 
   await expect(page.locator('.sheet-tab.active')).toContainText('Block 1')
 })
 
+test('@ui-smoke adding a sheet skips names left in use after deletion', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await page.locator('.sheet-tab').first().click()
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 2')
+  await page.locator('.sheet-tab').filter({ hasText: 'Block 1' }).click()
+  await page.getByRole('button', { name: 'Sheet ports and block settings' }).click()
+  const deletion = page.waitForEvent('dialog')
+  const deleteClick = page.getByRole('button', { name: 'Delete sheet' }).click()
+  const dialog = await deletion
+  await dialog.accept()
+  await deleteClick
+  await page.locator('.sheet-tab').first().click()
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 3')
+})
+
 test('creating a child sheet can be undone and redone', async ({ page }) => {
   await page.goto('/')
   const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })
