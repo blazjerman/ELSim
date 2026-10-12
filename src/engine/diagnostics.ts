@@ -37,7 +37,7 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
     hint = 'ngspice could not read the model card’s parameter list. Check its parameter names, values, and continuation lines against ngspice syntax, or ask for an ngspice-compatible library.'
   } else if (source?.assetId && /syntax error|parse error|badly formed|malformed model|invalid model card/i.test(message)) {
     hint = 'ngspice could not parse this model card. Check the reported source line and nearby continuation lines for unsupported syntax or a missing value, or ask for an ngspice-compatible library.'
-  } else if (source?.assetId && /unknown subckt|missing.*model|could not find.*model|no such model|unknown device type/i.test(message)) {
+  } else if (source?.assetId && /unknown subckt|missing.*model|(?:could not|couldn't|cannot|can't) find.*model|no model found|model\s+['"`]?[^\s'"`]+['"`]?(?:\s+\([^)]*\))?\s+(?:was\s+)?not found|no such model|unknown device type/i.test(message)) {
     hint = 'This model references a device model or subcircuit ngspice cannot find. Check that all required model files are imported and that each referenced name matches exactly.'
   } else if (source?.assetId && /timestep too small|time step too small|convergence problem|convergence failure|failed to converge|did not converge|unable to converge|no convergence|gmin stepping failed|source stepping failed|singular matrix/i.test(message)) {
     hint = `The solver could not find a stable solution while evaluating this imported model (source line ${source.assetLine ?? '?'}). Check the model’s parameter values, supply and bias conditions, pin order, and required companion components. Run Circuit checks first, then change one thing at a time.`

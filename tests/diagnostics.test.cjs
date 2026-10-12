@@ -105,6 +105,8 @@ test('imported model failures explain common card, type, parameter, and dependen
     ['Error: too few parameters in model card at line 1', /parameter list/i],
     ['Error: badly formed model card at line 1', /could not parse this model card/i],
     ['Error: unknown subckt CORE referenced at line 1', /required model files are imported/i],
+    ['Error: model CORE not found at line 1', /required model files are imported/i],
+    ['Error: couldn\'t find model CORE at line 1', /required model files are imported/i],
   ]
 
   for (const [message, hint] of cases) {
