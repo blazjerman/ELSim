@@ -254,6 +254,19 @@ test('project inspector reports the current project format version', { tag: '@ui
   await expect(page.getByText('ELSim JSON · v8')).toBeVisible()
 })
 
+test('autosave failure is shown instead of claiming the project is saved', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.addInitScript(() => {
+    const setItem = Storage.prototype.setItem
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'elsim:project:v7') throw new DOMException('Storage quota exceeded', 'QuotaExceededError')
+      setItem.call(this, key, value)
+    }
+  })
+  await page.goto('/')
+  await expect(page.locator('.app-status [role="status"]')).toHaveText('Local save failed. Use Save to download a copy.')
+  await expect(page.getByText('This browser could not save the project locally. Use Save to download a copy.')).toBeVisible()
+})
+
 test('engine-free preview explains the local runtime requirement while keeping the editor usable', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.route('**/engine/ngspice.mjs', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))
   await page.route('**/engine/ngspice.wasm', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))

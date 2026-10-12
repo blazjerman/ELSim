@@ -1585,6 +1585,7 @@ export default function App() {
   const [unknownRightsConfirmed, setUnknownRightsConfirmed] = useState(false)
   const [saveWarningOpen, setSaveWarningOpen] = useState(false)
   const [notice, setNotice] = useState('')
+  const [autosaveStatus, setAutosaveStatus] = useState<'saving' | 'saved' | 'error'>('saving')
   const [importWarnings, setImportWarnings] = useState<string[]>([])
   const [compatibilityDiagnostic, setCompatibilityDiagnostic] = useState<SimulationDiagnostic | null>(null)
   const [modelSourceReview, setModelSourceReview] = useState<{ assetId: string; line: number } | null>(null)
@@ -1667,7 +1668,9 @@ export default function App() {
       localStorage.removeItem('elsim:project:v3')
       localStorage.removeItem('elsim:project:v2')
       localStorage.removeItem('elsim:project:v1')
+      setAutosaveStatus('saved')
     } catch {
+      setAutosaveStatus('error')
       if (notify) setNotice('This browser could not save the project locally. Use Save to download a copy.')
     }
   }
@@ -2084,6 +2087,7 @@ export default function App() {
     return requiredModelAssets.has(assetId)
   }
   useEffect(() => {
+    setAutosaveStatus('saving')
     if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
     autosaveTimerRef.current = window.setTimeout(() => {
       autosaveTimerRef.current = null
@@ -3605,6 +3609,6 @@ export default function App() {
       'After a run, right-click a wire or component and choose a voltage or current waveform. Use the time controls in the top toolbar to inspect solved values. Schematic animations follow those same results. The Netlist tab is optional; you do not need to edit SPICE text.',
       'Use Save to download an .elsim project file containing your circuit and its project data. Later, choose Open and select that file to continue. Imported symbols and model libraries remain project assets, so review the rights notice before sharing files that contain them.',
     ][tourStep]}</p>{tourStep === 1 && <button className="tour-run-action" onClick={editTourComponentValue}>Edit resistor value</button>}{tourStep === 2 && <button className="tour-run-action" onClick={() => { setTourStep(null); void startSimulation() }}><Play size={13} fill="currentColor"/> Run this circuit now</button>}<div className="tour-progress" role="progressbar" aria-label="Quick tour progress" aria-valuemin={1} aria-valuemax={5} aria-valuenow={tourStep + 1} aria-valuetext={`Step ${tourStep + 1} of 5`}>{[0, 1, 2, 3, 4].map((step) => <span key={step} className={step <= tourStep ? 'current' : ''} aria-hidden="true"/> )}</div><div className="tour-actions"><button className="tour-skip" onClick={() => setTourStep(null)}>Skip tour</button><span/>{tourStep > 0 && <button className="tour-secondary" onClick={() => setTourPage(tourStep - 1)}>Back</button>}<button ref={tourNextButtonRef} className="primary-small" onClick={() => tourStep === 4 ? setTourStep(null) : setTourPage(tourStep + 1)}>{tourStep === 4 ? 'Finish' : 'Next'} <ArrowUp size={13}/></button></div></section></div>}
-    <footer className="app-status"><span><span className="status-dot"/> All changes saved locally</span><span>Original ELSim component symbols</span><span><Sparkles size={13}/> Built for curious minds</span></footer>
+    <footer className="app-status"><span role="status" aria-live="polite"><span className={`status-dot ${autosaveStatus}`}/>{autosaveStatus === 'saving' ? 'Saving changes locally…' : autosaveStatus === 'error' ? 'Local save failed. Use Save to download a copy.' : 'All changes saved locally'}</span><span>Original ELSim component symbols</span><span><Sparkles size={13}/> Built for curious minds</span></footer>
   </div>
 }
