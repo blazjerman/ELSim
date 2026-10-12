@@ -65,8 +65,12 @@ export function componentDefinitionFor(kind: PartKind): ComponentDefinition {
   return componentDefinitionByKind[kind]
 }
 
+export function componentPropertyDefault(kind: PartKind, key: string): string | undefined {
+  return componentDefinitionFor(kind).properties.find((property) => property.key === key)?.defaultValue
+}
+
 export function componentDefaultValue(kind: PartKind): string {
-  return componentDefinitionFor(kind).properties.find((property) => property.key === 'value')?.defaultValue ?? ''
+  return componentPropertyDefault(kind, 'value') ?? ''
 }
 
 function definitionSlug(value: string): string {

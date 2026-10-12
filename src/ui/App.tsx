@@ -25,7 +25,7 @@ import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../do
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
-import { componentDefaultValue, componentDefinitionFor, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
+import { componentDefaultValue, componentDefinitionFor, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { timeMagnitude } from '../domain/componentValue'
 import { measurementCrossingCountError, measurementThresholdError } from '../domain/measurementSettings'
 import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
@@ -2977,8 +2977,26 @@ export default function App() {
     const id = `p-${crypto.randomUUID()}`
     const placeX = x ?? snapToEditorGrid(Math.max(190, Math.min(620, 260 + (project.parts.length % 4) * 90)))
     const placeY = y ?? snapToEditorGrid(380 + (Math.floor(project.parts.length / 4) % 2) * 90)
-    const gateOperation = logicOperation ?? pendingLogicOperation ?? 'and'
-    const part: Part = { id, kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: nextRef(project.parts, kind), value: componentDefaultValue(kind) || (kind === 'behavioral' ? 'V(vin) * 2' : kind === 'inverter' ? 'NOT' : kind === 'logicGate' ? gateOperation.toUpperCase() : kind === 'ground' || kind === 'subcircuit' ? '' : '1'), x: placeX, y: placeY, rotation, ...(polarized && kind === 'capacitor' ? { polarized: true } : {}), ...(kind === 'potentiometer' ? { wiperPosition: componentDefinitionFor(kind).properties.find((property) => property.key === 'wiperPosition')?.defaultValue ?? '0.5' } : {}), ...(kind === 'transformer' ? { turnsRatio: componentDefinitionFor(kind).properties.find((property) => property.key === 'turnsRatio')?.defaultValue ?? '2', coupling: componentDefinitionFor(kind).properties.find((property) => property.key === 'coupling')?.defaultValue ?? '1' } : {}), ...(kind === 'behavioral' ? { behavioralOutput: 'voltage' as const } : {}), ...(kind === 'logicGate' ? { logicOperation: gateOperation } : {}), ...(['logicGate', 'inverter'].includes(kind) ? { logicLow: '0 V', logicHigh: '5 V', logicThreshold: '2.5 V' } : {}), ...(kind === 'lamp' ? { animationNominalPower: Number(componentDefinitionFor(kind).properties.find((property) => property.key === 'animationNominalPower')?.defaultValue ?? 10) } : {}) }
+    const defaultProperty = (key: string, fallback: string) => componentPropertyDefault(kind, key) ?? fallback
+    const gateOperation = logicOperation ?? pendingLogicOperation ?? defaultProperty('logicOperation', 'and') as NonNullable<Part['logicOperation']>
+    const defaultValue = componentDefaultValue(kind) || (kind === 'behavioral' ? 'V(vin) * 2' : kind === 'inverter' ? 'NOT' : kind === 'logicGate' ? gateOperation.toUpperCase() : kind === 'ground' || kind === 'subcircuit' ? '' : '1')
+    const part: Part = {
+      id,
+      kind,
+      componentDefinitionId: componentDefinitionFor(kind).id,
+      ref: nextRef(project.parts, kind),
+      value: defaultValue,
+      x: placeX,
+      y: placeY,
+      rotation,
+      ...(polarized && kind === 'capacitor' ? { polarized: true } : {}),
+      ...(kind === 'potentiometer' ? { wiperPosition: defaultProperty('wiperPosition', '0.5') } : {}),
+      ...(kind === 'transformer' ? { turnsRatio: defaultProperty('turnsRatio', '2'), coupling: defaultProperty('coupling', '1') } : {}),
+      ...(kind === 'behavioral' ? { behavioralOutput: defaultProperty('behavioralOutput', 'voltage') as NonNullable<Part['behavioralOutput']> } : {}),
+      ...(kind === 'logicGate' ? { logicOperation: gateOperation } : {}),
+      ...(['logicGate', 'inverter'].includes(kind) ? { logicLow: defaultProperty('logicLow', '0 V'), logicHigh: defaultProperty('logicHigh', '5 V'), logicThreshold: defaultProperty('logicThreshold', '2.5 V') } : {}),
+      ...(kind === 'lamp' ? { animationNominalPower: Number(defaultProperty('animationNominalPower', '10')) } : {}),
+    }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
     setSelection(null)
     setSelectedPartIds([])

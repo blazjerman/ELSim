@@ -5,7 +5,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { componentDefinitions, componentDefinitionFor, componentDefaultValue, importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
+const { componentDefinitions, componentDefinitionFor, componentDefaultValue, componentPropertyDefault, importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createStarterProject, kindNames, kindPrefix, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { parseSubcircuitLibrary } = require(path.join(build, 'domain/subcircuitLibrary.js'))
@@ -31,7 +31,9 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     assert.equal(kindNames[definition.kind], definition.name)
     assert.equal(kindPrefix[definition.kind], definition.electricalType)
     assert.equal(componentDefaultValue(definition.kind), definition.properties.find((property) => property.key === 'value')?.defaultValue ?? '')
+    for (const property of definition.properties) assert.equal(componentPropertyDefault(definition.kind, property.key), property.defaultValue)
   }
+  assert.equal(componentPropertyDefault('resistor', 'missingProperty'), undefined)
   for (const part of project.parts) assert.equal(componentDefinitionFor(part.kind).pins.length, componentPins(part).length, `${part.ref} definition pin count`)
   assert.deepEqual(componentDefinitionFor('source').pins.map(({ name }) => name), ['positive', 'negative'])
   assert.deepEqual(componentDefinitionFor('pnp').pins.map(({ name }) => name), ['collector', 'base', 'emitter'])
