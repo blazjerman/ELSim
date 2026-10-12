@@ -1,4 +1,4 @@
-type AnimationConfig = { key: string; magnitude: number; forward: boolean; currentMultiplier: number }
+type AnimationConfig = { key: string; magnitude: number; forward: boolean; currentMultiplier: number; dotSize: number; dotSpacing: number }
 
 const elements = new Map<string, SVGPolylineElement>()
 const configurations = new Map<string, AnimationConfig>()
@@ -53,9 +53,10 @@ function tick() {
     if (!element || config.magnitude <= 1e-12) continue
     // Match CircuitJS: advance dot position by current × current-speed setting.
     // Dot positions repeat every eight SVG units, as in CircuitJS.
-    const increment = (config.magnitude * config.currentMultiplier) % 8
+    const cycleLength = config.dotSize + config.dotSpacing
+    const increment = (config.magnitude * config.currentMultiplier) % cycleLength
     const phase = (phases.get(key) ?? 0) + increment * (config.forward ? 1 : -1)
-    const wrapped = ((phase % 8) + 8) % 8
+    const wrapped = ((phase % cycleLength) + cycleLength) % cycleLength
     phases.set(key, wrapped)
     element.setAttribute('stroke-dashoffset', `${-wrapped}`)
   }
