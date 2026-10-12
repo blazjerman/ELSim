@@ -4711,8 +4711,8 @@ test('circuit checks distinguish a behavioral node from a same-named component',
 
 test('circuit checks explain missing transitive model dependencies and select the affected block', async ({ page }) => {
   await page.goto('/')
-  await page.evaluate(async () => {
-    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+  await page.evaluate(async (fallbackProjectJson) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null') ?? JSON.parse(fallbackProjectJson)
     const content = '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n'
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
     const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -4720,7 +4720,7 @@ test('circuit checks explain missing transitive model dependencies and select th
     project.parts.push({ id: 'missing-model-instance', kind: 'subcircuit', ref: 'XAMP1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
     project.sheets[0] = { ...project.sheets[0], parts: project.parts }
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
-  })
+  }, JSON.stringify(createStarterProject()))
   await page.reload()
   await page.getByRole('button', { name: /Check circuit/ }).click()
   const report = page.getByRole('dialog', { name: 'Circuit checks' })
@@ -4778,8 +4778,8 @@ test('ngspice stderr errors identify the imported model line and unsupported fun
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
-  await page.evaluate(async () => {
-    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+  await page.evaluate(async (fallbackProjectJson) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null') ?? JSON.parse(fallbackProjectJson)
     const content = '.SUBCKT UNSUPPORTED IN OUT\nB1 OUT 0 V=if(V(IN)>0,1,0)\n.ENDS UNSUPPORTED\n'
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
     const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -4787,7 +4787,7 @@ test('ngspice stderr errors identify the imported model line and unsupported fun
     project.parts.push({ id: 'unsupported-function-instance', kind: 'subcircuit', ref: 'XU1', value: 'UNSUPPORTED', modelName: 'UNSUPPORTED', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
     project.sheets[0] = { ...project.sheets[0], parts: project.parts }
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
-  })
+  }, JSON.stringify(createStarterProject()))
   await page.reload()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   const modelDiagnostic = page.getByRole('region', { name: 'ngspice model compatibility diagnostic' })
@@ -4796,6 +4796,10 @@ test('ngspice stderr errors identify the imported model line and unsupported fun
   await expect(modelDiagnostic).toContainText('Error: no such function')
   await expect(modelDiagnostic).toContainText('if()')
   await expect(modelDiagnostic).toContainText('does not provide')
+  await modelDiagnostic.getByRole('button', { name: 'Review source line 2' }).click()
+  const sourceLine = page.locator('#model-source-unsupported-function-library-line-2')
+  await expect(sourceLine).toHaveClass(/active-source-line/)
+  await expect(sourceLine).toBeFocused()
 })
 
 test('LTspice model compatibility check warns about limit() clamp semantics', { tag: '@ltspice' }, async ({ page }) => {
