@@ -18,16 +18,17 @@ function nearestAxisIndex(axis: Float64Array, value: number, start: number, end:
   return Math.abs(axis[low] - value) < Math.abs(axis[low - 1] - value) ? low : low - 1
 }
 
-function handleCursorKeyDown(event: ReactKeyboardEvent<SVGSVGElement>, currentIndex: number | null, first: number, last: number, onChange: (index: number) => void): void {
-  if (last < first) return
+function handleCursorKeyDown(event: ReactKeyboardEvent<SVGSVGElement>, currentIndex: number | null, first: number, last: number, onChange: (index: number) => void): number | null {
+  if (last < first) return null
   let next: number
   if (event.key === 'Home') next = first
   else if (event.key === 'End') next = last
   else if (event.key === 'ArrowLeft') next = Math.max(first, (currentIndex ?? first) - 1)
   else if (event.key === 'ArrowRight') next = Math.min(last, (currentIndex ?? first - 1) + 1)
-  else return
+  else return null
   event.preventDefault()
   onChange(next)
+  return next
 }
 
 type PlotWindow = { start: number; end: number }
@@ -183,18 +184,19 @@ function TransientCursorMarker({ axis, first, last, minTime, maxTime, left, righ
   return <line x1={x} x2={x} y1={top} y2={bottom} className="plot-cursor"/>
 }
 
-function TransientCursorReadout({ axis, shown, traceIndexById, colors }: {
+function TransientCursorReadout({ axis, shown, traceIndexById, colors, keyboardAnnouncement }: {
   axis?: Float64Array
   shown: Trace[]
   traceIndexById: Map<string, number>
   colors: string[]
+  keyboardAnnouncement: string
 }) {
   const cursorIndex = useSimulationCursor()
-  return <div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => {
+  return <><div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => {
     const time = axis?.[cursorIndex] ?? 0
     const index = nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
     return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span>
-  })}</div>
+  })}</div><span className="sr-only" aria-live="polite" aria-atomic="true">{keyboardAnnouncement}</span></>
 }
 
 function useResponsivePlotSize() {
@@ -221,6 +223,7 @@ function useResponsivePlotSize() {
 }
 
 function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; measurements: MeasurementResult[] }) {
+  const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const traceIndexById = useTraceIndexById(traces)
@@ -283,9 +286,20 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const next = nearestAxisIndex(axis, minTime + fraction * (maxTime - minTime), first, Math.min(last, axis.length - 1))
     setSimulationCursor(next)
   }
+  const handlePlotKeyDown = (event: ReactKeyboardEvent<SVGSVGElement>) => {
+    const next = handleCursorKeyDown(event, getSimulationCursor(), first, Math.min(last, (axis?.length ?? 1) - 1), setSimulationCursor)
+    if (next === null || !axis) return
+    const time = axis[next]
+    const readings = shown.slice(0, 5).map((trace) => {
+      const index = nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
+      return `${trace.label} ${trace.values[index].toPrecision(5)} ${trace.unit}`
+    })
+    if (shown.length > readings.length) readings.push(`${shown.length - readings.length} more traces`)
+    setKeyboardAnnouncement(`Time ${time.toPrecision(5)} seconds${readings.length ? `. ${readings.join('; ')}.` : '.'}`)
+  }
   return <div className="waveform-view">
     <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => handleCursorKeyDown(event, getSimulationCursor(), first, Math.min(last, (axis?.length ?? 1) - 1), setSimulationCursor)} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
+    <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
       {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const v = voltageRange[1] - (line / 3) * (voltageRange[1] - voltageRange[0]); const a = currentRange[1] - (line / 3) * (currentRange[1] - currentRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{v.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{a.toPrecision(3)} A</text>}</g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
@@ -293,7 +307,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={(index) => colors[index % colors.length]}/>
-    <TransientCursorReadout axis={axis} shown={shown} traceIndexById={traceIndexById} colors={colors}/>
+    <TransientCursorReadout axis={axis} shown={shown} traceIndexById={traceIndexById} colors={colors} keyboardAnnouncement={keyboardAnnouncement}/>
     {measurements.length > 0 && <div className="measurement-results"><div className="form-section-title">MEASUREMENTS</div><table className="op-table"><thead><tr><th>Name</th><th>Operation</th><th>Value</th></tr></thead><tbody>{measurements.map((measurement) => <tr key={`${measurement.sweep?.index ?? 0}-${measurement.id}`}><td>{measurement.id}{measurement.sweep ? ` · ${measurement.sweep.label}` : ''}</td><td>{measurement.operation === 'delay' ? `DELAY ${measurement.vector} → ${measurement.targetVector ?? 'target'}` : `${measurement.operation === 'pp' ? 'PEAK-TO-PEAK' : measurement.operation === 'integ' ? 'INTEGRAL' : measurement.operation.toUpperCase()} ${measurement.vector}${measurement.from || measurement.to ? ` · ${measurement.from ? `from ${measurement.from}` : ''}${measurement.from && measurement.to ? ' ' : ''}${measurement.to ? `to ${measurement.to}` : ''}` : ''}`}</td><td>{measurement.value.toPrecision(7)} {measurement.unit}</td></tr>)}</tbody></table></div>}
   </div>
 }
