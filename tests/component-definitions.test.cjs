@@ -20,6 +20,8 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     assert.equal(typeof definition.help, 'string')
     assert.ok(definition.help.length > 0)
     if (definition.paletteName) assert.equal(schema.properties.paletteName.maxLength, 120)
+    if (definition.paletteSubtitle) assert.equal(schema.properties.paletteSubtitle.maxLength, 24)
+    if (definition.shortcut) assert.equal(schema.properties.shortcut.maxLength, 8)
     assert.equal(ids.has(definition.id), false)
     ids.add(definition.id)
     assert.deepEqual(definition.pins.map((pin) => pin.spiceOrder), definition.pins.map((_, index) => index + 1))
@@ -41,6 +43,17 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   for (const part of project.parts) assert.equal(componentDefinitionFor(part.kind).pins.length, componentPins(part).length, `${part.ref} definition pin count`)
   assert.deepEqual(componentDefinitionFor('source').pins.map(({ name }) => name), ['positive', 'negative'])
   assert.deepEqual(['vcvs', 'vccs', 'cccs', 'ccvs'].map((kind) => componentDefinitionFor(kind).paletteName), ['VCVS', 'VCCS', 'CCCS', 'CCVS'])
+  const paletteMetadata = [
+    ['resistor', 'R', 'r'], ['potentiometer', 'POT', 'h'], ['lamp', 'R', 'e'], ['capacitor', 'C', 'c'], ['inductor', 'L', 'L'], ['transformer', 'T', 'T'],
+    ['source', 'V', 'v'], ['currentSource', 'I', 'i'], ['diode', 'D', 'd'], ['zener', 'DZ', 'z'], ['led', 'D', 'l'], ['switch', 's', 's'],
+    ['voltageSwitch', 'S', 'S'], ['vcvs', 'E', 'E'], ['vccs', 'G', 'G'], ['cccs', 'F', 'F'], ['ccvs', 'H', 'H'], ['behavioral', 'B', 'b'],
+    ['inverter', 'NOT', '1'], ['logicGate', 'AND', '2'], ['npn', 'Q', 'n'], ['pnp', 'Q', 'p'], ['njfet', 'J', 'j'], ['pjfet', 'J', 'J'],
+    ['nmos', 'M', 'N'], ['pmos', 'M', 'P'], ['ground', 'GND', 'g'],
+  ]
+  for (const [kind, subtitle, shortcut] of paletteMetadata) {
+    assert.equal(componentDefinitionFor(kind).paletteSubtitle, subtitle, `${kind} palette subtitle`)
+    assert.equal(componentDefinitionFor(kind).shortcut, shortcut, `${kind} shortcut`)
+  }
   assert.deepEqual(componentDefinitionFor('pnp').pins.map(({ name }) => name), ['collector', 'base', 'emitter'])
   assert.ok(componentDefinitionFor('capacitor').animationChannels.includes('charge.voltage'))
   assert.ok(componentDefinitionFor('inductor').animationChannels.includes('field.current'))

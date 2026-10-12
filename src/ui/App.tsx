@@ -25,7 +25,7 @@ import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../do
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
-import { componentDefaultValue, componentDefinitionFor, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
+import { componentDefaultValue, componentDefinitionFor, componentDefinitions, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { timeMagnitude } from '../domain/componentValue'
 import { measurementCrossingCountError, measurementThresholdError } from '../domain/measurementSettings'
 import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
@@ -49,12 +49,7 @@ type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-re
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
 const ResultPlot = lazy(() => import('./AnalysisPlots').then((module) => ({ default: module.ResultPlot })))
 const KeyboardShortcuts = lazy(() => import('./KeyboardShortcuts'))
-const COMPONENT_SHORTCUTS: Partial<Record<PartKind, string>> = {
-  resistor: 'r', voltageSwitch: 'S', potentiometer: 'h', capacitor: 'c', inductor: 'L', transformer: 'T', source: 'v', currentSource: 'i',
-  diode: 'd', zener: 'z', led: 'l', switch: 's', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H',
-  behavioral: 'b', inverter: '1', logicGate: '2', lamp: 'e', npn: 'n', pnp: 'p', njfet: 'j', pjfet: 'J', nmos: 'N', pmos: 'P',
-  ground: 'g',
-}
+const COMPONENT_SHORTCUTS = Object.freeze(Object.fromEntries(componentDefinitions.flatMap((definition) => definition.shortcut ? [[definition.kind, definition.shortcut]] : []))) as Partial<Record<PartKind, string>>
 const LOGIC_GATE_SHORTCUTS: Record<string, NonNullable<Part['logicOperation']>> = { '2': 'and', '3': 'or', '4': 'xor', '5': 'xnor', '@': 'nand', '#': 'nor' }
 // Keep Falstad-style keys reserved before their matching component types exist.
 // `event.key` is case-sensitive, so e.g. n and N remain different shortcuts.
@@ -71,34 +66,34 @@ const EDITOR_SHORTCUTS = [
   ['/', 'Focus component search'], ['Escape', 'Cancel placement or clear selection'],
 ] as const
 const LOGIC_GATE_SHORTCUTS_HELP = [['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate'], ['5', 'XNOR gate'], ['@', 'NAND gate'], ['#', 'NOR gate']] as const
-const palette: { kind: PartKind; Icon: typeof Zap; subtitle: string }[] = [
-  { kind: 'resistor', Icon: Minus, subtitle: 'R' },
-  { kind: 'potentiometer', Icon: Activity, subtitle: 'POT' },
-  { kind: 'lamp', Icon: Lightbulb, subtitle: 'R' },
-  { kind: 'capacitor', Icon: Activity, subtitle: 'C' },
-  { kind: 'inductor', Icon: CircleHelp, subtitle: 'L' },
-  { kind: 'transformer', Icon: Cable, subtitle: 'T' },
-  { kind: 'source', Icon: Zap, subtitle: 'V' },
-  { kind: 'currentSource', Icon: Activity, subtitle: 'I' },
-  { kind: 'diode', Icon: Waypoints, subtitle: 'D' },
-  { kind: 'zener', Icon: Waypoints, subtitle: 'DZ' },
-  { kind: 'led', Icon: Lightbulb, subtitle: 'D' },
-  { kind: 'switch', Icon: GitBranch, subtitle: 's' },
-  { kind: 'voltageSwitch', Icon: GitBranch, subtitle: 'S' },
-  { kind: 'vcvs', Icon: Zap, subtitle: 'E' },
-  { kind: 'vccs', Icon: Activity, subtitle: 'G' },
-  { kind: 'cccs', Icon: Activity, subtitle: 'F' },
-  { kind: 'ccvs', Icon: Zap, subtitle: 'H' },
-  { kind: 'behavioral', Icon: SlidersHorizontal, subtitle: 'B' },
-  { kind: 'inverter', Icon: SlidersHorizontal, subtitle: 'NOT' },
-  { kind: 'logicGate', Icon: SlidersHorizontal, subtitle: 'AND' },
-  { kind: 'npn', Icon: GitBranch, subtitle: 'Q' },
-  { kind: 'pnp', Icon: GitBranch, subtitle: 'Q' },
-  { kind: 'njfet', Icon: GitBranch, subtitle: 'J' },
-  { kind: 'pjfet', Icon: GitBranch, subtitle: 'J' },
-  { kind: 'nmos', Icon: GitBranch, subtitle: 'M' },
-  { kind: 'pmos', Icon: GitBranch, subtitle: 'M' },
-  { kind: 'ground', Icon: ArrowDown, subtitle: 'GND' },
+const palette: { kind: PartKind; Icon: typeof Zap; }[] = [
+  { kind: 'resistor', Icon: Minus },
+  { kind: 'potentiometer', Icon: Activity },
+  { kind: 'lamp', Icon: Lightbulb },
+  { kind: 'capacitor', Icon: Activity },
+  { kind: 'inductor', Icon: CircleHelp },
+  { kind: 'transformer', Icon: Cable },
+  { kind: 'source', Icon: Zap },
+  { kind: 'currentSource', Icon: Activity },
+  { kind: 'diode', Icon: Waypoints },
+  { kind: 'zener', Icon: Waypoints },
+  { kind: 'led', Icon: Lightbulb },
+  { kind: 'switch', Icon: GitBranch },
+  { kind: 'voltageSwitch', Icon: GitBranch },
+  { kind: 'vcvs', Icon: Zap },
+  { kind: 'vccs', Icon: Activity },
+  { kind: 'cccs', Icon: Activity },
+  { kind: 'ccvs', Icon: Zap },
+  { kind: 'behavioral', Icon: SlidersHorizontal },
+  { kind: 'inverter', Icon: SlidersHorizontal },
+  { kind: 'logicGate', Icon: SlidersHorizontal },
+  { kind: 'npn', Icon: GitBranch },
+  { kind: 'pnp', Icon: GitBranch },
+  { kind: 'njfet', Icon: GitBranch },
+  { kind: 'pjfet', Icon: GitBranch },
+  { kind: 'nmos', Icon: GitBranch },
+  { kind: 'pmos', Icon: GitBranch },
+  { kind: 'ground', Icon: ArrowDown },
 ]
 const exampleCatalog: { id: ExampleId; title: string; description: string }[] = [
   { id: 'ac-lowpass', title: 'RC low-pass frequency response', description: 'Compare input and output across an AC sweep and find the approximately 1 kHz cutoff.' },
@@ -2629,10 +2624,10 @@ export default function App() {
     const selectedIds = selected && !selectedPartIdSet.has(selected.id) ? [selected.id] : selectedPartIds
     updatePartUiState(selectedIds, selected?.id ?? project.parts[0]?.id)
   }, [selectedPartIds, selected, project.parts])
-  const filteredPalette = palette.filter(({ kind, subtitle }) => {
+  const filteredPalette = palette.filter(({ kind }) => {
     const matchesCategory = componentCategory === 'all' || componentCategoryKinds[componentCategory].includes(kind)
     const definition = componentDefinitionFor(kind)
-    const matchesSearch = `${definition.paletteName ?? definition.name} ${definition.name} ${kindNames[kind]} ${subtitle}`.toLowerCase().includes(componentQuery.trim().toLowerCase())
+    const matchesSearch = `${definition.paletteName ?? definition.name} ${definition.name} ${kindNames[kind]} ${definition.paletteSubtitle ?? ''}`.toLowerCase().includes(componentQuery.trim().toLowerCase())
     return (componentQuery.trim() || matchesCategory) && matchesSearch
   })
   const selectComponentForPlacement = (kind: PartKind, polarized = false, logicOperation?: Part['logicOperation']) => {
@@ -3005,7 +3000,8 @@ export default function App() {
     setSelection(null)
     setSelectedPartIds([])
     setSelectedWireId(null)
-    setNotice(`${componentDefinitionFor(kind).name} placed.`)
+    const definition = componentDefinitionFor(kind)
+    setNotice(`${definition.paletteName ?? definition.name} placed.`)
   }
   const addSubcircuit = (model: { name: string; pins: string[]; definition: ReturnType<typeof importedSubcircuitComponentDefinition> }, symbol?: (typeof importedSymbols)[number]) => {
     const orderedPins = model.definition.pins.map((pin) => pin.name)
@@ -3797,9 +3793,10 @@ export default function App() {
           <button className={`category${componentCategory === 'controlled' ? ' active' : ''}`} aria-pressed={componentCategory === 'controlled'} onClick={() => setComponentCategory('controlled')}><Activity size={14}/> Controlled sources</button>
         </div>
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'all' ? 'ALL COMPONENTS' : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
-        {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, Icon, subtitle }) => {
+        {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, Icon }) => {
           const definition = componentDefinitionFor(kind)
           const label = definition.paletteName ?? definition.name
+          const subtitle = definition.paletteSubtitle ?? ''
           const help = definition.help ?? ''
           return <button key={kind} className={`component-card${pendingComponentKind === kind ? ' active' : ''}`} aria-pressed={pendingComponentKind === kind} onClick={() => selectComponentForPlacement(kind)} title={`Select ${label} to place`} aria-label={`Add ${label}. ${help}`} data-help={help}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span><kbd className="component-hotkey">{kind === 'capacitor' ? 'c / C' : kind === 'logicGate' ? '2–5, @, #' : COMPONENT_SHORTCUTS[kind] ?? ''}</kbd></button>
         })}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}

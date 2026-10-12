@@ -67,6 +67,15 @@
       "minLength": 1,
       "maxLength": 120
     },
+    "paletteSubtitle": {
+      "type": "string",
+      "maxLength": 24
+    },
+    "shortcut": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8
+    },
     "help": {
       "type": "string",
       "minLength": 1,
