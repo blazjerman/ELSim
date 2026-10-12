@@ -1,10 +1,26 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
-import { test, expect, type Locator } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
 import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
+
+async function expectVisibleKeyboardControlsNamed(page: Page) {
+  const unnamed = await page.locator('a[href], button, input:not([type="hidden"]), select, textarea, [tabindex], [role]').evaluateAll((controls) => controls.flatMap((control) => {
+    const element = control as HTMLElement
+    const style = getComputedStyle(element)
+    if (!element.getClientRects().length || style.visibility === 'hidden' || style.display === 'none' || element.closest('[aria-hidden="true"]') || element.tabIndex < 0) return []
+    const role = element.getAttribute('role')
+    if (role === 'none' || role === 'presentation') return []
+    const labelledBy = element.getAttribute('aria-labelledby')?.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim()
+    const labelText = Array.from((element as HTMLInputElement).labels ?? []).map((label) => label.textContent ?? '').join(' ').trim()
+    const svgTitle = element.querySelector(':scope > title')?.textContent?.trim()
+    const name = element.getAttribute('aria-label')?.trim() || labelledBy || labelText || element.getAttribute('title')?.trim() || svgTitle || element.textContent?.trim() || ''
+    return name ? [] : [`<${element.outerHTML.slice(0, 180)}>`]
+  }))
+  expect(unnamed).toEqual([])
+}
 
 async function rightClickNetLabel(page: import('@playwright/test').Page, name: string) {
   const labels = page.getByRole('button', { name: `Net label ${name.toUpperCase()}` })
@@ -240,7 +256,7 @@ test('keyboard opens schematic probe actions and restores focus after closing', 
   await expect(resistor).toBeFocused()
 })
 
-test('visible buttons expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
+test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const expectNamedFormControls = async () => {
     const unnamed = await page.locator('input:not([type="hidden"]), select, textarea, [role="textbox"], [role="combobox"], [role="checkbox"], [role="radio"], [role="switch"], [role="slider"], [role="spinbutton"]').evaluateAll((controls) => controls.flatMap((control) => {
@@ -266,17 +282,25 @@ test('visible buttons expose accessible names', { tag: '@ui-smoke' }, async ({ p
   }
   await expectNamedButtons()
   await expectNamedFormControls()
+  await expectVisibleKeyboardControlsNamed(page)
   await page.getByRole('button', { name: 'Examples' }).click()
   await expectNamedButtons()
   await expectNamedFormControls()
+  await expectVisibleKeyboardControlsNamed(page)
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Open quick tour' }).click()
   await expectNamedButtons()
   await expectNamedFormControls()
+  await expectVisibleKeyboardControlsNamed(page)
   await page.keyboard.press('Escape')
   await page.locator('.circuit-part[data-part-id="p-r1"]').click({ button: 'right' })
   await expectNamedButtons()
   await expectNamedFormControls()
+  await expectVisibleKeyboardControlsNamed(page)
+  await page.keyboard.press('Escape')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expectVisibleKeyboardControlsNamed(page)
+  await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
 })
 
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', { tag: '@ltspice' }, async ({ page }) => {
@@ -2383,6 +2407,7 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
   await expect(page.getByText('An inductor resists a sudden current change')).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expectVisibleKeyboardControlsNamed(page)
   const inductor = page.locator('.circuit-part[data-part-id="rl-step-l1"]')
   const inductorTitle = inductor.locator(':scope > title')
   const slider = page.getByRole('slider', { name: 'Simulation time' })
