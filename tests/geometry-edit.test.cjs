@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, EDITOR_GRID_SIZE, snapToEditorGrid, wireCrossingAt } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, EDITOR_GRID_SIZE, snapToEditorGrid, wireCrossingAt, wireSegmentOverlapsBounds } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
 
@@ -23,6 +23,15 @@ test('native component pins and the RC starter share one 10-unit placement grid'
   }
   assert.equal(snapToEditorGrid(375), 380)
   assert.equal(snapToEditorGrid(374), 370)
+})
+
+test('wire animation viewport culling keeps intersecting segments and excludes distant wires', () => {
+  const bounds = { left: 0, top: 0, right: 100, bottom: 100 }
+  const wire = (points) => ({ id: 'wire', points })
+  assert.equal(wireSegmentOverlapsBounds(wire([[10, 50], [120, 50]]), bounds), true)
+  assert.equal(wireSegmentOverlapsBounds(wire([[100, 20], [100, 90]]), bounds), true)
+  assert.equal(wireSegmentOverlapsBounds(wire([[110, 20], [140, 90]]), bounds), false)
+  assert.equal(wireSegmentOverlapsBounds(wire([[-40, -30], [-10, -10]]), bounds), false)
 })
 
 test('opening a manually edited project snaps its stored geometry before net validation', () => {

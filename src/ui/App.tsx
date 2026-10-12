@@ -14,7 +14,7 @@ import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
-import { componentPins, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { componentPins, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, wireCrossingAt, wireNetAt, wireSegmentOverlapsBounds } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
@@ -722,6 +722,10 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const viewWidth = viewportSize.width / project.view.zoom, viewHeight = viewportSize.height / project.view.zoom
   const viewportLeft = (380 - viewWidth / 2) - project.view.panX
   const viewportTop = (300 - viewHeight / 2) - project.view.panY
+  const animatedWireIds = useMemo(() => {
+    const bounds = { left: viewportLeft, top: viewportTop, right: viewportLeft + viewWidth, bottom: viewportTop + viewHeight }
+    return new Set(project.wires.filter((wire) => wireSegmentOverlapsBounds(wire, bounds)).map((wire) => wire.id))
+  }, [project.wires, viewportLeft, viewportTop, viewWidth, viewHeight])
   const tracesByVector = useMemo(() => {
     const index = new Map<string, Trace>()
     for (const trace of simulationResult?.traces ?? []) {
@@ -1283,7 +1287,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
-      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireIds.includes(wire.id)} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={wireFlows.get(wire.id) ?? []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>) }
+      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireIds.includes(wire.id)} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={animatedWireIds.has(wire.id) ? wireFlows.get(wire.id) ?? [] : []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>) }
       {wireConnectionDots.map(({ x, y }) => <circle key={`${x}:${y}`} className="wire-connection-dot" data-x={x} data-y={y} cx={x} cy={y} r="4" pointerEvents="none"/>)}
       <CanvasNetLabelLayer labels={project.netLabels} selectedIds={selectedNetLabelIds} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}

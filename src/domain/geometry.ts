@@ -1,4 +1,4 @@
-import type { Part, Project } from './project'
+import type { Part, Project, Wire } from './project'
 
 export type Point = { x: number; y: number }
 export type PinLocation = Point & { partId: string; index: number }
@@ -8,6 +8,13 @@ export const EDITOR_GRID_SIZE = 10
 
 export function snapToEditorGrid(value: number): number {
   return Math.round(value / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+}
+
+/** Conservative viewport test for an independent two-endpoint wire segment. */
+export function wireSegmentOverlapsBounds(wire: Wire, bounds: { left: number; top: number; right: number; bottom: number }): boolean {
+  const [[x1, y1], [x2, y2]] = wire.points
+  return Math.max(x1, x2) >= bounds.left && Math.min(x1, x2) <= bounds.right
+    && Math.max(y1, y2) >= bounds.top && Math.min(y1, y2) <= bounds.bottom
 }
 
 export function subcircuitPinOffsets(count: number, layout?: Part['sheetPortLayout']): [number, number][] {

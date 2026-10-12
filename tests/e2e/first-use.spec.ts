@@ -692,6 +692,21 @@ test('wire current animation keeps moving while transient playback advances', as
   expect(Math.abs(after - before)).toBeGreaterThan(1)
 })
 
+test('wire current particles outside the schematic viewport are not rendered', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const schematic = page.locator('svg.schematic')
+  const flow = schematic.locator('.wire-current-flow')
+  const initialFlowCount = await flow.count()
+  const wireCount = await schematic.locator('.wire-line').count()
+  expect(initialFlowCount).toBeGreaterThan(0)
+  const zoomIn = page.locator('.canvas-toolset').getByRole('button', { name: 'Zoom in' })
+  for (let index = 0; index < 5; index += 1) await zoomIn.click()
+  await expect.poll(() => flow.count()).toBeLessThan(initialFlowCount)
+  await expect(schematic.locator('.wire-line')).toHaveCount(wireCount)
+})
+
 test('ngspice current animates through the grounded RC return wire', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
