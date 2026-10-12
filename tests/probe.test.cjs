@@ -15,6 +15,12 @@ test('probe hit testing resolves labeled wires, components, and ignores ground/b
   assert.equal(resolveProbeTarget(project, { x: 700, y: 550 }), null)
 })
 
+test('probe hit testing reuses an available connectivity result', () => {
+  const project = createStarterProject()
+  const connectivity = { wireNets: new Map([['w-2', 'cached-vout']]) }
+  assert.deepEqual(resolveProbeTarget(project, { x: 475, y: 290 }, 12, connectivity), { kind: 'node', name: 'cached-vout', wireId: 'w-2' })
+})
+
 test('probe hit testing respects rotation and electrical pins', () => {
   const project = createStarterProject()
   assert.deepEqual(resolveProbeTarget(project, { x: 540, y: 405 }), { kind: 'part', id: 'p-c1' })

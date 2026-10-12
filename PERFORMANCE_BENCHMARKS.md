@@ -403,3 +403,8 @@ Wire current-flow phase now advances by elapsed time normalized to a 60 Hz refer
 ### On-demand analysis editors (2026-10-13)
 
 Parameter stepping and transient measurement/initial-condition editors are now separate dynamic chunks. With no configured sweeps or transient measurements/initial conditions, the project inspector keeps small launch controls and defers the full editors until the user adds an item. Existing saved settings still load their editor immediately. The production main entry decreased from 512.76 KB / 146.97 KiB gzip to 493.04 KB / 141.61 KiB gzip, clearing Vite's 500 KB warning; initial JavaScript transfer is 198.7 KiB gzip, with 12.9 KiB CSS and 211.6 KiB combined. Firefox tests cover deferred loading and editing, plus real initial-condition and sweep runs. All 48 Firefox UI-smoke cases, 28 unit groups, TypeScript checking, and production size-budget build pass. No WASM rebuild or Pages build was run.
+
+
+### Cached schematic interaction analysis (2026-10-13)
+
+Wire probing, wire context menus, and result overlays now reuse the same memoized connectivity analysis the application already computes. Probe and context-menu hit tests also query the schematic wire spatial index rather than scan all wire segments. Net-label context menus resolve the existing SVG label target directly, removing a full project-label scan plus per-label DOM queries on each right-click. Hierarchy deletion checks are memoized until sheet data changes. Firefox validates net-label context actions and wire/component voltage probing; all 28 unit groups, typechecking, and the production build pass. This removes redundant interaction-time work; no latency reduction is claimed without a controlled before/after browser measurement. No WASM or Pages build was run.

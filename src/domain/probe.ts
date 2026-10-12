@@ -1,6 +1,7 @@
 import { analyzeConnectivity } from './connectivity'
+import type { Connectivity } from './connectivity'
 import { wireNetAt, type Point } from './geometry'
-import type { Part, Project } from './project'
+import type { Part, Project, Wire } from './project'
 import type { Trace } from '../engine/contract'
 
 export type ProbeTarget = { kind: 'node'; name: string; wireId?: string } | { kind: 'part'; id: string }
@@ -80,10 +81,10 @@ export function groundVoltageTrace(reference: Trace): Trace {
   }
 }
 
-export function resolveProbeTarget(project: Project, point: Point, tolerance = 12): ProbeTarget | null {
-  const wire = wireNetAt(project, point, tolerance)
+export function resolveProbeTarget(project: Project, point: Point, tolerance = 12, connectivity?: Connectivity, wireCandidates?: readonly Wire[]): ProbeTarget | null {
+  const wire = wireNetAt(project, point, tolerance, wireCandidates ?? project.wires)
   if (wire) {
-    const name = analyzeConnectivity(project).wireNets.get(wire.wireId)
+    const name = (connectivity ?? analyzeConnectivity(project)).wireNets.get(wire.wireId)
     return name ? { kind: 'node', name, wireId: wire.wireId } : null
   }
   const part = project.parts.find((candidate) => {

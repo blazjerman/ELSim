@@ -435,6 +435,16 @@ test('keyboard opens schematic probe actions and restores focus after closing', 
   await expect(resistor).toBeFocused()
 })
 
+test('net-label context actions resolve from the SVG target', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const label = page.locator('.canvas-label').first()
+  await expect(label).toBeVisible()
+  await label.click({ button: 'right' })
+  const menu = page.getByRole('menu', { name: /Options for net/ })
+  await expect(menu).toBeVisible()
+  await expect(menu.getByRole('menuitem', { name: 'Edit net label' })).toBeVisible()
+})
+
 test('schematic context menu stays inside the canvas near the phone viewport edge', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.setViewportSize({ width: 390, height: 640 })

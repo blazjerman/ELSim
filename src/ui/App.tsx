@@ -7,7 +7,7 @@ import {
   Save, Scan, Search, SlidersHorizontal, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
-import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
+import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet, type Connectivity } from '../domain/connectivity'
 import { createPartClipboard, resolvePartClipboard, type PartClipboard } from '../domain/partClipboard'
 import { fitEditorView } from '../domain/editorView'
 import { moveSelectedSceneObjects } from '../domain/sceneEdit'
@@ -661,7 +661,7 @@ function CurrentSourceWaveformEditor({ part, onChange, analysisSettingError, pwl
   </>
 }
 
-function Schematic({ project, setSelection, setHoveredSchematicObject, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, currentMultiplier, currentDotSize, currentDotSpacing }: { project: Project; setSelection: (selection: Selection) => void; setHoveredSchematicObject: (target: HoveredSchematicObject | ((current: HoveredSchematicObject) => HoveredSchematicObject)) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingRotation: Part['rotation']; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; currentMultiplier: number; currentDotSize: number; currentDotSpacing: number }) {
+function Schematic({ project, connectivity, setSelection, setHoveredSchematicObject, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, currentMultiplier, currentDotSize, currentDotSpacing }: { project: Project; connectivity: Connectivity; setSelection: (selection: Selection) => void; setHoveredSchematicObject: (target: HoveredSchematicObject | ((current: HoveredSchematicObject) => HoveredSchematicObject)) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingRotation: Part['rotation']; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; currentMultiplier: number; currentDotSize: number; currentDotSpacing: number }) {
   const selectedWireIdSet = useMemo(() => new Set(selectedWireIds), [selectedWireIds])
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const selectedNetLabelIdSet = useMemo(() => new Set(selectedNetLabelIds), [selectedNetLabelIds])
@@ -793,7 +793,7 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
   }, [contextMenu?.kind, contextMenu?.id])
   const resultIsCurrent = (simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt
   const transientAxis = resultIsCurrent && simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
-  const resultConnectivity = useMemo(() => resultIsCurrent ? analyzeConnectivity(project) : null, [project.parts, project.wires, project.junctions, project.netLabels, resultIsCurrent])
+  const resultConnectivity = resultIsCurrent ? connectivity : null
   const viewWidth = viewportSize.width / view.zoom, viewHeight = viewportSize.height / view.zoom
   const viewportLeft = (380 - viewWidth / 2) - view.panX
   const viewportTop = (300 - viewHeight / 2) - view.panY
@@ -908,7 +908,7 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
   const canvasClick = (event: MouseEvent<SVGSVGElement>) => {
     if (tool === 'probe') {
       const point = pointFromEvent(event)
-      const target = resolveProbeTarget(project, point)
+      const target = resolveProbeTarget(project, point, 12, connectivity, wiresNear({ left: point.x - 12, top: point.y - 12, right: point.x + 12, bottom: point.y + 12 }))
       if (target) onProbe(target)
       else setNotice('Click near a wire or two-terminal component to add a voltage or current trace.')
       return
@@ -938,7 +938,7 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
   const probeWire = (wireId: string) => {
     const wire = project.wires.find((candidate) => candidate.id === wireId)
     const point = wire?.points[0]
-    const target = point ? resolveProbeTarget(project, { x: point[0], y: point[1] }) : null
+    const target = point ? resolveProbeTarget(project, { x: point[0], y: point[1] }, 12, connectivity, wiresNear({ left: point[0] - 12, top: point[1] - 12, right: point[0] + 12, bottom: point[1] + 12 })) : null
     if (target?.kind === 'node') onProbe(target)
     else setNotice('This wire is not connected to a net yet.')
   }
@@ -1347,15 +1347,7 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
       const partElement = element?.closest<SVGGElement>('[data-part-id]')
       const wireElement = element?.closest<SVGGElement>('[data-wire-id]')
       const labelElement = element?.closest<SVGGElement>('[data-net-label-id]')
-      const pointerPoint = pointFromEvent(event)
-      const labelAtPointer = [...project.netLabels].reverse().find((label) => {
-        const text = svg.current?.querySelector<SVGTextElement>(`[data-net-label-id="${CSS.escape(label.id)}"] text`)
-        const glyph = text?.getBBox()
-        if (label.visible === false || !glyph) return false
-        const padding = 3
-        return pointerPoint.x >= glyph.x - padding && pointerPoint.x <= glyph.x + glyph.width + padding && pointerPoint.y >= glyph.y - padding && pointerPoint.y <= glyph.y + glyph.height + padding
-      })
-      const labelId = labelElement?.dataset.netLabelId ?? labelAtPointer?.id
+      const labelId = labelElement?.dataset.netLabelId
       const wrapper = event.currentTarget.parentElement
       if (!wrapper) return
       const bounds = wrapper.getBoundingClientRect()
@@ -1377,8 +1369,7 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
       } else if (wireElement?.dataset.wireId) {
         const id = wireElement.dataset.wireId
         const point = pointFromEvent(event)
-        const hit = wireNetAt(project, point, 12)
-        const connectivity = analyzeConnectivity(project)
+        const hit = wireNetAt(project, point, 12, wiresNear({ left: point.x - 12, top: point.y - 12, right: point.x + 12, bottom: point.y + 12 }))
         const node = hit ? connectivity.wireNets.get(hit.wireId) : undefined
         setSelectedWireId(id); setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null)
         setContextMenu({ kind: 'wire', id, x, y, point: hit ? { x: hit.point.x, y: hit.point.y } : point, ...(node ? { node } : {}) })
@@ -2389,8 +2380,8 @@ export default function App() {
     setNotice(`Created ${name} inside ${parent?.name ?? 'the project'}.`)
   }
   const activeSheet = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
-  const activeSheetInstances = activeSheet ? project.sheets.flatMap((sheet) => sheet.parts.filter((part) => part.sheetId === activeSheet.id)) : []
-  const activeSheetDeleteReason = !activeSheet || activeSheet.parentSheetId === null
+  const activeSheetInstances = useMemo(() => activeSheet ? project.sheets.flatMap((sheet) => sheet.parts.filter((part) => part.sheetId === activeSheet.id)) : [], [activeSheet?.id, project.sheets])
+  const activeSheetDeleteReason = useMemo(() => !activeSheet || activeSheet.parentSheetId === null
     ? 'The root circuit cannot be deleted.'
     : activeSheetInstances.length
       ? 'Remove every placed instance of this block before deleting its sheet.'
@@ -2399,7 +2390,7 @@ export default function App() {
           return project.sheets.some((sheet) => !subtree.has(sheet.id) && sheet.parts.some((part) => part.sheetId && subtree.has(part.sheetId)))
             ? 'Remove uses of nested blocks outside this sheet before deleting its subtree.'
             : null
-        })()
+        })(), [activeSheet, activeSheetInstances, project.sheets])
   const sheetContains = (sheetId: string, targetId: string, visited = new Set<string>()): boolean => {
     if (sheetId === targetId) return true
     if (visited.has(sheetId)) return false
@@ -3281,9 +3272,9 @@ export default function App() {
     const currentProject = projectRef.current
     const part = currentProject.parts.find((item) => item.id === partId)
     if (!part || !simulationResult) { setNotice('Run the circuit first, then choose a component voltage probe.'); return }
-    const connectivity = analyzeConnectivity(currentProject)
-    const positiveNet = pinNet(connectivity, part, positivePin)
-    const negativeNet = negativePin < 0 ? '0' : pinNet(connectivity, part, negativePin)
+    const currentConnectivity = currentProject.parts === project.parts && currentProject.wires === project.wires && currentProject.junctions === project.junctions && currentProject.netLabels === project.netLabels ? connectivity : analyzeConnectivity(currentProject)
+    const positiveNet = pinNet(currentConnectivity, part, positivePin)
+    const negativeNet = negativePin < 0 ? '0' : pinNet(currentConnectivity, part, negativePin)
     if (positiveNet === 'unconnected' || negativeNet === 'unconnected') { setNotice(`${part.ref} needs both selected pins connected before its voltage can be plotted.`); return }
     const scopeSheetId = typeof simulationResult.metadata.settings.scopeSheetId === 'string' ? simulationResult.metadata.settings.scopeSheetId : currentProject.rootSheetId
     const scopePath = (() => { try { const value = JSON.parse(String(simulationResult.metadata.settings.scopeInstancePath ?? '[]')); return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value as string[] : [] } catch { return [] } })()
@@ -3932,7 +3923,7 @@ export default function App() {
       <main aria-label="Schematic workspace" className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <div key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><button className="sheet-tab-select" aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)}><span className="sheet-dot"/>{sheet.name}</button>{sheet.id === project.activeSheetId && <div className="sheet-tab-menu"><button className="sheet-tab-menu-trigger" aria-label={`More options for ${sheet.name}`} aria-haspopup="menu" aria-expanded={sheetTabMenu?.id === sheet.id} title={`More options for ${sheet.name}`} onClick={(event) => { if (sheetTabMenu?.id === sheet.id) setSheetTabMenu(null); else { const bounds = event.currentTarget.getBoundingClientRect(); setSheetTabMenu({ id: sheet.id, left: Math.max(8, Math.min(bounds.left, window.innerWidth - 202)), top: Math.max(8, Math.min(bounds.bottom + 4, window.innerHeight - 112)) }) } }}><MoreHorizontal size={16}/></button>{sheetTabMenu?.id === sheet.id && <div className="sheet-tab-menu-items" role="menu" aria-label={`${sheet.name} options`} style={{ left: sheetTabMenu.left, top: sheetTabMenu.top }} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); setSheetTabMenu(null); document.querySelector<HTMLButtonElement>('.sheet-tab-menu-trigger[aria-expanded="true"]')?.focus() } }}><button role="menuitem" onClick={() => { setSheetTabMenu(null); setSheetNameDraft(sheet.name); setSheetNameError(''); setSheetSettingsOpen(true) }}>Sheet and block settings…</button><button role="menuitem" disabled={sheet.parentSheetId === null} title={sheet.parentSheetId === null ? 'The root sheet cannot be duplicated as a block' : undefined} onClick={() => { setSheetTabMenu(null); duplicateActiveSheet() }}>Duplicate block</button><button role="menuitem" className="danger" disabled={sheet.parentSheetId === null || Boolean(activeSheetDeleteReason)} title={sheet.parentSheetId === null ? 'The root sheet cannot be deleted' : activeSheetDeleteReason ?? 'Delete this block and nested sheets'} onClick={() => { setSheetTabMenu(null); deleteActiveSheet() }}>Delete block</button></div>}</div>}</div>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button ref={sheetSettingsTriggerRef} className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => { setSheetNameDraft(activeSheet?.name ?? ''); setSheetNameError(''); setSheetSettingsOpen(true) }}><SlidersHorizontal size={15}/></button></div>
         {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p>{lessonNextStep ? <div className="example-lesson-next-step"><span className="eyebrow">TRY THIS NEXT</span><p>{lessonNextStep}</p>{simulationResultStale && <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : 'Run this circuit again'}</button>}</div> : <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : simulationResultStale ? 'Run this circuit again' : 'Run this circuit'}</button>}</div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
-        <Schematic project={project} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} commitView={commitView} recordViewDraft={recordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={addPart} onClearPendingComponent={() => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) }} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} currentMultiplier={currentMultiplier} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/>
+        <Schematic project={project} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} commitView={commitView} recordViewDraft={recordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={addPart} onClearPendingComponent={() => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) }} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} currentMultiplier={currentMultiplier} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/>
       </main>
 
       {additionalPlotPanels.map((panel, index) => <FloatingPlotPanel key={panel.id} panel={panel} index={index} title={waveformWindowTitle(panel, index)} onBoundsChange={(bounds) => updatePlotPanel(panel.id, (current) => ({ ...current, bounds }))} onClose={() => saveAdditionalPlotPanels(additionalPlotPanels.filter((item) => item.id !== panel.id))} onActivate={() => { if (index !== additionalPlotPanels.length - 1) saveAdditionalPlotPanels([...additionalPlotPanels.filter((item) => item.id !== panel.id), panel]) }}>
