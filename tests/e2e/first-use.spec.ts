@@ -1682,6 +1682,12 @@ test('floating waveform windows can be moved and resized from the keyboard', { t
   expect(moved).not.toBeNull()
   await page.keyboard.press('Shift+ArrowDown')
   await expect.poll(async () => (await plotWindow.boundingBox())?.height).toBe(moved!.height + 20)
+  await page.setViewportSize({ width: 390, height: 844 })
+  const titleBounds = await moveHandle.boundingBox()
+  const closeBounds = await plotWindow.getByRole('button', { name: 'Close V(R1)' }).boundingBox()
+  expect(titleBounds?.height).toBeGreaterThanOrEqual(44)
+  expect(closeBounds?.width).toBeGreaterThanOrEqual(40)
+  expect(closeBounds?.height).toBeGreaterThanOrEqual(40)
 })
 
 async function openWireVoltagePlot(page: import('@playwright/test').Page, x: number, y: number) {

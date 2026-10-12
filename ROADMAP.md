@@ -207,6 +207,8 @@ Accessibility review slice (2026-10-12): The UI smoke suite audits accessible na
 
 Wire editing accessibility follow-up (2026-10-12): endpoint handles are now keyboard-focusable controls with coordinate-aware names, arrow-key instructions, and a polite live announcement after movement; Firefox verifies the focus flow and announcement text.
 
+Mobile waveform controls (2026-10-12): floating plot title bars are 44 px high and their close targets are 40×40 px. The Firefox waveform-window workflow checks both dimensions at 390 px after verifying keyboard move and resize behavior; it uses the existing local engine.
+
 Floating waveform windows are now keyboard movable and resizable as well as pointer operated. Their title bar is a named, focusable group: arrow keys move it 10 px and Shift+arrow keys resize it by 20 px, respecting the same viewport and minimum-size bounds as pointer resizing. A focused Firefox workflow opens a real waveform, moves it, resizes it, and verifies the updated bounds using the existing local engine; no WASM rebuild was needed. Broader screen-reader and non-button control review remains open.
 
 Current Pages-path slice: Vite accepts a validated absolute `VITE_BASE_PATH`, and application entry, engine availability checks, worker module/WASM lookup, and service-worker registration use that base. GitHub Pages uses the standard engine-free build under `/ELSim/`; it does not install Emscripten, compile ngspice, or package any runtime. The local Vite server can serve an ignored runtime produced by `tools/build-ngspice-wasm.sh`. Pages is not used as a test environment.
