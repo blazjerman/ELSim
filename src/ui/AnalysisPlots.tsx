@@ -382,7 +382,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       <text x={left} y={height - 5} className="plot-tick">{minFrequency.toPrecision(3)} Hz</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{maxFrequency.toPrecision(3)} Hz</text>
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="AC result vectors" colorFor={(index) => colors[index % colors.length]}/>
-    <div className="cursor-readout">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && shown.map((trace) => { const real = trace.values[cursorIndex], imaginary = trace.imaginaryValues?.[cursorIndex] ?? 0; const readout = mode === 'magnitude' ? `${(20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE)).toPrecision(5)} dB` : `${(Math.atan2(imaginary, real) * 180 / Math.PI).toPrecision(5)}°`; return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {readout}</span> })}</div>
+    <div className="cursor-readout" aria-live="polite" aria-atomic="true">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <><span className="sr-only">Frequency {frequencies[cursorIndex].toPrecision(5)} hertz. </span>{shown.map((trace) => { const real = trace.values[cursorIndex], imaginary = trace.imaginaryValues?.[cursorIndex] ?? 0; const readout = mode === 'magnitude' ? `${(20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE)).toPrecision(5)} dB` : `${(Math.atan2(imaginary, real) * 180 / Math.PI).toPrecision(5)}°`; return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {readout}</span> })}</>}</div>
   </div>
 }
 
@@ -445,7 +445,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
       <text x={left} y={height - 5} className="plot-tick">{x0.toPrecision(3)} {traces[0]?.axisUnit}</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{x1.toPrecision(3)} {traces[0]?.axisUnit}</text>
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="DC sweep vectors" colorFor={(index) => colors[index % colors.length]}/>
-    <div className="cursor-readout">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</div>
+    <div className="cursor-readout" aria-live="polite" aria-atomic="true">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <><span className="sr-only">Sweep value {axis[cursorIndex].toPrecision(5)} {traces[0]?.axisUnit}. </span>{shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</>}</div>
   </div>
 }
 
