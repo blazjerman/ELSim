@@ -187,7 +187,7 @@ async function scrubToTime(slider: Locator, targetSeconds: number) {
   while (low <= high) {
     const index = Math.floor((low + high) / 2)
     await slider.fill(String(index))
-    const seconds = Number.parseFloat((await output.textContent()) ?? '')
+    const seconds = parseDisplayedTimeSeconds((await output.textContent()) ?? '')
     const difference = Math.abs(seconds - targetSeconds)
     if (difference < bestDifference) { bestDifference = difference; bestIndex = index }
     if (seconds < targetSeconds) low = index + 1
@@ -195,6 +195,13 @@ async function scrubToTime(slider: Locator, targetSeconds: number) {
     else break
   }
   await slider.fill(String(bestIndex))
+}
+
+function parseDisplayedTimeSeconds(value: string): number {
+  const match = value.trim().match(/^(-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*(ps|ns|µs|μs|us|ms|s)$/i)
+  if (!match) throw new Error(`Unexpected simulation time: ${value}`)
+  const scale: Record<string, number> = { ps: 1e-12, ns: 1e-9, 'µs': 1e-6, 'μs': 1e-6, us: 1e-6, ms: 1e-3, s: 1 }
+  return Number(match[1]) * scale[match[2].toLowerCase()]
 }
 
 test('quick tour explains the current workspace and project save flow', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -1467,7 +1474,7 @@ test('ngspice stores transient results only after the selected start time', { ta
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   const plot = await openWireVoltagePlot(page, 430, 290)
-  await expect(plot.getByRole('group', { name: /Transient waveforms from 0\.02\d* to/ })).toBeVisible()
+  await expect(plot.getByRole('group', { name: /Transient waveforms from 20(?:\.\d+)? ms to/ })).toBeVisible()
 })
 
 
@@ -1552,7 +1559,7 @@ test('ngspice current animates through the grounded RC return wire', { tag: ['@n
   await expect(page.getByRole('group', { name: 'Result playback' })).toBeVisible()
   const time = page.getByRole('slider', { name: 'Simulation time' })
   const initialAccessibleTime = await time.getAttribute('aria-valuetext')
-  expect(initialAccessibleTime).toMatch(/seconds$/)
+  expect(initialAccessibleTime).toMatch(/^-?\d+(?:\.\d+)? (?:ps|ns|µs|ms|s)$/)
   const lastSample = Number(await time.getAttribute('max'))
   await time.fill(String(Math.max(1, Math.round(lastSample * 0.05))))
   await expect.poll(() => time.getAttribute('aria-valuetext')).not.toBe(initialAccessibleTime)
