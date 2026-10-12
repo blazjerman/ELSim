@@ -704,6 +704,9 @@ test('component cards explain behavior on hover and keyboard focus', async ({ pa
   await expect.poll(() => resistor.evaluate((element) => getComputedStyle(element, '::after').opacity)).toBe('1')
   await resistor.focus()
   await expect.poll(() => resistor.evaluate((element) => getComputedStyle(element, '::after').visibility)).toBe('visible')
+  const transformer = page.locator('.component-card').filter({ hasText: 'Transformer' })
+  await expect(transformer).toHaveAttribute('data-help', /winding’s resistance/)
+  await expect(transformer).toHaveAttribute('data-help', /core saturation is not modeled/)
 })
 
 test('component subtitles stay clear of icons in the left library panel', async ({ page }) => {

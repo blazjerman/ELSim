@@ -66,7 +66,7 @@ const palette: { kind: PartKind; label: string; Icon: typeof Zap; subtitle: stri
   { kind: 'lamp', label: 'Lamp', Icon: Lightbulb, subtitle: 'R', help: 'Acts as a resistor; its glow follows simulated electrical power, not filament temperature.' },
   { kind: 'capacitor', label: 'Capacitor', Icon: Activity, subtitle: 'C', help: 'Stores electric charge. Lowercase c places a standard capacitor; uppercase C places a polarized capacitor with pin 1 marked positive.' },
   { kind: 'inductor', label: 'Inductor', Icon: CircleHelp, subtitle: 'L', help: 'Stores energy in a magnetic field. Its current changes over time as the field builds or collapses.' },
-  { kind: 'transformer', label: 'Transformer', Icon: Cable, subtitle: 'T', help: 'Transfers AC energy between two windings. Set the turns ratio and magnetic coupling; winding resistance and core saturation are not modeled.' },
+  { kind: 'transformer', label: 'Transformer', Icon: Cable, subtitle: 'T', help: 'Transfers AC energy between two windings. Set the turns ratio, magnetic coupling, and each winding’s resistance; core saturation is not modeled.' },
   { kind: 'source', label: 'Voltage source', Icon: Zap, subtitle: 'V', help: 'Sets a voltage between its positive and negative pins. Choose DC, pulse, or PWL in Properties.' },
   { kind: 'currentSource', label: 'Current source', Icon: Activity, subtitle: 'I', help: 'Sets current direction and magnitude. Use a DC, pulse, or PWL value in Properties.' },
   { kind: 'diode', label: 'Diode', Icon: Waypoints, subtitle: 'D', help: 'Lets current flow mainly from anode to cathode. Reverse the pins to change its direction.' },
