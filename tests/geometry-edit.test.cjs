@@ -8,6 +8,7 @@ const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join
 const { componentPins, EDITOR_GRID_SIZE, snapToEditorGrid, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
+const { moveSelectedSceneObjects } = require(path.join(build, 'domain/sceneEdit.js'))
 
 test('native component pins and the RC starter share one 10-unit placement grid', () => {
   const project = createStarterProject()
@@ -47,6 +48,27 @@ test('wire-connection dot broadphase preserves exact pin, T-join, and crossing g
   }
   assert.deepEqual(wireConnectionDotPoints(project), [...expected.values()])
   assert.deepEqual(wireConnectionDotPoints(project).map(({ x, y }) => [x, y]), [[-50, 0], [50, 0], [0, 0]])
+})
+
+test('mixed selection movement shifts only selected scene objects from their drag snapshot', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'drag-r2', kind: 'resistor', ref: 'R2', value: '2k', x: 600, y: 300, rotation: 90 })
+  project.wires.push({ id: 'drag-wire-2', points: [[600, 400], [700, 400]] })
+  project.netLabels.push({ id: 'drag-label-2', name: 'UNMOVED', x: 800, y: 500, visible: true })
+  const selected = {
+    parts: [project.parts[0]],
+    wires: [project.wires[0]],
+    netLabels: [project.netLabels[0]],
+  }
+  const original = structuredClone(project)
+  const moved = moveSelectedSceneObjects(project, selected, 30, -20)
+  assert.deepEqual(moved.parts[0], { ...original.parts[0], x: original.parts[0].x + 30, y: original.parts[0].y - 20 })
+  assert.deepEqual(moved.wires[0].points, original.wires[0].points.map(([x, y]) => [x + 30, y - 20]))
+  assert.deepEqual(moved.netLabels[0], { ...original.netLabels[0], x: original.netLabels[0].x + 30, y: original.netLabels[0].y - 20 })
+  assert.deepEqual(moved.parts[1], original.parts[1])
+  assert.deepEqual(moved.wires[1], original.wires[1])
+  assert.deepEqual(moved.netLabels[1], original.netLabels[1])
+  assert.deepEqual(project, original, 'dragging keeps the saved scene snapshot immutable')
 })
 
 test('wire animation viewport culling keeps intersecting segments and excludes distant wires', () => {

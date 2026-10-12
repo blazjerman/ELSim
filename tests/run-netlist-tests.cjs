@@ -41,6 +41,7 @@ try {
     path.join(root, 'src/domain/examples.ts'),
     path.join(root, 'src/domain/partClipboard.ts'),
     path.join(root, 'src/domain/editorView.ts'),
+    path.join(root, 'src/domain/sceneEdit.ts'),
     path.join(root, 'src/domain/simulationPresets.ts'),
     path.join(root, 'src/domain/behavioralExpression.ts'),
     path.join(root, 'src/domain/projectArchive.ts'),

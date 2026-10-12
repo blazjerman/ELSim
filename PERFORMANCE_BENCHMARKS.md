@@ -286,6 +286,10 @@ After replacing selected-ID array scans with `Set` lookups and keeping only visi
 
 The wire-heavy fixture now uses 1,000 parts and 1,200 independent two-endpoint segments, matching the current document model. In Firefox, editor render was 1,444.58 ms, single-part selection was 32 ms median / 42 ms p95, and Ctrl+A selected 1,000 parts plus 1,200 wires in 125 ms through the next animation frame. The test asserts that all parts and wire segments become selected. This is one local run, not a budget.
 
+### Large mixed-selection movement (2026-10-12)
+
+The production `moveSelectedSceneObjects` operation now builds movement maps from the immutable drag-start selection and applies them in one pass over the scene arrays. This avoids searching the full part/wire/label arrays once for each selected object on each pointer move. The performance runner calls this exact helper on the 5,000-resistor/4,900-wire fixture with every part and wire selected; seven local runs measured 1.146 ms median / 2.383 ms p95 on the i7-12700F / Node 18.20.4 host. The check confirms selected coordinates move by one grid step and the source project remains unchanged. This domain timing excludes React rendering, browser input dispatch, persistence, and the separate label array; it is not an end-to-end UI budget.
+
 ### Memoized-connectivity Circuit Checks path (2026-10-12)
 
 The editor computes connectivity in its own memoized selector and passes that result to `checkCircuit`. The performance runner now reports both that production call and the standalone form that computes connectivity internally. On this i7-12700F / Node 18.20.4 host, the memoized path p95 was 6.841 ms for a 5,001-part named-net chain, 13.824 ms for a 5,000-resistor wire grid, and 20.824 ms for 5,000 instances of the repeated two-level hierarchy. The standalone p95 was 57.425, 62.619, and 163.777 ms respectively. Both paths returned identical issue counts (0, 201, and 4,900). The benchmark is observational; it does not establish cross-machine budgets.

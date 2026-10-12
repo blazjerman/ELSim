@@ -18,6 +18,7 @@ const sources = [
   'src/domain/connectivity.ts', 'src/domain/electricalCheck.ts', 'src/domain/geometry.ts',
   'src/domain/probe.ts', 'src/domain/hierarchyProbe.ts', 'src/domain/project.ts',
   'src/domain/behavioralExpression.ts', 'src/domain/subcircuitLibrary.ts',
+  'src/domain/sceneEdit.ts',
   'src/domain/ltspiceSymbol.ts', 'src/domain/ltspiceSchematic.ts', 'src/domain/examples.ts',
 ]
 
@@ -198,6 +199,7 @@ try {
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
   const { componentPins, wireConnectionDotPoints } = build(path.join(output, 'domain/geometry.js'))
+  const { moveSelectedSceneObjects } = build(path.join(output, 'domain/sceneEdit.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
   const { createWireCurrentFlowSampler } = build(path.join(output, 'domain/wireFlow.js'))
   const { checkCircuit } = build(path.join(output, 'domain/electricalCheck.js'))
@@ -272,10 +274,22 @@ try {
     if (wireSegments !== project.wires.length || project.wires.some((wire) => wire.points.length !== 2)) throw new Error(`Wire-heavy benchmark fixture ${count} must use independent two-endpoint wire segments.`)
     let wireFlowSampling
     let connectionDots
+    let groupDrag
     if (count === 5_000) {
       const dots = measure(() => wireConnectionDotPoints(project))
       if (dots.value.length !== wireSegments * 2) throw new Error(`Wire-grid fixture expected ${wireSegments * 2} pin-connection dots; got ${dots.value.length}.`)
       connectionDots = { count: dots.value.length, medianMs: dots.medianMs, p95Ms: dots.p95Ms }
+
+      const selected = { parts: project.parts, wires: project.wires, netLabels: project.netLabels }
+      const movement = measure(() => moveSelectedSceneObjects(project, selected, 10, 10), 2, 7)
+      if (movement.value.parts[0].x !== project.parts[0].x + 10 || movement.value.wires[0].points[0][0] !== project.wires[0].points[0][0] + 10) throw new Error('Large mixed-selection drag changed the wrong geometry.')
+      if (project.parts[0].x === movement.value.parts[0].x) throw new Error('Large mixed-selection drag mutated the original scene.')
+      groupDrag = {
+        selectedParts: selected.parts.length,
+        selectedWires: selected.wires.length,
+        medianMs: movement.medianMs,
+        p95Ms: movement.p95Ms,
+      }
     }
     if (count === 5_000) {
       const sampler = createWireCurrentFlowSampler(project, connectivity.value)
@@ -307,6 +321,7 @@ try {
       fullCircuitChecks: { medianMs: fullCircuitChecks.medianMs, p95Ms: fullCircuitChecks.p95Ms },
       ...(wireFlowSampling ? { wireFlowSampling } : {}),
       ...(connectionDots ? { connectionDots } : {}),
+      ...(groupDrag ? { groupDrag } : {}),
     })
   }
 
