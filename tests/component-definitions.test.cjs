@@ -135,13 +135,17 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   for (const state of ['open', 'closed']) assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants[state].filter((primitive) => primitive.className === 'control-pin-label').map(({ text }) => text), ['+', '−'])
   assert.deepEqual(componentDefinitionFor('inductor').symbolVariants.forwardCurrent.find((primitive) => primitive.className === 'inductor-current-arrow')?.d, 'M-16 -21H16M16 -21L9 -26M16 -21L9 -16')
   assert.deepEqual(componentDefinitionFor('inductor').symbolVariants.reverseCurrent.find((primitive) => primitive.className === 'inductor-current-arrow')?.d, 'M16 -21H-16M-16 -21L-9 -26M-16 -21L-9 -16')
+  assert.deepEqual(componentDefinitionFor('capacitor').symbolVariants.forwardCurrent.filter((primitive) => primitive.className === 'capacitor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '−'], [2, '+']])
+  assert.deepEqual(componentDefinitionFor('capacitor').symbolVariants.reverseCurrent.filter((primitive) => primitive.className === 'capacitor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '+'], [2, '−']])
   for (const kind of ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet']) {
     const variants = componentDefinitionFor(kind).symbolVariants
     for (const state of ['forwardCurrent', 'reverseCurrent']) {
       assert.ok(variants[state].some((primitive) => primitive.className === 'transistor-current-indicator'), `${kind} ${state} arrow is definition geometry`)
     }
   }
-  assert.ok(JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8')).properties.symbolVariants)
+  const definitionSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8'))
+  assert.ok(definitionSchema.properties.symbolVariants)
+  assert.equal(definitionSchema.properties.symbolGeometry.items.oneOf.find((primitive) => primitive.properties?.kind?.const === 'text').properties.pin.maximum, 64)
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
   assert.deepEqual(componentDefinitionFor('lamp').symbolGeometry.map(({ kind }) => kind), ['line', 'circle', 'line', 'path'])
   assert.ok(componentDefinitionFor('lamp').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.className === 'lamp-filament'))
