@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
-import { createImportedOpampExampleProject } from '../../src/domain/examples'
-import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
+import { createHierarchicalExampleProject, createImportedOpampExampleProject } from '../../src/domain/examples'
+import { createStarterProject, validateProject } from '../../src/domain/project'
 import { componentPins } from '../../src/domain/geometry'
 import { createProjectArchive } from '../../src/domain/projectArchive'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
@@ -526,6 +526,30 @@ test('solver errors select and bring the reported component into view', { tag: '
     return [x + width / 2, y + height / 2]
   })
   expect(centered).toEqual([target.x, target.y])
+})
+
+test('nested component diagnostics select and center their visible reusable block', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createHierarchicalExampleProject()
+  const nestedSheet = project.sheets.at(-1)!
+  const nestedPart = nestedSheet.parts[0]
+  nestedPart.value = 'not-a-value'
+  const visibleBlock = project.parts.find((part) => part.sheetId === project.sheets[1].id)!
+  visibleBlock.x = 5000
+  visibleBlock.y = 4000
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+  await page.addInitScript((projectJson) => {
+    localStorage.setItem('elsim:project:v7', projectJson)
+  }, JSON.stringify(project))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText(`${nestedPart.ref} has an invalid numeric value`)
+  const affected = page.locator(`.circuit-part[data-part-id="${visibleBlock.id}"]`)
+  await expect(affected).toHaveClass(/selected/)
+  const centered = await page.locator('svg.schematic').evaluate((svg) => {
+    const { x, y, width, height } = (svg as SVGSVGElement).viewBox.baseVal
+    return [x + width / 2, y + height / 2]
+  })
+  expect(centered).toEqual([visibleBlock.x, visibleBlock.y])
 })
 
 test('reusable block settings expose named controls', { tag: '@ui-smoke' }, async ({ page }) => {

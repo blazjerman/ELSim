@@ -3160,6 +3160,29 @@ export default function App() {
     const link = document.createElement('a'); link.href = url; link.download = `${projectRef.current.name.replace(/[^A-Za-z0-9_-]+/g, '-')}-waveforms.csv`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     setNotice(`Exported ${traces.length} result vector${traces.length === 1 ? '' : 's'} to CSV.`)
   }
+  const selectReportedComponent = (sourceId?: string): Part | undefined => {
+    if (!sourceId) return undefined
+    const current = projectRef.current
+    let visiblePart = current.parts.find((part) => part.id === sourceId)
+    if (!visiblePart && current.activeSheetId === current.rootSheetId) {
+      const separator = sourceId.indexOf(':')
+      if (separator > 0) {
+        const sourceSheetId = sourceId.slice(0, separator)
+        const nestedPartId = sourceId.slice(separator + 1)
+        let sheet = current.sheets.find((candidate) => candidate.id === sourceSheetId)
+        if (sheet?.parts.some((part) => part.id === nestedPartId)) {
+          while (sheet && sheet.parentSheetId !== null && sheet.parentSheetId !== current.rootSheetId) {
+            sheet = current.sheets.find((candidate) => candidate.id === sheet!.parentSheetId)
+          }
+          if (sheet?.parentSheetId === current.rootSheetId) visiblePart = current.parts.find((part) => part.sheetId === sheet!.id)
+        }
+      }
+    }
+    if (!visiblePart) return undefined
+    setSelection({ kind: 'part', id: visiblePart.id })
+    setView((view) => ({ ...view, panX: 380 - visiblePart!.x, panY: 300 - visiblePart!.y }))
+    return visiblePart
+  }
   const startSimulation = async () => {
     setPlaybackRunning(false)
     const firstSettingError = validateAnalysisSettings(projectRef.current)[0]
@@ -3181,11 +3204,9 @@ export default function App() {
     const artifact = createNetlistArtifact(snapshot)
     const invalid = artifact.diagnostics.find((diagnostic) => diagnostic.severity === 'error')
     if (invalid) {
-      const invalidPart = invalid.sourceId && projectRef.current.parts.find((part) => part.id === invalid.sourceId)
+      const invalidPart = selectReportedComponent(invalid.sourceId)
       if (invalidPart) {
-        setSelection({ kind: 'part', id: invalidPart.id })
-        setSelectedPartIds([invalidPart.id])
-        if (/invalid numeric value|forward beta|series resistance|winding resistance/i.test(invalid.message)) {
+        if (invalidPart.id === invalid.sourceId && /invalid numeric value|forward beta|series resistance|winding resistance/i.test(invalid.message)) {
           focusAfterInspectorRender(`[data-part-setting="${invalidPart.id}:value"]`)
         }
       }
@@ -3295,11 +3316,7 @@ export default function App() {
         const message = typeof response.error?.message === 'string' ? response.error.message : 'ngspice returned an invalid error response.'
         const sourceId = response.error?.sourceId
         if (response.error?.assetId) setCompatibilityDiagnostic(response.error)
-        const failedPart = sourceId ? projectRef.current.parts.find((part) => part.id === sourceId) : undefined
-        if (failedPart) {
-          setSelection({ kind: 'part', id: failedPart.id })
-          setView((view) => ({ ...view, panX: 380 - failedPart.x, panY: 300 - failedPart.y }))
-        }
+        selectReportedComponent(sourceId)
         setNotice(response.error?.hint ? `${message} Tip: ${response.error.hint}` : message)
         worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
