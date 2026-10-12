@@ -209,7 +209,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   const search = dialog.getByRole('textbox', { name: 'Find an example' })
   const cards = dialog.locator('.example-list article')
-  await expect(cards).toHaveCount(20)
+  await expect(cards).toHaveCount(22)
   await search.fill('P-JFET')
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('P-JFET positive-rail switch')
@@ -219,7 +219,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   await search.fill('no such circuit')
   await expect(dialog.getByRole('status')).toContainText('No examples found')
   await dialog.getByRole('button', { name: 'Clear example search' }).click()
-  await expect(cards).toHaveCount(20)
+  await expect(cards).toHaveCount(22)
 })
 
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', { tag: '@ltspice' }, async ({ page }) => {
@@ -443,7 +443,7 @@ test('component shortcuts are case-sensitive and future Falstad shortcuts stay r
   await page.keyboard.press('Shift+C')
   await expect(page.locator('.component-card').filter({ hasText: 'Capacitor' })).toHaveAttribute('aria-pressed', 'true')
   await page.keyboard.press('Escape')
-  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+S', 'SPDT switch'], ['Shift+T', 'Transformer'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
+  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+S', 'SPDT switch'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
     await page.keyboard.press(shortcut)
     await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
   }
