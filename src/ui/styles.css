@@ -160,5 +160,13 @@
 .playback-rate-control{display:flex;align-items:center;gap:5px;color:#aeb9b0;font-size:10px;white-space:nowrap}.playback-rate-control select{height:28px;max-width:126px;padding:0 6px;border:1px solid #303b33;border-radius:5px;background:#1a211c;color:#d3ddd5;font-size:10px}
 .waveform-destination-options{display:grid;gap:8px}.waveform-destination-options .waveform-destination-option{width:100%;min-height:58px;margin:0;padding:12px;text-align:left;color:#dbe5dd}.waveform-destination-options .waveform-destination-option:focus-visible{outline-offset:2px}.waveform-destination-options .waveform-destination-option:disabled{opacity:.45;cursor:default}
 .main-toolbar{height:auto;min-height:45px;flex-wrap:wrap}.playback-rate-control{min-width:0}.playback-rate-control select{width:118px;min-width:0}
+@media(max-width:800px){
+  .playback-controls{display:grid;grid-template-columns:29px 29px minmax(0,1fr) auto;flex:0 0 100%;width:100%;min-width:0;gap:3px}
+  .playback-controls>.simulation-scrubber{min-width:0;gap:5px}
+  .playback-controls .simulation-scrubber input{width:auto;min-width:24px;flex:1}
+  .playback-controls .simulation-scrubber output{min-width:60px}
+  .playback-rate-control{grid-column:4;gap:4px;font-size:9px}
+  .playback-rate-control select{width:92px;min-width:0;padding:0 4px;font-size:9px}
+}
 /* Avoid SVG filter repaint flashes while retaining a clear hovered-wire state. */
 .wire-line.hovered{filter:none}.wire-line.hovered line:not(:first-child){stroke:#a4d7b2}
