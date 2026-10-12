@@ -723,7 +723,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
-  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'component-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; pointIndex?: number; points?: [number, number][]; group?: { parts: { id: string; x: number; y: number }[]; wires: { id: string; points: [[number, number], [number, number]] }[]; labels: { id: string; x: number; y: number }[] } } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'component-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; pointIndex?: number; points?: [number, number][]; group?: { parts: Part[]; wires: Project['wires']; labels: Project['netLabels'] } } | null>(null)
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [wirePreviewEnd, setWirePreviewEnd] = useState<{ x: number; y: number } | null>(null)
@@ -961,9 +961,9 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     const labelIds = alreadySelected ? selectedNetLabelIds : kind === 'label' ? [id] : []
     const partIdSet = new Set(partIds), wireIdSet = new Set(wireIds), labelIdSet = new Set(labelIds)
     const group = {
-      parts: project.parts.filter((item) => partIdSet.has(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y })),
-      wires: project.wires.filter((item) => wireIdSet.has(item.id)).map((item) => ({ id: item.id, points: item.points.map(([x, y]) => [x, y] as [number, number]) as [[number, number], [number, number]] })),
-      labels: project.netLabels.filter((item) => labelIdSet.has(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y })),
+      parts: project.parts.filter((item) => partIdSet.has(item.id)).map((item) => ({ ...item })),
+      wires: project.wires.filter((item) => wireIdSet.has(item.id)).map((item) => ({ ...item, points: item.points.map(([x, y]) => [x, y] as [number, number]) as [[number, number], [number, number]] })),
+      labels: project.netLabels.filter((item) => labelIdSet.has(item.id)).map((item) => ({ ...item })),
     }
     if (!alreadySelected) {
       setSelectedPartIds(partIds)
@@ -1111,9 +1111,12 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     setProject((current) => {
       if (kind === 'wire-point' && points && pointIndex !== undefined) return { ...current, wires: current.wires.map((wire) => wire.id === id ? { ...wire, points: points.map(([x, y], index) => index === pointIndex ? [x + deltaX, y + deltaY] as [number, number] : [x, y]) as [[number, number], [number, number]] } : wire) }
       if (group) {
-        const movingParts = new Map(group.parts.map((origin) => [origin.id, { ...current.parts.find((part) => part.id === origin.id)!, x: origin.x + deltaX, y: origin.y + deltaY }]))
-        const movingWires = new Map(group.wires.map((origin) => [origin.id, { ...current.wires.find((wire) => wire.id === origin.id)!, points: [[origin.points[0][0] + deltaX, origin.points[0][1] + deltaY], [origin.points[1][0] + deltaX, origin.points[1][1] + deltaY]] as [[number, number], [number, number]] }]))
-        const movingLabels = new Map(group.labels.map((origin) => [origin.id, { ...current.netLabels.find((label) => label.id === origin.id)!, x: origin.x + deltaX, y: origin.y + deltaY }]))
+        // The drag snapshot holds the selected immutable objects. Reuse them as
+        // origins directly; looking each one up in the full array made a large
+        // selected group quadratic on every pointer-move event.
+        const movingParts = new Map(group.parts.map((origin) => [origin.id, { ...origin, x: origin.x + deltaX, y: origin.y + deltaY }]))
+        const movingWires = new Map(group.wires.map((origin) => [origin.id, { ...origin, points: [[origin.points[0][0] + deltaX, origin.points[0][1] + deltaY], [origin.points[1][0] + deltaX, origin.points[1][1] + deltaY]] as [[number, number], [number, number]] }]))
+        const movingLabels = new Map(group.labels.map((origin) => [origin.id, { ...origin, x: origin.x + deltaX, y: origin.y + deltaY }]))
         return { ...current, parts: current.parts.map((part) => movingParts.get(part.id) ?? part), wires: current.wires.map((wire) => movingWires.get(wire.id) ?? wire), netLabels: current.netLabels.map((label) => movingLabels.get(label.id) ?? label) }
       }
       if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: [[points[0][0] + deltaX, points[0][1] + deltaY], [points[1][0] + deltaX, points[1][1] + deltaY]] as [[number, number], [number, number]] } : wire) }
