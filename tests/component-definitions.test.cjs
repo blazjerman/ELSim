@@ -71,6 +71,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.deepEqual(componentDefinitionFor('currentSource').symbolGeometry.at(-1), { kind: 'path', d: 'M10 0L2 -6V6Z', fill: 'stroke' })
   assert.equal(componentDefinitionFor('inductor').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.d.startsWith('M-34 0a9 9 0 0 1 18 0')), true)
   assert.deepEqual(componentDefinitionFor('inductor').symbolAnimations['field.current'].active.map(({ className, kind }) => [className, kind]), [['inductor-current-glow', 'path']])
+  assert.deepEqual(componentDefinitionFor('capacitor').symbolAnimations['charge.voltage'].active.map(({ className, kind }) => [className, kind]), [['capacitor-charge-glow capacitor-charge-positive-plate', 'line'], ['capacitor-charge-glow capacitor-charge-negative-plate', 'line']])
   assert.ok(componentDefinitionFor('transformer').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.className?.includes('transformer-primary')))
   assert.ok(componentDefinitionFor('transformer').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.className?.includes('transformer-secondary')))
   assert.equal(componentDefinitionFor('transformer').symbolGeometry.filter(({ kind }) => kind === 'line').length, 6)
