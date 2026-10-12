@@ -3474,6 +3474,8 @@ test('diode rectifier example clips the negative half-cycle in the browser engin
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Diode half-wave rectifier')
   await expect(page.getByLabel('Guided example')).toContainText('positive half-cycles')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(8)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(vin)')
@@ -3483,6 +3485,10 @@ test('diode rectifier example clips the negative half-cycle in the browser engin
   const positive = await page.locator('.plot-window .cursor-readout').innerText()
   expect(positive).toMatch(/V\(vin\) = 4\./i)
   expect(positive).toMatch(/V\(vout\) = [34]\./i)
+  for (const wireId of ['rectifier-input-top', 'rectifier-diode-load', 'rectifier-return-bottom']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.001)
+  }
   await scrubToTime(slider, 0.015)
   const negative = await page.locator('.plot-window .cursor-readout').innerText()
   expect(negative).toMatch(/V\(vin\) = -4\./i)

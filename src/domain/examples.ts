@@ -246,14 +246,23 @@ export function createDiodeRectifierExampleProject(): Project {
   }
   project.name = 'Diode half-wave rectifier'
   project.parts = [source, diode, load]
-  project.wires = []
+  project.wires = [
+    { id: 'rectifier-input-rise', points: [[280, 310], [280, 280]] },
+    { id: 'rectifier-input-top', points: [[280, 280], [450, 280]] },
+    { id: 'rectifier-input-drop', points: [[450, 280], [450, 360]] },
+    { id: 'rectifier-diode-load', points: [[550, 360], [670, 360]] },
+    { id: 'rectifier-return-right', points: [[770, 360], [820, 360]] },
+    { id: 'rectifier-return-drop', points: [[820, 360], [820, 440]] },
+    { id: 'rectifier-return-bottom', points: [[820, 440], [280, 440]] },
+    { id: 'rectifier-return-source', points: [[280, 440], [280, 410]] },
+  ]
   project.junctions = []
   project.netLabels = [
     labelAt('rectifier-vin-source', 'VIN', source, 0), labelAt('rectifier-vin-diode', 'VIN', diode, 0),
     labelAt('rectifier-vout-diode', 'VOUT', diode, 1), labelAt('rectifier-vout-load', 'VOUT', load, 0),
     labelAt('rectifier-ground-source', '0', source, 1), labelAt('rectifier-ground-load', '0', load, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '40 ms', maxStep: '100 µs' }
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'I(D1)'], ranges: {} }
   project.view = { zoom: 0.9, panX: -10, panY: 0 }
