@@ -56,6 +56,11 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     }
   }
   assert.equal(componentPropertyDefault('resistor', 'missingProperty'), undefined)
+  assert.deepEqual(componentDefinitionFor('resistor').symbolGeometry, [
+    { kind: 'line', x1: -50, y1: 0, x2: -23, y2: 0 },
+    { kind: 'rect', x: -23, y: -12, width: 46, height: 24, rx: 3 },
+    { kind: 'line', x1: 23, y1: 0, x2: 50, y2: 0 },
+  ])
   for (const part of project.parts) assert.equal(componentDefinitionFor(part.kind).pins.length, componentPins(part).length, `${part.ref} definition pin count`)
   assert.deepEqual(componentDefinitionFor('source').pins.map(({ name }) => name), ['positive', 'negative'])
   assert.deepEqual(['vcvs', 'vccs', 'cccs', 'ccvs'].map((kind) => componentDefinitionFor(kind).paletteName), ['VCVS', 'VCCS', 'CCCS', 'CCVS'])

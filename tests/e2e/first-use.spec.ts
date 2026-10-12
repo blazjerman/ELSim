@@ -1141,6 +1141,7 @@ test('connection inspector uses ordered, friendly pin labels from component defi
   await expect(page.locator('.pin-row')).toHaveCount(2)
   await expect(page.locator('.pin-row').nth(0)).toContainText('Terminal 1')
   await expect(page.locator('.pin-row').nth(1)).toContainText('Terminal 2')
+  await expect(page.locator('.circuit-part[data-part-id="p-r1"] rect[x="-23"][y="-12"][width="46"][height="24"]')).toHaveCount(1)
 
   await page.getByRole('button', { name: 'Examples' }).click()
   const examples = page.getByRole('dialog', { name: 'Open a working circuit' })

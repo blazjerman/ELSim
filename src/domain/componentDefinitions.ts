@@ -4,6 +4,11 @@ import type { SubcircuitDefinition } from './subcircuitLibrary'
 export type ComponentPinDefinition = { name: string; displayName?: string; direction: 'passive' | 'input' | 'output' | 'inout'; spiceOrder: number }
 export type ComponentPropertyDefinition = { key: string; label: string; unit: string; defaultValue?: string; required?: boolean }
 export type ComponentModelParameter = { name: string; defaultValue: string }
+export type ComponentSymbolPrimitive =
+  | { kind: 'line'; x1: number; y1: number; x2: number; y2: number }
+  | { kind: 'rect'; x: number; y: number; width: number; height: number; rx?: number }
+  | { kind: 'circle'; cx: number; cy: number; r: number }
+  | { kind: 'path'; d: string }
 export type ComponentDefinition = {
   id: string
   version: 1
@@ -16,6 +21,7 @@ export type ComponentDefinition = {
   electricalType: string
   pins: readonly ComponentPinDefinition[]
   pinOffsets?: readonly (readonly [number, number])[]
+  symbolGeometry?: readonly ComponentSymbolPrimitive[]
   properties: readonly ComponentPropertyDefinition[]
   animationChannels: readonly string[]
   connectionHint?: string
@@ -36,7 +42,7 @@ const twoPinOffsets = [[-50, 0], [50, 0]] as const
 const definitions = [
   { id: 'elsim.voltage-source', version: 1, kind: 'source', name: 'Voltage source', paletteSubtitle: 'V', shortcut: 'v', paletteCategory: 'basics', electricalType: 'V', pins: [{ name: 'positive', displayName: 'Positive', direction: 'output', spiceOrder: 1 }, { name: 'negative', displayName: 'Negative', direction: 'passive', spiceOrder: 2 }], pinOffsets: [[0, -50], [0, 50]], properties: [{ key: 'value', label: 'Voltage', unit: 'V', defaultValue: '5 V', required: true }, { key: 'acMagnitude', label: 'AC magnitude', unit: 'V' }, { key: 'acPhase', label: 'AC phase', unit: '°', defaultValue: '0' }], animationChannels: [] },
   { id: 'elsim.current-source', version: 1, kind: 'currentSource', name: 'Current source', paletteSubtitle: 'I', shortcut: 'i', paletteCategory: 'basics', electricalType: 'I', pins: [{ name: 'currentOut', displayName: 'Current out', direction: 'output', spiceOrder: 1 }, { name: 'currentReturn', displayName: 'Current return', direction: 'passive', spiceOrder: 2 }], pinOffsets: [[-50, 0], [50, 0]], properties: [{ key: 'value', label: 'Current', unit: 'A', defaultValue: '1 mA', required: true }, { key: 'acMagnitude', label: 'AC magnitude', unit: 'A' }, { key: 'acPhase', label: 'AC phase', unit: '°', defaultValue: '0' }], animationChannels: ['current'] },
-  { id: 'elsim.resistor', version: 1, kind: 'resistor', name: 'Resistor', paletteSubtitle: 'R', shortcut: 'r', paletteCategory: 'basics', electricalType: 'R', pins: twoPin, pinOffsets: twoPinOffsets, properties: [{ key: 'value', label: 'Resistance', unit: 'Ω', defaultValue: '1 kΩ', required: true }], animationChannels: [] },
+  { id: 'elsim.resistor', version: 1, kind: 'resistor', name: 'Resistor', paletteSubtitle: 'R', shortcut: 'r', paletteCategory: 'basics', electricalType: 'R', pins: twoPin, pinOffsets: twoPinOffsets, symbolGeometry: [{ kind: 'line', x1: -50, y1: 0, x2: -23, y2: 0 }, { kind: 'rect', x: -23, y: -12, width: 46, height: 24, rx: 3 }, { kind: 'line', x1: 23, y1: 0, x2: 50, y2: 0 }], properties: [{ key: 'value', label: 'Resistance', unit: 'Ω', defaultValue: '1 kΩ', required: true }], animationChannels: [] },
   { id: 'elsim.potentiometer', version: 1, kind: 'potentiometer', name: 'Potentiometer', paletteSubtitle: 'POT', shortcut: 'h', paletteCategory: 'basics', electricalType: 'R', pins: [{ name: 'upper', displayName: 'Upper', direction: 'passive', spiceOrder: 1 }, { name: 'wiper', displayName: 'Wiper', direction: 'passive', spiceOrder: 2 }, { name: 'lower', displayName: 'Lower', direction: 'passive', spiceOrder: 3 }], pinOffsets: [[0, -50], [50, 0], [0, 50]], properties: [{ key: 'value', label: 'Total resistance', unit: 'Ω', defaultValue: '10 kΩ', required: true }, { key: 'wiperPosition', label: 'Wiper position', unit: '', defaultValue: '0.5', required: true }], animationChannels: ['current'] },
   { id: 'elsim.lamp', version: 1, kind: 'lamp', name: 'Lamp', paletteSubtitle: 'R', shortcut: 'e', paletteCategory: 'basics', electricalType: 'R', pins: twoPin, pinOffsets: twoPinOffsets, properties: [{ key: 'value', label: 'Resistance', unit: 'Ω', defaultValue: '12 Ω', required: true }, { key: 'animationNominalPower', label: 'Nominal animation power', unit: 'W', defaultValue: '10' }], animationChannels: ['brightness.power'] },
   { id: 'elsim.capacitor', version: 1, kind: 'capacitor', name: 'Capacitor', paletteSubtitle: 'C', shortcut: 'c', paletteCategory: 'basics', electricalType: 'C', pins: twoPin, pinOffsets: twoPinOffsets, properties: [{ key: 'value', label: 'Capacitance', unit: 'F', defaultValue: '1 µF', required: true }, { key: 'seriesResistance', label: 'ESR', unit: 'Ω', defaultValue: '0 Ω' }], animationChannels: ['charge.voltage'] },
@@ -100,6 +106,7 @@ export const componentDefinitions: readonly ComponentDefinition[] = Object.freez
   help: componentHelpByKind[definition.kind],
   pins: Object.freeze(definition.pins.map((pin) => Object.freeze({ ...pin }))),
   pinOffsets: definition.pinOffsets ? Object.freeze(definition.pinOffsets.map((offset) => Object.freeze([...offset]) as unknown as [number, number])) : undefined,
+  symbolGeometry: definition.symbolGeometry ? Object.freeze(definition.symbolGeometry.map((primitive) => Object.freeze({ ...primitive }))) : undefined,
   properties: Object.freeze(definition.properties.map((property) => Object.freeze({ ...property }))),
   animationChannels: Object.freeze([...definition.animationChannels]),
 })))

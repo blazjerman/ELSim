@@ -163,6 +163,59 @@
         "maxItems": 2
       }
     },
+    "symbolGeometry": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "x1", "y1", "x2", "y2"],
+            "properties": {
+              "kind": { "const": "line" },
+              "x1": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "y1": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "x2": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "y2": { "type": "number", "minimum": -1000, "maximum": 1000 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "x", "y", "width", "height"],
+            "properties": {
+              "kind": { "const": "rect" },
+              "x": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "y": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "width": { "type": "number", "minimum": 0, "maximum": 1000 },
+              "height": { "type": "number", "minimum": 0, "maximum": 1000 },
+              "rx": { "type": "number", "minimum": 0, "maximum": 500 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "cx", "cy", "r"],
+            "properties": {
+              "kind": { "const": "circle" },
+              "cx": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "cy": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "r": { "type": "number", "exclusiveMinimum": 0, "maximum": 500 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "d"],
+            "properties": {
+              "kind": { "const": "path" },
+              "d": { "type": "string", "minLength": 1, "maxLength": 4096 }
+            }
+          }
+        ]
+      }
+    },
     "properties": {
       "type": "array",
       "maxItems": 64,
