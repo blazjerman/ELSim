@@ -817,6 +817,16 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const contextMenuReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
   useLayoutEffect(() => {
+    const menu = contextMenuRef.current
+    const wrapper = menu?.parentElement
+    if (!contextMenu || !menu || !wrapper) return
+    const bounds = wrapper.getBoundingClientRect()
+    const menuBounds = menu.getBoundingClientRect()
+    const x = Math.max(4, Math.min(contextMenu.x, bounds.width - menuBounds.width - 4))
+    const y = Math.max(4, Math.min(contextMenu.y, bounds.height - menuBounds.height - 4))
+    if (x !== contextMenu.x || y !== contextMenu.y) setContextMenu((current) => current ? { ...current, x, y } : null)
+  }, [contextMenu])
+  useLayoutEffect(() => {
     const element = svg.current
     if (!element) return
     const measure = () => {

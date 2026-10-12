@@ -277,6 +277,29 @@ test('keyboard opens schematic probe actions and restores focus after closing', 
   await expect(resistor).toBeFocused()
 })
 
+test('schematic context menu stays inside the canvas near the phone viewport edge', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.setViewportSize({ width: 390, height: 640 })
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await resistor.evaluate((element) => {
+    const bounds = element.closest('.canvas-wrap')!.getBoundingClientRect()
+    element.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, view: window,
+      clientX: bounds.right - 2, clientY: bounds.bottom - 2,
+    }))
+  })
+  const menu = page.getByRole('menu', { name: 'Options for R1' })
+  await expect(menu).toBeVisible()
+  const menuBounds = await menu.boundingBox()
+  const canvasBounds = await page.locator('.canvas-wrap').boundingBox()
+  expect(menuBounds).not.toBeNull()
+  expect(canvasBounds).not.toBeNull()
+  expect(menuBounds!.x).toBeGreaterThanOrEqual(canvasBounds!.x)
+  expect(menuBounds!.y).toBeGreaterThanOrEqual(canvasBounds!.y)
+  expect(menuBounds!.x + menuBounds!.width).toBeLessThanOrEqual(canvasBounds!.x + canvasBounds!.width)
+  expect(menuBounds!.y + menuBounds!.height).toBeLessThanOrEqual(canvasBounds!.y + canvasBounds!.height)
+})
+
 test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('complementary', { name: 'Component library' })).toBeVisible()
