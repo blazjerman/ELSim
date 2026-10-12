@@ -87,6 +87,7 @@ const ccvsSymbol = [
 const voltageControlledSourceOutline = [
   ...dependentSourceOutline,
   { kind: 'line', x1: 0, y1: -50, x2: 0, y2: -24 }, { kind: 'line', x1: 0, y1: 24, x2: 0, y2: 50 },
+  { kind: 'text', x: 7, y: -46, text: '+', className: 'control-pin-label' }, { kind: 'text', x: 7, y: 58, text: '−', className: 'control-pin-label' },
 ] as const satisfies readonly ComponentSymbolPrimitive[]
 const vcvsSymbol = [
   ...voltageControlledSourceOutline,
@@ -129,6 +130,7 @@ const voltageSwitchBaseGeometry = [
   { kind: 'line', x1: -50, y1: 0, x2: -17, y2: 0 }, { kind: 'line', x1: 17, y1: 0, x2: 50, y2: 0 },
   { kind: 'circle', cx: -14, cy: 0, r: 3, fill: 'stroke' }, { kind: 'circle', cx: 14, cy: 0, r: 3, fill: 'stroke' },
   { kind: 'line', x1: 0, y1: -50, x2: 0, y2: -24 }, { kind: 'line', x1: 0, y1: 24, x2: 0, y2: 50 },
+  { kind: 'text', x: 7, y: -36, text: '+', className: 'control-pin-label' }, { kind: 'text', x: 7, y: 43, text: '−', className: 'control-pin-label' },
 ] as const satisfies readonly ComponentSymbolPrimitive[]
 const voltageSwitchSymbolVariants = {
   open: [...voltageSwitchBaseGeometry, { kind: 'path', className: 'voltage-switch-lever', d: 'M-12 -2L9 -12' }],

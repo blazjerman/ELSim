@@ -4469,6 +4469,9 @@ test('controlled-source example opens and solves with input and output probes', 
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Voltage-controlled amplifier')
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  for (const id of ['amp-e1', 'amp-g1']) {
+    await expect(page.locator(`.circuit-part[data-part-id="${id}"] .control-pin-label`)).toHaveText(['+', '−'])
+  }
   await expect(page.locator('svg.schematic .wire-line')).toHaveCount(8)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
@@ -4508,6 +4511,7 @@ test('voltage-controlled switch example toggles the load with its control pulse'
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Voltage-controlled switch')
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="vswitch-s1"] .control-pin-label')).toHaveText(['+', '−'])
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(ctrl)')
