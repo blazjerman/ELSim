@@ -589,6 +589,42 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
 })
 
+test('keyboard focus remains visible in search, analysis, inspector, PWL, and context-menu controls', { tag: '@ui-smoke' }, async ({ page }) => {
+  const expectFocusRing = async (locator: import('@playwright/test').Locator) => {
+    const outline = await locator.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { style: style.outlineStyle, width: Number.parseFloat(style.outlineWidth) }
+    })
+    expect(outline.style).toBe('solid')
+    expect(outline.width).toBeGreaterThanOrEqual(2)
+  }
+
+  await page.goto('/')
+  const search = page.locator('.search-box input')
+  await search.focus()
+  await expectFocusRing(search.locator('..'))
+  await page.getByLabel('Analysis type').focus()
+  await expectFocusRing(page.locator('.analysis-select'))
+
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  const resistance = page.locator('[data-part-setting="p-r1:value"]')
+  await resistance.focus()
+  await expectFocusRing(resistance)
+
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('pwl')
+  const pointTime = page.getByLabel('PWL point 1 time')
+  await pointTime.focus()
+  await expectFocusRing(pointTime)
+
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await resistor.focus()
+  await page.keyboard.press('Shift+F10')
+  const firstMenuItem = page.getByRole('menu', { name: 'Options for R1' }).getByRole('menuitem').first()
+  await expect(firstMenuItem).toBeFocused()
+  await expectFocusRing(firstMenuItem)
+})
+
 test('solver errors select and bring the reported component into view', { tag: '@ui-smoke' }, async ({ page }) => {
   const project = createStarterProject()
   const target = project.parts.find((part) => part.kind === 'resistor')!
