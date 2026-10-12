@@ -714,19 +714,31 @@ test('measure selection and navigation latency in a 5000-part wire schematic', a
     const svg = page.locator('svg.schematic')
     const box = await svg.boundingBox()
     expect(box).not.toBeNull()
-    const zoomLabel = page.getByRole('button', { name: /%/ })
-    const beforeZoom = Number((await zoomLabel.innerText()).replace('%', ''))
-    const started = performance.now()
+    const beforeZoom = Number((await page.getByRole('button', { name: /%/ }).innerText()).replace('%', ''))
+    await svg.evaluate((element) => {
+      const win = window as Window & { __viewportWheelFrameSample?: { elapsedMs: number; zoomText: string } }
+      delete win.__viewportWheelFrameSample
+      element.addEventListener('wheel', () => {
+        const started = performance.now()
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          win.__viewportWheelFrameSample = {
+            elapsedMs: performance.now() - started,
+            zoomText: document.querySelector('.zoom-label')?.textContent?.trim() ?? '',
+          }
+        }))
+      }, { once: true, capture: true })
+    })
     await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
     await page.mouse.wheel(0, deltaY)
-    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
-    const afterZoom = Number((await zoomLabel.innerText()).replace('%', ''))
-    navigationSamples.push({ elapsedMs: performance.now() - started, changed: beforeZoom !== afterZoom })
+    await expect.poll(() => page.evaluate(() => (window as Window & { __viewportWheelFrameSample?: unknown }).__viewportWheelFrameSample ?? null)).not.toBeNull()
+    const measured = await page.evaluate(() => (window as Window & { __viewportWheelFrameSample: { elapsedMs: number; zoomText: string } }).__viewportWheelFrameSample)
+    const afterZoom = Number(measured.zoomText.replace('%', ''))
+    navigationSamples.push({ elapsedMs: measured.elapsedMs, changed: beforeZoom !== afterZoom })
   }
   const changedNavigationSamples = navigationSamples.filter((sample) => sample.changed)
   expect(changedNavigationSamples.length).toBeGreaterThanOrEqual(3)
   const navigationTimes = changedNavigationSamples.map((sample) => sample.elapsedMs).sort((a, b) => a - b)
   await page.getByTitle('Fit all circuit content in view').click()
   await expect.poll(() => mountedPartLocator.count()).toBeGreaterThan(mountedPartCount)
-  console.log(JSON.stringify({ benchmark: 'editor-wire-heavy-navigation-v5', browser: browserName, parts: 5000, wires: 4900, mountedParts: mountedPartCount, mountedWires: mountedWireCount, wireEndpointsPerSegment: 2, renderMs: Number(renderMs.toFixed(2)), selectionMedianMs: Number(samples[3].toFixed(2)), selectionP95Ms: Number(samples[6].toFixed(2)), selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), zoomSamplesChanged: changedNavigationSamples.length, zoomInputToTwoFramesMedianMs: Number(navigationTimes[Math.floor(navigationTimes.length / 2)].toFixed(2)), zoomInputToTwoFramesP95Ms: Number(navigationTimes.at(-1)!.toFixed(2)) }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'editor-wire-heavy-navigation-v6', browser: browserName, parts: 5000, wires: 4900, mountedParts: mountedPartCount, mountedWires: mountedWireCount, wireEndpointsPerSegment: 2, renderMs: Number(renderMs.toFixed(2)), selectionMedianMs: Number(samples[3].toFixed(2)), selectionP95Ms: Number(samples[6].toFixed(2)), selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), zoomSamplesChanged: changedNavigationSamples.length, zoomInputToTwoFramesMedianMs: Number(navigationTimes[Math.floor(navigationTimes.length / 2)].toFixed(2)), zoomInputToTwoFramesMaxOfChangedSamplesMs: Number(navigationTimes.at(-1)!.toFixed(2)) }, null, 2))
 })
