@@ -134,11 +134,11 @@ async function expectAvailableTrace(page: import('@playwright/test').Page, name:
   const plotWindow = page.locator('.plot-window').last()
   await expect(plotWindow.locator('.trace-toggles button', { hasText: traceLabel })).not.toHaveCount(0)
   if (!hadPlotWindow) {
-    await resizePlotWindow(page, plotWindow, 430, 340)
     const box = await targetElement.boundingBox()
     const midpoint = (page.viewportSize()?.width ?? 1280) / 2
-    if (box && box.x + box.width / 2 > midpoint) await movePlotWindowLeft(page, plotWindow)
-    else await movePlotWindowRight(page, plotWindow)
+    await movePlotWindowLeft(page, plotWindow)
+    await resizePlotWindow(page, plotWindow, 430, 340)
+    if (box && box.x + box.width / 2 < midpoint) await movePlotWindowRight(page, plotWindow)
   }
 }
 
@@ -1469,6 +1469,8 @@ test('ngspice stores transient results only after the selected start time', { ta
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Use the existing local ngspice WASM runtime').toEqual([])
   await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.keyboard.press('Escape')
   await page.getByLabel('Start saving at (optional)').fill('20 ms')
   await page.getByRole('button', { name: 'Run simulation' }).click()
@@ -6057,6 +6059,8 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   await expect.poll(() => cursorLabel.innerText()).not.toBe(clickedFrequency)
 
   await page.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Zoom in' }).click()
+  const plotContent = plotWindow.locator('.plot-window-content')
+  await expect.poll(() => plotContent.evaluate((element) => ({ left: element.scrollLeft, overflow: element.scrollWidth - element.clientWidth }))).toEqual({ left: 0, overflow: 0 })
   const readSavedAcRange = () => page.evaluate(() => {
     const saved = localStorage.getItem('elsim:project:v7')
     if (!saved) return null
