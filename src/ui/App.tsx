@@ -1,8 +1,8 @@
 import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
-  Activity, AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, CircleDot, CircleHelp,
-  Command, Copy, Download, FilePlus2, FlipHorizontal2, FolderOpen, GitBranch, Grid2X2,
+  Activity, AlertTriangle, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, CircleDot, CircleHelp,
+  Command, Copy, Download, FilePlus2, FlipHorizontal2, FolderOpen, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
   Save, Scan, Search, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
@@ -24,8 +24,9 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
+import { COMPONENT_SHORTCUTS, ComponentPalette, componentPaletteItems } from './ComponentPalette'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
-import { componentDefaultValue, componentDefinitionFor, componentDefinitions, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
+import { componentDefaultValue, componentDefinitionFor, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { timeMagnitude } from '../domain/componentValue'
 import { measurementCrossingCountError, measurementThresholdError } from '../domain/measurementSettings'
 import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
@@ -49,7 +50,6 @@ type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-re
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
 const ResultPlot = lazy(() => import('./AnalysisPlots').then((module) => ({ default: module.ResultPlot })))
 const KeyboardShortcuts = lazy(() => import('./KeyboardShortcuts'))
-const COMPONENT_SHORTCUTS = Object.freeze(Object.fromEntries(componentDefinitions.flatMap((definition) => definition.shortcut ? [[definition.kind, definition.shortcut]] : []))) as Partial<Record<PartKind, string>>
 const LOGIC_GATE_SHORTCUTS: Record<string, NonNullable<Part['logicOperation']>> = { '2': 'and', '3': 'or', '4': 'xor', '5': 'xnor', '@': 'nand', '#': 'nor' }
 // Keep Falstad-style keys reserved before their matching component types exist.
 // `event.key` is case-sensitive, so e.g. n and N remain different shortcuts.
@@ -66,35 +66,6 @@ const EDITOR_SHORTCUTS = [
   ['/', 'Focus component search'], ['Escape', 'Cancel placement or clear selection'],
 ] as const
 const LOGIC_GATE_SHORTCUTS_HELP = [['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate'], ['5', 'XNOR gate'], ['@', 'NAND gate'], ['#', 'NOR gate']] as const
-const palette: { kind: PartKind; Icon: typeof Zap; }[] = [
-  { kind: 'resistor', Icon: Minus },
-  { kind: 'potentiometer', Icon: Activity },
-  { kind: 'lamp', Icon: Lightbulb },
-  { kind: 'capacitor', Icon: Activity },
-  { kind: 'inductor', Icon: CircleHelp },
-  { kind: 'transformer', Icon: Cable },
-  { kind: 'source', Icon: Zap },
-  { kind: 'currentSource', Icon: Activity },
-  { kind: 'diode', Icon: Waypoints },
-  { kind: 'zener', Icon: Waypoints },
-  { kind: 'led', Icon: Lightbulb },
-  { kind: 'switch', Icon: GitBranch },
-  { kind: 'voltageSwitch', Icon: GitBranch },
-  { kind: 'vcvs', Icon: Zap },
-  { kind: 'vccs', Icon: Activity },
-  { kind: 'cccs', Icon: Activity },
-  { kind: 'ccvs', Icon: Zap },
-  { kind: 'behavioral', Icon: SlidersHorizontal },
-  { kind: 'inverter', Icon: SlidersHorizontal },
-  { kind: 'logicGate', Icon: SlidersHorizontal },
-  { kind: 'npn', Icon: GitBranch },
-  { kind: 'pnp', Icon: GitBranch },
-  { kind: 'njfet', Icon: GitBranch },
-  { kind: 'pjfet', Icon: GitBranch },
-  { kind: 'nmos', Icon: GitBranch },
-  { kind: 'pmos', Icon: GitBranch },
-  { kind: 'ground', Icon: ArrowDown },
-]
 const exampleCatalog: { id: ExampleId; title: string; description: string }[] = [
   { id: 'ac-lowpass', title: 'RC low-pass frequency response', description: 'Compare input and output across an AC sweep and find the approximately 1 kHz cutoff.' },
   { id: 'ac-highpass', title: 'RC high-pass frequency response', description: 'See low frequencies blocked and high frequencies passed, with a cutoff near 1 kHz.' },
@@ -2624,14 +2595,14 @@ export default function App() {
     const selectedIds = selected && !selectedPartIdSet.has(selected.id) ? [selected.id] : selectedPartIds
     updatePartUiState(selectedIds, selected?.id ?? project.parts[0]?.id)
   }, [selectedPartIds, selected, project.parts])
-  const filteredPalette = palette.filter(({ kind }) => {
+  const filteredPalette = componentPaletteItems.filter(({ kind }) => {
     const matchesCategory = componentCategory === 'all' || componentCategoryKinds[componentCategory].includes(kind)
     const definition = componentDefinitionFor(kind)
     const matchesSearch = `${definition.paletteName ?? definition.name} ${definition.name} ${kindNames[kind]} ${definition.paletteSubtitle ?? ''}`.toLowerCase().includes(componentQuery.trim().toLowerCase())
     return (componentQuery.trim() || matchesCategory) && matchesSearch
   })
   const selectComponentForPlacement = (kind: PartKind, polarized = false, logicOperation?: Part['logicOperation']) => {
-    const component = palette.find((item) => item.kind === kind)
+    const component = componentPaletteItems.find((item) => item.kind === kind)
     if (!component) return
     setPendingComponentKind(kind)
     setPendingPolarizedCapacitor(kind === 'capacitor' && polarized)
@@ -3198,7 +3169,7 @@ export default function App() {
       if (event.key === 'C') { selectComponentForPlacement('capacitor', true); return }
       const logicOperation = LOGIC_GATE_SHORTCUTS[event.key]
       if (logicOperation) { selectComponentForPlacement('logicGate', false, logicOperation); return }
-      const matchingPart = palette.find(({ kind }) => COMPONENT_SHORTCUTS[kind] === event.key)
+      const matchingPart = componentPaletteItems.find(({ kind }) => COMPONENT_SHORTCUTS[kind] === event.key)
       if (matchingPart) { selectComponentForPlacement(matchingPart.kind); return }
       const futurePart = FUTURE_COMPONENT_SHORTCUTS[event.key]
       if (futurePart) { setNotice(`${futurePart} is reserved for a future component.`); return }
@@ -3793,13 +3764,7 @@ export default function App() {
           <button className={`category${componentCategory === 'controlled' ? ' active' : ''}`} aria-pressed={componentCategory === 'controlled'} onClick={() => setComponentCategory('controlled')}><Activity size={14}/> Controlled sources</button>
         </div>
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'all' ? 'ALL COMPONENTS' : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
-        {filteredPalette.length ? <div className="component-grid">{filteredPalette.map(({ kind, Icon }) => {
-          const definition = componentDefinitionFor(kind)
-          const label = definition.paletteName ?? definition.name
-          const subtitle = definition.paletteSubtitle ?? ''
-          const help = definition.help ?? ''
-          return <button key={kind} className={`component-card${pendingComponentKind === kind ? ' active' : ''}`} aria-pressed={pendingComponentKind === kind} onClick={() => selectComponentForPlacement(kind)} title={`Select ${label} to place`} aria-label={`Add ${label}. ${help}`} data-help={help}><span className={`component-icon icon-${kind}`}><Icon size={18}/></span><span className="component-label">{label}</span><span className="component-subtitle">{subtitle}</span><kbd className="component-hotkey">{kind === 'capacitor' ? 'c / C' : kind === 'logicGate' ? '2–5, @, #' : COMPONENT_SHORTCUTS[kind] ?? ''}</kbd></button>
-        })}</div> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
+        {filteredPalette.length ? <ComponentPalette items={filteredPalette} pendingKind={pendingComponentKind} onSelect={selectComponentForPlacement}/> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
         {project.sheets.some((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)) && <div className="imported-models"><div className="component-list-label">PROJECT BLOCKS</div>{project.sheets.filter((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)).map((sheet) => <div className="imported-model" key={sheet.id}><div><strong>{sheet.name}</strong><span>{sheet.ports.length} ordered ports · {sheet.ports.map((port) => port.name).join(', ')}</span><small>Defined by this project</small><button className="place-model" onClick={() => placeSheetBlock(sheet)}>Place block</button></div><button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button></div>)}</div>}
         {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.missingIncludes.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Model dependency report"><strong>MODEL DEPENDENCIES</strong>{modelDependencyAnalysis.missingIncludes.length > 0 && <><p>ELSim never reads paths from a model file. Import each referenced file into this project; imported file contents are added directly to the generated netlist.</p><ul>{modelDependencyAnalysis.missingIncludes.slice(0, 20).map((include, index) => <li key={`${include.assetId}:${include.sourceLine}:${index}`}><code>{include.reference || '(empty include)'}</code> · {include.assetFilename}:{include.sourceLine} — {include.reason === 'missing' ? 'file not imported' : include.reason === 'ambiguous' ? 'matches multiple imported filenames' : 'path is unsupported; use a project-local relative path'}</li>)}</ul>{modelDependencyAnalysis.missingIncludes.length > 20 && <p>{modelDependencyAnalysis.missingIncludes.length - 20} additional include references are omitted.</p>}</>}{modelDependencyAnalysis.missing.length > 0 && <><p>These references are not present in the imported project libraries. Import the library that defines each name before running a circuit that uses it.</p><ul>{modelDependencyAnalysis.missing.slice(0, 20).map((dependency, index) => <li key={`${dependency.assetId}:${dependency.sourceLine}:${index}`}><code>{dependency.modelName}</code> ({dependency.kind}) · {dependency.filename}:{dependency.sourceLine}, in {dependency.owner}</li>)}</ul>{modelDependencyAnalysis.missing.length > 20 && <p>{modelDependencyAnalysis.missing.length - 20} additional missing references are omitted.</p>}</>}{modelDependencyAnalysis.recursiveChains.length > 0 && <><p>A circuit that instantiates one of these recursive call chains will fail in ngspice.</p><ul>{modelDependencyAnalysis.recursiveChains.map((chain) => <li key={chain.join(':')}>{chain.join(' → ')}</li>)}</ul></>}</div>}
         {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions"><strong>CONFLICTING MODEL DEFINITIONS</strong><p>More than one imported file defines the same model name. ELSim preserves both files; ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.</p><ul>{modelDependencyAnalysis.conflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.name}`}><code>{conflict.kind === 'subcircuit' ? '.SUBCKT' : '.MODEL'} {conflict.name}</code><ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>{definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => setModelSourceReview({ assetId: definition.assetId, line: definition.sourceLine })}>Review definition</button></li>)}</ul></li>)}</ul></div>}
@@ -3927,7 +3892,7 @@ export default function App() {
     {pendingWaveformTrace && <div className="waveform-destination-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeWaveformDestination() }}><section className="waveform-destination-dialog" role="dialog" aria-modal="true" aria-labelledby="waveform-destination-title" onKeyDown={trapDialogTab}><div className="dialog-heading"><div><span className="eyebrow">WAVEFORM PROBE</span><h2 id="waveform-destination-title">{pendingWaveformTrace.label}</h2></div><button className="subtle-icon" aria-label="Close" onClick={closeWaveformDestination}><X size={15}/></button></div><p>Choose where this trace should appear.</p><label className="waveform-destination-option"><input autoFocus type="radio" name="waveform-destination" checked={waveformDestination === 'new'} disabled={additionalPlotPanels.length >= 8} onChange={() => setWaveformDestination('new')}/><span><strong>New waveform window</strong><small>Open a separate plot with this trace.</small></span></label><label className="waveform-destination-option"><input type="radio" name="waveform-destination" checked={waveformDestination === 'current'} disabled={!additionalPlotPanels.length} onChange={() => setWaveformDestination('current')}/><span><strong>Add to current window</strong><small>{additionalPlotPanels.length ? `Add to ${waveformWindowTitle(additionalPlotPanels.at(-1)!, additionalPlotPanels.length - 1)}.` : 'Open a waveform window first.'}</small></span></label><div className="dialog-actions"><button className="quiet-button" onClick={closeWaveformDestination}>Cancel</button><button className="run-button" onClick={commitWaveformTrace} disabled={waveformDestination === 'new' && additionalPlotPanels.length >= 8}>Open waveform</button></div></section></div>}
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={() => setNetlistOpen(false)}><section className="netlist-modal" role="dialog" aria-modal="true" aria-labelledby="netlist-dialog-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2 id="netlist-dialog-title">Generated SPICE netlist</h2></div><button autoFocus className="subtle-icon" aria-label="Close netlist" onClick={() => setNetlistOpen(false)}><X size={17}/></button></div><pre>{createNetlist(project)}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div></section></div>}
     {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button autoFocus className="subtle-icon" aria-label="Close circuit checks" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><X size={17}/></button></div><p className="erc-intro">These checks look for common wiring mistakes and missing model references. They do not decide whether ngspice can solve your circuit.</p>{electricalIssues.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={`erc-severity ${issue.severity}`}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => { const part = project.parts.find((item) => item.id === issue.partId); setSelection({ kind: 'part', id: issue.partId! }); if (part) setView((view) => ({ ...view, panX: 380 - part.x, panY: 300 - part.y })); setElectricalCheckOpen(false) }}>Select affected component</button>}{issue.wireId && <button onClick={() => { const wire = project.wires.find((item) => item.id === issue.wireId); if (wire) { const [[x1, y1], [x2, y2]] = wire.points; setView((view) => ({ ...view, panX: 380 - (x1 + x2) / 2, panY: 300 - (y1 + y2) / 2 })) } setSelectedWireId(issue.wireId!); setTool('select'); setElectricalCheckOpen(false) }}>Select wire</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalIssues.length} finding{electricalIssues.length === 1 ? '' : 's'}</span><button className="primary-small" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}>Done</button></div></section></div>}
-    {shortcutsOpen && <Suspense fallback={null}><KeyboardShortcuts editing={EDITOR_SHORTCUTS} components={[["C", "Polarized capacitor"] as const, ...palette.filter(({ kind }) => COMPONENT_SHORTCUTS[kind] && kind !== 'logicGate' && kind !== 'inverter').map(({ kind }) => [COMPONENT_SHORTCUTS[kind]!, (componentDefinitionFor(kind).paletteName ?? componentDefinitionFor(kind).name)] as const)]} logicGates={LOGIC_GATE_SHORTCUTS_HELP} reserved={Object.entries(FUTURE_COMPONENT_SHORTCUTS)} onClose={() => { setShortcutsOpen(false); restoreDialogTriggerFocus(shortcutsTriggerRef) }}/></Suspense>}
+    {shortcutsOpen && <Suspense fallback={null}><KeyboardShortcuts editing={EDITOR_SHORTCUTS} components={[["C", "Polarized capacitor"] as const, ...componentPaletteItems.filter(({ kind }) => COMPONENT_SHORTCUTS[kind] && kind !== 'logicGate' && kind !== 'inverter').map(({ kind }) => [COMPONENT_SHORTCUTS[kind]!, (componentDefinitionFor(kind).paletteName ?? componentDefinitionFor(kind).name)] as const)]} logicGates={LOGIC_GATE_SHORTCUTS_HELP} reserved={Object.entries(FUTURE_COMPONENT_SHORTCUTS)} onClose={() => { setShortcutsOpen(false); restoreDialogTriggerFocus(shortcutsTriggerRef) }}/></Suspense>}
     {examplesOpen && <div className="tour-backdrop" onClick={() => { setExamplesOpen(false); setPendingExample(null); restoreDialogTriggerFocus(examplesTriggerRef) }}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="examples-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">LEARN BY EXAMPLE</span><h2 id="examples-title">Open a working circuit</h2></div><button autoFocus className="subtle-icon" aria-label="Close examples" onClick={() => { setExamplesOpen(false); setPendingExample(null); restoreDialogTriggerFocus(examplesTriggerRef) }}><X size={17}/></button></div><p className="tour-copy">Each example is a complete circuit you can inspect, edit, and simulate locally.</p>{pendingExample ? <div className="example-confirm" role="alert"><strong>Replace the current circuit?</strong><p>{pendingExampleTitle} will replace the circuit open in this tab. Save your current circuit first if you want to keep it.</p><div><button className="tour-secondary" onClick={() => setPendingExample(null)}>Cancel</button><button className="primary-small" onClick={() => loadExample(pendingExample)}>Replace and open</button></div></div>  : <>
         <div className="example-topic-filters" role="group" aria-label="Filter examples by topic">{exampleTopicOptions.map((topic) => <button type="button" key={topic.id} aria-pressed={exampleTopic === topic.id} onClick={() => setExampleTopic(topic.id)}>{topic.label}</button>)}</div><label className="search-box example-search"><Search size={15}/><input aria-label="Find an example" placeholder="Find an example" value={exampleQuery} onChange={(event) => setExampleQuery(event.target.value)}/>{exampleQuery && <button type="button" aria-label="Clear example search" onClick={() => setExampleQuery('')}><X size={13}/></button>}</label>
         {filteredExamples.length ? <div className="example-list">{filteredExamples.map(({ id, title, description }) => <article key={id}><div><strong>{title}</strong><p>{description}</p></div><button className="primary-small" onClick={() => setPendingExample(id)}>Open example</button></article>)}</div> : <div className="component-empty" role="status">No examples found for “{exampleQuery}”.</div>}
