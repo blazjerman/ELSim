@@ -147,6 +147,11 @@ function formatLessonCurrent(milliamps: number): string {
   return `${Number(milliamps.toPrecision(3))} mA`
 }
 
+function formatLessonTime(seconds: number): string {
+  if (seconds < 0.1) return `${Number((seconds * 1000).toPrecision(3))} ms`
+  return `${Number(seconds.toPrecision(3))} s`
+}
+
 const componentCategoryKinds: Record<Exclude<ComponentCategory, 'all'>, PartKind[]> = {
   basics: ['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'transformer', 'source', 'currentSource', 'switch', 'ground', 'inverter', 'logicGate'],
   semiconductors: ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'],
@@ -1607,6 +1612,14 @@ export default function App() {
   const transientAxis = simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
   const simulationResultStale = Boolean(simulationResult && simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt)
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && !simulationResultStale)
+  const rcResistance = exampleLesson?.id === 'rc' ? componentMagnitude(project.parts.find((part) => part.id === 'p-r1')?.value ?? '1 kΩ', 'resistor') : null
+  const rcCapacitance = exampleLesson?.id === 'rc' ? componentMagnitude(project.parts.find((part) => part.id === 'p-c1')?.value ?? '10 µF', 'capacitor') : null
+  const rcSupply = exampleLesson?.id === 'rc' ? componentMagnitude(project.parts.find((part) => part.id === 'p-v1')?.value ?? '5 V', 'source') : null
+  const rcTimeConstant = rcResistance && rcResistance > 0 && rcCapacitance && rcCapacitance > 0 ? rcResistance * rcCapacitance : null
+  const rcSolvedOutputTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)') : undefined
+  const rcSolvedAt10Ms = rcSolvedOutputTrace?.axis.length && rcSolvedOutputTrace.values.length
+    ? rcSolvedOutputTrace.axis.reduce((best, time, index, axis) => Math.abs(time - 0.01) < Math.abs(axis[best] - 0.01) ? index : best, 0)
+    : undefined
   const rlStepResistance = exampleLesson?.id === 'rl-step' ? componentMagnitude(project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? '100 Ω', 'resistor') : null
   const rlStepInductanceH = exampleLesson?.id === 'rl-step' ? componentMagnitude(project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? '100 mH', 'inductor') : null
   const rlStepTimeConstantMs = rlStepResistance && rlStepResistance > 0 && rlStepInductanceH && rlStepInductanceH > 0 ? 1000 * rlStepInductanceH / rlStepResistance : null
@@ -1651,7 +1664,15 @@ export default function App() {
   const zenerSolvedCurrentMa = simulationResult?.analysis === 'op' && zenerResistance && zenerResistance > 0 && zenerSupply !== null && zenerSolvedVoltage !== undefined
     ? Math.max(0, (zenerSupply - zenerSolvedVoltage) / zenerResistance * 1000)
     : undefined
-  const lessonNextStep = exampleLesson?.id === 'rl-step' && simulationResult
+  const lessonNextStep = exampleLesson?.id === 'rc' && simulationResult
+    ? rcTimeConstant !== null && rcSupply !== null && rcSolvedOutputTrace
+      ? simulationResultStale
+        ? `R1 = ${project.parts.find((part) => part.id === 'p-r1')?.value} and C1 = ${project.parts.find((part) => part.id === 'p-c1')?.value}, so τ = RC = ${formatLessonTime(rcTimeConstant)}. The old waveform is stale. At 10 ms, the updated circuit predicts VOUT ≈ ${formatLessonVoltage(rcSupply * (1 - Math.exp(-0.01 / rcTimeConstant)))}; rerun to compare.`
+        : rcResistance !== null && Math.abs(rcResistance - 1000) < 1e-6 && rcCapacitance !== null && Math.abs(rcCapacitance - 10e-6) < 1e-12 && rcSupply === 5
+          ? 'At one time constant (10 ms), a 5 V RC step reaches about 63% of its final value, or 3.16 V. Change R1 from 1 kΩ to 2 kΩ and rerun: τ doubles to 20 ms, so at 10 ms VOUT should be about 1.97 V.'
+          : `With R1 = ${project.parts.find((part) => part.id === 'p-r1')?.value} and C1 = ${project.parts.find((part) => part.id === 'p-c1')?.value}, τ = RC = ${formatLessonTime(rcTimeConstant)}. At 10 ms the exponential model predicts VOUT ≈ ${formatLessonVoltage(rcSupply * (1 - Math.exp(-0.01 / rcTimeConstant)))}; ngspice solved ${formatLessonVoltage(rcSolvedOutputTrace.values[rcSolvedAt10Ms ?? 0] ?? 0)}. Increase C1 to make charging slower, or restore R1 to 1 kΩ to recover the 10 ms time constant.`
+      : 'Enter a positive resistance and capacitance, then rerun to compare the RC time constant.'
+    : exampleLesson?.id === 'rl-step' && simulationResult
     ? simulationResultStale
       ? `R1 is ${project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? 'changed'} and L1 is ${project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? 'changed'}. These plots are from the previous circuit; run again to compare the new current ramp.`
       : rlStepResistance === 100 && rlStepInductanceH === 0.1
