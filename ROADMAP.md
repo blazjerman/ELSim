@@ -189,6 +189,8 @@ Hierarchy verification follow-up (2026-10-12): The Firefox nested-versus-flatten
 
 The imported-model browser now searches subcircuit names, source filenames, ordered pins, parameter names, and device-model names/types. Both subcircuit and device-model lists render 50 matches initially and reveal further groups on request. Imported-symbol matches are capped at 50 and follow the subcircuit search, so large libraries do not create unbounded model-card or symbol-match button lists. A Chromium regression imports 52 subcircuits and 52 device models, verifies both caps and search paths, and checks that a matching two-pin symbol lists 50 matches before narrowing to one IC.
 
+Imported-asset dependency guidance (2026-10-12): When placed ICs require a model library, or an IC uses an imported symbol, the library panel now explains why its remove control is disabled and what must be removed first. A focused UI smoke workflow checks the transitive model-library case.
+
 ### M3 — LTspice interoperability
 
 **M3.1 Compatibility matrix and fixtures.** Catalog supported `.asc`, `.asy`, directives, primitives, parameters, and model dialect features. Use original hand-written fixtures or files whose redistribution is permitted. Acceptance: every supported syntax item has a fixture; known unsupported items have a diagnostic.
