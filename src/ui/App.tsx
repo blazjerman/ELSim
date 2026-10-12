@@ -20,7 +20,7 @@ import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { updateSheetDefinition } from '../domain/sheetDefinition'
-import { wireCurrentFlowSegments, type WireCurrentFlowSegment } from '../domain/wireFlow'
+import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor } from './simulationCursor'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
@@ -1172,11 +1172,12 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const viewBox = `${viewportLeft} ${viewportTop} ${viewWidth} ${viewHeight}`
   const contextPart = contextMenu?.kind === 'part' ? project.parts.find((part) => part.id === contextMenu.id) : undefined
   const contextPinNames = contextPart ? contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name) : []
+  const wireFlowSampler = useMemo(() => currentAnimationEnabled && resultIsCurrent && resultConnectivity
+    ? createWireCurrentFlowSampler(project, resultConnectivity)
+    : undefined, [project, resultConnectivity, resultIsCurrent, currentAnimationEnabled])
   const wireFlows = useMemo(() => {
-    if (!currentAnimationEnabled || !resultIsCurrent || !resultConnectivity) return new Map<string, WireCurrentFlowSegment[]>()
-    return wireCurrentFlowSegments(
-      project,
-      resultConnectivity,
+    if (!wireFlowSampler) return new Map<string, WireCurrentFlowSegment[]>()
+    return wireFlowSampler(
       (part) => resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`),
       (part, pinIndex) => {
         const pinVector = part.kind === 'npn' || part.kind === 'pnp'
@@ -1197,7 +1198,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
         return pinVector ? resultValue(part.kind === 'transformer' ? `i(${pinVector})` : `i(@${part.ref}[${pinVector}])`) : undefined
       },
     )
-  }, [project, resultIsCurrent, resultConnectivity, activeSample, simulationResult, currentAnimationEnabled])
+  }, [wireFlowSampler, activeSample, simulationResult])
   const orderedWires = useMemo(() => hoveredWireId ? [...project.wires.filter((wire) => wire.id !== hoveredWireId), ...project.wires.filter((wire) => wire.id === hoveredWireId)] : project.wires, [project.wires, hoveredWireId])
   const hoveredWire = hoveredWireId ? project.wires.find((wire) => wire.id === hoveredWireId) : undefined
   const wireConnectionDots = useMemo(() => {

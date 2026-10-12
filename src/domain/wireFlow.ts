@@ -7,6 +7,20 @@ export type WireCurrentFlowSegment = WireCurrentFlow & { points: [number, number
 
 type FlowEdge = { wireId: string; points: [number, number][]; from: string; to: string }
 type Injection = { value?: number; ignored?: boolean }
+type FlowPin = { part: Part; pinIndex: number; key: string }
+type FlowComponent = {
+  start: string
+  edges: Set<FlowEdge>
+  bridges: Set<FlowEdge>
+  parent: Map<string, string | null>
+  parentEdge: Map<string, FlowEdge>
+  order: string[]
+}
+
+export type WireCurrentSampler = (
+  currentForPart: (part: Part) => number | undefined,
+  currentForPin?: (part: Part, pinIndex: number) => number | undefined,
+) => Map<string, WireCurrentFlowSegment[]>
 
 function coordinateKey(point: { x: number; y: number }): string {
   return `${Math.round(point.x * 1000)},${Math.round(point.y * 1000)}`
@@ -48,13 +62,10 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
  * ideal-wire loops are omitted, while bridge sections attached to a loop are
  * still animated because their current is unambiguous.
  */
-export function wireCurrentFlowSegments(
+export function createWireCurrentFlowSampler(
   project: Project,
   connectivity: Connectivity,
-  currentForPart: (part: Part) => number | undefined,
-  currentForPin?: (part: Part, pinIndex: number) => number | undefined,
-): Map<string, WireCurrentFlowSegment[]> {
-  const result = new Map(project.wires.map((wire) => [wire.id, [] as WireCurrentFlowSegment[]]))
+): WireCurrentSampler {
   const pins = project.parts.flatMap((part) => componentPins(part).map((pin) => ({ part, pin })))
   const candidatePointMap = new Map([
     ...project.wires.flatMap((wire) => wire.points.map(([x, y]) => [{ x, y } as const, coordinateKey({ x, y })] as const)),
@@ -111,18 +122,17 @@ export function wireCurrentFlowSegments(
     to.push(edge)
     adjacency.set(edge.to, to)
   }
-  const injections = new Map<string, Injection[]>()
+  const flowPins: FlowPin[] = []
   for (const { part, pin } of pins) {
     const net = connectivity.pinNets.get(`${part.id}:${pin.index}`)
     if (!net) continue
     const key = graphNodeKey(net, pin)
     if (!adjacency.has(key)) continue
-    const injection = knownPinInjection(part, pin.index, currentForPart, currentForPin)
-    injections.set(key, [...(injections.get(key) ?? []), injection])
+    flowPins.push({ part, pinIndex: pin.index, key })
   }
 
   const visitedNodes = new Set<string>()
-  const edgeFlows = new Map<FlowEdge, WireCurrentFlowSegment>()
+  const components: FlowComponent[] = []
   for (const start of adjacency.keys()) {
     if (visitedNodes.has(start)) continue
     const nodes = new Set<string>(), componentEdges = new Set<FlowEdge>()
@@ -179,62 +189,85 @@ export function wireCurrentFlowSegments(
         order.push(neighbor)
       }
     }
-    const subtree = new Map<string, { sum: number; unknown: number; count: number }>()
-    const summarizeNode = (node: string) => {
-      let sum = 0, unknown = 0, count = 0
-      for (const injection of injections.get(node) ?? []) {
-        if (injection.ignored) continue
-        if (injection.value === undefined) unknown += 1
-        else { sum += injection.value; count += 1 }
-      }
-      return { sum, unknown, count }
-    }
-    for (const node of [...order].reverse()) {
-      const total = summarizeNode(node)
-      for (const edge of adjacency.get(node) ?? []) {
-        const child = edge.from === node ? edge.to : edge.from
-        if (parent.get(child) !== node) continue
-        const childTotal = subtree.get(child)!
-        total.sum += childTotal.sum
-        total.unknown += childTotal.unknown
-        total.count += childTotal.count
-      }
-      subtree.set(node, total)
-    }
-    const total = subtree.get(start)!
-    for (const edge of componentEdges) {
-      if (!bridges.has(edge)) continue
-      const child = parentEdge.get(edge.to) === edge ? edge.to : edge.from
-      const childTotal = subtree.get(child)!
-      const complement = { sum: total.sum - childTotal.sum, unknown: total.unknown - childTotal.unknown, count: total.count - childTotal.count }
-      const left = child === edge.from ? childTotal : complement
-      const right = child === edge.to ? childTotal : complement
-      const source = left.unknown === 0 && left.count > 0 ? left : right.unknown === 0 && right.count > 0 ? right : null
-      if (!source) continue
-      if (left.unknown === 0 && right.unknown === 0 && left.count > 0 && right.count > 0) {
-        const tolerance = Math.max(1e-9, Math.max(Math.abs(left.sum), Math.abs(right.sum)) * 0.05)
-        if (Math.abs(left.sum + right.sum) > tolerance) continue
-      }
-      const forward = source === left ? left.sum >= 0 : right.sum < 0
-      edgeFlows.set(edge, { points: edge.points, forward, magnitude: Math.abs(source.sum) })
-    }
+    components.push({ start, edges: componentEdges, bridges, parent, parentEdge, order })
   }
 
-  for (const wire of project.wires) {
-    const pieces = (edgesByWire.get(wire.id) ?? []).map((edge) => ({ edge, flow: edgeFlows.get(edge) }))
-    const merged: WireCurrentFlowSegment[] = []
-    for (const { edge, flow } of pieces) {
-      if (!flow) continue
-      const previous = merged.at(-1)
-      const tolerance = Math.max(1e-9, Math.max(previous?.magnitude ?? 0, flow.magnitude) * 0.05)
-      const sameFlow = previous && previous.forward === flow.forward && Math.abs(previous.magnitude - flow.magnitude) <= tolerance
-        && coordinateKey({ x: previous.points.at(-1)![0], y: previous.points.at(-1)![1] }) === coordinateKey({ x: edge.points[0][0], y: edge.points[0][1] })
-      if (sameFlow) {
-        previous!.points.push(edge.points[1])
-        previous!.magnitude = Math.max(previous!.magnitude, flow.magnitude)
-      } else merged.push({ points: [...flow.points], forward: flow.forward, magnitude: flow.magnitude })
+  return (currentForPart, currentForPin) => {
+    const result = new Map(project.wires.map((wire) => [wire.id, [] as WireCurrentFlowSegment[]]))
+    const injections = new Map<string, Injection[]>()
+    for (const { part, pinIndex, key } of flowPins) {
+      const injection = knownPinInjection(part, pinIndex, currentForPart, currentForPin)
+      injections.set(key, [...(injections.get(key) ?? []), injection])
     }
-    result.set(wire.id, merged)
+
+    const edgeFlows = new Map<FlowEdge, WireCurrentFlowSegment>()
+    for (const { start, edges: componentEdges, bridges, parent, parentEdge, order } of components) {
+      const subtree = new Map<string, { sum: number; unknown: number; count: number }>()
+      const summarizeNode = (node: string) => {
+        let sum = 0, unknown = 0, count = 0
+        for (const injection of injections.get(node) ?? []) {
+          if (injection.ignored) continue
+          if (injection.value === undefined) unknown += 1
+          else { sum += injection.value; count += 1 }
+        }
+        return { sum, unknown, count }
+      }
+      for (const node of [...order].reverse()) {
+        const total = summarizeNode(node)
+        for (const edge of adjacency.get(node) ?? []) {
+          const child = edge.from === node ? edge.to : edge.from
+          if (parent.get(child) !== node) continue
+          const childTotal = subtree.get(child)!
+          total.sum += childTotal.sum
+          total.unknown += childTotal.unknown
+          total.count += childTotal.count
+        }
+        subtree.set(node, total)
+      }
+      const total = subtree.get(start)!
+      for (const edge of componentEdges) {
+        if (!bridges.has(edge)) continue
+        const child = parentEdge.get(edge.to) === edge ? edge.to : edge.from
+        const childTotal = subtree.get(child)!
+        const complement = { sum: total.sum - childTotal.sum, unknown: total.unknown - childTotal.unknown, count: total.count - childTotal.count }
+        const left = child === edge.from ? childTotal : complement
+        const right = child === edge.to ? childTotal : complement
+        const source = left.unknown === 0 && left.count > 0 ? left : right.unknown === 0 && right.count > 0 ? right : null
+        if (!source) continue
+        if (left.unknown === 0 && right.unknown === 0 && left.count > 0 && right.count > 0) {
+          const tolerance = Math.max(1e-9, Math.max(Math.abs(left.sum), Math.abs(right.sum)) * 0.05)
+          if (Math.abs(left.sum + right.sum) > tolerance) continue
+        }
+        const forward = source === left ? left.sum >= 0 : right.sum < 0
+        edgeFlows.set(edge, { points: edge.points, forward, magnitude: Math.abs(source.sum) })
+      }
+    }
+
+    for (const wire of project.wires) {
+      const pieces = (edgesByWire.get(wire.id) ?? []).map((edge) => ({ edge, flow: edgeFlows.get(edge) }))
+      const merged: WireCurrentFlowSegment[] = []
+      for (const { edge, flow } of pieces) {
+        if (!flow) continue
+        const previous = merged.at(-1)
+        const tolerance = Math.max(1e-9, Math.max(previous?.magnitude ?? 0, flow.magnitude) * 0.05)
+        const sameFlow = previous && previous.forward === flow.forward && Math.abs(previous.magnitude - flow.magnitude) <= tolerance
+          && coordinateKey({ x: previous.points.at(-1)![0], y: previous.points.at(-1)![1] }) === coordinateKey({ x: edge.points[0][0], y: edge.points[0][1] })
+        if (sameFlow) {
+          previous!.points.push(edge.points[1])
+          previous!.magnitude = Math.max(previous!.magnitude, flow.magnitude)
+        } else merged.push({ points: [...flow.points], forward: flow.forward, magnitude: flow.magnitude })
+      }
+      result.set(wire.id, merged)
+    }
+    return result
   }
-  return result
+}
+
+export function wireCurrentFlowSegments(
+  project: Project,
+  connectivity: Connectivity,
+  currentForPart: (part: Part) => number | undefined,
+  currentForPin?: (part: Part, pinIndex: number) => number | undefined,
+): Map<string, WireCurrentFlowSegment[]> {
+  return createWireCurrentFlowSampler(project, connectivity)(currentForPart, currentForPin)
 }

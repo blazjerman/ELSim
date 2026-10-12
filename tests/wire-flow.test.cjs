@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { wireCurrentFlowSegments } = require(path.join(build, 'domain/wireFlow.js'))
+const { createWireCurrentFlowSampler, wireCurrentFlowSegments } = require(path.join(build, 'domain/wireFlow.js'))
 const { createStarterProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
@@ -21,6 +21,18 @@ test('current animates across each independent starter wire segment, including g
     assert.equal(segments[0].forward, true, wire.id)
     assert.equal(segments[0].magnitude, 0.005, wire.id)
   }
+})
+
+test('a precomputed wire sampler updates flow values across playback samples', () => {
+  const project = createStarterProject()
+  const connectivity = analyzeConnectivity(project)
+  const sample = createWireCurrentFlowSampler(project, connectivity)
+  const first = sample((part) => part.ref === 'R1' ? 0.005 : part.ref === 'C1' ? 0.005 : part.ref === 'V1' ? -0.005 : undefined)
+  const secondCurrents = new Map([['V1', -0.002], ['R1', 0.002], ['C1', 0.002]])
+  const second = sample((part) => secondCurrents.get(part.ref))
+  assert.equal(first.get('w-1')[0].magnitude, 0.005)
+  assert.equal(second.get('w-1')[0].magnitude, 0.002)
+  assert.deepEqual(second, wireCurrentFlowSegments(project, connectivity, (part) => secondCurrents.get(part.ref)))
 })
 
 test('a parallel branch splits trunk animation into sections with their own currents', () => {
