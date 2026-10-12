@@ -159,6 +159,7 @@
             "zener",
             "led",
             "switch",
+            "voltageSwitch",
             "vcvs",
             "vccs",
             "cccs",
@@ -608,6 +609,25 @@
               }
             }
           }
+        },
+        "voltageSwitch": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "onResistance": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "offResistance": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "hysteresis": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "description": "Optional voltage-controlled switch parameters; omitted values use 1 \u03a9, 1 G\u03a9, and 0 V defaults."
         }
       },
       "allOf": [

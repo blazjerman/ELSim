@@ -13,7 +13,8 @@ Letters are case-sensitive. In the browser, holding Shift changes `event.key`, s
 | `i` | Current source (ELSim addition) |
 | `d` | Diode |
 | `l` | LED |
-| `s` | Switch |
+| `s` | Manual on/off switch |
+| `S` | Voltage-controlled switch |
 | `e` | Lamp (ELSim addition) |
 | `n` | NPN transistor |
 | `p` | PNP transistor |
@@ -34,7 +35,6 @@ These keys are recognized and show a “reserved for a future component” messa
 | --- | --- |
 | `R` | Relay |
 | `C` | Polarized capacitor |
-| `S` | SPDT switch |
 | `T` | Transformer |
 | `V` | One-terminal voltage source |
 | `a` / `A` | Operational amplifier orientations |

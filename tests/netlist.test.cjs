@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createAcHighPassExampleProject, createAcLowPassExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createAcHighPassExampleProject, createAcLowPassExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -845,6 +845,25 @@ test('four-terminal voltage-controlled sources keep SPICE output and control pin
   assert.match(artifact.text, /^G1 n\d+ n\d+ n\d+ n\d+ 1m$/m)
   assert.equal(artifact.sourceMap.filter((entry) => ['p-e1', 'p-g1'].includes(entry.sourceId)).length, 2)
   assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'E1')).map(({ x, y }) => [x - 720, y - 280]), [[-50, 0], [50, 0], [0, -50], [0, 50]])
+})
+
+test('voltage-controlled switch emits four-terminal device and its own model', () => {
+  const project = createVoltageSwitchExampleProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^S1 VCC VOUT CTRL 0 ELSIM_S1_SW$/m)
+  assert.match(artifact.text, /^\.model ELSIM_S1_SW SW\(Ron=1 Roff=1g Vt=2\.5 Vh=0\)$/m)
+  assert.match(artifact.text, /^\.tran 100u 100m$/m)
+})
+
+test('voltage-controlled switch rejects invalid resistance and hysteresis settings', () => {
+  const project = createVoltageSwitchExampleProject()
+  const device = project.parts.find((part) => part.kind === 'voltageSwitch')
+  device.voltageSwitch.offResistance = '0.5 Ω'
+  assert.throws(() => validateProject(project), /greater off resistance/i)
+  device.voltageSwitch.offResistance = '1 GΩ'
+  device.voltageSwitch.hysteresis = '-1 V'
+  assert.throws(() => validateProject(project), /nonnegative hysteresis/i)
 })
 
 test('NPN and PNP parts create separate educational BJT models in C-B-E pin order', () => {

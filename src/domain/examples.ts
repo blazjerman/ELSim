@@ -322,6 +322,36 @@ export function createControlledSourceExampleProject(): Project {
   return project
 }
 
+/** A pulse-controlled switch connects a 5 V supply to a resistive load. */
+export function createVoltageSwitchExampleProject(): Project {
+  const project = createStarterProject()
+  const control: Part = { id: 'vswitch-vctrl', kind: 'source', ref: 'VCTRL', value: '5 V', sourceMode: 'pulse', pulse: { initial: '0 V', delay: '0', rise: '1m', fall: '1m', width: '50m', period: '100m' }, x: 220, y: 620, rotation: 0 }
+  const supply: Part = { id: 'vswitch-vcc', kind: 'source', ref: 'VCC', value: '5 V', sourceMode: 'dc', x: 280, y: 280, rotation: 0 }
+  const device: Part = { id: 'vswitch-s1', kind: 'voltageSwitch', ref: 'S1', value: '2.5 V', voltageSwitch: { onResistance: '1 Ω', offResistance: '1 GΩ', hysteresis: '0 V' }, x: 540, y: 400, rotation: 0 }
+  const load: Part = { id: 'vswitch-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 800, y: 400, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Voltage-controlled switch'
+  project.parts = [control, supply, device, load]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('vswitch-control', 'CTRL', control, 0), labelAt('vswitch-control-pin', 'CTRL', device, 2),
+    labelAt('vswitch-control-ground', '0', control, 1), labelAt('vswitch-control-return', '0', device, 3),
+    labelAt('vswitch-supply', 'VCC', supply, 0), labelAt('vswitch-input', 'VCC', device, 0),
+    labelAt('vswitch-output', 'VOUT', device, 1), labelAt('vswitch-load', 'VOUT', load, 0),
+    labelAt('vswitch-ground', '0', supply, 1), labelAt('vswitch-load-ground', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(CTRL)', 'V(VOUT)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -20, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A low-side NPN switch driven through a base resistor and feeding a resistive load. */
 export function createTransistorSwitchExampleProject(): Project {
   const project = createStarterProject()

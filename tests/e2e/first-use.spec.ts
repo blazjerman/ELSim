@@ -209,7 +209,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   const search = dialog.getByRole('textbox', { name: 'Find an example' })
   const cards = dialog.locator('.example-list article')
-  await expect(cards).toHaveCount(22)
+  await expect(cards).toHaveCount(23)
   await search.fill('P-JFET')
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('P-JFET positive-rail switch')
@@ -219,7 +219,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   await search.fill('no such circuit')
   await expect(dialog.getByRole('status')).toContainText('No examples found')
   await dialog.getByRole('button', { name: 'Clear example search' }).click()
-  await expect(cards).toHaveCount(22)
+  await expect(cards).toHaveCount(23)
 })
 
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', { tag: '@ltspice' }, async ({ page }) => {
@@ -429,7 +429,7 @@ test('component shortcuts are case-sensitive and future Falstad shortcuts stay r
   await page.keyboard.press('Escape')
   const shortcuts: [string, string][] = [
     ['r', 'Resistor'], ['e', 'Lamp'], ['c', 'Capacitor'], ['Shift+L', 'Inductor'], ['v', 'Voltage source'],
-    ['i', 'Current source'], ['d', 'Diode'], ['z', 'Zener diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
+    ['i', 'Current source'], ['Shift+S', 'Voltage-controlled switch'], ['d', 'Diode'], ['z', 'Zener diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
     ['Shift+G', 'VCCS'], ['Shift+F', 'CCCS'], ['Shift+H', 'CCVS'], ['b', 'Behavioral source'], ['n', 'NPN transistor'],
     ['p', 'PNP transistor'], ['j', 'N-channel JFET'], ['Shift+J', 'P-channel JFET'], ['N', 'N-channel MOSFET'],
     ['P', 'P-channel MOSFET'], ['g', 'Ground'],
@@ -443,7 +443,7 @@ test('component shortcuts are case-sensitive and future Falstad shortcuts stay r
   await page.keyboard.press('Shift+C')
   await expect(page.locator('.component-card').filter({ hasText: 'Capacitor' })).toHaveAttribute('aria-pressed', 'true')
   await page.keyboard.press('Escape')
-  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+S', 'SPDT switch'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
+  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
     await page.keyboard.press(shortcut)
     await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
   }
@@ -2675,6 +2675,28 @@ test('controlled-source example opens and solves with input and output probes', 
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 2\.0+/)
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(gout\) = -1\.0+/)
+})
+
+test('voltage-controlled switch example toggles the load with its control pulse', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Use the existing ngspice WASM runtime for the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Voltage-controlled switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Voltage-controlled switch')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(ctrl)')
+  await expectAvailableTrace(page, 'V(vout)')
+  await expectAvailableTrace(page, 'I(S1)')
+  const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  const finalSample = Number(await timeSlider.getAttribute('max'))
+  await timeSlider.fill(String(Math.floor(finalSample * 0.25)))
+  await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 4\.9+/)
+  await timeSlider.fill(String(Math.floor(finalSample * 0.75)))
+  await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 0\.00+/)
 })
 
 test('transistor switch example demonstrates base drive and collector switching', { tag: '@ngspice' }, async ({ page }) => {
