@@ -117,6 +117,41 @@ export function createDiodeRectifierExampleProject(): Project {
   return project
 }
 
+/** A beginner bridge rectifier showing full-wave conversion and capacitor smoothing. */
+export function createBridgeRectifierExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'bridge-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'sine', sine: { offset: '0', amplitude: '5', frequency: '50 Hz', delay: '0', damping: '0', phase: '0' }, x: 220, y: 400, rotation: 0 }
+  const diode = (id: string, ref: string, x: number, y: number): Part => ({ id, kind: 'diode', ref, value: 'Default diode', x, y, rotation: 0 })
+  const diodes = [
+    diode('bridge-d1', 'D1', 460, 300), diode('bridge-d2', 'D2', 460, 500),
+    diode('bridge-d3', 'D3', 640, 300), diode('bridge-d4', 'D4', 640, 500),
+  ]
+  const capacitor: Part = { id: 'bridge-c1', kind: 'capacitor', ref: 'C1', value: '220 µF', x: 820, y: 360, rotation: 90 }
+  const load: Part = { id: 'bridge-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 820, y: 500, rotation: 90 }
+  const reference: Part = { id: 'bridge-rref', kind: 'resistor', ref: 'RREF', value: '100 kΩ', x: 1000, y: 500, rotation: 0 }
+  const parts = [source, ...diodes, capacitor, load, reference]
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const point = componentPins(part)[pin]
+    return { id, name, x: point.x, y: point.y, visible: true }
+  }
+  project.name = 'Bridge rectifier and smoothing capacitor'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('bridge-vin-source', 'VIN', source, 0), labelAt('bridge-vin-d1', 'VIN', diodes[0], 0), labelAt('bridge-vin-d3', 'VIN', diodes[2], 1),
+    labelAt('bridge-ground-source', '0', source, 1), labelAt('bridge-ground-d2', '0', diodes[1], 0), labelAt('bridge-ground-d4', '0', diodes[3], 1), labelAt('bridge-ground-reference', '0', reference, 1),
+    labelAt('bridge-vpos-d1', 'VPOS', diodes[0], 1), labelAt('bridge-vpos-d2', 'VPOS', diodes[1], 1), labelAt('bridge-vpos-capacitor', 'VPOS', capacitor, 0), labelAt('bridge-vpos-load', 'VPOS', load, 0),
+    labelAt('bridge-vneg-d3', 'VNEG', diodes[2], 0), labelAt('bridge-vneg-d4', 'VNEG', diodes[3], 0), labelAt('bridge-vneg-capacitor', 'VNEG', capacitor, 1), labelAt('bridge-vneg-load', 'VNEG', load, 1), labelAt('bridge-vneg-reference', 'VNEG', reference, 0),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['v(vin)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: -40, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A beginner RC circuit driven by a hand-edited piecewise-linear source. */
 export function createPwlExampleProject(): Project {
   const project = createStarterProject()

@@ -125,6 +125,8 @@ The Examples dialog includes an RLC ringing circuit, a voltage-controlled source
 
 A basic voltage-divider example now places two equal 1 kΩ resistors across 10 V, starts at an operating-point analysis, and selects VIN/VOUT. Its guided card explains the 5 V midpoint and invites changing one resistor; netlist and pinned-WASM operating-point regressions check the expected result, and a focused browser workflow verifies the solved midpoint.
 
+A guided bridge-rectifier lesson uses four built-in diodes, a 50 Hz source, a load, a reservoir capacitor, and a high-value output reference. The lesson directs the learner to probe voltage across the capacitor so the waveform and charge animation show the full-wave output between peaks. Netlist coverage checks diode orientation, output/load/reference connectivity, and transient settings; a focused Chromium run with the existing local engine verifies the capacitor stays above 3 V at the 10 ms between-peak sample and exposes the charge readout.
+
 The transient measurement editor offers labeled node-voltage and common R/C/L/voltage-source/current-source vectors in accessible pickers, while keeping editable SPICE expressions for advanced vectors. A browser regression checks node/current choices, free-form expression synchronization, and saved project state.
 
 ### M2 — Project system and deeper simulation

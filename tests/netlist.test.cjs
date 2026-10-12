@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createAcHighPassExampleProject, createAcLowPassExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -169,6 +169,23 @@ test('diode rectifier example generates an AC-driven half-wave transient', () =>
   assert.match(artifact.text, /^D1 VIN VOUT DDEFAULT$/m)
   assert.match(artifact.text, /^R1 VOUT 0 1k$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)', 'I(D1)'])
+})
+
+test('bridge rectifier example converts both AC half-cycles and includes a smoothing capacitor', () => {
+  const project = createBridgeRectifierExampleProject()
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'Bridge rectifier and smoothing capacitor')
+  assert.match(artifact.text, /^V1 VIN 0 SIN\(0 5 50 0 0 0\)$/m)
+  assert.match(artifact.text, /^D1 VIN VPOS DDEFAULT$/m)
+  assert.match(artifact.text, /^D2 0 VPOS DDEFAULT$/m)
+  assert.match(artifact.text, /^D3 VNEG VIN DDEFAULT$/m)
+  assert.match(artifact.text, /^D4 VNEG 0 DDEFAULT$/m)
+  assert.match(artifact.text, /^C1 VPOS VNEG 220u$/m)
+  assert.match(artifact.text, /^RLOAD VPOS VNEG 1k$/m)
+  assert.match(artifact.text, /^RREF VNEG 0 100k$/m)
+  assert.match(artifact.text, /^\.tran 100u 100m$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['v(vin)'])
 })
 
 test('RC low-pass example generates a 1 V AC logarithmic sweep around its cutoff', () => {
