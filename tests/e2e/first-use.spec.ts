@@ -496,6 +496,38 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
 })
 
+test('solver errors select and bring the reported component into view', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createStarterProject()
+  const target = project.parts.find((part) => part.kind === 'resistor')!
+  target.x = 5000
+  target.y = 4000
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+  await page.route('**/engine/ngspice.mjs', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: 'export default async () => {}' }))
+  await page.route('**/engine/ngspice.wasm', (route) => route.fulfill({ status: 200, contentType: 'application/wasm', body: 'mock-wasm' }))
+  await page.addInitScript(({ projectJson, sourceId }) => {
+    localStorage.setItem('elsim:project:v7', projectJson)
+    class MockWorker {
+      onmessage: ((event: { data: unknown }) => void) | null = null
+      postMessage(request: { type: string; requestId: string }) {
+        if (request.type !== 'run') return
+        window.setTimeout(() => this.onmessage?.({ data: { type: 'error', requestId: request.requestId, error: { severity: 'error', message: 'Simulated solver error', sourceId } } }), 0)
+      }
+      terminate() {}
+    }
+    Object.defineProperty(window, 'Worker', { configurable: true, value: MockWorker })
+  }, { projectJson: JSON.stringify(project), sourceId: target.id })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('Simulated solver error')
+  const affected = page.locator(`.circuit-part[data-part-id="${target.id}"]`)
+  await expect(affected).toHaveClass(/selected/)
+  const centered = await page.locator('svg.schematic').evaluate((svg) => {
+    const { x, y, width, height } = (svg as SVGSVGElement).viewBox.baseVal
+    return [x + width / 2, y + height / 2]
+  })
+  expect(centered).toEqual([target.x, target.y])
+})
+
 test('reusable block settings expose named controls', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('svg.schematic')).toBeVisible()

@@ -3295,7 +3295,11 @@ export default function App() {
         const message = typeof response.error?.message === 'string' ? response.error.message : 'ngspice returned an invalid error response.'
         const sourceId = response.error?.sourceId
         if (response.error?.assetId) setCompatibilityDiagnostic(response.error)
-        if (sourceId && projectRef.current.parts.some((part) => part.id === sourceId)) setSelection({ kind: 'part', id: sourceId })
+        const failedPart = sourceId ? projectRef.current.parts.find((part) => part.id === sourceId) : undefined
+        if (failedPart) {
+          setSelection({ kind: 'part', id: failedPart.id })
+          setView((view) => ({ ...view, panX: 380 - failedPart.x, panY: 300 - failedPart.y }))
+        }
         setNotice(response.error?.hint ? `${message} Tip: ${response.error.hint}` : message)
         worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
