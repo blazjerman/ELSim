@@ -552,6 +552,32 @@ test('nested component diagnostics select and center their visible reusable bloc
   expect(centered).toEqual([visibleBlock.x, visibleBlock.y])
 })
 
+test('nested component diagnostics select and center the component in its open sheet', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createHierarchicalExampleProject()
+  const nestedSheet = project.sheets.at(-1)!
+  const nestedPart = nestedSheet.parts[0]
+  nestedPart.value = 'not-a-value'
+  nestedPart.x = 5000
+  nestedPart.y = 4000
+  project.activeSheetId = nestedSheet.id
+  project.parts = nestedSheet.parts
+  project.wires = nestedSheet.wires
+  project.junctions = nestedSheet.junctions
+  project.netLabels = nestedSheet.netLabels
+  project.view = nestedSheet.view
+  await page.addInitScript((projectJson) => localStorage.setItem('elsim:project:v7', projectJson), JSON.stringify(project))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText(`${nestedPart.ref} has an invalid numeric value`)
+  const affected = page.locator(`.circuit-part[data-part-id="${nestedPart.id}"]`)
+  await expect(affected).toHaveClass(/selected/)
+  const centered = await page.locator('svg.schematic').evaluate((svg) => {
+    const { x, y, width, height } = (svg as SVGSVGElement).viewBox.baseVal
+    return [x + width / 2, y + height / 2]
+  })
+  expect(centered).toEqual([nestedPart.x, nestedPart.y])
+})
+
 test('reusable block settings expose named controls', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('svg.schematic')).toBeVisible()

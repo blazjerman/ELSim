@@ -3164,17 +3164,22 @@ export default function App() {
     if (!sourceId) return undefined
     const current = projectRef.current
     let visiblePart = current.parts.find((part) => part.id === sourceId)
-    if (!visiblePart && current.activeSheetId === current.rootSheetId) {
+    if (!visiblePart) {
       const separator = sourceId.indexOf(':')
       if (separator > 0) {
         const sourceSheetId = sourceId.slice(0, separator)
         const nestedPartId = sourceId.slice(separator + 1)
         let sheet = current.sheets.find((candidate) => candidate.id === sourceSheetId)
-        if (sheet?.parts.some((part) => part.id === nestedPartId)) {
-          while (sheet && sheet.parentSheetId !== null && sheet.parentSheetId !== current.rootSheetId) {
-            sheet = current.sheets.find((candidate) => candidate.id === sheet!.parentSheetId)
+        const reportedPart = sheet?.parts.find((part) => part.id === nestedPartId)
+        if (sheet && reportedPart) {
+          if (sheet.id === current.activeSheetId) {
+            visiblePart = current.parts.find((part) => part.id === nestedPartId)
+          } else {
+            while (sheet && sheet.parentSheetId !== null && sheet.parentSheetId !== current.activeSheetId) {
+              sheet = current.sheets.find((candidate) => candidate.id === sheet!.parentSheetId)
+            }
+            if (sheet?.parentSheetId === current.activeSheetId) visiblePart = current.parts.find((part) => part.sheetId === sheet!.id)
           }
-          if (sheet?.parentSheetId === current.rootSheetId) visiblePart = current.parts.find((part) => part.sheetId === sheet!.id)
         }
       }
     }
