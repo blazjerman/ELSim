@@ -7,6 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
+const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
 const { moveSelectedSceneObjects } = require(path.join(build, 'domain/sceneEdit.js'))
 
@@ -158,6 +159,37 @@ test('opening a manually edited project snaps its stored geometry before net val
     ...opened.netLabels.flatMap((label) => [label.x, label.y]),
   ]
   assert.ok(storedValues.every((value) => value % EDITOR_GRID_SIZE === 0))
+})
+
+test('opening a manually edited hierarchy snaps every authored sheet geometry to the shared grid', () => {
+  const project = createHierarchicalExampleProject()
+  project.parts[0].x += 2
+  project.wires.push({ id: 'root-off-grid-wire', points: [[20, 20], [60, 20]] })
+  project.wires[0].points[0][0] += 2
+  project.junctions.push({ x: 52, y: 62 })
+  project.netLabels[0].x += 2
+  const child = project.sheets.find((sheet) => sheet.id !== project.rootSheetId)
+  assert.ok(child)
+  child.parts[0].x += 2
+  child.wires.push({ id: 'child-off-grid-wire', points: [[30, 30], [70, 30]] })
+  child.wires[0].points[0][0] += 2
+  child.junctions.push({ x: 82, y: 92 })
+  child.netLabels[0].x += 2
+
+  const opened = validateProject(project)
+  const geometry = [
+    ...opened.parts.flatMap((part) => [part.x, part.y]),
+    ...opened.wires.flatMap((wire) => wire.points.flat()),
+    ...opened.junctions.flatMap(({ x, y }) => [x, y]),
+    ...opened.netLabels.flatMap(({ x, y }) => [x, y]),
+    ...opened.sheets.flatMap((sheet) => [
+      ...sheet.parts.flatMap((part) => [part.x, part.y]),
+      ...sheet.wires.flatMap((wire) => wire.points.flat()),
+      ...sheet.junctions.flatMap(({ x, y }) => [x, y]),
+      ...sheet.netLabels.flatMap(({ x, y }) => [x, y]),
+    ]),
+  ]
+  assert.ok(geometry.every((value) => value % EDITOR_GRID_SIZE === 0))
 })
 
 test('legacy multi-point wires migrate into independent two-endpoint segments', () => {
