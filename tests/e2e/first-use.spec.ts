@@ -228,7 +228,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   const search = dialog.getByRole('textbox', { name: 'Find an example' })
   const cards = dialog.locator('.example-list article')
-  await expect(cards).toHaveCount(32)
+  await expect(cards).toHaveCount(33)
   await search.fill('P-JFET')
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('P-JFET positive-rail switch')
@@ -238,7 +238,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   await search.fill('no such circuit')
   await expect(dialog.getByRole('status')).toContainText('No examples found')
   await dialog.getByRole('button', { name: 'Clear example search' }).click()
-  await expect(cards).toHaveCount(32)
+  await expect(cards).toHaveCount(33)
 })
 
 test('examples can be browsed by topic and combined with search', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -258,7 +258,7 @@ test('examples can be browsed by topic and combined with search', { tag: '@ui-sm
   await topicFilters.getByRole('button', { name: 'AC & reactive' }).click()
   await expect(cards).toHaveCount(6)
   await topicFilters.getByRole('button', { name: 'All' }).click()
-  await expect(cards).toHaveCount(32)
+  await expect(cards).toHaveCount(33)
 })
 
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -2012,6 +2012,45 @@ test('capacitor initial voltage editor starts the transient at the requested vol
   await expect(page.getByRole('button', { name: 'Rewind result playback to the first solved sample' })).toBeVisible()
   await page.getByRole('button', { name: 'Rewind result playback to the first solved sample' }).click()
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 2(?:\.0+)? V/)
+})
+
+test('capacitor discharge lesson compares solved RC decay before and after a resistor change', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Capacitor discharge' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Capacitor discharge')
+  await expect(page.getByLabel('Guided example')).toContainText('C1 starts at 5 V')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const lesson = page.locator('.example-lesson-next-step')
+  const measured = async () => {
+    const text = await lesson.innerText()
+    const match = text.match(/At 10 ms, ngspice solved V\(OUT\) = ([\d.]+) V and \|I\(R1\)\| = ([\d.]+) mA/)
+    expect(match, text).not.toBeNull()
+    return [Number(match![1]), Number(match![2])] as const
+  }
+  await expect(lesson).toContainText('one time constant leaves about 37%')
+  await expect(lesson).toContainText('Double R1 to 2 kΩ')
+  const [initialVoltage, initialCurrent] = await measured()
+  expect(initialVoltage).toBeGreaterThan(1.7)
+  expect(initialVoltage).toBeLessThan(2)
+  expect(initialCurrent).toBeGreaterThan(1.7)
+  await page.locator('.circuit-part[data-part-id="cap-discharge-r1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="cap-discharge-r1:value"]').fill('2 kΩ')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(lesson).toContainText('The updated circuit predicts V(OUT)')
+  await lesson.getByRole('button', { name: 'Run this circuit again' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const [updatedVoltage, updatedCurrent] = await measured()
+  expect(updatedVoltage).toBeGreaterThan(initialVoltage * 1.5)
+  expect(updatedVoltage).toBeLessThan(initialVoltage * 2)
+  expect(updatedCurrent).toBeLessThan(initialCurrent)
 })
 
 test('LTspice import shows skipped records and preserves the original source', { tag: '@ltspice' }, async ({ page }) => {

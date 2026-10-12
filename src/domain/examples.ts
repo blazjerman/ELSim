@@ -511,6 +511,32 @@ export function createRlStepExampleProject(): Project {
   return project
 }
 
+/** A capacitor-only transient lesson showing exponential discharge from an initial voltage. */
+export function createCapacitorDischargeExampleProject(): Project {
+  const project = createStarterProject()
+  const capacitor: Part = { id: 'cap-discharge-c1', kind: 'capacitor', ref: 'C1', value: '10 µF', x: 460, y: 400, rotation: 0 }
+  const resistor: Part = { id: 'cap-discharge-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 700, y: 400, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const parts = [capacitor, resistor]
+  project.name = 'Capacitor discharge'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('cap-discharge-c1-out', 'OUT', capacitor, 0), labelAt('cap-discharge-r1-out', 'OUT', resistor, 0),
+    labelAt('cap-discharge-c1-ground', '0', capacitor, 1), labelAt('cap-discharge-r1-ground', '0', resistor, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '50 ms', maxStep: '100 µs', initialConditions: [{ element: 'C1', voltage: '5 V' }] }
+  project.plotSettings = { selectedTraceIds: ['V(OUT)', 'I(R1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -10, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A beginner flyback lesson showing the current path through a protection diode. */
 export function createFlybackDiodeExampleProject(): Project {
   const project = createStarterProject()
