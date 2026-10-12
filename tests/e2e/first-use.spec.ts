@@ -222,6 +222,13 @@ test('quick tour explains the current workspace and project save flow', { tag: '
   await expect(dialog).toHaveCount(0)
 })
 
+test('project inspector reports the current project format version', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await expect(page.getByText('ELSim JSON · v8')).toBeVisible()
+})
+
 test('engine-free preview explains the local runtime requirement while keeping the editor usable', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.route('**/engine/ngspice.mjs', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))
   await page.route('**/engine/ngspice.wasm', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))
