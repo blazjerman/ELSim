@@ -134,7 +134,7 @@ test('duplicating a reusable sheet clones nested definitions with fresh identiti
 
   let nextId = 0
   const duplicated = duplicateSheetDefinition(project, 'sheet-load', () => `copy-${++nextId}`)
-  const copy = duplicated.sheets.find((sheet) => sheet.name === 'Block 1')
+  const copy = duplicated.sheets.find((sheet) => sheet.name === 'Copy of Load')
   assert.ok(copy)
   assert.notEqual(copy.id, 'sheet-load')
   assert.equal(copy.parentSheetId, project.rootSheetId)
@@ -152,6 +152,9 @@ test('duplicating a reusable sheet clones nested definitions with fresh identiti
   assert.equal(duplicated.activeSheetId, copy.id)
   assert.doesNotThrow(() => validateProject(duplicated))
   assert.equal(project.sheets.length, 3)
+  const secondCopy = duplicateSheetDefinition(duplicated, 'sheet-load', () => `copy-${++nextId}`)
+  assert.ok(secondCopy.sheets.some((sheet) => sheet.name === 'Copy of Load (2)'))
+  assert.doesNotThrow(() => validateProject(secondCopy))
 })
 
 test('editing a reused sheet definition updates instance pins and keeps surviving wires attached', () => {

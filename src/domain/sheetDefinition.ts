@@ -14,6 +14,18 @@ export function nextBlockSheetName(project: Project, parentSheetId: string): str
   return `Block ${next}`
 }
 
+function nextSheetCopyName(project: Project, parentSheetId: string, sourceName: string): string {
+  const names = new Set(project.sheets.filter((sheet) => sheet.parentSheetId === parentSheetId).map((sheet) => sheet.name.trim().toLowerCase()))
+  const base = `Copy of ${sourceName}`.slice(0, 80)
+  if (!names.has(base.toLowerCase())) return base
+  for (let suffix = 2; suffix < Number.MAX_SAFE_INTEGER; suffix += 1) {
+    const tail = ` (${suffix})`
+    const candidate = `${base.slice(0, 80 - tail.length)}${tail}`
+    if (!names.has(candidate.toLowerCase())) return candidate
+  }
+  throw new Error('Could not find an unused name for the duplicated sheet.')
+}
+
 /** Duplicate a reusable sheet and its nested definitions as an independent subtree. */
 export function duplicateSheetDefinition(project: Project, sheetId: string, createId: () => string = () => crypto.randomUUID()): Project {
   const source = project.sheets.find((sheet) => sheet.id === sheetId)
@@ -32,7 +44,7 @@ export function duplicateSheetDefinition(project: Project, sheetId: string, crea
     }
   }
   const idMap = new Map([...subtree].map((id) => [id, `sheet-${createId()}`]))
-  const rootName = nextBlockSheetName(project, source.parentSheetId)
+  const rootName = nextSheetCopyName(project, source.parentSheetId, source.name)
   const nameMap = new Map([...subtree].map((id) => [id, id === source.id ? rootName : project.sheets.find((sheet) => sheet.id === id)!.name]))
   const clones = project.sheets.filter((sheet) => subtree.has(sheet.id)).map((sheet): ProjectSheet => ({
     ...sheet,
