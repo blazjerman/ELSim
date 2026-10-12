@@ -395,16 +395,26 @@ export function createTransformerExampleProject(): Project {
   }
   project.name = 'AC step-up transformer'
   project.parts = [source, sourceResistance, transformer, load]
-  project.wires = []
+  project.wires = [
+    { id: 'transformer-drive-link', points: [[250, 330], [330, 380]] },
+    { id: 'transformer-primary-feed', points: [[430, 380], [450, 350]] },
+    { id: 'transformer-primary-return', points: [[250, 430], [450, 410]] },
+    { id: 'transformer-secondary-feed', points: [[550, 350], [700, 350]] },
+    { id: 'transformer-secondary-feed-drop', points: [[700, 350], [700, 330]] },
+    { id: 'transformer-secondary-load-top', points: [[700, 330], [760, 330]] },
+    { id: 'transformer-secondary-return', points: [[550, 410], [700, 410]] },
+    { id: 'transformer-secondary-return-rise', points: [[700, 410], [700, 430]] },
+    { id: 'transformer-secondary-load-bottom', points: [[700, 430], [760, 430]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('transformer-drive-source', 'DRIVE', source, 0), labelAt('transformer-drive-rsource', 'DRIVE', sourceResistance, 0),
-    labelAt('transformer-vin-rsource', 'VIN', sourceResistance, 1), labelAt('transformer-vin-primary', 'VIN', transformer, 0),
-    labelAt('transformer-ground-source', '0', source, 1), labelAt('transformer-ground-primary', '0', transformer, 1),
-    labelAt('transformer-vout-secondary', 'VOUT', transformer, 2), labelAt('transformer-vout-load', 'VOUT', load, 0),
-    labelAt('transformer-ground-secondary', '0', transformer, 3), labelAt('transformer-ground-load', '0', load, 1),
+    labelAt('transformer-drive-source', 'DRIVE', source, 0),
+    labelAt('transformer-vin-primary', 'VIN', transformer, 0),
+    labelAt('transformer-ground-primary', '0', transformer, 1),
+    labelAt('transformer-vout-secondary', 'VOUT', transformer, 2),
+    labelAt('transformer-ground-secondary', '0', transformer, 3),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '10 kHz' } }
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
   project.view = { zoom: 0.9, panX: -10, panY: 0 }
