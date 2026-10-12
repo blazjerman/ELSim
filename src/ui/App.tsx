@@ -790,6 +790,9 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const selectedWireIdSet = useMemo(() => new Set(selectedWireIds), [selectedWireIds])
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const selectedNetLabelIdSet = useMemo(() => new Set(selectedNetLabelIds), [selectedNetLabelIds])
+  const pinLocations = useMemo(() => projectPinLocations(project).map((pin) => ({ ...pin, id: `${pin.partId}:${pin.index}` })), [project.parts])
+  const pinsNear = useMemo(() => createViewportIndex(pinLocations, (pin) => ({ left: pin.x, top: pin.y, right: pin.x, bottom: pin.y }), 64), [pinLocations])
+  const wiresNear = useMemo(() => createWireViewportIndex(project.wires), [project.wires])
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const [view, setViewState] = useState(project.view)
   const viewRef = useRef(project.view)
@@ -1009,12 +1012,14 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   }
   const resolveNode = (point: { x: number; y: number }) => {
     let best: { x: number; y: number; distance: number } | null = null
-    for (const pin of projectPinLocations(project)) {
+    for (const pin of pinsNear({ left: point.x - 16, top: point.y - 16, right: point.x + 16, bottom: point.y + 16 })) {
       const distance = Math.hypot(point.x - pin.x, point.y - pin.y)
       if (distance < 16 && (!best || distance < best.distance)) best = { x: pin.x, y: pin.y, distance }
     }
     if (best) return best
-    const wire = wireNetAt(project, point, 8)
+    const tolerance = 8
+    const nearbyWires = wiresNear({ left: point.x - tolerance, top: point.y - tolerance, right: point.x + tolerance, bottom: point.y + tolerance })
+    const wire = wireNetAt(project, point, tolerance, nearbyWires)
     return wire ? { ...wire.point, distance: wire.distance } : null
   }
   const canvasClick = (event: MouseEvent<SVGSVGElement>) => {

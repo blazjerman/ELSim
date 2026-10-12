@@ -3114,6 +3114,7 @@ test('deleting a component keeps its independent wire and selected wires use the
 
 test('wire mode does not select or move an existing wire', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = []

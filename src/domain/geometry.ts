@@ -203,9 +203,9 @@ export function closestPoint(point: Point, a: Point, b: Point): Point & { distan
   return { x, y, t, distance: Math.hypot(point.x - x, point.y - y) }
 }
 
-export function wireNetAt(project: Project, point: Point, tolerance = 8): { point: Point; wireId: string; distance: number } | null {
+export function wireNetAt(project: Project, point: Point, tolerance = 8, candidates: readonly Wire[] = project.wires): { point: Point; wireId: string; distance: number } | null {
   let best: { point: Point; wireId: string; distance: number } | null = null
-  for (const wire of project.wires) {
+  for (const wire of candidates) {
     const [a, b] = wire.points
     const near = closestPoint(point, { x: a[0], y: a[1] }, { x: b[0], y: b[1] })
     if (near.distance <= tolerance && (!best || near.distance < best.distance)) {

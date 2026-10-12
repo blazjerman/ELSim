@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
 const { moveSelectedSceneObjects } = require(path.join(build, 'domain/sceneEdit.js'))
@@ -107,6 +107,27 @@ test('wire viewport index preserves brute-force visibility, ordering, and focuse
   assert.ok(query({ left: 100_000, top: 100_000, right: 101_000, bottom: 101_000 }, 'indexed-4').some((wire) => wire.id === 'indexed-4'))
   assert.deepEqual(query({ left: -30_000, top: -30_000, right: 30_000, bottom: 30_000 }), wires)
   assert.throws(() => createWireViewportIndex(wires, 0), RangeError)
+})
+
+test('indexed wire endpoint snapping matches the full scan, including long segments', () => {
+  const project = createStarterProject()
+  project.parts = []
+  project.wires = [
+    { id: 'snap-horizontal', points: [[0, 0], [100, 0]] },
+    { id: 'snap-vertical', points: [[200, 0], [200, 100]] },
+    { id: 'snap-long', points: [[-10_000, 500], [10_000, 500]] },
+    ...Array.from({ length: 2_000 }, (_, index) => {
+      const x = 50_000 + index * 500
+      return { id: `snap-distant-${index}`, points: [[x, 20_000], [x + 100, 20_000]] }
+    }),
+  ]
+  const query = createWireViewportIndex(project.wires)
+  for (const point of [{ x: 53, y: 5 }, { x: 201, y: 53 }, { x: 123, y: 506 }, { x: 30_000, y: 0 }]) {
+    const bounds = { left: point.x - 8, top: point.y - 8, right: point.x + 8, bottom: point.y + 8 }
+    const candidates = query(bounds)
+    assert.deepEqual(wireNetAt(project, point, 8, candidates), wireNetAt(project, point), `point ${point.x},${point.y}`)
+    if (point.x < 1_000) assert.ok(candidates.length < project.wires.length / 100, 'nearby lookup excludes distant wires')
+  }
 })
 
 test('generic viewport index preserves bounded-object visibility and z-order', () => {
