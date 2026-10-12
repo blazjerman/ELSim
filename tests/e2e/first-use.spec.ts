@@ -3268,13 +3268,13 @@ test('deleting a component keeps its independent wire and selected wires use the
   })
   await page.reload()
   await page.locator('.circuit-part[data-part-id="independent-resistor"]').click()
-  await page.getByRole('button', { name: 'Delete selected (Delete)' }).click()
+  await page.getByRole('button', { name: 'Delete selected or hovered (Delete)' }).click()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(0)
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)).toEqual([{ id: 'independent-wire', points: [[400, 330], [500, 330]] }])
 
-  await page.locator('.wire-line[data-wire-id="independent-wire"]').click()
-  await expect(page.getByRole('button', { name: 'Delete selected (Delete)' })).toBeEnabled()
-  await page.getByRole('button', { name: 'Delete selected (Delete)' }).click()
+  await page.locator('.wire-line[data-wire-id="independent-wire"]').hover()
+  await expect(page.getByRole('button', { name: 'Delete selected or hovered (Delete)' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Delete selected or hovered (Delete)' }).click()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(0)
 })
 
