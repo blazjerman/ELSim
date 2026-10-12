@@ -3148,6 +3148,32 @@ test('junction tool toggles a crossing connection in the schematic', async ({ pa
   await expect(svg.locator('title', { hasText: 'Connected wire junction' })).toHaveCount(0)
 })
 
+test('offscreen junction markers are culled and return when fitting the schematic', async ({ page }) => {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts = []
+    project.wires = [
+      { id: 'local-junction-h', points: [[300, 300], [400, 300]] },
+      { id: 'local-junction-v', points: [[350, 250], [350, 350]] },
+      { id: 'remote-junction-h', points: [[1900, 1000], [2100, 1000]] },
+      { id: 'remote-junction-v', points: [[2000, 900], [2000, 1100]] },
+    ]
+    project.junctions = [{ x: 350, y: 300 }, { x: 2000, y: 1000 }]
+    project.netLabels = []
+    project.sheets[0] = { ...project.sheets[0], parts: [], wires: project.wires, junctions: project.junctions, netLabels: [] }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const junctions = page.locator('svg.schematic [data-junction-x]')
+  await expect(junctions).toHaveCount(1)
+  await expect(page.locator('svg.schematic [data-junction-x="2000"]')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(junctions).toHaveCount(2)
+  await expect(page.locator('svg.schematic [data-junction-x="2000"][data-junction-y="1000"]')).toBeVisible()
+})
+
 test('Ctrl+A selects multiple wires and dragging one moves the selected wire group', async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
@@ -3473,10 +3499,10 @@ test('connection dots render at wire T joins and component pins on a wire', asyn
   expect(coordinates).toContainEqual([300, 300])
   expect(coordinates).toContainEqual([350, 300])
   expect(coordinates).toContainEqual([400, 300])
-  expect(coordinates).not.toContainEqual([1980, 1000])
+  expect(coordinates).not.toContainEqual([1950, 1000])
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await expect(page.locator('.wire-connection-dot')).toHaveCount(4)
-  await expect(page.locator('.wire-connection-dot[data-x="1980"][data-y="1000"]')).toBeVisible()
+  await expect(page.locator('.wire-connection-dot[data-x="1950"][data-y="1000"]')).toBeVisible()
 })
 
 test('moving a component leaves all wire objects fixed in place', async ({ page }) => {

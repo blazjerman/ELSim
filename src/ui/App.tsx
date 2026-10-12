@@ -175,6 +175,19 @@ const CanvasConnectionDotLayer = memo(function CanvasConnectionDotLayer({ dots, 
   return <>{visibleDots.map(({ x, y, id }) => <circle key={id} className="wire-connection-dot" data-x={x} data-y={y} cx={x} cy={y} r="4" pointerEvents="none"/>)}</>
 })
 
+const CanvasJunctionLayer = memo(function CanvasJunctionLayer({ junctions, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
+  junctions: { x: number; y: number }[]
+  viewportLeft: number
+  viewportTop: number
+  viewportRight: number
+  viewportBottom: number
+}) {
+  const indexedJunctions = useMemo(() => junctions.map((junction, index) => ({ ...junction, id: `${junction.x}:${junction.y}:${index}` })), [junctions])
+  const junctionViewportIndex = useMemo(() => createViewportIndex(indexedJunctions, (junction) => ({ left: junction.x - 6, top: junction.y - 6, right: junction.x + 6, bottom: junction.y + 6 })), [indexedJunctions])
+  const visibleJunctions = junctionViewportIndex({ left: viewportLeft, top: viewportTop, right: viewportRight, bottom: viewportBottom })
+  return <>{visibleJunctions.map(({ x, y, id }) => <g key={id} pointerEvents="none" data-junction-x={x} data-junction-y={y}><circle cx={x} cy={y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={x} cy={y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}</>
+})
+
 const CanvasNetLabel = memo(function CanvasNetLabel({ label, selected, tool, onPointerDown, onSelect }: {
   label: Project['netLabels'][number]
   selected: boolean
@@ -1582,7 +1595,7 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
       {wireFlowSampler && <WireCurrentFlowLayer wireIds={animatedWireIds} wires={project.wires} sampleFlows={sampleWireFlows} animationEnabled={currentAnimationEnabled} currentMultiplier={currentMultiplier} dotSize={currentDotSize} dotSpacing={currentDotSpacing}/>}
       <CanvasConnectionDotLayer dots={wireConnectionDots} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       <CanvasNetLabelLayer labels={project.netLabels} selectedIds={selectedNetLabelIds} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
-      {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
+      <CanvasJunctionLayer junctions={project.junctions} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       {wireStart && wirePreviewEnd && <line x1={wireStart.x} y1={wireStart.y} x2={wirePreviewEnd.x} y2={wirePreviewEnd.y} stroke="#a4e8bb" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>}
       {wireStart && <circle cx={wireStart.x} cy={wireStart.y} r="5" fill="#9ae3b7" stroke="#18251c" strokeWidth="3" pointerEvents="none"/>}
       {componentPreview && <g className="component-placement-preview" aria-hidden="true" pointerEvents="none"><CircuitPart part={componentPreview} onSelect={() => {}} onPointerDown={() => {}} onNavigate={() => {}} onProbe={() => {}} onSwitchToggle={() => {}} componentSample={() => ({})} tool="select"/></g>}
