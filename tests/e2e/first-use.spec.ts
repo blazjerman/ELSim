@@ -3153,6 +3153,8 @@ test('inverting op-amp lesson demonstrates negative feedback gain', { tag: '@ngs
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Inverting op-amp amplifier')
   await expect(page.getByLabel('Guided example')).toContainText('about −2 times the input')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(15)
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(VOUT)')

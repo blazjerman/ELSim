@@ -91,20 +91,36 @@ export function createInvertingOpampExampleProject(): Project {
     return { id, name, x: pin.x, y: pin.y, visible: true }
   }
   project.name = 'Inverting op-amp amplifier'
+  project.wires = [
+    { id: 'inverting-vin-rise', points: [[240, 350], [240, 300]] },
+    { id: 'inverting-vin-top', points: [[240, 300], [310, 300]] },
+    { id: 'inverting-vin-rin', points: [[310, 300], [310, 460]] },
+    { id: 'inverting-rin-feedback', points: [[410, 460], [430, 460]] },
+    { id: 'inverting-feedback-trunk', points: [[430, 580], [430, 420]] },
+    { id: 'inverting-feedback-input', points: [[430, 420], [440, 420]] },
+    { id: 'inverting-feedback-return', points: [[720, 370], [720, 580]] },
+    { id: 'inverting-feedback-bottom', points: [[720, 580], [430, 580]] },
+    { id: 'inverting-output-link', points: [[600, 400], [640, 400]] },
+    { id: 'inverting-output-rise', points: [[640, 400], [640, 200]] },
+    { id: 'inverting-output-feedback-top', points: [[640, 200], [720, 200]] },
+    { id: 'inverting-output-feedback-drop', points: [[720, 200], [720, 270]] },
+    { id: 'inverting-output-load-drop', points: [[640, 400], [640, 430]] },
+    { id: 'inverting-output-load-link', points: [[640, 430], [680, 430]] },
+    { id: 'inverting-output-load-top', points: [[680, 430], [680, 450]] },
+  ]
   project.netLabels = [
-    atPin('inverting-vin-source', 'VIN', input, 0), atPin('inverting-vin-rin', 'VIN', inputResistor, 0),
-    atPin('inverting-feedback-rin', 'FB', inputResistor, 1), atPin('inverting-feedback-opamp', 'FB', amplifier, 1),
+    atPin('inverting-vin-source', 'VIN', input, 0),
+    atPin('inverting-feedback-opamp', 'FB', amplifier, 1),
     atPin('inverting-ground-opamp', '0', amplifier, 0), atPin('inverting-vpos-opamp', 'VPOS', amplifier, 2),
     atPin('inverting-vpos-source', 'VPOS', project.parts.find((part) => part.ref === 'VCC')!, 0),
     atPin('inverting-vneg-opamp', 'VNEG', amplifier, 3), atPin('inverting-vneg-source', 'VNEG', project.parts.find((part) => part.ref === 'VEE')!, 1),
     atPin('inverting-ground-input', '0', input, 1),
     atPin('inverting-ground-vpos', '0', project.parts.find((part) => part.ref === 'VCC')!, 1),
     atPin('inverting-ground-vneg', '0', project.parts.find((part) => part.ref === 'VEE')!, 0),
-    atPin('inverting-output-opamp', 'VOUT', amplifier, 4), atPin('inverting-output-rf', 'VOUT', feedback, 0),
-    atPin('inverting-output-load', 'VOUT', load, 0), atPin('inverting-feedback-rf', 'FB', feedback, 1),
+    atPin('inverting-output-opamp', 'VOUT', amplifier, 4),
     atPin('inverting-ground-load', '0', load, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(FB)', 'V(VOUT)', 'I(RIN)'], ranges: {} }
   return project
 }

@@ -129,6 +129,7 @@ test('inverting op-amp lesson wires negative feedback and its resistor ratio', (
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
   assert.equal(project.name, 'Inverting op-amp amplifier')
+  assert.equal(project.wires.length, 15)
   assert.match(artifact.text, /^XU1 0 FB VPOS VNEG VOUT ELSIM_EDU_OPAMP$/m)
   assert.match(artifact.text, /^RIN VIN FB 10k$/m)
   assert.match(artifact.text, /^RF VOUT FB 20k$/m)
