@@ -58,10 +58,10 @@ function tick(now: number) {
   for (const [key, config] of configurations) {
     const element = elements.get(key)
     if (!element || config.magnitude <= 1e-12) continue
-    // Stronger simulated current moves the dots faster, while the speed
-    // control stays a global multiplier. The square-root response keeps
-    // useful motion visible across typical circuit current magnitudes.
-    const currentFactor = Math.min(8, Math.max(0.08, Math.sqrt(config.magnitude / 0.001)))
+    // Speed is proportional to the actual wire current: 2 mA advances the
+    // dots twice as fast as 1 mA. Cap only the extreme end to avoid skipping
+    // full dash cycles between frames. The slider multiplies the rate.
+    const currentFactor = Math.min(20, config.magnitude / 0.001)
     const phase = (phases.get(key) ?? 0) + elapsed * 18 * config.speed * currentFactor * (config.forward ? 1 : -1)
     const wrapped = ((phase % 18) + 18) % 18
     phases.set(key, wrapped)
