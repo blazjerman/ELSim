@@ -258,6 +258,20 @@ function trapDialogTab(event: ReactKeyboardEvent<HTMLElement>) {
   }
 }
 
+function navigateMenuItems(container: HTMLElement, key: string, selector = '[role="menuitem"]:not(:disabled), select:not(:disabled)') {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(key)) return false
+  const items = [...container.querySelectorAll<HTMLElement>(selector)]
+  if (!items.length) return false
+  const index = items.indexOf(document.activeElement as HTMLElement)
+  const next = key === 'Home' ? 0 : key === 'End' ? items.length - 1 : index < 0 ? (key === 'ArrowDown' ? 0 : items.length - 1) : (index + (key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+  items[next].focus()
+  return true
+}
+
+function navigateMenuByKeyboard(event: ReactKeyboardEvent<HTMLElement>) {
+  if (navigateMenuItems(event.currentTarget, event.key)) event.preventDefault()
+}
+
 function BlockParameterOverride({ name, defaultValue, value, onCommit, scope = 'block' }: { name: string; defaultValue: string; value: string | undefined; onCommit: (value: string) => void; scope?: 'block' | 'model' }) {
   const effectiveValue = value ?? defaultValue
   const [draft, setDraft] = useState(effectiveValue)
@@ -1625,13 +1639,8 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
     </svg>
     <div className="sr-only wire-endpoint-announcement" role="status" aria-live="polite" aria-atomic="true">{wireEndpointAnnouncement}</div>
     {contextMenu && <div ref={contextMenuRef} className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : contextMenu.kind === 'label' ? `Options for net ${project.netLabels.find((label) => label.id === contextMenu.id)?.name ?? ''}` : contextMenu.kind === 'wire' ? 'Wire options' : 'Schematic options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
-      const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled), select:not(:disabled)')]
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setContextMenu(null); contextMenuReturnFocusRef.current?.focus(); return }
-      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) || items.length === 0) return
-      event.preventDefault()
-      const index = items.indexOf(document.activeElement as HTMLButtonElement)
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
-      items[next].focus()
+      navigateMenuByKeyboard(event)
     }}>
       {contextPart ? <>
         <div className="context-menu-heading">{contextPart.ref} · {kindNames[contextPart.kind]}</div>
@@ -1714,6 +1723,16 @@ export default function App() {
   const [hierarchyWalkthroughStep, setHierarchyWalkthroughStep] = useState<number | null>(null)
   const [sheetSettingsOpen, setSheetSettingsOpen] = useState(false)
   const [sheetTabMenu, setSheetTabMenu] = useState<{ id: string; left: number; top: number } | null>(null)
+  useEffect(() => {
+    if (!sheetTabMenu) return
+    const frame = window.requestAnimationFrame(() => document.querySelector<HTMLElement>('.sheet-tab-menu-items[role="menu"] [role="menuitem"]:not(:disabled)')?.focus())
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const menu = document.querySelector<HTMLElement>('.sheet-tab-menu-items[role="menu"]')
+      if (menu?.contains(document.activeElement) && navigateMenuItems(menu, event.key, '[role="menuitem"]:not(:disabled)')) event.preventDefault()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => { window.cancelAnimationFrame(frame); document.removeEventListener('keydown', handleKeyDown) }
+  }, [sheetTabMenu?.id])
   const [sheetNameDraft, setSheetNameDraft] = useState('')
   const [sheetNameError, setSheetNameError] = useState('')
   const [sheetInstancePath, setSheetInstancePath] = useState<string[]>([])
