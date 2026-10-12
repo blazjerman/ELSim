@@ -662,6 +662,35 @@ test('large imported-model dependency reports are navigable regions, not live st
   await expect(importedModel.getByRole('button', { name: 'Remove model library amp.lib' })).toBeDisabled()
 })
 
+test('model library provenance can remove unused shared files and protects included dependencies', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(async (fallbackProjectJson) => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key) ?? 'null') ?? JSON.parse(fallbackProjectJson)
+    const assets = [
+      { id: 'amplifier-library', filename: 'amplifier.lib', content: '.include "shared.lib"\n.SUBCKT AMP IN OUT\nR1 IN OUT {RLOAD}\n.ENDS AMP' },
+      { id: 'shared-library', filename: 'shared.lib', content: '.PARAM RLOAD=10k' },
+      { id: 'unused-library', filename: 'unused.lib', content: '.MODEL D_UNUSED D(IS=1n)' },
+    ]
+    project.modelAssets = await Promise.all(assets.map(async (asset) => {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(asset.content))
+      const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+      return { ...asset, sha256, licenseStatus: 'unknown', importedAt: new Date().toISOString() }
+    }))
+    project.parts.push({ id: 'amplifier-instance', kind: 'subcircuit', ref: 'XAMP1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem(key, JSON.stringify(project))
+  }, JSON.stringify(createStarterProject()))
+  await page.reload()
+
+  await expect(page.getByRole('button', { name: 'Remove library file amplifier.lib' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Remove library file shared.lib' })).toBeDisabled()
+  const unusedFile = page.getByRole('button', { name: 'Remove library file unused.lib' })
+  await expect(unusedFile).toBeEnabled()
+  await unusedFile.click()
+  await expect(page.getByRole('button', { name: 'Remove library file unused.lib' })).toHaveCount(0)
+})
+
 test('model dependency report offers a direct import action for referenced library files', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()

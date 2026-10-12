@@ -238,6 +238,8 @@ Direct model-include recovery (2026-10-12): A native model dependency report wit
 
 Included-asset retention (2026-10-12): The required-model set now follows resolved include references recursively, including libraries that provide only shared `.PARAM`/`.FUNC` definitions and nested include files. Removing an imported IC's shared definition file can no longer silently break its simulation. A domain regression checks a two-level include chain and confirms unrelated libraries remain removable.
 
+Model library file management (2026-10-12): Every imported library now has one remove control in its provenance card, including include-only files with no `.MODEL` or `.SUBCKT` cards. The control is disabled when a placed IC or another included library depends on the file; unused files can be removed directly. Firefox verifies both protected two-level include dependencies and deletion of an unrelated model file.
+
 ### M3 — LTspice interoperability
 
 **M3.1 Compatibility matrix and fixtures.** Catalog supported `.asc`, `.asy`, directives, primitives, parameters, and model dialect features. Use original hand-written fixtures or files whose redistribution is permitted. Acceptance: every supported syntax item has a fixture; known unsupported items have a diagnostic.
