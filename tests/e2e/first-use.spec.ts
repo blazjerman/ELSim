@@ -507,12 +507,13 @@ test('component shortcuts are case-sensitive and logic-gate keys select their ma
     await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
   }
   const gateCard = page.locator('.component-card').filter({ hasText: 'Logic gate' })
-  for (const [key, operation] of [['2', 'and'], ['3', 'or'], ['4', 'xor'], ['@', 'nand'], ['#', 'nor']] as const) {
+  for (const [key, operation] of [['2', 'and'], ['3', 'or'], ['4', 'xor'], ['5', 'xnor'], ['@', 'nand'], ['#', 'nor']] as const) {
     if (key === '@' || key === '#') await page.evaluate((shortcut) => window.dispatchEvent(new KeyboardEvent('keydown', { key: shortcut, bubbles: true })), key)
     else await page.keyboard.press(key)
     await expect(gateCard, `${key} should select the ${operation.toUpperCase()} gate`).toHaveAttribute('aria-pressed', 'true')
     await expect(page.locator('.toast')).toContainText('Logic gate selected')
   }
+  await expect(gateCard.locator('.component-hotkey')).toHaveText('2–5, @, #')
   await page.keyboard.press('1')
   await expect(page.locator('.component-card').filter({ hasText: 'Inverter' })).toHaveAttribute('aria-pressed', 'true')
   await page.keyboard.press('w')
