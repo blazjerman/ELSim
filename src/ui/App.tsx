@@ -1716,6 +1716,7 @@ export default function App() {
   const transformerTurnsRatio = transformer ? Number(transformer.turnsRatio ?? '2') : null
   const transformerCurrent = exampleLesson?.id === 'transformer-current' ? project.parts.find((part) => part.id === 'transformer-t1') : undefined
   const transformerCurrentTurnsRatio = transformerCurrent ? Number(transformerCurrent.turnsRatio ?? '2') : null
+  const transformerCurrentSuggestedRatio = transformerCurrentTurnsRatio !== null && Math.abs(transformerCurrentTurnsRatio - 3) < 1e-9 ? 2 : 3
   const transformerPrimaryCurrentTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => ['i(lt1_p)', 'i(@lt1_p[i])'].includes(trace.id.toLowerCase())) : undefined
   const transformerSecondaryCurrentTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => ['i(lt1_s)', 'i(@lt1_s[i])'].includes(trace.id.toLowerCase())) : undefined
   const transformerPrimaryCurrentAtEnd = transformerPrimaryCurrentTrace?.values.at(-1)
@@ -1755,7 +1756,7 @@ export default function App() {
       ? simulationResultStale
         ? `T1 is now ${transformerCurrent?.turnsRatio ?? 'changed'}:1. These arrows are from the previous transient; rerun to refresh both winding currents and compare the new ratio.`
         : transformerCurrentTurnsRatio !== null && Number.isFinite(transformerCurrentTurnsRatio) && transformerCurrentTurnsRatio > 0
-          ? `At ${transformerCurrentTurnsRatio}:1 secondary-to-primary turns, an ideal transformer predicts secondary voltage ≈ ${transformerCurrentTurnsRatio}× primary voltage and secondary current ≈ primary current ÷ ${transformerCurrentTurnsRatio}.${transformerPrimaryCurrentAtEnd !== undefined && transformerSecondaryCurrentAtEnd !== undefined ? ` Ngspice's final sample is |Iprimary| = ${formatLessonCurrent(Math.abs(transformerPrimaryCurrentAtEnd) * 1000)} and |Isecondary| = ${formatLessonCurrent(Math.abs(transformerSecondaryCurrentAtEnd) * 1000)}.` : ''} Change T1 to 3:1, rerun, and compare the winding-current arrows or plot both winding currents. Winding resistance and leakage make the simulated result differ from the ideal ratio.`
+          ? `At ${transformerCurrentTurnsRatio}:1 secondary-to-primary turns, an ideal transformer predicts secondary voltage ≈ ${transformerCurrentTurnsRatio}× primary voltage and secondary current ≈ primary current ÷ ${transformerCurrentTurnsRatio}.${transformerPrimaryCurrentAtEnd !== undefined && transformerSecondaryCurrentAtEnd !== undefined ? ` Ngspice's final sample is |Iprimary| = ${formatLessonCurrent(Math.abs(transformerPrimaryCurrentAtEnd) * 1000)} and |Isecondary| = ${formatLessonCurrent(Math.abs(transformerSecondaryCurrentAtEnd) * 1000)}.` : ''} Change T1 to ${transformerCurrentSuggestedRatio}:1, rerun, and compare the winding-current arrows or plot both winding currents. Winding resistance and leakage make the simulated result differ from the ideal ratio.`
           : 'Choose a positive turns ratio, then rerun and compare the separately solved winding currents.'
     : exampleLesson?.id === 'current-controlled' && simulationResult
     ? currentControlledSenseAt25Ms !== undefined && currentControlledTransresistance !== null

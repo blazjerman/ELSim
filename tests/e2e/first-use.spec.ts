@@ -2853,6 +2853,7 @@ test('transformer transient animation follows both solved winding currents', { t
   await page.locator('.example-lesson-next-step').getByRole('button', { name: 'Run this circuit again' }).click()
   await expect(page.getByText(/analysis complete ·/i)).toBeVisible({ timeout: 60_000 })
   await expect(page.locator('.example-lesson-next-step')).toContainText('At 3:1 secondary-to-primary turns')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('Change T1 to 2:1')
   await expect(page.locator('.example-lesson-next-step')).toContainText(/Ngspice's final sample is \|Iprimary\| = .* mA and \|Isecondary\| = .* mA/)
   const slider = page.getByLabel('Simulation time')
   await scrubToTime(slider, 0.025)
