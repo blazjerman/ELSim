@@ -2891,8 +2891,14 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('RLC ringing')
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(9)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await scrubToTime(page.getByRole('slider', { name: 'Simulation time' }), 0.001)
+  for (const wireId of ['rlc-source-feed-top', 'rlc-resistor-inductor', 'rlc-return-bottom']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.001)
+  }
   await expect(page.locator('.example-lesson-next-step')).toContainText('underdamped')
   await expect(page.locator('.example-lesson-next-step')).toContainText('critical damping is about 20 Ω')
   await page.setViewportSize({ width: 1280, height: 900 })

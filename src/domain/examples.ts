@@ -526,15 +526,25 @@ export function createRlcExampleProject(): Project {
   }
   project.name = 'RLC ringing'
   project.parts = [source, resistor, inductor, capacitor]
-  project.wires = []
+  project.wires = [
+    { id: 'rlc-source-feed-rise', points: [[180, 310], [180, 260]] },
+    { id: 'rlc-source-feed-top', points: [[180, 260], [340, 260]] },
+    { id: 'rlc-source-feed-drop', points: [[340, 260], [340, 300]] },
+    { id: 'rlc-resistor-inductor', points: [[440, 300], [540, 300]] },
+    { id: 'rlc-inductor-capacitor', points: [[640, 300], [740, 300]] },
+    { id: 'rlc-return-right', points: [[840, 300], [880, 300]] },
+    { id: 'rlc-return-drop', points: [[880, 300], [880, 460]] },
+    { id: 'rlc-return-bottom', points: [[880, 460], [180, 460]] },
+    { id: 'rlc-return-source', points: [[180, 460], [180, 410]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('rlc-in-source', 'VIN', source, 0), labelAt('rlc-in-r', 'VIN', resistor, 0),
-    labelAt('rlc-r-l', 'R_L', resistor, 1), labelAt('rlc-l-r', 'R_L', inductor, 0),
-    labelAt('rlc-l-c', 'L_C', inductor, 1), labelAt('rlc-c-l', 'L_C', capacitor, 0),
-    labelAt('rlc-c-out', '0', capacitor, 1), labelAt('rlc-source-ground', '0', source, 1),
+    labelAt('rlc-in-source', 'VIN', source, 0),
+    labelAt('rlc-r-l', 'R_L', resistor, 1),
+    labelAt('rlc-l-c', 'L_C', inductor, 1),
+    labelAt('rlc-source-ground', '0', source, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '40 ms', maxStep: '20 µs' }
   project.plotSettings = { selectedTraceIds: ['V(L_C)', 'I(L1)'], ranges: {} }
   project.view = { zoom: 0.9, panX: -30, panY: 0 }
