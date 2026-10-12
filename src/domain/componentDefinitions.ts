@@ -8,6 +8,7 @@ export type ComponentSymbolPrimitive =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'rect'; x: number; y: number; width: number; height: number; rx?: number }
   | { kind: 'circle'; cx: number; cy: number; r: number; fill?: 'none' | 'stroke'; className?: string }
+  | { kind: 'text'; x: number; y: number; text: string; className?: string }
   | { kind: 'path'; d: string; fill?: 'none' | 'stroke'; className?: string }
 export type ComponentDefinition = {
   id: string
@@ -108,12 +109,12 @@ const xorGateGeometry = [
 ] as const satisfies readonly ComponentSymbolPrimitive[]
 const inversionBubble = { kind: 'circle', cx: 29, cy: 0, r: 5, className: 'logic-gate-inversion-bubble' } as const satisfies ComponentSymbolPrimitive
 const logicGateSymbolVariants = {
-  and: andGateGeometry,
-  nand: [...andGateGeometry, inversionBubble],
-  or: orGateGeometry,
-  nor: [...orGateGeometry, inversionBubble],
-  xor: xorGateGeometry,
-  xnor: [...xorGateGeometry, inversionBubble],
+  and: [...andGateGeometry, { kind: 'text', x: -3, y: 5, text: '&', className: 'gate-mark' }],
+  nand: [...andGateGeometry, inversionBubble, { kind: 'text', x: -3, y: 5, text: '&', className: 'gate-mark' }],
+  or: [...orGateGeometry, { kind: 'text', x: -3, y: 5, text: '≥1', className: 'gate-mark' }],
+  nor: [...orGateGeometry, inversionBubble, { kind: 'text', x: -3, y: 5, text: '≥1', className: 'gate-mark' }],
+  xor: [...xorGateGeometry, { kind: 'text', x: -3, y: 5, text: '=1', className: 'gate-mark' }],
+  xnor: [...xorGateGeometry, inversionBubble, { kind: 'text', x: -3, y: 5, text: '=1', className: 'gate-mark' }],
 } as const satisfies Readonly<Record<string, readonly ComponentSymbolPrimitive[]>>
 const manualSwitchBaseGeometry = [
   { kind: 'line', x1: -50, y1: 0, x2: -14, y2: 0 }, { kind: 'line', x1: 14, y1: 0, x2: 50, y2: 0 },

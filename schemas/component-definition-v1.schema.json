@@ -209,6 +209,18 @@
           {
             "type": "object",
             "additionalProperties": false,
+            "required": ["kind", "x", "y", "text"],
+            "properties": {
+              "kind": { "const": "text" },
+              "x": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "y": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "text": { "type": "string", "minLength": 1, "maxLength": 24 },
+              "className": { "type": "string", "pattern": "^[A-Za-z0-9 _-]+$", "maxLength": 128 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
             "required": ["kind", "d"],
             "properties": {
               "kind": { "const": "path" },
