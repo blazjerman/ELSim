@@ -869,6 +869,19 @@ test('invalid PWL points focus the exact source field before simulation', async 
   await expect(time).toHaveAttribute('aria-invalid', 'false')
 })
 
+test('voltage source accepts a pasted PWL point table', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('pwl')
+  await page.getByText('Paste point table').click()
+  await page.getByLabel('Paste PWL time and voltage rows').fill('time, voltage\n0, 0 V\n1m, 5 V\n2m, 0 V')
+  await page.getByRole('button', { name: 'Replace points with pasted table' }).click()
+  await expect(page.getByLabel('PWL point 2 time')).toHaveValue('1m')
+  await expect(page.getByLabel('PWL point 2 voltage')).toHaveValue('5 V')
+  await expect(page.getByLabel('PWL point 3 time')).toHaveValue('2m')
+  await expect(page.getByLabel('PWL point 3 voltage')).toHaveValue('0 V')
+})
+
 test('invalid component values select and focus the value field before engine checks', async ({ page }) => {
   await page.goto('/')
   const value = page.locator('[data-part-setting="p-r1:value"]')
