@@ -293,6 +293,10 @@ function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange 
     if (min === max) { min -= 1; max += 1 }
     return [min, max] as [number, number]
   }, [shown, first, last, mode])
+  const sampledIndicesById = useMemo(() => new Map(shown.map((trace) => [
+    trace.id,
+    extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, index) => valueFor(trace, index)),
+  ])), [shown, first, last, mode])
   const valueAxis = useValueWindow([dataMin, dataMax])
   useEffect(() => valueAxis.reset(), [mode])
   const minValue = valueAxis.range.min
@@ -311,7 +315,7 @@ function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange 
   const xFor = (frequency: number) => left + ((Math.log10(frequency) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left)
   const yFor = (value: number) => bottom - (value - minValue) / (maxValue - minValue) * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
-    const indices = extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, index) => valueFor(trace, index))
+    const indices = sampledIndicesById.get(trace.id) ?? []
     const points = indices.map((index) => {
       const x = left + ((Math.log10(trace.axis[index]) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left)
       const value = valueFor(trace, index)
@@ -319,7 +323,7 @@ function AcPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange 
       return `${x.toFixed(2)},${y.toFixed(2)}`
     }).join(' ')
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }
-  }), [traces, shown, first, last, width, height, minFrequency, maxFrequency, minValue, maxValue, mode, colors, traceIndexById])
+  }), [traces, shown, first, last, width, height, minFrequency, maxFrequency, minValue, maxValue, mode, colors, traceIndexById, sampledIndicesById])
   return <div className="waveform-view ac-view">
     <div className="waveform-title"><strong>AC frequency response</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${frequencies[cursorIndex].toPrecision(5)} Hz`}</span><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <div className="ac-mode"><button className={mode === 'magnitude' ? 'active' : ''} onClick={() => setMode('magnitude')}>Magnitude (dB)</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setMode('phase')}>Phase (°)</button></div>
