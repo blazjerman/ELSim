@@ -491,6 +491,7 @@ function clampPlotPanelBounds(bounds: PlotPanel['bounds']): PlotPanel['bounds'] 
 function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onActivate, children }: { panel: PlotPanel; index: number; title: string; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onActivate: () => void; children: ReactNode }) {
   const ref = useRef<HTMLElement>(null)
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
+  const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   useEffect(() => {
     const initial = clampPlotPanelBounds(panel.bounds)
     if (initial.x !== panel.bounds.x || initial.y !== panel.bounds.y || initial.width !== panel.bounds.width || initial.height !== panel.bounds.height) onBoundsChange(initial)
@@ -531,8 +532,13 @@ function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onAct
         else if (event.key === 'ArrowDown') bounds.y += step
         else bounds.y -= step
       }
-      onBoundsChange(clampPlotPanelBounds(bounds))
+      const next = clampPlotPanelBounds(bounds)
+      onBoundsChange(next)
+      setKeyboardAnnouncement(event.shiftKey
+        ? `${title} resized to ${Math.round(next.width)} by ${Math.round(next.height)} pixels.`
+        : `${title} moved to ${Math.round(next.x)} pixels from the left and ${Math.round(next.y)} pixels from the top.`)
     }} onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> {title}</span><span><button aria-label={`Close ${title}`} title="Close waveform window" onClick={onClose}><X size={14}/></button></span></div>
+    <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{keyboardAnnouncement}</span>
     <div className="plot-window-content">{children}</div>
   </section>
 }
