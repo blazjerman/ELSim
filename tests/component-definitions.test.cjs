@@ -123,6 +123,8 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.deepEqual(Object.keys(componentDefinitionFor('logicGate').symbolVariants).sort(), ['and', 'nand', 'nor', 'or', 'xnor', 'xor'])
   assert.deepEqual(Object.fromEntries(Object.entries(componentDefinitionFor('logicGate').symbolVariants).map(([name, geometry]) => [name, geometry.find((primitive) => primitive.kind === 'text')?.text])), { and: '&', nand: '&', or: '≥1', nor: '≥1', xor: '=1', xnor: '=1' })
   assert.ok(componentDefinitionFor('logicGate').symbolVariants.xor.some((primitive) => primitive.kind === 'path' && primitive.className === 'logic-gate-xor-curve'))
+  assert.deepEqual(Object.fromEntries(Object.entries(componentDefinitionFor('logicGate').symbolVariants).map(([name, geometry]) => [name, geometry.find((primitive) => primitive.className === 'logic-output-lead')?.x1])), { and: 22, nand: 34, or: 22, nor: 34, xor: 22, xnor: 34 })
+  assert.ok(componentDefinitionFor('inverter').symbolGeometry.some((primitive) => primitive.className === 'logic-output-lead'))
   assert.ok(componentDefinitionFor('logicGate').symbolVariants.nand.some((primitive) => primitive.kind === 'circle' && primitive.className === 'logic-gate-inversion-bubble'))
   assert.ok(Object.isFrozen(componentDefinitionFor('logicGate').symbolVariants.xor))
   assert.deepEqual(componentDefinitionFor('switch').symbolVariants.off.find((primitive) => primitive.kind === 'path')?.d, 'M-12 -2L10 -15')

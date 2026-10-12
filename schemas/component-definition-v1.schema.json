@@ -177,7 +177,8 @@
               "x1": { "type": "number", "minimum": -1000, "maximum": 1000 },
               "y1": { "type": "number", "minimum": -1000, "maximum": 1000 },
               "x2": { "type": "number", "minimum": -1000, "maximum": 1000 },
-              "y2": { "type": "number", "minimum": -1000, "maximum": 1000 }
+              "y2": { "type": "number", "minimum": -1000, "maximum": 1000 },
+              "className": { "type": "string", "pattern": "^[A-Za-z0-9 _-]+$", "maxLength": 128 }
             }
           },
           {

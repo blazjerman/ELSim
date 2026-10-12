@@ -3574,6 +3574,7 @@ test('logic gate lesson simulates the four input truth-table states', { tag: '@n
   await expect(page.locator('.circuit-part[data-part-id="logic-xor"] .gate-mark')).toHaveText('=1')
   await expect(page.locator('.circuit-part[data-part-id="logic-or"] .logic-gate-body')).toHaveAttribute('d', 'M-28 -30C-8 -30 12 -18 22 0C12 18 -8 30 -28 30C-18 12 -18 -12 -28 -30Z')
   await expect(page.locator('.circuit-part[data-part-id="logic-xor"] .logic-gate-xor-curve')).toHaveCount(1)
+  for (const id of ['logic-and', 'logic-or', 'logic-xor', 'logic-not', 'logic-nand', 'logic-nor', 'logic-xnor']) await expect(page.locator(`.circuit-part[data-part-id="${id}"] .logic-output-lead`)).toHaveCount(1)
   await expect(page.locator('.circuit-part[data-part-id="logic-nand"] .logic-gate-inversion-bubble')).toHaveCount(1)
   await expect(page.locator('.circuit-part[data-part-id="logic-xnor"] .logic-gate-inversion-bubble')).toHaveCount(1)
   await page.getByRole('button', { name: 'Run this circuit' }).click()
@@ -3600,6 +3601,8 @@ test('logic gate lesson simulates the four input truth-table states', { tag: '@n
     }
   }
   await expectState(0.005, [5, 5, 5, 5, 0, 0, 0, 0, 5])
+  await expect(page.locator('.circuit-part[data-part-id="logic-and"] .logic-output-lead')).toHaveAttribute('style', /drop-shadow/)
+  await expect(page.locator('.circuit-part[data-part-id="logic-xor"] .logic-output-lead')).not.toHaveAttribute('style', /drop-shadow/)
   await expectState(0.015, [5, 0, 0, 5, 5, 0, 5, 0, 0])
   await expectState(0.025, [0, 5, 0, 5, 5, 5, 5, 0, 0])
   await expectState(0.035, [0, 0, 0, 0, 0, 5, 5, 5, 5])
