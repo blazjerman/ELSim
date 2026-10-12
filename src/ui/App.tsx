@@ -1674,7 +1674,20 @@ export default function App() {
   const ledLimiterPredictedCurrentMa = ledLimiterResistance && ledLimiterResistance > 0 && ledLimiterSupply !== null
     ? Math.max(0, (ledLimiterSupply - (ledLimiterSolvedForwardVoltage ?? 2)) / ledLimiterResistance * 1000)
     : null
-  const lessonNextStep = exampleLesson?.id === 'led-current-limiter' && simulationResult
+  const currentSourceAmps = exampleLesson?.id === 'current-source' ? componentMagnitude(project.parts.find((part) => part.id === 'isource-i1')?.value ?? '1 mA', 'currentSource') : null
+  const currentSourceLoadOhms = exampleLesson?.id === 'current-source' ? componentMagnitude(project.parts.find((part) => part.id === 'isource-r1')?.value ?? '1 kΩ', 'resistor') : null
+  const currentSourceLoadText = project.parts.find((part) => part.id === 'isource-r1')?.value ?? 'changed'
+  const currentSourcePrediction = currentSourceAmps !== null && currentSourceLoadOhms !== null ? currentSourceAmps * currentSourceLoadOhms : null
+  const currentSourceSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(out)')?.values[0] : undefined
+  const lessonNextStep = exampleLesson?.id === 'current-source' && simulationResult
+    ? currentSourceAmps !== null && currentSourceLoadOhms !== null && currentSourcePrediction !== null
+      ? simulationResultStale
+        ? `The previous operating point is stale. With ${formatLessonCurrent(currentSourceAmps * 1000)} through R1 = ${currentSourceLoadText}, V = I × R predicts VOUT = ${formatLessonVoltage(currentSourcePrediction)}. Rerun to check the load voltage.`
+        : Math.abs(currentSourceLoadOhms - 1000) < 1e-6 && Math.abs(currentSourceAmps - 0.001) < 1e-12
+          ? 'The 1 mA source through 1 kΩ gives 1 V. Double R1 to 2 kΩ and rerun: with the same current, V = I × R predicts VOUT = 2 V.'
+          : `With ${currentSourceAmps * 1000} mA and R1 = ${currentSourceLoadText}, V = I × R predicts VOUT = ${formatLessonVoltage(currentSourcePrediction)}${currentSourceSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(currentSourceSolvedOutput)}` : ''}. Keep the source current fixed and change R1 to see the load voltage scale with resistance.`
+      : 'Enter a valid source current and positive load resistance, then rerun to compare V = I × R.'
+    : exampleLesson?.id === 'led-current-limiter' && simulationResult
     ? ledLimiterResistance !== null && ledLimiterSupply !== null
       ? simulationResultStale
         ? ledLimiterPredictedCurrentMa !== null
