@@ -727,6 +727,35 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
+test('project-local model includes resolve as imported assets and shared parameter records load', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await modelInput.setInputFiles({
+    name: 'amplifier.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.include "shared.lib"\n.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n'),
+  })
+  const dependencyReport = page.getByRole('region', { name: 'Model dependency report' })
+  await expect(dependencyReport).toContainText('shared.lib')
+  await expect(dependencyReport).toContainText('file not imported')
+  await expect(dependencyReport).toContainText('CORE')
+
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await modelInput.setInputFiles({
+    name: 'shared.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.PARAM RBASE=1k\n.FUNC TWICE(x) {2*x}\n.GLOBAL 0\n.SUBCKT CORE IN OUT\nR1 IN OUT {RBASE}\n.ENDS CORE\n'),
+  })
+  await expect(dependencyReport).toHaveCount(0)
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = await page.getByRole('dialog', { name: 'Generated SPICE netlist' }).innerText()
+  expect(netlist).toContain('.PARAM RBASE=1k')
+  expect(netlist).toContain('.FUNC TWICE(x) {2*x}')
+  expect(netlist).toContain('.SUBCKT CORE IN OUT')
+  expect(netlist).not.toMatch(/^\.include/im)
+})
+
 test('large imported IC lists can be searched and expanded on demand', async ({ page }) => {
   await page.goto('/')
   const subcircuitSources = Array.from({ length: 52 }, (_, index) => {

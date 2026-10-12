@@ -2,13 +2,15 @@ export type SubcircuitParameter = { name: string; defaultValue: string }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; startLine: number; endLine: number }
 export type SpiceModelDefinition = { name: string; type: string; parameters: SubcircuitParameter[]; startLine: number; endLine: number }
-export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
+export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number }
+export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
 export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
 export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string }
 export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
-export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
+export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; reason: 'missing' | 'ambiguous' | 'unsafe' }
+export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
 export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInput> = { assets: { asset: T; parsed: ParsedSubcircuitLibrary }[]; dependencies: ModelDependencyAnalysis }
 
@@ -16,7 +18,16 @@ const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 const pinName = /^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/
 const safeTopLevel = new Set(['.model', '.param', '.func', '.global'])
-const forbidden = new Set(['.control', '.endc', '.end', '.include', '.exec', '.shell', '.cm'])
+const forbidden = new Set(['.control', '.endc', '.end', '.exec', '.shell', '.cm'])
+
+function includedAssetBasename(reference: string): string | null {
+  const normalized = reference.replace(/\\/g, '/')
+  if (!normalized || normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized) || /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(normalized)) return null
+  const segments = normalized.split('/')
+  if (segments.some((segment) => segment === '..' || /[\u0000-\u001f]/.test(segment))) return null
+  const filename = segments.filter((segment) => segment && segment !== '.').at(-1)
+  return filename || null
+}
 
 function compatibilityScalar(value: string): number | null {
   const match = value.toLowerCase().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?(?:v|a|s|hz)?$/)
@@ -368,6 +379,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   const subcircuits: SubcircuitDefinition[] = []
   const models: SpiceModelDefinition[] = []
   const dependencies: ModelDependency[] = []
+  const includes: ModelIncludeReference[] = []
   const seenNames = new Set<string>()
   const seenModelNames = new Set<string>()
   const modelLines: LogicalLine[] = []
@@ -380,6 +392,14 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     if (!text || text.startsWith('*')) continue
     const tokens = text.split(/\s+/)
     const directive = tokens[0].toLowerCase()
+    if (directive === '.include' || directive === '.inc') {
+      if (active) throw new Error(`Line ${line.start}: .INCLUDE must be a top-level library reference, outside a .SUBCKT.`)
+      const argument = text.slice(tokens[0].length).trim()
+      const match = argument.match(/^(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))$/)
+      const reference = match?.[1] ?? match?.[2] ?? match?.[3] ?? argument
+      includes.push({ reference, filename: match ? includedAssetBasename(reference) : null, sourceLine: line.start })
+      continue
+    }
     if (forbidden.has(directive)) throw new Error(`Line ${line.start}: ${tokens[0]} is not allowed in an imported model library.`)
 
     if (active) {
@@ -456,7 +476,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   }
   if (active) throw new Error(`.SUBCKT ${active.name} opened on line ${active.start} has no matching .ENDS.`)
   if (activeLibrarySection) throw new Error(`.LIB ${activeLibrarySection} has no matching .ENDL.`)
-  if (!subcircuits.length && !models.length) throw new Error('No .SUBCKT definitions or .MODEL cards were found in this file.')
+  if (!subcircuits.length && !models.length && !sawTopLevelRecord && !includes.length) throw new Error('No .SUBCKT definitions, .MODEL cards, shared model records, or project-local includes were found in this file.')
   for (const subcircuit of subcircuits) dependencies.push(...subcircuit.dependencies)
 
   // Include full physical lines for retained directives and model blocks.
@@ -466,7 +486,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   for (const [start, end] of ranges) for (let line = start; line <= end; line += 1) retained.add(line)
   const modelRecords = [...retained].sort((a, b) => a - b).map((sourceLine) => ({ sourceLine, text: physical[sourceLine - 1] }))
   const modelText = modelRecords.map(({ text }) => text).join('\n')
-  return { subcircuits, models, dependencies, modelText, modelRecords }
+  return { subcircuits, models, dependencies, includes, modelText, modelRecords }
 }
 
 /** Parse each library once, then share its definitions with dependency checks and the UI. */
@@ -499,6 +519,15 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     }
   }
   const missing: ModelDependencyIssue[] = [], resolved: ResolvedModelDependency[] = []
+  const missingIncludes: ModelIncludeIssue[] = []
+  for (const { asset, parsed } of parsedAssets) for (const include of parsed.includes) {
+    if (!include.filename) {
+      missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: 'unsafe' })
+      continue
+    }
+    const matches = parsedAssets.filter(({ asset: candidate }) => candidate.filename.split(/[\\/]/).at(-1)?.toLowerCase() === include.filename!.toLowerCase())
+    if (matches.length !== 1) missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: matches.length ? 'ambiguous' : 'missing' })
+  }
   const graph = new Map<string, Set<string>>()
   for (const { asset, parsed } of parsedAssets) for (const dependency of parsed.dependencies) {
     const key = dependency.modelName.toLowerCase()
@@ -531,7 +560,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   }
   for (const name of subcircuits.keys()) visit(name)
   const conflicts = [...definitionLocations.values()].filter((conflict) => conflict.definitions.length > 1)
-  return { missing, recursiveChains, resolved, conflicts, subcircuitAssets, deviceModelAssets }
+  return { missing, missingIncludes, recursiveChains, resolved, conflicts, subcircuitAssets, deviceModelAssets }
 }
 
 /** Resolve references between imported libraries and report missing cards and recursive .SUBCKT chains. */

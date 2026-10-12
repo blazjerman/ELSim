@@ -28,6 +28,36 @@ test('combined model-library analysis shares parsed cards with dependency resolu
   assert.deepEqual(analyzeModelDependencies(assets), result.dependencies)
 })
 
+test('project-local includes resolve against imported assets without filesystem access', () => {
+  const parent = { id: 'parent', filename: 'amplifier.lib', content: '.include "shared.lib"\n.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP' }
+  const missing = analyzeModelLibraries([parent])
+  assert.deepEqual(missing.dependencies.missingIncludes.map(({ reference, reason }) => ({ reference, reason })), [{ reference: 'shared.lib', reason: 'missing' }])
+  assert.deepEqual(missing.dependencies.missing.map(({ modelName }) => modelName), ['CORE'])
+  assert.doesNotMatch(missing.assets[0].parsed.modelText, /^\.include/im)
+
+  const shared = { id: 'shared', filename: 'shared.lib', content: '.PARAM RBASE=1k\n.FUNC TWICE(x) {2*x}\n.GLOBAL 0\n.SUBCKT CORE IN OUT\nR1 IN OUT {RBASE}\n.ENDS CORE' }
+  const resolved = analyzeModelLibraries([parent, shared])
+  assert.deepEqual(resolved.dependencies.missingIncludes, [])
+  assert.deepEqual(resolved.dependencies.missing, [])
+  assert.match(resolved.assets[1].parsed.modelText, /^\.PARAM RBASE=1k/m)
+
+  const sharedRecordsOnly = parseSubcircuitLibrary('.PARAM RBASE=1k\n.FUNC TWICE(x) {2*x}\n.GLOBAL 0')
+  assert.equal(sharedRecordsOnly.subcircuits.length, 0)
+  assert.equal(sharedRecordsOnly.models.length, 0)
+  assert.match(sharedRecordsOnly.modelText, /\.FUNC TWICE/)
+})
+
+test('project-local includes reject absolute paths and traversal as unresolved unsafe references', () => {
+  const unsafe = ['../outside.lib', '/outside.lib', 'C:\\\\outside.lib', 'https://example.test/model.lib']
+  for (const reference of unsafe) {
+    const report = analyzeModelDependencies([{ id: 'root', filename: 'root.lib', content: `.include "${reference}"\n.MODEL DFAST D` }])
+    assert.equal(report.missingIncludes[0].reason, 'unsafe', reference)
+  }
+  const includeOnly = analyzeModelLibraries([{ id: 'wrapper', filename: 'wrapper.lib', content: '.include shared.lib' }])
+  assert.equal(includeOnly.assets[0].parsed.modelRecords.length, 0)
+  assert.deepEqual(includeOnly.dependencies.missingIncludes.map(({ reference, reason }) => ({ reference, reason })), [{ reference: 'shared.lib', reason: 'missing' }])
+})
+
 test('parses ordered subcircuit pins, parameters, continuations, shared models, and multiple definitions', () => {
   const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10 R=20k TWICE={GAIN * 2}\nR1 INP OUT\n+ 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
   const parsed = parseSubcircuitLibrary(source)
@@ -372,8 +402,9 @@ test('rejects ambiguous or malformed model-library section wrappers explicitly',
   assert.throws(() => parseSubcircuitLibrary('.LIB models.lib typical'), /external \.LIB file references are not allowed/i)
 })
 
-test('rejects executable, external-file, and whole-circuit directives', () => {
-  for (const directive of ['.include evil.lib', '.lib "evil.lib" tt', '.control', '.endc', '.end', '.exec command', '.shell command', '.cm plugin']) {
+test('rejects nested includes, external .LIB references, executable, and whole-circuit directives', () => {
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT x A\n.include evil.lib\n.ENDS'), /must be a top-level library reference/)
+  for (const directive of ['.lib "evil.lib" tt', '.control', '.endc', '.end', '.exec command', '.shell command', '.cm plugin']) {
     assert.throws(() => parseSubcircuitLibrary(`.SUBCKT x A\nR1 A 0 1k\n${directive}\n.ENDS`), /not allowed/)
   }
 })
