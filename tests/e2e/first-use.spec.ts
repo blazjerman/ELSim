@@ -3382,6 +3382,11 @@ test('parallel LED lesson shows separate branch currents and the effect of one r
   await expect(page.locator('svg.schematic .wire-line')).toHaveCount(11)
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  for (const wireId of ['parallel-feed-common', 'parallel-branch-upper', 'parallel-branch-lower', 'parallel-cathodes', 'parallel-cathode-ground', 'parallel-ground-bus', 'parallel-ground-source']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    await expect(flow).toHaveAttribute('data-current-magnitude', /\d/)
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.005)
+  }
   const lesson = page.locator('.example-lesson-next-step')
   await expect(lesson).toContainText('through D1')
   await expect(lesson).toContainText('through D2')
