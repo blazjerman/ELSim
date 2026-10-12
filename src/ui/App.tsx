@@ -3158,16 +3158,17 @@ export default function App() {
     })
     const lastPartId = pastedIds.at(-1)
     const lastLabel = pastedLabels.at(-1)
-    const lastWireId = pastedWires.at(-1)?.id
     setSelectedPartIds(pastedIds)
+    setSelectedWireIds(pastedWires.map((wire) => wire.id))
+    setSelectedNetLabelIds(pastedLabels.map((label) => label.id))
     if (lastPartId) {
       setSelection({ kind: 'part', id: lastPartId })
       setNotice(`Pasted ${sources.length} ${sources.length === 1 ? kindNames[sources[0].kind].toLowerCase() : 'components'} and ${pastedWires.length} attached wire segments. Ends at unselected parts stay open; net labels are not copied.`)
     } else if (lastLabel) {
       setSelection({ kind: 'label', id: lastLabel.id })
       setNotice(`Pasted net label ${lastLabel.name}. Same-name labels on this sheet connect to the same electrical node.`)
-    } else if (lastWireId) {
-      setSelectedWireId(lastWireId)
+    } else if (pastedWires.length) {
+      setSelection(null)
       setNotice(`Pasted ${pastedWires.length} wire segment${pastedWires.length === 1 ? '' : 's'}. Open endpoints stay unconnected until they touch another pin or wire.`)
     }
   }

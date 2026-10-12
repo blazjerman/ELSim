@@ -2032,6 +2032,40 @@ test('copy and paste a selected wire path without connected parts', async ({ pag
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return { parts: project.parts.length, wires: project.wires.length, points: project.wires.at(-1).points }
   })).toEqual({ parts: 0, wires: 2, points: [[340, 340], [440, 340]] })
+  await expect(page.locator('.wire-line.selected')).toHaveCount(1)
+  await expect(page.locator('.wire-line[data-wire-id="clipboard-wire"]')).not.toHaveClass(/selected/)
+})
+
+test('copying and pasting the full circuit selects only all newly pasted wires', async ({ page }) => {
+  await page.goto('/')
+  const original = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return {
+      wires: project.wires.map((wire: { id: string }) => wire.id),
+      parts: project.parts.map((part: { id: string }) => part.id),
+    }
+  })
+  expect(original.wires.length).toBeGreaterThan(1)
+
+  await page.keyboard.press('Control+a')
+  await page.keyboard.press('Control+c')
+  await page.keyboard.press('Control+v')
+
+  const pasted = await page.evaluate((originalIds) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return {
+      wires: project.wires.map((wire: { id: string }) => wire.id).filter((id: string) => !originalIds.wires.includes(id)),
+      parts: project.parts.map((part: { id: string }) => part.id).filter((id: string) => !originalIds.parts.includes(id)),
+    }
+  }, original)
+  expect(pasted.wires).toHaveLength(original.wires.length)
+  expect(pasted.parts).toHaveLength(original.parts.length)
+  await expect(page.locator('.wire-line.selected')).toHaveCount(pasted.wires.length)
+  const selected = await page.locator('.wire-line.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-wire-id')))
+  expect(new Set(selected)).toEqual(new Set(pasted.wires))
+  expect(selected.some((id) => original.wires.includes(id))).toBe(false)
+  const selectedParts = await page.locator('.circuit-part.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-part-id')))
+  expect(new Set(selectedParts)).toEqual(new Set(pasted.parts))
 })
 
 test('fit schematic view frames distant parts, wires, and labels', async ({ page }) => {
