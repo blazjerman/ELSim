@@ -1664,7 +1664,27 @@ export default function App() {
   const zenerSolvedCurrentMa = simulationResult?.analysis === 'op' && zenerResistance && zenerResistance > 0 && zenerSupply !== null && zenerSolvedVoltage !== undefined
     ? Math.max(0, (zenerSupply - zenerSolvedVoltage) / zenerResistance * 1000)
     : undefined
-  const lessonNextStep = exampleLesson?.id === 'rc' && simulationResult
+  const ledLimiterResistance = exampleLesson?.id === 'led-current-limiter' ? componentMagnitude(project.parts.find((part) => part.id === 'p-r1')?.value ?? '330 Ω', 'resistor') : null
+  const ledLimiterSupply = exampleLesson?.id === 'led-current-limiter' ? componentMagnitude(project.parts.find((part) => part.id === 'p-v1')?.value ?? '5 V', 'source') : null
+  const ledLimiterResistanceText = project.parts.find((part) => part.id === 'p-r1')?.value ?? 'changed'
+  const ledLimiterSolvedForwardVoltage = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const ledLimiterCurrentMa = ledLimiterResistance && ledLimiterResistance > 0 && ledLimiterSupply !== null && ledLimiterSolvedForwardVoltage !== undefined
+    ? Math.max(0, (ledLimiterSupply - ledLimiterSolvedForwardVoltage) / ledLimiterResistance * 1000)
+    : undefined
+  const ledLimiterPredictedCurrentMa = ledLimiterResistance && ledLimiterResistance > 0 && ledLimiterSupply !== null
+    ? Math.max(0, (ledLimiterSupply - (ledLimiterSolvedForwardVoltage ?? 2)) / ledLimiterResistance * 1000)
+    : null
+  const lessonNextStep = exampleLesson?.id === 'led-current-limiter' && simulationResult
+    ? ledLimiterResistance !== null && ledLimiterSupply !== null
+      ? simulationResultStale
+        ? ledLimiterPredictedCurrentMa !== null
+          ? `R1 is now ${ledLimiterResistanceText}; the old run measured an LED drop of ${ledLimiterSolvedForwardVoltage !== undefined ? formatLessonVoltage(ledLimiterSolvedForwardVoltage) : 'about 2 V'}. Using that drop, the updated current estimate is ${formatLessonCurrent(ledLimiterPredictedCurrentMa)}. Rerun to check the resistor-current estimate against ngspice.`
+          : 'Enter a positive resistance and supply, then rerun to compare LED current.'
+        : ledLimiterResistance === 330 && ledLimiterSupply === 5
+          ? `ngspice solved an LED drop of ${ledLimiterSolvedForwardVoltage !== undefined ? formatLessonVoltage(ledLimiterSolvedForwardVoltage) : '—'}, giving about ${ledLimiterCurrentMa !== undefined ? formatLessonCurrent(ledLimiterCurrentMa) : '—'} through R1. Change R1 from 330 Ω to 1 kΩ; current should fall to about ${formatLessonCurrent(Math.max(0, (ledLimiterSupply - (ledLimiterSolvedForwardVoltage ?? 2)) / 1000 * 1000))}.`
+          : `At R1 = ${ledLimiterResistanceText}, ngspice solved an LED drop of ${ledLimiterSolvedForwardVoltage !== undefined ? formatLessonVoltage(ledLimiterSolvedForwardVoltage) : '—'}; the series resistor gives about ${ledLimiterCurrentMa !== undefined ? formatLessonCurrent(ledLimiterCurrentMa) : '—'}. This is lower than the estimate for 330 Ω; try another resistance to see the inverse relationship.`
+      : 'Enter a positive resistor and supply value, then rerun to compare the LED current.'
+    : exampleLesson?.id === 'rc' && simulationResult
     ? rcTimeConstant !== null && rcSupply !== null && rcSolvedOutputTrace
       ? simulationResultStale
         ? `R1 = ${project.parts.find((part) => part.id === 'p-r1')?.value} and C1 = ${project.parts.find((part) => part.id === 'p-c1')?.value}, so τ = RC = ${formatLessonTime(rcTimeConstant)}. The old waveform is stale. At 10 ms, the updated circuit predicts VOUT ≈ ${formatLessonVoltage(rcSupply * (1 - Math.exp(-0.01 / rcTimeConstant)))}; rerun to compare.`
