@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { X } from 'lucide-react'
 import { measurementCrossingCountError, measurementThresholdError } from '../domain/measurementSettings'
 import { timeMagnitude } from '../domain/componentValue'
@@ -25,8 +26,9 @@ function measurementVectorChoices(project: Project) {
 
 
 function TransientMeasurementEditor({ project, measurements, onAdd, onChange, onRemove }: { project: Project; measurements: TransientMeasurement[]; onAdd: () => void; onChange: (index: number, patch: Partial<TransientMeasurement>) => void; onRemove: (index: number) => void }) {
-  const choices = measurementVectorChoices(project)
-  const knownChoice = (value: string) => [...choices.nodes, ...choices.currents].find((choice) => choice.value.toLowerCase() === value.toLowerCase())
+  const choices = useMemo(() => measurementVectorChoices(project), [project.parts, project.netLabels])
+  const choiceByValue = useMemo(() => new Map([...choices.nodes, ...choices.currents].map((choice) => [choice.value.toLowerCase(), choice])), [choices])
+  const knownChoice = (value: string) => choiceByValue.get(value.toLowerCase())
   const vectorPicker = (label: string, pickerLabel: string, value: string, onVectorChange: (vector: string) => void) => <>
     <label className="field-label">{label}<select aria-label={pickerLabel} value={knownChoice(value)?.value ?? `custom:${value}`} onChange={(event) => { if (!event.target.value.startsWith('custom:')) onVectorChange(event.target.value) }}>
       <option value={`custom:${value}`}>{knownChoice(value) ? 'Choose a signal…' : `Custom vector · ${value || 'enter below'}`}</option>
