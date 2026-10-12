@@ -3634,18 +3634,25 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   await expect(page.locator('.plot-cursor')).toBeAttached()
 
   await page.getByLabel('Plot navigation').getByRole('button', { name: 'Zoom in' }).click()
-  const zoomedRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.ac)
+  const readSavedAcRange = () => page.evaluate(() => {
+    const saved = localStorage.getItem('elsim:project:v7')
+    if (!saved) return null
+    const settings = JSON.parse(saved).plotSettings
+    return settings.panels?.at(-1)?.ranges.ac ?? settings.ranges.ac ?? null
+  })
+  await expect.poll(readSavedAcRange).not.toBeNull()
+  const zoomedRange = await readSavedAcRange()
   const box = await chart.boundingBox()
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.5)
   await page.mouse.wheel(0, -250)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.ac)).not.toEqual(zoomedRange)
-  const wheelRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.ac)
+  await expect.poll(readSavedAcRange).not.toEqual(zoomedRange)
+  const wheelRange = await readSavedAcRange()
   expect(wheelRange.end - wheelRange.start).toBeLessThan(zoomedRange.end - zoomedRange.start)
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.5)
   await page.mouse.down()
   await page.mouse.move(box!.x + box!.width * 0.58, box!.y + box!.height * 0.5, { steps: 5 })
   await page.mouse.up()
-  const draggedRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.ac)
+  const draggedRange = await readSavedAcRange()
   expect(draggedRange).toEqual(wheelRange)
 })
 
