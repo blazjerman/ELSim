@@ -3824,6 +3824,7 @@ test('LED current-limiter example explains and solves its resistor-limited curre
   await dialog.locator('.example-list article').filter({ hasText: 'LED current limiter' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('LED current limiter')
+  await expect(page.locator('.circuit-part[data-part-id="p-c1"] path.led-light-rays')).toBeVisible()
   await expect(page.locator('[data-part-id="p-r1"]')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByLabel('Guided example')).toContainText('increase R1 to reduce the LED current')
   await page.getByRole('button', { name: 'Run this circuit' }).click()
