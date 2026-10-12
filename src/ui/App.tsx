@@ -23,7 +23,7 @@ import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, renameSheetDefinition, sheetDefinitionSubtreeIds, updateSheetDefinition } from '../domain/sheetDefinition'
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
-import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
+import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
 import type { ComponentPaletteCategory } from './ComponentPalette'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
@@ -482,7 +482,7 @@ function sameView(left: Project['view'], right: Project['view']): boolean {
 }
 
 function SimulationPlaybackControls({ axis, available, running, rate, onRateChange, onRunningChange }: { axis?: Float64Array; available: boolean; running: boolean; rate: number | 'realtime'; onRateChange: (rate: number | 'realtime') => void; onRunningChange: (running: boolean) => void }) {
-  const sampleIndex = useSimulationCursor()
+  const sampleIndex = useSimulationCursorAnimation()
   const activeSample = axis?.length ? Math.max(0, Math.min(axis.length - 1, sampleIndex ?? axis.length - 1)) : 0
   return <div className="menu-group playback-controls" role="group" aria-label="Result playback">
     <IconButton title={running ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!running && (sampleIndex ?? 0) >= (axis?.length ?? 1) - 1) setSimulationCursor(0); onRunningChange(!running) }} active={running} disabled={!available}>{running ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton>
@@ -2223,13 +2223,29 @@ export default function App() {
   useEffect(() => {
     if (!playbackRunning || !playbackAvailable || !transientAxis?.length) return
     if (playbackRate !== 'realtime') {
-      const stride = Math.max(1, Math.ceil(transientAxis.length / 120))
-      const timer = window.setInterval(() => {
-        const next = Math.min((getSimulationCursor() ?? 0) + stride, transientAxis.length - 1)
+      const startIndex = Math.max(0, Math.min(transientAxis.length - 1, getSimulationCursor() ?? 0))
+      const startTime = transientAxis[startIndex]
+      const wallStart = performance.now()
+      let frame = 0
+      const advance = (now: number) => {
+        const target = startTime + (now - wallStart) / 1000 * playbackRate
+        if (target >= transientAxis[transientAxis.length - 1]) {
+          setSimulationCursor(transientAxis.length - 1)
+          setPlaybackRunning(false)
+          return
+        }
+        let low = startIndex, high = transientAxis.length - 1
+        while (low < high) {
+          const middle = Math.floor((low + high) / 2)
+          if (transientAxis[middle] < target) low = middle + 1
+          else high = middle
+        }
+        const next = low > startIndex && target - transientAxis[low - 1] <= transientAxis[low] - target ? low - 1 : low
         setSimulationCursor(next)
-        if (next >= transientAxis.length - 1) setPlaybackRunning(false)
-      }, Math.max(10, Math.round(33 / playbackRate)))
-      return () => window.clearInterval(timer)
+        frame = requestAnimationFrame(advance)
+      }
+      frame = requestAnimationFrame(advance)
+      return () => cancelAnimationFrame(frame)
     }
     const startIndex = Math.max(0, Math.min(transientAxis.length - 1, getSimulationCursor() ?? 0))
     const startTime = transientAxis[startIndex]

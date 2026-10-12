@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange } from '../domain/project'
 import { extremaIndices, valueRange } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
-import { getSimulationCursor, setSimulationCursor, useSimulationCursor } from './simulationCursor'
+import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation } from './simulationCursor'
 import { setAnalysisCursor, useAnalysisCursor } from './analysisCursor'
 
 function nearestAxisIndex(axis: Float64Array, value: number, start: number, end: number): number {
@@ -185,7 +185,7 @@ function TransientCursorMarker({ axis, first, last, minTime, maxTime, left, righ
   top: number
   bottom: number
 }) {
-  const cursorIndex = useSimulationCursor()
+  const cursorIndex = useSimulationCursorAnimation()
   if (cursorIndex === null || !axis || cursorIndex < first || cursorIndex > last) return null
   const x = left + ((axis[cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)
   return <line x1={x} x2={x} y1={top} y2={bottom} className="plot-cursor"/>
@@ -198,7 +198,7 @@ function TransientCursorReadout({ axis, shown, traceIndexById, colors, keyboardA
   colors: string[]
   keyboardAnnouncement: string
 }) {
-  const cursorIndex = useSimulationCursor()
+  const cursorIndex = useSimulationCursorAnimation()
   return <><div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => {
     const time = axis?.[cursorIndex] ?? 0
     const index = axis === trace.axis && cursorIndex >= 0 && cursorIndex < trace.axis.length
