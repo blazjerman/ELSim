@@ -1197,8 +1197,9 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
         }
         return pinVector ? resultValue(part.kind === 'transformer' ? `i(${pinVector})` : `i(@${part.ref}[${pinVector}])`) : undefined
       },
+      animatedWireIds,
     )
-  }, [wireFlowSampler, activeSample, simulationResult])
+  }, [wireFlowSampler, activeSample, simulationResult, animatedWireIds])
   const orderedWires = useMemo(() => hoveredWireId ? [...project.wires.filter((wire) => wire.id !== hoveredWireId), ...project.wires.filter((wire) => wire.id === hoveredWireId)] : project.wires, [project.wires, hoveredWireId])
   const hoveredWire = hoveredWireId ? project.wires.find((wire) => wire.id === hoveredWireId) : undefined
   const wireConnectionDots = useMemo(() => {

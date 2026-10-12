@@ -33,6 +33,9 @@ test('a precomputed wire sampler updates flow values across playback samples', (
   assert.equal(first.get('w-1')[0].magnitude, 0.005)
   assert.equal(second.get('w-1')[0].magnitude, 0.002)
   assert.deepEqual(second, wireCurrentFlowSegments(project, connectivity, (part) => secondCurrents.get(part.ref)))
+  const visibleOnly = sample((part) => secondCurrents.get(part.ref), undefined, new Set(['w-1']))
+  assert.deepEqual([...visibleOnly.keys()], ['w-1'])
+  assert.deepEqual(visibleOnly.get('w-1'), second.get('w-1'))
 })
 
 test('a parallel branch splits trunk animation into sections with their own currents', () => {

@@ -20,6 +20,7 @@ type FlowComponent = {
 export type WireCurrentSampler = (
   currentForPart: (part: Part) => number | undefined,
   currentForPin?: (part: Part, pinIndex: number) => number | undefined,
+  wireIds?: ReadonlySet<string>,
 ) => Map<string, WireCurrentFlowSegment[]>
 
 function coordinateKey(point: { x: number; y: number }): string {
@@ -192,12 +193,15 @@ export function createWireCurrentFlowSampler(
     components.push({ start, edges: componentEdges, bridges, parent, parentEdge, order })
   }
 
-  return (currentForPart, currentForPin) => {
-    const result = new Map(project.wires.map((wire) => [wire.id, [] as WireCurrentFlowSegment[]]))
+  return (currentForPart, currentForPin, wireIds) => {
+    const requestedWires = wireIds ? project.wires.filter((wire) => wireIds.has(wire.id)) : project.wires
+    const result = new Map(requestedWires.map((wire) => [wire.id, [] as WireCurrentFlowSegment[]]))
     const injections = new Map<string, Injection[]>()
     for (const { part, pinIndex, key } of flowPins) {
       const injection = knownPinInjection(part, pinIndex, currentForPart, currentForPin)
-      injections.set(key, [...(injections.get(key) ?? []), injection])
+      const atNode = injections.get(key)
+      if (atNode) atNode.push(injection)
+      else injections.set(key, [injection])
     }
 
     const edgeFlows = new Map<FlowEdge, WireCurrentFlowSegment>()
@@ -243,7 +247,7 @@ export function createWireCurrentFlowSampler(
       }
     }
 
-    for (const wire of project.wires) {
+    for (const wire of requestedWires) {
       const pieces = (edgesByWire.get(wire.id) ?? []).map((edge) => ({ edge, flow: edgeFlows.get(edge) }))
       const merged: WireCurrentFlowSegment[] = []
       for (const { edge, flow } of pieces) {
