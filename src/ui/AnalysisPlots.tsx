@@ -239,7 +239,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const first = Math.floor(navigation.window.start * Math.max(0, (axis?.length ?? 1) - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, (axis?.length ?? 1) - 1)))
   const minTime = axis?.[first] ?? 0, maxTime = axis?.[Math.min(last, (axis?.length ?? 1) - 1)] ?? 1
-  const rangeFor = (unit: string) => {
+  const rangeFor = (unit: string): [number, number] | null => {
     let min = Infinity, max = -Infinity
     for (const trace of shown) if (trace.unit === unit) {
       const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
@@ -247,18 +247,22 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       const range = valueRange(trace.values, traceFirst, traceLast)
       if (range) { min = Math.min(min, range[0]); max = Math.max(max, range[1]) }
     }
-    if (!Number.isFinite(min) || !Number.isFinite(max)) return [-1, 1] as [number, number]
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return null
     if (min === max) { min -= 1; max += 1 }
     return [Math.min(0, min), Math.max(0, max)] as [number, number]
   }
-  const [voltageDomain, currentDomain] = useMemo(() => [rangeFor('V'), rangeFor('A')], [shown, minTime, maxTime])
-  const voltageAxis = useValueWindow(voltageDomain), currentAxis = useValueWindow(currentDomain)
-  const voltageRange: [number, number] = [voltageAxis.range.min, voltageAxis.range.max]
-  const currentRange: [number, number] = [currentAxis.range.min, currentAxis.range.max]
+  const scopeDomain = useMemo<[number, number]>(() => {
+    const voltage = rangeFor('V'), current = rangeFor('A')
+    const ranges = [voltage, current].filter((range): range is [number, number] => range !== null)
+    if (!ranges.length) return [-1, 1]
+    return [Math.min(0, ...ranges.map(([min]) => min)), Math.max(0, ...ranges.map(([, max]) => max))]
+  }, [shown, minTime, maxTime])
+  const scopeAxis = useValueWindow(scopeDomain)
+  const scopeRange: [number, number] = [scopeAxis.range.min, scopeAxis.range.max]
   const hasVoltage = shown.some((trace) => trace.unit === 'V'), hasCurrent = shown.some((trace) => trace.unit === 'A')
-  const resetView = () => { navigation.reset(); voltageAxis.reset(); currentAxis.reset() }
-  const zoomValue = (factor: number) => { voltageAxis.zoom(factor); currentAxis.zoom(factor) }
-  const panValue = (direction: -1 | 1) => { voltageAxis.pan(direction); currentAxis.pan(direction) }
+  const resetView = () => { navigation.reset(); scopeAxis.reset() }
+  const zoomValue = (factor: number) => scopeAxis.zoom(factor)
+  const panValue = (direction: -1 | 1) => scopeAxis.pan(direction)
   const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta))
   const wheelZoom = (event: ReactWheelEvent<SVGSVGElement>) => {
     event.preventDefault()
@@ -274,7 +278,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
     const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
     const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
-    const [minValue, maxValue] = trace.unit === 'V' ? voltageRange : currentRange
+    const [minValue, maxValue] = scopeRange
     const range = maxValue - minValue
     const points: string[] = []
     for (const index of indices) {
@@ -283,7 +287,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
     }
     return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points: points.join(' ') }
-  }), [shown, minTime, maxTime, width, height, voltageRange[0], voltageRange[1], currentRange[0], currentRange[1], traceIndexById])
+  }), [shown, minTime, maxTime, width, height, scopeRange[0], scopeRange[1], traceIndexById])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -305,8 +309,8 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   return <div className="waveform-view">
     <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
-      {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const v = voltageRange[1] - (line / 3) * (voltageRange[1] - voltageRange[0]); const a = currentRange[1] - (line / 3) * (currentRange[1] - currentRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{v.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{a.toPrecision(3)} A</text>}</g> })}
-      {hasVoltage && <g className="plot-zero-reference"><line x1={left} x2={right} y1={bottom - (0 - voltageRange[0]) / (voltageRange[1] - voltageRange[0]) * (bottom - top)} y2={bottom - (0 - voltageRange[0]) / (voltageRange[1] - voltageRange[0]) * (bottom - top)}/><text x={left - 5} y={bottom - (0 - voltageRange[0]) / (voltageRange[1] - voltageRange[0]) * (bottom - top) + 3} textAnchor="end">0 V</text></g>}{hasCurrent && <g className="plot-zero-reference current-zero-reference"><line x1={left} x2={right} y1={bottom - (0 - currentRange[0]) / (currentRange[1] - currentRange[0]) * (bottom - top)} y2={bottom - (0 - currentRange[0]) / (currentRange[1] - currentRange[0]) * (bottom - top)}/><text x={right + 4} y={bottom - (0 - currentRange[0]) / (currentRange[1] - currentRange[0]) * (bottom - top) + 3}>0 A</text></g>}
+      {[0, 1, 2, 3].map((line) => { const fraction = line / 3; const y = top + fraction * (bottom - top); const value = scopeRange[1] - fraction * (scopeRange[1] - scopeRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{value.toPrecision(3)} A</text>}</g> })}
+      {(hasVoltage || hasCurrent) && <g className="plot-zero-reference"><line x1={left} x2={right} y1={bottom - (0 - scopeRange[0]) / (scopeRange[1] - scopeRange[0]) * (bottom - top)} y2={bottom - (0 - scopeRange[0]) / (scopeRange[1] - scopeRange[0]) * (bottom - top)}/>{hasVoltage && <text x={left - 5} y={bottom - (0 - scopeRange[0]) / (scopeRange[1] - scopeRange[0]) * (bottom - top) + 3} textAnchor="end">0 V</text>}{hasCurrent && <text x={right + 4} y={bottom - (0 - scopeRange[0]) / (scopeRange[1] - scopeRange[0]) * (bottom - top) + 3}>0 A</text>}</g>}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
       <TransientCursorMarker axis={axis} first={first} last={last} minTime={minTime} maxTime={maxTime} left={left} right={right} top={top} bottom={bottom}/>
