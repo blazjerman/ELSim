@@ -227,6 +227,20 @@ test('quick tour explains the current workspace and project save flow', { tag: '
   await expect(dialog).toHaveCount(0)
 })
 
+test('keyboard shortcut reference matches editor controls and restores focus', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const trigger = page.getByRole('button', { name: 'Keyboard shortcuts' })
+  await trigger.click()
+  const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
+  await expect(dialog.getByText('Draw a wire by dragging')).toBeVisible()
+  await expect(dialog.getByText('Ctrl/⌘ + Enter')).toBeVisible()
+  await expect(dialog.getByText('Resistor', { exact: true })).toBeVisible()
+  await expect(dialog.getByText(/Operational amplifier/)).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+})
+
 test('project inspector reports the current project format version', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.addInitScript(() => localStorage.clear())
   await page.goto('/')
