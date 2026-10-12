@@ -2513,7 +2513,10 @@ test('wire endpoints are keyboard accessible and move one grid step with arrow k
   await expect(page.getByRole('button', { name: /Move wire endpoint 1 at 310, 300/ })).toBeFocused()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual([[310, 300], [400, 300]])
   await page.keyboard.press('Tab')
-  await expect(page.getByRole('button', { name: /Move wire endpoint 2 at 400, 300/ })).toBeFocused()
+  const secondEndpoint = page.getByRole('button', { name: /Move wire endpoint 2 at 400, 300/ })
+  await expect(secondEndpoint).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: /Wire segment from 310, 300 to 400, 300/ })).toBeFocused()
 })
 
 test('wire hover clears immediately over a component and connection dots mark joined pins', async ({ page }) => {

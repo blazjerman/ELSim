@@ -662,7 +662,7 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
   onHover: (id?: string) => void
 }) {
   const [[x1, y1], [x2, y2]] = wire.points
-  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}. Press Enter to select and edit its endpoints; tab to move between endpoints.`} aria-pressed={selected} aria-keyshortcuts="Enter Space ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id, true) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
+  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}. Press Enter to edit endpoints; press Escape to return here.`} aria-pressed={selected} aria-keyshortcuts="Enter Space Escape ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id, true) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="14" strokeLinecap="round"/>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round"/>
   </g>
@@ -1457,7 +1457,14 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationEnabled={resultIsCurrent} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       {hoveredWire && tool === 'select' && <g className="wire-endpoint-handles" role="group" aria-label="Wire endpoints" onPointerEnter={() => setHoveredWireId(hoveredWire.id)}>{([0, 1] as const).map((index) => {
         const [x, y] = hoveredWire.points[index]
-        return <circle key={index} data-wire-endpoint-id={hoveredWire.id} data-endpoint-index={index} cx={x} cy={y} r="7" role="button" tabIndex={0} aria-label={`Move wire endpoint ${index + 1} at ${x}, ${y}. Use arrow keys to move one grid step.`} aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight" onFocus={() => setSelectedWireId(hoveredWire.id)} onKeyDown={(event) => {
+        return <circle key={index} data-wire-endpoint-id={hoveredWire.id} data-endpoint-index={index} cx={x} cy={y} r="7" role="button" tabIndex={0} aria-label={`Move wire endpoint ${index + 1} at ${x}, ${y}. Use arrow keys to move one grid step; press Escape to return to the wire.`} aria-keyshortcuts="Escape ArrowUp ArrowDown ArrowLeft ArrowRight" onFocus={() => setSelectedWireId(hoveredWire.id)} onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopPropagation()
+            endEdit()
+            svg.current?.querySelector<SVGGElement>(`.wire-line[data-wire-id="${CSS.escape(hoveredWire.id)}"]`)?.focus()
+            return
+          }
           const offsets = { ArrowUp: [0, -EDITOR_GRID_SIZE], ArrowDown: [0, EDITOR_GRID_SIZE], ArrowLeft: [-EDITOR_GRID_SIZE, 0], ArrowRight: [EDITOR_GRID_SIZE, 0] } as const
           const offset = offsets[event.key as keyof typeof offsets]
           if (!offset) return
