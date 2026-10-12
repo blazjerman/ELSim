@@ -922,7 +922,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const targetThreshold = delay ? spiceScalar(delay.targetThreshold, delay.targetVector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v') : null
     const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (delay
       ? vectorPattern.test(measurement.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && triggerThreshold !== null && targetThreshold !== null && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
-      : ['max', 'min', 'avg', 'rms'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()) && rangeValid)
+      : ['max', 'min', 'pp', 'avg', 'rms'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()) && rangeValid)
     if (!valid) {
       const message = `Transient measurement ${cleanComment(measurement.id)} has an unsupported name, operation, or vector.`
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })

@@ -137,7 +137,7 @@ test('worker result validation rejects unordered waveform axes', () => {
 test('published JSON schema describes delay measurements and seconds', () => {
   const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'engine-protocol.schema.json'), 'utf8'))
   assert.equal(schema.$defs.parameterSweepRun.properties.values.maxItems, 3)
-  assert.deepEqual(schema.$defs.measurement.properties.operation.enum, ['max', 'min', 'avg', 'rms', 'delay'])
+  assert.deepEqual(schema.$defs.measurement.properties.operation.enum, ['max', 'min', 'pp', 'avg', 'rms', 'delay'])
   assert.deepEqual(schema.$defs.measurement.properties.unit.enum, ['V', 'A', 's'])
   const variants = schema.$defs.transientMeasurement.oneOf
   assert.equal(variants.some((variant) => variant.properties?.operation?.const === 'delay'), true)

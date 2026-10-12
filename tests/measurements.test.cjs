@@ -24,17 +24,20 @@ test('delay threshold and crossing validation accepts SPICE units and gives acti
 test('transient measurements parse units and separate sweep cases', () => {
   const measures = [
     { id: 'Peak', operation: 'max', vector: 'V(out)' },
+    { id: 'Swing', operation: 'pp', vector: 'V(out)' },
     { id: 'RmsCurrent', operation: 'rms', vector: 'I(R1)' },
     { id: 'SourceCurrent', operation: 'avg', vector: 'i(@I1[current])' },
   ]
-  const output = 'elsim_peak_0 = 4.9900e+00 at=9.9e-3\nelsim_rmscurrent_0 = 1.25e-3\nelsim_sourcecurrent_0 = 1e-3\nelsim_peak_1 = 3.2e+00 at=8e-3\nelsim_rmscurrent_1 = 9e-4\nelsim_sourcecurrent_1 = -2e-3'
+  const output = 'elsim_peak_0 = 4.9900e+00 at=9.9e-3\nelsim_swing_0 = 4.9900e+00\nelsim_rmscurrent_0 = 1.25e-3\nelsim_sourcecurrent_0 = 1e-3\nelsim_peak_1 = 3.2e+00 at=8e-3\nelsim_swing_1 = 3.2e+00\nelsim_rmscurrent_1 = 9e-4\nelsim_sourcecurrent_1 = -2e-3'
   const parsed = parseMeasurementOutput(output, measures, ['R1=1kΩ', 'R1=2kΩ'])
   assert.equal(parsed.diagnostics.length, 0)
   assert.deepEqual(parsed.results.map(({ id, value, unit, sweep }) => ({ id, value, unit, case: sweep.index })), [
     { id: 'Peak', value: 4.99, unit: 'V', case: 0 },
+    { id: 'Swing', value: 4.99, unit: 'V', case: 0 },
     { id: 'RmsCurrent', value: 0.00125, unit: 'A', case: 0 },
     { id: 'SourceCurrent', value: 0.001, unit: 'A', case: 0 },
     { id: 'Peak', value: 3.2, unit: 'V', case: 1 },
+    { id: 'Swing', value: 3.2, unit: 'V', case: 1 },
     { id: 'RmsCurrent', value: 0.0009, unit: 'A', case: 1 },
     { id: 'SourceCurrent', value: -0.002, unit: 'A', case: 1 },
   ])
@@ -44,6 +47,7 @@ test('current-source measurements use the solved raw vector when ngspice has no 
   const traces = [{ id: 'i(@i1[current])', label: 'I(I1)', unit: 'A', axisLabel: 'Time', axisUnit: 's', axis: Float64Array.from([0, 1, 2]), values: Float64Array.from([0, 1, 0]) }, { id: 'v(out)', label: 'V(out)', unit: 'V', axisLabel: 'Time', axisUnit: 's', axis: Float64Array.from([0, 1, 2]), values: Float64Array.from([0, 0, 2]) }]
   const measurements = [
     { id: 'PeakI', operation: 'max', vector: 'i(@I1[current])' },
+    { id: 'SwingI', operation: 'pp', vector: 'i(@I1[current])' },
     { id: 'MeanI', operation: 'avg', vector: 'i(@I1[current])' },
     { id: 'RmsI', operation: 'rms', vector: 'i(@I1[current])' },
     { id: 'DelayI', operation: 'delay', vector: 'i(@I1[current])', threshold: '0.5', edge: 'rise', targetVector: 'V(out)', targetThreshold: '1', targetEdge: 'rise' },
@@ -52,6 +56,7 @@ test('current-source measurements use the solved raw vector when ngspice has no 
   assert.deepEqual(parsed.diagnostics, [])
   assert.deepEqual(parsed.results.map(({ id, value, unit }) => ({ id, value, unit })), [
     { id: 'PeakI', value: 1, unit: 'A' },
+    { id: 'SwingI', value: 1, unit: 'A' },
     { id: 'MeanI', value: 0.5, unit: 'A' },
     { id: 'RmsI', value: Math.sqrt(0.5), unit: 'A' },
     { id: 'DelayI', value: 1, unit: 's' },
@@ -110,6 +115,7 @@ test('current-source scalar measurements clip and integrate only the requested t
     { id: 'WindowMin', operation: 'min', vector: 'i(@I1[current])', from: '500m', to: '2500m' },
     { id: 'WindowAvg', operation: 'avg', vector: 'i(@I1[current])', from: '500m', to: '2500m' },
     { id: 'WindowRms', operation: 'rms', vector: 'i(@I1[current])', from: '500m', to: '2500m' },
+    { id: 'WindowSwing', operation: 'pp', vector: 'i(@I1[current])', from: '500m', to: '2500m' },
   ]
   const parsed = parseMeasurementOutput('', measurements, [], [[trace]])
   assert.deepEqual(parsed.diagnostics, [])
@@ -118,6 +124,7 @@ test('current-source scalar measurements clip and integrate only the requested t
     { id: 'WindowMin', value: 0, from: '500m', to: '2500m' },
     { id: 'WindowAvg', value: 1, from: '500m', to: '2500m' },
     { id: 'WindowRms', value: Math.sqrt(1.75), from: '500m', to: '2500m' },
+    { id: 'WindowSwing', value: 2, from: '500m', to: '2500m' },
   ])
   const outside = parseMeasurementOutput('', [{ id: 'Outside', operation: 'avg', vector: 'i(@I1[current])', from: '4s', to: '5s' }], [], [[trace]])
   assert.equal(outside.results.length, 0)
@@ -136,11 +143,12 @@ test('project measurements validate, persist in project JSON, and enter the gene
   const project = createStarterProject()
   project.parts.push({ id: 'measurement-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 700, y: 600, rotation: 0 })
   project.sheets[0].parts = project.parts
-  project.simulation.transientMeasurements = [{ id: 'PeakOutput', operation: 'max', vector: 'V(vout)', from: '2m', to: '8m' }, { id: 'InputRms', operation: 'rms', vector: 'I(R1)' }, { id: 'SourceCurrent', operation: 'avg', vector: 'i(@I1[current])' }]
+  project.simulation.transientMeasurements = [{ id: 'PeakOutput', operation: 'max', vector: 'V(vout)', from: '2m', to: '8m' }, { id: 'OutputSwing', operation: 'pp', vector: 'V(vout)' }, { id: 'InputRms', operation: 'rms', vector: 'I(R1)' }, { id: 'SourceCurrent', operation: 'avg', vector: 'i(@I1[current])' }]
   const reloaded = validateProject(JSON.parse(JSON.stringify(project)))
   const deck = createNetlistArtifact(reloaded).text
   const controlled = addResultControl(deck, [], reloaded.simulation.transientMeasurements)
   assert.match(deck, /\.meas tran ELSIM_PeakOutput max V\(vout\) FROM=2m TO=8m/)
+  assert.match(deck, /\.meas tran ELSIM_OutputSwing pp V\(vout\)/)
   assert.match(deck, /\.meas tran ELSIM_InputRms rms I\(R1\)/)
   assert.match(deck, /ELSim calculates AVG measurement SourceCurrent from the solved current-source samples/)
   assert.doesNotMatch(controlled, /\.meas tran ELSIM_SourceCurrent/)

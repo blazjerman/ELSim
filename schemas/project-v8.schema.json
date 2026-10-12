@@ -1255,6 +1255,7 @@
                 "enum": [
                   "max",
                   "min",
+                  "pp",
                   "avg",
                   "rms",
                   "delay"

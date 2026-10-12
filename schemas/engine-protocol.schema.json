@@ -97,7 +97,7 @@
       "required": ["id", "operation", "vector", "value", "unit"],
       "properties": {
         "id": { "type": "string" },
-        "operation": { "enum": ["max", "min", "avg", "rms", "delay"] },
+        "operation": { "enum": ["max", "min", "pp", "avg", "rms", "delay"] },
         "vector": { "type": "string" },
         "targetVector": { "type": "string" },
         "from": { "type": "string", "maxLength": 48 },
@@ -133,7 +133,7 @@
           "required": ["id", "operation", "vector"],
           "properties": {
             "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$" },
-            "operation": { "enum": ["max", "min", "avg", "rms"] },
+            "operation": { "enum": ["max", "min", "pp", "avg", "rms"] },
             "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" },
             "from": { "type": "string", "maxLength": 48 },
             "to": { "type": "string", "maxLength": 48 }

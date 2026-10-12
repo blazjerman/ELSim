@@ -40,14 +40,17 @@ function calculateFromTraces(measurement: TransientMeasurement, traces: readonly
     const left = low - 1, fraction = (time - axis[left]) / (axis[low] - axis[left])
     return values[left] + (values[low] - values[left]) * fraction
   }
-  if (measurement.operation === 'max' || measurement.operation === 'min') {
+  if (measurement.operation === 'max' || measurement.operation === 'min' || measurement.operation === 'pp') {
     const firstValue = valueAt(start), lastValue = valueAt(end)
     if (firstValue === null || lastValue === null) return null
-    let result = measurement.operation === 'max' ? Math.max(firstValue, lastValue) : Math.min(firstValue, lastValue)
+    let minimum = Math.min(firstValue, lastValue), maximum = Math.max(firstValue, lastValue)
     let low = 0, high = axis.length
     while (low < high) { const middle = (low + high) >>> 1; if (axis[middle] <= start) low = middle + 1; else high = middle }
-    for (let index = low; index < axis.length && axis[index] < end; index++) result = measurement.operation === 'max' ? Math.max(result, values[index]) : Math.min(result, values[index])
-    return result
+    for (let index = low; index < axis.length && axis[index] < end; index++) {
+      minimum = Math.min(minimum, values[index])
+      maximum = Math.max(maximum, values[index])
+    }
+    return measurement.operation === 'min' ? minimum : measurement.operation === 'max' ? maximum : maximum - minimum
   }
   if (measurement.operation === 'delay') {
     const target = traceFor(measurement.targetVector)
