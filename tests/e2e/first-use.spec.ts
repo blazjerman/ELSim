@@ -3677,6 +3677,16 @@ test('current-controlled sources example shows CCCS gain and CCVS transresistanc
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(v_f\) = -2\.0+/)
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(v_h\) = 2\.0+/)
+  await expect(page.locator('.example-lesson-next-step')).toContainText('Change H1 from 2 kΩ to 4 kΩ')
+  await page.locator('.circuit-part[data-part-id="current-h1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="current-h1:value"]').fill('4 kΩ')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('predicts V_H = 4 V')
+  await page.locator('.example-lesson-next-step').getByRole('button', { name: 'Run this circuit again' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.example-lesson-next-step')).toContainText('ngspice solved 4 V')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('V_F = -2 V')
 })
 
 test('global editor shortcuts stay inactive while an app dialog is open', async ({ page }) => {

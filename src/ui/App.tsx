@@ -1693,6 +1693,16 @@ export default function App() {
   const controlledOutputAt25Ms = controlledOutputTrace?.values[traceIndexAt25Ms(controlledOutputTrace) ?? 0]
   const controlledCurrentOutputAt25Ms = controlledCurrentOutputTrace?.values[traceIndexAt25Ms(controlledCurrentOutputTrace) ?? 0]
   const controlledPredictedOutput = controlledSourceGain !== null && controlledInputAt25Ms !== undefined ? controlledSourceGain * controlledInputAt25Ms : undefined
+  const currentControlledTransresistance = exampleLesson?.id === 'current-controlled' ? componentMagnitude(project.parts.find((part) => part.id === 'current-h1')?.value ?? '2 kΩ', 'resistor') : null
+  const currentControlledSenseTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'i(vsense)') : undefined
+  const currentControlledVoltageTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(v_h)') : undefined
+  const currentControlledCccsTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(v_f)') : undefined
+  const currentControlledSenseAt25Ms = currentControlledSenseTrace?.values[traceIndexAt25Ms(currentControlledSenseTrace) ?? 0]
+  const currentControlledVoltageAt25Ms = currentControlledVoltageTrace?.values[traceIndexAt25Ms(currentControlledVoltageTrace) ?? 0]
+  const currentControlledCccsAt25Ms = currentControlledCccsTrace?.values[traceIndexAt25Ms(currentControlledCccsTrace) ?? 0]
+  const currentControlledPredictedVoltage = currentControlledSenseAt25Ms !== undefined && currentControlledTransresistance !== null
+    ? currentControlledSenseAt25Ms * currentControlledTransresistance
+    : undefined
   const voltageSwitch = exampleLesson?.id === 'voltage-switch' ? project.parts.find((part) => part.id === 'vswitch-s1') : undefined
   const voltageSwitchThreshold = voltageSwitch ? componentMagnitude(voltageSwitch.value, 'source') : null
   const voltageSwitchHysteresis = voltageSwitch ? componentMagnitude(voltageSwitch.voltageSwitch?.hysteresis ?? '0 V', 'source') : null
@@ -1706,7 +1716,15 @@ export default function App() {
   const voltageSwitchPredictedClosed = voltageSwitchThreshold !== null && voltageSwitchHysteresis !== null && voltageSwitchControlAt25Ms !== undefined
     ? voltageSwitchControlAt25Ms >= voltageSwitchThreshold + voltageSwitchHysteresis / 2
     : undefined
-  const lessonNextStep = exampleLesson?.id === 'voltage-switch' && simulationResult
+  const lessonNextStep = exampleLesson?.id === 'current-controlled' && simulationResult
+    ? currentControlledSenseAt25Ms !== undefined && currentControlledTransresistance !== null
+      ? simulationResultStale
+        ? `The old run measured I(VSENSE) = ${formatLessonCurrent(currentControlledSenseAt25Ms * 1000)} at 25 ms. At H1 = ${project.parts.find((part) => part.id === 'current-h1')?.value ?? 'changed'}, V = I × transresistance predicts V_H = ${currentControlledPredictedVoltage !== undefined ? formatLessonVoltage(currentControlledPredictedVoltage) : 'not available'}. Rerun to check H1; F1's current gain remains unchanged.`
+        : Math.abs(currentControlledTransresistance - 2000) < 1e-6 && currentControlledSenseAt25Ms > 0
+          ? `At 25 ms, I(VSENSE) = ${formatLessonCurrent(currentControlledSenseAt25Ms * 1000)}. H1's 2 kΩ transresistance gives V_H = ${formatLessonVoltage(currentControlledVoltageAt25Ms ?? currentControlledPredictedVoltage ?? 0)}; F1 independently gives V_F = ${formatLessonVoltage(currentControlledCccsAt25Ms ?? 0)}. Change H1 from 2 kΩ to 4 kΩ and rerun: V_H should double while V_F stays the same.`
+          : `At 25 ms, ${formatLessonCurrent(currentControlledSenseAt25Ms * 1000)} through VSENSE and H1 = ${project.parts.find((part) => part.id === 'current-h1')?.value ?? 'changed'} predict V_H = ${currentControlledPredictedVoltage !== undefined ? formatLessonVoltage(currentControlledPredictedVoltage) : 'not available'}; ngspice solved ${currentControlledVoltageAt25Ms !== undefined ? formatLessonVoltage(currentControlledVoltageAt25Ms) : 'not available'}. F1 still gives V_F = ${currentControlledCccsAt25Ms !== undefined ? formatLessonVoltage(currentControlledCccsAt25Ms) : 'not available'}.`
+      : 'Run the circuit to inspect I(VSENSE), then compare the current-controlled outputs.'
+    : exampleLesson?.id === 'voltage-switch' && simulationResult
     ? voltageSwitchThreshold !== null && voltageSwitchHysteresis !== null && voltageSwitchControlAt25Ms !== undefined
       ? simulationResultStale
         ? `The old run had V(CTRL) = ${formatLessonVoltage(voltageSwitchControlAt25Ms)} at 25 ms. With the edited ${voltageSwitch?.ref ?? 'S1'} threshold at ${formatLessonVoltage(voltageSwitchThreshold)} and ${formatLessonVoltage(voltageSwitchHysteresis)} hysteresis, the switch should ${voltageSwitchPredictedClosed ? 'close' : 'stay open'}; rerun to compare VOUT.`
