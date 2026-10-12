@@ -64,7 +64,7 @@ const EDITOR_SHORTCUTS = [
   ['m', 'Select and move'], ['w', 'Draw a wire by dragging'], [';', 'Place or edit a net label'], ['?', 'Probe a wire or component'], ['=', 'Toggle a wire-crossing junction'],
   ['Ctrl/⌘ + Enter', 'Run simulation'], ['Ctrl/⌘ + A', 'Select all components, wires, and labels'], ['Ctrl/⌘ + C / V', 'Copy and paste selected objects'], ['Ctrl/⌘ + Z', 'Undo'], ['Ctrl/⌘ + Shift + Z or Y', 'Redo'],
   ['Arrow keys', 'Move keyboard focus between schematic components'], ['Enter / Space', 'Activate the focused item; toggles switches in Select mode'], ['Arrow keys on endpoint', 'Move a focused wire endpoint one grid step'], ['Context Menu / Shift + F10', 'Open options for the focused schematic object'],
-  ['Delete / Backspace', 'Delete selected objects'], ['r or .', 'Rotate selected part; r places a resistor when none is selected'], ['y', 'Flip the selected component'], ['Space + drag', 'Pan the schematic'], ['Mouse wheel', 'Zoom at the pointer'],
+  ['Delete / Backspace', 'Delete selected objects'], ['r or .', 'Rotate a pending or selected part; r places a resistor when none is selected'], ['y', 'Flip the selected component'], ['Space + drag', 'Pan the schematic'], ['Mouse wheel', 'Zoom at the pointer'],
   ['/', 'Focus component search'], ['Escape', 'Cancel placement or clear selection'],
 ] as const
 const LOGIC_GATE_SHORTCUTS_HELP = [['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate'], ['5', 'XNOR gate'], ['@', 'NAND gate'], ['#', 'NOR gate']] as const
@@ -318,17 +318,12 @@ function usePartUiState(id: string): number {
   return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
-function placementRotation(kind: PartKind, dx: number, dy: number): Part['rotation'] {
-  if (Math.hypot(dx, dy) < EDITOR_GRID_SIZE) return 0
-  const angle = Math.atan2(dy, dx) * 180 / Math.PI
-  const target = ((Math.round(angle / 90) * 90) % 360 + 360) % 360
+function defaultPlacementRotation(kind: PartKind): Part['rotation'] {
   const exemplar: Part = { id: 'placement', kind, componentDefinitionId: componentDefinitionFor(kind).id, ref: 'X', value: '', x: 0, y: 0, rotation: 0 }
-  // Point the second (usually controlled/right-hand) terminal along the drag.
-  // For transistor families this is the base/gate, so dragging left-to-right
-  // puts that pin on the right and the device channel faces left.
   const directionPin = componentPins(exemplar)[1]
-  const native = directionPin ? Math.atan2(directionPin.y, directionPin.x) * 180 / Math.PI : 0
-  return (((target - Math.round(native / 90) * 90) % 360 + 360) % 360) as Part['rotation']
+  if (!directionPin) return 0
+  const native = Math.atan2(directionPin.y, directionPin.x) * 180 / Math.PI
+  return (((-Math.round(native / 90) * 90) % 360 + 360) % 360) as Part['rotation']
 }
 
 const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, componentSample, animate = false, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; componentSample: (part: Part) => { voltage?: number; current?: number; secondaryCurrent?: number; switchClosed?: boolean; logicOutput?: number }; animate?: boolean; symbol?: ImportedSymbol; detailed?: boolean }) {
@@ -806,7 +801,7 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
   </div>
 }
 
-function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; setSelection: (selection: Selection) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
+function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; setSelection: (selection: Selection) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingRotation: Part['rotation']; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
   const selectedWireIdSet = useMemo(() => new Set(selectedWireIds), [selectedWireIds])
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const selectedNetLabelIdSet = useMemo(() => new Set(selectedNetLabelIds), [selectedNetLabelIds])
@@ -870,7 +865,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   }, [])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
-  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'component-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; additive?: boolean; pointIndex?: number; points?: [number, number][]; group?: { parts: Part[]; wires: Project['wires']; netLabels: Project['netLabels'] } } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; additive?: boolean; pointIndex?: number; points?: [number, number][]; group?: { parts: Part[]; wires: Project['wires']; netLabels: Project['netLabels'] } } | null>(null)
   const dragPreviewElements = useRef<{ element: SVGGElement; transform: string | null }[]>([])
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
@@ -884,6 +879,10 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
+  useEffect(() => {
+    if (!pendingComponent) { setComponentPreview(null); return }
+    setComponentPreview((current) => current ? { ...current, kind: pendingComponent, componentDefinitionId: componentDefinitionFor(pendingComponent).id, rotation: pendingRotation, polarized: pendingPolarizedCapacitor } : current)
+  }, [pendingComponent, pendingRotation, pendingPolarizedCapacitor])
   useLayoutEffect(() => {
     const menu = contextMenuRef.current
     const wrapper = menu?.parentElement
@@ -1080,17 +1079,6 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     else setNotice('This wire is not connected to a net yet.')
   }
   const beginWireCreation = (event: PointerEvent<SVGSVGElement>) => {
-    if (pendingComponent && tool === 'select' && event.button === 0 && !spacePan) {
-      event.preventDefault()
-      event.stopPropagation()
-      const point = pointFromEvent(event)
-      const anchor = { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
-      setComponentPreview({ id: 'placement-preview', kind: pendingComponent, componentDefinitionId: componentDefinitionFor(pendingComponent).id, ref: '', value: componentDefaultValue(pendingComponent), x: anchor.x, y: anchor.y, rotation: 0 })
-      drag.current = { kind: 'component-create', id: pendingComponent, pointer: event.pointerId, x: anchor.x, y: anchor.y, originX: anchor.x, originY: anchor.y }
-      suppressCanvasClick.current = true
-      event.currentTarget.setPointerCapture(event.pointerId)
-      return
-    }
     if (tool !== 'wire' || event.button !== 0 || spacePan) return
     event.preventDefault()
     event.stopPropagation()
@@ -1323,16 +1311,6 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       if (end.x !== drag.current.originX || end.y !== drag.current.originY) suppressCanvasClick.current = true
       return
     }
-    if (drag.current.kind === 'component-create') {
-      const position = { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
-      drag.current.x = position.x
-      drag.current.y = position.y
-      const kind = drag.current.id as PartKind
-      const rotation = placementRotation(kind, position.x - drag.current.originX, position.y - drag.current.originY)
-      setComponentPreview((current) => current ? { ...current, x: snapToEditorGrid((drag.current!.originX + position.x) / 2), y: snapToEditorGrid((drag.current!.originY + position.y) / 2), rotation } : current)
-      suppressCanvasClick.current = true
-      return
-    }
     const deltaX = Math.round((point.x - drag.current.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     const deltaY = Math.round((point.y - drag.current.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     if (deltaX !== 0 || deltaY !== 0) suppressCanvasClick.current = true
@@ -1409,18 +1387,6 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       drag.current = null
       return
     }
-    if (drag.current?.kind === 'component-create') {
-      const placement = drag.current
-      const kind = placement.id as PartKind
-      const end = { x: snapToEditorGrid(pointFromEvent(event).x), y: snapToEditorGrid(pointFromEvent(event).y) }
-      const dx = end.x - placement.originX, dy = end.y - placement.originY
-      const position = { x: snapToEditorGrid((end.x + placement.originX) / 2), y: snapToEditorGrid((end.y + placement.originY) / 2) }
-      const rotation = placementRotation(kind, dx, dy)
-      onPlaceComponent(kind, position.x, position.y, rotation, pendingPolarizedCapacitor, pendingLogicOperation)
-      setComponentPreview(null)
-      drag.current = null
-      return
-    }
     if (drag.current?.kind === 'wire-create') {
       const start = { x: drag.current.originX, y: drag.current.originY }
       const point = pointFromEvent(event)
@@ -1489,14 +1455,22 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     return wires
   }, [visibleWires, hoveredWireId])
   const renderWire = (wire: Wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireIdSet.has(wire.id)} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>
+  const updatePlacementPreview = (event: PointerEvent<SVGSVGElement>) => {
+    if (!pendingComponent || tool !== 'select' || spacePan) return
+    const point = pointFromEvent(event)
+    const x = snapToEditorGrid(point.x), y = snapToEditorGrid(point.y)
+    setComponentPreview((current) => current?.kind === pendingComponent && current.x === x && current.y === y && current.rotation === pendingRotation
+      ? current
+      : { id: 'placement-preview', kind: pendingComponent, componentDefinitionId: componentDefinitionFor(pendingComponent).id, ref: '', value: componentDefaultValue(pendingComponent), x, y, rotation: pendingRotation, polarized: pendingPolarizedCapacitor })
+  }
   const hoveredWire = project.wires.find((wire) => wire.id === selectedWireIds.at(-1)) ?? project.wires.find((wire) => wire.id === hoveredWireId)
   const wireConnectionDots = useMemo(() => wireConnectionDotPoints(project), [project.parts, project.wires])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
       <div className="canvas-toolset"><IconButton title="Select and move (M)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => { onClearPendingComponent(); setSelectedWireId(null); setTool('wire'); setNotice('Wire selected. Drag anywhere on the grid to place one segment.') }}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (?)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (=)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
-      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Drag anywhere on the grid to place a wire' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Drag blank space L→R to contain-select, R→L to touch-select · Ctrl/⌘+A selects all components and wires · Shift-click adds/removes · drag to move · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
+      <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Drag anywhere on the grid to place a wire' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : pendingComponent ? 'Click to place component · R rotates · Esc cancels' : 'Drag blank space L→R to contain-select, R→L to touch-select · Ctrl/⌘+A selects all components and wires · Shift-click adds/removes · drag to move · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
-    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire segments and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event); beginBoxSelection(event) }} onPointerMove={(event) => { moveDrag(event); const target = event.target instanceof Element ? event.target : null; if (!target?.closest('.wire-line, .wire-endpoint-handles')) setHoveredWireId(undefined) }} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onKeyDown={(event) => {
+    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}${pendingComponent ? ' component-placement-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire segments and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onClickCapture={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; event.preventDefault(); event.stopPropagation(); return } if (!pendingComponent || tool !== 'select') return; const point = pointFromEvent(event); onPlaceComponent(pendingComponent, snapToEditorGrid(point.x), snapToEditorGrid(point.y), pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation); event.preventDefault(); event.stopPropagation() }} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event); beginBoxSelection(event) }} onPointerMove={(event) => { updatePlacementPreview(event); moveDrag(event); const target = event.target instanceof Element ? event.target : null; if (!target?.closest('.wire-line, .wire-endpoint-handles')) setHoveredWireId(undefined) }} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onKeyDown={(event) => {
       const target = event.target instanceof Element ? event.target.closest<SVGElement>('[data-part-id], [data-wire-id], [data-net-label-id]') : null
       if (!target || !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) return
       event.preventDefault()
@@ -1659,6 +1633,7 @@ export default function App() {
   const [selectedNetLabelIds, setSelectedNetLabelIds] = useState<string[]>([])
   const [tool, setTool] = useState<ToolMode>('select')
   const [pendingComponentKind, setPendingComponentKind] = useState<PartKind | null>(null)
+  const [pendingComponentRotation, setPendingComponentRotation] = useState<Part['rotation']>(0)
   const [pendingPolarizedCapacitor, setPendingPolarizedCapacitor] = useState(false)
   const [pendingLogicOperation, setPendingLogicOperation] = useState<Part['logicOperation']>()
   const [netlistOpen, setNetlistOpen] = useState(false)
@@ -2715,13 +2690,14 @@ export default function App() {
     const component = componentPaletteItems.find((item) => item.kind === kind)
     if (!component) return
     setPendingComponentKind(kind)
+    setPendingComponentRotation(defaultPlacementRotation(kind))
     setPendingPolarizedCapacitor(kind === 'capacitor' && polarized)
     setPendingLogicOperation(kind === 'logicGate' ? logicOperation ?? 'and' : undefined)
     setTool('select')
     setComponentCategory('basics')
     setComponentQuery('')
     const definition = componentDefinitionFor(kind)
-    setNotice(`${definition.paletteName ?? definition.name} selected. Drag on the schematic to place it and set its orientation.`)
+    setNotice(`${definition.paletteName ?? definition.name} selected. Click the schematic to place it; press R to rotate before placing.`)
   }
   const normalizedExampleQuery = exampleQuery.trim().toLocaleLowerCase()
   const filteredExamples = exampleCatalog.filter(({ id, title, description }) => (exampleTopic === 'all' || exampleTopicIds[exampleTopic].includes(id)) && `${title} ${description}`.toLocaleLowerCase().includes(normalizedExampleQuery))
@@ -3274,6 +3250,7 @@ export default function App() {
       if ((event.ctrlKey || event.metaKey) && key === 'y') { event.preventDefault(); redo(); return }
       if (event.ctrlKey || event.metaKey || event.altKey) return
       const hasSchematicSelection = Boolean(selection || selectedPartIds.length || selectedWireIds.length || selectedNetLabelIds.length)
+      if (pendingComponentKind && (event.key === 'r' || event.key === '.')) { setPendingComponentRotation((rotation) => ((rotation + 90) % 360) as Part['rotation']); return }
       if (event.key === 'r' && selected) { rotateSelected(); return }
       if (hasSchematicSelection && (Object.values(COMPONENT_SHORTCUTS).includes(event.key) || FUTURE_COMPONENT_SHORTCUTS[event.key] || event.key === 'C')) return
       if (event.key === 'C') { selectComponentForPlacement('capacitor', true); return }
@@ -3301,7 +3278,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onSpaceKeyDown, true); window.removeEventListener('keyup', onSpaceKeyUp, true); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy])
+  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy, pendingComponentKind])
   const exportNetlist = async () => {
     const netlist = createNetlist(projectRef.current)
     try { await navigator.clipboard.writeText(netlist); setNotice('Generated netlist copied') }
@@ -4007,7 +3984,7 @@ export default function App() {
       <main aria-label="Schematic workspace" className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <div key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><button className="sheet-tab-select" aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)}><span className="sheet-dot"/>{sheet.name}</button>{sheet.id === project.activeSheetId && <div className="sheet-tab-menu"><button className="sheet-tab-menu-trigger" aria-label={`More options for ${sheet.name}`} aria-haspopup="menu" aria-expanded={sheetTabMenu?.id === sheet.id} title={`More options for ${sheet.name}`} onClick={(event) => { if (sheetTabMenu?.id === sheet.id) setSheetTabMenu(null); else { const bounds = event.currentTarget.getBoundingClientRect(); setSheetTabMenu({ id: sheet.id, left: Math.max(8, Math.min(bounds.left, window.innerWidth - 202)), top: Math.max(8, Math.min(bounds.bottom + 4, window.innerHeight - 112)) }) } }}><MoreHorizontal size={16}/></button>{sheetTabMenu?.id === sheet.id && <div className="sheet-tab-menu-items" role="menu" aria-label={`${sheet.name} options`} style={{ left: sheetTabMenu.left, top: sheetTabMenu.top }} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); setSheetTabMenu(null); document.querySelector<HTMLButtonElement>('.sheet-tab-menu-trigger[aria-expanded="true"]')?.focus() } }}><button role="menuitem" onClick={() => { setSheetTabMenu(null); setSheetNameDraft(sheet.name); setSheetNameError(''); setSheetSettingsOpen(true) }}>Sheet and block settings…</button><button role="menuitem" disabled={sheet.parentSheetId === null} title={sheet.parentSheetId === null ? 'The root sheet cannot be duplicated as a block' : undefined} onClick={() => { setSheetTabMenu(null); duplicateActiveSheet() }}>Duplicate block</button><button role="menuitem" className="danger" disabled={sheet.parentSheetId === null || Boolean(activeSheetDeleteReason)} title={sheet.parentSheetId === null ? 'The root sheet cannot be deleted' : activeSheetDeleteReason ?? 'Delete this block and nested sheets'} onClick={() => { setSheetTabMenu(null); deleteActiveSheet() }}>Delete block</button></div>}</div>}</div>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button ref={sheetSettingsTriggerRef} className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => { setSheetNameDraft(activeSheet?.name ?? ''); setSheetNameError(''); setSheetSettingsOpen(true) }}><SlidersHorizontal size={15}/></button></div>
         {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p>{lessonNextStep ? <div className="example-lesson-next-step"><span className="eyebrow">TRY THIS NEXT</span><p>{lessonNextStep}</p>{simulationResultStale && <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : 'Run this circuit again'}</button>}</div> : <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : simulationResultStale ? 'Run this circuit again' : 'Run this circuit'}</button>}</div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
-        <Schematic project={project} setSelection={setSelection} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} commitView={commitView} recordViewDraft={recordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={addPart} onClearPendingComponent={() => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) }} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
+        <Schematic project={project} setSelection={setSelection} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} commitView={commitView} recordViewDraft={recordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={addPart} onClearPendingComponent={() => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) }} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>
       </main>
 
       {additionalPlotPanels.map((panel, index) => <FloatingPlotPanel key={panel.id} panel={panel} index={index} title={waveformWindowTitle(panel, index)} onBoundsChange={(bounds) => updatePlotPanel(panel.id, (current) => ({ ...current, bounds }))} onClose={() => saveAdditionalPlotPanels(additionalPlotPanels.filter((item) => item.id !== panel.id))} onActivate={() => { if (index !== additionalPlotPanels.length - 1) saveAdditionalPlotPanels([...additionalPlotPanels.filter((item) => item.id !== panel.id), panel]) }}>

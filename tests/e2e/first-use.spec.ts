@@ -2332,6 +2332,7 @@ test('wire and component placement tools stay armed until cancelled', async ({ p
     const start = await screenPoint(x1, y1), end = await screenPoint(x2, y2)
     await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
   }
+  const clickOnCanvas = async (x: number, y: number) => { const point = await screenPoint(x, y); await page.mouse.click(point.x, point.y) }
   const wireTool = page.getByRole('button', { name: 'Draw wire (W)' })
   const wireCount = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)
   await wireTool.click()
@@ -2347,10 +2348,10 @@ test('wire and component placement tools stay armed until cancelled', async ({ p
   await expect(page.locator('.circuit-part[data-part-id="p-r1"]')).toHaveClass(/selected/)
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
   await resistor.click()
-  await dragOnCanvas(500, 300, 500, 340)
+  await clickOnCanvas(500, 300)
   await expect(resistor).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
-  await dragOnCanvas(500, 460, 500, 500)
+  await clickOnCanvas(500, 460)
   await expect(resistor).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R3'))).toBe(true)
   await expect(page.locator('.circuit-part.selected')).toHaveCount(0)
@@ -2359,9 +2360,9 @@ test('wire and component placement tools stay armed until cancelled', async ({ p
   await page.keyboard.press('C')
   const capacitor = page.locator('.component-card').filter({ hasText: 'Capacitor' })
   await expect(capacitor).toHaveAttribute('aria-pressed', 'true')
-  await dragOnCanvas(360, 520, 360, 560)
+  await clickOnCanvas(360, 520)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'C2')?.polarized)).toBe(true)
-  await dragOnCanvas(460, 520, 460, 560)
+  await clickOnCanvas(460, 520)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'C3')?.polarized)).toBe(true)
   await expect(page.locator('.circuit-part.selected')).toHaveCount(0)
   await page.keyboard.press('Escape')
@@ -2382,7 +2383,7 @@ test('sheet tab three-dot menu manages reusable blocks', async ({ page }) => {
   await expect(page.getByLabel('Sheet name')).not.toHaveValue('')
 })
 
-test('placement preview shows component orientation and toolbar controls stay fixed', async ({ page }) => {
+test('click placement preview rotates with R and toolbar controls stay fixed', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('group', { name: 'Result playback' })).toBeVisible()
   await expect(page.getByLabel('Simulation time')).toBeDisabled()
@@ -2401,15 +2402,15 @@ test('placement preview shows component orientation and toolbar controls stay fi
     const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
     return { x: screen.x, y: screen.y }
   }, { x, y })
-  const start = await screenPoint(500, 500), end = await screenPoint(580, 500)
-  await page.mouse.move(start.x, start.y)
-  await page.mouse.down()
-  await page.mouse.move(end.x, end.y, { steps: 3 })
+  const point = await screenPoint(580, 500)
+  await page.mouse.move(point.x, point.y)
   const preview = page.locator('.component-placement-preview .circuit-part')
   await expect(preview).toBeVisible()
   await expect(preview).toHaveAttribute('transform', /rotate\(180\)/)
-  await page.mouse.up()
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'npn')?.rotation)).toBe(180)
+  await page.keyboard.press('r')
+  await expect(preview).toHaveAttribute('transform', /rotate\(270\)/)
+  await page.mouse.click(point.x, point.y)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'npn')?.rotation)).toBe(270)
 })
 
 test('new voltage-controlled switches use their component definition defaults', async ({ page }) => {
@@ -2423,8 +2424,8 @@ test('new voltage-controlled switches use their component definition defaults', 
     const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
     return { x: screen.x, y: screen.y }
   }, { x, y })
-  const start = await screenPoint(500, 460), end = await screenPoint(500, 500)
-  await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
+  const point = await screenPoint(500, 460)
+  await page.mouse.click(point.x, point.y)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'voltageSwitch')?.voltageSwitch)).toEqual({ onResistance: '1 Ω', offResistance: '1 GΩ', hysteresis: '0 V' })
   await page.keyboard.press('m')
   await page.locator('.circuit-part[aria-label^="S1,"]').click()
