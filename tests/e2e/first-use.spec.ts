@@ -1127,6 +1127,19 @@ test('AC source validation focuses its inspector field before simulation', { tag
   await expect(plot.getByRole('group', { name: /AC magnitude from/ })).toBeVisible({ timeout: 60_000 })
 })
 
+test('connection inspector uses ordered, friendly pin labels from component definitions', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await expect(page.locator('.pin-row')).toHaveCount(2)
+  await expect(page.locator('.pin-row').nth(0)).toContainText('Positive')
+  await expect(page.locator('.pin-row').nth(1)).toContainText('Negative')
+
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  await expect(page.locator('.pin-row')).toHaveCount(2)
+  await expect(page.locator('.pin-row').nth(0)).toContainText('Terminal 1')
+  await expect(page.locator('.pin-row').nth(1)).toContainText('Terminal 2')
+})
+
 test('invalid pulse timing selects its source and focuses the exact setting', async ({ page }) => {
   await page.goto('/')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')
