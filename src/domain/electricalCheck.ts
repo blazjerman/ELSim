@@ -339,6 +339,23 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
   }
 
+  let importedSubcircuits = new Set<string>()
+  try {
+    importedSubcircuits = new Set(analyzeModelDependencies(project.modelAssets ?? []).subcircuitAssets.keys())
+  } catch {
+    // Imported model syntax diagnostics are reported by the model editor.
+  }
+  for (const { sheet, topLevelInstanceId } of reachableSheets) for (const part of sheet.parts) {
+    if (part.kind !== 'subcircuit' || part.sheetId || !part.modelName || importedSubcircuits.has(part.modelName.toLowerCase())) continue
+    issues.push({
+      id: `missing-subcircuit-model:${sheet.id}:${part.id}`,
+      severity: 'warning',
+      title: `${part.ref} needs subcircuit model ${part.modelName}${sheet.id === project.activeSheetId ? '' : ` in ${sheet.name}`}`,
+      detail: `No imported .SUBCKT definition named ${part.modelName} is available. Import the library that defines it or remove this instance.`,
+      partId: topLevelInstanceId ?? part.id,
+    })
+  }
+
   if (project.modelAssets?.length) {
     try {
       const dependencies = analyzeModelDependencies(project.modelAssets)

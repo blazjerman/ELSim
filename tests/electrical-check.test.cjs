@@ -456,6 +456,20 @@ test('reports missing transitive dependencies of an instantiated model', () => {
   assert.ok(checkCircuit(project).some((item) => item.id.startsWith('missing-model-dependency:') && /MISSING_CORE/.test(item.title)))
 })
 
+test('reports placed external ICs with no matching imported subcircuit definition', () => {
+  const project = createHierarchicalExampleProject()
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.parts.push({ id: 'missing-child-ic', kind: 'subcircuit', ref: 'XIC', value: 'AMP_MISSING', modelName: 'AMP_MISSING', modelPins: ['IN', 'OUT'], x: 800, y: 700, rotation: 0 })
+  const issue = checkCircuit(project).find((item) => item.id === 'missing-subcircuit-model:sheet-core:missing-child-ic')
+  assert.equal(issue?.severity, 'warning')
+  assert.equal(issue?.partId, 'example-x2')
+  assert.match(issue?.title, /XIC.*AMP_MISSING.*Core resistor/)
+  assert.match(issue?.detail, /Import the library that defines it/)
+
+  project.modelAssets = [{ id: 'amp-lib', filename: 'amp.lib', sha256: '0'.repeat(64), content: '.SUBCKT AMP_MISSING IN OUT\nR1 IN OUT 1k\n.ENDS AMP_MISSING\n', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
+  assert.equal(checkCircuit(project).some((item) => item.id === 'missing-subcircuit-model:sheet-core:missing-child-ic'), false)
+})
+
 test('selects active circuit parts that use conflicting imported model definitions', () => {
   const project = createStarterProject()
   project.modelAssets = [
