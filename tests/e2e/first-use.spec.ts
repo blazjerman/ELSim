@@ -4796,6 +4796,26 @@ test('@ui-smoke a reusable child sheet can be duplicated independently', async (
   await expect(page.locator('.sheet-tab.active')).toContainText('Block 1')
 })
 
+test('@ui-smoke deleting an unused reusable sheet also removes its nested definitions and undo restores them', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await expect(page.locator('.sheet-tab')).toHaveCount(3)
+  await page.getByTitle('Child of Main circuit').click()
+  await page.getByRole('button', { name: 'Sheet ports and block settings' }).click()
+  const deletion = page.waitForEvent('dialog')
+  const deleteClick = page.getByRole('button', { name: 'Delete sheet' }).click()
+  const dialog = await deletion
+  expect(dialog.message()).toContain('all nested blocks')
+  await dialog.accept()
+  await deleteClick
+  await expect(page.locator('.sheet-tab')).toHaveCount(1)
+  await expect.poll(() => page.evaluate(() => { const saved = localStorage.getItem('elsim:project:v7'); return saved ? JSON.parse(saved).sheets.map((sheet: { name: string }) => sheet.name) : null })).toEqual(['Main circuit'])
+  await page.keyboard.press('Control+z')
+  await expect(page.locator('.sheet-tab')).toHaveCount(3)
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 1')
+})
+
 test('@ui-smoke an unused child sheet can be deleted after confirmation', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Add sheet' }).click()

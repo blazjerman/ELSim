@@ -512,3 +512,6 @@ Batch custom-model import (2026-10-12): Users can select multiple related SPICE 
 
 
 Offline local simulation follow-up (2026-10-12): Added `npm run build:offline` to package the developer's existing ignored `public/engine/ngspice.mjs` and `.wasm` into a local production build without compiling WASM or invoking the distribution-review gate. Default and GitHub Pages builds remain engine-free. The offline service worker now answers `HEAD` runtime checks from cached `GET` assets, and the Firefox PWA regression checks JavaScript/WASM MIME types and successfully simulates after going offline and reloading. `npm run build:offline` and `npm run test:e2e:pwa:firefox` pass.
+
+
+Nested-sheet deletion follow-up (2026-10-12): Deleting an unused reusable sheet now removes its complete nested definition subtree atomically, with one Undo restoring the subtree. Deletion is blocked when any removed definition is instantiated by a sheet outside that subtree, with an actionable message. Domain coverage verifies safe deletion and external-reference protection; the focused Firefox workflow verifies the sheet tabs, deletion, and Undo. All 28 unit groups and TypeScript checking pass.

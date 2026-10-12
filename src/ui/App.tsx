@@ -20,7 +20,7 @@ import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrac
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
-import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, renameSheetDefinition, updateSheetDefinition } from '../domain/sheetDefinition'
+import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, renameSheetDefinition, sheetDefinitionSubtreeIds, updateSheetDefinition } from '../domain/sheetDefinition'
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
@@ -2293,9 +2293,12 @@ export default function App() {
     ? 'The root circuit cannot be deleted.'
     : activeSheetInstances.length
       ? 'Remove every placed instance of this block before deleting its sheet.'
-      : project.sheets.some((sheet) => sheet.parentSheetId === activeSheet.id)
-        ? 'Delete nested child sheets before deleting their parent sheet.'
-        : null
+      : (() => {
+          const subtree = sheetDefinitionSubtreeIds(project, activeSheet.id)
+          return project.sheets.some((sheet) => !subtree.has(sheet.id) && sheet.parts.some((part) => part.sheetId && subtree.has(part.sheetId)))
+            ? 'Remove uses of nested blocks outside this sheet before deleting its subtree.'
+            : null
+        })()
   const sheetContains = (sheetId: string, targetId: string, visited = new Set<string>()): boolean => {
     if (sheetId === targetId) return true
     if (visited.has(sheetId)) return false
@@ -2347,13 +2350,13 @@ export default function App() {
   }
   const deleteActiveSheet = () => {
     if (!activeSheet || activeSheetDeleteReason) return
-    if (!window.confirm(`Delete “${activeSheet.name}” and all of its components, wires, ports, and parameters? You can undo this before closing the project.`)) return
+    if (!window.confirm(`Delete “${activeSheet.name}” and all nested blocks, components, wires, ports, and parameters? You can undo this before closing the project.`)) return
     const parentSheetId = activeSheet.parentSheetId!
     const next = deleteSheetDefinition(project, activeSheet.id)
     setProject(() => next)
     setSheetInstancePath(preferredSheetInstancePath(project, parentSheetId, sheetInstancePath) ?? [])
     setSheetSettingsOpen(false)
-    setNotice(`Deleted sheet ${activeSheet.name}.`)
+    setNotice(`Deleted sheet ${activeSheet.name} and its nested blocks.`)
     restoreDialogTriggerFocus(sheetSettingsTriggerRef)
   }
   const duplicateActiveSheet = () => {

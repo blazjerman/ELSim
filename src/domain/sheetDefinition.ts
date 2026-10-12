@@ -95,15 +95,40 @@ export function renameSheetDefinition(project: Project, sheetId: string, request
   return { ...project, sheets, parts: active.parts, wires: active.wires, junctions: active.junctions, netLabels: active.netLabels, view: active.view }
 }
 
-/** Remove an unused leaf sheet and return to its parent sheet. */
+/** Return a sheet and every descendant definition owned by its subtree. */
+export function sheetDefinitionSubtreeIds(project: Project, sheetId: string): Set<string> {
+  const subtree = new Set([sheetId])
+  let expanded = true
+  while (expanded) {
+    expanded = false
+    for (const sheet of project.sheets) {
+      if (sheet.parentSheetId && subtree.has(sheet.parentSheetId) && !subtree.has(sheet.id)) {
+        subtree.add(sheet.id)
+        expanded = true
+      }
+    }
+  }
+  return subtree
+}
+
+/** Remove an unused sheet subtree and return to its parent sheet. */
 export function deleteSheetDefinition(project: Project, sheetId: string): Project {
   const definition = project.sheets.find((sheet) => sheet.id === sheetId)
   if (!definition) throw new Error(`Sheet ${sheetId} does not exist.`)
   if (definition.parentSheetId === null || definition.id === project.rootSheetId) throw new Error('The root circuit cannot be deleted.')
-  if (project.sheets.some((sheet) => sheet.parts.some((part) => part.sheetId === sheetId))) throw new Error('Remove every placed instance of this block before deleting its sheet.')
-  if (project.sheets.some((sheet) => sheet.parentSheetId === sheetId)) throw new Error('Delete nested child sheets before deleting their parent sheet.')
-  const sheets = project.sheets.filter((sheet) => sheet.id !== sheetId)
-  const activeSheetId = project.activeSheetId === sheetId ? definition.parentSheetId : project.activeSheetId
+
+  const subtree = sheetDefinitionSubtreeIds(project, sheetId)
+  const externalInstance = project.sheets
+    .filter((sheet) => !subtree.has(sheet.id))
+    .flatMap((sheet) => sheet.parts)
+    .find((part) => part.sheetId && subtree.has(part.sheetId))
+  if (externalInstance) {
+    if (externalInstance.sheetId === sheetId) throw new Error('Remove every placed instance of this block before deleting its sheet.')
+    throw new Error('Remove uses of nested blocks outside this sheet before deleting its subtree.')
+  }
+
+  const sheets = project.sheets.filter((sheet) => !subtree.has(sheet.id))
+  const activeSheetId = subtree.has(project.activeSheetId) ? definition.parentSheetId : project.activeSheetId
   const active = sheets.find((sheet) => sheet.id === activeSheetId)
   if (!active) throw new Error('The parent sheet is missing; this sheet cannot be deleted safely.')
   return { ...project, sheets, activeSheetId, parts: active.parts, wires: active.wires, junctions: active.junctions, netLabels: active.netLabels, view: active.view }

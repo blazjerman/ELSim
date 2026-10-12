@@ -93,7 +93,7 @@ test('sheet rename rejects empty, oversized, and duplicate sibling names', () =>
   assert.throws(() => renameSheetDefinition(project, 'sheet-load', 'other'), /already used in this hierarchy/)
 })
 
-test('deleting a sheet protects references and nested sheets, then returns to its parent', () => {
+test('deleting a sheet removes its unused nested subtree, protects external references, and returns to its parent', () => {
   const project = createBlockProject()
   assert.throws(() => deleteSheetDefinition(project, project.rootSheetId), /root circuit cannot be deleted/)
   assert.throws(() => deleteSheetDefinition(project, 'sheet-load'), /placed instance/)
@@ -102,15 +102,18 @@ test('deleting a sheet protects references and nested sheets, then returns to it
   nested.parts = nested.parts.filter((part) => part.id !== 'root-block')
   nested.sheets[0] = { ...nested.sheets[0], parts: nested.parts }
   nested.sheets.push({ id: 'sheet-inner', name: 'Inner', parentSheetId: 'sheet-load', parts: [], wires: [], junctions: [], netLabels: [], ports: [], view: { zoom: 1, panX: 0, panY: 0 } })
-  assert.throws(() => deleteSheetDefinition(nested, 'sheet-load'), /nested child sheets/)
+  const outsideUse = structuredClone(nested)
+  outsideUse.sheets[0] = { ...outsideUse.sheets[0], parts: [{ id: 'outside-instance', kind: 'subcircuit', ref: 'XOUT', value: 'Inner', modelName: sheetModelName('sheet-inner'), modelPins: [], sheetId: 'sheet-inner', x: 500, y: 400, rotation: 0 }] }
+  assert.throws(() => deleteSheetDefinition(outsideUse, 'sheet-load'), /outside this sheet/)
 
-  const unused = structuredClone(project)
+  const unused = structuredClone(nested)
   unused.parts = unused.parts.filter((part) => part.id !== 'root-block')
   unused.sheets[0] = { ...unused.sheets[0], parts: unused.parts }
   unused.activeSheetId = 'sheet-load'
   unused.parts = unused.sheets[1].parts
   const deleted = deleteSheetDefinition(unused, 'sheet-load')
   assert.equal(deleted.sheets.some((sheet) => sheet.id === 'sheet-load'), false)
+  assert.equal(deleted.sheets.some((sheet) => sheet.id === 'sheet-inner'), false)
   assert.equal(deleted.activeSheetId, project.rootSheetId)
   assert.equal(deleted.parts, deleted.sheets[0].parts)
   assert.doesNotThrow(() => validateProject(deleted))
