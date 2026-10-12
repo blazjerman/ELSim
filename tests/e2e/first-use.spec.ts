@@ -5816,6 +5816,7 @@ test('voltage source inspector edits DC, pulse, and validated PWL transient beha
 
 test('transient measurements offer labeled nodes and common component currents', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.simulation.transientMeasurements = [{ id: 'SignalDelay', operation: 'delay', vector: 'V(vin)', threshold: '2.5', edge: 'rise', targetVector: 'V(vout)', targetThreshold: '2.5', targetEdge: 'rise' }]
@@ -6224,6 +6225,7 @@ test('two-source LTspice DC sweep imports exact secondary steps, runs labeled cu
 
 test('declared global parameter sweep edits and simulates through the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const key = 'elsim:project:v7'
     const project = JSON.parse(localStorage.getItem(key)!)
@@ -6275,6 +6277,35 @@ test('large parameter-sweep component lists stay bounded and can find late compo
   await expect(componentSelect.locator('option[value="R240"]')).toBeAttached()
   await componentSelect.selectOption('R240')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.parameterSweeps[0].component)).toBe('R240')
+})
+
+test('parameter-sweep editor code loads only after parameter stepping is added', { tag: '@ui-smoke' }, async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', (request) => requests.push(request.url()))
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await expect(page.getByRole('button', { name: 'Add parameter stepping' })).toBeVisible()
+  expect(requests.some((url) => url.includes('/src/ui/ParameterSweepEditor.tsx'))).toBe(false)
+
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.locator('.parameter-sweep-card')).toHaveCount(1)
+  await expect.poll(() => requests.some((url) => url.includes('/src/ui/ParameterSweepEditor.tsx'))).toBe(true)
+})
+
+test('transient advanced editors load only when a measurement or initial condition is added', { tag: '@ui-smoke' }, async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', (request) => requests.push(request.url()))
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await expect(page.getByRole('button', { name: 'Add measurement' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Add capacitor voltage' })).toBeVisible()
+  expect(requests.some((url) => url.includes('/src/ui/TransientEditors.tsx'))).toBe(false)
+
+  await page.getByRole('button', { name: 'Add measurement' }).click()
+  await expect(page.locator('.measurement-card')).toHaveCount(1)
+  await expect.poll(() => requests.some((url) => url.includes('/src/ui/TransientEditors.tsx'))).toBe(true)
 })
 
 test('pulse source high levels can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {

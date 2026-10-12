@@ -27,9 +27,8 @@ import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componen
 import type { ComponentPaletteCategory } from './ComponentPalette'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentDefaultValue, componentDefinitionFor, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
-import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
+import { componentMagnitude } from '../domain/componentValue'
 import { nextRef, referencePrefixForKind } from '../domain/referenceDesignator'
-import { measurementCrossingCountError, measurementThresholdError } from '../domain/measurementSettings'
 import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
@@ -46,6 +45,8 @@ type HoveredSchematicObject = { kind: 'part' | 'wire' | 'label'; id: string } | 
 type ProbeRequest = { kind: 'node'; name: string; wireId?: string; labelId?: string } | { kind: 'part'; id: string; winding?: 'P' | 'S' }
 import type { ExampleId } from './ExamplesDialog'
 
+const ParameterSweepEditor = lazy(() => import('./ParameterSweepEditor'))
+const TransientEditors = lazy(() => import('./TransientEditors'))
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
 const ResultPlot = lazy(() => import('./AnalysisPlots').then((module) => ({ default: module.ResultPlot })))
 const KeyboardShortcuts = lazy(() => import('./KeyboardShortcuts'))
@@ -556,129 +557,17 @@ function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onAct
   </section>
 }
 
-function ParameterSweepEditor({ parts, sweeps, models, parameters: globalParameters, analysis, dcSweepSource, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string }[] }[]; parameters: { name: string; defaultValue: string }[]; analysis: Project['simulation']['analysis']; dcSweepSource?: string; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
-  const [listDrafts, setListDrafts] = useState<Record<number, string>>({})
-  const [listErrors, setListErrors] = useState<Record<number, string>>({})
-  const [componentSearches, setComponentSearches] = useState<Record<number, string>>({})
-  const modelsByName = useMemo(() => new Map(models.map((model) => [model.name.toLowerCase(), model])), [models])
-  const modelFor = (part?: Part) => part?.deviceModel ? modelsByName.get(part.deviceModel.toLowerCase()) : undefined
-  const numericModelParameters = (part?: Part) => modelFor(part)?.parameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) ?? []
-  const modelRange = (value: string) => { const magnitude = componentMagnitude(value, 'resistor'); return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` } }
-  const sourceMode = (part: Part) => part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')
-  const sourceValue = (part: Part, parameter: string) => {
-    const [mode, field] = parameter.split('.')
-    const fallback = part.kind === 'source' ? '0 V' : '0 A'
-    if (mode === 'pulse') return ({ initial: part.pulse?.initial ?? fallback, high: part.value, delay: part.pulse?.delay ?? '0', rise: part.pulse?.rise ?? '1u', fall: part.pulse?.fall ?? '1u', width: part.pulse?.width ?? '1m', period: part.pulse?.period ?? '2m' } as Record<string, string>)[field] ?? fallback
-    if (mode === 'pwl') { const index = Number(field); return part.kind === 'currentSource' ? part.currentPwl?.[index - 1]?.current ?? '0 A' : part.pwl?.[index - 1]?.voltage ?? '0 V' }
-    if (mode === 'sine') return ({ offset: part.sine?.offset ?? fallback, amplitude: part.sine?.amplitude ?? part.value, frequency: part.sine?.frequency ?? '1 kHz', delay: part.sine?.delay ?? '0', damping: part.sine?.damping ?? '0', phase: part.sine?.phase ?? '0' } as Record<string, string>)[field] ?? fallback
-    if (mode === 'exp') return ({ initial: part.exp?.initial ?? fallback, pulsed: part.exp?.pulsed ?? part.value, riseDelay: part.exp?.riseDelay ?? '0', riseTau: part.exp?.riseTau ?? '1u', fallDelay: part.exp?.fallDelay ?? '1m', fallTau: part.exp?.fallTau ?? '1u' } as Record<string, string>)[field] ?? fallback
-    return ({ offset: part.sffm?.offset ?? fallback, amplitude: part.sffm?.amplitude ?? part.value, carrierFrequency: part.sffm?.carrierFrequency ?? '1 kHz', modulationIndex: part.sffm?.modulationIndex ?? '0', signalFrequency: part.sffm?.signalFrequency ?? '100 Hz' } as Record<string, string>)[field] ?? fallback
-  }
-  const sourceRange = (part: Part, parameter: string) => {
-    const start = sourceValue(part, parameter)
-    const field = parameter.split('.').at(-1) ?? ''
-    if (['initial', 'high', 'pulsed', 'offset', 'amplitude'].includes(field) || field.startsWith('point.')) {
-      const magnitude = componentMagnitude(start, part.kind)
-      const unit = part.kind === 'source' ? 'V' : 'A'
-      return { start, stop: magnitude === null ? start : `${(magnitude * 2).toExponential(5)} ${unit}` }
-    }
-    const normalized = start.trim().replaceAll(' ', '').replace(/(?:hz|s|°)$/i, '').replaceAll('µ', 'u').replaceAll('μ', 'u')
-    const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
-    const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match?.[2]?.toLowerCase() ?? ''] ?? 1
-    const magnitude = match ? Number(match[1]) * scale : NaN
-    const unit = ['frequency', 'carrierFrequency', 'signalFrequency'].includes(field) ? 'Hz' : ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field) ? 's' : field === 'phase' ? '°' : ''
-    const next = magnitude === 0 ? (unit === 's' ? 1e-6 : 1) : magnitude * 2
-    return { start, stop: Number.isFinite(magnitude) ? `${next.toExponential(5)}${unit ? ` ${unit}` : ''}` : start }
-  }
-  const supportedSourceModes = ['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm']
-  const eligible = useMemo(() => {
-    const eligibleModelHasNumericParameter = (part: Part) => modelsByName.get(part.deviceModel?.toLowerCase() ?? '')?.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) ?? false
-    return analysis === 'dc'
-      ? parts.filter((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'dc' && part.ref.toLowerCase() !== dcSweepSource?.toLowerCase())
-      : parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === undefined || supportedSourceModes.includes(part.sourceMode))) || (part.kind === 'source' && supportedSourceModes.includes(part.sourceMode ?? 'pulse')) || eligibleModelHasNumericParameter(part))
-  }, [analysis, dcSweepSource, modelsByName, parts])
-  const numericParameters = useMemo(() => analysis === 'tran' ? globalParameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) : [], [analysis, globalParameters])
-  const targetCount = eligible.length + numericParameters.length
-  const parameterOptions = useMemo(() => globalParameters.filter((parameter) => numericParameters.includes(parameter) || sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase())), [globalParameters, numericParameters, sweeps])
-  const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
-  return <div className="form-section parameter-sweep-section">
-    <div className="form-section-title">PARAMETER STEPPING</div>
-    <p className="field-hint">{analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : 'Compare up to 10 transient cases while changing passive values, scalar DC or waveform amplitude, PWL amplitude scales, or numeric parameters from imported device models.'}</p>
-    {sweeps.map((sweep, index) => {
-      const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
-      const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
-      const query = componentSearches[index] ?? ''
-      const normalizedQuery = query.trim().toLowerCase()
-      const matchingEligible = normalizedQuery ? eligible.filter((part) => `${part.ref} ${kindNames[part.kind]}`.toLowerCase().includes(normalizedQuery)) : eligible
-      const visibleEligible = matchingEligible.slice(0, 100)
-      const selectedEligible = eligible.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())
-      if (selectedEligible && !visibleEligible.some((part) => part.id === selectedEligible.id)) visibleEligible.push(selectedEligible)
-      return <div className="parameter-sweep-card" key={`${sweep.component}-${index}`}>
-        <div className="parameter-sweep-heading"><strong>Parameter {index + 1}</strong><button type="button" aria-label={`Remove parameter ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
-        {eligible.length > 100 && <label className="field-label">Find a component<input type="search" aria-label={`Filter eligible components for parameter ${index + 1}`} value={query} onChange={(event) => setComponentSearches((current) => ({ ...current, [index]: event.target.value }))} placeholder="Search by name or type"/><small className="field-hint">Showing {Math.min(matchingEligible.length, 100)} of {matchingEligible.length} matches{selectedEligible && !matchingEligible.some((part) => part.id === selectedEligible.id) ? '; current selection is also listed' : ''}.</small></label>}
-        <label className="field-label">Component or device<select aria-label={`Parameter ${index + 1} component`} value={sweep.component} onChange={(event) => {
-          if (event.target.value.startsWith('$param:')) {
-            const parameter = globalParameters.find((item) => item.name.toLowerCase() === event.target.value.slice('$param:'.length).toLowerCase())
-            if (!parameter) return
-            const magnitude = componentMagnitude(parameter.defaultValue, 'resistor')
-            onChange(index, { component: `$param:${parameter.name}`, globalParameter: parameter.name, listValues: undefined, parameter: undefined, sourceParameter: undefined, start: parameter.defaultValue, stop: magnitude === null ? parameter.defaultValue : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` })
-            return
-          }
-          const nextPart = eligible.find((item) => item.ref === event.target.value)
-          if (!nextPart) return
-          const parameters = numericModelParameters(nextPart)
-          if (parameters.length) {
-            const parameter = parameters[0]
-            const { start, stop } = modelRange(parameter.defaultValue)
-            onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: parameter.name, sourceParameter: undefined, start, stop })
-            return
-          }
-          if (nextPart.sourceMode === 'pwl') {
-            onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: undefined, sourceParameter: undefined, start: '1', stop: '2' })
-            return
-          }
-          const sourceAmplitude = nextPart.sourceMode === 'sine' ? nextPart.sine?.amplitude : nextPart.sourceMode === 'exp' ? nextPart.exp?.pulsed : nextPart.sourceMode === 'sffm' ? nextPart.sffm?.amplitude : undefined
-          const startValue = sourceAmplitude ?? nextPart.value
-          const magnitude = componentMagnitude(startValue, nextPart.kind)
-          const unit = nextPart.kind === 'source' ? 'V' : nextPart.kind === 'currentSource' ? 'A' : nextPart.kind === 'resistor' || nextPart.kind === 'potentiometer' || nextPart.kind === 'lamp' ? 'Ω' : nextPart.kind === 'capacitor' ? 'F' : 'H'
-          onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: undefined, sourceParameter: undefined, start: startValue, stop: magnitude === null ? startValue : `${(magnitude * 2).toExponential(5)} ${unit}` })
-        }}>{parameterOptions.map((parameter) => <option key={`param:${parameter.name}`} value={`$param:${parameter.name}`} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && other.globalParameter?.toLowerCase() === parameter.name.toLowerCase())}>Global · {parameter.name}</option>)}{visibleEligible.map((item) => <option key={item.id} value={item.ref} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && !other.globalParameter && other.component.toLowerCase() === item.ref.toLowerCase())}>{item.ref} · {kindNames[item.kind]}</option>)}</select></label>
-        {modelFor(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())) && <label className="field-label">Imported model parameter<select aria-label={`Parameter ${index + 1} model parameter`} value={sweep.parameter ?? ''} onChange={(event) => { const parameter = numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).find((item) => item.name === event.target.value); if (!parameter) return; const { start, stop } = modelRange(parameter.defaultValue); onChange(index, { parameter: parameter.name, sourceParameter: undefined, start, stop }) }}>{numericModelParameters(parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())).map((parameter) => <option key={parameter.name} value={parameter.name}>{parameter.name} · default {parameter.defaultValue}</option>)}</select></label>}
-        {(() => { const selected = parts.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase()); const mode = selected ? sourceMode(selected) : ''; const labels: Record<string, string> = { 'pulse.initial': 'Initial level', 'pulse.high': 'High level', 'pulse.delay': 'Delay', 'pulse.rise': 'Rise time', 'pulse.fall': 'Fall time', 'pulse.width': 'Pulse width', 'pulse.period': 'Period', 'pwl.scale': 'All point amplitudes', 'sine.offset': 'Offset', 'sine.amplitude': 'Amplitude', 'sine.frequency': 'Frequency', 'sine.delay': 'Delay', 'sine.damping': 'Damping factor', 'sine.phase': 'Phase', 'exp.initial': 'Initial level', 'exp.pulsed': 'Pulsed level', 'exp.riseDelay': 'Rise delay', 'exp.riseTau': 'Rise time constant', 'exp.fallDelay': 'Fall delay', 'exp.fallTau': 'Fall time constant', 'sffm.offset': 'Offset', 'sffm.amplitude': 'Amplitude', 'sffm.carrierFrequency': 'Carrier frequency', 'sffm.modulationIndex': 'Modulation index', 'sffm.signalFrequency': 'Signal frequency' }; if (mode === 'pwl' && selected) for (let point = 1; point <= (selected.kind === 'currentSource' ? selected.currentPwl?.length ?? 0 : selected.pwl?.length ?? 0); point += 1) labels[`pwl.point.${point}`] = `Point ${point} amplitude`; const options = Object.entries(labels).filter(([value]) => value.startsWith(`${mode}.`) || (mode === 'pwl' && value.startsWith('pwl.'))).map(([value, label]) => ({ value, label })); const defaultParameter = mode === 'pulse' ? 'pulse.high' : mode === 'sine' ? 'sine.amplitude' : mode === 'exp' ? 'exp.pulsed' : mode === 'sffm' ? 'sffm.amplitude' : mode === 'pwl' ? 'pwl.scale' : undefined; return options.length && selected ? <label className="field-label">Source waveform parameter<select aria-label={`Parameter ${index + 1} source parameter`} value={sweep.sourceParameter ?? defaultParameter ?? ''} onChange={(event) => { const sourceParameter = event.target.value as ParameterSweep['sourceParameter']; if (!sourceParameter) return; const range = sourceRange(selected, sourceParameter); onChange(index, { parameter: undefined, sourceParameter, start: range.start, stop: range.stop }) }}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label> : null })()}
-        {(!sweep.listValues || analysis === 'dc') && <div className="parameter-sweep-inputs"><label className="field-label">Start<input aria-label={`Parameter ${index + 1} start value`} value={sweep.start} onChange={(event) => onChange(index, { start: event.target.value })}/></label><label className="field-label">Stop<input aria-label={`Parameter ${index + 1} stop value`} value={sweep.stop} onChange={(event) => onChange(index, { stop: event.target.value })}/></label></div>}
-        {sweep.listValues && analysis === 'dc' && <small className="field-hint">Imported secondary values: {sweep.listValues.join(', ')}. Editing the range or count makes the values evenly spaced.</small>}
-        {sweep.globalParameter && sweep.listValues ? <label className="field-label">Discrete values<input aria-label={`Parameter ${index + 1} discrete values`} value={listDrafts[index] ?? sweep.listValues.join(', ')} onChange={(event) => setListDrafts((current) => ({ ...current, [index]: event.target.value }))} onBlur={() => { const values = (listDrafts[index] ?? sweep.listValues!.join(', ')).split(',').map((value) => value.trim()).filter(Boolean); const valid = values.length >= 2 && values.length <= maxPoints && values.every((value) => componentMagnitude(value, 'resistor') !== null); if (!valid) { setListErrors((current) => ({ ...current, [index]: `Enter 2–${maxPoints} numeric values separated by commas.` })); return } setListErrors((current) => ({ ...current, [index]: '' })); onChange(index, { listValues: values, start: values[0], stop: values.at(-1)!, points: values.length }) }}/>{listErrors[index] && <small className="field-error" role="alert">{listErrors[index]}</small>}<small className="field-hint">Imported discrete sweep values; edit as a comma-separated list.</small></label> : <label className="field-label">Number of values<input aria-label={`Parameter ${index + 1} number of values`} type="number" min="2" max={maxPoints} value={sweep.points} onChange={(event) => onChange(index, { listValues: undefined, points: Number(event.target.value) })}/></label>}
-      </div>
-    })}
-    {!(analysis === 'dc' && sweeps.length > 0) && <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= (analysis === 'dc' ? 1 : 3) || targetCount <= sweeps.length || combinations * 2 > 10}>{analysis === 'dc' ? 'Add secondary DC source' : sweeps.length ? 'Add another parameter' : 'Add parameter stepping'}</button>}
-    <div className="field-hint">{combinations} simulation case{combinations === 1 ? '' : 's'} selected · maximum 10 · each result is plotted as a separate trace.</div>
-  </div>
+function TransientEditorLaunchers({ nodes, inductors, capacitors, skipOp, onAddMeasurement, onAddCondition, onAddInductorCurrent, onAddCapacitorVoltage, onSkipOpChange }: { nodes: string[]; inductors: string[]; capacitors: string[]; skipOp: boolean; onAddMeasurement: () => void; onAddCondition: () => void; onAddInductorCurrent: () => void; onAddCapacitorVoltage: () => void; onSkipOpChange: (value: boolean) => void }) {
+  return <>
+    <div className="form-section measurement-editor"><div className="form-section-title">TRANSIENT MEASUREMENTS</div><p className="field-hint">Choose a labeled node or component current, or enter an advanced vector expression. Calculate peak, minimum, peak-to-peak, average, RMS, time integral, or delay between threshold crossings. Integrating current gives charge in coulombs.</p><button type="button" className="add-parameter-sweep" onClick={onAddMeasurement}>Add measurement</button></div>
+    <div className="form-section measurement-editor"><div className="form-section-title">INITIAL CONDITIONS</div><p className="field-hint">Set starting voltages on labeled nodes or capacitors, or starting current in inductors. Element initial values start transient analysis directly with UIC.</p><button type="button" className="add-parameter-sweep" onClick={onAddCondition} disabled={nodes.length === 0}>Add node voltage</button><button type="button" className="add-parameter-sweep" onClick={onAddInductorCurrent} disabled={inductors.length === 0}>Add inductor current</button><button type="button" className="add-parameter-sweep" onClick={onAddCapacitorVoltage} disabled={capacitors.length === 0}>Add capacitor voltage</button><label className="checkbox-field"><input type="checkbox" checked={skipOp} disabled={false} onChange={(event) => onSkipOpChange(event.target.checked)}/><span><strong>Skip initial operating point (UIC)</strong><small>Starts directly from specified initial values. Capacitor voltage and inductor current conditions require UIC and enable it automatically.</small></span></label></div>
+  </>
 }
 
 function patchMeasurement(current: TransientMeasurement, patch: Partial<TransientMeasurement>): TransientMeasurement {
   if (patch.operation === 'delay') return { id: current.id, operation: 'delay', vector: current.vector, threshold: '2.5', targetVector: 'V(vout)', targetThreshold: '2.5', edge: 'rise', targetEdge: 'rise' }
   if ((current as { operation: string }).operation === 'delay' && patch.operation) return { id: current.id, operation: patch.operation as 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ', vector: current.vector }
   return { ...current, ...patch } as TransientMeasurement
-}
-
-function MeasurementWindowFields({ measurement, index, onChange }: { measurement: Extract<TransientMeasurement, { operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ' }>; index: number; onChange: (patch: Partial<TransientMeasurement>) => void }) {
-  const from = measurement.from === undefined ? null : timeMagnitude(measurement.from)
-  const to = measurement.to === undefined ? null : timeMagnitude(measurement.to)
-  const invalidOrder = from !== null && to !== null && from >= to
-  const fromError = measurement.from === undefined ? '' : from === null ? 'Enter a numeric SPICE time such as 2m or 500u.' : from < 0 ? 'Measurement time must be zero or later.' : invalidOrder ? 'From time must be earlier than To time.' : ''
-  const toError = measurement.to === undefined ? '' : to === null ? 'Enter a numeric SPICE time such as 2m or 500u.' : to < 0 ? 'Measurement time must be zero or later.' : invalidOrder ? 'To time must be later than From time.' : ''
-  const fromId = `measurement-${measurement.id}-from-error`, toId = `measurement-${measurement.id}-to-error`
-  return <><label className="field-label">From time (optional)<input aria-label={`Measurement ${index + 1} from time`} aria-invalid={Boolean(fromError)} aria-describedby={fromError ? fromId : undefined} placeholder="Start of run" value={measurement.from ?? ''} onChange={(event) => onChange({ from: event.target.value || undefined })}/>{fromError && <small id={fromId} className="field-error" role="alert">{fromError}</small>}</label><label className="field-label">To time (optional)<input aria-label={`Measurement ${index + 1} to time`} aria-invalid={Boolean(toError)} aria-describedby={toError ? toId : undefined} placeholder="End of run" value={measurement.to ?? ''} onChange={(event) => onChange({ to: event.target.value || undefined })}/>{toError && <small id={toId} className="field-error" role="alert">{toError}</small>}</label><div className="field-hint">Limit the selected calculation to a time interval. Enter SPICE time values such as 2m or 500u.</div></>
-}
-
-function measurementVectorChoices(project: Project) {
-  const nodes = [...new Map(project.netLabels.filter((label) => label.name.trim() && label.name !== '0').map((label) => [label.name.toLowerCase(), label.name])).values()].sort((left, right) => left.localeCompare(right))
-  const currentParts = project.parts.filter((part) => ['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind))
-  const currents = currentParts.map((part) => ({
-    value: part.kind === 'currentSource' ? `i(@${part.ref}[current])` : `I(${part.ref})`,
-    label: `${part.ref} · ${kindNames[part.kind]}`,
-  }))
-  return { nodes: nodes.map((name) => ({ value: `V(${name})`, label: name })), currents }
 }
 
 const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spacePan, onProbe, onBeginDrag, onSelect, onHover }: {
@@ -733,39 +622,6 @@ const WireFlowPath = memo(function WireFlowPath({ wireId, index, segment, enable
   return <polyline ref={ref} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={dotSize} strokeLinecap="round" strokeDasharray={`0 ${dotSpacing}`} opacity="0.9"><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
 })
 
-function TransientMeasurementEditor({ project, measurements, onAdd, onChange, onRemove }: { project: Project; measurements: TransientMeasurement[]; onAdd: () => void; onChange: (index: number, patch: Partial<TransientMeasurement>) => void; onRemove: (index: number) => void }) {
-  const choices = measurementVectorChoices(project)
-  const knownChoice = (value: string) => [...choices.nodes, ...choices.currents].find((choice) => choice.value.toLowerCase() === value.toLowerCase())
-  const vectorPicker = (label: string, pickerLabel: string, value: string, onVectorChange: (vector: string) => void) => <>
-    <label className="field-label">{label}<select aria-label={pickerLabel} value={knownChoice(value)?.value ?? `custom:${value}`} onChange={(event) => { if (!event.target.value.startsWith('custom:')) onVectorChange(event.target.value) }}>
-      <option value={`custom:${value}`}>{knownChoice(value) ? 'Choose a signal…' : `Custom vector · ${value || 'enter below'}`}</option>
-      <optgroup label="Node voltage">{choices.nodes.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</optgroup>
-      <optgroup label="Component current">{choices.currents.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</optgroup>
-    </select></label>
-    <label className="field-label">{label} expression<input placeholder="V(out) or I(R1)" value={value} onChange={(event) => onVectorChange(event.target.value)}/></label>
-  </>
-  return <div className="form-section measurement-editor">
-    <div className="form-section-title">TRANSIENT MEASUREMENTS</div>
-    <p className="field-hint">Choose a labeled node or component current, or enter an advanced vector expression. Calculate peak, minimum, peak-to-peak, average, RMS, time integral, or delay between threshold crossings. Integrating current gives charge in coulombs.</p>
-    {measurements.map((measurement, index) => {
-      const delay = measurement.operation === 'delay' ? measurement : null
-      const triggerThresholdError = delay ? measurementThresholdError(delay.threshold, delay.vector, 'Trigger threshold') : ''
-      const targetThresholdError = delay ? measurementThresholdError(delay.targetThreshold, delay.targetVector, 'Target threshold') : ''
-      const triggerCountError = delay ? measurementCrossingCountError(delay.triggerCount, 'Trigger crossing number') : ''
-      const targetCountError = delay ? measurementCrossingCountError(delay.targetCount, 'Target crossing number') : ''
-      return <div className="measurement-card" key={`${measurement.id}-${index}`}>
-      <div className="parameter-sweep-heading"><strong>Measurement {index + 1}</strong><button type="button" aria-label={`Remove measurement ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
-      <label className="field-label">Name<input maxLength={24} value={measurement.id} onChange={(event) => onChange(index, { id: event.target.value })}/></label>
-      <label className="field-label">Calculate<select value={measurement.operation} onChange={(event) => onChange(index, event.target.value === 'delay' ? { operation: 'delay', vector: measurement.vector, threshold: '2.5', targetVector: 'V(vout)', targetThreshold: '2.5', edge: 'rise', targetEdge: 'rise' } : { operation: event.target.value as 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ', vector: measurement.vector })}><option value="max">Maximum</option><option value="min">Minimum</option><option value="pp">Peak-to-peak</option><option value="avg">Average</option><option value="rms">RMS</option><option value="integ">Time integral</option><option value="delay">Propagation delay</option></select></label>
-      {vectorPicker('Vector', `Choose vector for measurement ${index + 1}`, measurement.vector, (vector) => onChange(index, { vector }))}
-      {measurement.operation !== 'delay' && <MeasurementWindowFields measurement={measurement} index={index} onChange={(patch) => onChange(index, patch)}/>}
-      {delay && <><label className="field-label">Trigger threshold<input aria-label={`Measurement ${index + 1} trigger threshold`} aria-invalid={Boolean(triggerThresholdError)} aria-describedby={triggerThresholdError ? `measurement-${index + 1}-trigger-threshold-error` : undefined} value={delay.threshold} onChange={(event) => onChange(index, { threshold: event.target.value })}/>{triggerThresholdError && <small id={`measurement-${index + 1}-trigger-threshold-error`} className="field-error" role="alert">{triggerThresholdError}</small>}</label><label className="field-label">Trigger edge<select value={delay.edge} onChange={(event) => onChange(index, { edge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either direction</option></select></label><label className="field-label">Trigger crossing number<input type="number" min={1} max={9999} step={1} aria-label={`Measurement ${index + 1} trigger crossing number`} aria-invalid={Boolean(triggerCountError)} aria-describedby={triggerCountError ? `measurement-${index + 1}-trigger-count-error` : undefined} value={delay.triggerCount ?? 1} onChange={(event) => onChange(index, { triggerCount: event.target.value === '' ? undefined : Number(event.target.value) })}/>{triggerCountError && <small id={`measurement-${index + 1}-trigger-count-error`} className="field-error" role="alert">{triggerCountError}</small>}</label>{vectorPicker('Target vector', `Choose target vector for measurement ${index + 1}`, delay.targetVector, (targetVector) => onChange(index, { targetVector }))}<label className="field-label">Target threshold<input aria-label={`Measurement ${index + 1} target threshold`} aria-invalid={Boolean(targetThresholdError)} aria-describedby={targetThresholdError ? `measurement-${index + 1}-target-threshold-error` : undefined} value={delay.targetThreshold} onChange={(event) => onChange(index, { targetThreshold: event.target.value })}/>{targetThresholdError && <small id={`measurement-${index + 1}-target-threshold-error`} className="field-error" role="alert">{targetThresholdError}</small>}</label><label className="field-label">Target edge<select value={delay.targetEdge} onChange={(event) => onChange(index, { targetEdge: event.target.value as 'rise' | 'fall' | 'either' })}><option value="rise">Rising</option><option value="fall">Falling</option><option value="either">Either direction</option></select></label><label className="field-label">Target crossing number<input type="number" min={1} max={9999} step={1} aria-label={`Measurement ${index + 1} target crossing number`} aria-invalid={Boolean(targetCountError)} aria-describedby={targetCountError ? `measurement-${index + 1}-target-count-error` : undefined} value={delay.targetCount ?? 1} onChange={(event) => onChange(index, { targetCount: event.target.value === '' ? undefined : Number(event.target.value) })}/>{targetCountError && <small id={`measurement-${index + 1}-target-count-error`} className="field-error" role="alert">{targetCountError}</small>}</label><div className="field-hint">Crossing numbers count matching edges after the transient starts for the trigger and after the trigger event for the target. Thresholds accept SPICE values such as 2.5V or 500mA.</div></>}
-    </div>})}
-    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={measurements.length >= 12}>Add measurement</button>
-    {measurements.length > 0 && <div className="field-hint">Measurements are calculated for each parameter sweep case. Delay values are reported in seconds.</div>}
-  </div>
-}
-
 function SineSourceWaveformEditor({ part, onChange, analysisSettingError }: { part: Part; onChange: (patch: Partial<Part>) => void; analysisSettingError: (field: AnalysisSettingField, sourceId?: string) => string | undefined }) {
   const quantity = part.kind === 'currentSource' ? 'current' : 'voltage'
   const unit = quantity === 'current' ? 'a' : 'v'
@@ -803,21 +659,6 @@ function CurrentSourceWaveformEditor({ part, onChange, analysisSettingError, pwl
     {mode === 'exp' && <ExpSourceWaveformEditor part={part} onChange={onChange} analysisSettingError={analysisSettingError}/>}
     {mode === 'sffm' && <SffmSourceWaveformEditor part={part} onChange={onChange} analysisSettingError={analysisSettingError}/>}
   </>
-}
-
-function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skipOp, onAdd, onAddCurrent, onAddCapacitorVoltage, onChange, onRemove, onSkipOpChange }: { conditions: InitialCondition[]; nodes: string[]; inductors: string[]; capacitors: string[]; skipOp: boolean; onAdd: () => void; onAddCurrent: () => void; onAddCapacitorVoltage: () => void; onChange: (index: number, value: InitialCondition) => void; onRemove: (index: number) => void; onSkipOpChange: (value: boolean) => void }) {
-  return <div className="form-section measurement-editor">
-    <div className="form-section-title">INITIAL CONDITIONS</div>
-    <p className="field-hint">Set starting voltages on labeled nodes or capacitors, or starting current in inductors. Element initial values start transient analysis directly with UIC.</p>
-    {conditions.map((condition, index) => <div className="measurement-card" key={`${'element' in condition ? condition.element : condition.node}-${index}`}>
-      <div className="parameter-sweep-heading"><strong>{'current' in condition ? `Inductor current ${index + 1}` : 'element' in condition ? `Capacitor voltage ${index + 1}` : `Node voltage ${index + 1}`}</strong><button type="button" aria-label={`Remove initial condition ${index + 1}`} onClick={() => onRemove(index)}><X size={13}/></button></div>
-      {'element' in condition && 'current' in condition ? <><label className="field-label">Inductor<select value={condition.element} onChange={(event) => onChange(index, { element: event.target.value, current: condition.current })}>{inductors.map((element) => <option key={element} value={element}>{element}</option>)}</select></label><label className="field-label">Starting current<input value={condition.current} onChange={(event) => onChange(index, { element: condition.element, current: event.target.value })}/></label></> : 'element' in condition ? <><label className="field-label">Capacitor<select value={condition.element} onChange={(event) => onChange(index, { element: event.target.value, voltage: condition.voltage })}>{capacitors.map((element) => <option key={element} value={element}>{element}</option>)}</select></label><label className="field-label">Starting voltage<input value={condition.voltage} onChange={(event) => onChange(index, { element: condition.element, voltage: event.target.value })}/></label></> : <><label className="field-label">Node<select value={condition.node} onChange={(event) => onChange(index, { node: event.target.value, voltage: condition.voltage })}>{nodes.map((node) => <option key={node} value={node}>{node}</option>)}</select></label><label className="field-label">Starting voltage<input value={condition.voltage} onChange={(event) => onChange(index, { node: condition.node, voltage: event.target.value })}/></label></>}
-    </div>)}
-    <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={conditions.length >= 8 || nodes.every((node) => conditions.some((condition) => !('element' in condition) && condition.node.toLowerCase() === node.toLowerCase()))}>Add node voltage</button>
-    <button type="button" className="add-parameter-sweep" onClick={onAddCurrent} disabled={conditions.length >= 8 || inductors.every((element) => conditions.some((condition) => 'element' in condition && condition.element.toLowerCase() === element.toLowerCase()))}>Add inductor current</button>
-    <button type="button" className="add-parameter-sweep" onClick={onAddCapacitorVoltage} disabled={conditions.length >= 8 || capacitors.every((element) => conditions.some((condition) => 'element' in condition && condition.element.toLowerCase() === element.toLowerCase()))}>Add capacitor voltage</button>
-    <label className="checkbox-field"><input type="checkbox" checked={skipOp || conditions.some((condition) => 'element' in condition)} disabled={conditions.some((condition) => 'element' in condition)} onChange={(event) => onSkipOpChange(event.target.checked)}/><span><strong>Skip initial operating point (UIC)</strong><small>Starts directly from specified initial values. Capacitor voltage and inductor current conditions require UIC and enable it automatically.</small></span></label>
-  </div>
 }
 
 function Schematic({ project, setSelection, setHoveredSchematicObject, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, currentMultiplier, currentDotSize, currentDotSpacing }: { project: Project; setSelection: (selection: Selection) => void; setHoveredSchematicObject: (target: HoveredSchematicObject | ((current: HoveredSchematicObject) => HoveredSchematicObject)) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingRotation: Part['rotation']; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; currentMultiplier: number; currentDotSize: number; currentDotSpacing: number }) {
@@ -4156,11 +3997,12 @@ export default function App() {
               <label className="field-label">{`Step (${dcSweepUnit})`}<input data-analysis-setting="dcStep" aria-invalid={Boolean(analysisSettingError('dcStep'))} aria-describedby={analysisSettingError('dcStep') ? 'analysis-error-dcStep' : undefined} value={project.simulation.dcSweep?.step ?? dcSweepDefaults.step} onChange={(event) => setProject((current) => ({ ...current, simulation: { ...current.simulation, dcSweep: { ...(current.simulation.dcSweep ?? dcSweepDefaults), step: event.target.value } } }))}/>{analysisSettingError('dcStep') && <small id="analysis-error-dcStep" className="field-error" role="alert">{analysisSettingError('dcStep')}</small>}</label><div className="field-hint">Changing between voltage and current sources resets the range to matching units; switching between sources of the same type keeps the range.</div>
             </>}
           </div>
-    <ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} models={importedDeviceModels} parameters={project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []} analysis={project.simulation.analysis} dcSweepSource={project.simulation.dcSweep?.source} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/>
-    {project.simulation.analysis === 'tran' && <>
-      <TransientMeasurementEditor project={project} measurements={project.simulation.transientMeasurements ?? []} onAdd={addMeasurement} onChange={updateMeasurement} onRemove={removeMeasurement}/>
-      <InitialConditionEditor conditions={project.simulation.initialConditions ?? []} nodes={labeledNodeNames} inductors={inductorParts.map((part) => part.ref)} capacitors={capacitorParts.map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAdd={addInitialCondition} onAddCurrent={addInductorInitialCondition} onAddCapacitorVoltage={addCapacitorInitialCondition} onChange={updateInitialCondition} onRemove={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/>
-    </>}
+    {(project.simulation.parameterSweeps?.length ?? 0) > 0
+      ? <Suspense fallback={<div className="field-hint">Loading parameter controls…</div>}><ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} models={importedDeviceModels} parameters={project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []} analysis={project.simulation.analysis} dcSweepSource={project.simulation.dcSweep?.source} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/></Suspense>
+      : <div className="form-section parameter-sweep-section"><div className="form-section-title">PARAMETER STEPPING</div><p className="field-hint">{project.simulation.analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : 'Compare up to 10 transient cases while changing passive values, scalar DC or waveform amplitude, PWL amplitude scales, or numeric parameters from imported device models.'}</p><button type="button" className="add-parameter-sweep" onClick={addParameterSweep}>{project.simulation.analysis === 'dc' ? 'Add secondary DC source' : 'Add parameter stepping'}</button><div className="field-hint">1 simulation case selected · maximum 10 · each result is plotted as a separate trace.</div></div>}
+    {project.simulation.analysis === 'tran' && ((project.simulation.transientMeasurements?.length ?? 0) > 0 || (project.simulation.initialConditions?.length ?? 0) > 0
+      ? <Suspense fallback={<div className="field-hint">Loading transient analysis controls…</div>}><TransientEditors project={project} measurements={project.simulation.transientMeasurements ?? []} conditions={project.simulation.initialConditions ?? []} nodes={labeledNodeNames} inductors={inductorParts.map((part) => part.ref)} capacitors={capacitorParts.map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAddMeasurement={addMeasurement} onChangeMeasurement={updateMeasurement} onRemoveMeasurement={removeMeasurement} onAddCondition={addInitialCondition} onAddInductorCurrent={addInductorInitialCondition} onAddCapacitorVoltage={addCapacitorInitialCondition} onChangeCondition={updateInitialCondition} onRemoveCondition={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/></Suspense>
+      : <TransientEditorLaunchers nodes={labeledNodeNames} inductors={inductorParts.map((part) => part.ref)} capacitors={capacitorParts.map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAddMeasurement={addMeasurement} onAddCondition={addInitialCondition} onAddInductorCurrent={addInductorInitialCondition} onAddCapacitorVoltage={addCapacitorInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/>)}
           <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : `${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'dc' ? 'DC source sweep' : project.simulation.analysis === 'ac' ? 'AC frequency-domain' : project.simulation.analysis === 'noise' ? 'Noise spectral-density' : 'Transient'} analysis runs locally in a Web Worker. Results are tied to the circuit revision.`}</p><button onClick={() => setNotice(engineAssetAvailable === false ? 'Build the pinned engine with tools/build-ngspice-wasm.sh; see engine/wasm/README.md.' : 'ngspice 47 · Emscripten WebAssembly · transient, DC operating-point, AC, DC sweep, and noise analyses')}>Engine status <ArrowUp size={13}/></button><a className="engine-notice-link" href={`${import.meta.env.BASE_URL}THIRD_PARTY_NOTICES.md`} target="_blank" rel="noreferrer">Third-party notices</a></div>
         </>}
         <div className="inspector-links"><button onClick={startTour}><CircleHelp size={14}/> Help</button><button onClick={() => setNotice('Component library is original ELSim data.')}><Bookmark size={14}/> Library notes</button></div>
