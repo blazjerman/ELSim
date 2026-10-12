@@ -259,6 +259,19 @@ The checker now builds one trimmed label-name `Set` per sheet and uses constant-
 
 The repeated hierarchy result is about 65% lower and the named-net chain about 79% lower in this pair of observations. Timings vary by run and are not CI budgets. All existing electrical-check regressions passed after the change.
 
+### Firefox large-editor measurement (2026-10-12)
+
+The Firefox editor benchmark now waits for the starter project to persist before using it as the generated-project fixture; this fixes a race that made the benchmark fail before collecting data. One local run on the i7-12700F host measured:
+
+| Parts | Editor ready (ms) | Selection median / p95 (ms) | SVG elements | Detailed parts |
+| ---: | ---: | ---: | ---: | ---: |
+| 100 | 378 | 11 / 15 | 559 | 36 |
+| 500 | 432 | 5 / 7 | 1,601 | 64 |
+| 1,000 | 527 | 6 / 14 | 2,601 | 64 |
+| 5,000 | 1,175 | 17 / 21 | 10,601 | 64 |
+
+The generated schematic has twice as many net labels as parts. At 5,000 parts, only 64 components retain detailed SVG artwork and 105 labels render, while every component remains in the DOM for accessible selection. Firefox does not expose the benchmark's Chromium-only JS heap readings. These are single-run observations, not budgets.
+
 ### Memoized-connectivity Circuit Checks path (2026-10-12)
 
 The editor computes connectivity in its own memoized selector and passes that result to `checkCircuit`. The performance runner now reports both that production call and the standalone form that computes connectivity internally. On this i7-12700F / Node 18.20.4 host, the memoized path p95 was 6.841 ms for a 5,001-part named-net chain, 13.824 ms for a 5,000-resistor wire grid, and 20.824 ms for 5,000 instances of the repeated two-level hierarchy. The standalone p95 was 57.425, 62.619, and 163.777 ms respectively. Both paths returned identical issue counts (0, 201, and 4,900). The benchmark is observational; it does not establish cross-machine budgets.

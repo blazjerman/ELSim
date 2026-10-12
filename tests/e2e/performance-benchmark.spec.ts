@@ -446,6 +446,7 @@ test('record large-project editor render and selection input-to-frame timings', 
   test.setTimeout(120_000)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.addInitScript(() => {
     const benchmarkProject = sessionStorage.getItem('elsim:benchmark-project')
     if (benchmarkProject) localStorage.setItem('elsim:project:v7', benchmarkProject)
