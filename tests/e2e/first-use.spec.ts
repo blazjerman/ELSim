@@ -2216,6 +2216,27 @@ test('wire and component placement tools stay armed until cancelled', async ({ p
   await expect(capacitor).toHaveAttribute('aria-pressed', 'false')
 })
 
+test('new voltage-controlled switches use their component definition defaults', async ({ page }) => {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.locator('.component-card').filter({ hasText: 'Voltage-controlled switch' }).click()
+  const svg = page.locator('svg.schematic')
+  const screenPoint = (x: number, y: number) => svg.evaluate((element, point) => {
+    const target = (element as SVGSVGElement).createSVGPoint()
+    target.x = point.x; target.y = point.y
+    const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  }, { x, y })
+  const start = await screenPoint(500, 460), end = await screenPoint(500, 500)
+  await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'voltageSwitch')?.voltageSwitch)).toEqual({ onResistance: '1 Ω', offResistance: '1 GΩ', hysteresis: '0 V' })
+  await page.keyboard.press('m')
+  await page.locator('.circuit-part[aria-label^="S1,"]').click()
+  await expect(page.getByLabel('Switch on resistance')).toHaveValue('1 Ω')
+  await expect(page.getByLabel('Switch off resistance')).toHaveValue('1 GΩ')
+  await expect(page.getByLabel('Switch hysteresis')).toHaveValue('0 V')
+})
+
 async function openComponentVoltagePlot(page: import('@playwright/test').Page, ref = 'R1') {
   const hadPlotWindow = (await page.locator('.plot-window').count()) > 0
   await page.locator(`.circuit-part[aria-label^="${ref},"]`).click({ button: 'right' })
