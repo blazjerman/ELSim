@@ -3,10 +3,9 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
-import { createHierarchicalExampleProject, createImportedOpampExampleProject } from '../../src/domain/examples'
+import { createHierarchicalExampleProject } from '../../src/domain/examples'
 import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
 import { componentPins } from '../../src/domain/geometry'
-import { createProjectArchive } from '../../src/domain/projectArchive'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
 import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
 
@@ -3967,33 +3966,63 @@ test('imported op-amp lesson opens its IC model and solves the feedback gain', {
   await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('1.499')
 })
 
-test('an imported IC project archive opens and simulates in a fresh browser session', { tag: ['@ngspice', '@engine-smoke'] }, async ({ browser, baseURL }) => {
+test('save and reopen an imported IC with two waveform traces in a fresh browser session', { tag: ['@ngspice', '@engine-smoke'] }, async ({ browser, baseURL, page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
 
-  const archive = createProjectArchive(createImportedOpampExampleProject())
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.locator('.example-list article').filter({ hasText: 'Imported op-amp IC' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Imported op-amp IC')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(VOUT)')
+  await expectAvailableTrace(page, 'I(RLOAD)')
+  const sourcePlot = page.locator('.plot-window').last()
+  await expect(sourcePlot.locator('.trace-toggles button', { hasText: 'V(VOUT)' })).toBeVisible()
+  await expect(sourcePlot.locator('.trace-toggles button', { hasText: 'I(RLOAD)' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  const rightsReview = page.getByRole('alertdialog', { name: 'Review imported files' })
+  await expect(rightsReview).toContainText('user-opamp.lib')
+  await expect(rightsReview).toContainText('educational-opamp.asy')
+  const downloadPromise = page.waitForEvent('download')
+  await rightsReview.getByRole('button', { name: 'Save project file' }).click()
+  const download = await downloadPromise
+  const archivePath = await download.path()
+  expect(archivePath).not.toBeNull()
+
   const context = await browser.newContext({ baseURL })
   try {
-    const page = await context.newPage()
-    await page.goto('/')
-    page.once('dialog', (dialog) => dialog.accept())
-    await page.locator('input[accept^=".elsim,.json"]').setInputFiles({
-      name: 'imported-op-amp.elsim',
-      mimeType: 'application/vnd.elsim.project+zip',
-      buffer: Buffer.from(archive),
-    })
+    const freshPage = await context.newPage()
+    await freshPage.goto('/')
+    freshPage.once('dialog', (dialog) => dialog.accept())
+    await freshPage.locator('input[accept^=".elsim,.json"]').setInputFiles(archivePath!)
 
-    await expect(page.locator('.project-title')).toHaveText('Imported op-amp IC')
-    await expect(page.locator('.imported-symbol-art text').filter({ hasText: 'EDUCATIONAL OP-AMP' })).toBeVisible()
-    await expect.poll(() => page.evaluate(() => {
+    await expect(freshPage.locator('.project-title')).toHaveText('Imported op-amp IC')
+    await expect(freshPage.locator('.imported-symbol-art text').filter({ hasText: 'EDUCATIONAL OP-AMP' })).toBeVisible()
+    await expect.poll(() => freshPage.evaluate(() => {
       const saved = localStorage.getItem('elsim:project:v7')
-      return saved ? JSON.parse(saved).modelAssets?.[0]?.filename : null
-    })).toBe('user-opamp.lib')
-    await page.getByRole('button', { name: 'Run simulation' }).click()
-    await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
-    await expectAvailableTrace(page, 'V(VOUT)')
-    const table = page.locator('.plot-window').last().locator('.op-table')
+      if (!saved) return null
+      const project = JSON.parse(saved)
+      const panel = project.plotSettings?.panels?.[0]
+      return {
+        model: project.modelAssets?.[0]?.filename,
+        symbol: project.symbolAssets?.[0]?.filename,
+        traces: panel?.selectedTraceIds,
+        referenceKinds: Object.values(panel?.traceReferences ?? {}).map((reference) => (reference as { kind: string }).kind),
+      }
+    })).toMatchObject({ model: 'user-opamp.lib', symbol: 'educational-opamp.asy', traces: expect.arrayContaining(['v(vout)', 'i(@rload[i])']), referenceKinds: expect.arrayContaining(['node', 'part-current']) })
+    await expect(freshPage.locator('.plot-window')).toHaveCount(1)
+    await freshPage.getByRole('button', { name: 'Run simulation' }).click()
+    await expect(freshPage.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+    const reopenedPlot = freshPage.locator('.plot-window').last()
+    await expect(reopenedPlot.locator('.trace-toggles button', { hasText: 'V(VOUT)' })).toBeVisible()
+    await expect(reopenedPlot.locator('.trace-toggles button', { hasText: 'I(RLOAD)' })).toBeVisible()
+    const table = reopenedPlot.locator('.op-table')
     await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('1.499')
   } finally {
     await context.close()
