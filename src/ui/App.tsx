@@ -41,15 +41,15 @@ import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type Simulat
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = ComponentPaletteCategory
-type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 type Selection = { kind: 'part' | 'label'; id: string } | null
 type HoveredSchematicObject = { kind: 'part' | 'wire' | 'label'; id: string } | null
 type ProbeRequest = { kind: 'node'; name: string; wireId?: string; labelId?: string } | { kind: 'part'; id: string; winding?: 'P' | 'S' }
-type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
+import type { ExampleId } from './ExamplesDialog'
 
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
 const ResultPlot = lazy(() => import('./AnalysisPlots').then((module) => ({ default: module.ResultPlot })))
 const KeyboardShortcuts = lazy(() => import('./KeyboardShortcuts'))
+const ExamplesDialog = lazy(() => import('./ExamplesDialog').then((module) => ({ default: module.ExamplesDialog })))
 const LOGIC_GATE_SHORTCUTS: Record<string, NonNullable<Part['logicOperation']>> = { '2': 'and', '3': 'or', '4': 'xor', '5': 'xnor', '@': 'nand', '#': 'nor' }
 // Keep Falstad-style keys reserved before their matching component types exist.
 // `event.key` is case-sensitive, so e.g. n and N remain different shortcuts.
@@ -66,56 +66,6 @@ const EDITOR_SHORTCUTS = [
   ['/', 'Focus component search'], ['Escape', 'Cancel placement or clear selection'],
 ] as const
 const LOGIC_GATE_SHORTCUTS_HELP = [['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate'], ['5', 'XNOR gate'], ['@', 'NAND gate'], ['#', 'NOR gate']] as const
-const exampleCatalog: { id: ExampleId; title: string; description: string }[] = [
-  { id: 'ac-lowpass', title: 'RC low-pass frequency response', description: 'Compare input and output across an AC sweep and find the approximately 1 kHz cutoff.' },
-  { id: 'ac-highpass', title: 'RC high-pass frequency response', description: 'See low frequencies blocked and high frequencies passed, with a cutoff near 1 kHz.' },
-  { id: 'rlc-resonance', title: 'Parallel RLC resonance', description: 'Sweep an LC tank and find its resonant peak; change L or C to move the peak.' },
-  { id: 'lc-energy', title: 'LC energy exchange', description: 'Start with a charged capacitor and watch stored electric energy move into inductor current and back.' },
-  { id: 'rc', title: 'RC step response', description: 'Watch a capacitor charge through a resistor and explore the time constant.' },
-  { id: 'pwl', title: 'PWL waveform response', description: 'Drive an RC circuit with a custom three-level source and see how the capacitor follows each change.' },
-  { id: 'current-source', title: 'Current source and load', description: 'See a 1 mA source drive a 1 kΩ load and produce a 1 V operating point.' },
-  { id: 'potentiometer', title: 'Potentiometer voltage divider', description: 'Turn a wiper into a variable output from a 10 V supply.' },
-  { id: 'voltage-divider', title: 'Voltage divider', description: 'Two equal resistors split a 10 V supply into a predictable 5 V midpoint.' },
-  { id: 'zener', title: 'Zener voltage reference', description: 'A resistor limits current while a reverse-connected 5.1 V Zener holds the output near its breakdown voltage.' },
-  { id: 'transformer', title: 'AC transformer', description: 'Compare the primary and secondary waveforms of a coupled-inductor transformer with a 2:1 turns ratio.' },
-  { id: 'transformer-current', title: 'Transformer winding currents', description: 'Run a 50 Hz transient and watch the solved primary and secondary currents animate independently.' },
-  { id: 'imported-opamp', title: 'Imported op-amp IC', description: 'Explore a five-pin user subcircuit, its ordered pins, supply rails, feedback resistors, and solved gain.' },
-  { id: 'logic-gates', title: 'Logic gate basics', description: 'Drive ideal NOT, AND, OR, NAND, NOR, XOR, and XNOR gates with two pulse sources and compare their default 0 V / 5 V outputs.' },
-  { id: 'logic-gates-3v3', title: '3.3 V logic gates', description: 'Run the same truth-table circuit with 3.3 V inputs, a 1.65 V threshold, and configurable 0 V / 3.3 V outputs.' },
-  { id: 'inverting-opamp', title: 'Inverting op-amp amplifier', description: 'See a negative-feedback amplifier produce −1 V from a 0.5 V input, then compare its 10 kΩ input and 20 kΩ feedback resistors.' },
-  { id: 'common-emitter', title: 'NPN common-emitter amplifier', description: 'Use a resistor-biased NPN stage to amplify a small AC signal and invert its phase.' },
-  { id: 'led-current-limiter', title: 'LED current limiter', description: 'See how a series resistor limits current through an LED from a 5 V supply.' },
-  { id: 'led-parallel', title: 'Parallel LEDs with separate resistors', description: 'Compare two LED branches and see how each series resistor sets its own branch current.' },
-  { id: 'capacitor-discharge', title: 'Capacitor discharge', description: 'Start with a charged capacitor and watch voltage and resistor current decay through an RC time constant.' },
-  { id: 'rectifier', title: 'Diode half-wave rectifier', description: 'Compare a 50 Hz AC input with the positive half-wave across a diode and load resistor.' },
-  { id: 'bridge-rectifier', title: 'Bridge rectifier and smoothing capacitor', description: 'Four diodes turn both AC half-cycles positive; a capacitor smooths the output between peaks.' },
-  { id: 'rl-step', title: 'Inductor current ramp', description: 'See inductor current rise gradually while a pulse is on, then decay after it switches off.' },
-  { id: 'flyback', title: 'Inductive flyback diode', description: 'Compare the coil voltage and current as a pulse switches off; a diode provides a safe path for the inductor current.' },
-  { id: 'rlc', title: 'RLC ringing', description: 'See how resistance, inductance, and capacitance shape a damped transient response.' },
-  { id: 'controlled', title: 'Voltage-controlled sources', description: 'Compare a gain-of-two VCVS with a 1 mS VCCS on the same 1 V input.' },
-  { id: 'voltage-switch', title: 'Voltage-controlled switch', description: 'Use a pulse voltage to connect a 5 V supply to a load, then inspect the output switching.' },
-  { id: 'current-controlled', title: 'Current-controlled sources', description: 'A 1 mA sense branch controls a gain-of-two CCCS and a 2 kΩ CCVS.' },
-  { id: 'transistor', title: 'NPN low-side switch', description: 'See base current turn on a transistor and pull a 1 kΩ collector load low.' },
-  { id: 'pnp', title: 'PNP high-side switch', description: 'See an active-low base turn on a PNP that supplies a 1 kΩ load from 5 V.' },
-  { id: 'mosfet', title: 'NMOS low-side switch', description: 'See gate voltage control drain current, with the bulk tied to ground and a 1 kΩ drain load.' },
-  { id: 'pmos', title: 'PMOS high-side switch', description: 'See an active-low gate turn on a high-side PMOS, with its source and bulk tied to the 5 V supply.' },
-  { id: 'jfet', title: 'N-JFET low-side switch', description: 'See a JFET conduct at zero gate bias, then turn off when the gate goes negative.' },
-  { id: 'pjfet', title: 'P-JFET positive-rail switch', description: 'See a P-channel JFET conduct at zero gate bias from a 5 V rail, then turn off when its gate goes positive.' },
-  { id: 'led', title: 'LED pulse response', description: 'See ngspice current drive the LED brightness as a pulse source switches.' },
-  { id: 'hierarchy', title: 'Nested reusable divider', description: 'Run two instances, inspect a two-level block, compare parameter overrides, and probe the inner resistor current.' },
-]
-const exampleTopicOptions: { id: ExampleTopic; label: string }[] = [
-  { id: 'start', label: 'Start here' }, { id: 'all', label: 'All' }, { id: 'basics', label: 'Basics' }, { id: 'diodes', label: 'Diodes & LEDs' },
-  { id: 'ac', label: 'AC & reactive' }, { id: 'switching', label: 'Switching' }, { id: 'advanced', label: 'Advanced' },
-]
-const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
-  start: ['rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
-  basics: ['rc', 'capacitor-discharge', 'voltage-divider', 'potentiometer', 'current-source', 'led-current-limiter'],
-  diodes: ['led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
-  ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
-  switching: ['voltage-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
-  advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'imported-opamp', 'inverting-opamp', 'common-emitter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier'],
-}
 const exampleSelection: Record<ExampleId, string> = {
   potentiometer: 'pot-p1', rc: 'p-r1', 'ac-lowpass': 'ac-lowpass-c1', 'ac-highpass': 'ac-highpass-c1', led: 'p-c1', 'led-current-limiter': 'p-r1', 'led-parallel': 'parallel-led-d1', 'capacitor-discharge': 'cap-discharge-c1',
   rlc: 'rlc-l1', 'lc-energy': 'lc-energy-c1', 'rl-step': 'rl-step-l1', flyback: 'flyback-d1', controlled: 'amp-e1', 'current-controlled': 'current-f1', transistor: 'switch-q1', 'voltage-switch': 'vswitch-s1', pnp: 'pnp-switch-q1',
@@ -1706,10 +1656,8 @@ export default function App() {
   const [replacementModelAssetId, setReplacementModelAssetId] = useState<string | null>(null)
   const [pendingModelImport, setPendingModelImport] = useState<{ filename: string; content: string; replaceId: string | null; sections: string[]; selectedSections: string[] } | null>(null)
   const [examplesOpen, setExamplesOpen] = useState(false)
+  const [examplesDialogLoaded, setExamplesDialogLoaded] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const [exampleQuery, setExampleQuery] = useState('')
-  const [exampleTopic, setExampleTopic] = useState<ExampleTopic>('all')
-  const [pendingExample, setPendingExample] = useState<ExampleId | null>(null)
   const [exampleLesson, setExampleLesson] = useState<{ id: ExampleId; title: string; guidance: string } | null>(null)
   const [hierarchyWalkthroughStep, setHierarchyWalkthroughStep] = useState<number | null>(null)
   const [sheetSettingsOpen, setSheetSettingsOpen] = useState(false)
@@ -2798,9 +2746,6 @@ export default function App() {
     setComponentCategory(definition.paletteCategory ?? 'basics')
     setNotice(`${definition.paletteName ?? definition.name} selected. Click the schematic to place it; press R to rotate before placing.`)
   }
-  const normalizedExampleQuery = exampleQuery.trim().toLocaleLowerCase()
-  const filteredExamples = exampleCatalog.filter(({ id, title, description }) => (exampleTopic === 'all' || exampleTopicIds[exampleTopic].includes(id)) && `${title} ${description}`.toLocaleLowerCase().includes(normalizedExampleQuery))
-  const pendingExampleTitle = exampleCatalog.find(({ id }) => id === pendingExample)?.title ?? 'RC step response'
   const startTour = () => {
     tourTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const firstPart = projectRef.current.parts.find((part) => part.kind === 'resistor') ?? projectRef.current.parts[0]
@@ -3312,7 +3257,7 @@ export default function App() {
       if (event.key === 'Escape' && electricalCheckOpen) { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef); return }
       if (event.key === 'Escape' && tourStep !== null) { setTourStep(null); return }
       if (event.key === 'Escape' && shortcutsOpen) { setShortcutsOpen(false); restoreDialogTriggerFocus(shortcutsTriggerRef); return }
-      if (event.key === 'Escape' && examplesOpen) { setExamplesOpen(false); setPendingExample(null); restoreDialogTriggerFocus(examplesTriggerRef); return }
+      if (event.key === 'Escape' && examplesOpen) { setExamplesOpen(false); restoreDialogTriggerFocus(examplesTriggerRef); return }
       if (event.key === 'Escape' && sheetSettingsOpen) { setSheetSettingsOpen(false); restoreDialogTriggerFocus(sheetSettingsTriggerRef); return }
       if (event.key === 'Escape' && netlistOpen) { setNetlistOpen(false); return }
       if (event.key === 'Escape' && pendingModelImport) { setPendingModelImport(null); return }
@@ -4059,7 +4004,6 @@ export default function App() {
     setSelection({ kind: 'part', id: exampleSelection[example] })
     setHierarchyWalkthroughStep(example === 'hierarchy' ? 0 : null)
     setExamplesOpen(false)
-    setPendingExample(null)
     setNotice(example === 'hierarchy' ? 'Opened a two-level reusable block example. Run it, open X2’s sheet definition, then open XCORE and probe RCORE.' : `Opened ${next.name}. Press Run simulation to see the results.`)
   }
 
@@ -4074,7 +4018,7 @@ export default function App() {
       <button className="project-title" onClick={() => { const name = window.prompt('Project name', project.name); if (name?.trim()) setProject((p) => ({ ...p, name: name.trim() })) }}>{project.name}<ChevronDown size={14}/></button>
       <span className="saved-indicator"><Check size={13}/> Local project</span>
       <div className="topbar-spacer"/>
-      <div className="topbar-actions"><button ref={examplesTriggerRef} className="quiet-button" onClick={() => { setExampleQuery(''); setExamplesOpen(true) }}><BookOpen size={15}/> Examples</button><button ref={shortcutsTriggerRef} className="quiet-button shortcut-help-button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onClick={() => setShortcutsOpen(true)}><Command size={15}/></button><button className="quiet-button" aria-label="Open quick tour" title="Quick tour" onClick={startTour}><CircleHelp size={16}/></button></div>
+      <div className="topbar-actions"><button ref={examplesTriggerRef} className="quiet-button" onClick={() => { setExamplesDialogLoaded(true); setExamplesOpen(true) }}><BookOpen size={15}/> Examples</button><button ref={shortcutsTriggerRef} className="quiet-button shortcut-help-button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onClick={() => setShortcutsOpen(true)}><Command size={15}/></button><button className="quiet-button" aria-label="Open quick tour" title="Quick tour" onClick={startTour}><CircleHelp size={16}/></button></div>
     </header>
 
     <div className="main-toolbar">
@@ -4243,10 +4187,7 @@ export default function App() {
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={() => setNetlistOpen(false)}><section className="netlist-modal" role="dialog" aria-modal="true" aria-labelledby="netlist-dialog-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2 id="netlist-dialog-title">Generated SPICE netlist</h2></div><button autoFocus className="subtle-icon" aria-label="Close netlist" onClick={() => setNetlistOpen(false)}><X size={17}/></button></div><pre>{netlistText ?? 'Generating netlist…'}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist} disabled={netlistText === null}><Copy size={13}/> Copy netlist</button></div></section></div>}
     {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button autoFocus className="subtle-icon" aria-label="Close circuit checks" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><X size={17}/></button></div><p className="erc-intro">These checks look for common wiring mistakes and missing model references. They do not decide whether ngspice can solve your circuit.</p>{electricalCheckLoading || (!electricalIssues && !electricalCheckError) ? <div className="erc-success" role="status">Checking circuit…</div> : electricalCheckError ? <p className="field-error" role="alert">{electricalCheckError}</p> : electricalIssues?.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={'erc-severity ' + issue.severity}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => { const part = project.parts.find((item) => item.id === issue.partId); setSelection({ kind: 'part', id: issue.partId! }); if (part) setView((view) => ({ ...view, panX: 380 - part.x, panY: 300 - part.y })); setElectricalCheckOpen(false) }}>Select affected component</button>}{issue.wireId && <button onClick={() => { const wire = project.wires.find((item) => item.id === issue.wireId); if (wire) { const [[x1, y1], [x2, y2]] = wire.points; setView((view) => ({ ...view, panX: 380 - (x1 + x2) / 2, panY: 300 - (y1 + y2) / 2 })) } setSelectedWireId(issue.wireId!); setTool('select'); setElectricalCheckOpen(false) }}>Select wire</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalCheckLoading ? 'Checking…' : electricalCheckError ? 'Check unavailable' : electricalIssues ? electricalIssues.length + ' finding' + (electricalIssues.length === 1 ? '' : 's') : 'Preparing checks'}</span><button className="primary-small" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}>Done</button></div></section></div>}
     {shortcutsOpen && <Suspense fallback={null}><KeyboardShortcuts editing={EDITOR_SHORTCUTS} components={[["C", "Polarized capacitor"] as const, ...componentPaletteItems.filter(({ kind }) => COMPONENT_SHORTCUTS[kind] && kind !== 'logicGate' && kind !== 'inverter').map(({ kind }) => [COMPONENT_SHORTCUTS[kind]!, (componentDefinitionFor(kind).paletteName ?? componentDefinitionFor(kind).name)] as const)]} logicGates={LOGIC_GATE_SHORTCUTS_HELP} reserved={Object.entries(FUTURE_COMPONENT_SHORTCUTS)} onClose={() => { setShortcutsOpen(false); restoreDialogTriggerFocus(shortcutsTriggerRef) }}/></Suspense>}
-    {examplesOpen && <div className="tour-backdrop" onClick={() => { setExamplesOpen(false); setPendingExample(null); restoreDialogTriggerFocus(examplesTriggerRef) }}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="examples-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">LEARN BY EXAMPLE</span><h2 id="examples-title">Open a working circuit</h2></div><button autoFocus className="subtle-icon" aria-label="Close examples" onClick={() => { setExamplesOpen(false); setPendingExample(null); restoreDialogTriggerFocus(examplesTriggerRef) }}><X size={17}/></button></div><p className="tour-copy">Each example is a complete circuit you can inspect, edit, and simulate locally.</p>{pendingExample ? <div className="example-confirm" role="alert"><strong>Replace the current circuit?</strong><p>{pendingExampleTitle} will replace the circuit open in this tab. Save your current circuit first if you want to keep it.</p><div><button className="tour-secondary" onClick={() => setPendingExample(null)}>Cancel</button><button className="primary-small" onClick={() => loadExample(pendingExample)}>Replace and open</button></div></div>  : <>
-        <div className="example-topic-filters" role="group" aria-label="Filter examples by topic">{exampleTopicOptions.map((topic) => <button type="button" key={topic.id} aria-pressed={exampleTopic === topic.id} onClick={() => setExampleTopic(topic.id)}>{topic.label}</button>)}</div><label className="search-box example-search"><Search size={15}/><input aria-label="Find an example" placeholder="Find an example" value={exampleQuery} onChange={(event) => setExampleQuery(event.target.value)}/>{exampleQuery && <button type="button" aria-label="Clear example search" onClick={() => setExampleQuery('')}><X size={13}/></button>}</label>
-        {filteredExamples.length ? <div className="example-list">{filteredExamples.map(({ id, title, description }) => <article key={id}><div><strong>{title}</strong><p>{description}</p></div><button className="primary-small" onClick={() => setPendingExample(id)}>Open example</button></article>)}</div> : <div className="component-empty" role="status">No examples found for “{exampleQuery}”.</div>}
-      </>}</section></div>}
+    {examplesDialogLoaded && <Suspense fallback={examplesOpen ? <div className="tour-backdrop" role="presentation"><div className="tour-dialog" role="status">Loading examples…</div></div> : null}><ExamplesDialog open={examplesOpen} onClose={() => { setExamplesOpen(false); restoreDialogTriggerFocus(examplesTriggerRef) }} onOpen={loadExample} onKeyDown={trapDialogTab}/></Suspense>}
     {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogTab}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 5</span><h2 id="tour-title" aria-live="polite" aria-atomic="true">{['Understand the workspace', 'Change a component value', 'Run a simulation', 'Explore waveforms and animation', 'Save and reopen your project'][tourStep]}</h2></div><button autoFocus className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p className="tour-copy">{[
       'Your open circuit is on the center canvas. Browse parts on the left and inspect the selected item on the right. Open Examples to try the RC step response or another guided circuit. You can build and edit without writing a netlist.',
       'The resistor is selected. Change its Value in the right panel, or select the capacitor and edit that value. The old result will be marked stale until you run the edited circuit again. Changes stay in this browser.',

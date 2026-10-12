@@ -338,6 +338,32 @@ test('Run waits for the local ngspice runtime check before starting the worker',
   }
 })
 
+test('examples dialog code loads only when the picker opens', { tag: '@ui-smoke' }, async ({ page }) => {
+  const requested: string[] = []
+  page.on('request', (request) => requested.push(request.url()))
+  await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  expect(requested.some((url) => url.includes('ExamplesDialog'))).toBe(false)
+  await page.getByRole('button', { name: 'Examples' }).click()
+  await expect(page.getByRole('dialog', { name: 'Open a working circuit' })).toBeVisible()
+  expect(requested.some((url) => url.includes('ExamplesDialog'))).toBe(true)
+})
+
+test('examples search and topic filter persist across close and reopen', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  let dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Diodes & LEDs' }).click()
+  await dialog.getByRole('textbox', { name: 'Find an example' }).fill('LED')
+  await expect(dialog.locator('.example-list article')).toHaveCount(3)
+  await dialog.getByRole('button', { name: 'Close examples' }).click()
+  await page.getByRole('button', { name: 'Examples' }).click()
+  dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await expect(dialog.getByRole('button', { name: 'Diodes & LEDs' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(dialog.getByRole('textbox', { name: 'Find an example' })).toHaveValue('LED')
+  await expect(dialog.locator('.example-list article')).toHaveCount(3)
+})
+
 test('examples can be searched by title and description', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
@@ -955,7 +981,9 @@ test('project-local model includes resolve as imported assets and shared paramet
   })
   await expect(dependencyReport).toHaveCount(0)
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  const netlist = await page.getByRole('dialog', { name: 'Generated SPICE netlist' }).innerText()
+  const netlistDialog = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlistDialog.locator('pre')).toContainText('.PARAM RBASE=1k')
+  const netlist = await netlistDialog.innerText()
   expect(netlist).toContain('.PARAM RBASE=1k')
   expect(netlist).toContain('.FUNC TWICE(x) {2*x}')
   expect(netlist).toContain('.SUBCKT CORE IN OUT')
@@ -1647,15 +1675,21 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(page.getByText('S1 switched on. Run simulation to calculate the updated circuit.')).toBeVisible()
 
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
-  await page.evaluate(() => {
+  const projectJson = await page.evaluate(() => {
     const key = 'elsim:project:v7'
     const project = JSON.parse(localStorage.getItem(key)!)
     const distantPart = { id: 'keyboard-far-part', kind: 'resistor', ref: 'R99', value: '1 kΩ', x: 10000, y: 400, rotation: 0 }
     project.parts.push(distantPart)
     project.sheets = project.sheets.map((sheet: { id: string; parts: unknown[] }) => sheet.id === project.rootSheetId ? { ...sheet, parts: project.parts } : sheet)
-    localStorage.setItem(key, JSON.stringify(project))
+    return JSON.stringify(project)
   })
+  await page.addInitScript((serialized) => {
+    localStorage.setItem('elsim:project:v7', serialized)
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  }, projectJson)
   await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
+  await expect(page.locator('svg.schematic')).toBeVisible()
   const distantPart = page.locator('.circuit-part[data-part-id="keyboard-far-part"]')
   await expect(distantPart).toHaveCount(0)
   await page.locator('.circuit-part[data-part-id="p-c1"]').focus()
