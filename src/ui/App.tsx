@@ -44,7 +44,7 @@ import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type Simulat
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = 'all' | ComponentPaletteCategory
-type ExampleTopic = 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
+type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 type Selection = { kind: 'part' | 'label'; id: string } | null
 type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'led' | 'led-current-limiter' | 'led-parallel' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
 
@@ -105,10 +105,11 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'hierarchy', title: 'Nested reusable divider', description: 'Run two instances, inspect a two-level block, compare parameter overrides, and probe the inner resistor current.' },
 ]
 const exampleTopicOptions: { id: ExampleTopic; label: string }[] = [
-  { id: 'all', label: 'All' }, { id: 'basics', label: 'Basics' }, { id: 'diodes', label: 'Diodes & LEDs' },
+  { id: 'start', label: 'Start here' }, { id: 'all', label: 'All' }, { id: 'basics', label: 'Basics' }, { id: 'diodes', label: 'Diodes & LEDs' },
   { id: 'ac', label: 'AC & reactive' }, { id: 'switching', label: 'Switching' }, { id: 'advanced', label: 'Advanced' },
 ]
 const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
+  start: ['rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
   basics: ['rc', 'capacitor-discharge', 'voltage-divider', 'potentiometer', 'current-source', 'led-current-limiter'],
   diodes: ['led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'transformer', 'transformer-current', 'rl-step', 'rlc'],

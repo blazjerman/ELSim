@@ -343,7 +343,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   const search = dialog.getByRole('textbox', { name: 'Find an example' })
   const cards = dialog.locator('.example-list article')
-  await expect(cards).toHaveCount(33)
+  await expect(cards).toHaveCount(35)
   await search.fill('P-JFET')
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('P-JFET positive-rail switch')
@@ -353,7 +353,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   await search.fill('no such circuit')
   await expect(dialog.getByRole('status')).toContainText('No examples found')
   await dialog.getByRole('button', { name: 'Clear example search' }).click()
-  await expect(cards).toHaveCount(33)
+  await expect(cards).toHaveCount(35)
 })
 
 test('examples can be browsed by topic and combined with search', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -371,9 +371,25 @@ test('examples can be browsed by topic and combined with search', { tag: '@ui-sm
   await expect(cards.first()).toContainText('Parallel LEDs with separate resistors')
   await dialog.getByRole('textbox', { name: 'Find an example' }).fill('')
   await topicFilters.getByRole('button', { name: 'AC & reactive' }).click()
-  await expect(cards).toHaveCount(6)
+  await expect(cards).toHaveCount(7)
   await topicFilters.getByRole('button', { name: 'All' }).click()
-  await expect(cards).toHaveCount(33)
+  await expect(cards).toHaveCount(35)
+})
+
+test('example picker offers a short beginner path before the full catalog', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  const topicFilters = dialog.getByRole('group', { name: 'Filter examples by topic' })
+  const cards = dialog.locator('.example-list article')
+  await topicFilters.getByRole('button', { name: 'Start here' }).click()
+  await expect(cards).toHaveCount(4)
+  await expect(cards.nth(0)).toContainText('RC step response')
+  await expect(cards.nth(1)).toContainText('Voltage divider')
+  await expect(cards.nth(2)).toContainText('LED current limiter')
+  await expect(cards.nth(3)).toContainText('Capacitor discharge')
+  await topicFilters.getByRole('button', { name: 'All' }).click()
+  await expect(cards).toHaveCount(35)
 })
 
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
