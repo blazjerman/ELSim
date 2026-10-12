@@ -1136,6 +1136,7 @@ test('connection inspector uses ordered, friendly pin labels from component defi
   await expect(page.locator('.pin-row')).toHaveCount(2)
   await expect(page.locator('.pin-row').nth(0)).toContainText('Positive')
   await expect(page.locator('.pin-row').nth(1)).toContainText('Negative')
+  await expect(page.locator('.circuit-part[data-part-id="p-v1"] circle[cx="0"][cy="0"][r="24"]')).toHaveCount(1)
 
   await page.locator('.circuit-part[data-part-id="p-r1"]').click()
   await expect(page.locator('.pin-row')).toHaveCount(2)
@@ -1146,7 +1147,16 @@ test('connection inspector uses ordered, friendly pin labels from component defi
   await expect(page.locator('.circuit-part[data-part-id="p-c1"] line[x1="-8"][y1="-16"][x2="-8"][y2="16"]')).toHaveCount(1)
 
   await page.getByRole('button', { name: 'Examples' }).click()
-  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  let examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.locator('.example-list article').filter({ hasText: 'Current source and load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  const currentSource = page.getByRole('button', { name: /^I1, Current source/ })
+  const currentArrow = currentSource.locator('path[d="M10 0L2 -6V6Z"]')
+  await expect(currentArrow).toHaveCount(1)
+  await expect(currentArrow).not.toHaveAttribute('fill', 'none')
+
+  await page.getByRole('button', { name: 'Examples' }).click()
+  examples = page.getByRole('dialog', { name: 'Open a working circuit' })
   await examples.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await page.locator('.circuit-part[data-part-id="switch-q1"]').click()

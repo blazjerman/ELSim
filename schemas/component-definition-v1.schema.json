@@ -210,7 +210,8 @@
             "required": ["kind", "d"],
             "properties": {
               "kind": { "const": "path" },
-              "d": { "type": "string", "minLength": 1, "maxLength": 4096 }
+              "d": { "type": "string", "minLength": 1, "maxLength": 4096 },
+              "fill": { "enum": ["none", "stroke"] }
             }
           }
         ]

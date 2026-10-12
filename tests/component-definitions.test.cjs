@@ -67,6 +67,8 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     { kind: 'line', x1: 8, y1: -16, x2: 8, y2: 16 },
     { kind: 'line', x1: 8, y1: 0, x2: 50, y2: 0 },
   ])
+  assert.equal(componentDefinitionFor('source').symbolGeometry.filter(({ kind }) => kind === 'circle').length, 1)
+  assert.deepEqual(componentDefinitionFor('currentSource').symbolGeometry.at(-1), { kind: 'path', d: 'M10 0L2 -6V6Z', fill: 'stroke' })
   for (const part of project.parts) assert.equal(componentDefinitionFor(part.kind).pins.length, componentPins(part).length, `${part.ref} definition pin count`)
   assert.deepEqual(componentDefinitionFor('source').pins.map(({ name }) => name), ['positive', 'negative'])
   assert.deepEqual(['vcvs', 'vccs', 'cccs', 'ccvs'].map((kind) => componentDefinitionFor(kind).paletteName), ['VCVS', 'VCCS', 'CCCS', 'CCVS'])
