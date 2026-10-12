@@ -5168,6 +5168,7 @@ test('circuit checks can select the affected component and orphan wire', async (
   await expect(page.locator('.wire-line.selected')).toHaveCount(1)
 
   await page.getByRole('button', { name: 'Select and move (M)' }).click()
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   const ground = page.locator('.circuit-part[data-part-id="p-gnd"]')
   await ground.focus()
   await page.keyboard.press('Enter')

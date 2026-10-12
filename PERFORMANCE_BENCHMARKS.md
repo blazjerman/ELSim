@@ -337,3 +337,7 @@ The same bounded-object index now drives component and net-label culling. On the
 ### Large-schematic keyboard navigation (2026-10-12)
 
 Directional component navigation now finds the nearest target in one pass, preserving the prior distance ranking and stable tie order without allocating or sorting a filtered component list. The selection update shares the editor's urgent SVG-state / transition-priority inspector path and clears stale wire/label selection. The focused Firefox 5,000-part wire fixture verifies focus moves to the next component and measured 42 ms from arrow-key dispatch through two animation frames in the normal viewport. This single observation includes React updates and is not a before/after comparison or release budget.
+
+### View-only editor updates (2026-10-12)
+
+Connectivity, electrical diagnostics, and analysis-setting validation now retain their memoized results when only pan/zoom state changes. The 5,000-part Firefox browser benchmark recorded 21 ms median / 23 ms max zoom input-to-two-frames, 38 ms select-all input-to-frame, and 29 ms full-selection-drag input-to-frame. This is a single local run without a before/after comparison; it does not establish a performance budget. The focused circuit-check workflow passes after fitting the schematic before focusing an off-screen component.

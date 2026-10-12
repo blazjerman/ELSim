@@ -453,6 +453,15 @@ function projectWithSheetView(project: Project, sheetId: string, view: Project['
   return project.activeSheetId === sheetId ? { ...project, view, sheets } : { ...project, sheets }
 }
 
+function sameElectricalSheetData(left: Project['sheets'], right: Project['sheets']): boolean {
+  return left === right || left.length === right.length && left.every((sheet, index) => {
+    const candidate = right[index]
+    return sheet.id === candidate.id && sheet.name === candidate.name && sheet.parentSheetId === candidate.parentSheetId
+      && sheet.parts === candidate.parts && sheet.wires === candidate.wires && sheet.junctions === candidate.junctions
+      && sheet.netLabels === candidate.netLabels && sheet.ports === candidate.ports && sheet.parameters === candidate.parameters
+  })
+}
+
 function sameView(left: Project['view'], right: Project['view']): boolean {
   return left.zoom === right.zoom && left.panX === right.panX && left.panY === right.panY
 }
@@ -2192,12 +2201,20 @@ export default function App() {
     }, Math.max(10, Math.round(33 / animationSpeed)))
     return () => window.clearInterval(timer)
   }, [playbackRunning, playbackAvailable, transientAxis, animationSpeed])
-  const connectivity = useMemo(() => analyzeConnectivity(project), [project])
-  const electricalIssues = useMemo(() => checkCircuit(project, connectivity), [project, connectivity])
-  const analysisSettingErrors = validateAnalysisSettings(project, connectivity)
+  const electricalSheetsRef = useRef(project.sheets)
+  if (!sameElectricalSheetData(electricalSheetsRef.current, project.sheets)) electricalSheetsRef.current = project.sheets
+  const modelLibraryRevision = useMemo(() => JSON.stringify((project.modelAssets ?? []).map((asset) => [asset.id, asset.filename, asset.sha256, asset.selectedSections ?? []])), [project.modelAssets])
+  const connectivity = useMemo(() => analyzeConnectivity(project), [project.parts, project.wires, project.junctions, project.netLabels])
+  const electricalIssues = useMemo(() => checkCircuit(project, connectivity), [
+    project.parts, project.wires, project.junctions, project.netLabels, project.activeSheetId,
+    project.simulation.analysis, project.simulation.dcSweep, modelLibraryRevision, electricalSheetsRef.current, connectivity,
+  ])
+  const analysisSettingErrors = useMemo(() => validateAnalysisSettings(project, connectivity), [
+    project.parts, project.simulation, project.activeSheetId,
+    project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters, connectivity,
+  ])
   const analysisSettingError = (field: AnalysisSettingField, sourceId?: string) => analysisSettingErrors.find((error) => error.field === field && (sourceId === undefined || error.sourceId === sourceId))?.message
   const pwlCountValidationError = (sourceId: string) => analysisSettingErrors.find((error) => error.field === 'pwlPoints' && error.sourceId === sourceId && error.settingPath?.endsWith('.points'))?.message
-  const modelLibraryRevision = useMemo(() => JSON.stringify((project.modelAssets ?? []).map((asset) => [asset.id, asset.filename, asset.sha256, asset.selectedSections ?? []])), [project.modelAssets])
   const modelLibraryAnalysis = useMemo(() => analyzeModelLibraries(project.modelAssets ?? []), [modelLibraryRevision])
   const importedModels = useMemo(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => parsed.subcircuits.map((subcircuit) => ({ ...subcircuit, assetId: asset.id, filename: asset.filename, definition: importedSubcircuitComponentDefinition(subcircuit, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256 }) }))), [modelLibraryAnalysis])
   const filteredImportedModels = useMemo(() => {
