@@ -240,6 +240,18 @@ test('keyboard opens schematic probe actions and restores focus after closing', 
 
 test('visible buttons expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  const expectNamedFormControls = async () => {
+    const unnamed = await page.locator('input:not([type="hidden"]), select, textarea, [role="textbox"], [role="combobox"], [role="checkbox"], [role="radio"], [role="switch"], [role="slider"], [role="spinbutton"]').evaluateAll((controls) => controls.flatMap((control) => {
+      const element = control as HTMLElement & { labels?: NodeListOf<HTMLLabelElement> }
+      const style = getComputedStyle(element)
+      if (!element.getClientRects().length || style.visibility === 'hidden' || style.display === 'none' || element.closest('[aria-hidden="true"]')) return []
+      const labelledBy = element.getAttribute('aria-labelledby')?.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim()
+      const labelText = Array.from(element.labels ?? []).map((label) => label.textContent ?? '').join(' ').trim()
+      const name = element.getAttribute('aria-label')?.trim() || labelledBy || labelText || element.getAttribute('title')?.trim() || ''
+      return name ? [] : [`<${element.outerHTML.slice(0, 180)}>`]
+    }))
+    expect(unnamed).toEqual([])
+  }
   const expectNamedButtons = async () => {
     const unnamed = await page.locator('button').evaluateAll((buttons) => buttons.flatMap((button) => {
       const style = getComputedStyle(button)
@@ -251,14 +263,18 @@ test('visible buttons expose accessible names', { tag: '@ui-smoke' }, async ({ p
     expect(unnamed).toEqual([])
   }
   await expectNamedButtons()
+  await expectNamedFormControls()
   await page.getByRole('button', { name: 'Examples' }).click()
   await expectNamedButtons()
+  await expectNamedFormControls()
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Open quick tour' }).click()
   await expectNamedButtons()
+  await expectNamedFormControls()
   await page.keyboard.press('Escape')
   await page.locator('.circuit-part[data-part-id="p-r1"]').click({ button: 'right' })
   await expectNamedButtons()
+  await expectNamedFormControls()
 })
 
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', { tag: '@ltspice' }, async ({ page }) => {
