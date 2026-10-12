@@ -1148,8 +1148,7 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
       && componentPins(part).every((pin) => Math.hypot(point.x - pin.x, point.y - pin.y) > 16)
     if (tool !== 'select' && !movingPartWithWireArmed) return
     event.stopPropagation()
-    const preserveMixedSelection = kind === 'part' && (selectedWireIds.length > 0 || selectedNetLabelIds.length > 0)
-    const alreadySelected = preserveMixedSelection || selectedPartIdSet.has(id) || selectedWireIdSet.has(id) || selectedNetLabelIdSet.has(id)
+    const alreadySelected = selectedPartIdSet.has(id) || selectedWireIdSet.has(id) || selectedNetLabelIdSet.has(id)
     const partIds = alreadySelected
       ? kind === 'part' && !selectedPartIdSet.has(id) ? [...selectedPartIds, id] : selectedPartIds
       : kind === 'part' ? [id] : []
