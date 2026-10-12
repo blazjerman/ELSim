@@ -194,7 +194,9 @@ function TransientCursorReadout({ axis, shown, traceIndexById, colors, keyboardA
   const cursorIndex = useSimulationCursor()
   return <><div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => {
     const time = axis?.[cursorIndex] ?? 0
-    const index = nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
+    const index = axis === trace.axis && cursorIndex >= 0 && cursorIndex < trace.axis.length
+      ? cursorIndex
+      : nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
     return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span>
   })}</div><span className="sr-only" aria-live="polite" aria-atomic="true">{keyboardAnnouncement}</span></>
 }
