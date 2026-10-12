@@ -741,7 +741,7 @@ test('wire current animation keeps moving while transient playback advances', as
   expect(Math.abs(after - before)).toBeGreaterThan(1)
 })
 
-test('wire current particles outside the schematic viewport are not rendered', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('wire current particles outside the schematic viewport are not rendered', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
@@ -775,6 +775,7 @@ test('ngspice current splits evenly across parallel resistor wire branches', { t
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts.push({ id: 'parallel-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 360, y: 390, rotation: 0 })
@@ -1766,6 +1767,7 @@ test('capacitor initial voltage editor starts the transient at the requested vol
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Add capacitor voltage' }).click()
   const initialVoltage = page.getByLabel('Starting voltage', { exact: true })
@@ -2310,7 +2312,7 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*5\.000000 V/i })).toBeVisible()
 })
 
-test('imported op-amp lesson opens its IC model and solves the feedback gain', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('imported op-amp lesson opens its IC model and solves the feedback gain', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2329,7 +2331,7 @@ test('imported op-amp lesson opens its IC model and solves the feedback gain', {
   await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('1.499')
 })
 
-test('inverting op-amp lesson demonstrates negative feedback gain', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('inverting op-amp lesson demonstrates negative feedback gain', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2346,7 +2348,7 @@ test('inverting op-amp lesson demonstrates negative feedback gain', { tag: ['@ng
   await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('-0.999')
 })
 
-test('logic gate lesson simulates the four input truth-table states', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('logic gate lesson simulates the four input truth-table states', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -2410,7 +2412,7 @@ test('logic gate lesson simulates the four input truth-table states', { tag: ['@
   await expect(outputPlot.locator('.cursor-readout')).toContainText(/V\(BAND\) =/)
 })
 
-test('3.3 V logic gate example runs with matching thresholds and outputs', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('3.3 V logic gate example runs with matching thresholds and outputs', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -2430,7 +2432,7 @@ test('3.3 V logic gate example runs with matching thresholds and outputs', { tag
   await expect(page.locator('.plot-window').first().locator('.cursor-readout')).toContainText(/V\(out_and\) = 3\.3/i)
 })
 
-test('potentiometer example adjusts the simulated output with its wiper', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('potentiometer example adjusts the simulated output with its wiper', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -2451,7 +2453,7 @@ test('potentiometer example adjusts the simulated output with its wiper', { tag:
   await expect(page.locator('.plot-window').getByRole('row', { name: /V\(vout\).*7\.500000 V/i })).toBeVisible()
 })
 
-test('transformer example solves the configured AC turns ratio', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('transformer example solves the configured AC turns ratio', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -2478,7 +2480,7 @@ test('transformer example solves the configured AC turns ratio', { tag: ['@ngspi
   await expect(loadPlot.locator('.cursor-readout')).toContainText(/V\(R1\) = 6\.02\d+ dB/i)
 })
 
-test('LED current-limiter example explains and solves its resistor-limited current', { tag: '@ngspice @engine-smoke' }, async ({ page }) => {
+test('LED current-limiter example explains and solves its resistor-limited current', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -2912,7 +2914,7 @@ test('controlled-source example opens and solves with input and output probes', 
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(gout\) = -1\.0+/)
 })
 
-test('voltage-controlled switch example toggles the load with its control pulse', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('voltage-controlled switch example toggles the load with its control pulse', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Use the existing ngspice WASM runtime for the browser smoke test').toEqual([])
   await page.goto('/')
@@ -3813,6 +3815,7 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
 
 test('DC sweep waveform supports source cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.getByLabel('Analysis type').selectOption('dc')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
