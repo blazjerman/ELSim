@@ -771,6 +771,9 @@ test('quick tour can edit a component value and run the changed circuit', { tag:
   await page.getByRole('button', { name: 'Close netlist' }).click()
   const plot = await openWireVoltagePlot(page, 430, 290)
   await expect(plot.locator('.trace-toggles button', { hasText: 'V(vout)' })).toBeVisible()
+  const csvDownload = page.waitForEvent('download')
+  await plot.getByRole('button', { name: 'Export CSV' }).click()
+  expect((await csvDownload).suggestedFilename()).toMatch(/waveforms\.csv$/)
 })
 
 test('right-click probes wire voltage to ground and component voltage across its pins', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
@@ -5727,12 +5730,14 @@ test('@ui-smoke component property edits use stable undo and redo snapshots', as
 
 test('voltage source inspector edits DC, pulse, and validated PWL transient behavior', async ({ page }) => {
   await page.goto('/')
+  expect(await page.evaluate(() => performance.getEntriesByType('resource').some(({ name }) => name.includes('/src/engine/netlistGeneration.ts')))).toBe(false)
   await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
   const waveform = page.getByRole('combobox', { name: 'Source waveform' })
   await expect(waveform).toHaveValue('pulse')
   await waveform.selectOption('dc')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('V1 vin 0 DC 5')
+  expect(await page.evaluate(() => performance.getEntriesByType('resource').some(({ name }) => name.includes('/src/engine/netlistGeneration.ts')))).toBe(true)
   await page.keyboard.press('Escape')
   await waveform.selectOption('pulse')
   await page.getByLabel('Period', { exact: true }).fill('20m')
