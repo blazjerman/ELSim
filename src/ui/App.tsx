@@ -1219,28 +1219,24 @@ function Schematic({ project, connectivity, setSelection, setHoveredSchematicObj
       if (moved) {
         const left = Math.min(startX, endX), right = Math.max(startX, endX)
         const top = Math.min(startY, endY), bottom = Math.max(startY, endY)
-        const selectedIds = project.parts.filter((part) => {
-          const bounds = svg.current?.querySelector<SVGGElement>(`[data-part-id="${CSS.escape(part.id)}"]`)?.getBoundingClientRect()
-          if (!bounds) return false
-          return endX < startX
-            ? bounds.right >= left && bounds.left <= right && bounds.bottom >= top && bounds.top <= bottom
-            : bounds.left >= left && bounds.right <= right && bounds.top >= top && bounds.bottom <= bottom
-        }).map((part) => part.id)
-        const selectedWireIds = project.wires.filter((wire) => {
-          const bounds = svg.current?.querySelector<SVGGElement>(`[data-wire-id="${CSS.escape(wire.id)}"]`)?.getBoundingClientRect()
-          if (!bounds) return false
-          return endX < startX
-            ? bounds.right >= left && bounds.left <= right && bounds.bottom >= top && bounds.top <= bottom
-            : bounds.left >= left && bounds.right <= right && bounds.top >= top && bounds.bottom <= bottom
-        }).map((wire) => wire.id)
-        const selectedNetLabelIds = project.netLabels.filter((label) => {
-          const bounds = svg.current?.querySelector<SVGGElement>(`[data-net-label-id="${CSS.escape(label.id)}"]`)?.getBoundingClientRect()
-          if (!bounds) return false
-          return endX < startX
-            ? bounds.right >= left && bounds.left <= right && bounds.bottom >= top && bounds.top <= bottom
-            : bounds.left >= left && bounds.right <= right && bounds.top >= top && bounds.bottom <= bottom
-        }).map((label) => label.id)
-        const nextPartIds = boxDrag.additive ? [...new Set([...selectedPartIdsRef.current, ...selectedIds])] : selectedIds
+        const crossing = endX < startX
+        const included = (bounds: DOMRect) => crossing
+          ? bounds.right >= left && bounds.left <= right && bounds.bottom >= top && bounds.top <= bottom
+          : bounds.left >= left && bounds.right <= right && bounds.top >= top && bounds.bottom <= bottom
+        const selectedParts: string[] = []
+        const selectedWireIds: string[] = []
+        const selectedNetLabelIds: string[] = []
+        // Read bounds from rendered controls once. This avoids N project scans
+        // with a selector per item and correctly uses the visible wire hit path
+        // rather than the usually zero-sized accessibility wrapper.
+        for (const element of svg.current?.querySelectorAll<SVGGElement>('.circuit-part[data-part-id], .wire-line[data-wire-id], .canvas-label[data-net-label-id]') ?? []) {
+          const bounds = element.getBoundingClientRect()
+          if (!included(bounds)) continue
+          if (element.matches('.circuit-part')) selectedParts.push(element.dataset.partId!)
+          else if (element.matches('.wire-line')) selectedWireIds.push(element.dataset.wireId!)
+          else selectedNetLabelIds.push(element.dataset.netLabelId!)
+        }
+        const nextPartIds = boxDrag.additive ? [...new Set([...selectedPartIdsRef.current, ...selectedParts])] : selectedParts
         const nextWireIds = boxDrag.additive ? [...new Set([...selectedWireIdsRef.current, ...selectedWireIds])] : selectedWireIds
         const nextLabelIds = boxDrag.additive ? [...new Set([...selectedNetLabelIdsRef.current, ...selectedNetLabelIds])] : selectedNetLabelIds
         setSelectedPartIds(nextPartIds)
