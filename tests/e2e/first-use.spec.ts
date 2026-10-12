@@ -1250,6 +1250,59 @@ test('copying a hierarchical block into a new project preserves nested definitio
   })).toEqual({ outer: 'Parameterized divider', inner: 'Core resistor', nestedReferenceResolves: true, override: '2k' })
 })
 
+test('nested reusable divider solves match an equivalent flattened circuit', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running the browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  await page.locator('.example-list article').filter({ hasText: 'Nested reusable divider' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Simulation complete|Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(OUT5)')
+  await expectAvailableTrace(page, 'V(OUT10)')
+  const hierarchicalTable = page.locator('.plot-window').last().locator('.op-table')
+  await expect(hierarchicalTable.getByRole('row', { name: /V\(out5\).*2\.500000 V/i })).toBeVisible()
+  await expect(hierarchicalTable.getByRole('row', { name: /V\(out10\).*3\.333333 V/i })).toBeVisible()
+
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    const parts = project.parts.filter((part: { kind: string }) => part.kind === 'source' || part.kind === 'ground')
+    const resistors = [
+      { id: 'flat-rmain1', ref: 'RMAIN1', value: '1k', x: 400, y: 300 },
+      { id: 'flat-rcore1', ref: 'RCORE1', value: '1k', x: 600, y: 300 },
+      { id: 'flat-rmain2', ref: 'RMAIN2', value: '2k', x: 400, y: 600 },
+      { id: 'flat-rcore2', ref: 'RCORE2', value: '1k', x: 600, y: 600 },
+    ].map((part) => ({ ...part, kind: 'resistor', rotation: 0 }))
+    const netLabels = [
+      ['in5-source', 'IN5', 200, 250], ['in5-main', 'IN5', 350, 300],
+      ['out5-main', 'OUT5', 450, 300], ['out5-core', 'OUT5', 550, 300],
+      ['in10-source', 'IN10', 200, 550], ['in10-main', 'IN10', 350, 600],
+      ['out10-main', 'OUT10', 450, 600], ['out10-core', 'OUT10', 550, 600],
+      ['ground-source1', '0', 200, 350], ['ground-source2', '0', 200, 650],
+      ['ground-core1', '0', 650, 300], ['ground-core2', '0', 650, 600],
+    ].map(([id, name, x, y]) => ({ id: `flat-${id}`, name, x, y, visible: true }))
+    const root = { ...project.sheets[0], parts: [...parts, ...resistors], wires: [], junctions: [], netLabels }
+    project.parts = root.parts
+    project.wires = []
+    project.junctions = []
+    project.netLabels = netLabels
+    project.sheets = [root]
+    project.plotSettings = { ...project.plotSettings, selectedTraceIds: [], ranges: {} }
+    localStorage.setItem(key, JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(OUT5)')
+  await expectAvailableTrace(page, 'V(OUT10)')
+  const flattenedTable = page.locator('.plot-window').last().locator('.op-table')
+  await expect(flattenedTable.getByRole('row', { name: /V\(out5\).*2\.500000 V/i })).toBeVisible()
+  await expect(flattenedTable.getByRole('row', { name: /V\(out10\).*3\.333333 V/i })).toBeVisible()
+})
+
 test('copying a user IC into a new project carries transitive libraries and its custom symbol', async ({ page }) => {
   const topSource = '.SUBCKT USER_TOP IN OUT\nXCORE IN OUT USER_CORE\n.ENDS USER_TOP\n'
   const coreSource = '.SUBCKT USER_CORE IN OUT\nRCORE IN OUT 1k\n.ENDS USER_CORE\n'
