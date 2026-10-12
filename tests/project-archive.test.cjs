@@ -146,6 +146,30 @@ test('user model libraries round-trip inside project data with digest and licens
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], selectedSections: ['missing'] }] }), /section names that exist/)
 })
 
+test('large imported model libraries validate many placed IC instances', async () => {
+  const project = createStarterProject()
+  const definitions = Array.from({ length: 600 }, (_, index) => {
+    const name = `USER_${String(index + 1).padStart(4, '0')}`
+    return `.SUBCKT ${name} IN OUT\nR1 IN OUT 1k\n.ENDS ${name}`
+  })
+  const content = definitions.join('\n')
+  const sha256 = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(content)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  project.modelAssets = [{ id: 'large-model-library', filename: 'large-user-library.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts = Array.from({ length: 400 }, (_, index) => {
+    const modelName = `USER_${String(index + 101).padStart(4, '0')}`
+    return { id: `user-ic-${index}`, kind: 'subcircuit', ref: `XIC${index + 1}`, value: modelName, modelName, modelPins: ['IN', 'OUT'], x: 100 + (index % 32) * 40, y: 120 + Math.floor(index / 32) * 40, rotation: 0 }
+  })
+  project.wires = []
+  project.netLabels = []
+  project.junctions = []
+  project.sheets = project.sheets.map((sheet) => sheet.id === project.rootSheetId ? { ...sheet, parts: project.parts, wires: [], netLabels: [], junctions: [] } : sheet)
+
+  const validated = validateProject(project)
+  assert.equal(validated.parts.length, 400)
+  assert.equal(validated.parts[0].componentDefinitionId, `user.${sha256}.user-0101`)
+  assert.equal(validated.parts.at(-1).componentDefinitionId, `user.${sha256}.user-0500`)
+})
+
 test('project validation preserves case-insensitive duplicate definitions across model library files', async () => {
   const project = createStarterProject()
   const contents = [

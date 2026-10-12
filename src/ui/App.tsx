@@ -1509,7 +1509,8 @@ export default function App() {
   const analysisSettingErrors = validateAnalysisSettings(project)
   const analysisSettingError = (field: AnalysisSettingField, sourceId?: string) => analysisSettingErrors.find((error) => error.field === field && (sourceId === undefined || error.sourceId === sourceId))?.message
   const pwlCountValidationError = (sourceId: string) => analysisSettingErrors.find((error) => error.field === 'pwlPoints' && error.sourceId === sourceId && error.settingPath?.endsWith('.points'))?.message
-  const modelLibraryAnalysis = useMemo(() => analyzeModelLibraries(project.modelAssets ?? []), [project.modelAssets])
+  const modelLibraryRevision = useMemo(() => JSON.stringify((project.modelAssets ?? []).map((asset) => [asset.id, asset.filename, asset.sha256, asset.selectedSections ?? []])), [project.modelAssets])
+  const modelLibraryAnalysis = useMemo(() => analyzeModelLibraries(project.modelAssets ?? []), [modelLibraryRevision])
   const importedModels = useMemo(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => parsed.subcircuits.map((subcircuit) => ({ ...subcircuit, assetId: asset.id, filename: asset.filename, definition: importedSubcircuitComponentDefinition(subcircuit, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256 }) }))), [modelLibraryAnalysis])
   const filteredImportedModels = useMemo(() => {
     const query = importedSubcircuitQuery.trim().toLowerCase()
@@ -1525,7 +1526,7 @@ export default function App() {
   }, [importedDeviceModels, importedDeviceModelQuery])
   const visibleImportedDeviceModels = filteredImportedDeviceModels.slice(0, visibleImportedDeviceModelCount)
   const modelDependencyAnalysis = modelLibraryAnalysis.dependencies
-  const modelDialectWarnings = useMemo(() => (project.modelAssets ?? []).flatMap((asset) => analyzeLtspiceModelDialect(asset.content).map((warning) => ({ ...warning, filename: asset.filename, assetId: asset.id }))), [project.modelAssets])
+  const modelDialectWarnings = useMemo(() => (project.modelAssets ?? []).flatMap((asset) => analyzeLtspiceModelDialect(asset.content).map((warning) => ({ ...warning, filename: asset.filename, assetId: asset.id }))), [modelLibraryRevision])
   useEffect(() => {
     if (!modelSourceReview) return
     const sourceLine = document.getElementById(`model-source-${modelSourceReview.assetId}-line-${modelSourceReview.line}`)
@@ -1537,7 +1538,7 @@ export default function App() {
     if (!sources.length) return []
     const libraries = (project.modelAssets ?? []).map((asset) => ({ filename: asset.filename, selectedSections: asset.selectedSections, sections: listModelLibrarySections(asset.content) }))
     return sources.flatMap((source) => analyzeLtspiceSchematicCompatibility(source.originalText, libraries).map((warning) => ({ ...warning, filename: source.filename })))
-  }, [project.importedSchematicSource, project.importedChildSchematicSources, project.modelAssets])
+  }, [project.importedSchematicSource, project.importedChildSchematicSources, modelLibraryRevision])
   const compatibilityWarnings = useMemo(() => [
     ...modelDialectWarnings.map((warning) => ({ ...warning, sourceFilename: warning.filename, key: warning.assetId })),
     ...schematicCompatibilityWarnings.map((warning) => ({ ...warning, sourceFilename: warning.filename, key: warning.filename })),

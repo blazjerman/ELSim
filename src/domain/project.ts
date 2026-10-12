@@ -1,6 +1,6 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
-import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from './subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseLtspiceSymbol } from './ltspiceSymbol'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
@@ -311,6 +311,7 @@ export function validateProject(input: unknown): Project {
   if (data.version !== 8 || !Array.isArray(data.parts) || !Array.isArray(data.wires) || !Array.isArray(data.netLabels) || !Array.isArray(data.junctions)) {
     throw new Error('This project format is not supported. Expected ELSim project version 8.')
   }
+  const parsedModelAssets = new Map<string, ReturnType<typeof parseSubcircuitLibrary>>()
   // Normalize hand-edited JSON before any connectivity checks. The app's
   // saved geometry has one canonical 10-unit grid.
   data.wires = splitWirePaths(data.wires)
@@ -425,7 +426,7 @@ export function validateProject(input: unknown): Project {
       totalBytes += size
       if (totalBytes > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
       if (candidate.selectedSections !== undefined && (!Array.isArray(candidate.selectedSections) || candidate.selectedSections.length > 32 || candidate.selectedSections.some((section) => typeof section !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) || new Set(candidate.selectedSections.map((section) => section.toLowerCase())).size !== candidate.selectedSections.length)) throw new Error(`${candidate.filename} has invalid selected .LIB sections.`)
-      parseSubcircuitLibrary(candidate.content, candidate.selectedSections)
+      parsedModelAssets.set(candidate.id, parseSubcircuitLibrary(candidate.content, candidate.selectedSections))
       assetIds.add(candidate.id)
     }
   }
@@ -459,17 +460,26 @@ export function validateProject(input: unknown): Project {
       if (totalBytes > 50 * 1024 * 1024) throw new Error('Original LTspice schematic sources exceed the 50 MiB project limit.')
     }
   }
-  const importedDefinitions = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).subcircuits) ?? []
-  const importedDeviceModels = (data.modelAssets as ModelLibraryAsset[] | undefined)?.flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models) ?? []
+  const importedDefinitionByName = new Map<string, { asset: ModelLibraryAsset; definition: SubcircuitDefinition }>()
+  const importedDeviceModelByName = new Map<string, SpiceModelDefinition>()
+  for (const asset of (data.modelAssets as ModelLibraryAsset[] | undefined) ?? []) {
+    const parsed = parsedModelAssets.get(asset.id)
+    if (!parsed) throw new Error(`${asset.filename} could not be parsed as a model library.`)
+    for (const definition of parsed.subcircuits) {
+      const name = definition.name.toLowerCase()
+      if (!importedDefinitionByName.has(name)) importedDefinitionByName.set(name, { asset, definition })
+    }
+    for (const model of parsed.models) {
+      const name = model.name.toLowerCase()
+      if (!importedDeviceModelByName.has(name)) importedDeviceModelByName.set(name, model)
+    }
+  }
   for (const part of data.parts as Part[]) {
     const expectedDefinitionId = part.kind !== 'subcircuit' || part.sheetId
       ? componentDefinitionByKind[part.kind].id
       : (() => {
-          const asset = (data.modelAssets as ModelLibraryAsset[] | undefined)?.find((candidate) =>
-            parseSubcircuitLibrary(candidate.content, candidate.selectedSections).subcircuits.some((model) => model.name.toLowerCase() === part.modelName?.toLowerCase()),
-          )
-          const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
-          return asset && definition ? importedSubcircuitComponentDefinition(definition, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256 }).id : undefined
+          const entry = part.modelName ? importedDefinitionByName.get(part.modelName.toLowerCase()) : undefined
+          return entry ? importedSubcircuitComponentDefinition(entry.definition, { assetId: entry.asset.id, filename: entry.asset.filename, sha256: entry.asset.sha256 }).id : undefined
         })()
     if (!expectedDefinitionId) throw new Error(`${part.ref} has no matching component definition.`)
     if (part.componentDefinitionId !== undefined && part.componentDefinitionId !== expectedDefinitionId) throw new Error(`${part.ref} component definition does not match its model.`)
@@ -482,7 +492,7 @@ export function validateProject(input: unknown): Project {
       if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
     }
     if (part.kind === 'subcircuit' && !part.sheetId) {
-      const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
+      const definition = part.modelName ? importedDefinitionByName.get(part.modelName.toLowerCase())?.definition : undefined
       if (!definition) throw new Error(`${part.ref} refers to missing imported subcircuit ${part.modelName}.`)
       if (!part.modelPins || part.modelPins.length !== definition.pins.length || part.modelPins.some((pin, index) => pin.toLowerCase() !== definition.pins[index].toLowerCase())) throw new Error(`${part.ref} pin order does not match imported subcircuit ${definition.name}.`)
       if (part.modelParameters !== undefined) {
@@ -499,7 +509,7 @@ export function validateProject(input: unknown): Project {
       continue
     }
     if (part.deviceModel !== undefined) {
-      const model = importedDeviceModels.find((candidate) => candidate.name.toLowerCase() === part.deviceModel?.toLowerCase())
+      const model = importedDeviceModelByName.get(part.deviceModel.toLowerCase())
       const expectedType = part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'npn' ? 'npn' : part.kind === 'pnp' ? 'pnp' : part.kind === 'njfet' ? 'njf' : part.kind === 'pjfet' ? 'pjf' : part.kind === 'nmos' ? 'nmos' : part.kind === 'pmos' ? 'pmos' : null
       if (!model || !expectedType || model.type.toLowerCase() !== expectedType) throw new Error(`${part.ref} has a missing or incompatible imported device model ${part.deviceModel}.`)
     }
@@ -534,7 +544,7 @@ export function validateProject(input: unknown): Project {
       const validPwlPoint = sourceMode === 'pwl' && pwlPointIndex !== null && Number.isInteger(pwlPointIndex) && pwlPointIndex >= 1 && pwlPointIndex <= (pwlPointCount ?? 0)
       const validSourceTarget = (component?.kind === 'source' || component?.kind === 'currentSource') && (sweep.sourceParameter === 'pwl.scale' ? sourceMode === 'pwl' : validPwlPoint || (sourceMode !== 'pwl' && typeof sweep.sourceParameter === 'string' && sweep.sourceParameter.startsWith(`${sourceMode}.`)))
       const supportedDevice = ['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(component?.kind ?? '')
-      const selectedModel = component?.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === component.deviceModel!.toLowerCase()) : undefined
+      const selectedModel = component?.deviceModel ? importedDeviceModelByName.get(component.deviceModel.toLowerCase()) : undefined
       const modelParameter = modelSweep && selectedModel?.parameters.find((parameter) => parameter.name.toLowerCase() === sweep.parameter!.toLowerCase())
       const waveformSweep = !modelSweep && (component?.kind === 'source' || component?.kind === 'currentSource') && ['pulse', 'pwl', 'sine', 'exp', 'sffm'].includes(component.sourceMode ?? '')
       if ((!globalParameterSweep && !component) || (listSweep && !globalParameterSweep && !dcSourceSweep) || (globalParameterSweep && (modelSweep || sourceFieldSweep)) || (modelSweep && (sourceFieldSweep || !supportedDevice || !selectedModel || !modelParameter || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.parameter!))) || (sourceFieldSweep && (modelSweep || !validSourceTarget)) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component!.kind)) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && component!.kind === 'source' && component!.sourceMode !== 'dc' && !waveformSweep) || (!globalParameterSweep && !modelSweep && !sourceFieldSweep && component!.kind === 'currentSource' && component!.sourceMode !== 'dc' && component!.sourceMode !== undefined && !waveformSweep) || (simulation.analysis === 'dc' && !dcSourceSweep) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || (listSweep && (sweep.listValues!.length !== sweep.points || sweep.listValues!.some((value) => typeof value !== 'string' || !value.trim()))) || sweepRefs.has(sweep.component.toLowerCase())) throw new Error('Parameter stepping settings are malformed. Choose a declared parameter, distinct scalar DC source for DC analysis, or a supported transient sweep target including numeric parameters on selected imported device models, with 2–10 steps.')
@@ -703,11 +713,8 @@ export function validateProject(input: unknown): Project {
       const expectedDefinitionId = part.kind !== 'subcircuit' || part.sheetId
         ? componentDefinitionByKind[part.kind].id
         : (() => {
-            const asset = (project.modelAssets ?? []).find((candidate) =>
-              parseSubcircuitLibrary(candidate.content, candidate.selectedSections).subcircuits.some((model) => model.name.toLowerCase() === part.modelName?.toLowerCase()),
-            )
-            const definition = importedDefinitions.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
-            return asset && definition ? importedSubcircuitComponentDefinition(definition, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256 }).id : undefined
+            const entry = part.modelName ? importedDefinitionByName.get(part.modelName.toLowerCase()) : undefined
+            return entry ? importedSubcircuitComponentDefinition(entry.definition, { assetId: entry.asset.id, filename: entry.asset.filename, sha256: entry.asset.sha256 }).id : undefined
           })()
       if (!expectedDefinitionId) throw new Error(`${part.ref} has no matching component definition.`)
       if (part.componentDefinitionId !== undefined && part.componentDefinitionId !== expectedDefinitionId) throw new Error(`${part.ref} component definition does not match its model.`)
