@@ -2943,6 +2943,8 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Inductor current ramp')
   await expect(page.getByText('An inductor resists a sudden current change')).toBeVisible()
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(8)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expectVisibleKeyboardControlsNamed(page)
@@ -2984,6 +2986,10 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
   const risingCurrent = await currentAt(0.4)
   expect(risingCurrent).toBeGreaterThan(0.04)
   expect(risingCurrent).toBeLessThan(0.06)
+  for (const wireId of ['rl-step-feed-top', 'rl-step-resistor-inductor', 'rl-step-return-bottom']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.04)
+  }
   await expect(inductor.locator('.inductor-current-arrow')).toBeVisible()
   const decayingCurrent = await currentAt(0.9)
   expect(decayingCurrent).toBeLessThan(0.01)

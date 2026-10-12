@@ -568,14 +568,23 @@ export function createRlStepExampleProject(): Project {
   }
   project.name = 'Inductor current ramp'
   project.parts = [source, resistor, inductor]
-  project.wires = []
+  project.wires = [
+    { id: 'rl-step-feed-rise', points: [[220, 310], [220, 260]] },
+    { id: 'rl-step-feed-top', points: [[220, 260], [410, 260]] },
+    { id: 'rl-step-feed-drop', points: [[410, 260], [410, 300]] },
+    { id: 'rl-step-resistor-inductor', points: [[510, 300], [650, 300]] },
+    { id: 'rl-step-return-right', points: [[750, 300], [800, 300]] },
+    { id: 'rl-step-return-drop', points: [[800, 300], [800, 460]] },
+    { id: 'rl-step-return-bottom', points: [[800, 460], [220, 460]] },
+    { id: 'rl-step-return-source', points: [[220, 460], [220, 410]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('rl-step-vin-source', 'VIN', source, 0), labelAt('rl-step-vin-resistor', 'VIN', resistor, 0),
-    labelAt('rl-step-resistor-inductor', 'V_RL', resistor, 1), labelAt('rl-step-inductor-resistor', 'V_RL', inductor, 0),
-    labelAt('rl-step-ground-inductor', '0', inductor, 1), labelAt('rl-step-ground-source', '0', source, 1),
+    labelAt('rl-step-vin-source', 'VIN', source, 0),
+    labelAt('rl-step-resistor-inductor', 'V_RL', resistor, 1),
+    labelAt('rl-step-ground-source', '0', source, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '10 ms', maxStep: '50 µs' }
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(V_RL)', 'I(L1)'], ranges: {} }
   project.view = { zoom: 0.9, panX: -15, panY: 0 }
