@@ -107,7 +107,7 @@ test('ngspice model-card errors identify the imported file and original source l
 test('imported model failures explain common card, type, parameter, and dependency errors', () => {
   const modelArtifact = { text: '.model QX NPN(BF=100)', sourceMap: [{ line: 1, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 14 }], diagnostics: [] }
   const cases = [
-    ['Error: unknown parameter (VTO) in model card at line 1', /parameter ngspice does not recognize/i],
+    ['Error: unknown parameter (VTO) in model card at line 1', /could not resolve a parameter.*model card/i],
     ['Error: model type mismatch at line 1', /does not match the device or subcircuit/i],
     ['Error: too few parameters in model card at line 1', /parameter list/i],
     ['Error: badly formed model card at line 1', /could not parse this model card/i],
@@ -123,6 +123,41 @@ test('imported model failures explain common card, type, parameter, and dependen
     assert.equal(diagnostic.message, message)
     assert.match(diagnostic.hint, hint)
   }
+})
+
+test('ngspice model warnings preceding generic netlist errors remain actionable', () => {
+  const componentSourceMap = [{ line: 5, sourceId: 'part-q1', role: 'component' }]
+  const missingModelText = [
+    "warning, can't find model 'qmissing' from line",
+    '    q1 out in 0 qmissing',
+    'Error on line 5 or its substitute:',
+    '  q1 out in 0 qmissing',
+  ].join('\n')
+  const missingModel = firstNgspiceError('', missingModelText, 1)
+  assert.match(missingModel, /can't find model 'qmissing'/i)
+  const missingDiagnostic = diagnosticForNgspice(missingModel, { ...artifact, sourceMap: componentSourceMap })
+  assert.equal(missingDiagnostic.sourceId, 'part-q1')
+  assert.match(missingDiagnostic.hint, /model is available.*pin order/i)
+
+  const wrongTypeText = [
+    'warning, model type mismatch in line',
+    '    q1 out in 0 qnpn',
+    'Error on line 5 or its substitute:',
+    '  q1 out in 0 qnpn',
+  ].join('\n')
+  const wrongType = firstNgspiceError('', wrongTypeText, 1)
+  assert.match(wrongType, /warning, model type mismatch/i)
+  const wrongTypeDiagnostic = diagnosticForNgspice(wrongType, { ...artifact, sourceMap: componentSourceMap })
+  assert.equal(wrongTypeDiagnostic.sourceId, 'part-q1')
+  assert.match(wrongTypeDiagnostic.hint, /model card of the wrong device type/i)
+
+  const modelSourceMap = [{ line: 7, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 18 }]
+  const parameterText = 'Undefined parameter [oops]\nError in netlist line no. 7, new internal line no. 6:\n\nCannot compute substitute\n'
+  const parameterError = firstNgspiceError('', parameterText, 1)
+  assert.match(parameterError, /Undefined parameter \[oops\]/)
+  const parameterDiagnostic = diagnosticForNgspice(parameterError, { ...artifact, sourceMap: modelSourceMap })
+  assert.equal(parameterDiagnostic.assetLine, 18)
+  assert.match(parameterDiagnostic.hint, /resolve a parameter.*spelling, declaration, and scope/i)
 })
 
 test('imported model convergence failures retain source context and give solver-focused recovery guidance', () => {

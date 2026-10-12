@@ -3,11 +3,13 @@ import type { NetlistArtifact, SimulationDiagnostic } from './contract'
 /** Select ngspice's actionable error line across both output streams. */
 export function firstNgspiceError(stdout: string, stderr: string, status: number): string | undefined {
   const lines = `${stdout}\n${stderr}`.split(/\r?\n/)
-  const explicitIndex = lines.findIndex((line) => /^\s*(?:Error|Fatal(?:\s+Error)?):/i.test(line))
+  const explicitIndex = lines.findIndex((line) => /^\s*(?:(?:Error|Fatal(?:\s+Error)?):|Error\s+(?:on|in)\s+(?:netlist\s+)?line\b)/i.test(line))
   if (explicitIndex >= 0) {
     const explicit = lines[explicitIndex].trim()
+    const precedingDetail = lines.slice(Math.max(0, explicitIndex - 6), explicitIndex).reverse().find((line) => /^\s*(?:warning,\s*(?:can't find model|cannot find model|model type mismatch)|undefined parameter|cannot compute substitute|strtod:|incorrect model type)/i.test(line))
     const location = lines.slice(explicitIndex + 1, explicitIndex + 3).find((line) => /line\s+no\.?\s*\d+/i.test(line))
-    return location ? `${explicit} ${location.trim()}` : explicit
+    const details = [precedingDetail?.trim(), explicit, location?.trim()].filter(Boolean).join(' ')
+    return details
   }
   const solverFailure = lines.find((line) => /\btime\s*step too small\b|\bfailed to converge\b|\bdid not converge\b|\bunable to converge\b|\bconvergence (?:failure|problem)\b|\bno convergence(?:\s+(?:achieved|possible|found)\b|[.:;]|$)|\bsingular matrix\b/i.test(line))
   if (solverFailure) return solverFailure.trim()
@@ -29,8 +31,8 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
     hint = `The imported model calls ${missingFunction}(), which this ngspice build does not provide. Check for simulator-specific syntax or ask the model supplier for an ngspice-compatible library (source line ${source.assetLine ?? '?'}).`
   } else if (missingFunction) {
     hint = `${missingFunction}() is not available in this ngspice build. Replace the expression with a supported ngspice function or an equivalent circuit/model.`
-  } else if (source?.assetId && /unknown parameter|unrecognized parameter|parameter .* not found/i.test(message)) {
-    hint = 'This imported model card uses a parameter ngspice does not recognize. Check whether the model expects simulator-specific syntax, or ask its supplier for an ngspice-compatible version.'
+  } else if (source?.assetId && /unknown parameter|unrecognized parameter|undefined parameter|parameter .* not found/i.test(message)) {
+    hint = 'ngspice could not resolve a parameter used by this imported model card. Check its spelling, declaration, and scope; if the card expects simulator-specific syntax, ask its supplier for an ngspice-compatible version.'
   } else if (source?.assetId && /model type mismatch|wrong model type|incorrect model type|is not a valid model type/i.test(message)) {
     hint = 'This model card type does not match the device or subcircuit that references it. Check the component prefix and model declaration, or use a model card intended for that device type.'
   } else if (source?.assetId && /too few parameters|too many parameters|missing required parameter/i.test(message)) {
@@ -54,7 +56,9 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
           ? 'For a transient run, check source edges, switch states, initial conditions, and unrealistic or zero-valued passive values. A maximum time step controls resolution and is not a general convergence fix.'
           : 'Check the DC paths to ground, floating nodes, conflicting ideal voltage sources, switch states, and nonlinear-device bias.'
     hint = `The solver could not find a stable solution. ${context} Run Circuit checks, verify model supply and pin connections, and change one thing at a time. Add realistic series resistance only when it represents the circuit.`
-  } else if (/unknown subckt|missing.*model|could not find.*model|no such model|unknown device type/.test(lower)) {
+  } else if (/model type mismatch|wrong model type|incorrect model type|is not a valid model type/.test(lower)) {
+    hint = 'This component uses a model card of the wrong device type. Check that the device prefix (D, Q, J, or M) matches the model card type and select a compatible model.'
+  } else if (/unknown subckt|missing.*model|could not find.*model|couldn't find.*model|can't find.*model|cannot find.*model|no such model|unknown device type/.test(lower)) {
     hint = 'Check that the model is available, its name matches the component, and its pin order is correct.'
   } else if (/no writable vector|no such vector|vector .* not found|not available or has zero length/.test(lower)) {
     hint = 'Check that the selected analysis produces this voltage or current vector and that the referenced node or component exists.'
