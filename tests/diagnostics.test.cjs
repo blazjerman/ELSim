@@ -126,6 +126,13 @@ test('imported model failures explain common card, type, parameter, and dependen
   }
 })
 
+test('strtod fatal output keeps its parameter detail and gives guidance without a source line', () => {
+  const message = firstNgspiceError('', 'strtod: Invalid argument\nERROR: fatal error in ngspice, exit(1)', 1)
+  assert.match(message, /strtod: Invalid argument.*fatal error/i)
+  const diagnostic = diagnosticForNgspice(message, artifact)
+  assert.match(diagnostic.hint, /could not parse a numeric value.*component values and model-card parameters/i)
+})
+
 test('ngspice model warnings preceding generic netlist errors remain actionable', () => {
   const componentSourceMap = [{ line: 5, sourceId: 'part-q1', role: 'component' }]
   const missingModelText = [
