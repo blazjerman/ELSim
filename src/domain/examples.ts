@@ -542,9 +542,9 @@ export function createZenerRegulatorExampleProject(): Project {
   ]
   project.junctions = []
   project.netLabels = [
-    labelAt('zener-input-source', 'VIN', source, 0), labelAt('zener-input-resistor', 'VIN', resistor, 0),
-    labelAt('zener-output-resistor', 'VZ', resistor, 1), labelAt('zener-output-cathode', 'VZ', zener, 1),
-    labelAt('zener-ground-source', '0', source, 1), labelAt('zener-ground-anode', '0', zener, 0),
+    labelAt('zener-input-source', 'VIN', source, 0),
+    labelAt('zener-output-cathode', 'VZ', zener, 1),
+    labelAt('zener-ground-source', '0', source, 1),
   ]
   project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'op' }
