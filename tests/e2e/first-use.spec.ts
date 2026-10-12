@@ -2372,6 +2372,10 @@ test('logic gate lesson simulates the four input truth-table states', { tag: ['@
     const measured = await sample(time)
     expect(measured).toHaveLength(levels.length)
     measured.forEach((value, index) => expect(value, `at ${time}s, trace ${index}`).toBeCloseTo(levels[index], 1))
+    const gateIds = ['logic-and', 'logic-or', 'logic-xor', 'logic-not', 'logic-nand', 'logic-nor', 'logic-xnor']
+    for (const [index, id] of gateIds.entries()) {
+      await expect(page.locator(`.circuit-part[data-part-id="${id}"]`), `${id} animation at ${time}s`).toHaveAttribute('data-logic-state', levels[index + 2] >= 2.5 ? 'high' : 'low')
+    }
   }
   await expectState(0.005, [5, 5, 5, 5, 0, 0, 0, 0, 5])
   await expectState(0.015, [5, 0, 0, 5, 5, 0, 5, 0, 0])
