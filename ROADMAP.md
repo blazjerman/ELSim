@@ -172,6 +172,8 @@ Project validation now parses each imported model library once, then resolves al
 
 ## 4. Legal and open-source release policy
 
+> **Owner decision (2026-10-12): out of scope.** The owner will build the ngspice WASM locally and is not preparing a public app/runtime release. Do not spend feature-work time simplifying, auditing, or changing license handling, and do not make these checks a gate for roadmap work. Keep existing notices and checks untouched unless the owner explicitly reopens distribution work.
+
 This is an engineering risk assessment, not a legal opinion. The project can be open source under this approach, provided the exact distributed code and assets are audited.
 
 | Material | Current finding | Required action |
@@ -189,7 +191,7 @@ Do not claim “legal to use” for arbitrary manufacturer models or encrypted f
 
 Use this section as the goal prompt for AI agents:
 
-> Build ELSim according to `ROADMAP.md`. Start with M0 and do not implement broad UI features until the ngspice WebAssembly feasibility and license inventory gates have evidence. Work in small, reviewable changes. Preserve architecture boundaries and the versioned project schema. Every new component must include electrical pin order, netlist generation, properties/units, original symbol rendering, optional animation mapping, and a numeric reference circuit. Every import path must produce a loss/diagnostic report. Never bundle third-party models or assets without recorded redistribution rights. Update the roadmap's decision log and compatibility matrix when evidence changes. Report completed acceptance criteria, test commands/results, and remaining risks in each PR.
+> Build ELSim according to the active milestones in `ROADMAP.md`; implement remaining app functionality without reopening the deferred license/release review. The owner builds the ngspice WebAssembly runtime locally; do not rebuild it during ordinary app work. Work in small, reviewable changes. Preserve architecture boundaries and the versioned project schema. Every new component must include electrical pin order, netlist generation, properties/units, original symbol rendering, optional animation mapping, and a numeric reference circuit. Every import path must produce a loss/diagnostic report. Update the roadmap's decision log and compatibility matrix when engineering evidence changes. Report completed acceptance criteria and focused test results with each change.
 
 Suggested agent ownership once M0 contracts are agreed: engine/WASM; document/netlister; editor/design system; waveforms/animation; interoperability; release/legal inventory. Agents may prototype independently, but a maintainer resolves schema/adapter changes before merging.
 
@@ -199,7 +201,7 @@ Suggested agent ownership once M0 contracts are agreed: engine/WASM; document/ne
 2. Relevant unit/integration tests and, for electrical behavior, comparison to pinned native ngspice.
 3. Failure paths and user-facing diagnostics covered.
 4. Documentation, compatibility matrix, and project migration updated if applicable.
-5. Dependency and asset provenance recorded; no unknown-license material added.
+5. Relevant technical dependencies and asset provenance recorded; license review is deferred by owner decision above and is not a feature-work gate.
 6. Browser performance and accessibility checked for user-visible changes.
 
 ## 6. Decision log and open questions
