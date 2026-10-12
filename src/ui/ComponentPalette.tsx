@@ -40,6 +40,14 @@ export const componentPaletteItems: readonly { kind: PaletteKind }[] = Object.fr
   Object.keys(paletteIcons).map((kind) => Object.freeze({ kind: kind as PaletteKind })),
 )
 
+export type ComponentPaletteCategory = 'basics' | 'semiconductors' | 'controlled'
+export const componentCategoryKinds: Readonly<Record<ComponentPaletteCategory, readonly PartKind[]>> = Object.freeze(
+  Object.fromEntries((['basics', 'semiconductors', 'controlled'] as const).map((category) => [
+    category,
+    componentDefinitions.filter((definition) => definition.paletteCategory === category).map((definition) => definition.kind),
+  ])) as Record<ComponentPaletteCategory, PartKind[]>,
+)
+
 export const COMPONENT_SHORTCUTS = Object.freeze(Object.fromEntries(
   componentDefinitions.flatMap((definition) => definition.shortcut ? [[definition.kind, definition.shortcut]] : []),
 )) as Partial<Record<PartKind, string>>

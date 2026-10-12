@@ -24,7 +24,8 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
-import { COMPONENT_SHORTCUTS, ComponentPalette, componentPaletteItems } from './ComponentPalette'
+import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
+import type { ComponentPaletteCategory } from './ComponentPalette'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentDefaultValue, componentDefinitionFor, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import { timeMagnitude } from '../domain/componentValue'
@@ -42,7 +43,7 @@ import { clearProjectAutosave, readProjectAutosave, writeProjectAutosave } from 
 import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
-type ComponentCategory = 'all' | 'basics' | 'semiconductors' | 'controlled'
+type ComponentCategory = 'all' | ComponentPaletteCategory
 type ExampleTopic = 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 type Selection = { kind: 'part' | 'label'; id: string } | null
 type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'led' | 'led-current-limiter' | 'led-parallel' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
@@ -152,12 +153,6 @@ function formatLessonEnergy(joules: number): string {
 function formatLessonTime(seconds: number): string {
   if (seconds < 0.1) return `${Number((seconds * 1000).toPrecision(3))} ms`
   return `${Number(seconds.toPrecision(3))} s`
-}
-
-const componentCategoryKinds: Record<Exclude<ComponentCategory, 'all'>, PartKind[]> = {
-  basics: ['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'transformer', 'source', 'currentSource', 'switch', 'ground', 'inverter', 'logicGate'],
-  semiconductors: ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'],
-  controlled: ['voltageSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral'],
 }
 
 function IconButton({ title, children, onClick, active = false, disabled = false }: { title: string; children: ReactNode; onClick?: () => void; active?: boolean; disabled?: boolean }) {
