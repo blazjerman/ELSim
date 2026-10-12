@@ -11,6 +11,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(4)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
@@ -169,6 +170,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
   })
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(4)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
@@ -177,7 +179,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
     project.simulation.maxStep = '1 µs'
     project.plotSettings.selectedTraceIds = []
     const traces = ['v(vout)', 'v(vin)', 'i(@r1[i])', 'i(@c1[i])']
-    project.plotSettings.panels = traces.map((_, index) => ({
+    project.plotSettings.panels = Array.from({ length: 8 }, (_, index) => ({
       id: `million-sample-panel-${index + 1}`,
       bounds: { x: 12 + (index % 2) * 628, y: 128 + Math.floor(index / 2) * 356, width: 600, height: 340 },
       selectedTraceIds: traces,
@@ -208,8 +210,8 @@ test('measure a million-sample transient through the browser ngspice worker and 
   const maxSample = Number(await slider.getAttribute('max'))
   expect(maxSample).toBeGreaterThan(1_000_000)
   const plots = page.locator('.plot-window')
-  await expect(plots).toHaveCount(4)
-  for (let index = 0; index < 4; index += 1) {
+  await expect(plots).toHaveCount(8)
+  for (let index = 0; index < 8; index += 1) {
     const plot = plots.nth(index)
     await expect(plot.locator('.trace-selected-item')).toHaveCount(4)
     await expect(plot.getByRole('button', { name: 'Disable V(vout)' })).toBeVisible()
@@ -217,7 +219,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
   }
   const selectedTraceCount = await page.locator('.plot-window .trace-selected-item').count()
   const renderedTraceCount = await page.locator('.plot-window .waveform-chart polyline').count()
-  expect(selectedTraceCount).toBe(16)
+  expect(selectedTraceCount).toBe(32)
   expect(renderedTraceCount).toBe(selectedTraceCount)
   const scrubTimes: number[] = []
   for (const key of ['End', 'Home', 'End']) {
@@ -242,7 +244,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
     expect(workerProfiles).toHaveLength(1)
     console.log(workerProfiles[0])
   }
-  console.log(JSON.stringify({ benchmark: 'browser-million-sample-multi-trace-transient-v3', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, heapBefore: before, heapAfter: after }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-million-sample-eight-window-transient-v4', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plotWindowCount: await plots.count(), tracesPerWindow: 4, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, heapBefore: before, heapAfter: after }, null, 2))
 })
 
 test('measure browser waveform rendering with dozens of solved traces', async ({ page, browserName }) => {
