@@ -37,7 +37,7 @@ function usePlotWindow(traces: Trace[], savedRange: PlotRange | undefined, onRan
   const [window, setWindow] = useState<PlotWindow>(savedRange ?? { start: 0, end: 1 })
   const windowRef = useRef(window)
   windowRef.current = window
-  useEffect(() => { const next = savedRange ?? { start: 0, end: 1 }; windowRef.current = next; setWindow(next) }, [traces])
+  useEffect(() => { const next = savedRange ?? { start: 0, end: 1 }; windowRef.current = next; setWindow(next) }, [traces, savedRange])
   const update = (next: PlotRange) => { windowRef.current = next; setWindow(next); onRangeChange(next) }
   const panBy = (delta: number) => {
     const current = windowRef.current
@@ -300,7 +300,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const anchorIndex = nearestAxisIndex(axis ?? Float64Array.of(0), timeAtPointer, first, Math.min(last, (axis?.length ?? 1) - 1))
     navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchorIndex / Math.max(1, (axis?.length ?? 1) - 1))
   }
-  const colors = colorsForTraces(traces, savedColors)
+  const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const valueStep = niceTickStep(scopeRange[1] - scopeRange[0], Math.max(3, Math.floor((bottom - top) / 42)))
   const valueTicks = ticksInRange(scopeRange[0], scopeRange[1], valueStep)
   const minorValueStep = valueStep / 5
@@ -324,7 +324,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
     }
     return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points: points.join(' ') }
-  }), [shown, minTime, maxTime, width, height, scopeRange[0], scopeRange[1], traceIndexById])
+  }), [shown, minTime, maxTime, width, height, scopeRange[0], scopeRange[1], traceIndexById, colors])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -365,7 +365,7 @@ function OperatingPointView({ traces, selectedIds, onToggle, onExport, savedColo
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id))
   const traceIndexById = useTraceIndexById(traces)
-  const colors = colorsForTraces(traces, savedColors)
+  const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   return <div className="waveform-view op-view">
     <div className="waveform-title"><strong>DC operating point</strong><span>{traces.length} vectors · one solved bias point</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="operating-point traces" colorFor={(index) => colors[index % colors.length]}/>
@@ -384,7 +384,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const [mode, setMode] = useState<'magnitude' | 'phase' | 'noise'>(isNoise ? 'noise' : 'magnitude')
   useEffect(() => setMode(isNoise ? 'noise' : 'magnitude'), [isNoise])
   const cursorValue = useAnalysisCursor(result)
-  const colors = colorsForTraces(traces, savedColors)
+  const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const plotSize = useResponsivePlotSize()
   const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = width - 12, top = 12, bottom = height - 30
   const frequencies = traces[0]?.axis ?? Float64Array.of(1, 10)

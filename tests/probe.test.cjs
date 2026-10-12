@@ -9,7 +9,7 @@ const { componentCurrentVector, transformerWindingCurrentVector, deriveComponent
 
 test('probe hit testing resolves labeled wires, components, and ignores ground/background', () => {
   const project = createStarterProject()
-  assert.deepEqual(resolveProbeTarget(project, { x: 475, y: 290 }), { kind: 'node', name: 'vout' })
+  assert.deepEqual(resolveProbeTarget(project, { x: 475, y: 290 }), { kind: 'node', name: 'vout', wireId: 'w-2' })
   assert.deepEqual(resolveProbeTarget(project, { x: 365, y: 290 }), { kind: 'part', id: 'p-r1' })
   assert.equal(resolveProbeTarget(project, { x: 185, y: 490 }), null)
   assert.equal(resolveProbeTarget(project, { x: 700, y: 550 }), null)
@@ -18,7 +18,7 @@ test('probe hit testing resolves labeled wires, components, and ignores ground/b
 test('probe hit testing respects rotation and electrical pins', () => {
   const project = createStarterProject()
   assert.deepEqual(resolveProbeTarget(project, { x: 540, y: 405 }), { kind: 'part', id: 'p-c1' })
-  assert.deepEqual(resolveProbeTarget(project, { x: 540, y: 355 }), { kind: 'node', name: 'vout' })
+  assert.deepEqual(resolveProbeTarget(project, { x: 540, y: 355 }), { kind: 'node', name: 'vout', wireId: 'w-2-seg-1' })
 })
 
 test('component current vectors use ngspice device-specific names', () => {

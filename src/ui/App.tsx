@@ -14,11 +14,9 @@ import { moveSelectedSceneObjects } from '../domain/sceneEdit'
 import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
-import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
 import { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector } from '../domain/probe'
-import { hierarchyNodeVector } from '../domain/hierarchyProbe'
-import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
+import { hierarchyComponentCurrentVector, hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, renameSheetDefinition, sheetDefinitionSubtreeIds, updateSheetDefinition } from '../domain/sheetDefinition'
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
@@ -966,12 +964,11 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
   const viewWidth = viewportSize.width / view.zoom, viewHeight = viewportSize.height / view.zoom
   const viewportLeft = (380 - viewWidth / 2) - view.panX
   const viewportTop = (300 - viewHeight / 2) - view.panY
-  const wireViewportIndex = useMemo(() => createWireViewportIndex(project.wires), [project.wires])
   const visibleWires = useMemo(() => {
     const bounds = { left: viewportLeft, top: viewportTop, right: viewportLeft + viewWidth, bottom: viewportTop + viewHeight }
     const focusedWireId = document.activeElement?.closest<SVGGElement>('.wire-line')?.dataset.wireId
-    return wireViewportIndex(bounds, focusedWireId)
-  }, [wireViewportIndex, viewportLeft, viewportTop, viewWidth, viewHeight])
+    return wiresNear(bounds, focusedWireId)
+  }, [wiresNear, viewportLeft, viewportTop, viewWidth, viewHeight])
   const animatedWireIds = useMemo(() => new Set(visibleWires.map((wire) => wire.id)), [visibleWires])
   const tracesByVector = useMemo(() => {
     const index = new Map<string, Trace>()
@@ -2373,14 +2370,19 @@ export default function App() {
       .catch(() => { if (mounted) setEngineAssetAvailable(false) })
     return () => { mounted = false; activeWorkerRef.current?.terminate(); activeWorkerRef.current = null }
   }, [])
-  const setProject = (fn: (current: Project) => Project) => setProjectState((current) => {
-    const next = fn(current)
-    if (next === current) return current
-    const snapshot = { ...current, parts: current.parts.map((part) => ({ ...part })), wires: current.wires.map((wire) => ({ ...wire, points: [[...wire.points[0]], [...wire.points[1]]] as [[number, number], [number, number]] })), netLabels: current.netLabels.map((label) => ({ ...label })) }
-    if (!editGroup.current) history.current = { past: [...history.current.past, snapshot].slice(-100), future: [] }
-    const scene = { parts: next.parts, wires: next.wires, junctions: next.junctions, netLabels: next.netLabels, view: next.view }
-    return { ...next, sheets: next.sheets.map((sheet) => sheet.id === next.activeSheetId ? { ...sheet, ...scene } : sheet), updatedAt: new Date().toISOString() }
-  })
+  const setProject = (fn: (current: Project) => Project) => {
+    const groupedEdit = editGroup.current
+    setProjectState((current) => {
+      const next = fn(current)
+      if (next === current) return current
+      if (!groupedEdit) {
+        const snapshot = { ...current, parts: current.parts.map((part) => ({ ...part })), wires: current.wires.map((wire) => ({ ...wire, points: [[...wire.points[0]], [...wire.points[1]]] as [[number, number], [number, number]] })), netLabels: current.netLabels.map((label) => ({ ...label })) }
+        history.current = { past: [...history.current.past, snapshot].slice(-100), future: [] }
+      }
+      const scene = { parts: next.parts, wires: next.wires, junctions: next.junctions, netLabels: next.netLabels, view: next.view }
+      return { ...next, sheets: next.sheets.map((sheet) => sheet.id === next.activeSheetId ? { ...sheet, ...scene } : sheet), updatedAt: new Date().toISOString() }
+    })
+  }
   const savePlotSettings = (update: (current: NonNullable<Project['plotSettings']>) => NonNullable<Project['plotSettings']>) => setProjectState((current) => {
     const before = current.plotSettings ?? { selectedTraceIds: [], ranges: {} }
     const next = update(before)
@@ -3042,6 +3044,7 @@ export default function App() {
       if (textCandidates.some((candidate) => candidate.size > 1024 * 1024)) throw new Error('LTspice PWL data files are limited to 1 MiB each.')
       if (textCandidates.reduce((sum, candidate) => sum + candidate.size, 0) > 8 * 1024 * 1024) throw new Error('LTspice PWL data files exceed the 8 MiB total import limit.')
       const pwlFiles = await Promise.all(textCandidates.map(async (file) => ({ filename: file.name, content: new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()) })))
+      const { parseLtspiceSchematic } = await import('../domain/ltspiceSchematic')
       const imported = parseLtspiceSchematic(source, ascFile.name, symbols, modelAssets, childSchematics, [], pwlFiles)
       pendingViewRef.current = null
       setProjectState(imported.project)
