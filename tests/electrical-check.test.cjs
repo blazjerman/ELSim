@@ -72,6 +72,20 @@ test('circuit checks flag case-insensitive duplicate SPICE references on the act
   assert.ok(issues.every((issue) => /unique within a sheet, ignoring letter case/.test(issue.detail)))
 })
 
+test('duplicate-reference checks follow hierarchy sheet scope', () => {
+  const project = createHierarchicalExampleProject()
+  const divider = project.sheets.find((sheet) => sheet.id === 'sheet-divider')
+  divider.parts.push({ id: 'divider-rmain-duplicate', kind: 'resistor', ref: 'rmain', value: '2k', x: 800, y: 500, rotation: 0 })
+  project.parts.push({ id: 'root-rcore', kind: 'resistor', ref: 'RCORE', value: '2k', x: 900, y: 900, rotation: 0 })
+  project.sheets.find((sheet) => sheet.id === project.activeSheetId).parts = project.parts
+
+  const issues = checkCircuit(project).filter((issue) => issue.id.startsWith('duplicate-reference:'))
+  assert.deepEqual(issues.map((issue) => issue.id).sort(), [
+    'duplicate-reference:divider-rin',
+    'duplicate-reference:divider-rmain-duplicate',
+  ])
+})
+
 test('reports floating terminals on the component a beginner needs to wire', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'loose-r', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 700, y: 600, rotation: 0 })

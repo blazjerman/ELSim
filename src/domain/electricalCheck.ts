@@ -52,22 +52,24 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   }
   const reachableSheets = reachableSimulationSheets(project)
 
-  const partsByReference = new Map<string, Project['parts']>()
-  for (const part of project.parts) {
-    const key = part.ref.trim().toLowerCase()
-    partsByReference.set(key, [...(partsByReference.get(key) ?? []), part])
-  }
-  for (const duplicates of partsByReference.values()) {
-    if (duplicates.length < 2) continue
-    for (const part of duplicates) {
-      const otherReferences = duplicates.filter((candidate) => candidate.id !== part.id).map((candidate) => candidate.ref)
-      issues.push({
-        id: `duplicate-reference:${part.id}`,
-        severity: 'warning',
-        title: `${part.ref} shares its reference with ${otherReferences.join(', ')}`,
-        detail: 'SPICE component references must be unique within a sheet, ignoring letter case. Rename one of these components before running the simulation.',
-        partId: part.id,
-      })
+  for (const { sheet } of reachableSheets) {
+    const partsByReference = new Map<string, Project['parts']>()
+    for (const part of sheet.parts) {
+      const key = part.ref.trim().toLowerCase()
+      partsByReference.set(key, [...(partsByReference.get(key) ?? []), part])
+    }
+    for (const duplicates of partsByReference.values()) {
+      if (duplicates.length < 2) continue
+      for (const part of duplicates) {
+        const otherReferences = duplicates.filter((candidate) => candidate.id !== part.id).map((candidate) => candidate.ref)
+        issues.push({
+          id: `duplicate-reference:${part.id}`,
+          severity: 'warning',
+          title: `${part.ref} shares its reference with ${otherReferences.join(', ')}`,
+          detail: 'SPICE component references must be unique within a sheet, ignoring letter case. Rename one of these components before running the simulation.',
+          partId: part.id,
+        })
+      }
     }
   }
 
