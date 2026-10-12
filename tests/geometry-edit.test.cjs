@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
 const { moveSelectedSceneObjects } = require(path.join(build, 'domain/sceneEdit.js'))
@@ -91,6 +91,22 @@ test('wire animation viewport culling keeps intersecting segments and excludes d
   assert.equal(wireSegmentOverlapsBounds(wire([[100, 20], [100, 90]]), bounds), true)
   assert.equal(wireSegmentOverlapsBounds(wire([[110, 20], [140, 90]]), bounds), false)
   assert.equal(wireSegmentOverlapsBounds(wire([[-40, -30], [-10, -10]]), bounds), false)
+})
+
+test('wire viewport index preserves brute-force visibility, ordering, and focused wires', () => {
+  const wires = Array.from({ length: 600 }, (_, index) => {
+    const x = (index % 30 - 15) * 500
+    const y = (Math.floor(index / 30) - 10) * 400
+    return { id: `indexed-${index}`, points: [[x, y], [x + (index % 2 ? 180 : 0), y + (index % 2 ? 0 : 180)]] }
+  })
+  wires.push({ id: 'indexed-long', points: [[-20_000, 2_560], [20_000, 2_560]] })
+  const query = createWireViewportIndex(wires)
+  const bounds = { left: -1_000, top: -700, right: 1_200, bottom: 1_100 }
+  const expected = wires.filter((wire) => wireSegmentOverlapsBounds(wire, bounds))
+  assert.deepEqual(query(bounds), expected)
+  assert.ok(query({ left: 100_000, top: 100_000, right: 101_000, bottom: 101_000 }, 'indexed-4').some((wire) => wire.id === 'indexed-4'))
+  assert.deepEqual(query({ left: -30_000, top: -30_000, right: 30_000, bottom: 30_000 }), wires)
+  assert.throws(() => createWireViewportIndex(wires, 0), RangeError)
 })
 
 test('opening a manually edited project snaps its stored geometry before net validation', () => {

@@ -17,6 +17,53 @@ export function wireSegmentOverlapsBounds(wire: Wire, bounds: { left: number; to
     && Math.max(y1, y2) >= bounds.top && Math.min(y1, y2) <= bounds.bottom
 }
 
+/** Build a reusable spatial broadphase for viewport queries over static wires. */
+export function createWireViewportIndex(wires: readonly Wire[], cellSize = 256, maxCellsPerWire = 64) {
+  if (!Number.isFinite(cellSize) || cellSize <= 0 || !Number.isInteger(maxCellsPerWire) || maxCellsPerWire < 1) throw new RangeError('Wire viewport index limits must be positive.')
+  const cells = new Map<string, number[]>()
+  const wideWires: number[] = []
+  const indexById = new Map(wires.map((wire, index) => [wire.id, index]))
+  const cellKey = (x: number, y: number) => `${x},${y}`
+  const cellRange = (wire: Wire | { left: number; top: number; right: number; bottom: number }) => {
+    if ('points' in wire) {
+      const [[x1, y1], [x2, y2]] = wire.points
+      return [Math.floor(Math.min(x1, x2) / cellSize), Math.floor(Math.min(y1, y2) / cellSize), Math.floor(Math.max(x1, x2) / cellSize), Math.floor(Math.max(y1, y2) / cellSize)] as const
+    }
+    return [Math.floor(wire.left / cellSize), Math.floor(wire.top / cellSize), Math.floor(wire.right / cellSize), Math.floor(wire.bottom / cellSize)] as const
+  }
+
+  wires.forEach((wire, index) => {
+    const [left, top, right, bottom] = cellRange(wire)
+    if ((right - left + 1) * (bottom - top + 1) > maxCellsPerWire) {
+      wideWires.push(index)
+      return
+    }
+    for (let x = left; x <= right; x += 1) for (let y = top; y <= bottom; y += 1) {
+      const key = cellKey(x, y)
+      const entries = cells.get(key)
+      if (entries) entries.push(index)
+      else cells.set(key, [index])
+    }
+  })
+
+  return (bounds: { left: number; top: number; right: number; bottom: number }, focusedWireId?: string): Wire[] => {
+    const [left, top, right, bottom] = cellRange(bounds)
+    const cellCount = (right - left + 1) * (bottom - top + 1)
+    const candidates = new Set<number>(wideWires)
+    if (cellCount > 4096) {
+      wires.forEach((_, index) => candidates.add(index))
+    } else {
+      for (let x = left; x <= right; x += 1) for (let y = top; y <= bottom; y += 1) {
+        for (const index of cells.get(cellKey(x, y)) ?? []) candidates.add(index)
+      }
+    }
+    const focusedIndex = focusedWireId ? indexById.get(focusedWireId) : undefined
+    if (focusedIndex !== undefined) candidates.add(focusedIndex)
+    return [...candidates].sort((a, b) => a - b)
+      .flatMap((index) => index === focusedIndex || wireSegmentOverlapsBounds(wires[index], bounds) ? [wires[index]] : [])
+  }
+}
+
 export function subcircuitPinOffsets(count: number, layout?: Part['sheetPortLayout']): [number, number][] {
   if (!Number.isInteger(count) || count < 1 || count > 64) return []
   if (layout?.length === count && layout.some((port) => port.side !== 'auto')) {

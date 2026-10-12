@@ -15,7 +15,7 @@ import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
-import { componentPins, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt, wireSegmentOverlapsBounds } from '../domain/geometry'
+import { componentPins, createWireViewportIndex, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
@@ -954,11 +954,12 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const viewWidth = viewportSize.width / view.zoom, viewHeight = viewportSize.height / view.zoom
   const viewportLeft = (380 - viewWidth / 2) - view.panX
   const viewportTop = (300 - viewHeight / 2) - view.panY
+  const wireViewportIndex = useMemo(() => createWireViewportIndex(project.wires), [project.wires])
   const visibleWires = useMemo(() => {
     const bounds = { left: viewportLeft, top: viewportTop, right: viewportLeft + viewWidth, bottom: viewportTop + viewHeight }
     const focusedWireId = document.activeElement?.closest<SVGGElement>('.wire-line')?.dataset.wireId
-    return project.wires.filter((wire) => wire.id === focusedWireId || wireSegmentOverlapsBounds(wire, bounds))
-  }, [project.wires, viewportLeft, viewportTop, viewWidth, viewHeight])
+    return wireViewportIndex(bounds, focusedWireId)
+  }, [wireViewportIndex, viewportLeft, viewportTop, viewWidth, viewHeight])
   const animatedWireIds = useMemo(() => new Set(visibleWires.map((wire) => wire.id)), [visibleWires])
   const tracesByVector = useMemo(() => {
     const index = new Map<string, Trace>()

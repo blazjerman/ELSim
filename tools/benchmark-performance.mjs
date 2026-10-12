@@ -199,7 +199,7 @@ try {
   const build = createRequire(import.meta.url)
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
-  const { componentPins, wireConnectionDotPoints } = build(path.join(output, 'domain/geometry.js'))
+  const { componentPins, createWireViewportIndex, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
   const { moveSelectedSceneObjects } = build(path.join(output, 'domain/sceneEdit.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
   const { createWireCurrentFlowSampler } = build(path.join(output, 'domain/wireFlow.js'))
@@ -274,9 +274,29 @@ try {
     const wireSegments = project.wires.reduce((sum, wire) => sum + wire.points.length - 1, 0)
     if (wireSegments !== project.wires.length || project.wires.some((wire) => wire.points.length !== 2)) throw new Error(`Wire-heavy benchmark fixture ${count} must use independent two-endpoint wire segments.`)
     let wireFlowSampling
+    let wireViewportCulling
     let connectionDots
     let groupDrag
     if (count === 5_000) {
+      const bounds = { left: 0, top: 0, right: 1_600, bottom: 1_000 }
+      const viewportIndexBuild = measure(() => createWireViewportIndex(project.wires), 1, 5)
+      const viewportIndex = viewportIndexBuild.value
+      const indexedViewport = measure(() => viewportIndex(bounds), 2, 7)
+      const indexAndQuery = measure(() => createWireViewportIndex(project.wires)(bounds), 1, 5)
+      const scannedViewport = measure(() => project.wires.filter((wire) => wireSegmentOverlapsBounds(wire, bounds)), 2, 7)
+      if (JSON.stringify(indexedViewport.value.map((wire) => wire.id)) !== JSON.stringify(scannedViewport.value.map((wire) => wire.id))) throw new Error('Indexed wire viewport query changed visible wire membership or z-order.')
+      if (JSON.stringify(indexAndQuery.value.map((wire) => wire.id)) !== JSON.stringify(scannedViewport.value.map((wire) => wire.id))) throw new Error('Indexed wire viewport build/query changed visible wire membership or z-order.')
+      wireViewportCulling = {
+        totalWires: project.wires.length,
+        visibleWires: indexedViewport.value.length,
+        spatialIndex: {
+          build: { medianMs: viewportIndexBuild.medianMs, p95Ms: viewportIndexBuild.p95Ms },
+          query: { medianMs: indexedViewport.medianMs, p95Ms: indexedViewport.p95Ms },
+          buildAndQuery: { medianMs: indexAndQuery.medianMs, p95Ms: indexAndQuery.p95Ms },
+        },
+        fullScan: { medianMs: scannedViewport.medianMs, p95Ms: scannedViewport.p95Ms },
+      }
+
       const dots = measure(() => wireConnectionDotPoints(project))
       if (dots.value.length !== wireSegments * 2) throw new Error(`Wire-grid fixture expected ${wireSegments * 2} pin-connection dots; got ${dots.value.length}.`)
       connectionDots = { count: dots.value.length, medianMs: dots.medianMs, p95Ms: dots.p95Ms }
@@ -330,6 +350,7 @@ try {
       circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
       fullCircuitChecks: { medianMs: fullCircuitChecks.medianMs, p95Ms: fullCircuitChecks.p95Ms },
       ...(wireFlowSampling ? { wireFlowSampling } : {}),
+      ...(wireViewportCulling ? { wireViewportCulling } : {}),
       ...(connectionDots ? { connectionDots } : {}),
       ...(groupDrag ? { groupDrag } : {}),
     })
