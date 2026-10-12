@@ -238,6 +238,29 @@ test('keyboard opens schematic probe actions and restores focus after closing', 
   await expect(resistor).toBeFocused()
 })
 
+test('visible buttons expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const expectNamedButtons = async () => {
+    const unnamed = await page.locator('button').evaluateAll((buttons) => buttons.flatMap((button) => {
+      const style = getComputedStyle(button)
+      if (!button.getClientRects().length || style.visibility === 'hidden' || style.display === 'none' || button.closest('[aria-hidden="true"]')) return []
+      const labelledBy = button.getAttribute('aria-labelledby')?.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim()
+      const name = button.getAttribute('aria-label')?.trim() || labelledBy || (button as HTMLElement).innerText.trim() || button.getAttribute('title')?.trim() || ''
+      return name ? [] : [`<${button.outerHTML.slice(0, 180)}>`]
+    }))
+    expect(unnamed).toEqual([])
+  }
+  await expectNamedButtons()
+  await page.getByRole('button', { name: 'Examples' }).click()
+  await expectNamedButtons()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Open quick tour' }).click()
+  await expectNamedButtons()
+  await page.keyboard.press('Escape')
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click({ button: 'right' })
+  await expectNamedButtons()
+})
+
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
