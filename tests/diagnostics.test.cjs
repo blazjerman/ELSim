@@ -111,6 +111,7 @@ test('imported model failures explain common card, type, parameter, and dependen
     ['Error: model type mismatch at line 1', /does not match the device or subcircuit/i],
     ['Error: too few parameters in model card at line 1', /parameter list/i],
     ['Error: badly formed model card at line 1', /could not parse this model card/i],
+    ['strtod: Invalid argument\nERROR: fatal error in ngspice, exit(1) in line no. 1 from file /project.cir', /could not interpret part.*supported number or parameter/i],
     ['Error: unknown subckt CORE referenced at line 1', /required model files are imported/i],
     ['Error: model CORE not found at line 1', /required model files are imported/i],
     ['Error: couldn\'t find model CORE at line 1', /required model files are imported/i],
