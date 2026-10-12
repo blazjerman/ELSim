@@ -234,11 +234,15 @@ test('measure a million-sample transient through the browser ngspice worker and 
     }
   })
   expect(pageErrors).toEqual([])
+  let wasmLinearMemoryBytes: number | null = null
   if (process.env.VITE_ELSIM_PROFILE === '1') {
     expect(workerProfiles).toHaveLength(1)
+    const workerProfile = JSON.parse(workerProfiles[0].slice('[ELSim worker profile]'.length).trim()) as { wasmLinearMemoryBytes?: number | null }
+    wasmLinearMemoryBytes = workerProfile.wasmLinearMemoryBytes ?? null
+    expect(wasmLinearMemoryBytes, 'the Emscripten worker should report its WASM linear-memory capacity').toBeGreaterThan(0)
     console.log(workerProfiles[0])
   }
-  console.log(JSON.stringify({ benchmark: 'browser-million-sample-eight-window-transient-v4', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plotWindowCount: await plots.count(), tracesPerWindow: 4, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, heapBefore: before, heapAfter: after }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-million-sample-eight-window-transient-v4', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plotWindowCount: await plots.count(), tracesPerWindow: 4, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, wasmLinearMemoryBytes, heapBefore: before, heapAfter: after }, null, 2))
 })
 
 test('measure browser waveform rendering with dozens of solved traces', async ({ page, browserName }) => {
