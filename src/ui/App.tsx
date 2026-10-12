@@ -3467,21 +3467,70 @@ export default function App() {
         const savedPanels = projectRef.current.plotSettings?.panels ?? []
         if (savedPanels.length) {
           const currentProject = projectRef.current
+          const previousTraceIndexById = new Map(simulationResult?.traces.map((trace, index) => [trace.id, index] as const) ?? [])
+          const sheetsById = new Map(currentProject.sheets.map((sheet) => [sheet.id, sheet]))
+          const partsById = new Map<string, Part>()
+          const sheetByPartId = new Map<string, (typeof currentProject.sheets)[number]>()
+          const partReferences = new Set<string>()
+          for (const sheet of currentProject.sheets) for (const part of sheet.parts) {
+            partsById.set(part.id, part)
+            sheetByPartId.set(part.id, sheet)
+            partReferences.add(part.ref.toLowerCase())
+          }
+          let currentReferencesByVector: Map<string, PlotTraceReference> | undefined
+          const findLegacyCurrentReference = (traceId: string) => {
+            if (!currentReferencesByVector) {
+              currentReferencesByVector = new Map()
+              for (const sheet of currentProject.sheets) for (const part of sheet.parts) {
+                if (part.kind === 'ground' || part.kind === 'subcircuit') continue
+                const instancePath = findSheetInstancePath(sheet.id, currentProject.rootSheetId) ?? []
+                const vector = instancePath.length ? hierarchyComponentCurrentVector(currentProject, sheet.id, instancePath, part.id, currentProject.rootSheetId) : componentCurrentVector(part)
+                if (vector && !currentReferencesByVector.has(vector.toLowerCase())) currentReferencesByVector.set(vector.toLowerCase(), { kind: 'part-current', partId: part.id, sheetId: sheet.id, scopeSheetId: currentProject.rootSheetId, instancePath })
+              }
+            }
+            return currentReferencesByVector.get(traceId.toLowerCase())
+          }
+          const connectivityBySheetId = new Map<string, ReturnType<typeof analyzeConnectivity>>()
+          const connectivityForSheet = (sheetId: string, scene: Project) => {
+            let connectivity = connectivityBySheetId.get(sheetId)
+            if (!connectivity) {
+              connectivity = analyzeConnectivity(scene)
+              connectivityBySheetId.set(sheetId, connectivity)
+            }
+            return connectivity
+          }
+          const traceIds = new Set(response.result.traces.map((trace) => trace.id))
+          let sweepGroundReferences: Trace[] | undefined
+          const tracesByVector = new Map<string, Trace[]>()
+          const indexTrace = (trace: Trace) => {
+            const sweepBaseId = /^(.*?)::sweep-\d+$/i.exec(trace.id)?.[1]
+            for (const key of new Set([trace.id, trace.baseId, sweepBaseId].filter((value): value is string => Boolean(value)).map((value) => value.toLowerCase()))) {
+              const matches = tracesByVector.get(key)
+              if (matches) matches.push(trace)
+              else tracesByVector.set(key, [trace])
+            }
+          }
+          for (const trace of response.result.traces) indexTrace(trace)
           const sceneForSheet = (sheetId: string) => {
-            const sheet = currentProject.sheets.find((candidate) => candidate.id === sheetId)
+            const sheet = sheetsById.get(sheetId)
             return sheet ? { ...currentProject, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view } : currentProject
           }
           const nextPanels = savedPanels.map((panel) => {
             const selectedTraceIds: string[] = []
+            const selectedTraceIdSet = new Set<string>()
             const traceReferences: NonNullable<PlotPanel['traceReferences']> = {}
             const traceColors: NonNullable<PlotPanel['traceColors']> = {}
             const componentVoltageProbes: NonNullable<PlotPanel['componentVoltageProbes']> = {}
             const addMissingTraces = (derived: Trace[]) => {
-              for (const trace of derived) if (!response.result.traces.some((existing) => existing.id === trace.id)) response.result.traces.push(trace)
+              for (const trace of derived) if (!traceIds.has(trace.id)) {
+                traceIds.add(trace.id)
+                response.result.traces.push(trace)
+                indexTrace(trace)
+              }
             }
             const matchVector = (vector: string) => {
               const key = vector.toLowerCase()
-              return response.result.traces.filter((trace) => trace.id.toLowerCase() === key || trace.baseId?.toLowerCase() === key || trace.id.toLowerCase().startsWith(`${key}::sweep-`))
+              return tracesByVector.get(key) ?? []
             }
             for (const oldId of panel.selectedTraceIds) {
               const priorComponentProbe = panel.componentVoltageProbes?.[oldId]
@@ -3490,44 +3539,46 @@ export default function App() {
                 partId: priorComponentProbe.partId,
                 positivePin: priorComponentProbe.positivePin,
                 negativePin: priorComponentProbe.negativePin,
-                sheetId: priorComponentProbe.sheetId ?? currentProject.sheets.find((sheet) => sheet.parts.some((part) => part.id === priorComponentProbe.partId))?.id ?? currentProject.activeSheetId,
+                sheetId: priorComponentProbe.sheetId ?? sheetByPartId.get(priorComponentProbe.partId)?.id ?? currentProject.activeSheetId,
                 scopeSheetId: priorComponentProbe.scopeSheetId ?? currentProject.rootSheetId,
                 instancePath: priorComponentProbe.instancePath ?? [],
               } : undefined)
-              if (!reference) {
-                outer: for (const sheet of currentProject.sheets) for (const part of sheet.parts) {
-                  if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-                  const instancePath = findSheetInstancePath(sheet.id, currentProject.rootSheetId) ?? []
-                  const vector = instancePath.length ? hierarchyComponentCurrentVector(currentProject, sheet.id, instancePath, part.id, currentProject.rootSheetId) : componentCurrentVector(part)
-                  if (vector?.toLowerCase() === oldId.toLowerCase()) {
-                    reference = { kind: 'part-current', partId: part.id, sheetId: sheet.id, scopeSheetId: currentProject.rootSheetId, instancePath }
-                    break outer
-                  }
-                }
-              }
+              if (!reference) reference = findLegacyCurrentReference(oldId)
               if (!reference) {
                 const nodeMatch = /^v\(([^)]+)\)(?:::sweep-\d+)?$/i.exec(oldId)
                 const nodeName = nodeMatch?.[1]
-                const isPartVoltage = nodeName && currentProject.sheets.some((sheet) => sheet.parts.some((part) => part.ref.toLowerCase() === nodeName.toLowerCase()))
+                const isPartVoltage = nodeName && partReferences.has(nodeName.toLowerCase())
                 if (nodeName && !isPartVoltage) reference = { kind: 'node', name: nodeName, sheetId: currentProject.rootSheetId, scopeSheetId: currentProject.rootSheetId, instancePath: [] }
               }
               let matches: Trace[] = []
               let refreshedVoltageProbe: ComponentVoltageProbe | undefined
               if (reference?.kind === 'node') {
                 const scene = sceneForSheet(reference.sheetId)
-                const node = reference.wireId ? analyzeConnectivity(scene).wireNets.get(reference.wireId) : reference.labelId ? scene.netLabels.find((label) => label.id === reference.labelId)?.name : reference.name
+                const node = reference.wireId ? connectivityForSheet(reference.sheetId, scene).wireNets.get(reference.wireId) : reference.labelId ? scene.netLabels.find((label) => label.id === reference.labelId)?.name : reference.name
                 const vector = node ? hierarchyNodeVector(currentProject, reference.sheetId, reference.instancePath, node, reference.scopeSheetId) : null
                 if (vector) {
                   matches = matchVector(vector)
                   if (vector.toLowerCase() === 'v(0)' && !matches.length) {
-                    const sweepReferences = response.result.traces.filter((trace, index) => !response.result.traces.slice(0, index).some((previous) => previous.sweep?.index === trace.sweep?.index))
-                    addMissingTraces(sweepReferences.map(groundVoltageTrace))
+                    if (!sweepGroundReferences) {
+                      const seenSweeps = new Set<number>()
+                      let hasUnsteppedReference = false
+                      sweepGroundReferences = []
+                      for (const trace of response.result.traces) {
+                        if (!trace.sweep && !hasUnsteppedReference) {
+                          hasUnsteppedReference = true
+                          sweepGroundReferences.push(trace)
+                        } else if (trace.sweep && !seenSweeps.has(trace.sweep.index)) {
+                          seenSweeps.add(trace.sweep.index)
+                          sweepGroundReferences.push(trace)
+                        }
+                      }
+                    }
+                    addMissingTraces(sweepGroundReferences.map(groundVoltageTrace))
                     matches = matchVector(vector)
                   }
                 }
               } else if (reference?.kind === 'part-current') {
-                const scene = sceneForSheet(reference.sheetId)
-                const part = scene.parts.find((candidate) => candidate.id === reference.partId)
+                const part = partsById.get(reference.partId)
                 const vector = part ? reference.instancePath.length
                   ? hierarchyComponentCurrentVector(currentProject, reference.sheetId, reference.instancePath, part.id, reference.scopeSheetId, reference.winding)
                   : part.kind === 'transformer' && reference.winding ? transformerWindingCurrentVector(part.ref, reference.winding) : componentCurrentVector(part)
@@ -3535,15 +3586,14 @@ export default function App() {
                 if (vector) matches = matchVector(vector)
               } else if (reference?.kind === 'component-voltage') {
                 const scene = sceneForSheet(reference.sheetId)
-                const part = scene.parts.find((candidate) => candidate.id === reference.partId)
+                const part = partsById.get(reference.partId)
                 if (part) {
-                  const connectivity = analyzeConnectivity(scene)
+                  const connectivity = connectivityForSheet(reference.sheetId, scene)
                   const positiveNet = pinNet(connectivity, part, reference.positivePin)
                   const negativeNet = reference.negativePin < 0 ? '0' : pinNet(connectivity, part, reference.negativePin)
                   if (positiveNet !== 'unconnected' && negativeNet !== 'unconnected') {
                     const vectorFor = (net: string) => net === '0' ? 'v(0)' : hierarchyNodeVector(currentProject, reference.sheetId, reference.instancePath, net, reference.scopeSheetId)
                     const positiveVector = vectorFor(positiveNet), negativeVector = vectorFor(negativeNet)
-                    const partsById = new Map(currentProject.sheets.flatMap((sheet) => sheet.parts.map((candidate) => [candidate.id, candidate] as const)))
                     const refName = [...reference.instancePath.map((id) => partsById.get(id)?.ref).filter((value): value is string => Boolean(value)), part.ref].join('.')
                     const vectorRef = reference.negativePin < 0 ? `${refName}.p${reference.positivePin + 1}-gnd` : reference.positivePin === 0 && reference.negativePin === 1 ? refName : `${refName}.p${reference.positivePin + 1}-${reference.negativePin + 1}`
                     if (positiveVector && negativeVector) {
@@ -3555,11 +3605,14 @@ export default function App() {
                   }
                 }
               }
-              if (!reference && !matches.length) matches = response.result.traces.filter((trace) => trace.id === oldId || trace.baseId === oldId)
-              const oldIndex = simulationResult?.traces.findIndex((trace) => trace.id === oldId) ?? -1
+              if (!reference && !matches.length) matches = matchVector(oldId)
+              const oldIndex = previousTraceIndexById.get(oldId) ?? -1
               const color = panel.traceColors?.[oldId] ?? PLOT_TRACE_COLORS[(oldIndex < 0 ? 0 : oldIndex) % PLOT_TRACE_COLORS.length]
               for (const trace of matches) {
-                if (!selectedTraceIds.includes(trace.id)) selectedTraceIds.push(trace.id)
+                if (!selectedTraceIdSet.has(trace.id)) {
+                  selectedTraceIdSet.add(trace.id)
+                  selectedTraceIds.push(trace.id)
+                }
                 traceColors[trace.id] = color
                 if (reference) traceReferences[trace.id] = reference
                 if (refreshedVoltageProbe) componentVoltageProbes[trace.id] = refreshedVoltageProbe
