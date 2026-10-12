@@ -4,7 +4,8 @@ import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
 import { createImportedOpampExampleProject } from '../../src/domain/examples'
-import { createStarterProject } from '../../src/domain/project'
+import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
+import { componentPins } from '../../src/domain/geometry'
 import { createProjectArchive } from '../../src/domain/projectArchive'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
 import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
@@ -4540,6 +4541,38 @@ test('Examples, Circuit checks, and Sheet settings keep keyboard focus inside mo
   await expect(sheetSettings.getByRole('button', { name: 'Done' })).toBeFocused()
   await sheetSettings.getByRole('button', { name: 'Done' }).click()
   await expect(sheetSettingsTrigger).toBeFocused()
+})
+
+test('circuit checks flag two declared hierarchical outputs connected to one net', async ({ page }) => {
+  const project = createStarterProject()
+  const driver = {
+    id: 'sheet-driver', name: 'Driver', parentSheetId: project.rootSheetId,
+    parts: [], wires: [], junctions: [],
+    netLabels: [{ id: 'driver-out-label', name: 'OUT', x: 100, y: 100, visible: true }],
+    ports: [{ id: 'driver-out', name: 'OUT', direction: 'output' as const, side: 'right' as const }],
+    view: { zoom: 1, panX: 0, panY: 0 },
+  }
+  const blocks = [
+    { id: 'driver-a', kind: 'subcircuit' as const, ref: 'XA', value: 'Driver', modelName: sheetModelName(driver.id), modelPins: ['OUT'], sheetId: driver.id, x: 700, y: 500, rotation: 0 },
+    { id: 'driver-b', kind: 'subcircuit' as const, ref: 'XB', value: 'Driver', modelName: sheetModelName(driver.id), modelPins: ['OUT'], sheetId: driver.id, x: 900, y: 500, rotation: 0 },
+  ]
+  const [pinA] = componentPins(blocks[0]), [pinB] = componentPins(blocks[1])
+  project.parts.push(...blocks)
+  project.netLabels.push(
+    { id: 'driver-a-net', name: 'DRIVE_BUS', x: pinA.x, y: pinA.y, visible: true },
+    { id: 'driver-b-net', name: 'DRIVE_BUS', x: pinB.x, y: pinB.y, visible: true },
+  )
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, netLabels: project.netLabels }
+  project.sheets.push(driver)
+  const validated = validateProject(project)
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  await expect(report).toContainText('Multiple block outputs share net DRIVE_BUS')
+  await expect(report).toContainText('XA.OUT and XB.OUT')
+  await report.getByRole('button', { name: 'Select affected component' }).first().click()
+  await expect(page.locator('.circuit-part.selected .part-ref')).toContainText('XA')
 })
 
 test('circuit checks can select the affected component and orphan wire', async ({ page }) => {

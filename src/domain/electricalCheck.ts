@@ -51,6 +51,42 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     return [{ id: 'empty', severity: 'info', title: 'Circuit is empty', detail: 'Add a component before running a simulation.' }]
   }
   const reachableSheets = reachableSimulationSheets(project)
+  const sheetDefinitions = new Map(project.sheets.map((sheet) => [sheet.id, sheet]))
+  const appendMultipleBlockOutputIssues = (sheet: Project['sheets'][number], sheetConnectivity: Connectivity, topLevelInstanceId?: string) => {
+    const outputPortsByNet = new Map<string, { part: Project['parts'][number]; name: string }[]>()
+    for (const part of sheet.parts) {
+      if (!part.sheetId) continue
+      const definition = sheetDefinitions.get(part.sheetId)
+      if (!definition) continue
+      definition.ports.forEach((port, index) => {
+        if ((port.direction ?? 'inout') !== 'output') return
+        const net = sheetConnectivity.pinNets.get(`${part.id}:${index}`)
+        if (!net || net === '0') return
+        const outputs = outputPortsByNet.get(net) ?? []
+        outputs.push({ part, name: port.name })
+        outputPortsByNet.set(net, outputs)
+      })
+    }
+    for (const [net, outputs] of outputPortsByNet) if (outputs.length > 1) {
+      issues.push({
+        id: `multiple-block-outputs:${sheet.id}:${net}`,
+        severity: 'warning',
+        title: `Multiple block outputs share net ${net} in ${sheet.name}`,
+        detail: `${outputs.map(({ part, name }) => `${part.ref}.${name}`).join(' and ')} are declared as outputs on the same net. Check whether this is intentional; ELSim does not model tri-state or open-collector behavior from port direction metadata.`,
+        partId: topLevelInstanceId ?? outputs[0].part.id,
+      })
+    }
+  }
+  const activeSheetDefinition = sheetDefinitions.get(project.activeSheetId)
+  if (activeSheetDefinition) appendMultipleBlockOutputIssues({
+    ...activeSheetDefinition,
+    parts: project.parts,
+    wires: project.wires,
+    junctions: project.junctions,
+    netLabels: project.netLabels,
+    view: project.view,
+  }, connectivity)
+
   const importedDeviceModels = new Set<string>()
   for (const asset of project.modelAssets ?? []) {
     try {
@@ -167,6 +203,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
     const sheetConnectivity = analyzeConnectivity(sheetProject)
     const sheetLabelNames = new Set(sheet.netLabels.map((label) => label.name.trim()))
+    appendMultipleBlockOutputIssues(sheet, sheetConnectivity, topLevelInstanceId)
     for (const [index, diagnostic] of sheetConnectivity.diagnostics.entries()) issues.push({
       id: `connectivity:${sheet.id}:${index}`,
       severity: 'warning',

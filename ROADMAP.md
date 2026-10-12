@@ -518,3 +518,6 @@ Nested-sheet deletion follow-up (2026-10-12): Deleting an unused reusable sheet 
 
 
 Reduced-motion animation-loop follow-up (2026-10-12): Wire-current animation now cancels its pending requestAnimationFrame when the OS enables reduced motion instead of polling while leaving particles static. A single MediaQueryList listener resumes the loop when the preference changes back, preserving each wire's phase. The wire-animation regression verifies cancellation, resumption, and phase continuity; typecheck and all 28 unit groups pass. No WASM rebuild or browser build was needed.
+
+
+Hierarchical port-direction diagnostics (2026-10-12): Circuit Checks now groups declared output ports by connected parent-sheet net and warns when multiple reusable-block outputs share a net. The advisory explicitly allows intentional wired-OR/open-collector designs and explains that port-direction metadata does not model tri-state behavior; selecting the finding focuses the affected block. Bidirectional ports do not trigger this check. Domain tests cover both directions and the Firefox UI regression checks the warning and selection. All 28 unit groups and TypeScript checking pass; no WASM rebuild was required.

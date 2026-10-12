@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { checkCircuit } = require(path.join(build, 'domain/electricalCheck.js'))
-const { createStarterProject } = require(path.join(build, 'domain/project.js'))
+const { createStarterProject, sheetModelName } = require(path.join(build, 'domain/project.js'))
 const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
@@ -580,4 +580,36 @@ test('checks behavioral node and component references in their own namespaces an
   issue = checkCircuit(project).find((item) => item.id === `behavioral-reference:${behavioral.id}`)
   assert.match(issue?.title, /invalid behavioral expression/)
   assert.match(issue?.detail, /table\(\) expects an input followed by at least two x,y point pairs/)
+})
+
+
+test('hierarchical output-port conflicts are reported on the containing block', () => {
+  const project = createStarterProject()
+  const outputSheet = {
+    id: 'sheet-driver', name: 'Driver', parentSheetId: project.rootSheetId,
+    parts: [], wires: [], junctions: [],
+    netLabels: [{ id: 'driver-out-label', name: 'OUT', x: 100, y: 100, visible: true }],
+    ports: [{ id: 'driver-out', name: 'OUT', direction: 'output', side: 'right' }],
+    view: { zoom: 1, panX: 0, panY: 0 },
+  }
+  const blocks = [
+    { id: 'driver-a', kind: 'subcircuit', ref: 'XA', value: 'Driver', modelName: sheetModelName(outputSheet.id), modelPins: ['OUT'], sheetId: outputSheet.id, x: 700, y: 500, rotation: 0 },
+    { id: 'driver-b', kind: 'subcircuit', ref: 'XB', value: 'Driver', modelName: sheetModelName(outputSheet.id), modelPins: ['OUT'], sheetId: outputSheet.id, x: 900, y: 500, rotation: 0 },
+  ]
+  project.parts.push(...blocks)
+  const [pinA] = componentPins(blocks[0]), [pinB] = componentPins(blocks[1])
+  project.netLabels.push(
+    { id: 'driver-a-net', name: 'DRIVE_BUS', x: pinA.x, y: pinA.y, visible: true },
+    { id: 'driver-b-net', name: 'DRIVE_BUS', x: pinB.x, y: pinB.y, visible: true },
+  )
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, netLabels: project.netLabels }
+  project.sheets.push(outputSheet)
+  const issues = checkCircuit(project).filter((issue) => issue.id.startsWith('multiple-block-outputs:'))
+  assert.equal(issues.length, 1)
+  assert.equal(issues[0].severity, 'warning')
+  assert.equal(issues[0].partId, 'driver-a')
+  assert.match(issues[0].detail, /XA.OUT and XB.OUT/)
+
+  outputSheet.ports[0].direction = 'inout'
+  assert.equal(checkCircuit(project).some((issue) => issue.id.startsWith('multiple-block-outputs:')), false)
 })
