@@ -3522,7 +3522,9 @@ export default function App() {
       return
     }
     activeWorkerRef.current?.terminate()
-    const snapshot = structuredClone(projectRef.current)
+    // Project edits replace objects instead of mutating them, so this stable
+    // root is a run snapshot without copying large schematics or model files.
+    const snapshot = projectRef.current
     const artifact = createNetlistArtifact(snapshot)
     const invalid = artifact.diagnostics.find((diagnostic) => diagnostic.severity === 'error')
     if (invalid) {

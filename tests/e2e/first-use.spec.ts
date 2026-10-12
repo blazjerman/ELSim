@@ -6084,6 +6084,7 @@ test('DC sweep waveform supports source cursor and horizontal wheel zoom without
 
 test('three-parameter sweep runs all eight bounded cases in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const key = 'elsim:project:v7'
     const project = JSON.parse(localStorage.getItem(key)!)

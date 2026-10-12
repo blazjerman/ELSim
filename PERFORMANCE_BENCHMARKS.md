@@ -369,3 +369,8 @@ The editor now memoizes project wire IDs as a `Set` and filters selected IDs aga
 ### Immutable undo history snapshots (2026-10-12)
 
 Undo history now retains prior immutable `Project` roots by reference. Normal edits no longer clone every active part, wire, and label, and grouped gestures no longer `structuredClone` the full project at pointer-down; unchanged arrays and sheet subtrees are shared between history entries. A local 5,000-part/4,999-wire object fixture measured the removed full `structuredClone` at 11.28 ms median / 12.43 ms max and the old active-array snapshot at 0.50 / 0.91 ms across nine runs. The new path stores the existing root reference. This measurement is a Node microbenchmark, not a browser latency or memory claim. Firefox verifies property edit, wire endpoint, and child-sheet undo/redo; the full 43-case Firefox UI smoke suite and production build pass.
+
+
+### Shared simulation run snapshots (2026-10-12)
+
+Starting a simulation now keeps the current immutable `Project` root as its run snapshot instead of calling `structuredClone` on the entire project. Netlist generation and sweep preparation read project data, and the worker message boundary serializes the simulation payload; this removes the extra main-thread project copy before those steps. The 5,000-part/4,999-wire fixture's removed full-project clone measured 11.28 ms median / 12.43 ms max in the existing nine-run Node microbenchmark. This is not a direct measurement of simulation startup latency or browser peak memory. Firefox verifies the starter circuit run and all eight cases of a three-parameter sweep with the local engine. No WASM rebuild was performed.
