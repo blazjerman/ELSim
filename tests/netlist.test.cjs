@@ -630,6 +630,7 @@ test('pasted PWL tables accept CSV, TSV, optional headers, and current units', (
   assert.deepEqual(parseSourcePwlText('time, voltage\n0, 0 V\n1m, 5 V').points, [{ time: '0', voltage: '0 V' }, { time: '1m', voltage: '5 V' }])
   assert.deepEqual(parseSourcePwlText('0\t0\n1m\t2m', 'current').points, [{ time: '0', current: '0' }, { time: '1m', current: '2m' }])
   assert.match(parseSourcePwlText('0, 0\n0, 1').error, /Line 2: Time must be later/)
+  assert.match(parseSourcePwlText('time, current\n0, 0\n1m, 2m', 'voltage').error, /Header must name time and voltage/)
   assert.match(parseSourcePwlText('0, 0').error, /at least two/)
 })
 

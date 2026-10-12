@@ -9,14 +9,23 @@ export function parseSourcePwlText(text: string, quantity: 'voltage' | 'current'
   | { points?: never; error: string } {
   const rows = text.split(/\r?\n/).map((line, index) => ({ line: index + 1, value: line.trim() }))
     .filter(({ value }) => value && !value.startsWith('#'))
-  if (rows.length && /^time\b/i.test(rows[0].value)) rows.shift()
+  const splitRow = (value: string) => value.includes(',') || value.includes('\t')
+    ? value.split(/[,\t]+/).map((field) => field.trim())
+    : value.match(/^(\S+)\s+(.+)$/)?.slice(1).map((field) => field.trim()) ?? []
+  if (rows.length && /^time\b/i.test(rows[0].value)) {
+    const header = splitRow(rows[0].value)
+    const timeColumn = header[0]?.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase()
+    const valueColumn = header[1]?.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase()
+    if (header.length !== 2 || timeColumn !== 'time' || !['value', quantity].includes(valueColumn ?? '')) {
+      return { error: `Header must name time and ${quantity} columns.` }
+    }
+    rows.shift()
+  }
   if (rows.length < 2) return { error: 'Paste at least two time/value rows.' }
   if (rows.length > MAX_SOURCE_PWL_POINTS) return { error: `A waveform can contain at most ${MAX_SOURCE_PWL_POINTS} points.` }
   const points: (SourcePwlPoint | CurrentSourcePwlPoint)[] = []
   for (const row of rows) {
-    const fields = row.value.includes(',') || row.value.includes('\t')
-      ? row.value.split(/[,\t]+/).map((field) => field.trim())
-      : row.value.match(/^(\S+)\s+(.+)$/)?.slice(1).map((field) => field.trim()) ?? []
+    const fields = splitRow(row.value)
     if (fields.length !== 2) return { error: `Line ${row.line} must contain a time and one ${quantity} value.` }
     points.push(quantity === 'voltage' ? { time: fields[0], voltage: fields[1] } : { time: fields[0], current: fields[1] })
   }
