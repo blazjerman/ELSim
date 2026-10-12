@@ -2204,6 +2204,16 @@ test('wire and component placement tools stay armed until cancelled', async ({ p
   await expect(page.locator('.circuit-part.selected')).toHaveCount(0)
   await page.keyboard.press('Escape')
   await expect(resistor).toHaveAttribute('aria-pressed', 'false')
+  await page.keyboard.press('C')
+  const capacitor = page.locator('.component-card').filter({ hasText: 'Capacitor' })
+  await expect(capacitor).toHaveAttribute('aria-pressed', 'true')
+  await dragOnCanvas(360, 520, 360, 560)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'C2')?.polarized)).toBe(true)
+  await dragOnCanvas(460, 520, 460, 560)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'C3')?.polarized)).toBe(true)
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(capacitor).toHaveAttribute('aria-pressed', 'false')
 })
 
 async function openComponentVoltagePlot(page: import('@playwright/test').Page, ref = 'R1') {
