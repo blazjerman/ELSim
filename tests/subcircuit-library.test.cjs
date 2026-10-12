@@ -58,6 +58,20 @@ test('project-local includes reject absolute paths and traversal as unresolved u
   assert.deepEqual(includeOnly.dependencies.missingIncludes.map(({ reference, reason }) => ({ reference, reason })), [{ reference: 'shared.lib', reason: 'missing' }])
 })
 
+test('placed models retain recursively included shared-parameter libraries', () => {
+  const analysis = analyzeModelLibraries([
+    { id: 'amplifier', filename: 'amplifier.lib', content: '.include "shared.lib"\n.SUBCKT AMP IN OUT\nR1 IN OUT {RLOAD}\n.ENDS AMP' },
+    { id: 'shared', filename: 'shared.lib', content: '.include constants.lib\n.PARAM RLOAD={BASE * 2}' },
+    { id: 'constants', filename: 'constants.lib', content: '.PARAM BASE=2k' },
+    { id: 'unused', filename: 'unused.lib', content: '.MODEL D_UNUSED D(IS=1n)' },
+  ])
+  assert.deepEqual(analysis.dependencies.resolvedIncludes.map(({ assetId, targetAssetId }) => [assetId, targetAssetId]), [
+    ['amplifier', 'shared'],
+    ['shared', 'constants'],
+  ])
+  assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'AMP' }])].sort(), ['amplifier', 'constants', 'shared'])
+})
+
 test('parses ordered subcircuit pins, parameters, continuations, shared models, and multiple definitions', () => {
   const source = `* user library\n.model DFAST D(Is=1n)\n.SUBCKT amp INP INM VCC VEE OUT PARAMS: GAIN=10 R=20k TWICE={GAIN * 2}\nR1 INP OUT\n+ 10k\n D1 OUT VEE DFAST\n.ENDS amp\n.subckt buffer IN OUT\nE1 OUT 0 IN 0 1\n.ends`
   const parsed = parseSubcircuitLibrary(source)

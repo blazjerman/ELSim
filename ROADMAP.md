@@ -236,6 +236,8 @@ Imported-asset dependency guidance (2026-10-12): When placed ICs require a model
 
 Direct model-include recovery (2026-10-12): A native model dependency report with unresolved project-local `.include`/`.inc` files now opens the multi-file model picker directly. Users can select the referenced files together; ELSim still imports only user-selected text files and never reads paths from model source. Firefox UI coverage imports a parent `.SUBCKT`, follows its missing include, adds the child library, and confirms the dependency report clears. Unit tests, typecheck, and the focused Firefox workflow pass without rebuilding WASM.
 
+Included-asset retention (2026-10-12): The required-model set now follows resolved include references recursively, including libraries that provide only shared `.PARAM`/`.FUNC` definitions and nested include files. Removing an imported IC's shared definition file can no longer silently break its simulation. A domain regression checks a two-level include chain and confirms unrelated libraries remain removable.
+
 ### M3 — LTspice interoperability
 
 **M3.1 Compatibility matrix and fixtures.** Catalog supported `.asc`, `.asy`, directives, primitives, parameters, and model dialect features. Use original hand-written fixtures or files whose redistribution is permitted. Acceptance: every supported syntax item has a fixture; known unsupported items have a diagnostic.

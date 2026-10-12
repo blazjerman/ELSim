@@ -8,9 +8,10 @@ export type ModelDependencyIssue = { assetId: string; filename: string; owner: s
 export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
 export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string }
+export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number }
 export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
 export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; reason: 'missing' | 'ambiguous' | 'unsafe' }
-export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
+export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
 export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInput> = { assets: { asset: T; parsed: ParsedSubcircuitLibrary }[]; dependencies: ModelDependencyAnalysis }
 
@@ -519,7 +520,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     }
   }
   const missing: ModelDependencyIssue[] = [], resolved: ResolvedModelDependency[] = []
-  const missingIncludes: ModelIncludeIssue[] = []
+  const missingIncludes: ModelIncludeIssue[] = [], resolvedIncludes: ResolvedModelInclude[] = []
   for (const { asset, parsed } of parsedAssets) for (const include of parsed.includes) {
     if (!include.filename) {
       missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: 'unsafe' })
@@ -527,6 +528,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     }
     const matches = parsedAssets.filter(({ asset: candidate }) => candidate.filename.split(/[\\/]/).at(-1)?.toLowerCase() === include.filename!.toLowerCase())
     if (matches.length !== 1) missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: matches.length ? 'ambiguous' : 'missing' })
+    else resolvedIncludes.push({ assetId: asset.id, targetAssetId: matches[0].asset.id, reference: include.reference, sourceLine: include.sourceLine })
   }
   const graph = new Map<string, Set<string>>()
   for (const { asset, parsed } of parsedAssets) for (const dependency of parsed.dependencies) {
@@ -560,7 +562,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   }
   for (const name of subcircuits.keys()) visit(name)
   const conflicts = [...definitionLocations.values()].filter((conflict) => conflict.definitions.length > 1)
-  return { missing, missingIncludes, recursiveChains, resolved, conflicts, subcircuitAssets, deviceModelAssets }
+  return { missing, missingIncludes, recursiveChains, resolved, resolvedIncludes, conflicts, subcircuitAssets, deviceModelAssets }
 }
 
 /** Resolve references between imported libraries and report missing cards and recursive .SUBCKT chains. */
@@ -570,23 +572,32 @@ export function analyzeModelDependencies(assets: ModelLibraryInput[]): ModelDepe
 
 /** Return the imported libraries required by schematic instances, including transitive dependencies. */
 export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: { kind: string; modelName?: string; deviceModel?: string }[]): Set<string> {
-  const required = new Set<string>(), pending: string[] = []
+  const required = new Set<string>(), pending: string[] = [], pendingAssets: string[] = []
+  const addAsset = (assetId: string | undefined) => {
+    if (!assetId || required.has(assetId)) return
+    required.add(assetId)
+    pendingAssets.push(assetId)
+  }
   for (const part of parts) {
     if (part.kind === 'subcircuit' && part.modelName) {
       const name = part.modelName.toLowerCase(), assetId = analysis.subcircuitAssets.get(name)
-      if (assetId) { required.add(assetId); pending.push(name) }
+      if (assetId) { addAsset(assetId); pending.push(name) }
     } else if (part.deviceModel) {
-      const assetId = analysis.deviceModelAssets.get(part.deviceModel.toLowerCase())
-      if (assetId) required.add(assetId)
+      addAsset(analysis.deviceModelAssets.get(part.deviceModel.toLowerCase()))
     }
   }
   const visited = new Set<string>()
-  while (pending.length) {
+  while (pending.length || pendingAssets.length) {
+    const assetId = pendingAssets.pop()
+    if (assetId) {
+      for (const include of analysis.resolvedIncludes) if (include.assetId === assetId) addAsset(include.targetAssetId)
+      continue
+    }
     const owner = pending.pop()!
     if (visited.has(owner)) continue
     visited.add(owner)
     for (const dependency of analysis.resolved) if (dependency.owner.toLowerCase() === owner) {
-      required.add(dependency.targetAssetId)
+      addAsset(dependency.targetAssetId)
       if (dependency.kind === 'subcircuit') pending.push(dependency.modelName.toLowerCase())
     }
   }
