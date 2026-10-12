@@ -1,6 +1,25 @@
 import { componentPins } from './geometry'
 import type { Project, ProjectSheet } from './project'
 
+/** Rename a sheet and keep all placed instances' visible names in sync. */
+export function renameSheetDefinition(project: Project, sheetId: string, requestedName: string): Project {
+  const definition = project.sheets.find((sheet) => sheet.id === sheetId)
+  if (!definition) throw new Error(`Sheet ${sheetId} does not exist.`)
+  const name = requestedName.trim()
+  if (!name || name.length > 80) throw new Error('Sheet names must contain 1–80 characters.')
+  if (project.sheets.some((sheet) => sheet.id !== sheetId && sheet.parentSheetId === definition.parentSheetId && sheet.name.trim().toLowerCase() === name.toLowerCase())) {
+    throw new Error(`Sheet name ${name} is already used in this hierarchy.`)
+  }
+  const sheets = project.sheets.map((sheet) => {
+    const renamed = sheet.id === sheetId ? { ...sheet, name } : sheet
+    const hasInstances = sheet.parts.some((part) => part.sheetId === sheetId)
+    if (!hasInstances) return renamed
+    return { ...renamed, parts: renamed.parts.map((part) => part.sheetId === sheetId ? { ...part, value: name } : part) }
+  })
+  const active = sheets.find((sheet) => sheet.id === project.activeSheetId)!
+  return { ...project, sheets, parts: active.parts, wires: active.wires, junctions: active.junctions, netLabels: active.netLabels, view: active.view }
+}
+
 /** Update a reusable sheet interface and all of its instances as one project edit. */
 export function updateSheetDefinition(
   project: Project,

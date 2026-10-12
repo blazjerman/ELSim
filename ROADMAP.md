@@ -443,3 +443,5 @@ Model-library parser follow-up (2026-10-12): Section inspection now returns the 
 Large-circuit model-check follow-up (2026-10-12): Circuit Checks now parse each imported model library once per check and reuse the resulting device-model name set across root and reachable child-sheet parts. Missing-model warnings and invalid-library handling are unchanged; the previous path reparsed every library for every model-assigned component.
 
 Shared-net check follow-up (2026-10-12): Circuit Checks now append terminal references to per-net arrays in place in both root and reachable child sheets, avoiding repeated copies when many component pins share a net. Floating-terminal and orphan-wire classification is unchanged.
+
+Hierarchy usability follow-up (2026-10-12): Sheet settings now allow renaming the root or a child sheet. Names are trimmed, limited to the project’s 80-character schema bound, and checked for case-insensitive sibling collisions. Every placed instance updates its visible block name while stable sheet IDs and generated model names preserve circuit identity; domain and Firefox UI regressions cover propagation, netlisting, and duplicate rejection.

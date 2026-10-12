@@ -10,7 +10,7 @@ const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { hierarchyNodeVector, hierarchyComponentCurrentVector } = require(path.join(build, 'domain/hierarchyProbe.js'))
 const { preferredSheetInstancePath } = require(path.join(build, 'domain/hierarchyNavigation.js'))
-const { updateSheetDefinition } = require(path.join(build, 'domain/sheetDefinition.js'))
+const { renameSheetDefinition, updateSheetDefinition } = require(path.join(build, 'domain/sheetDefinition.js'))
 
 test('current-source probes use ngspice current parameters in root and nested sheets', () => {
   const project = createCurrentSourceExampleProject()
@@ -55,6 +55,31 @@ function createBlockProject() {
   ]
   return project
 }
+
+test('renaming a reusable sheet updates every placed block without changing its electrical identity', () => {
+  const project = createBlockProject()
+  project.sheets.push({
+    id: 'sheet-nested-parent', name: 'Parent', parentSheetId: project.rootSheetId,
+    parts: [{ id: 'nested-block', kind: 'subcircuit', ref: 'XCHILD', value: 'Load', modelName: sheetModelName('sheet-load'), modelPins: ['IN', 'OUT'], sheetId: 'sheet-load', x: 500, y: 300, rotation: 0 }],
+    wires: [], junctions: [], netLabels: [], ports: [], view: { zoom: 1, panX: 0, panY: 0 },
+  })
+  const renamed = renameSheetDefinition(project, 'sheet-load', '  Power stage  ')
+  assert.equal(renamed.sheets.find((sheet) => sheet.id === 'sheet-load').name, 'Power stage')
+  assert.equal(renamed.sheets[0].parts.find((part) => part.id === 'root-block').value, 'Power stage')
+  assert.equal(renamed.sheets.find((sheet) => sheet.id === 'sheet-nested-parent').parts[0].value, 'Power stage')
+  assert.equal(renamed.sheets.find((sheet) => sheet.id === 'sheet-nested-parent').parts[0].modelName, sheetModelName('sheet-load'))
+  assert.equal(project.sheets.find((sheet) => sheet.id === 'sheet-load').name, 'Load')
+  assert.doesNotThrow(() => validateProject(renamed))
+  assert.match(createNetlistArtifact(renamed).text, /\.SUBCKT ELSIM_SHEET_sheet_load/)
+})
+
+test('sheet rename rejects empty, oversized, and duplicate sibling names', () => {
+  const project = createBlockProject()
+  project.sheets.push({ id: 'sheet-other', name: 'Other', parentSheetId: project.rootSheetId, parts: [], wires: [], junctions: [], netLabels: [], ports: [], view: { zoom: 1, panX: 0, panY: 0 } })
+  assert.throws(() => renameSheetDefinition(project, 'sheet-load', '  '), /1–80 characters/)
+  assert.throws(() => renameSheetDefinition(project, 'sheet-load', 'X'.repeat(81)), /1–80 characters/)
+  assert.throws(() => renameSheetDefinition(project, 'sheet-load', 'other'), /already used in this hierarchy/)
+})
 
 test('editing a reused sheet definition updates instance pins and keeps surviving wires attached', () => {
   const project = createBlockProject()

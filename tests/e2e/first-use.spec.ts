@@ -4412,6 +4412,26 @@ test('LTspice model compatibility check warns about limit() clamp semantics', { 
   await expect(warning).toContainText('missing function or an argument-count mismatch')
 })
 
+test('@ui-smoke reusable sheets can be renamed and reject duplicate sibling names', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 1')
+  await page.getByRole('button', { name: 'Sheet ports and block settings' }).click()
+  await page.getByLabel('Sheet name').fill('Power stage')
+  await page.getByRole('button', { name: 'Rename sheet' }).click()
+  await expect(page.locator('.sheet-tab.active')).toContainText('Power stage')
+  await expect(page.locator('#sheet-settings-title')).toHaveText('Power stage ports and parameters')
+  await page.getByRole('button', { name: 'Done' }).click()
+
+  await page.locator('.sheet-tab').first().click()
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await page.getByRole('button', { name: 'Sheet ports and block settings' }).click()
+  await page.getByLabel('Sheet name').fill('Power stage')
+  await page.getByRole('button', { name: 'Rename sheet' }).click()
+  await expect(page.getByRole('alert')).toContainText('already used in this hierarchy')
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 2')
+})
+
 test('creating a child sheet can be undone and redone', async ({ page }) => {
   await page.goto('/')
   const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })
