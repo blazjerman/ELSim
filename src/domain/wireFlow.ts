@@ -10,6 +10,7 @@ type Injection = { value?: number; ignored?: boolean }
 type FlowPin = { part: Part; pinIndex: number; key: string }
 type FlowComponent = {
   start: string
+  nodes: Set<string>
   edges: Set<FlowEdge>
   bridges: Set<FlowEdge>
   parent: Map<string, string | null>
@@ -190,22 +191,38 @@ export function createWireCurrentFlowSampler(
         order.push(neighbor)
       }
     }
-    components.push({ start, edges: componentEdges, bridges, parent, parentEdge, order })
+    components.push({ start, nodes, edges: componentEdges, bridges, parent, parentEdge, order })
+  }
+
+  const componentByNode = new Map<string, number>()
+  const pinsByComponent = components.map(() => [] as FlowPin[])
+  components.forEach(({ nodes }, index) => nodes.forEach((node) => componentByNode.set(node, index)))
+  for (const flowPin of flowPins) {
+    const componentIndex = componentByNode.get(flowPin.key)
+    if (componentIndex !== undefined) pinsByComponent[componentIndex].push(flowPin)
   }
 
   return (currentForPart, currentForPin, wireIds) => {
     const requestedWires = wireIds ? project.wires.filter((wire) => wireIds.has(wire.id)) : project.wires
     const result = new Map(requestedWires.map((wire) => [wire.id, [] as WireCurrentFlowSegment[]]))
+    const requestedComponents = new Set<number>()
+    for (const wire of requestedWires) for (const edge of edgesByWire.get(wire.id) ?? []) {
+      const componentIndex = componentByNode.get(edge.from)
+      if (componentIndex !== undefined) requestedComponents.add(componentIndex)
+    }
     const injections = new Map<string, Injection[]>()
-    for (const { part, pinIndex, key } of flowPins) {
-      const injection = knownPinInjection(part, pinIndex, currentForPart, currentForPin)
-      const atNode = injections.get(key)
-      if (atNode) atNode.push(injection)
-      else injections.set(key, [injection])
+    for (const componentIndex of requestedComponents) {
+      for (const { part, pinIndex, key } of pinsByComponent[componentIndex]) {
+        const injection = knownPinInjection(part, pinIndex, currentForPart, currentForPin)
+        const atNode = injections.get(key)
+        if (atNode) atNode.push(injection)
+        else injections.set(key, [injection])
+      }
     }
 
     const edgeFlows = new Map<FlowEdge, WireCurrentFlowSegment>()
-    for (const { start, edges: componentEdges, bridges, parent, parentEdge, order } of components) {
+    for (const componentIndex of requestedComponents) {
+      const { start, edges: componentEdges, bridges, parent, parentEdge, order } = components[componentIndex]
       const subtree = new Map<string, { sum: number; unknown: number; count: number }>()
       const summarizeNode = (node: string) => {
         let sum = 0, unknown = 0, count = 0

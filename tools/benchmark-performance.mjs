@@ -199,6 +199,7 @@ try {
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
   const { componentPins } = build(path.join(output, 'domain/geometry.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
+  const { createWireCurrentFlowSampler } = build(path.join(output, 'domain/wireFlow.js'))
   const { checkCircuit } = build(path.join(output, 'domain/electricalCheck.js'))
   const { createNetlistArtifact } = build(path.join(output, 'engine/netlist.js'))
   const { extremaIndices } = build(path.join(output, 'engine/plot.js'))
@@ -269,6 +270,24 @@ try {
     if (connectivity.value.pinNets.size !== count * 2) throw new Error(`Wire-heavy benchmark fixture ${count} lost one or more component pins in connectivity analysis.`)
     const wireSegments = project.wires.reduce((sum, wire) => sum + wire.points.length - 1, 0)
     if (wireSegments !== project.wires.length || project.wires.some((wire) => wire.points.length !== 2)) throw new Error(`Wire-heavy benchmark fixture ${count} must use independent two-endpoint wire segments.`)
+    let wireFlowSampling
+    if (count === 5_000) {
+      const sampler = createWireCurrentFlowSampler(project, connectivity.value)
+      const visibleWireIds = new Set(project.wires.slice(0, 20).map((wire) => wire.id))
+      const currentForPart = (part) => part.kind === 'resistor' ? 0.001 : undefined
+      const full = measure(() => sampler(currentForPart), 1, 3)
+      const visible = measure(() => sampler(currentForPart, undefined, visibleWireIds), 1, 3)
+      if (visible.value.size !== visibleWireIds.size) throw new Error('Visible wire-current sampling omitted a requested wire.')
+      for (const id of visibleWireIds) {
+        if (JSON.stringify(visible.value.get(id)) !== JSON.stringify(full.value.get(id))) throw new Error(`Visible wire-current sample changed the full-circuit result for ${id}.`)
+      }
+      wireFlowSampling = {
+        wireNetworks: project.wires.length,
+        requestedWires: visibleWireIds.size,
+        allNetworks: { medianMs: full.medianMs, p95Ms: full.p95Ms },
+        visibleNetworks: { medianMs: visible.medianMs, p95Ms: visible.p95Ms },
+      }
+    }
     wireResults.push({
       resistors: count,
       parts: project.parts.length,
@@ -280,6 +299,7 @@ try {
       netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
       circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
       fullCircuitChecks: { medianMs: fullCircuitChecks.medianMs, p95Ms: fullCircuitChecks.p95Ms },
+      ...(wireFlowSampling ? { wireFlowSampling } : {}),
     })
   }
 
@@ -357,7 +377,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 5,
+    benchmarkVersion: 6,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,

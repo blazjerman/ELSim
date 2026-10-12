@@ -38,6 +38,26 @@ test('a precomputed wire sampler updates flow values across playback samples', (
   assert.deepEqual(visibleOnly.get('w-1'), second.get('w-1'))
 })
 
+test('visible-wire sampling skips disconnected wire networks but keeps their full-circuit results', () => {
+  const project = createStarterProject()
+  const disconnectedResistor = { id: 'p-r-disconnected', kind: 'resistor', ref: 'R-disconnected', value: '1k', x: 1200, y: 800, rotation: 0 }
+  const [leftPin] = componentPins(disconnectedResistor)
+  project.parts.push(disconnectedResistor)
+  project.wires.push({ id: 'w-disconnected', points: [[leftPin.x - 30, leftPin.y], [leftPin.x, leftPin.y]] })
+  const connectivity = analyzeConnectivity(project)
+  const sample = createWireCurrentFlowSampler(project, connectivity)
+  const currentForPart = (part) => ({ V1: -0.005, R1: 0.005, C1: 0.005, 'R-disconnected': 0.002 })[part.ref]
+  const visiblePartRefs = []
+  const visible = sample((part) => { visiblePartRefs.push(part.ref); return currentForPart(part) }, undefined, new Set(['w-1']))
+  assert.deepEqual([...visible.keys()], ['w-1'])
+  assert.deepEqual(visible.get('w-1'), sample(currentForPart).get('w-1'))
+  assert.equal(visiblePartRefs.includes('R-disconnected'), false)
+  const allPartRefs = []
+  const all = sample((part) => { allPartRefs.push(part.ref); return currentForPart(part) })
+  assert.equal(allPartRefs.includes('R-disconnected'), true)
+  assert.deepEqual(all.get('w-disconnected'), [{ points: [[1120, 800], [1150, 800]], forward: true, magnitude: 0.002 }])
+})
+
 test('a parallel branch splits trunk animation into sections with their own currents', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'p-r2', kind: 'resistor', ref: 'R2', value: '2 kΩ', x: 500, y: 200, rotation: 0 })
