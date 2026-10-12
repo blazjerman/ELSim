@@ -210,6 +210,23 @@ test('hierarchy probes map internal nodes through an instance path and ports to 
   assert.match(repeatedDeck, /^\.save @r\.xload2\.rload1\[i\]$/mi)
 })
 
+test('nested transformer winding currents retain instance-scoped transient saves', () => {
+  const project = createBlockProject()
+  const child = project.sheets[1]
+  const transformer = { id: 'child-transformer', kind: 'transformer', ref: 'T1', value: '1 H', x: 500, y: 300, rotation: 0 }
+  child.parts.push(transformer)
+  child.netLabels.push(...componentPins(transformer).map((pin, index) => ({
+    id: `child-transformer-pin-${index}`,
+    name: ['IN', '0', 'OUT', '0'][index],
+    x: pin.x,
+    y: pin.y,
+    visible: true,
+  })))
+  const deck = createNetlistArtifact(validateProject(project)).text
+  assert.match(deck, /^\.save i\(l\.xload\.t1_p\)$/mi)
+  assert.match(deck, /^\.save i\(l\.xload\.t1_s\)$/mi)
+})
+
 
 test('sheet port side and direction metadata controls ordered block pin geometry', () => {
   const project = createBlockProject()

@@ -45,6 +45,12 @@ test('AC result control avoids unsupported capacitor and inductor branch-current
   assert.match(ac, /ac dec 20 10 1meg\nwrite \/result\.raw all/)
 })
 
+test('AC result control removes generated hierarchy current saves so node voltages remain available', () => {
+  const ac = addResultControl('.save i(l.x1_t1_p)\n.save i(l.x1_t1_s)\nV1 in 0 AC 1\n.ac dec 20 10 1meg\n.end')
+  assert.doesNotMatch(ac, /^\.save\b/m)
+  assert.match(ac, /ac dec 20 10 1meg\nwrite \/result\.raw all/)
+})
+
 test('noise result control selects the spectral density plot before writing raw data', () => {
   const control = addResultControl('V1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 10u\n.noise V(out) V1 dec 10 1 100k\n.end')
   assert.doesNotMatch(control, /^\.save\b/m)

@@ -123,5 +123,8 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   } else commands.push(analysisCommand, ...(/^(?:tran)\b/i.test(analysisCommand) ? measurements.map((measurement) => measurementCommand(measurement)).filter((command): command is string => Boolean(command)) : []), ...(analysisType === 'noise' ? ['setplot noise1'] : []), 'write /result.raw all')
   commands.push('quit', '.endc', '.end')
   rows.splice(endLine, 1, ...waveformParameterRows, ...measurementRows, ...save, ...commands)
+  if (analysisType === 'ac' || analysisType === 'noise') {
+    for (let index = rows.length - 1; index >= 0; index -= 1) if (/^\s*\.save\b/i.test(rows[index])) rows.splice(index, 1)
+  }
   return rows.join('\n') + '\n'
 }

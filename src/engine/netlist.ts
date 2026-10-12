@@ -370,7 +370,10 @@ function hierarchicalSaveVectors(project: Project): string[] {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
       const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmos' || part.kind === 'pmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
-      if (part.kind === 'potentiometer') {
+      if (part.kind === 'transformer') {
+        saves.add(`.save i(l.${device}_p)`)
+        saves.add(`.save i(l.${device}_s)`)
+      } else if (part.kind === 'potentiometer') {
         saves.add(`.save @r.${[...path, `${part.ref.toLowerCase()}_a`].join('.')}[i]`)
         saves.add(`.save @r.${[...path, `${part.ref.toLowerCase()}_b`].join('.')}[i]`)
       } else if (part.kind === 'source') saves.add(`.save i(${type}.${device})`)
