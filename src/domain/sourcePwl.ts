@@ -1,6 +1,7 @@
 import type { CurrentSourcePwlPoint, SourcePwlPoint } from './project'
 
 export const MAX_SOURCE_PWL_POINTS = 256
+export const MAX_FINITE_PWL_POINTS = 32
 
 const scaleBySuffix: Record<string, number> = { meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 }
 

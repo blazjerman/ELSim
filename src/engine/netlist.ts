@@ -3,7 +3,7 @@ import type { Connectivity } from '../domain/connectivity'
 import { sheetModelName, type Part, type PartKind, type Project } from '../domain/project'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
-import { MAX_SOURCE_PWL_POINTS, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
+import { MAX_FINITE_PWL_POINTS, MAX_SOURCE_PWL_POINTS, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
 import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import type { NetlistArtifact, NetlistSource } from './contract'
@@ -228,9 +228,9 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
         add('pwlPoints', `${part.ref} ${pointErrors![errorIndex]}`, part.id, `${fieldName}.${pointIndex}.${valueField ? quantity : 'time'}`)
       }
       if (part.pwlRepeatCount !== undefined) {
-        const maximum = Math.floor((32 - points.length) / (points.length - 1)) + 1
+        const maximum = Math.floor((MAX_FINITE_PWL_POINTS - points.length) / (points.length - 1)) + 1
         if (!Number.isInteger(part.pwlRepeatCount) || part.pwlRepeatCount < 1 || part.pwlRepeatCount > 31 || part.pwlRepeatCount > maximum) {
-          add('pwlPoints', `${part.ref} finite PWL repeat count exceeds the 32-point expanded-table limit.`, part.id, 'pwl.repeatCount')
+          add('pwlPoints', `${part.ref} finite PWL repeat count exceeds the ${MAX_FINITE_PWL_POINTS}-point expanded-table limit.`, part.id, 'pwl.repeatCount')
         } else {
           const boundary = validateSourcePwlRepeatBoundary(pointValues, part.pwlRepeatCount, quantity)
           if (boundary) add('pwlPoints', `${part.ref} ${boundary}`, part.id, 'pwl.repeatCount')

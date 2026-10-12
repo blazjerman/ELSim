@@ -634,6 +634,9 @@ test('native PWL source accepts 256 points and rejects more', () => {
   let artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^V1 .* PWL\(0u 0 1u 1/m)
+  source.pwlRepeatCount = 2
+  assert.match(validateAnalysisSettings(project)[0].message, /32-point expanded-table limit/)
+  delete source.pwlRepeatCount
   source.pwl.push({ time: '256u', voltage: '0 V' })
   artifact = createNetlistArtifact(project)
   assert.match(artifact.diagnostics[0].message, /2–256 points/)
