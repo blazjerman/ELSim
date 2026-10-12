@@ -222,6 +222,22 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   await expect(cards).toHaveCount(23)
 })
 
+test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await resistor.focus()
+  await page.keyboard.press('Shift+F10')
+  const menu = page.getByRole('menu', { name: 'Options for R1' })
+  const actions = menu.getByRole('menuitem')
+  await expect(menu).toBeVisible()
+  await expect(actions.first()).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(actions.nth(1)).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(resistor).toBeFocused()
+})
+
 test('LTspice parameter arithmetic imports while unsupported expressions are preserved and reported', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()

@@ -134,7 +134,7 @@ const CanvasNetLabel = memo(function CanvasNetLabel({ label, selected, tool, onP
   onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void
   onSelect: (id: string, additive?: boolean) => void
 }) {
-  return <g data-net-label-id={label.id} className={`canvas-label${selected ? ' selected' : ''}`} role="button" tabIndex={0} aria-label={`Net label ${label.name}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onKeyDown={(event) => {
+  return <g data-net-label-id={label.id} className={`canvas-label${selected ? ' selected' : ''}`} role="button" tabIndex={0} aria-label={`Net label ${label.name}`} aria-pressed={selected} aria-keyshortcuts="Enter Space ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onKeyDown={(event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault(); event.stopPropagation(); onSelect(label.id)
   }} onPointerDown={(event) => onPointerDown(event, label.id)} onClick={(event) => {
@@ -322,7 +322,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     ? `${part.ref}, ${kindNames[part.kind]}, switch ${part.value.toLowerCase()}${selected ? ', selected' : ''}`
     : `${part.ref}, ${kindNames[part.kind]}, ${part.value || 'no value'}${selected ? ', selected' : ''}`
   const showDetails = detailed || Boolean(symbol)
-  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} data-polarized={part.polarized ? 'true' : undefined} data-visual-detail={showDetails ? 'full' : 'compact'} role="button" tabIndex={focusable ? 0 : -1} aria-label={`${accessibilityLabel}${part.kind === 'capacitor' && part.polarized ? ', polarized, pin 1 positive' : ''}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onKeyDown={(event) => {
+  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} data-polarized={part.polarized ? 'true' : undefined} data-visual-detail={showDetails ? 'full' : 'compact'} role="button" tabIndex={focusable ? 0 : -1} aria-label={`${accessibilityLabel}${part.kind === 'capacitor' && part.polarized ? ', polarized, pin 1 positive' : ''}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space ContextMenu Shift+F10" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onKeyDown={(event) => {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); onNavigate(part.id, event.key); return }
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
@@ -560,7 +560,7 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
   onHover: (id?: string) => void
 }) {
   const [[x1, y1], [x2, y2]] = wire.points
-  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}`} aria-pressed={selected} aria-keyshortcuts="Enter Space Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
+  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}`} aria-pressed={selected} aria-keyshortcuts="Enter Space ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="14" strokeLinecap="round"/>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round"/>
     {flow.map((segment, index) => {
@@ -689,6 +689,8 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const [hoveredWireId, setHoveredWireId] = useState<string>()
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | { kind: 'label'; id: string; x: number; y: number; node?: string } | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+  const contextMenuReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
   useLayoutEffect(() => {
     const element = svg.current
@@ -705,7 +707,12 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   }, [])
   useEffect(() => {
     if (!contextMenu) return
-    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setContextMenu(null) }
+    contextMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled), select:not(:disabled)')?.focus()
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setContextMenu(null)
+      contextMenuReturnFocusRef.current?.focus()
+    }
     window.addEventListener('keydown', close)
     return () => window.removeEventListener('keydown', close)
   }, [contextMenu])
@@ -1210,8 +1217,17 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       <div className="canvas-toolset"><IconButton title="Select and move (M)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => { onClearPendingComponent(); setSelectedWireId(null); setTool('wire'); setNotice('Wire selected. Drag anywhere on the grid to place one segment.') }}><Cable size={16}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (?)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (=)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(project.view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize))}><Scan size={15}/></IconButton></div>
       <div className="canvas-status"><span className="status-dot"/> {tool === 'wire' ? 'Drag anywhere on the grid to place a wire' : tool === 'probe' ? 'Click a wire or component to add a trace' : tool === 'junction' ? 'Click a crossing to connect or disconnect it' : 'Drag blank space L→R to contain-select, R→L to touch-select · Ctrl/⌘+A selects all components and wires · Shift-click adds/removes · drag to move · Space or middle-drag to pan'} <span className="status-separator">·</span> Grid 10 px</div>
     </div>
-    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire segments and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event); beginBoxSelection(event) }} onPointerMove={(event) => { moveDrag(event); const target = event.target instanceof Element ? event.target : null; if (!target?.closest('.wire-line, .wire-endpoint-handles')) setHoveredWireId(undefined) }} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onContextMenu={(event) => {
+    <svg ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire segments and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event); beginBoxSelection(event) }} onPointerMove={(event) => { moveDrag(event); const target = event.target instanceof Element ? event.target : null; if (!target?.closest('.wire-line, .wire-endpoint-handles')) setHoveredWireId(undefined) }} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onKeyDown={(event) => {
+      const target = event.target instanceof Element ? event.target.closest<SVGElement>('[data-part-id], [data-wire-id], [data-net-label-id]') : null
+      if (!target || !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) return
       event.preventDefault()
+      event.stopPropagation()
+      contextMenuReturnFocusRef.current = target
+      const bounds = target.getBoundingClientRect()
+      target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2 }))
+    }} onContextMenu={(event) => {
+      event.preventDefault()
+      contextMenuReturnFocusRef.current = document.activeElement instanceof HTMLElement || document.activeElement instanceof SVGElement ? document.activeElement : null
       const element = event.target instanceof Element ? event.target : null
       const partElement = element?.closest<SVGGElement>('[data-part-id]')
       const wireElement = element?.closest<SVGGElement>('[data-wire-id]')
@@ -1278,7 +1294,15 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
       <CircuitPartLayer parts={project.parts} symbolsById={symbolsById} tool={tool} animationRevision={animationRevision} componentSample={samplePart} onSelect={selectPart} onPointerDown={beginPartDrag} onNavigate={navigateFocusedPart} onProbe={probePart} onSwitchToggle={togglePart} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       {hoveredWire && tool === 'select' && <g className="wire-endpoint-handles" aria-label="Wire endpoints" onPointerEnter={() => setHoveredWireId(hoveredWire.id)}>{([0, 1] as const).map((index) => <circle key={index} cx={hoveredWire.points[index][0]} cy={hoveredWire.points[index][1]} r="7" onPointerDown={(event) => beginWirePointDrag(event, hoveredWire.id, index)} onClick={(event) => event.stopPropagation()}><title>Drag this wire endpoint</title></circle>)}</g>}
     </svg>
-    {contextMenu && <div className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : contextMenu.kind === 'label' ? `Options for net ${project.netLabels.find((label) => label.id === contextMenu.id)?.name ?? ''}` : contextMenu.kind === 'wire' ? 'Wire options' : 'Schematic options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+    {contextMenu && <div ref={contextMenuRef} className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : contextMenu.kind === 'label' ? `Options for net ${project.netLabels.find((label) => label.id === contextMenu.id)?.name ?? ''}` : contextMenu.kind === 'wire' ? 'Wire options' : 'Schematic options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
+      const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled), select:not(:disabled)')]
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setContextMenu(null); contextMenuReturnFocusRef.current?.focus(); return }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) || items.length === 0) return
+      event.preventDefault()
+      const index = items.indexOf(document.activeElement as HTMLButtonElement)
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+      items[next].focus()
+    }}>
       {contextPart ? <>
         <div className="context-menu-heading">{contextPart.ref} · {kindNames[contextPart.kind]}</div>
         {contextPinNames.length === 2 && <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 0, 1); setContextMenu(null) }}>Plot voltage across {contextPinNames[0]} → {contextPinNames[1]}</button>}
