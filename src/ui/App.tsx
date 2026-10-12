@@ -429,21 +429,22 @@ function SimulationPlaybackControls({ axis, available, running, onRunningChange 
   </div>
 }
 
+function clampPlotPanelBounds(bounds: PlotPanel['bounds']): PlotPanel['bounds'] {
+  const width = Math.max(280, Math.min(bounds.width, window.innerWidth - 16))
+  const height = Math.max(160, Math.min(bounds.height, window.innerHeight - 16))
+  return { x: Math.max(8 - width, Math.min(window.innerWidth - 48, bounds.x)), y: Math.max(8, Math.min(window.innerHeight - 48, bounds.y)), width, height }
+}
+
 function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onActivate, children }: { panel: PlotPanel; index: number; title: string; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onActivate: () => void; children: ReactNode }) {
   const ref = useRef<HTMLElement>(null)
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   useEffect(() => {
-    const clamp = (bounds: PlotPanel['bounds']) => {
-      const width = Math.max(280, Math.min(bounds.width, window.innerWidth - 16))
-      const height = Math.max(160, Math.min(bounds.height, window.innerHeight - 16))
-      return { x: Math.max(8 - width, Math.min(window.innerWidth - 48, bounds.x)), y: Math.max(8, Math.min(window.innerHeight - 48, bounds.y)), width, height }
-    }
-    const initial = clamp(panel.bounds)
+    const initial = clampPlotPanelBounds(panel.bounds)
     if (initial.x !== panel.bounds.x || initial.y !== panel.bounds.y || initial.width !== panel.bounds.width || initial.height !== panel.bounds.height) onBoundsChange(initial)
     const saveSize = () => {
       const rect = ref.current?.getBoundingClientRect()
       if (!rect) return
-      const next = clamp({ ...panel.bounds, width: rect.width, height: rect.height })
+      const next = clampPlotPanelBounds({ ...panel.bounds, width: rect.width, height: rect.height })
       if (next.width !== panel.bounds.width || next.height !== panel.bounds.height) onBoundsChange(next)
     }
     const observer = new ResizeObserver(saveSize)
@@ -451,17 +452,34 @@ function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onAct
     const move = (event: globalThis.PointerEvent) => {
       if (!drag.current) return
       const { x, y, left, top } = drag.current
-      onBoundsChange(clamp({ ...panel.bounds, x: left + event.clientX - x, y: top + event.clientY - y }))
+      onBoundsChange(clampPlotPanelBounds({ ...panel.bounds, x: left + event.clientX - x, y: top + event.clientY - y }))
     }
     const up = () => { drag.current = null }
-    const resize = () => onBoundsChange(clamp(panel.bounds))
+    const resize = () => onBoundsChange(clampPlotPanelBounds(panel.bounds))
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('resize', resize)
     return () => { observer.disconnect(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('resize', resize) }
   }, [panel.bounds, onBoundsChange])
   return <section ref={ref} data-plot-panel-id={panel.id} className="plot-window additional-plot-window" role="dialog" aria-label={title} style={{ left: panel.bounds.x, top: panel.bounds.y, width: panel.bounds.width, height: panel.bounds.height, zIndex: 9 + index }} onPointerDownCapture={onActivate}>
-    <div className="plot-window-title" title="Drag to move this waveform window" onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> {title}</span><span><button aria-label={`Close ${title}`} title="Close waveform window" onClick={onClose}><X size={14}/></button></span></div>
+    <div className="plot-window-title" role="group" aria-label={`Move and resize ${title}. Drag or use arrow keys to move; hold Shift with an arrow key to resize.`} aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight" tabIndex={0} title="Drag or use arrow keys to move this waveform window; Shift+arrow keys resize it" onKeyDown={(event) => {
+      if (event.target !== event.currentTarget || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return
+      event.preventDefault()
+      const step = event.shiftKey ? 20 : 10
+      const bounds = { ...panel.bounds }
+      if (event.shiftKey) {
+        if (event.key === 'ArrowRight') bounds.width += step
+        else if (event.key === 'ArrowLeft') bounds.width -= step
+        else if (event.key === 'ArrowDown') bounds.height += step
+        else bounds.height -= step
+      } else {
+        if (event.key === 'ArrowRight') bounds.x += step
+        else if (event.key === 'ArrowLeft') bounds.x -= step
+        else if (event.key === 'ArrowDown') bounds.y += step
+        else bounds.y -= step
+      }
+      onBoundsChange(clampPlotPanelBounds(bounds))
+    }} onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> {title}</span><span><button aria-label={`Close ${title}`} title="Close waveform window" onClick={onClose}><X size={14}/></button></span></div>
     <div className="plot-window-content">{children}</div>
   </section>
 }

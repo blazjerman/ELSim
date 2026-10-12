@@ -1556,6 +1556,32 @@ async function openComponentVoltagePlot(page: import('@playwright/test').Page, r
   return plotWindow
 }
 
+test('floating waveform windows can be moved and resized from the keyboard', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /Plot voltage across pin1/ }).click()
+  const destination = page.getByRole('dialog', { name: 'V(R1)' })
+  await destination.getByRole('radio', { name: /New waveform window/ }).check()
+  await destination.getByRole('button', { name: 'Open waveform' }).click()
+
+  const plotWindow = page.locator('.plot-window').last()
+  const moveHandle = plotWindow.getByRole('group', { name: /Move and resize V\(R1\)/ })
+  await expect(moveHandle).toBeVisible()
+  await expect(moveHandle).toHaveAttribute('aria-keyshortcuts', /Shift\+ArrowRight/)
+  const initial = await plotWindow.boundingBox()
+  expect(initial).not.toBeNull()
+  await moveHandle.focus()
+  await expect(moveHandle).toBeFocused()
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(async () => (await plotWindow.boundingBox())?.x).toBe(initial!.x + 10)
+  const moved = await plotWindow.boundingBox()
+  expect(moved).not.toBeNull()
+  await page.keyboard.press('Shift+ArrowDown')
+  await expect.poll(async () => (await plotWindow.boundingBox())?.height).toBe(moved!.height + 20)
+})
+
 async function openWireVoltagePlot(page: import('@playwright/test').Page, x: number, y: number) {
   const hadPlotWindow = (await page.locator('.plot-window').count()) > 0
   const point = await page.locator('svg.schematic').evaluate((node, position) => {
