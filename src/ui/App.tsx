@@ -2705,6 +2705,7 @@ export default function App() {
   }
   const endEdit = () => { editGroup.current = false }
   const partsById = useMemo(() => new Map(project.parts.map((part) => [part.id, part])), [project.parts])
+  const projectWireIds = useMemo(() => new Set(project.wires.map((wire) => wire.id)), [project.wires])
   const voltageSources = useMemo(() => project.parts.filter((part) => part.kind === 'source'), [project.parts])
   const dcSweepSources = useMemo(() => project.parts.filter((part) => part.kind === 'source' || part.kind === 'currentSource'), [project.parts])
   const activeDcSweepSource = dcSweepSources.find((part) => part.ref.toLowerCase() === (project.simulation.dcSweep?.source ?? 'V1').toLowerCase())
@@ -2749,9 +2750,9 @@ export default function App() {
   }, [partsById, selected, selectedPartIds])
   const selectedLabel = selection?.kind === 'label' ? project.netLabels.find((label) => label.id === selection.id) ?? null : null
   useEffect(() => {
-    const validIds = selectedWireIds.filter((id) => project.wires.some((wire) => wire.id === id))
+    const validIds = selectedWireIds.filter((id) => projectWireIds.has(id))
     if (validIds.length !== selectedWireIds.length) setSelectedWireIds(validIds)
-  }, [project.wires, selectedWireIds])
+  }, [projectWireIds, selectedWireIds])
   useLayoutEffect(() => {
     const selectedIds = selected && !selectedPartIdSet.has(selected.id) ? [selected.id] : selectedPartIds
     updatePartUiState(selectedIds, selected?.id ?? project.parts[0]?.id)

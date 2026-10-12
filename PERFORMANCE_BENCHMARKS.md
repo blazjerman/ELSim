@@ -361,3 +361,7 @@ Wire deletion used to rescan every remaining segment for each explicit junction.
 ### On-demand project archive code (2026-10-12)
 
 Portable project ZIP creation/parsing was moved from the initial App import into the explicit save/open handlers. The production build now emits a 6.36 KB (2.45 KB gzip) `projectArchive` chunk and reduces initial JavaScript transfer from 223.1 to 221.1 KiB gzip on the existing build budget report. The main application chunk remains 582.12 KB minified and still triggers Vite’s 500 KB warning. Firefox save-with-provenance and open-project workflows pass. This change is a measured 2.0 KiB initial-transfer reduction; it does not claim a meaningful startup-time change.
+
+### Large wire selection membership checks (2026-10-12)
+
+The editor now memoizes project wire IDs as a `Set` and filters selected IDs against it, replacing a repeated array search that could compare each selected wire against the entire project wire list. Ordering and stale-ID cleanup behavior are unchanged. Firefox Ctrl+A selection and multi-wire group-move regressions pass; no standalone timing comparison is claimed.
