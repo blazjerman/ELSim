@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
@@ -344,6 +344,18 @@ test('crossing, junction, endpoint, and branch edits recalculate topology after 
   const branched = analyzeConnectivity(project).wireNets
   assert.equal(branched.get('sequence-branch'), branched.get('sequence-h'), 'branch endpoint joins the horizontal wire')
   assert.notEqual(branched.get('sequence-branch'), branched.get('sequence-v'), 'the branch does not short to the nearby crossing wire')
+})
+
+test('junction retention keeps only points where two remaining wire segments meet', () => {
+  const junctions = [{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 20 }]
+  const wires = [
+    { id: 'horizontal', points: [[-10, 0], [10, 0]] },
+    { id: 'vertical', points: [[0, -10], [0, 10]] },
+    { id: 'branch-a', points: [[10, 10], [20, 10]] },
+    { id: 'branch-b', points: [[10, 10], [10, 20]] },
+  ]
+  assert.deepEqual(retainConnectedJunctions(junctions, wires), junctions.slice(0, 2))
+  assert.deepEqual(retainConnectedJunctions(junctions, wires.filter((wire) => wire.id !== 'vertical' && wire.id !== 'branch-b')), [])
 })
 
 test('connectivity broadphase preserves crossings on long overflow segments', () => {

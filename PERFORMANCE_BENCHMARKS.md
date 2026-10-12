@@ -353,3 +353,7 @@ Junction SVG groups now use a memoized point index and render only markers in th
 ### Large selection clipboard indexing (2026-10-12)
 
 Selected-part clipboard creation previously checked every selected pin against every wire, then checked every copied junction against every copied wire. It now queries the existing wire spatial index at each selected pin and copied junction, retaining the exact point-on-segment checks and original wire order. A local stress run with 5,000 selected resistors and 4,999 endpoint wires retained every wire and measured 16.63 ms median / 36.07 ms max across nine runs. This is a single-host current measurement, not a before/after claim or budget. The Firefox full-circuit copy/paste test confirms the selection includes all newly pasted wires and no source wire IDs; the test waits for the debounced project save before inspecting local storage.
+
+### Junction cleanup on wire deletion (2026-10-12)
+
+Wire deletion used to rescan every remaining segment for each explicit junction. It now queries a single wire spatial index and keeps the same exact segment predicate, retaining a junction only when at least two remaining segments meet there. A local fixture with 5,000 wires and 2,500 junctions retained all 2,500 junctions at 3.84 ms median / 13.59 ms max across nine runs. This is a current single-host measurement, not a before/after claim or budget. Unit coverage verifies both preserved multi-segment junctions and removal of junctions after their crossing wires are deleted.

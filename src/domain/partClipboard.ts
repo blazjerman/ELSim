@@ -1,4 +1,4 @@
-import { componentPins, createWireViewportIndex, pointOnSegment } from './geometry'
+import { componentPins, createWireViewportIndex, pointOnSegment, retainConnectedJunctions } from './geometry'
 import { analyzeModelDependencies, requiredModelAssetIds } from './subcircuitLibrary'
 import type { Part, Project, ProjectSheet } from './project'
 
@@ -114,13 +114,7 @@ export function createPartClipboard(project: Project, selectedPartIds: readonly 
   // schematic branches into a local copy operation.
   const wires = project.wires.filter((wire) => selectedWires.has(wire.id) || attachedWireIds.has(wire.id))
     .map((wire) => ({ ...wire, points: [[...wire.points[0]], [...wire.points[1]]] as [[number, number], [number, number]] }))
-  const copiedWireIndex = wires.length ? createWireViewportIndex(wires) : null
-  const junctions = project.junctions.filter((junction) => {
-    if (!copiedWireIndex) return false
-    const crossingWires = copiedWireIndex({ left: junction.x, top: junction.y, right: junction.x, bottom: junction.y })
-      .filter((wire) => pointOnSegment({ x: junction.x, y: junction.y }, { x: wire.points[0][0], y: wire.points[0][1] }, { x: wire.points[1][0], y: wire.points[1][1] }))
-    return crossingWires.length >= 2
-  }).map((junction) => ({ ...junction }))
+  const junctions = retainConnectedJunctions(project.junctions, wires)
   const definitions = new Map(project.sheets.map((sheet) => [sheet.id, sheet]))
   const copiedSheetIds = new Set<string>()
   const pending = parts.flatMap((part) => part.sheetId ? [part.sheetId] : [])

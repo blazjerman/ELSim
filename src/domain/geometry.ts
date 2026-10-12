@@ -78,6 +78,21 @@ export function createWireViewportIndex(wires: readonly Wire[], cellSize = 256, 
   return (bounds: ViewportBounds, focusedWireId?: string) => query(bounds, focusedWireId).filter((wire) => wire.id === focusedWireId || wireSegmentOverlapsBounds(wire, bounds))
 }
 
+/** Keep explicit junctions where at least two remaining wire segments meet. */
+export function retainConnectedJunctions(junctions: readonly Point[], wires: readonly Wire[]): Point[] {
+  if (wires.length < 2 || junctions.length === 0) return []
+  const wiresAtPoint = createWireViewportIndex(wires)
+  return junctions.filter((junction) => {
+    let connectedSegments = 0
+    for (const wire of wiresAtPoint({ left: junction.x, top: junction.y, right: junction.x, bottom: junction.y })) {
+      if (!pointOnSegment(junction, { x: wire.points[0][0], y: wire.points[0][1] }, { x: wire.points[1][0], y: wire.points[1][1] })) continue
+      connectedSegments += 1
+      if (connectedSegments >= 2) return true
+    }
+    return false
+  })
+}
+
 export function subcircuitPinOffsets(count: number, layout?: Part['sheetPortLayout']): [number, number][] {
   if (!Number.isInteger(count) || count < 1 || count > 64) return []
   if (layout?.length === count && layout.some((port) => port.side !== 'auto')) {

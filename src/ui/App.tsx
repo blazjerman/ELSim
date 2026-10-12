@@ -14,7 +14,7 @@ import { moveSelectedSceneObjects } from '../domain/sceneEdit'
 import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
-import { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, retainConnectedJunctions, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector } from '../domain/probe'
 import { hierarchyComponentCurrentVector, hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
@@ -3239,7 +3239,7 @@ export default function App() {
     if (!partIds.size && !wireIds.size && !labelIds.size) return
     setProject((current) => {
       const wires = current.wires.filter((wire) => !wireIds.has(wire.id))
-      const junctions = current.junctions.filter((junction) => wires.filter((wire) => pointOnSegment(junction, { x: wire.points[0][0], y: wire.points[0][1] }, { x: wire.points[1][0], y: wire.points[1][1] })).length >= 2)
+      const junctions = retainConnectedJunctions(current.junctions, wires)
       return { ...current, parts: current.parts.filter((part) => !partIds.has(part.id)), wires, junctions, netLabels: current.netLabels.filter((label) => !labelIds.has(label.id)) }
     })
     setSelection(null)
