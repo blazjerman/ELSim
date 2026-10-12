@@ -1745,6 +1745,10 @@ export default function App() {
           ? `Near 1 kHz, the primary is ${formatLessonVoltage(transformerInputAt1kHz)}. A 2:1 turns ratio predicts about ${formatLessonVoltage(transformerPredictedOutputAt1kHz ?? 0)} at the secondary. Change T1's ratio from 2 to 3 and rerun AC: V(VOUT) should rise to about 3 V.`
           : `Near 1 kHz, the ${transformerTurnsRatio}:1 ratio predicts V(VOUT) ≈ ${transformerPredictedOutputAt1kHz !== undefined ? formatLessonVoltage(transformerPredictedOutputAt1kHz) : 'not available'}; ngspice solved ${transformerOutputAt1kHz !== undefined ? formatLessonVoltage(transformerOutputAt1kHz) : 'not available'}. The ratio scales secondary voltage; the AC frequency sweep stays the same.`
       : 'Choose a positive turns ratio, then rerun AC to compare primary and secondary voltage.'
+    : exampleLesson?.id === 'transformer-current' && simulationResult
+      ? simulationResultStale
+        ? 'T1 has changed since this transient run. Rerun to refresh both winding-current arrows and compare the new current ratio.'
+        : 'For an ideal transformer, a 2:1 secondary-to-primary turns ratio gives roughly twice the secondary voltage and half the secondary current. Change T1 to 3:1, rerun, and compare the winding-current arrows or plot both winding currents. Winding resistance and leakage make the real result differ from the ideal ratio.'
     : exampleLesson?.id === 'current-controlled' && simulationResult
     ? currentControlledSenseAt25Ms !== undefined && currentControlledTransresistance !== null
       ? simulationResultStale

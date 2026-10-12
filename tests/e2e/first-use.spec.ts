@@ -2843,6 +2843,7 @@ test('transformer transient animation follows both solved winding currents', { t
   await expect(page.getByLabel('Analysis type')).toHaveValue('tran')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/analysis complete ·/i)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.example-lesson-next-step')).toContainText('roughly twice the secondary voltage and half the secondary current')
   const slider = page.getByLabel('Simulation time')
   await scrubToTime(slider, 0.025)
   const transformer = page.locator('.circuit-part[data-part-id="transformer-t1"]')
