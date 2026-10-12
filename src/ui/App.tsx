@@ -1679,7 +1679,18 @@ export default function App() {
   const currentSourceLoadText = project.parts.find((part) => part.id === 'isource-r1')?.value ?? 'changed'
   const currentSourcePrediction = currentSourceAmps !== null && currentSourceLoadOhms !== null ? currentSourceAmps * currentSourceLoadOhms : null
   const currentSourceSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(out)')?.values[0] : undefined
-  const lessonNextStep = exampleLesson?.id === 'current-source' && simulationResult
+  const bridgeCapacitance = exampleLesson?.id === 'bridge-rectifier' ? componentMagnitude(project.parts.find((part) => part.id === 'bridge-c1')?.value ?? '220 µF', 'capacitor') : null
+  const bridgeCapacitanceText = project.parts.find((part) => part.id === 'bridge-c1')?.value ?? 'changed'
+  const bridgeRippleRatio = bridgeCapacitance && bridgeCapacitance > 0 ? 220e-6 / bridgeCapacitance : null
+  const lessonNextStep = exampleLesson?.id === 'bridge-rectifier' && simulationResult
+    ? bridgeCapacitance !== null && bridgeRippleRatio !== null
+      ? simulationResultStale
+        ? `C1 is now ${bridgeCapacitanceText}. The old waveform is stale; with the same load and frequency, ripple should scale to about ${Number((bridgeRippleRatio * 100).toPrecision(3))}% of its previous value. Rerun, then compare C1 voltage between charging peaks.`
+        : Math.abs(bridgeCapacitance - 220e-6) < 1e-12
+          ? 'Probe V(C1) and compare the voltage near 90 ms and 95 ms. Then increase C1 from 220 µF to 470 µF and rerun: for the same load and 100 Hz rectified ripple, ripple should fall to about 47% because it is roughly proportional to 1/C.'
+          : `At C1 = ${bridgeCapacitanceText}, the estimated ripple is about ${Number((bridgeRippleRatio * 100).toPrecision(3))}% of the 220 µF case at the same load and frequency. Scrub the capacitor-voltage plot between peaks to check the smoothing. Increase RLOAD to make the discharge faster and ripple larger.`
+      : 'Enter a positive capacitance for C1, then rerun to compare the capacitor smoothing.'
+    : exampleLesson?.id === 'current-source' && simulationResult
     ? currentSourceAmps !== null && currentSourceLoadOhms !== null && currentSourcePrediction !== null
       ? simulationResultStale
         ? `The previous operating point is stale. With ${formatLessonCurrent(currentSourceAmps * 1000)} through R1 = ${currentSourceLoadText}, V = I × R predicts VOUT = ${formatLessonVoltage(currentSourcePrediction)}. Rerun to check the load voltage.`
