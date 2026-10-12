@@ -3036,6 +3036,8 @@ test('flyback diode carries inductor current after the source pulse turns off', 
   await dialog.locator('.example-list article').filter({ hasText: 'Inductive flyback diode' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Inductive flyback diode')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(10)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   const lesson = page.locator('.example-lesson-next-step')
@@ -3054,6 +3056,12 @@ test('flyback diode carries inductor current after the source pulse turns off', 
   expect(Number.isFinite(diodeCurrent)).toBe(true)
   expect(Math.abs(diodeCurrent)).toBeGreaterThan(0.04)
   await expect(diode.locator('.component-current-arrow')).toBeVisible()
+  for (const wireId of ['flyback-diode-coil-link', 'flyback-diode-coil-rise', 'flyback-coil-branch']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    await expectWireFlow(flow, 'first-to-last')
+  }
+  const diodeReturn = page.locator('.wire-current-flow-layer [data-wire-id="flyback-diode-ground"] .wire-current-flow').first()
+  await expectWireFlow(diodeReturn, 'last-to-first')
 })
 
 test('voltage-divider example teaches and solves the equal-resistor midpoint', { tag: '@ngspice' }, async ({ page }) => {

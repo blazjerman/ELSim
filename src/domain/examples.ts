@@ -670,14 +670,25 @@ export function createFlybackDiodeExampleProject(): Project {
   const parts = [source, resistor, inductor, diode]
   project.name = 'Inductive flyback diode'
   project.parts = parts
-  project.wires = []
+  project.wires = [
+    { id: 'flyback-source-resistor', points: [[200, 350], [370, 350]] },
+    { id: 'flyback-resistor-inductor', points: [[470, 350], [650, 350]] },
+    { id: 'flyback-diode-coil-link', points: [[700, 390], [680, 390]] },
+    { id: 'flyback-diode-coil-rise', points: [[680, 390], [680, 350]] },
+    { id: 'flyback-coil-branch', points: [[680, 350], [650, 350]] },
+    { id: 'flyback-ground-l1-link', points: [[750, 350], [800, 350]] },
+    { id: 'flyback-ground-right-drop', points: [[800, 350], [800, 520]] },
+    { id: 'flyback-ground-bus', points: [[800, 520], [200, 520]] },
+    { id: 'flyback-ground-source-rise', points: [[200, 520], [200, 450]] },
+    { id: 'flyback-diode-ground', points: [[700, 490], [700, 520]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('flyback-drive-source', 'DRIVE', source, 0), labelAt('flyback-drive-r1', 'DRIVE', resistor, 0),
-    labelAt('flyback-coil-r1', 'COIL', resistor, 1), labelAt('flyback-coil-l1', 'COIL', inductor, 0), labelAt('flyback-coil-d1', 'COIL', diode, 1),
-    labelAt('flyback-ground-source', '0', source, 1), labelAt('flyback-ground-l1', '0', inductor, 1), labelAt('flyback-ground-d1', '0', diode, 0),
+    labelAt('flyback-drive-source', 'DRIVE', source, 0),
+    labelAt('flyback-coil-l1', 'COIL', inductor, 0),
+    labelAt('flyback-ground-source', '0', source, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '40 ms', maxStep: '50 µs' }
   project.plotSettings = { selectedTraceIds: ['V(DRIVE)', 'V(COIL)', 'I(L1)', 'I(D1)'], ranges: {} }
   project.view = { zoom: 0.85, panX: -5, panY: -10 }
