@@ -441,3 +441,5 @@ Engine-free preview guidance (2026-10-12): The toolbar now shows a concise missi
 Model-library parser follow-up (2026-10-12): Section inspection now returns the logical-line records it already built to the library parser, avoiding a second full continuation-processing pass for each imported model file. Parsing semantics and physical source-line mapping are unchanged.
 
 Large-circuit model-check follow-up (2026-10-12): Circuit Checks now parse each imported model library once per check and reuse the resulting device-model name set across root and reachable child-sheet parts. Missing-model warnings and invalid-library handling are unchanged; the previous path reparsed every library for every model-assigned component.
+
+Shared-net check follow-up (2026-10-12): Circuit Checks now append terminal references to per-net arrays in place in both root and reachable child sheets, avoiding repeated copies when many component pins share a net. Floating-terminal and orphan-wire classification is unchanged.

@@ -225,7 +225,9 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     for (const part of sheet.parts) for (const pin of componentPins(part)) {
       const net = sheetConnectivity.pinNets.get(`${part.id}:${pin.index}`)
       if (!net || part.kind === 'ground') continue
-      pinsByNet.set(net, [...(pinsByNet.get(net) ?? []), { part, index: pin.index }])
+      const connectedPins = pinsByNet.get(net)
+      if (connectedPins) connectedPins.push({ part, index: pin.index })
+      else pinsByNet.set(net, [{ part, index: pin.index }])
     }
     for (const [net, pins] of pinsByNet) {
       if (net === '0' || pins.length !== 1 || sheetLabelNames.has(net)) continue
@@ -280,7 +282,9 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     for (const pin of componentPins(part)) {
       const net = connectivity.pinNets.get(`${part.id}:${pin.index}`)
       if (!net || net === '0' || part.kind === 'ground') continue
-      pinsByNet.set(net, [...(pinsByNet.get(net) ?? []), { partId: part.id, index: pin.index }])
+      const connectedPins = pinsByNet.get(net)
+      if (connectedPins) connectedPins.push({ partId: part.id, index: pin.index })
+      else pinsByNet.set(net, [{ partId: part.id, index: pin.index }])
     }
   }
 
