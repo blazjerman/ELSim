@@ -19,6 +19,7 @@ try {
     let parsingMs = null
     let vectorBytes = null
     let traceNames = null
+    let firstAxisValue = null
     let finalAxisValue = null
     let finalTraceValue = null
     if (workerData.rawParserPath) {
@@ -27,12 +28,13 @@ try {
       const parsed = parseRawFile(output)
       parsingMs = performance.now() - parseStart
       traceNames = parsed.variables.map((variable) => variable.name)
+      firstAxisValue = parsed.axis[0]
       finalAxisValue = parsed.axis.at(-1)
       finalTraceValue = parsed.variables[0]?.values.at(-1) ?? null
       vectorBytes = parsed.axis.byteLength + parsed.variables.reduce((sum, variable) => sum + variable.values.byteLength + (variable.imaginaryValues?.byteLength ?? 0), 0)
       if (parsed.axis.length !== points) throw new Error(`Parsed ${parsed.axis.length} samples from a raw file declaring ${points}.`)
     }
-    parentPort.postMessage({ status, moduleLoadMs, simulationMs, parsingMs, rawBytes: output.byteLength, points, variables, vectorBytes, traceNames, finalAxisValue, finalTraceValue })
+    parentPort.postMessage({ status, moduleLoadMs, simulationMs, parsingMs, rawBytes: output.byteLength, points, variables, vectorBytes, traceNames, firstAxisValue, finalAxisValue, finalTraceValue })
   } else parentPort.postMessage({ status, moduleLoadMs, simulationMs, output })
 } catch (error) {
   parentPort.postMessage({ error: error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error) })

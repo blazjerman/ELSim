@@ -168,14 +168,14 @@ function runWasm(moduleUrl, deck, options = {}) {
   })
 }
 
-function makeTransientDeck(sampleCount) {
+function makeTransientDeck(sampleCount, startSavingTime = '0') {
   const stopTime = `${sampleCount}u`
   return [
     'ELSim large transient benchmark',
     'V1 in 0 PULSE(0 5 0 1n 1n 0.5m 1m)',
     'R1 in out 1k',
     'C1 out 0 1u',
-    `.tran 1u ${stopTime} 0 1u`,
+    `.tran 1u ${stopTime} ${startSavingTime} 1u`,
     '.save v(out)',
     '.control',
     'set filetype=binary',
@@ -340,6 +340,7 @@ try {
 
   let simulationResults = null
   let transientResults = null
+  let transientWindowComparison = null
   const engineModule = path.join(root, 'public/engine/ngspice.mjs')
   if (existsSync(engineModule)) {
     simulationResults = []
@@ -396,10 +397,28 @@ try {
         workerRoundTripMs: Number(solved.workerRoundTripMs.toFixed(3)),
       })
     }
+
+    const fullWindow = transientResults[0]
+    const retainedWindow = await runWasm(pathToFileURL(engineModule).href, makeTransientDeck(100_000, '50m'), { summaryOnly: true, rawParserPath: path.join(output, 'engine/raw.js') })
+    if (retainedWindow.status !== 0) throw new Error(`ngspice failed the transient save-window benchmark (status ${retainedWindow.status}).`)
+    if (retainedWindow.points >= fullWindow.solvedSamples * 0.7) throw new Error(`Saving from 50 ms retained too many samples (${retainedWindow.points} of ${fullWindow.solvedSamples}).`)
+    if (!Number.isFinite(retainedWindow.firstAxisValue) || retainedWindow.firstAxisValue < 0.05 - 1e-9) throw new Error(`The transient save-window benchmark retained samples before 50 ms (${retainedWindow.firstAxisValue}).`)
+    if (Math.abs(retainedWindow.finalTraceValue - fullWindow.finalOutputVolts) > 1e-6) throw new Error('Skipping early saved waveform samples changed the final V(out) result.')
+    if (retainedWindow.rawBytes >= fullWindow.rawBytes * 0.7 || retainedWindow.vectorBytes >= fullWindow.vectorBytes * 0.7) throw new Error('The transient save window did not reduce raw and parsed waveform payload sizes as expected.')
+    transientWindowComparison = {
+      saveFromSeconds: retainedWindow.firstAxisValue,
+      fullWindow: { samples: fullWindow.solvedSamples, rawBytes: fullWindow.rawBytes, vectorBytes: fullWindow.vectorBytes, finalOutputVolts: fullWindow.finalOutputVolts },
+      retainedWindow: { samples: retainedWindow.points, rawBytes: retainedWindow.rawBytes, vectorBytes: retainedWindow.vectorBytes, finalOutputVolts: retainedWindow.finalTraceValue },
+      reductionPercent: {
+        samples: Number(((1 - retainedWindow.points / fullWindow.solvedSamples) * 100).toFixed(2)),
+        rawBytes: Number(((1 - retainedWindow.rawBytes / fullWindow.rawBytes) * 100).toFixed(2)),
+        vectorBytes: Number(((1 - retainedWindow.vectorBytes / fullWindow.vectorBytes) * 100).toFixed(2)),
+      },
+    }
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 6,
+    benchmarkVersion: 7,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
@@ -408,6 +427,7 @@ try {
     plotResults,
     simulationResults: simulationResults ?? 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations',
     transientResults: transientResults ?? 'skipped: build the optional local ngspice WASM runtime to include large transient and process-memory observations',
+    transientWindowComparison: transientWindowComparison ?? 'skipped: build the optional local ngspice WASM runtime to compare retained waveform data windows',
   }, null, 2))
 } finally {
   rmSync(output, { recursive: true, force: true })
