@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -827,6 +827,18 @@ test('RLC ringing example is a complete series circuit with transient probes', (
   assert.match(artifact.text, /^C1 L_C 0 100u$/m)
   assert.match(artifact.text, /^\.tran 20u 40m$/m)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(L_C)', 'I(L1)'])
+})
+
+test('LC energy example starts charged and plots capacitor voltage with inductor current', () => {
+  const project = createLcEnergyExampleProject()
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'LC energy exchange')
+  assert.match(artifact.text, /^L1 VC R_L 10m$/m)
+  assert.match(artifact.text, /^R1 R_L 0 1$/m)
+  assert.match(artifact.text, /^C1 VC 0 100u IC=5$/m)
+  assert.match(artifact.text, /^\.tran 10u 25m uic$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VC)', 'I(L1)'])
 })
 
 test('RL step example has a pulse-driven series resistor and inductor with current and voltage traces', () => {

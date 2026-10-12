@@ -343,7 +343,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   const search = dialog.getByRole('textbox', { name: 'Find an example' })
   const cards = dialog.locator('.example-list article')
-  await expect(cards).toHaveCount(35)
+  await expect(cards).toHaveCount(36)
   await search.fill('P-JFET')
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('P-JFET positive-rail switch')
@@ -353,7 +353,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   await search.fill('no such circuit')
   await expect(dialog.getByRole('status')).toContainText('No examples found')
   await dialog.getByRole('button', { name: 'Clear example search' }).click()
-  await expect(cards).toHaveCount(35)
+  await expect(cards).toHaveCount(36)
 })
 
 test('examples can be browsed by topic and combined with search', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -371,9 +371,9 @@ test('examples can be browsed by topic and combined with search', { tag: '@ui-sm
   await expect(cards.first()).toContainText('Parallel LEDs with separate resistors')
   await dialog.getByRole('textbox', { name: 'Find an example' }).fill('')
   await topicFilters.getByRole('button', { name: 'AC & reactive' }).click()
-  await expect(cards).toHaveCount(7)
+  await expect(cards).toHaveCount(8)
   await topicFilters.getByRole('button', { name: 'All' }).click()
-  await expect(cards).toHaveCount(35)
+  await expect(cards).toHaveCount(36)
 })
 
 test('example picker offers a short beginner path before the full catalog', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -389,7 +389,7 @@ test('example picker offers a short beginner path before the full catalog', { ta
   await expect(cards.nth(2)).toContainText('LED current limiter')
   await expect(cards.nth(3)).toContainText('Capacitor discharge')
   await topicFilters.getByRole('button', { name: 'All' }).click()
-  await expect(cards).toHaveCount(35)
+  await expect(cards).toHaveCount(36)
 })
 
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -3389,6 +3389,39 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   await expect(inductor.locator('.inductor-current-glow')).toHaveAttribute('d', /^M-34 0a9 9/)
   await expect(inductor.locator('.component-current-flow')).toHaveCount(0)
   await expect(page.locator('.component-current-flow')).toHaveCount(0)
+})
+
+test('LC energy lesson shows capacitor charge exchanging with inductor current', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(60_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser workflow').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'LC energy exchange' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('LC energy exchange')
+  await expect(page.locator('.example-lesson')).toContainText('electrical energy become magnetic energy')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const capacitor = page.locator('.circuit-part[data-part-id="lc-energy-c1"]')
+  const inductor = page.locator('.circuit-part[data-part-id="lc-energy-l1"]')
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  await scrubToTime(slider, 0)
+  const initialCharge = Number(await capacitor.locator('.capacitor-charge-glow').first().getAttribute('data-charge-level'))
+  await scrubToTime(slider, 0.00157)
+  await expect.poll(async () => Number(await capacitor.locator('.capacitor-charge-glow').first().getAttribute('data-charge-level'))).toBeLessThan(initialCharge)
+  await expect(inductor.locator(':scope > title')).toContainText(/A, flowing/)
+  const plot = await openComponentVoltagePlot(page, 'C1')
+  await expect(plot.locator('.trace-toggles button', { hasText: 'V(C1)' })).toBeVisible()
+  await inductor.focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
+  const currentChooser = page.getByRole('dialog', { name: /I\(l1\)/i })
+  await currentChooser.getByRole('radio', { name: /Add to current window/ }).check()
+  await currentChooser.getByRole('button', { name: 'Open waveform' }).click()
+  await expect(plot.locator('.trace-toggles button', { hasText: 'I(L1)' })).toBeVisible()
 })
 
 test('inductor current ramp lesson shows gradual current rise and decay after the pulse', { tag: '@ngspice' }, async ({ page }) => {

@@ -155,6 +155,8 @@ Wire animation idle-work fix (2026-10-12): The shared `requestAnimationFrame` lo
 
 **M1.5 Beginner experience.** Onboarding, searchable components, example circuits, hover explanations, sensible simulation presets, and accessible colors/keyboard operations. Acceptance: scripted first-use test reaches a working circuit without knowledge of netlists.
 
+LC energy exchange lesson (2026-10-12): Added a charged series RLC-free LC transient with a small 1 Ω damping resistor; its initial capacitor voltage is 5 V and it plots V(VC) with I(L1), showing the capacitor charge and inductor current trade off over an approximately 6.3 ms period. The focused Firefox/ngspice workflow checks the solved run and charge animation at a quarter-cycle. This fills the reactive-circuit learning gap between standalone capacitor discharge, inductor ramp, and damped RLC ringing.
+
 Example discovery (2026-10-12): the example picker now has a four-circuit “Start here” path ordered from an RC step response through a voltage divider and LED current limiter to capacitor discharge. The complete catalog and existing topic/search filters remain available. A focused browser smoke regression checks the path order and confirms the full catalog remains reachable.
 
 Example confirmation follow-up (2026-10-12): the replace-circuit prompt now reads the selected example's title from the same catalog used by the picker, removing the duplicated per-example title conditional and keeping the confirmation text aligned as examples are added or renamed. TypeScript checking passes.

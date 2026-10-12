@@ -658,6 +658,44 @@ export function createRlcExampleProject(): Project {
   return project
 }
 
+/** A charged series LC loop shows stored electric energy becoming magnetic energy and back. */
+export function createLcEnergyExampleProject(): Project {
+  const project = createStarterProject()
+  const capacitor: Part = { id: 'lc-energy-c1', kind: 'capacitor', ref: 'C1', value: '100 µF', x: 260, y: 320, rotation: 180 }
+  const inductor: Part = { id: 'lc-energy-l1', kind: 'inductor', ref: 'L1', value: '10 mH', x: 500, y: 320, rotation: 0 }
+  const resistor: Part = { id: 'lc-energy-r1', kind: 'resistor', ref: 'R1', value: '1 Ω', x: 740, y: 320, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'LC energy exchange'
+  project.parts = [capacitor, inductor, resistor]
+  project.wires = [
+    { id: 'lc-energy-c1-l1', points: [[310, 320], [450, 320]] },
+    { id: 'lc-energy-l1-r1', points: [[550, 320], [690, 320]] },
+    { id: 'lc-energy-r1-return', points: [[790, 320], [850, 320]] },
+    { id: 'lc-energy-return-drop', points: [[850, 320], [850, 480]] },
+    { id: 'lc-energy-return-bottom', points: [[850, 480], [210, 480]] },
+    { id: 'lc-energy-return-c1', points: [[210, 480], [210, 320]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    labelAt('lc-energy-vc', 'VC', capacitor, 0),
+    labelAt('lc-energy-lr', 'R_L', inductor, 1),
+    labelAt('lc-energy-ground', '0', capacitor, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = {
+    ...project.simulation,
+    analysis: 'tran', stopTime: '25 ms', maxStep: '10 µs',
+    initialConditions: [{ element: 'C1', voltage: '5 V' }],
+  }
+  project.plotSettings = { selectedTraceIds: ['V(VC)', 'I(L1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -10, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A beginner RL step-response lesson showing the inductor's gradual current rise and decay. */
 export function createRlStepExampleProject(): Project {
   const project = createStarterProject()

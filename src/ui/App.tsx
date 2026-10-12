@@ -46,7 +46,7 @@ type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = 'all' | ComponentPaletteCategory
 type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 type Selection = { kind: 'part' | 'label'; id: string } | null
-type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'led' | 'led-current-limiter' | 'led-parallel' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
+type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
 
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
 const ResultPlot = lazy(() => import('./AnalysisPlots').then((module) => ({ default: module.ResultPlot })))
@@ -71,6 +71,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'ac-lowpass', title: 'RC low-pass frequency response', description: 'Compare input and output across an AC sweep and find the approximately 1 kHz cutoff.' },
   { id: 'ac-highpass', title: 'RC high-pass frequency response', description: 'See low frequencies blocked and high frequencies passed, with a cutoff near 1 kHz.' },
   { id: 'rlc-resonance', title: 'Parallel RLC resonance', description: 'Sweep an LC tank and find its resonant peak; change L or C to move the peak.' },
+  { id: 'lc-energy', title: 'LC energy exchange', description: 'Start with a charged capacitor and watch stored electric energy move into inductor current and back.' },
   { id: 'rc', title: 'RC step response', description: 'Watch a capacitor charge through a resistor and explore the time constant.' },
   { id: 'pwl', title: 'PWL waveform response', description: 'Drive an RC circuit with a custom three-level source and see how the capacitor follows each change.' },
   { id: 'current-source', title: 'Current source and load', description: 'See a 1 mA source drive a 1 kΩ load and produce a 1 V operating point.' },
@@ -112,13 +113,13 @@ const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
   start: ['rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
   basics: ['rc', 'capacitor-discharge', 'voltage-divider', 'potentiometer', 'current-source', 'led-current-limiter'],
   diodes: ['led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
-  ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
+  ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
   switching: ['voltage-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
   advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'imported-opamp', 'inverting-opamp', 'common-emitter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier'],
 }
 const exampleSelection: Record<ExampleId, string> = {
   potentiometer: 'pot-p1', rc: 'p-r1', 'ac-lowpass': 'ac-lowpass-c1', 'ac-highpass': 'ac-highpass-c1', led: 'p-c1', 'led-current-limiter': 'p-r1', 'led-parallel': 'parallel-led-d1', 'capacitor-discharge': 'cap-discharge-c1',
-  rlc: 'rlc-l1', 'rl-step': 'rl-step-l1', flyback: 'flyback-d1', controlled: 'amp-e1', 'current-controlled': 'current-f1', transistor: 'switch-q1', 'voltage-switch': 'vswitch-s1', pnp: 'pnp-switch-q1',
+  rlc: 'rlc-l1', 'lc-energy': 'lc-energy-c1', 'rl-step': 'rl-step-l1', flyback: 'flyback-d1', controlled: 'amp-e1', 'current-controlled': 'current-f1', transistor: 'switch-q1', 'voltage-switch': 'vswitch-s1', pnp: 'pnp-switch-q1',
   pjfet: 'pjfet-switch-j1', mosfet: 'mos-switch-m1', pmos: 'pmos-switch-m1', jfet: 'jfet-switch-j1', hierarchy: 'example-x1', 'rlc-resonance': 'resonance-l1',
   pwl: 'p-v1', 'current-source': 'isource-i1', rectifier: 'rectifier-d1', 'bridge-rectifier': 'bridge-d1', 'voltage-divider': 'divider-r1', zener: 'zener-d1', transformer: 'transformer-t1', 'transformer-current': 'transformer-t1', 'imported-opamp': 'example-opamp-xu1', 'inverting-opamp': 'example-opamp-xu1', 'common-emitter': 'common-emitter-q1', 'logic-gates': 'logic-and', 'logic-gates-3v3': 'logic-and',
 }
@@ -3640,7 +3641,7 @@ export default function App() {
           led: examples.createLedExampleProject, 'led-current-limiter': examples.createLedCurrentLimiterExampleProject,
           'led-parallel': examples.createParallelLedExampleProject,
           'capacitor-discharge': examples.createCapacitorDischargeExampleProject,
-          rlc: examples.createRlcExampleProject, 'rl-step': examples.createRlStepExampleProject, flyback: examples.createFlybackDiodeExampleProject, controlled: examples.createControlledSourceExampleProject,
+          rlc: examples.createRlcExampleProject, 'lc-energy': examples.createLcEnergyExampleProject, 'rl-step': examples.createRlStepExampleProject, flyback: examples.createFlybackDiodeExampleProject, controlled: examples.createControlledSourceExampleProject,
           'current-controlled': examples.createCurrentControlledSourcesExampleProject, transistor: examples.createTransistorSwitchExampleProject,
           'voltage-switch': examples.createVoltageSwitchExampleProject,
           pnp: examples.createPnpSwitchExampleProject, pjfet: examples.createPjfetSwitchExampleProject,
@@ -3683,6 +3684,7 @@ export default function App() {
       'led-parallel': { title: 'Give every parallel LED its own resistor', guidance: 'Run the operating point and compare I(D1) with I(D2). Each branch has its own 330 Ω resistor. Change R2 to 680 Ω and rerun: only the second branch current should drop.' },
       'capacitor-discharge': { title: 'Watch stored charge leave a capacitor', guidance: 'C1 starts at 5 V and discharges through R1 with no source connected. Run the transient, then compare V(OUT) and I(R1). The starting voltage is an initial condition, and the discharge time depends on R1 × C1.' },
       rlc: { title: 'See energy move between L and C', guidance: 'Run the transient and compare capacitor voltage with inductor current as the circuit rings and loses energy in R1.' },
+      'lc-energy': { title: 'Watch electrical energy become magnetic energy', guidance: 'C1 starts charged to 5 V. Run the transient and compare V(VC) with I(L1): as capacitor voltage falls, inductor current rises; then the energy returns to C1. The 1 Ω resistor slowly dissipates energy, so each swing gets smaller. L1 and C1 set a period of about 6.3 ms.' },
       'rl-step': { title: 'An inductor resists a sudden current change', guidance: 'Run the transient and compare V(V_RL) with I(L1). Current rises gradually while the pulse is on, then continues briefly and decays after the source switches off. Here L/R = 1 ms, so the current changes most over a few milliseconds.' },
       flyback: { title: 'Give an inductor current a path when switching off', guidance: 'Run the transient and compare V(COIL), I(L1), and I(D1). When the source pulse switches off, the inductor keeps current flowing through D1; the diode clamps the coil voltage instead of leaving it to spike.' },
       controlled: { title: 'Compare voltage and current control', guidance: 'Run the transient. E1 scales the input voltage; G1 converts the same input voltage into output current.' },
