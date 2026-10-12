@@ -3452,10 +3452,14 @@ test('connection dots render at wire T joins and component pins on a wire', asyn
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    project.parts = [{ id: 'join-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 300, rotation: 0 }]
+    project.parts = [
+      { id: 'join-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 300, rotation: 0 },
+      { id: 'offscreen-resistor', kind: 'resistor', ref: 'R2', value: '1k', x: 2000, y: 1000, rotation: 0 },
+    ]
     project.wires = [
       { id: 'join-horizontal', points: [[250, 300], [450, 300]] },
       { id: 'join-vertical', points: [[350, 200], [350, 300]] },
+      { id: 'offscreen-pin-wire', points: [[1900, 1000], [1980, 1000]] },
     ]
     project.junctions = []
     project.netLabels = []
@@ -3469,6 +3473,10 @@ test('connection dots render at wire T joins and component pins on a wire', asyn
   expect(coordinates).toContainEqual([300, 300])
   expect(coordinates).toContainEqual([350, 300])
   expect(coordinates).toContainEqual([400, 300])
+  expect(coordinates).not.toContainEqual([1980, 1000])
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('.wire-connection-dot')).toHaveCount(4)
+  await expect(page.locator('.wire-connection-dot[data-x="1980"][data-y="1000"]')).toBeVisible()
 })
 
 test('moving a component leaves all wire objects fixed in place', async ({ page }) => {

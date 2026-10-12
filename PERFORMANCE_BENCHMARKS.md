@@ -341,3 +341,7 @@ Directional component navigation now finds the nearest target in one pass, prese
 ### View-only editor updates (2026-10-12)
 
 Connectivity, electrical diagnostics, and analysis-setting validation now retain their memoized results when only pan/zoom state changes. The 5,000-part Firefox browser benchmark recorded 21 ms median / 23 ms max zoom input-to-two-frames, 38 ms select-all input-to-frame, and 29 ms full-selection-drag input-to-frame. This is a single local run without a before/after comparison; it does not establish a performance budget. The focused circuit-check workflow passes after fitting the schematic before focusing an off-screen component.
+
+### Viewport-culling wire connection dots (2026-10-12)
+
+Connection-dot coordinates are indexed when wire geometry changes and the SVG layer renders only dots intersecting the visible world-space viewport (including an 8-unit edge margin). This removes offscreen dot circles from the DOM while preserving dots for visible wire joins and component pins. The quick benchmark calculated 9,800 candidate points in 15.221 ms median / 37.229 ms p95, but it does not measure SVG mounting or browser frame time; no UI speedup is claimed from that domain measurement. The focused Firefox regression was added, but its configured web server exited before the test started in this restricted workspace. Typecheck, all 28 unit groups, and production build passed; no WASM build was run.
