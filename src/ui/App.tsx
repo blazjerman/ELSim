@@ -1634,6 +1634,16 @@ export default function App() {
   const rlStepInductanceH = exampleLesson?.id === 'rl-step' ? componentMagnitude(project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? '100 mH', 'inductor') : null
   const rlStepTimeConstantMs = rlStepResistance && rlStepResistance > 0 && rlStepInductanceH && rlStepInductanceH > 0 ? 1000 * rlStepInductanceH / rlStepResistance : null
   const rlStepSteadyCurrentMa = rlStepResistance && rlStepResistance > 0 ? 5000 / rlStepResistance : null
+  const flybackResistance = exampleLesson?.id === 'flyback' ? componentMagnitude(project.parts.find((part) => part.id === 'flyback-r1')?.value ?? '10 Ω', 'resistor') : null
+  const flybackInductanceH = exampleLesson?.id === 'flyback' ? componentMagnitude(project.parts.find((part) => part.id === 'flyback-l1')?.value ?? '100 mH', 'inductor') : null
+  const flybackTimeConstantMs = flybackResistance && flybackResistance > 0 && flybackInductanceH && flybackInductanceH > 0 ? 1000 * flybackInductanceH / flybackResistance : null
+  const flybackCoilTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(coil)') : undefined
+  const flybackDiodeTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => ['i(@d1[id])', 'i(d1)'].includes(trace.id.toLowerCase())) : undefined
+  const flybackSampleIndexAt15Ms = flybackCoilTrace?.axis.length
+    ? flybackCoilTrace.axis.reduce((best, time, index, axis) => Math.abs(time - 0.015) < Math.abs(axis[best] - 0.015) ? index : best, 0)
+    : undefined
+  const flybackCoilVoltageAt15Ms = flybackSampleIndexAt15Ms === undefined ? undefined : flybackCoilTrace?.values[flybackSampleIndexAt15Ms]
+  const flybackDiodeCurrentAt15Ms = flybackSampleIndexAt15Ms === undefined ? undefined : flybackDiodeTrace?.values[flybackSampleIndexAt15Ms]
   const rlcResistance = exampleLesson?.id === 'rlc' ? componentMagnitude(project.parts.find((part) => part.id === 'rlc-r1')?.value ?? '5 Ω', 'resistor') : null
   const rlcInductanceH = exampleLesson?.id === 'rlc' ? componentMagnitude(project.parts.find((part) => part.id === 'rlc-l1')?.value ?? '10 mH', 'inductor') : null
   const rlcCapacitanceF = exampleLesson?.id === 'rlc' ? componentMagnitude(project.parts.find((part) => part.id === 'rlc-c1')?.value ?? '100 µF', 'capacitor') : null
@@ -1761,8 +1771,10 @@ export default function App() {
           : 'Choose a positive turns ratio, then rerun and compare the separately solved winding currents.'
     : exampleLesson?.id === 'flyback' && simulationResult
       ? simulationResultStale
-        ? 'The source or coil changed since this run. Rerun to check how the flyback diode handles the inductor current.'
-        : 'Move the time cursor just past 10 ms, when V1 switches off. V(COIL) should go slightly below ground as D1 conducts, while I(L1) decays through the diode instead of stopping instantly.'
+        ? `The previous run at 15 ms showed ${flybackCoilVoltageAt15Ms !== undefined ? `V(COIL) = ${formatLessonVoltage(flybackCoilVoltageAt15Ms)}` : 'a clamped coil voltage'}${flybackDiodeCurrentAt15Ms !== undefined ? ` and |I(D1)| = ${formatLessonCurrent(Math.abs(flybackDiodeCurrentAt15Ms) * 1000)}` : ''}. The source or coil has changed; rerun to compare the new decay.`
+        : flybackCoilVoltageAt15Ms !== undefined && flybackDiodeCurrentAt15Ms !== undefined && flybackTimeConstantMs !== null
+          ? `Five milliseconds after V1 switches off, ngspice solved V(COIL) = ${formatLessonVoltage(flybackCoilVoltageAt15Ms)} and |I(D1)| = ${formatLessonCurrent(Math.abs(flybackDiodeCurrentAt15Ms) * 1000)}. D1 gives the inductor current a loop and clamps the coil voltage. L1/R1 ≈ ${Number(flybackTimeConstantMs.toPrecision(3))} ms is a rough decay time; double R1 and rerun to see the current fall faster.`
+          : 'Move the time cursor just past 10 ms, when V1 switches off. Compare V(COIL), I(L1), and I(D1): the diode carries the inductor current and clamps the coil voltage.'
     : exampleLesson?.id === 'current-controlled' && simulationResult
     ? currentControlledSenseAt25Ms !== undefined && currentControlledTransresistance !== null
       ? simulationResultStale
