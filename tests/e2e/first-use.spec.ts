@@ -867,6 +867,28 @@ test('quick tour can edit a component value and run the changed circuit', { tag:
   expect((await csvDownload).suggestedFilename()).toMatch(/waveforms\.csv$/)
 })
 
+test('first circuit journey edits the RC starter and inspects V(vout) without opening netlist', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.addInitScript(() => performance.mark('elsim-first-circuit-start'))
+  await page.goto('/')
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  const resistance = page.locator('.inspector-panel input[data-part-setting="p-r1:value"]')
+  await expect(resistance).toBeVisible()
+  await resistance.fill('2k')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openWireVoltagePlot(page, 430, 290)
+  const chart = plot.locator('.waveform-chart')
+  await expect(chart).toBeVisible()
+  await expect(chart).toHaveAttribute('aria-label', /Transient waveforms from .+ to .+/)
+  await expect(plot.locator('.trace-toggles button', { hasText: 'V(vout)' })).toBeVisible()
+  await expect(plot.locator('.cursor-readout')).toContainText(/V\(vout\)\s*=/i)
+  await expect(page.locator('.netlist-modal')).toHaveCount(0)
+  const elapsedMs = await page.evaluate(() => performance.now() - performance.getEntriesByName('elsim-first-circuit-start')[0].startTime)
+  expect(elapsedMs, 'First-run journey should take under five minutes including load and solve').toBeLessThan(5 * 60 * 1000)
+})
+
 test('right-click probes wire voltage to ground and component voltage across its pins', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
