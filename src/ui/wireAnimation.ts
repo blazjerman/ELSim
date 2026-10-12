@@ -1,4 +1,4 @@
-type AnimationConfig = { key: string; magnitude: number; forward: boolean; speed: number; scale: number }
+type AnimationConfig = { key: string; magnitude: number; forward: boolean; speed: number; scale: number; currentReference: number }
 
 const elements = new Map<string, SVGPolylineElement>()
 const configurations = new Map<string, AnimationConfig>()
@@ -58,10 +58,10 @@ function tick(now: number) {
   for (const [key, config] of configurations) {
     const element = elements.get(key)
     if (!element || config.magnitude <= 1e-12) continue
-    // Speed is proportional to the actual wire current: 2 mA advances the
-    // dots twice as fast as 1 mA. Cap only the extreme end to avoid skipping
-    // full dash cycles between frames. The slider multiplies the rate.
-    const currentFactor = Math.min(20, config.magnitude / 0.001)
+    // Falstad advances current dots in proportion to current × a user scale.
+    // Compress that range logarithmically so amp-level currents remain legible.
+    // currentReference sets the point at which flow reaches its base speed.
+    const currentFactor = Math.min(12, Math.log1p(config.magnitude / config.currentReference) / Math.LN2)
     const phase = (phases.get(key) ?? 0) + elapsed * 18 * config.speed * currentFactor * (config.forward ? 1 : -1)
     const wrapped = ((phase % 18) + 18) % 18
     phases.set(key, wrapped)
