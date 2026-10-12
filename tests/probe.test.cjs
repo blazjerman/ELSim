@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { createStarterProject } = require(path.join(build, 'domain/project.js'))
-const { componentCurrentVector, deriveComponentVoltageTraces, resolveProbeTarget } = require(path.join(build, 'domain/probe.js'))
+const { componentCurrentVector, transformerWindingCurrentVector, deriveComponentVoltageTraces, resolveProbeTarget } = require(path.join(build, 'domain/probe.js'))
 
 test('probe hit testing resolves labeled wires, components, and ignores ground/background', () => {
   const project = createStarterProject()
@@ -29,6 +29,8 @@ test('component current vectors use ngspice device-specific names', () => {
   assert.equal(componentCurrentVector({ kind: 'vcvs', ref: 'E1' }), 'i(@E1[i])')
   assert.equal(componentCurrentVector({ kind: 'currentSource', ref: 'I1' }), 'i(@I1[current])')
   assert.equal(componentCurrentVector({ kind: 'potentiometer', ref: 'POT1' }), 'i(@RPOT1_A[i])')
+  assert.equal(componentCurrentVector({ kind: 'transformer', ref: 'T1' }), 'i(@LT1_P[i])')
+  assert.equal(transformerWindingCurrentVector('T1', 'S'), 'i(@LT1_S[i])')
   assert.equal(componentCurrentVector({ kind: 'vccs', ref: 'G1' }), 'i(@G1[i])')
   assert.equal(componentCurrentVector({ kind: 'npn', ref: 'Q1' }), 'i(@Q1[ic])')
   assert.equal(componentCurrentVector({ kind: 'pnp', ref: 'Q2' }), 'i(@Q2[ic])')

@@ -361,6 +361,10 @@ function hierarchicalSaveVectors(project: Project): string[] {
     if (!sheet) return
     const nextAncestry = new Set(ancestry).add(sheetId)
     const ports = new Set(sheet.ports.map((port) => port.name.toLowerCase()))
+    if (!path.length) for (const part of sheet.parts) if (part.kind === 'transformer') {
+      saves.add(`.save i(L${part.ref}_P)`)
+      saves.add(`.save i(L${part.ref}_S)`)
+    }
     for (const label of path.length ? sheet.netLabels : []) {
       const name = label.name.trim()
       if (!name || name === '0' || ports.has(name.toLowerCase())) continue

@@ -188,6 +188,8 @@ test('AC transformer example emits coupled windings with the selected turns rati
   assert.match(artifact.text, /^LT1_P VIN 0 10$/m)
   assert.match(artifact.text, /^LT1_S VOUT 0 4(?:0|0\.0+)$/m)
   assert.match(artifact.text, /^KT1 LT1_P LT1_S 1$/m)
+  assert.match(artifact.text, /^\.save i\(LT1_P\)$/m)
+  assert.match(artifact.text, /^\.save i\(LT1_S\)$/m)
   const leaky = structuredClone(project)
   leaky.parts.find((part) => part.kind === 'transformer').coupling = '0.97'
   assert.match(createNetlistArtifact(leaky).text, /^KT1 LT1_P LT1_S 0\.97$/m)
