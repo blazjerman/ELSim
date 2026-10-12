@@ -334,6 +334,22 @@ test('checks current-controlled source references in child-sheet scope', () => {
   assert.match(issue?.title, /controlling voltage source.*Core resistor/)
 })
 
+test('checks semiconductor models and educational beta in child sheets', () => {
+  const project = createHierarchicalExampleProject()
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.parts.push(
+    { id: 'core-diode', kind: 'diode', ref: 'DCORE', value: 'D_UNAVAILABLE', deviceModel: 'D_UNAVAILABLE', x: 700, y: 400, rotation: 0 },
+    { id: 'core-npn', kind: 'npn', ref: 'QCORE', value: '0', x: 700, y: 500, rotation: 0 },
+  )
+  const issues = checkCircuit(project)
+  const modelIssue = issues.find((item) => item.id === 'missing-device-model:sheet-core:core-diode')
+  const betaIssue = issues.find((item) => item.id === 'invalid-beta:sheet-core:core-npn')
+  assert.equal(modelIssue?.partId, 'example-x2')
+  assert.match(modelIssue?.title, /DCORE.*Core resistor/)
+  assert.equal(betaIssue?.partId, 'example-x2')
+  assert.match(betaIssue?.title, /QCORE.*Core resistor/)
+})
+
 test('accepts declared sheet parameters in behavioral source expressions and explains missing ones', () => {
   const project = createStarterProject()
   const behavioral = { id: 'parameter-behavioral', kind: 'behavioral', ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage', x: 700, y: 600, rotation: 0 }

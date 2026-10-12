@@ -84,6 +84,26 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       return Boolean(expression && sheetParameters.has(expression[1].toLowerCase()))
     }
     for (const part of sheet.parts) {
+      if ((part.kind === 'npn' || part.kind === 'pnp') && !part.deviceModel && (!/^[1-9]\d{0,3}$/.test(part.value) || Number(part.value) > 1000)) issues.push({
+        id: `invalid-beta:${sheet.id}:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} has an invalid forward beta in ${sheet.name}`,
+        detail: 'Enter a whole-number forward beta from 1 to 1000, or select an imported device model to replace the educational beta approximation.',
+        partId: topLevelInstanceId,
+      })
+      if (['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(part.kind) && part.deviceModel) {
+        const foundModel = (project.modelAssets ?? []).some((asset) => {
+          try { return analyzeModelDependencies([asset]).deviceModelAssets.has(part.deviceModel!.toLowerCase()) }
+          catch { return false }
+        })
+        if (!foundModel) issues.push({
+          id: `missing-device-model:${sheet.id}:${part.id}`,
+          severity: 'warning',
+          title: `${part.ref} needs device model ${part.deviceModel} in ${sheet.name}`,
+          detail: 'This model is not in the imported project libraries. Import the library that defines it or select a compatible model before running.',
+          partId: topLevelInstanceId,
+        })
+      }
       if (part.kind === 'cccs' || part.kind === 'ccvs') {
         const controlSource = part.controlSource?.trim().toLowerCase()
         const sourceExists = controlSource && sheet.parts.some((candidate) => candidate.kind === 'source' && candidate.ref.toLowerCase() === controlSource)
