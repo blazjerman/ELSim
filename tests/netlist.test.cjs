@@ -192,12 +192,25 @@ test('AC transformer example emits coupled windings with the selected turns rati
   leaky.parts.find((part) => part.kind === 'transformer').coupling = '0.97'
   assert.match(createNetlistArtifact(leaky).text, /^KT1 LT1_P LT1_S 0\.97$/m)
   assert.equal(artifact.sourceMap.filter((entry) => entry.sourceId === 'transformer-t1').length, 3)
+  const lossy = structuredClone(project)
+  Object.assign(lossy.parts.find((part) => part.kind === 'transformer'), { primaryWindingResistance: '1.2 Ω', secondaryWindingResistance: '350 mΩ' })
+  const lossyArtifact = createNetlistArtifact(lossy)
+  assert.deepEqual(lossyArtifact.diagnostics, [])
+  assert.match(lossyArtifact.text, /^RT1_P VIN __ELSIM_transformer_t1_P 1\.2$/m)
+  assert.match(lossyArtifact.text, /^LT1_P __ELSIM_transformer_t1_P 0 10$/m)
+  assert.match(lossyArtifact.text, /^RT1_S VOUT __ELSIM_transformer_t1_S 350m$/m)
+  assert.match(lossyArtifact.text, /^LT1_S __ELSIM_transformer_t1_S 0 40(?:\.0+)?$/m)
+  assert.match(lossyArtifact.text, /^KT1 LT1_P LT1_S 1$/m)
+  assert.equal(lossyArtifact.sourceMap.filter((entry) => entry.sourceId === 'transformer-t1').length, 5)
   const malformed = structuredClone(project)
   malformed.parts.find((part) => part.kind === 'transformer').turnsRatio = '0'
   assert.throws(() => validateProject(malformed), /turns ratio/i)
   malformed.parts.find((part) => part.kind === 'transformer').turnsRatio = '2'
   malformed.parts.find((part) => part.kind === 'transformer').coupling = '1.01'
   assert.throws(() => validateProject(malformed), /coupling coefficient/i)
+  malformed.parts.find((part) => part.kind === 'transformer').coupling = '1'
+  malformed.parts.find((part) => part.kind === 'transformer').primaryWindingResistance = '-1 Ω'
+  assert.throws(() => validateProject(malformed), /primaryWindingResistance must be a nonnegative numeric resistance/i)
   const overflow = structuredClone(project)
   Object.assign(overflow.parts.find((part) => part.kind === 'transformer'), { value: '1e308 H', turnsRatio: '1000' })
   assert.match(createNetlistArtifact(overflow).text, /ERROR: T1 needs a positive finite primary inductance/i)

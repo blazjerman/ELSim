@@ -14,6 +14,14 @@ function cleanComment(value: string): string {
   return value.replace(/[\r\n\u0000-\u001f]/g, ' ').trim()
 }
 
+function reserveUniqueName(base: string, used: Set<string>): string {
+  let name = base
+  let suffix = 2
+  while (used.has(name.toLowerCase())) name = `${base}_${suffix++}`
+  used.add(name.toLowerCase())
+  return name
+}
+
 function spiceScalar(value: string, unit: string): string | null {
   let result = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '')
   if (unit && result.toLowerCase().endsWith(unit)) result = result.slice(0, -unit.length)
@@ -629,7 +637,19 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const turnsRatio = Number(part.turnsRatio ?? '2')
       const coupling = Number(part.coupling ?? '1')
       const secondaryInductanceValue = (primaryInductance ?? 0) * turnsRatio * turnsRatio
-      if (primaryInductance === null || primaryInductance <= 0 || !Number.isFinite(turnsRatio) || turnsRatio < 0.001 || turnsRatio > 1000 || !Number.isFinite(coupling) || coupling <= 0 || coupling > 1 || !Number.isFinite(secondaryInductanceValue) || secondaryInductanceValue <= 0) {
+      const primaryResistance = spiceScalar(part.primaryWindingResistance ?? '0', '')
+      const secondaryResistance = spiceScalar(part.secondaryWindingResistance ?? '0', '')
+      const primaryResistanceMagnitude = componentMagnitude(part.primaryWindingResistance ?? '0', 'resistor')
+      const secondaryResistanceMagnitude = componentMagnitude(part.secondaryWindingResistance ?? '0', 'resistor')
+      const invalidWinding = primaryResistance === null || primaryResistanceMagnitude === null || primaryResistanceMagnitude < 0
+        ? 'primary' : secondaryResistance === null || secondaryResistanceMagnitude === null || secondaryResistanceMagnitude < 0 ? 'secondary' : null
+      if (invalidWinding) {
+        const message = `${part.ref} ${invalidWinding} winding resistance must be a nonnegative numeric resistance.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      if (primaryInductance === null || primaryInductance <= 0 || !Number.isFinite(turnsRatio) || turnsRatio < 0.001 || turnsRatio > 1000 || !Number.isFinite(coupling) || coupling <= 0 || coupling > 1 || !Number.isFinite(secondaryInductanceValue) || secondaryInductanceValue <= 0 || primaryResistance === null || primaryResistanceMagnitude === null || primaryResistanceMagnitude < 0 || secondaryResistance === null || secondaryResistanceMagnitude === null || secondaryResistanceMagnitude < 0) {
         const message = `${part.ref} needs a positive finite primary inductance, a turns ratio from 0.001 to 1000, and a coupling coefficient greater than 0 and at most 1.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -637,8 +657,20 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       const primary = `L${part.ref}_P`, secondary = `L${part.ref}_S`
       const secondaryInductance = secondaryInductanceValue.toPrecision(12)
-      append(`${primary} ${positive} ${negative} ${value}`, part.id, 'component')
-      append(`${secondary} ${secondaryPositive} ${secondaryNegative} ${secondaryInductance}`, part.id, 'component')
+      let primaryPositive = positive
+      let secondaryPositiveNode = secondaryPositive
+      if (primaryResistanceMagnitude > 0) {
+        const seriesReference = reserveUniqueName(`R${part.ref.slice(0, 22)}_P`, usedReferences)
+        primaryPositive = reserveUniqueName(`__ELSIM_${part.id.slice(0, 24).replace(/[^A-Za-z0-9_]/g, '_')}_P`, usedNodes)
+        append(`${seriesReference} ${positive} ${primaryPositive} ${primaryResistance}`, part.id, 'component')
+      }
+      if (secondaryResistanceMagnitude > 0) {
+        const seriesReference = reserveUniqueName(`R${part.ref.slice(0, 22)}_S`, usedReferences)
+        secondaryPositiveNode = reserveUniqueName(`__ELSIM_${part.id.slice(0, 24).replace(/[^A-Za-z0-9_]/g, '_')}_S`, usedNodes)
+        append(`${seriesReference} ${secondaryPositive} ${secondaryPositiveNode} ${secondaryResistance}`, part.id, 'component')
+      }
+      append(`${primary} ${primaryPositive} ${negative} ${value}`, part.id, 'component')
+      append(`${secondary} ${secondaryPositiveNode} ${secondaryNegative} ${secondaryInductance}`, part.id, 'component')
       append(`K${part.ref} ${primary} ${secondary} ${coupling}`, part.id, 'component')
     }
     else if (part.kind === 'potentiometer') {
@@ -680,15 +712,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         if (resistanceMagnitude > 0) {
           const referenceBase = `R${part.ref.slice(0, 24)}_ESR`
-          let seriesReference = referenceBase
-          let suffix = 2
-          while (usedReferences.has(seriesReference.toLowerCase())) seriesReference = `${referenceBase}_${suffix++}`
-          usedReferences.add(seriesReference.toLowerCase())
+          const seriesReference = reserveUniqueName(referenceBase, usedReferences)
           const nodeBase = `__ELSIM_${part.id.slice(0, 32).replace(/[^A-Za-z0-9_]/g, '_')}_ESR`
-          let internalNode = nodeBase
-          let nodeSuffix = 2
-          while (usedNodes.has(internalNode.toLowerCase())) internalNode = `${nodeBase}_${nodeSuffix++}`
-          usedNodes.add(internalNode.toLowerCase())
+          const internalNode = reserveUniqueName(nodeBase, usedNodes)
           append(`${seriesReference} ${positive} ${internalNode} ${resistance}`, part.id, 'component')
           elementPositive = internalNode
         }

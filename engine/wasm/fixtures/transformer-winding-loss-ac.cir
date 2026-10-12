@@ -1,0 +1,12 @@
+* AC transformer with editable winding copper losses
+V1 DRIVE 0 AC 1 0
+RSOURCE DRIVE VIN 10m
+RT1_P VIN __ELSIM_transformer_t1_P 10
+RT1_S VOUT __ELSIM_transformer_t1_S 100
+LT1_P __ELSIM_transformer_t1_P 0 10
+LT1_S __ELSIM_transformer_t1_S 0 40
+KT1 LT1_P LT1_S 1
+R1 VOUT 0 1k
+.ac dec 20 10 10k
+.print ac v(vout)
+.end

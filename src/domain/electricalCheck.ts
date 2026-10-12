@@ -126,6 +126,15 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         const resistance = componentMagnitude(part.seriesResistance, 'resistor')
         if (resistance === null || resistance < 0) invalidValue('Enter a nonnegative numeric series resistance with an optional SI prefix, such as 0.2 Ω or 50 mΩ.')
       }
+      if (part.kind === 'transformer') {
+        for (const [key, label] of [['primaryWindingResistance', 'primary'], ['secondaryWindingResistance', 'secondary']] as const) {
+          const value = part[key]
+          if (value !== undefined) {
+            const resistance = componentMagnitude(value, 'resistor')
+            if (resistance === null || resistance < 0) invalidValue(`Enter a nonnegative numeric ${label} winding resistance with an optional SI prefix, such as 0.2 Ω.`)
+          }
+        }
+      }
       if (part.kind === 'source' && (part.sourceMode === undefined || part.sourceMode === 'dc') && componentMagnitude(part.value, part.kind) === null && !isSheetParameter(part.value)) {
         invalidValue('Enter a numeric voltage with an optional SI prefix, or use a parameter declared on this sheet.')
       } else if (part.kind === 'currentSource' && componentMagnitude(part.value, part.kind) === null && !isSheetParameter(part.value)) {

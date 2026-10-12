@@ -60,6 +60,9 @@ export type Part = {
   coupling?: string
   /** Optional series resistance in ohms for capacitor ESR or inductor winding loss. */
   seriesResistance?: string
+  /** Optional transformer primary and secondary copper-loss resistances in ohms. */
+  primaryWindingResistance?: string
+  secondaryWindingResistance?: string
   /** Wiper position from the upper terminal (0) to the lower terminal (1). */
   wiperPosition?: string
   symbolAssetId?: string
@@ -368,6 +371,11 @@ export function validateProject(input: unknown): Project {
     if (candidate.coupling !== undefined && (candidate.kind !== 'transformer' || typeof candidate.coupling !== 'string' || candidate.coupling.length > 64)) throw new Error(`${candidate.ref} has invalid transformer coupling metadata.`)
     if (candidate.seriesResistance !== undefined && ((candidate.kind !== 'capacitor' && candidate.kind !== 'inductor') || typeof candidate.seriesResistance !== 'string' || candidate.seriesResistance.length > 64)) throw new Error(`${candidate.ref} has invalid series-resistance metadata.`)
     if (candidate.seriesResistance !== undefined && (componentMagnitude(candidate.seriesResistance, 'resistor') === null || componentMagnitude(candidate.seriesResistance, 'resistor')! < 0)) throw new Error(`${candidate.ref} series resistance must be a nonnegative numeric resistance.`)
+    for (const key of ['primaryWindingResistance', 'secondaryWindingResistance'] as const) {
+      const resistance = candidate[key]
+      if (resistance !== undefined && (candidate.kind !== 'transformer' || typeof resistance !== 'string' || resistance.length > 64)) throw new Error(`${candidate.ref} has invalid ${key} metadata.`)
+      if (resistance !== undefined && (componentMagnitude(resistance, 'resistor') === null || componentMagnitude(resistance, 'resistor')! < 0)) throw new Error(`${candidate.ref} ${key} must be a nonnegative numeric resistance.`)
+    }
     if (candidate.kind === 'transformer' && (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(candidate.coupling ?? '1') || !Number.isFinite(Number(candidate.coupling ?? '1')) || Number(candidate.coupling ?? '1') <= 0 || Number(candidate.coupling ?? '1') > 1)) throw new Error(`${candidate.ref} magnetic coupling coefficient must be greater than 0 and at most 1.`)
     if (candidate.wiperPosition !== undefined && (candidate.kind !== 'potentiometer' || typeof candidate.wiperPosition !== 'string' || candidate.wiperPosition.length > 64)) throw new Error(`${candidate.ref} has invalid potentiometer wiper-position metadata.`)
     if (candidate.kind === 'potentiometer' && (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(candidate.wiperPosition ?? '0.5') || !Number.isFinite(Number(candidate.wiperPosition ?? '0.5')) || Number(candidate.wiperPosition ?? '0.5') < 0.001 || Number(candidate.wiperPosition ?? '0.5') > 0.999)) throw new Error(`${candidate.ref} wiper position must be between 0.001 and 0.999.`)

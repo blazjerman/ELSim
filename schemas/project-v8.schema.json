@@ -556,6 +556,16 @@
           "maxLength": 64,
           "description": "Optional nonnegative series resistance (ohms) for capacitor ESR or inductor winding loss."
         },
+        "primaryWindingResistance": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional nonnegative series resistance in ohms for a built-in transformer's primary winding."
+        },
+        "secondaryWindingResistance": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional nonnegative series resistance in ohms for a built-in transformer's secondary winding."
+        },
         "wiperPosition": {
           "type": "string",
           "maxLength": 64,

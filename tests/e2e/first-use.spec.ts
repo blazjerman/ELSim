@@ -2813,6 +2813,14 @@ test('transformer example solves the configured AC turns ratio', { tag: '@ngspic
   await page.locator('.example-lesson-next-step').getByRole('button', { name: 'Run this circuit again' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expect(page.locator('.example-lesson-next-step')).toContainText('ngspice solved 3 V')
+  await page.locator('.circuit-part[data-part-id="transformer-t1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.getByRole('textbox', { name: 'Primary winding resistance' }).fill('10 Ω')
+  await page.getByRole('textbox', { name: 'Secondary winding resistance' }).fill('100 Ω')
+  await page.getByRole('button', { name: 'Netlist', exact: true }).click()
+  const lossyNetlist = await page.locator('.netlist-panel pre').innerText()
+  expect(lossyNetlist).toMatch(/^RT1_P VIN __ELSIM_transformer_t1_P 10$/m)
+  expect(lossyNetlist).toMatch(/^RT1_S VOUT __ELSIM_transformer_t1_S 100$/m)
 })
 
 test('LED current-limiter example explains and solves its resistor-limited current', { tag: '@ngspice' }, async ({ page }) => {
