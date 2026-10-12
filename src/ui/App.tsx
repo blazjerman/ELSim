@@ -160,15 +160,17 @@ const CanvasNetLabelLayer = memo(function CanvasNetLabelLayer({ labels, selected
   onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void
   onSelect: (id: string, additive?: boolean) => void
 }) {
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   // Keep the interactive/accessibility tree proportional to what the user can see.
-  // Include selected labels outside the viewport so keyboard focus is not lost during pan.
+  // Preserve only the focused label across a pan; large multi-selections stay viewport-bounded.
+  const focusedLabelId = document.activeElement?.closest<SVGGElement>('[data-net-label-id]')?.dataset.netLabelId
   const margin = 30
-  return <>{labels.filter((label) => label.visible !== false && (selectedIds.includes(label.id) || (
+  return <>{labels.filter((label) => label.visible !== false && (label.id === focusedLabelId || (
     label.x + 9 <= viewportRight + margin &&
     label.x + 9 + label.name.length * 9 >= viewportLeft - margin &&
     label.y - 9 >= viewportTop - margin &&
     label.y - 9 <= viewportBottom + margin
-  ))).map((label) => <CanvasNetLabel key={label.id} label={label} selected={selectedIds.includes(label.id)} tool={tool} onPointerDown={onPointerDown} onSelect={onSelect}/>)}</>
+  ))).map((label) => <CanvasNetLabel key={label.id} label={label} selected={selectedIdSet.has(label.id)} tool={tool} onPointerDown={onPointerDown} onSelect={onSelect}/>)}</>
 })
 
 function focusAfterInspectorRender(selector: string) {
@@ -705,6 +707,9 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
 }
 
 function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, setView, spacePan, tool, setTool, pendingComponent, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; setSelection: (selection: Selection) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; setView: (fn: (current: Project['view']) => Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
+  const selectedWireIdSet = useMemo(() => new Set(selectedWireIds), [selectedWireIds])
+  const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
+  const selectedNetLabelIdSet = useMemo(() => new Set(selectedNetLabelIds), [selectedNetLabelIds])
   const sampleIndex = useSimulationCursor()
   const symbolsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, parseLtspiceSymbol(asset.content, asset.filename)])), [project.symbolAssets])
   const svg = useRef<SVGSVGElement>(null)
@@ -938,22 +943,23 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     if (tool !== 'select' && !movingPartWithWireArmed) return
     event.stopPropagation()
     const preserveMixedSelection = kind === 'part' && (selectedWireIds.length > 0 || selectedNetLabelIds.length > 0)
-    const alreadySelected = preserveMixedSelection || selectedPartIds.includes(id) || selectedWireIds.includes(id) || selectedNetLabelIds.includes(id)
+    const alreadySelected = preserveMixedSelection || selectedPartIdSet.has(id) || selectedWireIdSet.has(id) || selectedNetLabelIdSet.has(id)
     const partIds = alreadySelected
-      ? kind === 'part' && !selectedPartIds.includes(id) ? [...selectedPartIds, id] : selectedPartIds
+      ? kind === 'part' && !selectedPartIdSet.has(id) ? [...selectedPartIds, id] : selectedPartIds
       : kind === 'part' ? [id] : []
     const wireIds = alreadySelected ? selectedWireIds : kind === 'wire' ? [id] : []
     const labelIds = alreadySelected ? selectedNetLabelIds : kind === 'label' ? [id] : []
+    const partIdSet = new Set(partIds), wireIdSet = new Set(wireIds), labelIdSet = new Set(labelIds)
     const group = {
-      parts: project.parts.filter((item) => partIds.includes(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y })),
-      wires: project.wires.filter((item) => wireIds.includes(item.id)).map((item) => ({ id: item.id, points: item.points.map(([x, y]) => [x, y] as [number, number]) as [[number, number], [number, number]] })),
-      labels: project.netLabels.filter((item) => labelIds.includes(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y })),
+      parts: project.parts.filter((item) => partIdSet.has(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y })),
+      wires: project.wires.filter((item) => wireIdSet.has(item.id)).map((item) => ({ id: item.id, points: item.points.map(([x, y]) => [x, y] as [number, number]) as [[number, number], [number, number]] })),
+      labels: project.netLabels.filter((item) => labelIdSet.has(item.id)).map((item) => ({ id: item.id, x: item.x, y: item.y })),
     }
     if (!alreadySelected) {
       setSelectedPartIds(partIds)
       setSelectedWireIds(wireIds)
       setSelectedNetLabelIds(labelIds)
-    } else if (kind === 'part' && !selectedPartIds.includes(id)) {
+    } else if (kind === 'part' && !selectedPartIdSet.has(id)) {
       setSelectedPartIds(partIds)
     }
     if (kind === 'wire') { if (!alreadySelected) setSelectedWireId(id) }
@@ -1320,7 +1326,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
-      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireIds.includes(wire.id)} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={animatedWireIds.has(wire.id) ? wireFlows.get(wire.id) ?? [] : []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>) }
+      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireIdSet.has(wire.id)} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} flow={animatedWireIds.has(wire.id) ? wireFlows.get(wire.id) ?? [] : []} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>) }
       {wireConnectionDots.map(({ x, y }) => <circle key={`${x}:${y}`} className="wire-connection-dot" data-x={x} data-y={y} cx={x} cy={y} r="4" pointerEvents="none"/>)}
       <CanvasNetLabelLayer labels={project.netLabels} selectedIds={selectedNetLabelIds} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       {project.junctions.map((junction, index) => <g key={`junction-${index}`} pointerEvents="none"><circle cx={junction.x} cy={junction.y} r="6" fill="#a9d8b7" stroke="#152019" strokeWidth="1.5"/><circle cx={junction.x} cy={junction.y} r="2" fill="#283d2e"/><title>Connected wire junction</title></g>)}
@@ -1387,6 +1393,7 @@ export default function App() {
   const selectedWireId = selectedWireIds.at(-1) ?? null
   const setSelectedWireId = (id: string | null) => setSelectedWireIds(id ? [id] : [])
   const [selectedPartIds, setSelectedPartIds] = useState<string[]>(['p-r1'])
+  const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const [selectedNetLabelIds, setSelectedNetLabelIds] = useState<string[]>([])
   const [tool, setTool] = useState<ToolMode>('select')
   const [pendingComponentKind, setPendingComponentKind] = useState<PartKind | null>(null)
@@ -1846,7 +1853,7 @@ export default function App() {
     if (validIds.length !== selectedWireIds.length) setSelectedWireIds(validIds)
   }, [project.wires, selectedWireIds])
   useLayoutEffect(() => {
-    const selectedIds = selected && !selectedPartIds.includes(selected.id) ? [selected.id] : selectedPartIds
+    const selectedIds = selected && !selectedPartIdSet.has(selected.id) ? [selected.id] : selectedPartIds
     updatePartUiState(selectedIds, selected?.id ?? project.parts[0]?.id)
   }, [selectedPartIds, selected, project.parts])
   const filteredPalette = palette.filter(({ kind, label, subtitle }) => {

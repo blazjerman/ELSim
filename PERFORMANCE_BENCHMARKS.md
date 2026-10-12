@@ -263,7 +263,7 @@ The repeated hierarchy result is about 65% lower and the named-net chain about 7
 
 The Firefox editor benchmark now waits for the starter project to persist before using it as the generated-project fixture; this fixes a race that made the benchmark fail before collecting data. One local run on the i7-12700F host measured:
 
-| Parts | Editor ready (ms) | Selection median / p95 (ms) | SVG elements | Detailed parts |
+| Parts | Editor ready (ms) | Single-selection median / p95 (ms) | SVG elements | Detailed parts |
 | ---: | ---: | ---: | ---: | ---: |
 | 100 | 378 | 11 / 15 | 559 | 36 |
 | 500 | 432 | 5 / 7 | 1,601 | 64 |
@@ -271,6 +271,8 @@ The Firefox editor benchmark now waits for the starter project to persist before
 | 5,000 | 1,175 | 17 / 21 | 10,601 | 64 |
 
 The generated schematic has twice as many net labels as parts. At 5,000 parts, only 64 components retain detailed SVG artwork and 105 labels render, while every component remains in the DOM for accessible selection. Firefox does not expose the benchmark's Chromium-only JS heap readings. These are single-run observations, not budgets.
+
+After replacing selected-ID array scans with `Set` lookups and keeping only visible plus currently focused labels mounted, the same Firefox benchmark measured Ctrl+A selection across 5,000 components and 10,000 labels at 190 ms through the next animation frame. The post-selection SVG still mounted 105 labels. This is one run and has no comparable pre-change Ctrl+A baseline; the change removes quadratic membership scans and avoids mounting 10,000 offscreen label controls at once.
 
 ### Memoized-connectivity Circuit Checks path (2026-10-12)
 

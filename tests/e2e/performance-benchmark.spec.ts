@@ -547,6 +547,15 @@ test('record large-project editor render and selection input-to-frame timings', 
   await expect(offscreenPart).toHaveClass(/selected/)
   await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(5_000)
   expect(await page.locator('svg.schematic [data-net-label-id]').count()).toBeLessThan(10_000)
+  const selectAllInputToFrameMs = await page.evaluate(() => new Promise<number>((resolve) => {
+    const started = performance.now()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }))
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now() - started)))
+  }))
+  await expect(page.getByText('Selected all 5000 components, 0 wires, and 10000 labels.')).toBeVisible()
+  const selectedLabelsMounted = await page.locator('svg.schematic [data-net-label-id]').count()
+  expect(selectedLabelsMounted).toBeLessThan(500)
+  expect(await page.locator('svg.schematic .circuit-part.selected').count()).toBe(5_000)
 
   const transport = await page.evaluate(async () => {
     const sampleCount = 100_000, traceCount = 6
@@ -582,7 +591,7 @@ test('record large-project editor render and selection input-to-frame timings', 
   expect(transport.transfer.sharedAxis).toBe(true)
   expect(transport.transfer.detachedAtSend).toBe(true)
   expect(transport.clone.finalSample).toBeCloseTo(transport.transfer.finalSample, 12)
-  console.log(JSON.stringify({ benchmark: 'editor-large-project-v4', browser: browserName, inputTiming: 'synthetic click dispatch to next animation frame; excludes Playwright locator/actionability overhead', results, transport }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'editor-large-project-v5', browser: browserName, inputTiming: 'synthetic event dispatch to next animation frame; excludes Playwright locator/actionability overhead', selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), selectedLabelsMounted, results, transport }, null, 2))
 })
 
 test('measure selection latency in a large routed-wire schematic', async ({ page, browserName }) => {

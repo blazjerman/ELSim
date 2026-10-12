@@ -1242,6 +1242,7 @@ test('copy and paste a selected wire path without connected parts', async ({ pag
 
 test('fit schematic view frames distant parts, wires, and labels', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts.push({ id: 'far-part', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 1800, y: 1200, rotation: 0 })
@@ -2037,6 +2038,7 @@ test('Ctrl+A selects multiple wires and dragging one moves the selected wire gro
 
 test('dragging a mixed component, wire, and label selection moves every selected item together', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = [{ id: 'mixed-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 330, rotation: 0 }]
