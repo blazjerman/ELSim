@@ -17,6 +17,12 @@ export type ParsedRawFile = {
   variables: RawVariable[]
 }
 
+export function rawTraceUnit(name: string, type: string): string {
+  if (/^onoise_spectrum$/i.test(name)) return 'V/√Hz'
+  if (/^inoise_spectrum$/i.test(name)) return /^current-density$/i.test(type) ? 'A/√Hz' : 'V/√Hz'
+  return /^current$/i.test(type) ? 'A' : 'V'
+}
+
 export function isTraceVariable(name: string, names: string[]): boolean {
   if (/^(?:inoise|onoise)_spectrum$/i.test(name)) return true
   if (/^v\(/i.test(name) || /^i\(@/i.test(name)) return true

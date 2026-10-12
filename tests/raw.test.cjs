@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { isTraceVariable, parseAsciiRawFile } = require(path.join(build, 'engine/raw.js'))
+const { isTraceVariable, parseAsciiRawFile, rawTraceUnit } = require(path.join(build, 'engine/raw.js'))
 const { serializeWaveformCsv } = require(path.join(build, 'engine/csv.js'))
 
 const validRaw = `Title: RC fixture
@@ -176,6 +176,11 @@ test('ASCII raw parser reads ngspice output and input-referred noise density vec
   assert.deepEqual(parsed.variables.map((variable) => variable.name), ['onoise_spectrum', 'inoise_spectrum'])
   assert.deepEqual([...parsed.variables[0].values], [1e-8, 9.95e-9])
   assert.equal(isTraceVariable('onoise_spectrum', parsed.variables.map((variable) => variable.name)), true)
+  assert.equal(rawTraceUnit('onoise_spectrum', parsed.variables[0].type), 'V/√Hz')
+  assert.equal(rawTraceUnit('inoise_spectrum', parsed.variables[1].type), 'V/√Hz')
+  const currentInput = parseAsciiRawFile(validNoiseRaw.replace('inoise_spectrum voltage-density', 'inoise_spectrum current-density'))
+  assert.equal(rawTraceUnit('onoise_spectrum', currentInput.variables[0].type), 'V/√Hz')
+  assert.equal(rawTraceUnit('inoise_spectrum', currentInput.variables[1].type), 'A/√Hz')
 })
 
 test('transient plotting accepts only voltage and current variable names', () => {

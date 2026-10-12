@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { isTraceVariable, parseAsciiRawFile } from './raw'
+import { isTraceVariable, parseAsciiRawFile, rawTraceUnit } from './raw'
 import { addResultControl } from './resultControl'
 import { parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice, firstNgspiceError } from './diagnostics'
@@ -25,7 +25,7 @@ function makeTraces(rawText: string): Trace[] {
     return {
       id: lowercaseName,
       label: noise ? (lowercaseName.startsWith('onoise') ? 'Output noise' : 'Input-referred noise') : `${current ? 'I' : 'V'}(${component ?? inner})`,
-      unit: noise ? 'V/√Hz' : current ? 'A' : 'V',
+      unit: noise ? rawTraceUnit(variable.name, variable.type) : current ? 'A' : 'V',
       axisLabel: parsed.axisLabel,
       axisUnit: parsed.axisUnit,
       axis,
