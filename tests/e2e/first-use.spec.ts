@@ -969,6 +969,7 @@ test('voltage source accepts a pasted PWL point table', { tag: '@ui-smoke' }, as
   await page.goto('/')
   await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
   await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('pwl')
+  await expect(page.getByRole('button', { name: /Add point/ })).not.toHaveAttribute('aria-invalid')
   await page.getByText('Import point table').click()
   await page.getByLabel('Paste PWL time and voltage rows').fill('time, voltage\n0, 0 V\n1m, 5 V\n2m, 0 V')
   await page.getByRole('button', { name: 'Replace points with pasted table' }).click()
