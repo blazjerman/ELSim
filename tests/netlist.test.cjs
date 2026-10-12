@@ -10,7 +10,7 @@ const { createStarterProject, validateProject } = require(path.join(build, 'doma
 const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlStepExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
+const { parseSourcePwlText, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
 const { dcSweepPointCount, MAX_DC_SWEEP_POINTS } = require(path.join(build, 'domain/dcSweep.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
@@ -624,6 +624,13 @@ test('PWL editor validation reports malformed, negative, and non-increasing time
   assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '2 ms', voltage: '5 V' }]), [null, null, null, null])
   assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '0', voltage: 'bad' }]), [null, null, 'Time must be later than the previous point.', 'Enter a numeric voltage such as 3.3 or -5 V.'])
   assert.deepEqual(validateSourcePwlPoints([{ time: '-1m', voltage: '0' }, { time: 'x', voltage: '1' }]), ['Time must be zero or greater.', null, 'Enter a time such as 2m or 2 ms.', null])
+})
+
+test('pasted PWL tables accept CSV, TSV, optional headers, and current units', () => {
+  assert.deepEqual(parseSourcePwlText('time, voltage\n0, 0 V\n1m, 5 V').points, [{ time: '0', voltage: '0 V' }, { time: '1m', voltage: '5 V' }])
+  assert.deepEqual(parseSourcePwlText('0\t0\n1m\t2m', 'current').points, [{ time: '0', current: '0' }, { time: '1m', current: '2m' }])
+  assert.match(parseSourcePwlText('0, 0\n0, 1').error, /Line 2: Time must be later/)
+  assert.match(parseSourcePwlText('0, 0').error, /at least two/)
 })
 
 test('native PWL source accepts 256 points and rejects more', () => {
