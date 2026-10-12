@@ -209,8 +209,10 @@ try {
     const project = makeChain(createStarterProject, componentPins, count)
     const connectivity = measure(() => analyzeConnectivity(project))
     const netlist = measure(() => createNetlistArtifact(project))
-    const circuitChecks = measure(() => checkCircuit(project))
+    const circuitChecks = measure(() => checkCircuit(project, connectivity.value))
+    const fullCircuitChecks = measure(() => checkCircuit(project))
     const artifact = netlist.value
+    if (circuitChecks.value.length !== fullCircuitChecks.value.length) throw new Error(`Circuit-check fixture ${count} changed issue count when connectivity was reused.`)
     if (artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error(`Benchmark fixture ${count} produced netlist errors.`)
     if (connectivity.value.pinNets.size !== count * 2 + 2) throw new Error(`Benchmark fixture ${count} lost one or more component pins in connectivity analysis.`)
     circuitResults.push({
@@ -223,6 +225,7 @@ try {
       connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
       netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
       circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
+      fullCircuitChecks: { medianMs: fullCircuitChecks.medianMs, p95Ms: fullCircuitChecks.p95Ms },
     })
   }
 
@@ -231,8 +234,10 @@ try {
     const project = makeHierarchy(createHierarchicalExampleProject, componentPins, count)
     const connectivity = measure(() => analyzeConnectivity(project))
     const netlist = measure(() => createNetlistArtifact(project))
-    const circuitChecks = measure(() => checkCircuit(project))
+    const circuitChecks = measure(() => checkCircuit(project, connectivity.value))
+    const fullCircuitChecks = measure(() => checkCircuit(project))
     const artifact = netlist.value
+    if (circuitChecks.value.length !== fullCircuitChecks.value.length) throw new Error(`Hierarchical circuit-check fixture ${count} changed issue count when connectivity was reused.`)
     if (artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error(`Hierarchical benchmark fixture ${count} produced netlist errors.`)
     if (connectivity.value.pinNets.size !== count * 3) throw new Error(`Hierarchical benchmark fixture ${count} lost one or more root block pins.`)
     if (!/^\.SUBCKT ELSIM_SHEET_sheet_core/m.test(artifact.text) || !/^\.SUBCKT ELSIM_SHEET_sheet_divider/m.test(artifact.text)) throw new Error(`Hierarchical benchmark fixture ${count} lost a nested block definition.`)
@@ -247,6 +252,7 @@ try {
       connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
       netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
       circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
+      fullCircuitChecks: { medianMs: fullCircuitChecks.medianMs, p95Ms: fullCircuitChecks.p95Ms },
     })
   }
 
@@ -255,8 +261,10 @@ try {
     const project = makeWireGrid(createStarterProject, componentPins, count)
     const connectivity = measure(() => analyzeConnectivity(project))
     const netlist = measure(() => createNetlistArtifact(project))
-    const circuitChecks = measure(() => checkCircuit(project))
+    const circuitChecks = measure(() => checkCircuit(project, connectivity.value))
+    const fullCircuitChecks = measure(() => checkCircuit(project))
     const artifact = netlist.value
+    if (circuitChecks.value.length !== fullCircuitChecks.value.length) throw new Error(`Wire-grid circuit-check fixture ${count} changed issue count when connectivity was reused.`)
     if (artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error(`Wire-heavy benchmark fixture ${count} produced netlist errors.`)
     if (connectivity.value.pinNets.size !== count * 2) throw new Error(`Wire-heavy benchmark fixture ${count} lost one or more component pins in connectivity analysis.`)
     const wireSegments = project.wires.reduce((sum, wire) => sum + wire.points.length - 1, 0)
@@ -271,6 +279,7 @@ try {
       connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
       netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
       circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
+      fullCircuitChecks: { medianMs: fullCircuitChecks.medianMs, p95Ms: fullCircuitChecks.p95Ms },
     })
   }
 
@@ -348,7 +357,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 4,
+    benchmarkVersion: 5,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
