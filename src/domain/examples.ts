@@ -697,14 +697,24 @@ export function createAcLowPassExampleProject(): Project {
   }
   project.name = 'RC low-pass frequency response'
   project.parts = [source, resistor, capacitor]
-  project.wires = []
+  project.wires = [
+    { id: 'ac-lowpass-vin-rise', points: [[260, 310], [260, 260]] },
+    { id: 'ac-lowpass-vin-top', points: [[260, 260], [450, 260]] },
+    { id: 'ac-lowpass-vin-resistor', points: [[450, 260], [450, 300]] },
+    { id: 'ac-lowpass-resistor-output', points: [[550, 300], [610, 300]] },
+    { id: 'ac-lowpass-output-drop', points: [[610, 300], [610, 360]] },
+    { id: 'ac-lowpass-output-capacitor', points: [[610, 360], [690, 360]] },
+    { id: 'ac-lowpass-ground-source-drop', points: [[260, 410], [260, 440]] },
+    { id: 'ac-lowpass-ground-return', points: [[260, 440], [790, 440]] },
+    { id: 'ac-lowpass-ground-capacitor-rise', points: [[790, 440], [790, 360]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('ac-lowpass-vin-source', 'VIN', source, 0), labelAt('ac-lowpass-vin-resistor', 'VIN', resistor, 0),
-    labelAt('ac-lowpass-vout-resistor', 'VOUT', resistor, 1), labelAt('ac-lowpass-vout-capacitor', 'VOUT', capacitor, 0),
-    labelAt('ac-lowpass-ground-source', '0', source, 1), labelAt('ac-lowpass-ground-capacitor', '0', capacitor, 1),
+    labelAt('ac-lowpass-vin-source', 'VIN', source, 0),
+    labelAt('ac-lowpass-vout-capacitor', 'VOUT', capacitor, 0),
+    labelAt('ac-lowpass-ground-source', '0', source, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '100 kHz' }, sourceAcMagnitude: '1 V' }
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
   project.view = { zoom: 0.95, panX: -10, panY: 0 }
@@ -724,14 +734,24 @@ export function createAcHighPassExampleProject(): Project {
   }
   project.name = 'RC high-pass frequency response'
   project.parts = [source, capacitor, resistor]
-  project.wires = []
+  project.wires = [
+    { id: 'ac-highpass-vin-rise', points: [[260, 310], [260, 260]] },
+    { id: 'ac-highpass-vin-top', points: [[260, 260], [450, 260]] },
+    { id: 'ac-highpass-vin-capacitor', points: [[450, 260], [450, 300]] },
+    { id: 'ac-highpass-capacitor-output', points: [[550, 300], [610, 300]] },
+    { id: 'ac-highpass-output-drop', points: [[610, 300], [610, 360]] },
+    { id: 'ac-highpass-output-resistor', points: [[610, 360], [690, 360]] },
+    { id: 'ac-highpass-ground-source-drop', points: [[260, 410], [260, 440]] },
+    { id: 'ac-highpass-ground-return', points: [[260, 440], [790, 440]] },
+    { id: 'ac-highpass-ground-resistor-rise', points: [[790, 440], [790, 360]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('ac-highpass-vin-source', 'VIN', source, 0), labelAt('ac-highpass-vin-capacitor', 'VIN', capacitor, 0),
-    labelAt('ac-highpass-vout-capacitor', 'VOUT', capacitor, 1), labelAt('ac-highpass-vout-resistor', 'VOUT', resistor, 0),
-    labelAt('ac-highpass-ground-source', '0', source, 1), labelAt('ac-highpass-ground-resistor', '0', resistor, 1),
+    labelAt('ac-highpass-vin-source', 'VIN', source, 0),
+    labelAt('ac-highpass-vout-capacitor', 'VOUT', capacitor, 1),
+    labelAt('ac-highpass-ground-source', '0', source, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '100 kHz' }, sourceAcMagnitude: '1 V' }
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
   project.view = { zoom: 0.95, panX: -10, panY: 0 }
