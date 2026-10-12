@@ -229,6 +229,19 @@ test('ground in an uninstantiated sheet does not hide a missing ground warning',
   assert.equal(checkCircuit(project).some((issue) => issue.id === 'ground'), true)
 })
 
+test('missing-ground guidance selects a voltage source inside a reachable child sheet', () => {
+  const project = createHierarchicalExampleProject()
+  const root = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
+  project.parts = root.parts.filter((part) => part.kind !== 'source' && part.kind !== 'ground')
+  project.wires = []
+  project.netLabels = root.netLabels.filter((label) => label.name.trim() !== '0')
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.parts.push({ id: 'nested-supply', kind: 'source', ref: 'VCORE', value: '5 V', x: 700, y: 800, rotation: 0 })
+  const issue = checkCircuit(project).find((item) => item.id === 'ground')
+  assert.equal(issue?.partId, 'example-x2')
+  assert.match(issue?.detail, /negative terminal of VCORE inside Core resistor/)
+})
+
 test('gives a useful first step for an empty project', () => {
   const project = createStarterProject()
   project.parts = []

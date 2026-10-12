@@ -468,15 +468,19 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     if (sheetParts.some((part) => part.kind !== 'ground' && componentPins(part).some((pin) => sheetConnectivity.pinNets.get(`${part.id}:${pin.index}`) === '0'))) hasGround = true
   }
   if (!hasGround) {
-    const supply = project.parts.find((part) => part.kind === 'source')
+    const supplyLocation = reachableSheets.flatMap(({ sheet, topLevelInstanceId }) => sheet.parts
+      .filter((part) => part.kind === 'source')
+      .map((source) => ({ source, sheet, partId: topLevelInstanceId ?? source.id })))[0]
+    const supply = supplyLocation?.source
+    const sheetHint = supplyLocation && supplyLocation.sheet.id !== project.activeSheetId ? ` inside ${supplyLocation.sheet.name}` : ''
     issues.push({
       id: 'ground',
       severity: 'warning',
       title: 'No ground reference found',
       detail: supply
-        ? `Most SPICE circuits need a node named 0. Check the negative terminal of ${supply.ref}; if that is your circuit's reference point, connect a ground symbol there or add a net label named 0. Keep a different reference if your circuit is intentionally floating.`
+        ? `Most SPICE circuits need a node named 0. Check the negative terminal of ${supply.ref}${sheetHint}; if that is your circuit's reference point, connect a ground symbol there or add a net label named 0. Keep a different reference if your circuit is intentionally floating.`
         : 'Most SPICE circuits need a node named 0. Add a ground symbol or a net label named 0.',
-      ...(supply ? { partId: supply.id } : {}),
+      ...(supplyLocation ? { partId: supplyLocation.partId } : {}),
     })
   }
   for (const [index, diagnostic] of connectivity.diagnostics.entries()) {
