@@ -9,6 +9,7 @@ import { performance } from 'node:perf_hooks'
 
 const require = createRequire(import.meta.url)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const skipEngineBenchmarks = process.argv.includes('--skip-engine')
 const output = mkdtempSync(path.join(os.tmpdir(), 'elsim-performance-'))
 const tsc = path.resolve(path.dirname(require.resolve('typescript')), '../bin/tsc')
 const sources = [
@@ -296,16 +297,25 @@ try {
       const visibleWireIds = new Set(project.wires.slice(0, 20).map((wire) => wire.id))
       const currentForPart = (part) => part.kind === 'resistor' ? 0.001 : undefined
       const full = measure(() => sampler(currentForPart), 1, 3)
-      const visible = measure(() => sampler(currentForPart, undefined, visibleWireIds), 1, 3)
+      const visibleStableSet = measure(() => sampler(currentForPart, undefined, visibleWireIds), 1, 7)
+      const visibleRebuiltSet = measure(() => sampler(currentForPart, undefined, new Set(visibleWireIds)), 1, 7)
+      const visible = visibleStableSet
       if (visible.value.size !== visibleWireIds.size) throw new Error('Visible wire-current sampling omitted a requested wire.')
       for (const id of visibleWireIds) {
         if (JSON.stringify(visible.value.get(id)) !== JSON.stringify(full.value.get(id))) throw new Error(`Visible wire-current sample changed the full-circuit result for ${id}.`)
+      }
+      if (visibleRebuiltSet.value.size !== visibleWireIds.size) throw new Error('Rebuilt visible wire-current sampling omitted a requested wire.')
+      for (const id of visibleWireIds) {
+        if (JSON.stringify(visibleRebuiltSet.value.get(id)) !== JSON.stringify(visible.value.get(id))) throw new Error(`Rebuilding the visible-wire set changed the result for ${id}.`)
       }
       wireFlowSampling = {
         wireNetworks: project.wires.length,
         requestedWires: visibleWireIds.size,
         allNetworks: { medianMs: full.medianMs, p95Ms: full.p95Ms },
-        visibleNetworks: { medianMs: visible.medianMs, p95Ms: visible.p95Ms },
+        visibleNetworks: {
+          stableSet: { medianMs: visibleStableSet.medianMs, p95Ms: visibleStableSet.p95Ms },
+          rebuiltSetEachSample: { medianMs: visibleRebuiltSet.medianMs, p95Ms: visibleRebuiltSet.p95Ms },
+        },
       }
     }
     wireResults.push({
@@ -342,7 +352,7 @@ try {
   let transientResults = null
   let transientWindowComparison = null
   const engineModule = path.join(root, 'public/engine/ngspice.mjs')
-  if (existsSync(engineModule)) {
+  if (!skipEngineBenchmarks && existsSync(engineModule)) {
     simulationResults = []
     for (const count of [100, 1_000, 5_000]) {
       const project = makeChain(createStarterProject, componentPins, count)
@@ -425,9 +435,9 @@ try {
     wireResults,
     hierarchyResults,
     plotResults,
-    simulationResults: simulationResults ?? 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations',
-    transientResults: transientResults ?? 'skipped: build the optional local ngspice WASM runtime to include large transient and process-memory observations',
-    transientWindowComparison: transientWindowComparison ?? 'skipped: build the optional local ngspice WASM runtime to compare retained waveform data windows',
+    simulationResults: simulationResults ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations'),
+    transientResults: transientResults ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to include large transient and process-memory observations'),
+    transientWindowComparison: transientWindowComparison ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to compare retained waveform data windows'),
   }, null, 2))
 } finally {
   rmSync(output, { recursive: true, force: true })

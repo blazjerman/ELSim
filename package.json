@@ -29,6 +29,7 @@
     "test:e2e:pwa:firefox": "npm run test:e2e:pwa -- --browser=firefox",
     "check:pages-base": "node tools/check-pages-base-build.mjs",
     "benchmark:performance": "node tools/benchmark-performance.mjs",
+    "benchmark:performance:quick": "node tools/benchmark-performance.mjs --skip-engine",
     "benchmark:browser": "playwright test --config playwright.performance.config.ts",
     "test:wasm": "node tools/test-ngspice-wasm.mjs",
     "check:ngspice-release": "node tools/check-ngspice-release.mjs",
