@@ -228,10 +228,13 @@ test('quick tour explains the current workspace and project save flow', { tag: '
 })
 
 test('keyboard shortcut reference matches editor controls and restores focus', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
+  await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
   const trigger = page.getByRole('button', { name: 'Keyboard shortcuts' })
   await trigger.click()
   const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
+  await expect(dialog).toBeVisible()
   await expect(dialog.getByText('Draw a wire by dragging')).toBeVisible()
   await expect(dialog.getByText('Ctrl/⌘ + Enter')).toBeVisible()
   await expect(dialog.getByText('Resistor', { exact: true })).toBeVisible()
