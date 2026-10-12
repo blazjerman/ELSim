@@ -52,8 +52,8 @@ function tick() {
     const element = elements.get(key)
     if (!element || config.magnitude <= 1e-12) continue
     // Match CircuitJS: advance dot position by current × current-speed setting.
-    // Dot positions repeat every eight SVG units, as in CircuitJS.
-    const cycleLength = config.dotSize + config.dotSpacing
+    // Round-capped zero-length dashes render as dots at the configured spacing.
+    const cycleLength = config.dotSpacing
     const increment = (config.magnitude * config.currentMultiplier) % cycleLength
     const phase = (phases.get(key) ?? 0) + increment * (config.forward ? 1 : -1)
     const wrapped = ((phase % cycleLength) + cycleLength) % cycleLength
