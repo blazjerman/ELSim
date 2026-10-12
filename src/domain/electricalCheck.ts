@@ -52,7 +52,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   }
   const reachableSheets = reachableSimulationSheets(project)
 
-  for (const { sheet } of reachableSheets) {
+  for (const { sheet, topLevelInstanceId } of reachableSheets) {
     const partsByReference = new Map<string, Project['parts']>()
     for (const part of sheet.parts) {
       const key = part.ref.trim().toLowerCase()
@@ -63,11 +63,11 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       for (const part of duplicates) {
         const otherReferences = duplicates.filter((candidate) => candidate.id !== part.id).map((candidate) => candidate.ref)
         issues.push({
-          id: `duplicate-reference:${part.id}`,
+          id: `duplicate-reference:${sheet.id === project.activeSheetId ? '' : `${sheet.id}:`}${part.id}`,
           severity: 'warning',
           title: `${part.ref} shares its reference with ${otherReferences.join(', ')}`,
           detail: 'SPICE component references must be unique within a sheet, ignoring letter case. Rename one of these components before running the simulation.',
-          partId: part.id,
+          partId: topLevelInstanceId ?? part.id,
         })
       }
     }

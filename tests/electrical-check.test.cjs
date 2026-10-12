@@ -81,9 +81,10 @@ test('duplicate-reference checks follow hierarchy sheet scope', () => {
 
   const issues = checkCircuit(project).filter((issue) => issue.id.startsWith('duplicate-reference:'))
   assert.deepEqual(issues.map((issue) => issue.id).sort(), [
-    'duplicate-reference:divider-rin',
-    'duplicate-reference:divider-rmain-duplicate',
+    'duplicate-reference:sheet-divider:divider-rin',
+    'duplicate-reference:sheet-divider:divider-rmain-duplicate',
   ])
+  assert.ok(issues.every((issue) => issue.partId === 'example-x2'))
 })
 
 test('reports floating terminals on the component a beginner needs to wire', () => {
@@ -293,6 +294,15 @@ test('checks parameter values in reachable child sheets and selects their top-le
 
   core.parts.find((part) => part.ref === 'RCORE').value = '{RCORE}'
   assert.equal(checkCircuit(project).some((item) => item.id === 'invalid-value:sheet-core:core-r1'), false)
+})
+
+test('child-sheet duplicate-reference checks select the visible block instance', () => {
+  const project = createHierarchicalExampleProject()
+  const divider = project.sheets.find((sheet) => sheet.id === 'sheet-divider')
+  divider.parts.push({ ...divider.parts.find((part) => part.ref === 'RMAIN'), id: 'nested-duplicate', ref: 'rmain' })
+  const issues = checkCircuit(project).filter((item) => item.id.startsWith('duplicate-reference:sheet-divider:'))
+  assert.equal(issues.length, 2)
+  assert.deepEqual(new Set(issues.map((item) => item.partId)), new Set(['example-x2']))
 })
 
 test('accepts declared sheet parameters in behavioral source expressions and explains missing ones', () => {
