@@ -802,6 +802,7 @@ test('ngspice current animates through the grounded RC return wire', { tag: ['@n
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('group', { name: 'Result playback' })).toBeVisible()
   const time = page.getByRole('slider', { name: 'Simulation time' })
   const lastSample = Number(await time.getAttribute('max'))
   await time.fill(String(Math.max(1, Math.round(lastSample * 0.05))))
@@ -4263,6 +4264,7 @@ test('portable export names imported files and asks before including unknown-lic
 
 test('opening a project asks before replacing the current circuit', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   const currentName = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)
   const importedProject = await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
