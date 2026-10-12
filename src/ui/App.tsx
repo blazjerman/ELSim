@@ -1622,7 +1622,6 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
           <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id, winding: 'S' }); setContextMenu(null) }}>Plot secondary winding current</button>
         </> : contextPart.kind !== 'ground' && (currentProbesUnavailable ? <div className="context-menu-note" role="note">AC and noise results do not include component-current traces. Run a transient or DC analysis to probe current.</div> : <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id }); setContextMenu(null) }}>{contextPart.kind === 'potentiometer' ? 'Plot upper-to-wiper current' : 'Plot current through component'}</button>)}
         {contextPart.kind === 'switch' && <button role="menuitem" onClick={() => { togglePart(contextPart.id); setContextMenu(null) }}>Switch {contextPart.value.toLowerCase() === 'on' ? 'off' : 'on'}</button>}
-        <button role="menuitem" onClick={() => setContextMenu(null)}>Edit properties</button>
       </> : contextMenu.kind === 'label' ? <>
         <div className="context-menu-heading">Net {contextMenu.node ?? '0'}</div>
         <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node, labelId: contextMenu.id }); setContextMenu(null) }}>Plot voltage to ground</button>
@@ -3980,11 +3979,6 @@ export default function App() {
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
     </div>
 
-    <div className="toolbar-status-row" aria-live="polite">
-      <div className={`result-stale-warning${simulationResultStale ? '' : ' status-placeholder'}`} role={simulationResultStale ? 'status' : undefined} aria-hidden={!simulationResultStale}><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</div>
-      <div className={`engine-missing-notice${engineAssetAvailable === false ? '' : ' status-placeholder'}`} role={engineAssetAvailable === false ? 'status' : undefined} aria-hidden={engineAssetAvailable !== false}><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={() => setNotice('To enable simulation, follow engine/wasm/README.md and run tools/build-ngspice-wasm.sh.')}>Setup</button></div>
-    </div>
-
     <div className={`workspace mobile-pane-${mobilePane}`}>
       <nav className="mobile-workspace-tabs" aria-label="Workspace panels">
         <button className={mobilePane === 'components' ? 'active' : ''} aria-pressed={mobilePane === 'components'} onClick={() => setMobilePane('components')}>Components</button>
@@ -4147,6 +4141,13 @@ export default function App() {
       'Use Save to download an .elsim project file containing your circuit and its project data. Later, choose Open and select that file to continue. Imported symbols and model libraries remain project assets, so review the rights notice before sharing files that contain them.',
     ][tourStep]}</p>{tourStep === 1 && <button className="tour-run-action" onClick={editTourComponentValue}>Edit resistor value</button>}{tourStep === 2 && <button className="tour-run-action" onClick={() => { setTourStep(null); void startSimulation() }}><Play size={13} fill="currentColor"/> Run this circuit now</button>}<div className="tour-progress" role="progressbar" aria-label="Quick tour progress" aria-valuemin={1} aria-valuemax={5} aria-valuenow={tourStep + 1} aria-valuetext={`Step ${tourStep + 1} of 5`}>{[0, 1, 2, 3, 4].map((step) => <span key={step} className={step <= tourStep ? 'current' : ''} aria-hidden="true"/> )}</div><div className="tour-actions"><button className="tour-skip" onClick={() => setTourStep(null)}>Skip tour</button><span/>{tourStep > 0 && <button className="tour-secondary" onClick={() => setTourPage(tourStep - 1)}>Back</button>}<button ref={tourNextButtonRef} className="primary-small" onClick={() => tourStep === 4 ? setTourStep(null) : setTourPage(tourStep + 1)}>{tourStep === 4 ? 'Finish' : 'Next'} <ArrowUp size={13}/></button></div></section></div>}
     {!projectRecoveryReady && <div className="project-recovery-overlay" role="status" aria-live="polite"><span className="status-dot saving"/>Restoring your local project…</div>}
-    <footer className="app-status"><span role="status" aria-live="polite"><span className={`status-dot ${autosaveStatus}`}/>{autosaveStatus === 'saving' ? 'Saving changes locally…' : autosaveStatus === 'recovered' ? 'Saved in browser recovery storage' : autosaveStatus === 'error' ? 'Local save failed. Use Save to download a copy.' : 'All changes saved locally'}</span><span>Original ELSim component symbols</span></footer>
+    <footer className="app-status" aria-live="polite">
+      <div className="app-status-left">
+        <span role="status"><span className={`status-dot ${autosaveStatus}`}/>{autosaveStatus === 'saving' ? 'Saving changes locally…' : autosaveStatus === 'recovered' ? 'Saved in browser recovery storage' : autosaveStatus === 'error' ? 'Local save failed. Use Save to download a copy.' : 'All changes saved locally'}</span>
+        {simulationResultStale && <span className="result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</span>}
+        {engineAssetAvailable === false && <div className="engine-missing-notice" role="status"><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={() => setNotice('To enable simulation, follow engine/wasm/README.md and run tools/build-ngspice-wasm.sh.')}>Setup</button></div>}
+      </div>
+      <span className="app-status-brand">Original ELSim component symbols</span>
+    </footer>
   </div>
 }
