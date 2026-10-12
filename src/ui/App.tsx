@@ -3127,6 +3127,11 @@ export default function App() {
       setNotice(modelAssetsVerified === false ? 'An imported model or symbol file failed its SHA-256 check. Reimport a trusted copy before simulating.' : 'Checking imported file fingerprints. Try Run again in a moment.')
       return
     }
+    if (engineAssetAvailable === null) {
+      setRunState('error')
+      setNotice('Checking for the local ngspice runtime. Try Run again in a moment.')
+      return
+    }
     if (engineAssetAvailable === false) {
       setRunState('error')
       setNotice('ngspice WASM is not built. Follow engine/wasm/README.md to build the local engine.')
@@ -3502,7 +3507,7 @@ export default function App() {
       <div className="menu-group waveform-window-actions"><IconButton title="Open generated netlist" aria-label="Netlist" onClick={() => setNetlistOpen(true)}><Command size={14}/></IconButton><IconButton title="Tile waveform windows" aria-label="Tile waveform windows" onClick={tilePlotWindows} disabled={additionalPlotPanels.length < 2}><Grid2X2 size={14}/></IconButton>{simulationResult && <IconButton title="Download simulation run report" aria-label="Download simulation run report" onClick={downloadRunReport}><Download size={14}/></IconButton>}</div>
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit <span>{electricalIssues.length}</span></button>
       {engineAssetAvailable === false && <div className="engine-missing-notice" role="status"><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={() => setNotice('To enable simulation, follow engine/wasm/README.md and run tools/build-ngspice-wasm.sh. The runtime stays local under public/engine/.')}>Setup</button></div>}
-      <button className="run-button" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={15} fill="currentColor"/> Run simulation</button>
+      <button className="run-button" onClick={startSimulation} disabled={engineAssetAvailable === null || runState === 'loading' || runState === 'running'} title={engineAssetAvailable === null ? 'Checking for the local ngspice runtime' : undefined}><Play size={15} fill="currentColor"/> Run simulation</button>
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
     </div>
 

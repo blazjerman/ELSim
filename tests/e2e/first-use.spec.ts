@@ -314,6 +314,28 @@ test('engine-free preview explains the local runtime requirement while keeping t
   await expect(page.locator('.circuit-part[data-part-id="p-r1"] .part-value')).toContainText('2k')
 })
 
+test('Run waits for the local ngspice runtime check before starting the worker', { tag: '@ui-smoke' }, async ({ page }) => {
+  let releaseAssetCheck!: () => void
+  const assetCheckPending = new Promise<void>((resolve) => { releaseAssetCheck = resolve })
+  for (const asset of ['ngspice.mjs', 'ngspice.wasm']) {
+    await page.route(`**/engine/${asset}`, async (route) => {
+      if (route.request().method() === 'HEAD') await assetCheckPending
+      await route.continue()
+    })
+  }
+
+  try {
+    await page.goto('/')
+    const run = page.getByRole('button', { name: 'Run simulation' })
+    await expect(run).toBeDisabled()
+    await expect(run).toHaveAttribute('title', 'Checking for the local ngspice runtime')
+    releaseAssetCheck()
+    await expect(run).toBeEnabled()
+  } finally {
+    releaseAssetCheck()
+  }
+})
+
 test('examples can be searched by title and description', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
