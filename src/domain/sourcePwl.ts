@@ -50,6 +50,26 @@ function magnitude(value: string, unit: 's' | 'v' | 'a'): number | null {
   return Number.isFinite(result) ? result : null
 }
 
+/** Return an SVG polyline for a validated-looking PWL table, or null while editing invalid values. */
+export function sourcePwlPreview(points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined, quantity: 'voltage' | 'current' = 'voltage'): string | null {
+  if (!points || points.length < 2 || points.length > MAX_SOURCE_PWL_POINTS) return null
+  const samples = points.map((point) => ({
+    time: magnitude(point.time, 's'),
+    value: magnitude('voltage' in point ? point.voltage : point.current, quantity === 'voltage' ? 'v' : 'a'),
+  }))
+  if (samples.some(({ time, value }) => time === null || value === null)) return null
+  const times = samples.map(({ time }) => time!)
+  const values = samples.map(({ value }) => value!)
+  if (times.some((time, index) => index > 0 && time <= times[index - 1])) return null
+  const minTime = times[0], maxTime = times.at(-1)!
+  const minValue = Math.min(...values), maxValue = Math.max(...values)
+  return samples.map(({ time, value }) => {
+    const x = 4 + ((time! - minTime) / (maxTime - minTime)) * 172
+    const y = maxValue === minValue ? 23 : 4 + ((maxValue - value!) / (maxValue - minValue)) * 38
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+}
+
 /** Finite voltage-source repeats must meet continuously at their cycle boundary. */
 export function validateSourcePwlRepeatBoundary(points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined, repeatCount: number | undefined, quantity: 'voltage' | 'current' = 'voltage'): string | null {
   if (repeatCount === undefined || repeatCount <= 1 || !points || points.length < 2) return null

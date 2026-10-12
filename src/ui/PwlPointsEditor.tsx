@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { CurrentSourcePwlPoint, SourcePwlPoint } from '../domain/project'
-import { MAX_FINITE_PWL_POINTS, MAX_SOURCE_PWL_POINTS, parseSourcePwlText, validateSourcePwlPoints } from '../domain/sourcePwl'
+import { MAX_FINITE_PWL_POINTS, MAX_SOURCE_PWL_POINTS, parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints } from '../domain/sourcePwl'
 
 export default function PwlPointsEditor({ points, onChange, partId, validationMessage, quantity = 'voltage', repeatForever = false, onRepeatForeverChange, repeatCount, onRepeatCountChange, repeatBoundaryError }: { points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined; onChange: (points: (SourcePwlPoint | CurrentSourcePwlPoint)[]) => void; partId: string; validationMessage?: string; quantity?: 'voltage' | 'current'; repeatForever?: boolean; onRepeatForeverChange?: (repeat: boolean) => void; repeatCount?: number; onRepeatCountChange?: (count: number | undefined) => void; repeatBoundaryError?: string | null }) {
   const [pasteText, setPasteText] = useState('')
@@ -8,6 +8,7 @@ export default function PwlPointsEditor({ points, onChange, partId, validationMe
   const valueKey = quantity === 'voltage' ? 'voltage' : 'current'
   const rows = (points ?? [{ time: '0', [valueKey]: '0' }, { time: '10m', [valueKey]: quantity === 'voltage' ? '5' : '5m' }]) as (SourcePwlPoint | CurrentSourcePwlPoint)[]
   const errors = validateSourcePwlPoints(rows, quantity)
+  const preview = sourcePwlPreview(rows, quantity)
   const pointValue = (point: SourcePwlPoint | CurrentSourcePwlPoint) => 'voltage' in point ? point.voltage : point.current
   const fieldPrefix = quantity === 'voltage' ? 'pwl' : 'currentPwl'
   const countErrorId = `pwl-point-count-error-${partId}`
@@ -37,6 +38,7 @@ export default function PwlPointsEditor({ points, onChange, partId, validationMe
   }
   return <div className="pwl-points-editor">
     <div className="pwl-point-heading"><span>Time (s)</span><span>{quantity === 'voltage' ? 'Voltage (V)' : 'Current (A)'}</span><span className="sr-only">Actions</span></div>
+    {preview && <div className="pwl-preview"><svg viewBox="0 0 180 48" role="img" aria-label={`${quantity === 'voltage' ? 'Voltage' : 'Current'} waveform preview`}><line x1="4" y1="44" x2="176" y2="44"/><polyline points={preview}/></svg><span>Waveform preview</span></div>}
     {validationMessage && <div className="field-error" id={countErrorId} role="alert">{validationMessage}</div>}
     {rows.map((point, index) => <div className="pwl-point-row" key={index}>
       <label><span className="sr-only">PWL point {index + 1} time</span><input data-part-setting={`${partId}:${fieldPrefix}.${index}.time`} aria-label={`PWL point ${index + 1} time`} aria-invalid={Boolean(errors?.[index * 2])} aria-describedby={errors?.[index * 2] ? `pwl-point-${partId}-${index + 1}-time-error` : undefined} value={point.time} onChange={(event) => onChange(rows.map((item, itemIndex) => itemIndex === index ? { ...item, time: event.target.value } : item))}/>{errors?.[index * 2] && <span className="field-error" id={`pwl-point-${partId}-${index + 1}-time-error`} role="alert">{errors[index * 2]}</span>}</label>

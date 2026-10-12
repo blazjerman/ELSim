@@ -876,6 +876,8 @@ test('voltage source accepts a pasted PWL point table', { tag: '@ui-smoke' }, as
   await page.getByText('Import point table').click()
   await page.getByLabel('Paste PWL time and voltage rows').fill('time, voltage\n0, 0 V\n1m, 5 V\n2m, 0 V')
   await page.getByRole('button', { name: 'Replace points with pasted table' }).click()
+  await expect(page.getByRole('img', { name: 'Voltage waveform preview' })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Voltage waveform preview' }).locator('polyline')).toHaveAttribute('points', '4.0,42.0 90.0,4.0 176.0,42.0')
   await expect(page.getByLabel('PWL point 2 time')).toHaveValue('1m')
   await expect(page.getByLabel('PWL point 2 voltage')).toHaveValue('5 V')
   await expect(page.getByLabel('PWL point 3 time')).toHaveValue('2m')

@@ -10,7 +10,7 @@ const { createStarterProject, validateProject } = require(path.join(build, 'doma
 const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlStepExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { parseSourcePwlText, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
+const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
 const { dcSweepPointCount, MAX_DC_SWEEP_POINTS } = require(path.join(build, 'domain/dcSweep.js'))
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
@@ -632,6 +632,12 @@ test('pasted PWL tables accept CSV, TSV, optional headers, and current units', (
   assert.match(parseSourcePwlText('0, 0\n0, 1').error, /Line 2: Time must be later/)
   assert.match(parseSourcePwlText('time, current\n0, 0\n1m, 2m', 'voltage').error, /Header must name time and voltage/)
   assert.match(parseSourcePwlText('0, 0').error, /at least two/)
+})
+
+test('PWL waveform preview scales time and amplitude and hides malformed drafts', () => {
+  assert.equal(sourcePwlPreview([{ time: '0', voltage: '0 V' }, { time: '1m', voltage: '5 V' }, { time: '2m', voltage: '0 V' }]), '4.0,42.0 90.0,4.0 176.0,42.0')
+  assert.equal(sourcePwlPreview([{ time: '0', current: '-2 mA' }, { time: '1m', current: '2 mA' }], 'current'), '4.0,42.0 176.0,4.0')
+  assert.equal(sourcePwlPreview([{ time: '0', voltage: '0' }, { time: '1m', voltage: 'bad' }]), null)
 })
 
 test('native PWL source accepts 256 points and rejects more', () => {
