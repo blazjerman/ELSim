@@ -4,7 +4,22 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { registerWireAnimation, updateWireAnimation } = require(path.join(build, 'ui/wireAnimation.js'))
+const { advanceWireAnimationPhase, registerWireAnimation, updateWireAnimation } = require(path.join(build, 'ui/wireAnimation.js'))
+
+test('wire motion advances by elapsed time so refresh rate does not change its speed', () => {
+  const config = { key: 'timed-wire', magnitude: 0.001, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 }
+  const simulate = (frameCount) => {
+    const elapsedPerFrame = 1000 / frameCount
+    let phase = 0
+    for (let frame = 0; frame < frameCount; frame += 1) phase = advanceWireAnimationPhase(phase, config, elapsedPerFrame)
+    return phase
+  }
+  const at30Hz = simulate(30)
+  const at60Hz = simulate(60)
+  const at120Hz = simulate(120)
+  assert.ok(Math.abs(at30Hz - at60Hz) < 1e-9)
+  assert.ok(Math.abs(at60Hz - at120Hz) < 1e-9)
+})
 
 test('wire playback keeps dash phase while simulation samples update', () => {
   const previousWindow = global.window

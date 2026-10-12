@@ -6249,6 +6249,34 @@ test('declared global parameter sweep edits and simulates through the browser ng
   expect(labels).toContain('RLOAD=5000')
 })
 
+test('large parameter-sweep component lists stay bounded and can find late components', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    for (let index = 2; index <= 251; index += 1) {
+      project.parts.push({ id: `sweep-part-${index}`, kind: 'resistor', ref: `R${index}`, value: '1 kΩ', x: 1200 + index * 40, y: 800, rotation: 0 })
+    }
+    project.sheets[0].parts = project.parts
+    project.simulation.parameterSweeps = [{ component: 'R251', start: '1 kΩ', stop: '2 kΩ', points: 2 }]
+    localStorage.setItem(key, JSON.stringify(project))
+  })
+  await page.reload()
+  await page.keyboard.press('Escape')
+
+  const componentSelect = page.getByRole('combobox', { name: 'Parameter 1 component' })
+  const filter = page.getByRole('searchbox', { name: 'Filter eligible components for parameter 1' })
+  await expect(filter).toBeVisible()
+  await expect(componentSelect).toHaveValue('R251')
+  expect(await componentSelect.locator('option').count()).toBeLessThanOrEqual(101)
+
+  await filter.fill('R240')
+  await expect(componentSelect.locator('option[value="R240"]')).toBeAttached()
+  await componentSelect.selectOption('R240')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.parameterSweeps[0].component)).toBe('R240')
+})
+
 test('pulse source high levels can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
