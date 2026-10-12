@@ -2752,9 +2752,9 @@ export default function App() {
     setPendingPolarizedCapacitor(kind === 'capacitor' && polarized)
     setPendingLogicOperation(kind === 'logicGate' ? logicOperation ?? 'and' : undefined)
     setTool('select')
-    setComponentCategory('basics')
     setComponentQuery('')
     const definition = componentDefinitionFor(kind)
+    setComponentCategory(definition.paletteCategory ?? 'basics')
     setNotice(`${definition.paletteName ?? definition.name} selected. Click the schematic to place it; press R to rotate before placing.`)
   }
   const normalizedExampleQuery = exampleQuery.trim().toLocaleLowerCase()

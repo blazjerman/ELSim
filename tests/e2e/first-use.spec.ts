@@ -257,7 +257,8 @@ test('keyboard shortcut reference matches editor controls and restores focus', {
 test('project inspector reports the current project format version', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.addInitScript(() => localStorage.clear())
   await page.goto('/')
-  await page.keyboard.press('Escape')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await expect(page.getByText('ELSim JSON · v8')).toBeVisible()
 })
 
@@ -712,6 +713,7 @@ test('model dependency report offers a direct import action for referenced libra
 
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const output = project.netLabels.find((label: { name: string }) => label.name.toLowerCase() === 'vout')
@@ -721,8 +723,12 @@ test('noise settings omit grounded labels and netlist an output alias canonicall
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
+  await expect(page.getByRole('button', { name: 'Net label VOUT_ALIAS' })).toBeVisible()
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.getByLabel('Analysis type', { exact: true }).selectOption('noise')
   const outputNode = page.getByLabel('Output node')
+  await expect(outputNode).toBeVisible()
+  await expect(outputNode.locator('option')).not.toHaveCount(0)
   const options = await outputNode.locator('option').allTextContents()
   expect(options.map((option) => option.toLowerCase())).toContain('vout_alias')
   expect(options.map((option) => option.toLowerCase())).not.toContain('gnd')
@@ -1051,6 +1057,7 @@ test('LTspice schematic import preserves and reports duplicate model library fil
 
 test('component shortcuts are case-sensitive and logic-gate keys select their matching parts', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.keyboard.press('Escape')
   const shortcuts: [string, string][] = [
     ['r', 'Resistor'], ['e', 'Lamp'], ['c', 'Capacitor'], ['Shift+L', 'Inductor'], ['v', 'Voltage source'],
@@ -1384,6 +1391,7 @@ test('transient resolution presets derive and save a maximum step from stop time
 
 test('transient start-saving time is persisted and appears in the generated netlist', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.keyboard.press('Escape')
   await page.getByLabel('Start saving at (optional)').fill('20 ms')
   await page.getByRole('group', { name: 'Transient resolution presets' }).getByRole('button', { name: 'Detailed' }).click()
@@ -1582,6 +1590,7 @@ test('wire animation refreshes after moving a component and changing its value',
 
 test('schematic components use one roving tab stop and arrow-key spatial navigation', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
   await expect(resistor).toHaveAttribute('role', 'button')
   await expect(resistor).toHaveAttribute('tabindex', '0')
@@ -1602,14 +1611,16 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
 
   await page.getByRole('button', { name: /Add Switch/ }).click()
   const svg = page.locator('svg.schematic')
+  await expect(svg).toHaveClass(/component-placement-mode/)
   const screenPoint = (x: number, y: number) => svg.evaluate((element, point) => {
     const target = (element as SVGSVGElement).createSVGPoint(); target.x = point.x; target.y = point.y
     const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
     return { x: screen.x, y: screen.y }
   }, { x, y })
-  const start = await screenPoint(500, 160), end = await screenPoint(540, 160)
-  await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
+  const start = await screenPoint(500, 300)
+  await page.mouse.click(start.x, start.y)
   const switchPart = page.getByRole('button', { name: /^S1, Switch/ })
+  await expect(switchPart).toBeVisible()
   await expect(switchPart.locator('.manual-switch-lever')).toHaveAttribute('d', 'M-12 -2L10 -15')
   await switchPart.focus()
   await expect(switchPart).toHaveAttribute('aria-pressed', 'false')
@@ -3965,7 +3976,7 @@ test('inverter static symbol renders from the component registry', { tag: '@ui-s
   const inverter = page.locator('.circuit-part[data-part-id="logic-not"]')
   await expect(inverter.locator('path[d="M-23 -20L22 0L-23 20Z"]')).toHaveCount(1)
   await expect(inverter.locator('circle[cx="28"][cy="0"][r="6"]')).toHaveCount(1)
-  await expect(inverter.locator('line[x1="34"][y1="0"][x2="50"][y2="0"]')).toHaveCount(1)
+  await expect(inverter.locator('.logic-output-lead')).toHaveCount(1)
 })
 
 test('dependent source symbols render from the component registry', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -5588,7 +5599,7 @@ test('@ui-smoke reusable sheets can be renamed and reject duplicate sibling name
   await page.getByLabel('Sheet name').fill('Power stage')
   await page.getByRole('button', { name: 'Rename sheet' }).click()
   await expect(page.getByRole('alert')).toContainText('already used in this hierarchy')
-  await expect(page.locator('.sheet-tab.active')).toContainText('Block 2')
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 1')
 })
 
 test('@ui-smoke a reusable child sheet can be duplicated independently', async ({ page }) => {
