@@ -1199,6 +1199,30 @@ test('transient resolution presets derive and save a maximum step from stop time
   await expect(maxStep).toHaveValue('2.000000e-4 s')
 })
 
+test('transient start-saving time is persisted and appears in the generated netlist', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await page.getByLabel('Start saving at (optional)').fill('20 ms')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('.tran 100u 100m 20m 100u')
+  await expect.poll(() => page.evaluate(() => {
+    const saved = localStorage.getItem('elsim:project:v7')
+    return saved ? JSON.parse(saved).simulation.startSavingTime : null
+  })).toBe('20 ms')
+})
+
+test('ngspice stores transient results only after the selected start time', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Use the existing local ngspice WASM runtime').toEqual([])
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await page.getByLabel('Start saving at (optional)').fill('20 ms')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openWireVoltagePlot(page, 430, 290)
+  await expect(plot.getByRole('group', { name: /Transient waveforms from 0\.02\d* to/ })).toBeVisible()
+})
+
 
 test('wire current animation respects the operating system reduced-motion preference', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })

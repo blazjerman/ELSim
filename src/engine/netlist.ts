@@ -147,7 +147,7 @@ function spiceSffm(part: Part, parameters: Project['sheets'][number]['parameters
   return `SFFM(${offset} ${amplitude} ${carrier} ${index} ${signal})`
 }
 
-export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'stopTime' | 'maxStep' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
+export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project, connectivity?: Connectivity): AnalysisSettingError[] {
@@ -161,6 +161,11 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     const step = spiceMagnitude(project.simulation.maxStep, 'time')
     if (stop === null || stop <= 0) add('stopTime', 'Enter a positive stop time, such as 100 ms.')
     if (step === null || step <= 0) add('maxStep', 'Enter a positive maximum step, such as 100 µs.')
+    const startSavingText = project.simulation.startSavingTime?.trim()
+    if (startSavingText) {
+      const startSaving = spiceMagnitude(startSavingText, 'time')
+      if (startSaving === null || startSaving < 0 || stop === null || startSaving >= stop) add('startSavingTime', 'Enter a nonnegative time earlier than the stop time, or leave this blank to save from time zero.')
+    }
     for (const part of project.parts.filter((item) => item.kind === 'source' || (item.kind === 'currentSource' && item.sourceMode === 'pulse'))) {
       if (part.kind === 'source' && part.sourceMode !== undefined && part.sourceMode !== 'pulse') continue
       const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
@@ -947,8 +952,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   } else {
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)
+    const startSavingTime = project.simulation.startSavingTime?.trim() ? spiceTime(project.simulation.startSavingTime) : null
     const hasElementInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition) ?? false
-    if (maxStep && stopTime) append(`.tran ${maxStep} ${stopTime}${project.simulation.skipInitialOperatingPoint || hasElementInitial ? ' uic' : ''}`, 'analysis:tran', 'analysis')
+    if (maxStep && stopTime && (!project.simulation.startSavingTime?.trim() || startSavingTime)) append(`.tran ${maxStep} ${stopTime}${startSavingTime ? ` ${startSavingTime} ${maxStep}` : ''}${project.simulation.skipInitialOperatingPoint || hasElementInitial ? ' uic' : ''}`, 'analysis:tran', 'analysis')
     else {
       const message = 'Transient stop time and maximum step must be valid SPICE time values.'
       append(`* ERROR: ${message}`, 'analysis:tran', 'analysis')

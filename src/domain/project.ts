@@ -122,7 +122,7 @@ export type Project = {
   symbolAssets?: SymbolAsset[]
   importedSchematicSource?: LtspiceSchematicSource
   importedChildSchematicSources?: LtspiceSchematicSource[]
-  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; stopTime: string; maxStep: string; temperature?: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
+  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; stopTime: string; maxStep: string; startSavingTime?: string; temperature?: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
   rootSheetId: string
   activeSheetId: string
   sheets: ProjectSheet[]
@@ -634,6 +634,12 @@ export function validateProject(input: unknown): Project {
     }
   }
   if (simulation.skipInitialOperatingPoint !== undefined && typeof simulation.skipInitialOperatingPoint !== 'boolean') throw new Error('Skip initial operating point must be on or off.')
+  if (simulation.startSavingTime !== undefined && (typeof simulation.startSavingTime !== 'string' || simulation.startSavingTime.length > 64)) throw new Error('Transient data start time must be a bounded time value.')
+  if (simulation.startSavingTime !== undefined && simulation.startSavingTime.trim() !== '') {
+    const startSavingTime = timeMagnitude(simulation.startSavingTime)
+    const stopTime = timeMagnitude(simulation.stopTime)
+    if (startSavingTime === null || startSavingTime < 0 || stopTime === null || startSavingTime >= stopTime) throw new Error('Transient data start time must be nonnegative and earlier than the stop time.')
+  }
   if (simulation.initialConditions !== undefined) {
     if (!Array.isArray(simulation.initialConditions) || simulation.initialConditions.length > 8) throw new Error('A project can have up to eight initial conditions.')
     if (simulation.analysis !== 'tran') throw new Error('Initial conditions require transient analysis.')

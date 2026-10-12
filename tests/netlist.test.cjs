@@ -23,6 +23,24 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('transient start-saving time reduces stored results without changing the zero-time solve', () => {
+  const project = createStarterProject()
+  project.simulation.startSavingTime = '20 ms'
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.tran 100u 100m 20m 100u$/m)
+
+  project.simulation.startSavingTime = '100 ms'
+  assert.equal(validateAnalysisSettings(project).some(({ field }) => field === 'startSavingTime'), true)
+  project.simulation.startSavingTime = '-1 ms'
+  assert.equal(validateAnalysisSettings(project).some(({ field }) => field === 'startSavingTime'), true)
+  project.simulation.startSavingTime = ''
+  assert.equal(validateAnalysisSettings(project).some(({ field }) => field === 'startSavingTime'), false)
+  project.simulation.startSavingTime = '20 ms'
+  project.simulation.analysis = 'ac'
+  assert.doesNotThrow(() => validateProject(project), 'the transient-only value remains harmless when another analysis is selected')
+})
+
 test('capacitor ESR and inductor winding resistance netlist in series while preserving ideal defaults', () => {
   const project = createRlcExampleProject()
   const ideal = createNetlistArtifact(project)

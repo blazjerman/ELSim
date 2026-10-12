@@ -99,6 +99,8 @@ The worker’s “no writable vector” failure now gives the same useful recove
 
 Fatal solver diagnostic follow-up (2026-10-12): The ngspice worker now recognizes both `Fatal:` and `Fatal error:` prefixes, keeps the fatal text instead of reducing it to an exit-code message, and maps an attached `line no.` location through the netlist source map. A focused domain regression covers stderr output and source selection; all 28 unit groups and TypeScript checking pass. No engine rebuild is needed.
 
+Transient data-window control (2026-10-12): Transient settings can optionally set ngspice `tstart` to discard stored waveform samples before a chosen time. The circuit still solves from zero so startup behavior remains electrically correct; the setting is validated against `stopTime`, saved in native project files, and exposed as “Start saving at” with an explanation in the inspector. A focused Firefox UI regression checks persistence and generated netlist output; no WASM rebuild is needed.
+
 Imported-model recovery follow-up (2026-10-12): An ngspice model-card error with a mapped source line now has a Review source line action that opens the original imported library at the failing line and focuses it. A focused Firefox run uses the existing local runtime and checks the source highlight and focus.
 
 Mapped solver-error navigation (2026-10-12): When an ngspice diagnostic maps to a top-level component, the editor now selects it and pans it into the center of the schematic view. A focused Firefox UI regression injects a worker error for an offscreen component and verifies both selection and viewport centering.
