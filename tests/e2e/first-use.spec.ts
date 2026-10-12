@@ -2511,6 +2511,7 @@ test('wire endpoints are keyboard accessible and move one grid step with arrow k
   await expect(endpoint).toBeFocused()
   await page.keyboard.press('ArrowRight')
   await expect(page.getByRole('button', { name: /Move wire endpoint 1 at 310, 300/ })).toBeFocused()
+  await expect(page.locator('.wire-endpoint-announcement')).toHaveText('Wire endpoint 1 moved right to grid position 310, 300.')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual([[310, 300], [400, 300]])
   await page.keyboard.press('Tab')
   const secondEndpoint = page.getByRole('button', { name: /Move wire endpoint 2 at 400, 300/ })

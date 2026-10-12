@@ -804,6 +804,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const [componentPreview, setComponentPreview] = useState<{ x: number; y: number } | null>(null)
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number; crossing: boolean } | null>(null)
   const [hoveredWireId, setHoveredWireId] = useState<string>()
+  const [wireEndpointAnnouncement, setWireEndpointAnnouncement] = useState('')
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; id?: string; name: string } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | { kind: 'label'; id: string; x: number; y: number; node?: string } | null>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
@@ -1471,10 +1472,13 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
           event.preventDefault()
           event.stopPropagation()
           beginEdit()
+          const directions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' } as const
+          setWireEndpointAnnouncement(`Wire endpoint ${index + 1} moved ${directions[event.key as keyof typeof directions]} to grid position ${x + offset[0]}, ${y + offset[1]}.`)
           setProject((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === hoveredWire.id ? { ...wire, points: wire.points.map(([pointX, pointY], pointIndex) => pointIndex === index ? [pointX + offset[0], pointY + offset[1]] as [number, number] : [pointX, pointY]) as [[number, number], [number, number]] } : wire) }))
         }} onKeyUp={(event) => { if (event.key.startsWith('Arrow')) endEdit() }} onBlur={endEdit} onPointerDown={(event) => beginWirePointDrag(event, hoveredWire.id, index)} onClick={(event) => event.stopPropagation()}><title>Drag this wire endpoint or focus it and use arrow keys</title></circle>
       })}</g>}
     </svg>
+    <div className="sr-only wire-endpoint-announcement" role="status" aria-live="polite" aria-atomic="true">{wireEndpointAnnouncement}</div>
     {contextMenu && <div ref={contextMenuRef} className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : contextMenu.kind === 'label' ? `Options for net ${project.netLabels.find((label) => label.id === contextMenu.id)?.name ?? ''}` : contextMenu.kind === 'wire' ? 'Wire options' : 'Schematic options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
       const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled), select:not(:disabled)')]
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setContextMenu(null); contextMenuReturnFocusRef.current?.focus(); return }
