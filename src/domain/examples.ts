@@ -595,8 +595,8 @@ export function createRlStepExampleProject(): Project {
 /** A capacitor-only transient lesson showing exponential discharge from an initial voltage. */
 export function createCapacitorDischargeExampleProject(): Project {
   const project = createStarterProject()
-  const capacitor: Part = { id: 'cap-discharge-c1', kind: 'capacitor', ref: 'C1', value: '10 µF', x: 460, y: 400, rotation: 0 }
-  const resistor: Part = { id: 'cap-discharge-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 700, y: 400, rotation: 0 }
+  const capacitor: Part = { id: 'cap-discharge-c1', kind: 'capacitor', ref: 'C1', value: '10 µF', x: 460, y: 400, rotation: 90 }
+  const resistor: Part = { id: 'cap-discharge-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 700, y: 400, rotation: 90 }
   const labelAt = (id: string, name: string, part: Part, pin: number) => {
     const location = componentPins(part)[pin]
     return { id, name, x: location.x, y: location.y, visible: true }
@@ -604,13 +604,16 @@ export function createCapacitorDischargeExampleProject(): Project {
   const parts = [capacitor, resistor]
   project.name = 'Capacitor discharge'
   project.parts = parts
-  project.wires = []
+  project.wires = [
+    { id: 'cap-discharge-output', points: [[460, 350], [700, 350]] },
+    { id: 'cap-discharge-ground-return', points: [[700, 450], [460, 450]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('cap-discharge-c1-out', 'OUT', capacitor, 0), labelAt('cap-discharge-r1-out', 'OUT', resistor, 0),
-    labelAt('cap-discharge-c1-ground', '0', capacitor, 1), labelAt('cap-discharge-r1-ground', '0', resistor, 1),
+    labelAt('cap-discharge-c1-out', 'OUT', capacitor, 0),
+    labelAt('cap-discharge-c1-ground', '0', capacitor, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '50 ms', maxStep: '100 µs', initialConditions: [{ element: 'C1', voltage: '5 V' }] }
   project.plotSettings = { selectedTraceIds: ['V(OUT)', 'I(R1)'], ranges: {} }
   project.view = { zoom: 0.9, panX: -10, panY: 0 }

@@ -2328,9 +2328,13 @@ test('capacitor discharge lesson compares solved RC decay before and after a res
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Capacitor discharge')
   await expect(page.getByLabel('Guided example')).toContainText('C1 starts at 5 V')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(2)
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   const lesson = page.locator('.example-lesson-next-step')
+  const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  await scrubToTime(timeSlider, 0.01)
   const measured = async () => {
     const text = await lesson.innerText()
     const match = text.match(/At 10 ms, ngspice solved V\(OUT\) = ([\d.]+) V and \|I\(R1\)\| = ([\d.]+) mA/)
