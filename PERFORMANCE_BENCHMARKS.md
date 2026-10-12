@@ -244,3 +244,17 @@ The browser benchmark creates 500 non-overlapping series resistors plus one sour
 ### Current-model endpoint-wire benchmark (2026-10-12)
 
 The wire-heavy fixture now uses the same independent two-endpoint segments as the editor and project format. This replaces the retired multi-point path fixture, which overstated wire segments and no longer represented circuits users can create. On the same i7-12700F host, the 5,000-resistor case contains 4,900 wires and exactly 4,900 segments; connectivity measured 35.640 ms median / 47.613 ms p95 and netlisting measured 41.502 ms median / 59.238 ms p95. The 1,000-resistor case measured 5.561 / 5.841 ms connectivity and 7.077 / 7.600 ms netlisting (median / p95). The runner asserts every benchmark wire contains exactly two endpoints. The optional local ngspice build also ran successfully: the 5,000-section operating point retained N0 = 5 V, and the 1M-sample transient produced 1,034,006 samples and V(out) = 1.888 V. No runtime was rebuilt for this benchmark.
+
+### Circuit Checks label-index benchmark (2026-10-12)
+
+The performance runner now measures `checkCircuit` on the resistor chain, endpoint-wire grid, and repeated two-level hierarchy fixtures. It records the resulting issue count alongside median/p95 timing so timing changes remain paired with diagnostic coverage. Initial measurements found repeated linear scans through all labels for every net and wire: on this i7-12700F / Node 18.20.4 host, Circuit Checks took 264.315 ms p95 for a 5,000-resistor chain and 464.178 ms p95 for 5,000 repeated hierarchy instances.
+
+The checker now builds one trimmed label-name `Set` per sheet and uses constant-time lookups for orphan wires and floating terminals. This preserves the prior exact, case-sensitive label matching and does not change solver values or connectivity.
+
+| Fixture | Parts/instances | Before p95 (ms) | After p95 (ms) | Issues before/after |
+| --- | ---: | ---: | ---: | ---: |
+| Named-net resistor chain | 5,001 | 264.315 | 54.557 | 0 / 0 |
+| Two-endpoint wire grid | 5,000 | 63.628 | 59.585 | 201 / 201 |
+| Repeated two-level hierarchy | 5,000 | 464.178 | 163.325 | 4,900 / 4,900 |
+
+The repeated hierarchy result is about 65% lower and the named-net chain about 79% lower in this pair of observations. Timings vary by run and are not CI budgets. All existing electrical-check regressions passed after the change.

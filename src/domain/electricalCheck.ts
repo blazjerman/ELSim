@@ -148,6 +148,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       netLabels: sheet.netLabels,
     }
     const sheetConnectivity = analyzeConnectivity(sheetProject)
+    const sheetLabelNames = new Set(sheet.netLabels.map((label) => label.name.trim()))
     for (const [index, diagnostic] of sheetConnectivity.diagnostics.entries()) issues.push({
       id: `connectivity:${sheet.id}:${index}`,
       severity: 'warning',
@@ -209,7 +210,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       pinsByNet.set(net, [...(pinsByNet.get(net) ?? []), { part, index: pin.index }])
     }
     for (const [net, pins] of pinsByNet) {
-      if (net === '0' || pins.length !== 1 || sheet.netLabels.some((label) => label.name.trim() === net)) continue
+      if (net === '0' || pins.length !== 1 || sheetLabelNames.has(net)) continue
       const { part, index } = pins[0]
       const current = floatingByPart.get(part.id) ?? { part, pins: [] }
       current.pins.push(index)
@@ -234,7 +235,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     for (const wire of sheet.wires) {
       const net = sheetConnectivity.wireNets.get(wire.id)
       const connectedToPart = net === '0' || (net !== undefined && pinsByNet.has(net))
-      const attachedLabel = net !== undefined && sheet.netLabels.some((label) => label.name.trim() === net)
+      const attachedLabel = net !== undefined && sheetLabelNames.has(net)
       if (!connectedToPart && !attachedLabel) issues.push({
         id: `orphan-wire:${sheet.id}:${wire.id}`,
         severity: 'info',
@@ -265,10 +266,11 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
   }
 
+  const projectLabelNames = new Set(project.netLabels.map((label) => label.name.trim()))
   for (const wire of project.wires) {
     const net = connectivity.wireNets.get(wire.id)
     const connectedToPart = net === '0' || (net !== undefined && pinsByNet.has(net))
-    const attachedLabel = net !== undefined && project.netLabels.some((label) => label.name.trim() === net)
+    const attachedLabel = net !== undefined && projectLabelNames.has(net)
     if (!connectedToPart && !attachedLabel) {
       issues.push({ id: `orphan-wire:${wire.id}`, severity: 'info', title: 'Wire is not attached to a component or label', detail: 'This wire may be leftover drawing. Connect it to a terminal or delete it if it is not needed.', wireId: wire.id })
     }
@@ -426,7 +428,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
 
   const floatingByPart = new Map<string, number[]>()
   for (const [net, pins] of pinsByNet) {
-    const hasNamedConnection = project.netLabels.some((label) => label.name.trim() === net)
+    const hasNamedConnection = projectLabelNames.has(net)
     if (pins.length !== 1 || hasNamedConnection) continue
     const pin = pins[0]
     floatingByPart.set(pin.partId, [...(floatingByPart.get(pin.partId) ?? []), pin.index])

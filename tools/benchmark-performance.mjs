@@ -199,6 +199,7 @@ try {
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
   const { componentPins } = build(path.join(output, 'domain/geometry.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
+  const { checkCircuit } = build(path.join(output, 'domain/electricalCheck.js'))
   const { createNetlistArtifact } = build(path.join(output, 'engine/netlist.js'))
   const { extremaIndices } = build(path.join(output, 'engine/plot.js'))
   const { parseAsciiRawFile } = build(path.join(output, 'engine/raw.js'))
@@ -208,6 +209,7 @@ try {
     const project = makeChain(createStarterProject, componentPins, count)
     const connectivity = measure(() => analyzeConnectivity(project))
     const netlist = measure(() => createNetlistArtifact(project))
+    const circuitChecks = measure(() => checkCircuit(project))
     const artifact = netlist.value
     if (artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error(`Benchmark fixture ${count} produced netlist errors.`)
     if (connectivity.value.pinNets.size !== count * 2 + 2) throw new Error(`Benchmark fixture ${count} lost one or more component pins in connectivity analysis.`)
@@ -220,6 +222,7 @@ try {
       netlistBytes: Buffer.byteLength(artifact.text),
       connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
       netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
+      circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
     })
   }
 
@@ -228,6 +231,7 @@ try {
     const project = makeHierarchy(createHierarchicalExampleProject, componentPins, count)
     const connectivity = measure(() => analyzeConnectivity(project))
     const netlist = measure(() => createNetlistArtifact(project))
+    const circuitChecks = measure(() => checkCircuit(project))
     const artifact = netlist.value
     if (artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error(`Hierarchical benchmark fixture ${count} produced netlist errors.`)
     if (connectivity.value.pinNets.size !== count * 3) throw new Error(`Hierarchical benchmark fixture ${count} lost one or more root block pins.`)
@@ -242,6 +246,7 @@ try {
       netlistLines: artifact.text.trimEnd().split('\n').length,
       connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
       netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
+      circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
     })
   }
 
@@ -250,6 +255,7 @@ try {
     const project = makeWireGrid(createStarterProject, componentPins, count)
     const connectivity = measure(() => analyzeConnectivity(project))
     const netlist = measure(() => createNetlistArtifact(project))
+    const circuitChecks = measure(() => checkCircuit(project))
     const artifact = netlist.value
     if (artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error(`Wire-heavy benchmark fixture ${count} produced netlist errors.`)
     if (connectivity.value.pinNets.size !== count * 2) throw new Error(`Wire-heavy benchmark fixture ${count} lost one or more component pins in connectivity analysis.`)
@@ -264,6 +270,7 @@ try {
       netlistLines: artifact.text.trimEnd().split('\n').length,
       connectivity: { medianMs: connectivity.medianMs, p95Ms: connectivity.p95Ms },
       netlisting: { medianMs: netlist.medianMs, p95Ms: netlist.p95Ms },
+      circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
     })
   }
 
@@ -341,7 +348,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 3,
+    benchmarkVersion: 4,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
