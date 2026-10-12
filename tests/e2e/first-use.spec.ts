@@ -664,7 +664,7 @@ test('AC source validation focuses its inspector field before simulation', { tag
   await phase.fill('45')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   const plot = await openComponentVoltagePlot(page, 'R1')
-  await expect(plot.getByRole('img', { name: /AC magnitude from/ })).toBeVisible({ timeout: 60_000 })
+  await expect(plot.getByRole('group', { name: /AC magnitude from/ })).toBeVisible({ timeout: 60_000 })
 })
 
 test('invalid pulse timing selects its source and focuses the exact setting', async ({ page }) => {
@@ -1606,7 +1606,7 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   const toolbarBottom = toolbar.y + toolbar.height
   expect(windowTop).toBeGreaterThan(toolbarBottom)
   await expect(firstWindow.getByRole('button', { name: /Disable V\(R1\)/ })).toBeVisible()
-  await expect(firstWindow.getByRole('img', { name: /Transient waveforms from/ })).toBeVisible()
+  await expect(firstWindow.getByRole('group', { name: /Transient waveforms from/ })).toBeVisible()
   await expect(firstWindow).toHaveCSS('resize', 'both')
 
   await resistor.click({ button: 'right' })
@@ -2522,12 +2522,12 @@ test('transformer example solves the configured AC turns ratio', { tag: '@ngspic
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   const plot = await openComponentVoltagePlot(page, 'T1')
-  const chart = plot.getByRole('img', { name: /AC magnitude from/ })
+  const chart = plot.getByRole('group', { name: /AC magnitude from/ })
   await expect(chart).toBeVisible()
   await expect(plot.locator('.trace-toggles button', { hasText: 'V(T1)' })).toBeVisible()
   await plot.getByRole('button', { name: /Close/ }).click()
   const loadPlot = await openComponentVoltagePlot(page, 'R1')
-  const loadChart = loadPlot.getByRole('img', { name: /AC magnitude from/ })
+  const loadChart = loadPlot.getByRole('group', { name: /AC magnitude from/ })
   const chartBox = await loadChart.boundingBox()
   await loadChart.click({ position: { x: chartBox!.width * 0.37, y: chartBox!.height / 2 } })
   await expect(loadPlot.locator('.cursor-readout')).toContainText(/V\(R1\) = 6\.02\d+ dB/i)
@@ -2639,7 +2639,7 @@ test('RC low-pass example explains and solves its AC cutoff response', { tag: '@
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(vin)')
   await expectAvailableTrace(page, 'V(vout)')
-  const chart = page.getByRole('img', { name: /AC magnitude from/ })
+  const chart = page.getByRole('group', { name: /AC magnitude from/ })
   await expect(chart).toBeVisible()
   const chartBox = await chart.boundingBox()
   await chart.click({ position: { x: chartBox!.width * 0.55, y: chartBox!.height / 2 } })
@@ -2659,7 +2659,7 @@ test('RC high-pass example explains and solves its AC cutoff response', { tag: '
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(vin)')
   await expectAvailableTrace(page, 'V(vout)')
-  await expect(page.getByRole('img', { name: /AC magnitude from/ })).toBeVisible()
+  await expect(page.getByRole('group', { name: /AC magnitude from/ })).toBeVisible()
 })
 
 
@@ -2881,7 +2881,7 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', {
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'I(i1)')
-  const currentSweep = page.locator('.plot-window').last().getByRole('img', { name: /DC sweep of/i })
+  const currentSweep = page.locator('.plot-window').last().getByRole('group', { name: /DC sweep of/i })
   await expect(currentSweep).toBeVisible()
   await expect(currentSweep).toContainText('0.0100 A')
 })
@@ -3803,31 +3803,41 @@ test('waveform click moves the cursor, wheel zooms horizontally, and drag keeps 
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   const plotWindow = await openComponentVoltagePlot(page)
-  const chart = plotWindow.getByRole('img', { name: /Transient waveforms from/ })
+  const chart = plotWindow.getByRole('group', { name: /Transient waveforms from/ })
   await expect(chart).toBeVisible()
+  const readSavedTransientRange = () => page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings
+    return settings.panels?.at(-1)?.ranges.tran ?? settings.ranges?.tran ?? null
+  })
   await page.getByLabel('Plot navigation').getByRole('button', { name: 'Zoom in' }).click()
-  const zoomedRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.tran)
+  await expect.poll(readSavedTransientRange).not.toBeNull()
+  const zoomedRange = await readSavedTransientRange()
   expect(zoomedRange.end - zoomedRange.start).toBeLessThan(1)
 
   const box = await chart.boundingBox()
   expect(box).not.toBeNull()
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.55)
   await page.mouse.wheel(0, -250)
-  await expect.poll(() => page.evaluate(() => {
-    const range = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.tran
-    return range.end - range.start
-  })).toBeLessThan(zoomedRange.end - zoomedRange.start)
-  const wheelRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.tran)
+  await expect.poll(async () => {
+    const range = await readSavedTransientRange()
+    return range ? range.end - range.start : Infinity
+  }).toBeLessThan(zoomedRange.end - zoomedRange.start)
+  const wheelRange = await readSavedTransientRange()
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.55)
   await page.mouse.down()
   await page.mouse.move(box!.x + box!.width * 0.58, box!.y + box!.height * 0.55, { steps: 5 })
   await page.mouse.up()
-  const draggedRange = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.at(-1).ranges.tran)
+  const draggedRange = await readSavedTransientRange()
   expect(draggedRange).toEqual(wheelRange)
 
   await chart.click({ position: { x: box!.width * 0.5, y: box!.height * 0.45 } })
-  await expect(page.getByText(/^t = /)).toBeVisible()
+  const timeReadout = page.getByText(/^t = /)
+  await expect(timeReadout).toBeVisible()
   await expect(page.locator('.plot-cursor')).toBeAttached()
+  const clickedTime = await timeReadout.innerText()
+  await chart.focus()
+  await chart.press('ArrowRight')
+  await expect.poll(() => timeReadout.innerText()).not.toBe(clickedTime)
 })
 
 test('AC waveform supports frequency cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
@@ -3837,11 +3847,16 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   const plotWindow = await openComponentVoltagePlot(page)
-  const chart = plotWindow.getByRole('img', { name: /AC magnitude from/ })
+  const chart = plotWindow.getByRole('group', { name: /AC magnitude from/ })
   await expect(chart).toBeVisible()
   await chart.click({ position: { x: (await chart.boundingBox())!.width * 0.55, y: 35 } })
   await expect(page.getByText(/Hz$/).first()).toBeVisible()
   await expect(page.locator('.plot-cursor')).toBeAttached()
+  const cursorLabel = plotWindow.locator('.waveform-title span').filter({ hasText: /Hz$/ })
+  const clickedFrequency = await cursorLabel.innerText()
+  await chart.focus()
+  await chart.press('ArrowRight')
+  await expect.poll(() => cursorLabel.innerText()).not.toBe(clickedFrequency)
 
   await page.getByLabel('Plot navigation').getByRole('button', { name: 'Zoom in' }).click()
   const readSavedAcRange = () => page.evaluate(() => {
@@ -3867,7 +3882,7 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
 
   await movePlotWindowRight(page, plotWindow)
   const secondPlotWindow = await openComponentVoltagePlot(page)
-  const secondChart = secondPlotWindow.getByRole('img', { name: /AC magnitude from/ })
+  const secondChart = secondPlotWindow.getByRole('group', { name: /AC magnitude from/ })
   await secondChart.click({ position: { x: (await secondChart.boundingBox())!.width * 0.72, y: 35 } })
   const cursorLabels = page.locator('.ac-view .waveform-title span').filter({ hasText: /Hz$/ })
   await expect(cursorLabels).toHaveCount(2)
@@ -3881,11 +3896,16 @@ test('DC sweep waveform supports source cursor and horizontal wheel zoom without
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   const plotWindow = await openComponentVoltagePlot(page)
-  const chart = plotWindow.getByRole('img', { name: /DC sweep of/i })
+  const chart = plotWindow.getByRole('group', { name: /DC sweep of/i })
   await expect(chart).toBeVisible()
   await chart.click({ position: { x: (await chart.boundingBox())!.width * 0.55, y: 45 } })
   await expect(page.locator('.plot-cursor')).toBeAttached()
   await expect(chart.locator('..')).toContainText(/V$/)
+  const cursorLabel = plotWindow.locator('.waveform-title span').filter({ hasText: /V$/ })
+  const clickedSweepValue = await cursorLabel.innerText()
+  await chart.focus()
+  await chart.press('ArrowRight')
+  await expect.poll(() => cursorLabel.innerText()).not.toBe(clickedSweepValue)
 
   const readSavedDcRange = () => page.evaluate(() => {
     const settings = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings
