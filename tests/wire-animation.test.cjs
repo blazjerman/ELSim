@@ -12,7 +12,13 @@ test('wire playback keeps dash phase while simulation samples update', () => {
   const previousCancel = global.cancelAnimationFrame
   const callbacks = new Map()
   let nextFrame = 1
-  global.window = { matchMedia: () => ({ matches: false }) }
+  let reducedMotion = false
+  let onPreferenceChange
+  const mediaQuery = {
+    get matches() { return reducedMotion },
+    addEventListener: (type, listener) => { if (type === 'change') onPreferenceChange = listener },
+  }
+  global.window = { matchMedia: () => mediaQuery }
   global.requestAnimationFrame = (callback) => { const id = nextFrame++; callbacks.set(id, callback); return id }
   global.cancelAnimationFrame = (id) => callbacks.delete(id)
   const offsets = []
@@ -33,6 +39,16 @@ test('wire playback keeps dash phase while simulation samples update', () => {
     advance(1033)
     assert.notEqual(offsets.at(-1), firstOffset)
     assert.ok(offsets.at(-1) < firstOffset, 'the dash phase continues forward through a sample update')
+
+    reducedMotion = true
+    onPreferenceChange({ matches: true })
+    assert.equal(callbacks.size, 0, 'reduced motion cancels the pending animation frame')
+    const pausedOffset = offsets.at(-1)
+    reducedMotion = false
+    onPreferenceChange({ matches: false })
+    assert.equal(callbacks.size, 1, 'turning reduced motion off resumes the animation loop')
+    advance(1066)
+    assert.notEqual(offsets.at(-1), pausedOffset, 'wire flow resumes from its previous phase')
   } finally {
     registerWireAnimation(key, null)
     global.window = previousWindow

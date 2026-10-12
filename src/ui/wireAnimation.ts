@@ -5,9 +5,31 @@ const configurations = new Map<string, AnimationConfig>()
 const phases = new Map<string, number>()
 let frame: number | null = null
 let previous = 0
+let motionPreference: MediaQueryList | null = null
+
+function cancelFrame() {
+  if (frame === null) return
+  cancelAnimationFrame(frame)
+  frame = null
+  previous = 0
+}
+
+function onMotionPreferenceChange(event: MediaQueryListEvent) {
+  if (event.matches) cancelFrame()
+  else schedule()
+}
+
+function getMotionPreference() {
+  if (!motionPreference) {
+    motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
+    if (typeof motionPreference.addEventListener === 'function') motionPreference.addEventListener('change', onMotionPreferenceChange)
+    else motionPreference.addListener?.(onMotionPreferenceChange)
+  }
+  return motionPreference
+}
 
 function schedule() {
-  if (frame === null && elements.size && configurations.size) {
+  if (frame === null && elements.size && configurations.size && !getMotionPreference().matches) {
     previous = performance.now()
     frame = requestAnimationFrame(tick)
   }
@@ -16,7 +38,12 @@ function schedule() {
 function tick(now: number) {
   const elapsed = Math.min(0.05, Math.max(0, (now - previous) / 1000))
   previous = now
-  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) for (const [key, config] of configurations) {
+  if (getMotionPreference().matches) {
+    frame = null
+    previous = 0
+    return
+  }
+  for (const [key, config] of configurations) {
     const element = elements.get(key)
     if (!element || config.magnitude <= 1e-12) continue
     const phase = (phases.get(key) ?? 0) + elapsed * 18 * config.speed * Math.min(1, Math.sqrt(config.magnitude / 0.01)) * (config.forward ? 1 : -1)
@@ -34,11 +61,7 @@ export function registerWireAnimation(key: string, element: SVGPolylineElement |
     elements.delete(key)
     configurations.delete(key)
     phases.delete(key)
-    if (!elements.size && frame !== null) {
-      cancelAnimationFrame(frame)
-      frame = null
-      previous = 0
-    }
+    if (!elements.size) cancelFrame()
     return
   }
   elements.set(key, element)
@@ -50,11 +73,7 @@ export function updateWireAnimation(key: string, config?: AnimationConfig) {
   if (!config) {
     configurations.delete(key)
     phases.delete(key)
-    if (!configurations.size && frame !== null) {
-      cancelAnimationFrame(frame)
-      frame = null
-      previous = 0
-    }
+    if (!configurations.size) cancelFrame()
     return
   }
   configurations.set(key, config)

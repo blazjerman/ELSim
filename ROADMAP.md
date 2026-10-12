@@ -515,3 +515,6 @@ Offline local simulation follow-up (2026-10-12): Added `npm run build:offline` t
 
 
 Nested-sheet deletion follow-up (2026-10-12): Deleting an unused reusable sheet now removes its complete nested definition subtree atomically, with one Undo restoring the subtree. Deletion is blocked when any removed definition is instantiated by a sheet outside that subtree, with an actionable message. Domain coverage verifies safe deletion and external-reference protection; the focused Firefox workflow verifies the sheet tabs, deletion, and Undo. All 28 unit groups and TypeScript checking pass.
+
+
+Reduced-motion animation-loop follow-up (2026-10-12): Wire-current animation now cancels its pending requestAnimationFrame when the OS enables reduced motion instead of polling while leaving particles static. A single MediaQueryList listener resumes the loop when the preference changes back, preserving each wire's phase. The wire-animation regression verifies cancellation, resumption, and phase continuity; typecheck and all 28 unit groups pass. No WASM rebuild or browser build was needed.
