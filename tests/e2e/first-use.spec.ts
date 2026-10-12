@@ -642,7 +642,8 @@ test('reusable block settings expose named controls', { tag: '@ui-smoke' }, asyn
 
 test('large imported-model dependency reports are navigable regions, not live status announcements', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
-  await page.evaluate(async (fallbackProjectJson) => {
+  await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
+  const projectJson = await page.evaluate(async (fallbackProjectJson) => {
     const key = 'elsim:project:v7'
     const project = JSON.parse(localStorage.getItem(key) ?? 'null') ?? JSON.parse(fallbackProjectJson)
     const content = '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n'
@@ -651,9 +652,14 @@ test('large imported-model dependency reports are navigable regions, not live st
     project.modelAssets = [{ id: 'amp-library', filename: 'amp.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
     project.parts.push({ id: 'missing-model-instance', kind: 'subcircuit', ref: 'XAMP1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
     project.sheets[0] = { ...project.sheets[0], parts: project.parts }
-    localStorage.setItem(key, JSON.stringify(project))
+    return JSON.stringify(project)
   }, JSON.stringify(createStarterProject()))
+  await page.addInitScript((serialized) => {
+    localStorage.setItem('elsim:project:v7', serialized)
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  }, projectJson)
   await page.reload()
+  await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
   const report = page.getByRole('region', { name: 'Model dependency report' })
   await expect(report).toContainText('CORE')
   await expect(report).toContainText('amp.lib')
@@ -665,7 +671,8 @@ test('large imported-model dependency reports are navigable regions, not live st
 
 test('model library provenance can remove unused shared files and protects included dependencies', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
-  await page.evaluate(async (fallbackProjectJson) => {
+  await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
+  const projectJson = await page.evaluate(async (fallbackProjectJson) => {
     const key = 'elsim:project:v7'
     const project = JSON.parse(localStorage.getItem(key) ?? 'null') ?? JSON.parse(fallbackProjectJson)
     const assets = [
@@ -680,9 +687,14 @@ test('model library provenance can remove unused shared files and protects inclu
     }))
     project.parts.push({ id: 'amplifier-instance', kind: 'subcircuit', ref: 'XAMP1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
     project.sheets[0] = { ...project.sheets[0], parts: project.parts }
-    localStorage.setItem(key, JSON.stringify(project))
+    return JSON.stringify(project)
   }, JSON.stringify(createStarterProject()))
+  await page.addInitScript((serialized) => {
+    localStorage.setItem('elsim:project:v7', serialized)
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  }, projectJson)
   await page.reload()
+  await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
 
   await expect(page.getByRole('button', { name: 'Remove library file amplifier.lib' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Remove library file shared.lib' })).toBeDisabled()
@@ -969,11 +981,12 @@ test('batch-importing related model libraries resolves their includes immediatel
   await expect(page.getByText('BATCH_AMP', { exact: true })).toBeVisible()
   await expect(page.getByText('BATCH_CORE', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  const netlist = await page.getByRole('dialog', { name: 'Generated SPICE netlist' }).innerText()
-  expect(netlist).toContain('.PARAM RBASE=2k')
-  expect(netlist).toContain('.SUBCKT BATCH_AMP')
-  expect(netlist).toContain('.SUBCKT BATCH_CORE')
-  expect(netlist).not.toMatch(/^\.include/im)
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist.locator('pre')).toContainText('.PARAM RBASE=2k')
+  const netlistText = await netlist.innerText()
+  expect(netlistText).toContain('.SUBCKT BATCH_AMP')
+  expect(netlistText).toContain('.SUBCKT BATCH_CORE')
+  expect(netlistText).not.toMatch(/^\.include/im)
 })
 
 test('large imported IC lists can be searched and expanded on demand', async ({ page }) => {
@@ -1990,6 +2003,7 @@ test('copying a user IC into a new project carries transitive libraries and its 
 
 test('imported IC symbols announce ordered pin names to assistive technology', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
   const source = '.SUBCKT USER_AMP INPUT OUTPUT\nRCORE INPUT OUTPUT 1k\n.ENDS USER_AMP\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'user-amp.lib', mimeType: 'text/plain', buffer: Buffer.from(source) })
@@ -2006,6 +2020,7 @@ test('imported IC symbols announce ordered pin names to assistive technology', {
   const placeWithSymbol = symbolCard.getByRole('button', { name: 'Place USER_AMP with this symbol' })
   await expect(placeWithSymbol).toBeVisible()
   await placeWithSymbol.click()
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await expect(page.locator('.circuit-part[aria-label^="X2,"]')).toHaveAccessibleName(/pins: 1 NONINV, 2 OUT/)
 })
 
@@ -5798,14 +5813,21 @@ test('transient measurements offer labeled nodes and common component currents',
 
 test('transient measurements expose peak-to-peak and preserve it in the netlist', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
-  await page.evaluate(() => {
+  await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
+  const projectJson = await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.simulation.transientMeasurements = [{ id: 'OutputSwing', operation: 'max', vector: 'V(vout)' }]
-    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+    return JSON.stringify(project)
   })
+  await page.addInitScript((serialized) => {
+    localStorage.setItem('elsim:project:v7', serialized)
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  }, projectJson)
   await page.reload()
-  await page.keyboard.press('Escape')
+  await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.getByRole('combobox', { name: 'Calculate', exact: true }).selectOption('pp')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0].operation)).toBe('pp')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
