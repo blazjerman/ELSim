@@ -1613,6 +1613,7 @@ test('copying a user IC into a new project carries transitive libraries and its 
   await page.reload()
   const sourcePart = page.locator('.circuit-part[aria-label^="XUSER,"]')
   await expect(sourcePart).toBeVisible()
+  await expect(sourcePart).toHaveAccessibleName(/pins: 1 IN, 2 OUT/)
   await sourcePart.evaluate((element) => (element as SVGGElement).focus())
   await page.keyboard.press('Enter')
   await page.keyboard.press('Control+c')
@@ -1632,6 +1633,31 @@ test('copying a user IC into a new project carries transitive libraries and its 
       definitionMatchesModel: part.componentDefinitionId === `user.${project.modelAssets.find((asset: { filename: string }) => asset.filename === 'user-top.lib').sha256}.user-top`,
     }
   })).toEqual({ libraries: ['user-core.lib', 'user-top.lib'], symbol: 'user-top.asy', hasTransitiveModel: true, definitionMatchesModel: true })
+})
+
+test('imported IC symbols announce ordered pin names to assistive technology', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const source = '.SUBCKT USER_AMP INPUT OUTPUT\nRCORE INPUT OUTPUT 1k\n.ENDS USER_AMP\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'user-amp.lib', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'USER_AMP' })
+  await expect(importedModel.getByRole('button', { name: 'Add to schematic' })).toBeVisible()
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  const symbolSource = 'Version 4\nSYMATTR Prefix X\nRECTANGLE Normal -8 -8 8 8\nPIN -16 0 R\nPINATTR PinName INPUT\nPINATTR SpiceOrder 1\nPIN 16 0 L\nPINATTR PinName OUTPUT\nPINATTR SpiceOrder 2\n'
+  const symbol = parseLtspiceSymbol(symbolSource, 'user-amp.asy')
+  const symbolAsset = { id: 'symbol-accessibility', filename: 'user-amp.asy', content: symbolSource, sha256: createHash('sha256').update(symbolSource).digest('hex'), licenseStatus: 'unknown' as const, importedAt: '2026-01-01T00:00:00.000Z' }
+  await page.evaluate(({ symbolAsset, offsets }) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const part = project.parts.find((candidate: { ref: string }) => candidate.ref === 'X1')
+    part.symbolAssetId = symbolAsset.id
+    part.symbolPinOffsets = offsets
+    project.symbolAssets = [symbolAsset]
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  }, { symbolAsset, offsets: symbol.pins.map(({ x, y }) => [x, y]) })
+  await page.reload()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toHaveAccessibleName(/pins: 1 INPUT, 2 OUTPUT/)
 })
 
 test('copy and paste an explicitly selected net label with its global connection semantics', async ({ page }) => {
