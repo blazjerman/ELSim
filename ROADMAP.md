@@ -439,3 +439,5 @@ Quick-tour edit action (2026-10-12): The “Change a component value” step now
 Engine-free preview guidance (2026-10-12): The toolbar now shows a concise missing-runtime notice with a Setup action when ngspice WASM assets are unavailable. The action explains the local build commands and ignored runtime location, while project editing and saving remain available. Firefox verified missing module/WASM responses, setup guidance, the Run explanation, and a resistor value edit. No WASM build or hosted deployment was run.
 
 Model-library parser follow-up (2026-10-12): Section inspection now returns the logical-line records it already built to the library parser, avoiding a second full continuation-processing pass for each imported model file. Parsing semantics and physical source-line mapping are unchanged.
+
+Large-circuit model-check follow-up (2026-10-12): Circuit Checks now parse each imported model library once per check and reuse the resulting device-model name set across root and reachable child-sheet parts. Missing-model warnings and invalid-library handling are unchanged; the previous path reparsed every library for every model-assigned component.

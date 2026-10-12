@@ -51,6 +51,14 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     return [{ id: 'empty', severity: 'info', title: 'Circuit is empty', detail: 'Add a component before running a simulation.' }]
   }
   const reachableSheets = reachableSimulationSheets(project)
+  const importedDeviceModels = new Set<string>()
+  for (const asset of project.modelAssets ?? []) {
+    try {
+      for (const name of analyzeModelDependencies([asset]).deviceModelAssets.keys()) importedDeviceModels.add(name)
+    } catch {
+      // Invalid library syntax has its own importer diagnostic.
+    }
+  }
 
   for (const { sheet, topLevelInstanceId } of reachableSheets) {
     const partsByReference = new Map<string, Project['parts']>()
@@ -92,10 +100,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         partId: topLevelInstanceId,
       })
       if (['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(part.kind) && part.deviceModel) {
-        const foundModel = (project.modelAssets ?? []).some((asset) => {
-          try { return analyzeModelDependencies([asset]).deviceModelAssets.has(part.deviceModel!.toLowerCase()) }
-          catch { return false }
-        })
+        const foundModel = importedDeviceModels.has(part.deviceModel.toLowerCase())
         if (!foundModel) issues.push({
           id: `missing-device-model:${sheet.id}:${part.id}`,
           severity: 'warning',
@@ -323,11 +328,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       }
     }
     if ((part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'npn' || part.kind === 'pnp' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos') && part.deviceModel) {
-      let foundModel = false
-      for (const asset of project.modelAssets ?? []) {
-        try { if (analyzeModelDependencies([asset]).deviceModelAssets.has(part.deviceModel.toLowerCase())) foundModel = true }
-        catch { /* Invalid library syntax has its own importer diagnostic. */ }
-      }
+      const foundModel = importedDeviceModels.has(part.deviceModel.toLowerCase())
       if (!foundModel) issues.push({
         id: `missing-device-model:${part.id}`,
         severity: 'warning',
