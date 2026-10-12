@@ -1,17 +1,15 @@
-type AnimationConfig = { key: string; magnitude: number; forward: boolean; speed: number; scale: number; currentReference: number }
+type AnimationConfig = { key: string; magnitude: number; forward: boolean; currentMultiplier: number }
 
 const elements = new Map<string, SVGPolylineElement>()
 const configurations = new Map<string, AnimationConfig>()
 const phases = new Map<string, number>()
 let frame: number | null = null
-let previous = 0
 let motionPreference: MediaQueryList | null = null
 
 function cancelFrame() {
   if (frame === null) return
   cancelAnimationFrame(frame)
   frame = null
-  previous = 0
 }
 
 function hasMovingFlow() {
@@ -37,40 +35,33 @@ function getMotionPreference() {
 
 function schedule() {
   if (frame === null && elements.size && hasMovingFlow() && !getMotionPreference().matches) {
-    previous = performance.now()
     frame = requestAnimationFrame(tick)
   }
 }
 
-function tick(now: number) {
-  const elapsed = Math.min(0.05, Math.max(0, (now - previous) / 1000))
-  previous = now
+function tick() {
   if (getMotionPreference().matches) {
     frame = null
-    previous = 0
     return
   }
   if (!elements.size || !hasMovingFlow()) {
     frame = null
-    previous = 0
     return
   }
   for (const [key, config] of configurations) {
     const element = elements.get(key)
     if (!element || config.magnitude <= 1e-12) continue
-    // Falstad advances current dots in proportion to current × a user scale.
-    // Compress that range logarithmically so amp-level currents remain legible.
-    // currentReference sets the point at which flow reaches its base speed.
-    const currentFactor = Math.min(12, Math.log1p(config.magnitude / config.currentReference) / Math.LN2)
-    const phase = (phases.get(key) ?? 0) + elapsed * 18 * config.speed * currentFactor * (config.forward ? 1 : -1)
-    const wrapped = ((phase % 18) + 18) % 18
+    // Match CircuitJS: advance dot position by current × current-speed setting.
+    // Dot positions repeat every eight SVG units, as in CircuitJS.
+    const increment = (config.magnitude * config.currentMultiplier) % 8
+    const phase = (phases.get(key) ?? 0) + increment * (config.forward ? 1 : -1)
+    const wrapped = ((phase % 8) + 8) % 8
     phases.set(key, wrapped)
-    element.setAttribute('stroke-dashoffset', `${-wrapped * config.scale}`)
+    element.setAttribute('stroke-dashoffset', `${-wrapped}`)
   }
   if (elements.size && hasMovingFlow()) frame = requestAnimationFrame(tick)
   else {
     frame = null
-    previous = 0
   }
 }
 

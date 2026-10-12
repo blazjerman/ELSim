@@ -33,10 +33,10 @@ test('wire playback keeps dash phase while simulation samples update', () => {
 
   try {
     registerWireAnimation(key, element)
-    updateWireAnimation(key, { key, magnitude: 0.01, forward: true, speed: 1, scale: 1, currentReference: 0.001 })
+    updateWireAnimation(key, { key, magnitude: 0.01, forward: true, currentMultiplier: 50 })
     advance(startTime)
     const firstOffset = offsets.at(-1)
-    updateWireAnimation(key, { key, magnitude: 0.04, forward: true, speed: 1, scale: 1, currentReference: 0.001 })
+    updateWireAnimation(key, { key, magnitude: 0.04, forward: true, currentMultiplier: 50 })
     advance(startTime + 10)
     assert.notEqual(offsets.at(-1), firstOffset)
     assert.ok(offsets.at(-1) < firstOffset, 'the dash phase continues forward through a sample update')
@@ -58,7 +58,7 @@ test('wire playback keeps dash phase while simulation samples update', () => {
   }
 })
 
-test('wire animation uses a tunable logarithmic current scale', () => {
+test('wire animation follows current × Falstad current-speed multiplier', () => {
   const previousWindow = global.window
   const previousRequest = global.requestAnimationFrame
   const previousCancel = global.cancelAnimationFrame
@@ -70,6 +70,7 @@ test('wire animation uses a tunable logarithmic current scale', () => {
   const offsets = []
   const element = { setAttribute: (_name, value) => offsets.push(Number(value)) }
   const key = 'magnitude-wire:0'
+  const startTime = performance.now() + 10
   const advance = (timestamp) => {
     const [id, callback] = callbacks.entries().next().value
     callbacks.delete(id)
@@ -78,25 +79,25 @@ test('wire animation uses a tunable logarithmic current scale', () => {
 
   try {
     registerWireAnimation(key, element)
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, speed: 1, scale: 1, currentReference: 0.001 })
-    advance(1000)
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, currentMultiplier: 50 })
+    advance(startTime)
     const atOneMilliamp = offsets.at(-1)
-    advance(1010)
+    advance(startTime + 10)
     const oneMilliampDistance = Math.abs(offsets.at(-1) - atOneMilliamp)
 
-    updateWireAnimation(key, { key, magnitude: 0.002, forward: true, speed: 1, scale: 1, currentReference: 0.001 })
-    advance(1020)
+    updateWireAnimation(key, { key, magnitude: 0.002, forward: true, currentMultiplier: 50 })
+    advance(startTime + 20)
     const atTwoMilliamps = offsets.at(-1)
-    advance(1030)
+    advance(startTime + 30)
     const twoMilliampDistance = Math.abs(offsets.at(-1) - atTwoMilliamps)
-    assert.ok(Math.abs(twoMilliampDistance / oneMilliampDistance - Math.log1p(2) / Math.log1p(1)) < 0.01,
-      `2 mA should follow the logarithmic scale relative to 1 mA (got ${twoMilliampDistance / oneMilliampDistance}×)`)
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, speed: 1, scale: 1, currentReference: 0.0001 })
-    advance(1040)
+    assert.ok(Math.abs(twoMilliampDistance / oneMilliampDistance - 2) < 0.01,
+      `2 mA should move twice as fast as 1 mA (got ${twoMilliampDistance / oneMilliampDistance}×)`)
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, currentMultiplier: 100 })
+    advance(startTime + 40)
     const sensitiveRangeOffset = offsets.at(-1)
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, speed: 1, scale: 1, currentReference: 0.01 })
-    advance(1050)
-    assert.notEqual(offsets.at(-1), sensitiveRangeOffset, 'changing the current reference changes animation speed')
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, currentMultiplier: 25 })
+    advance(startTime + 50)
+    assert.notEqual(offsets.at(-1), sensitiveRangeOffset, 'Falstad-style current-speed slider changes animation speed')
   } finally {
     registerWireAnimation(key, null)
     global.window = previousWindow
@@ -120,15 +121,15 @@ test('wire playback schedules frames only while a visible wire carries current',
 
   try {
     registerWireAnimation(key, element)
-    updateWireAnimation(key, { key, magnitude: 0, forward: true, speed: 1, scale: 1, currentReference: 0.001 })
+    updateWireAnimation(key, { key, magnitude: 0, forward: true, currentMultiplier: 50 })
     assert.equal(callbacks.size, 0, 'zero current does not start a frame loop')
 
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, speed: 1, scale: 1, currentReference: 0.001 })
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, currentMultiplier: 50 })
     assert.equal(callbacks.size, 1, 'nonzero current starts animation')
-    updateWireAnimation(key, { key, magnitude: 0, forward: true, speed: 1, scale: 1, currentReference: 0.001 })
+    updateWireAnimation(key, { key, magnitude: 0, forward: true, currentMultiplier: 50 })
     assert.equal(callbacks.size, 0, 'animation stops immediately when current returns to zero')
 
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: false, speed: 1, scale: 1, currentReference: 0.001 })
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: false, currentMultiplier: 50 })
     assert.equal(callbacks.size, 1, 'animation resumes when current flows again')
   } finally {
     registerWireAnimation(key, null)

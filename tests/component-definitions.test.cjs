@@ -77,8 +77,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.equal(componentDefinitionFor('transformer').symbolGeometry.filter(({ kind }) => kind === 'line').length, 6)
   assert.equal(componentDefinitionFor('transformer').symbolAnimations['field.primaryCurrent'].active[0].className.includes('transformer-primary-current-glow'), true)
   assert.equal(componentDefinitionFor('transformer').symbolAnimations['field.secondaryCurrent'].active[0].className.includes('transformer-secondary-current-glow'), true)
-  assert.deepEqual(componentDefinitionFor('transformer').symbolAnimations.secondaryCurrentDirection.forward.map(({ className }) => className), ['transformer-secondary-current-arrow'])
-  assert.notEqual(componentDefinitionFor('transformer').symbolAnimations.secondaryCurrentDirection.forward[0].d, componentDefinitionFor('transformer').symbolAnimations.secondaryCurrentDirection.reverse[0].d)
+  assert.equal(componentDefinitionFor('transformer').symbolAnimations.secondaryCurrentDirection, undefined)
   for (const kind of ['ground', 'diode', 'zener', 'led']) assert.ok(componentDefinitionFor(kind).symbolGeometry.length, `${kind} has definition-owned static geometry`)
   assert.deepEqual(componentDefinitionFor('led').symbolGeometry.slice(0, -1), componentDefinitionFor('diode').symbolGeometry)
   assert.equal(componentDefinitionFor('led').symbolGeometry.at(-1).className, 'led-light-rays')
@@ -141,8 +140,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants.closed.find((primitive) => primitive.kind === 'path')?.d, 'M-12 -2L12 0')
   assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants.open.find((primitive) => primitive.kind === 'path')?.d, 'M-12 -2L9 -12')
   for (const state of ['open', 'closed']) assert.deepEqual(componentDefinitionFor('voltageSwitch').symbolVariants[state].filter((primitive) => primitive.className === 'control-pin-label').map(({ text }) => text), ['+', '−'])
-  assert.deepEqual(componentDefinitionFor('inductor').symbolVariants.forwardCurrent.find((primitive) => primitive.className === 'inductor-current-arrow')?.d, 'M-16 -21H16M16 -21L9 -26M16 -21L9 -16')
-  assert.deepEqual(componentDefinitionFor('inductor').symbolVariants.reverseCurrent.find((primitive) => primitive.className === 'inductor-current-arrow')?.d, 'M16 -21H-16M-16 -21L-9 -26M-16 -21L-9 -16')
+  assert.equal(componentDefinitionFor('inductor').symbolVariants, undefined)
   assert.deepEqual(componentDefinitionFor('capacitor').symbolVariants.forwardCurrent.filter((primitive) => primitive.className === 'capacitor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '−'], [2, '+']])
   assert.deepEqual(componentDefinitionFor('capacitor').symbolVariants.reverseCurrent.filter((primitive) => primitive.className === 'capacitor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '+'], [2, '−']])
   for (const kind of ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet']) {
@@ -157,9 +155,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.equal(new RegExp(definitionSchema.properties.symbolAnimations.propertyNames.pattern).test('brightness.power'), true)
   assert.equal(definitionSchema.properties.symbolGeometry.items.oneOf.find((primitive) => primitive.properties?.kind?.const === 'text').properties.pin.maximum, 64)
   for (const kind of ['source', 'currentSource', 'resistor', 'lamp', 'transformer', 'diode', 'zener', 'led', 'switch', 'voltageSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'inverter', 'logicGate']) {
-    const variants = componentDefinitionFor(kind).symbolAnimations.currentDirection
-    for (const direction of ['forward', 'reverse']) assert.ok(variants[direction].some((primitive) => primitive.className === 'component-current-arrow' && primitive.kind === 'path'), `${kind} ${direction} current arrow is definition geometry`)
-    assert.notEqual(variants.forward[0].d, variants.reverse[0].d, `${kind} direction variants differ`)
+    assert.equal(componentDefinitionFor(kind).symbolAnimations?.currentDirection, undefined, `${kind} has no redundant component current arrows`)
   }
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
   assert.deepEqual(componentDefinitionFor('lamp').symbolGeometry.map(({ kind }) => kind), ['line', 'circle', 'line', 'path'])
