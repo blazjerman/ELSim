@@ -292,6 +292,7 @@ test('polarized capacitor metadata changes its symbol but not its simulated netl
 
 test('Zener regulator uses its breakdown model and has ordered diode current probing', () => {
   const project = validateProject(createZenerRegulatorExampleProject())
+  assert.equal(project.wires.length, 9)
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^DZ1 0 VZ DZENER$/m)

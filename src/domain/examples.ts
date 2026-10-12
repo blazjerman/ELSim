@@ -529,14 +529,24 @@ export function createZenerRegulatorExampleProject(): Project {
   }
   project.name = 'Zener voltage reference'
   project.parts = [source, resistor, zener]
-  project.wires = []
+  project.wires = [
+    { id: 'zener-feed-rise', points: [[260, 310], [260, 260]] },
+    { id: 'zener-feed-top', points: [[260, 260], [450, 260]] },
+    { id: 'zener-feed-resistor', points: [[450, 260], [450, 300]] },
+    { id: 'zener-resistor-output', points: [[550, 300], [550, 230]] },
+    { id: 'zener-output-top', points: [[550, 230], [790, 230]] },
+    { id: 'zener-output-cathode', points: [[790, 230], [790, 300]] },
+    { id: 'zener-ground-anode', points: [[690, 300], [690, 430]] },
+    { id: 'zener-ground-return', points: [[690, 430], [260, 430]] },
+    { id: 'zener-ground-source', points: [[260, 430], [260, 410]] },
+  ]
   project.junctions = []
   project.netLabels = [
     labelAt('zener-input-source', 'VIN', source, 0), labelAt('zener-input-resistor', 'VIN', resistor, 0),
     labelAt('zener-output-resistor', 'VZ', resistor, 1), labelAt('zener-output-cathode', 'VZ', zener, 1),
     labelAt('zener-ground-source', '0', source, 1), labelAt('zener-ground-anode', '0', zener, 0),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'op' }
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VZ)', 'I(DZ1)'], ranges: {} }
   project.view = { zoom: 0.9, panX: -10, panY: 0 }
