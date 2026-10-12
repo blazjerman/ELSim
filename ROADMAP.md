@@ -147,6 +147,8 @@ Voltage-controlled switch current-flow follow-up (2026-10-12): The wire sampler 
 
 Controlled-source current-flow follow-up (2026-10-12): CCCS/CCVS branch currents now drive their two output-pin wire paths; ideal inverter and logic-gate current is assigned to the output pin while input pins remain at zero. The current-controlled-source lesson now draws explicit sensor, load, and return wires, with output paths routed around the opposite terminals to preserve topology. Unit tests cover output-versus-input flow, and the Firefox/ngspice lesson verifies both controlled-source loops animate after solving.
 
+Wire animation idle-work fix (2026-10-12): The shared `requestAnimationFrame` loop now runs only while at least one registered visible wire carries nonzero solved current; it stops as soon as all active currents fall below the visibility threshold and resumes when current returns. A unit regression verifies idle startup, prompt stopping, and resumption. This prevents large idle circuits from consuming animation-frame work without changing result sampling or dot speed/direction.
+
 **M1.5 Beginner experience.** Onboarding, searchable components, example circuits, hover explanations, sensible simulation presets, and accessible colors/keyboard operations. Acceptance: scripted first-use test reaches a working circuit without knowledge of netlists.
 
 Example discovery (2026-10-12): the example picker now has a four-circuit “Start here” path ordered from an RC step response through a voltage divider and LED current limiter to capacitor discharge. The complete catalog and existing topic/search filters remain available. A focused browser smoke regression checks the path order and confirms the full catalog remains reachable.

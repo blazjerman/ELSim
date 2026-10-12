@@ -14,6 +14,13 @@ function cancelFrame() {
   previous = 0
 }
 
+function hasMovingFlow() {
+  for (const config of configurations.values()) {
+    if (config.magnitude > 1e-12) return true
+  }
+  return false
+}
+
 function onMotionPreferenceChange(event: MediaQueryListEvent) {
   if (event.matches) cancelFrame()
   else schedule()
@@ -29,7 +36,7 @@ function getMotionPreference() {
 }
 
 function schedule() {
-  if (frame === null && elements.size && configurations.size && !getMotionPreference().matches) {
+  if (frame === null && elements.size && hasMovingFlow() && !getMotionPreference().matches) {
     previous = performance.now()
     frame = requestAnimationFrame(tick)
   }
@@ -43,6 +50,11 @@ function tick(now: number) {
     previous = 0
     return
   }
+  if (!elements.size || !hasMovingFlow()) {
+    frame = null
+    previous = 0
+    return
+  }
   for (const [key, config] of configurations) {
     const element = elements.get(key)
     if (!element || config.magnitude <= 1e-12) continue
@@ -51,8 +63,11 @@ function tick(now: number) {
     phases.set(key, wrapped)
     element.setAttribute('stroke-dashoffset', `${-wrapped * config.scale}`)
   }
-  if (elements.size && configurations.size) frame = requestAnimationFrame(tick)
-  else frame = null
+  if (elements.size && hasMovingFlow()) frame = requestAnimationFrame(tick)
+  else {
+    frame = null
+    previous = 0
+  }
 }
 
 /** Maintain one animation frame loop for every visible wire flow segment. */
@@ -61,7 +76,7 @@ export function registerWireAnimation(key: string, element: SVGPolylineElement |
     elements.delete(key)
     configurations.delete(key)
     phases.delete(key)
-    if (!elements.size) cancelFrame()
+    if (!elements.size || !hasMovingFlow()) cancelFrame()
     return
   }
   elements.set(key, element)
@@ -73,9 +88,10 @@ export function updateWireAnimation(key: string, config?: AnimationConfig) {
   if (!config) {
     configurations.delete(key)
     phases.delete(key)
-    if (!configurations.size) cancelFrame()
+    if (!hasMovingFlow()) cancelFrame()
     return
   }
   configurations.set(key, config)
-  schedule()
+  if (hasMovingFlow()) schedule()
+  else cancelFrame()
 }

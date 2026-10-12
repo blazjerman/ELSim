@@ -56,3 +56,36 @@ test('wire playback keeps dash phase while simulation samples update', () => {
     global.cancelAnimationFrame = previousCancel
   }
 })
+
+test('wire playback schedules frames only while a visible wire carries current', () => {
+  const previousWindow = global.window
+  const previousRequest = global.requestAnimationFrame
+  const previousCancel = global.cancelAnimationFrame
+  const callbacks = new Map()
+  let nextFrame = 1
+  const mediaQuery = { matches: false, addEventListener() {} }
+  global.window = { matchMedia: () => mediaQuery }
+  global.requestAnimationFrame = (callback) => { const id = nextFrame++; callbacks.set(id, callback); return id }
+  global.cancelAnimationFrame = (id) => callbacks.delete(id)
+  const element = { setAttribute() {} }
+  const key = 'idle-wire:0'
+
+  try {
+    registerWireAnimation(key, element)
+    updateWireAnimation(key, { key, magnitude: 0, forward: true, speed: 1, scale: 1 })
+    assert.equal(callbacks.size, 0, 'zero current does not start a frame loop')
+
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, speed: 1, scale: 1 })
+    assert.equal(callbacks.size, 1, 'nonzero current starts animation')
+    updateWireAnimation(key, { key, magnitude: 0, forward: true, speed: 1, scale: 1 })
+    assert.equal(callbacks.size, 0, 'animation stops immediately when current returns to zero')
+
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: false, speed: 1, scale: 1 })
+    assert.equal(callbacks.size, 1, 'animation resumes when current flows again')
+  } finally {
+    registerWireAnimation(key, null)
+    global.window = previousWindow
+    global.requestAnimationFrame = previousRequest
+    global.cancelAnimationFrame = previousCancel
+  }
+})
