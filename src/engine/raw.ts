@@ -154,3 +154,77 @@ export function parseAsciiRawFile(text: string): ParsedRawFile {
   if (isDcSweep) variables[0].values.set(axis)
   return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : 'op', axis, variables: variables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }
 }
+
+const binaryMarker = [66, 105, 110, 97, 114, 121, 58] // Binary:
+
+function findBinaryMarker(bytes: Uint8Array): number {
+  let markerStart = -1
+  for (let index = 0; index <= bytes.length - binaryMarker.length; index += 1) {
+    if ((index === 0 || bytes[index - 1] === 10) && binaryMarker.every((value, offset) => bytes[index + offset] === value)) {
+      markerStart = index
+      break
+    }
+  }
+  return markerStart
+}
+
+/** Parse ngspice's point-major binary raw format without decoding its numeric payload as text. */
+export function parseBinaryRawFile(bytes: Uint8Array): ParsedRawFile {
+  const markerStart = findBinaryMarker(bytes)
+  if (markerStart < 0) throw new Error('ngspice did not write a binary raw data section.')
+  let payloadStart = markerStart + binaryMarker.length
+  if (bytes[payloadStart] === 13) payloadStart += 1
+  if (bytes[payloadStart] !== 10) throw new Error('ngspice binary raw data header is malformed.')
+  payloadStart += 1
+  const header = new TextDecoder().decode(bytes.subarray(0, markerStart))
+  const title = header.match(/^Title:\s*(.*)$/im)?.[1]?.trim() ?? 'ngspice results'
+  const plotName = header.match(/^Plotname:\s*(.*)$/im)?.[1]?.trim() ?? 'Analysis'
+  const flags = header.match(/^Flags:\s*(.*)$/im)?.[1]?.trim().toLowerCase().split(/\s+/) ?? []
+  const isComplex = flags.includes('complex')
+  if (!isComplex && !flags.includes('real')) throw new Error(`Unsupported ngspice raw data flags: ${flags.join(', ') || 'missing'}.`)
+  const pointCount = Number(header.match(/^No\. Points:\s*(\d+)$/im)?.[1])
+  const variableCount = Number(header.match(/^No\. Variables:\s*(\d+)$/im)?.[1])
+  if (!Number.isSafeInteger(pointCount) || pointCount < 1 || !Number.isSafeInteger(variableCount) || variableCount < 2) throw new Error('ngspice raw data has invalid point or variable counts.')
+  const variableBlock = header.split(/^Variables:\s*$/im)[1]
+  if (!variableBlock) throw new Error('ngspice raw data is missing its Variables section.')
+  const variables = variableBlock.split(/\r?\n/).map((line) => {
+    const match = line.match(/^\s*\d+\s+(\S+)\s+(\S+)/)
+    return match ? { name: match[1], type: match[2], values: new Float64Array(pointCount), ...(isComplex ? { imaginaryValues: new Float64Array(pointCount) } : {}) } : null
+  }).filter((variable): variable is RawVariable => variable !== null)
+  if (variables.length !== variableCount) throw new Error('ngspice raw data variables do not match its declared result data.')
+  const hasTimeAxis = variables[0]?.name.toLowerCase() === 'time'
+  const isOperatingPoint = /operating point/i.test(plotName)
+  const isFrequency = /ac analysis/i.test(plotName)
+  const isNoise = /noise spectral density/i.test(plotName)
+  const isDcSweep = /dc transfer characteristic/i.test(plotName)
+  if (!hasTimeAxis && !isOperatingPoint && !isFrequency && !isDcSweep && !isNoise) throw new Error(`Unsupported ngspice raw analysis axis: ${plotName}.`)
+  if (isComplex && !isFrequency) throw new Error(`Complex ngspice raw data is unsupported for ${plotName}.`)
+  if (isFrequency && !isComplex) throw new Error('ngspice AC analysis must contain complex frequency-domain vectors.')
+  if (isOperatingPoint && pointCount !== 1) throw new Error('ngspice operating-point raw data must contain exactly one sample.')
+  const valuesPerPoint = variableCount * (isComplex ? 2 : 1)
+  const expectedBytes = pointCount * valuesPerPoint * Float64Array.BYTES_PER_ELEMENT
+  if (!Number.isSafeInteger(expectedBytes) || bytes.length - payloadStart < expectedBytes) throw new Error('ngspice binary raw data ended before all numeric points were read.')
+  const view = new DataView(bytes.buffer, bytes.byteOffset + payloadStart, expectedBytes)
+  const axis = new Float64Array(pointCount)
+  for (let point = 0; point < pointCount; point += 1) {
+    for (let variable = 0; variable < variableCount; variable += 1) {
+      const valueIndex = (point * valuesPerPoint) + variable * (isComplex ? 2 : 1)
+      const valueOffset = valueIndex * Float64Array.BYTES_PER_ELEMENT
+      const value = view.getFloat64(valueOffset, true)
+      if (variable === 0 && !isOperatingPoint) axis[point] = value
+      else variables[variable].values[point] = value
+      if (isComplex) variables[variable].imaginaryValues![point] = view.getFloat64(valueOffset + Float64Array.BYTES_PER_ELEMENT, true)
+    }
+  }
+  const axisVector = isDcSweep ? variables[0].name : ''
+  const axisLabel = hasTimeAxis ? 'Time' : isFrequency || isNoise ? 'Frequency' : isDcSweep ? axisVector : 'Operating point'
+  const sweepType = variables[0].type.toLowerCase()
+  const axisUnit = hasTimeAxis ? 's' : isFrequency || isNoise ? 'Hz' : isDcSweep && sweepType === 'voltage' ? 'V' : isDcSweep && sweepType === 'current' ? 'A' : ''
+  if (isDcSweep) variables[0].values.set(axis)
+  return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : 'op', axis, variables: variables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }
+}
+
+export function parseRawFile(data: string | Uint8Array): ParsedRawFile {
+  if (typeof data === 'string') return parseAsciiRawFile(data)
+  return findBinaryMarker(data) >= 0 ? parseBinaryRawFile(data) : parseAsciiRawFile(new TextDecoder().decode(data))
+}

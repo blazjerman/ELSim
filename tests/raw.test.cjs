@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { isTraceVariable, parseAsciiRawFile, rawTraceUnit } = require(path.join(build, 'engine/raw.js'))
+const { isTraceVariable, parseAsciiRawFile, parseBinaryRawFile, rawTraceUnit } = require(path.join(build, 'engine/raw.js'))
 const { serializeWaveformCsv } = require(path.join(build, 'engine/csv.js'))
 
 const validRaw = `Title: RC fixture
@@ -199,6 +199,38 @@ test('ASCII raw parser rejects complex transient data', () => {
 test('ASCII raw parser rejects truncated and mismatched point data', () => {
   assert.throws(() => parseAsciiRawFile(validRaw.replace(/\n\s*-2\.000000e-03\n/, '\n')), /ended before all numeric points/)
   assert.throws(() => parseAsciiRawFile(validRaw.replace('No. Variables: 3', 'No. Variables: 4')), /variables do not match/)
+})
+
+function binaryRaw(header, samples) {
+  const prefix = Buffer.from(header.replace('Values:', 'Binary:') + '\n')
+  const payload = Buffer.alloc(samples.length * Float64Array.BYTES_PER_ELEMENT)
+  samples.forEach((sample, index) => payload.writeDoubleLE(sample, index * Float64Array.BYTES_PER_ELEMENT))
+  return new Uint8Array(Buffer.concat([prefix, payload]))
+}
+
+test('binary raw parser reads interleaved transient vectors without text expansion', () => {
+  const data = binaryRaw(validRaw.replace(/Values:[\s\S]*$/, 'Values:'), [0, 5, -0.001, 0.001, 4, -0.002])
+  const parsed = parseBinaryRawFile(data)
+  assert.equal(parsed.analysis, 'tran')
+  assert.deepEqual([...parsed.axis], [0, 0.001])
+  assert.deepEqual([...parsed.variables[0].values], [5, 4])
+  assert.deepEqual([...parsed.variables[1].values], [-0.001, -0.002])
+})
+
+test('binary raw parser reads interleaved real and imaginary AC values', () => {
+  const header = validAcRaw.replace(/Values:[\s\S]*$/, 'Values:')
+  const values = [1000, 0, 1, 0, 0.001, -0.002, 10000, 0, 0.5, -0.5, 0.002, -0.003]
+  const parsed = parseBinaryRawFile(binaryRaw(header, values))
+  assert.equal(parsed.analysis, 'ac')
+  assert.deepEqual([...parsed.axis], [1000, 10000])
+  assert.deepEqual([...parsed.variables[0].values], [1, 0.5])
+  assert.deepEqual([...parsed.variables[0].imaginaryValues], [0, -0.5])
+  assert.deepEqual([...parsed.variables[1].imaginaryValues], [-0.002, -0.003])
+})
+
+test('binary raw parser rejects truncated payloads', () => {
+  const data = binaryRaw(validRaw.replace(/Values:[\s\S]*$/, 'Values:'), [0, 5, -0.001])
+  assert.throws(() => parseBinaryRawFile(data), /ended before all numeric points/)
 })
 
 test('waveform CSV includes units, quoted labels, and synchronized mixed-unit samples', () => {

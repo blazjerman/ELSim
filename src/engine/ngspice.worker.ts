@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { isTraceVariable, parseAsciiRawFile, rawTraceUnit } from './raw'
+import { isTraceVariable, parseRawFile, rawTraceUnit } from './raw'
 import { addResultControl } from './resultControl'
 import { parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice, firstNgspiceError } from './diagnostics'
@@ -9,11 +9,11 @@ import { needsLtspiceFullDeckTranslation } from '../domain/subcircuitLibrary'
 
 const worker = self as DedicatedWorkerGlobalScope
 const profileWorker = import.meta.env.DEV && import.meta.env.VITE_ELSIM_PROFILE === '1'
-type NgspiceModule = { FS: { writeFile(path: string, data: string): void; readFile(path: string, options: { encoding: 'utf8' }): string }; callMain(args: string[]): number }
+type NgspiceModule = { FS: { writeFile(path: string, data: string): void; readFile(path: string): Uint8Array }; callMain(args: string[]): number }
 type NgspiceFactory = (options: { noInitialRun: boolean; locateFile: (path: string) => string; print: (...parts: string[]) => void; printErr: (...parts: string[]) => void }) => Promise<NgspiceModule>
 
-function makeTraces(rawText: string): Trace[] {
-  const parsed = parseAsciiRawFile(rawText)
+function makeTraces(rawData: string | Uint8Array): Trace[] {
+  const parsed = parseRawFile(rawData)
   const axis = parsed.axis
   const names = parsed.variables.map((variable) => variable.name)
   return parsed.variables.filter((variable) => isTraceVariable(variable.name, names)).map((variable) => {
@@ -71,14 +71,14 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     }
     const resultProcessingStarted = profileWorker ? performance.now() : 0
     const traces = parameterSweep?.length
-      ? parameterSweep.flatMap((sweep, index) => makeTraces(module.FS.readFile(`/result-${index}.raw`, { encoding: 'utf8' })).map((trace) => ({
+      ? parameterSweep.flatMap((sweep, index) => makeTraces(module.FS.readFile(`/result-${index}.raw`)).map((trace) => ({
         ...trace,
         id: `${trace.id}::sweep-${index}`,
         baseId: trace.id,
         label: `${trace.label} · ${sweep.label}`,
         sweep: { label: sweep.label, index },
       })))
-      : makeTraces(module.FS.readFile('/result.raw', { encoding: 'utf8' }))
+      : makeTraces(module.FS.readFile('/result.raw'))
     if (!traces.length) throw new Error('ngspice completed but produced no voltage or current vectors.')
     const measurementTraces = parameterSweep?.length
       ? parameterSweep.map((_, index) => traces.filter((trace) => trace.sweep?.index === index))

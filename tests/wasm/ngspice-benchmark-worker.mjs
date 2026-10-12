@@ -11,10 +11,11 @@ try {
   const simulationStart = performance.now()
   const status = module.callMain(['-b', '/benchmark.cir'])
   const simulationMs = performance.now() - simulationStart
-  const output = module.FS.readFile('/result.raw', { encoding: 'utf8' })
+  const output = module.FS.readFile('/result.raw')
+  const header = new TextDecoder().decode(output.subarray(0, Math.min(output.length, 4096)))
   if (workerData.summaryOnly) {
-    const points = Number(output.match(/^No\. Points:\s*(\d+)/mi)?.[1])
-    const variables = Number(output.match(/^No\. Variables:\s*(\d+)/mi)?.[1])
+    const points = Number(header.match(/^No\. Points:\s*(\d+)/mi)?.[1])
+    const variables = Number(header.match(/^No\. Variables:\s*(\d+)/mi)?.[1])
     let parsingMs = null
     let vectorBytes = null
     let traceNames = null
@@ -22,8 +23,8 @@ try {
     let finalTraceValue = null
     if (workerData.rawParserPath) {
       const parseStart = performance.now()
-      const { parseAsciiRawFile } = createRequire(import.meta.url)(workerData.rawParserPath)
-      const parsed = parseAsciiRawFile(output)
+      const { parseRawFile } = createRequire(import.meta.url)(workerData.rawParserPath)
+      const parsed = parseRawFile(output)
       parsingMs = performance.now() - parseStart
       traceNames = parsed.variables.map((variable) => variable.name)
       finalAxisValue = parsed.axis.at(-1)
@@ -31,7 +32,7 @@ try {
       vectorBytes = parsed.axis.byteLength + parsed.variables.reduce((sum, variable) => sum + variable.values.byteLength + (variable.imaginaryValues?.byteLength ?? 0), 0)
       if (parsed.axis.length !== points) throw new Error(`Parsed ${parsed.axis.length} samples from a raw file declaring ${points}.`)
     }
-    parentPort.postMessage({ status, moduleLoadMs, simulationMs, parsingMs, rawBytes: Buffer.byteLength(output), points, variables, vectorBytes, traceNames, finalAxisValue, finalTraceValue })
+    parentPort.postMessage({ status, moduleLoadMs, simulationMs, parsingMs, rawBytes: output.byteLength, points, variables, vectorBytes, traceNames, finalAxisValue, finalTraceValue })
   } else parentPort.postMessage({ status, moduleLoadMs, simulationMs, output })
 } catch (error) {
   parentPort.postMessage({ error: error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error) })

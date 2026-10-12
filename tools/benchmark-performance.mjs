@@ -178,7 +178,7 @@ function makeTransientDeck(sampleCount) {
     `.tran 1u ${stopTime} 0 1u`,
     '.save v(out)',
     '.control',
-    'set filetype=ascii',
+    'set filetype=binary',
     'run',
     'write /result.raw all',
     'quit',
@@ -205,7 +205,7 @@ try {
   const { checkCircuit } = build(path.join(output, 'domain/electricalCheck.js'))
   const { createNetlistArtifact } = build(path.join(output, 'engine/netlist.js'))
   const { extremaIndices } = build(path.join(output, 'engine/plot.js'))
-  const { parseAsciiRawFile } = build(path.join(output, 'engine/raw.js'))
+  const { parseRawFile } = build(path.join(output, 'engine/raw.js'))
 
   const circuitResults = []
   for (const count of [100, 500, 1_000, 5_000]) {
@@ -346,10 +346,10 @@ try {
     for (const count of [100, 1_000, 5_000]) {
       const project = makeChain(createStarterProject, componentPins, count)
       const artifact = createNetlistArtifact(project)
-      const deck = artifact.text.replace(/\n\.end\s*$/i, '\n.save all\n.control\nset filetype=ascii\nrun\nwrite /result.raw all\nquit\n.endc\n.end')
+      const deck = artifact.text.replace(/\n\.end\s*$/i, '\n.save all\n.control\nset filetype=binary\nrun\nwrite /result.raw all\nquit\n.endc\n.end')
       const solved = await runWasm(pathToFileURL(engineModule).href, deck)
       if (solved.status !== 0) throw new Error(`ngspice failed its ${count}-section benchmark (status ${solved.status}).`)
-      const parsing = measure(() => parseAsciiRawFile(solved.output))
+      const parsing = measure(() => parseRawFile(solved.output))
       const vectors = parsing.value.variables
       const nodeZero = vectors.find((variable) => variable.name.toLowerCase() === 'v(n0)')?.values[0]
       if (nodeZero === undefined || Math.abs(nodeZero - 5) > 1e-6) throw new Error(`The ${count}-section benchmark no longer solves N0 to 5 V.`)
@@ -362,7 +362,7 @@ try {
         solverModuleLoadMs: Number(solved.moduleLoadMs.toFixed(3)),
         solverRunMs: Number(solved.simulationMs.toFixed(3)),
         workerRoundTripMs: Number(solved.workerRoundTripMs.toFixed(3)),
-        rawBytes: Buffer.byteLength(solved.output),
+        rawBytes: solved.output.byteLength,
         vectors: vectors.length,
         vectorBytes,
         rawParsing: { medianMs: parsing.medianMs, p95Ms: parsing.p95Ms },
