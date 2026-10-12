@@ -2225,11 +2225,20 @@ export default function App() {
     if (playbackRate !== 'realtime') {
       const startIndex = Math.max(0, Math.min(transientAxis.length - 1, getSimulationCursor() ?? 0))
       const startTime = transientAxis[startIndex]
+      const endTime = transientAxis[transientAxis.length - 1]
       const wallStart = performance.now()
+      // Keep the original scaled playback feel: at 1× a complete run takes
+      // about four seconds regardless of its simulated duration. Select only
+      // solved axis samples; the plotted values are never interpolated.
+      const totalSamples = Math.max(1, transientAxis.length - 1)
+      const stride = Math.max(1, Math.ceil(totalSamples / 120))
+      const remainingSamples = transientAxis.length - 1 - startIndex
+      const playbackDuration = Math.max(1, Math.ceil(remainingSamples / stride) * 33 / playbackRate)
       let frame = 0
       const advance = (now: number) => {
-        const target = startTime + (now - wallStart) / 1000 * playbackRate
-        if (target >= transientAxis[transientAxis.length - 1]) {
+        const progress = Math.min(1, (now - wallStart) / playbackDuration)
+        const target = startTime + (endTime - startTime) * progress
+        if (progress >= 1) {
           setSimulationCursor(transientAxis.length - 1)
           setPlaybackRunning(false)
           return
