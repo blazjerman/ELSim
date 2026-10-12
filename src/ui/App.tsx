@@ -383,7 +383,14 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const symbolCoordinates = symbol ? [...symbol.primitives.flatMap((primitive) => primitive.kind === 'polyline' ? primitive.points : primitive.kind === 'text' ? [[primitive.x, primitive.y]] : [[primitive.x1, primitive.y1], [primitive.x2, primitive.y2]]), ...symbol.pins.map(({ x, y }) => [x, y])] : []
   const symbolBounds = symbolCoordinates.length ? { minX: Math.min(...symbolCoordinates.map(([x]) => x)), minY: Math.min(...symbolCoordinates.map(([, y]) => y)), maxX: Math.max(...symbolCoordinates.map(([x]) => x)), maxY: Math.max(...symbolCoordinates.map(([, y]) => y)) } : null
   const labelBounds = (() => {
-    const points: [number, number][] = componentPins(part).map((pin) => [pin.x - part.x, pin.y - part.y])
+    const angle = part.rotation * Math.PI / 180
+    const cosine = Math.cos(angle), sine = Math.sin(angle)
+    // componentPins returns world coordinates already rotated. Convert pins
+    // back to local coordinates before the common bounds rotation below.
+    const points: [number, number][] = componentPins(part).map((pin) => {
+      const x = pin.x - part.x, y = pin.y - part.y
+      return [x * cosine + y * sine, -x * sine + y * cosine]
+    })
     for (const primitive of symbolGeometry) {
       if (primitive.kind === 'line') points.push([primitive.x1, primitive.y1], [primitive.x2, primitive.y2])
       else if (primitive.kind === 'rect') points.push([primitive.x, primitive.y], [primitive.x + primitive.width, primitive.y + primitive.height])
@@ -392,7 +399,6 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     }
     if (symbolBounds) points.push([symbolBounds.minX, symbolBounds.minY], [symbolBounds.maxX, symbolBounds.maxY])
     if (part.kind === 'subcircuit') points.push([-customWidth / 2, -customHeight / 2], [customWidth / 2, customHeight / 2])
-    const angle = part.rotation * Math.PI / 180
     const rotated = points.map(([x, y]) => [x * Math.cos(angle) - y * Math.sin(angle), x * Math.sin(angle) + y * Math.cos(angle)])
     return rotated.length ? { minX: Math.min(...rotated.map(([x]) => x)), minY: Math.min(...rotated.map(([, y]) => y)), maxX: Math.max(...rotated.map(([x]) => x)), maxY: Math.max(...rotated.map(([, y]) => y)) } : { minX: -24, minY: -24, maxX: 24, maxY: 24 }
   })()
@@ -400,7 +406,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     const angle = part.rotation * Math.PI / 180
     return { x: Math.cos(angle) * x + Math.sin(angle) * y, y: -Math.sin(angle) * x + Math.cos(angle) * y }
   }
-  const vertical = part.rotation % 180 !== 0
+  const vertical = labelBounds.maxY - labelBounds.minY > labelBounds.maxX - labelBounds.minX
   const refAnchor = vertical
     ? labelAnchor(labelBounds.minX - 20, 0)
     : labelAnchor(0, part.kind === 'ground' ? labelBounds.maxY + 14 : labelBounds.minY - 14)
@@ -718,7 +724,7 @@ const WireCurrentFlowLayer = memo(function WireCurrentFlowLayer({ wireIds, wires
   const animatedWires = useMemo(() => wires.filter((wire) => wireIds.has(wire.id)), [wires, wireIds])
   const flows = useMemo(() => sampleFlows(sampleIndex), [sampleIndex, sampleFlows])
   return <g className="wire-current-flow-layer" aria-hidden="true" pointerEvents="none">{animatedWires.map((wire) => <g key={wire.id} data-wire-id={wire.id}>{(flows.get(wire.id) ?? []).map((segment, index) => {
-    const currentStrength = Math.min(1, Math.sqrt(segment.magnitude / 0.01))
+    const currentStrength = Math.min(3, Math.max(0.15, Math.sqrt(segment.magnitude / 0.001)))
     const glow = segment.magnitude > 1e-12 ? Math.min(1, (0.12 + currentStrength * 0.88) * animationScale) : 0
     return <WireFlowPath key={`${wire.id}:${index}`} wireId={wire.id} index={index} segment={segment} enabled={animationEnabled} scale={animationScale} speed={animationSpeed} strength={currentStrength} opacity={glow}/>
   })}</g>)}</g>
@@ -738,7 +744,9 @@ const WireFlowPath = memo(function WireFlowPath({ wireId, index, segment, enable
   const config = enabled ? { key, magnitude: segment.magnitude, forward: segment.forward, speed, scale } : undefined
   const ref = useCallback((element: SVGPolylineElement | null) => registerWireAnimation(key, element), [key])
   useLayoutEffect(() => updateWireAnimation(key, config), [key, config?.magnitude, config?.forward, config?.speed, config?.scale])
-  return <polyline ref={ref} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={(2.2 + strength * 2.2) * scale} strokeLinecap="round" strokeDasharray={`${3 * scale} ${15 * scale}`} opacity={opacity}><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
+  const dotLength = 2 + Math.min(2.5, strength)
+  const strokeWidth = 1.8 + Math.log2(1 + strength) * 1.4
+  return <polyline ref={ref} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={strokeWidth * scale} strokeLinecap="round" strokeDasharray={`${dotLength * scale} ${15 * scale}`} opacity={opacity}><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
 })
 
 function TransientMeasurementEditor({ project, measurements, onAdd, onChange, onRemove }: { project: Project; measurements: TransientMeasurement[]; onAdd: () => void; onChange: (index: number, patch: Partial<TransientMeasurement>) => void; onRemove: (index: number) => void }) {
@@ -3964,7 +3972,7 @@ export default function App() {
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => changeAnalysis(event.target.value as Project['simulation']['analysis'])}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option><option value="noise">Noise analysis</option></select><ChevronDown size={13}/></label>
       <SimulationPlaybackControls axis={transientAxis} available={playbackAvailable} running={playbackRunning} rate={playbackRate} onRateChange={setPlaybackRate} onRunningChange={setPlaybackRunning}/>
-      <div className="menu-group"><details className={`animation-tuning${animationTuningAvailable ? '' : ' is-disabled'}`}><summary aria-label="Current animation settings" aria-disabled={!animationTuningAvailable} tabIndex={animationTuningAvailable ? 0 : -1} title={animationTuningAvailable ? 'Current animation size and speed scale' : 'Run a transient or operating-point simulation to enable animation settings'} onClick={(event) => { if (!animationTuningAvailable) event.preventDefault() }}><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} disabled={!animationTuningAvailable} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Speed scale <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label><small>Wire flow speed also follows the simulated current.</small></div></details></div>
+      <div className="menu-group"><details className={`animation-tuning${animationTuningAvailable ? '' : ' is-disabled'}`}><summary aria-label="Current animation settings" aria-disabled={!animationTuningAvailable} tabIndex={animationTuningAvailable ? 0 : -1} title={animationTuningAvailable ? 'Current animation size and speed scale' : 'Run a transient or operating-point simulation to enable animation settings'} onClick={(event) => { if (!animationTuningAvailable) event.preventDefault() }}><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} disabled={!animationTuningAvailable} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Speed scale <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label><small>Stronger wire current moves dots faster and makes them more visible.</small></div></details></div>
       <div className="menu-group waveform-window-actions"><IconButton title="Open generated netlist" aria-label="Netlist" onClick={() => setNetlistOpen(true)}><Command size={14}/></IconButton><IconButton title="Tile waveform windows" aria-label="Tile waveform windows" onClick={tilePlotWindows} disabled={additionalPlotPanels.length < 2}><Grid2X2 size={14}/></IconButton><IconButton title={simulationResult ? 'Download simulation run report' : 'Run a simulation to create a report'} aria-label="Download simulation run report" onClick={downloadRunReport} disabled={!simulationResult}><Download size={14}/></IconButton></div>
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit <span>{electricalIssues.length}</span></button>
       <button className="run-button" onClick={startSimulation} disabled={engineAssetAvailable === null || runState === 'loading' || runState === 'running'} title={engineAssetAvailable === null ? 'Checking for the local ngspice runtime' : undefined}><Play size={15} fill="currentColor"/> Run simulation</button>
