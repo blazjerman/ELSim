@@ -428,6 +428,12 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
+  for (const partId of ['p-v1', 'p-c1', 'p-gnd']) {
+    await page.locator(`.circuit-part[data-part-id="${partId}"]`).click()
+    await expectNamedButtons()
+    await expectNamedFormControls()
+    await expectVisibleKeyboardControlsNamed(page)
+  }
   await page.getByRole('button', { name: 'Examples' }).click()
   await expectNamedButtons()
   await expectNamedFormControls()
