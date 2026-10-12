@@ -67,6 +67,18 @@ test('logic gate lesson creates labeled, transient behavioral gates', () => {
   }
 })
 
+test('logic gates accept custom input thresholds and logic output levels', () => {
+  const project = createLogicGatesExampleProject()
+  project.parts = project.parts.map((part) => part.id === 'logic-and'
+    ? { ...part, logicLow: '0 V', logicHigh: '3.3 V', logicThreshold: '1.65 V' }
+    : part)
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^BAND OUT_AND 0 V=\{0 \+ \(3\.3 - 0\) \*/m)
+  assert.match(artifact.text, /V\(A\) > 1\.65/)
+  assert.throws(() => validateProject({ ...project, parts: project.parts.map((part) => part.id === 'logic-and' ? { ...part, logicLow: '3.3 V', logicHigh: '0 V', logicThreshold: '1.65 V' } : part) }), /threshold strictly between low and high/)
+})
+
 test('AC transformer example emits coupled windings with the selected turns ratio', () => {
   const project = createTransformerExampleProject()
   const artifact = createNetlistArtifact(project)

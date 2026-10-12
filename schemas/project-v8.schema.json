@@ -257,6 +257,9 @@
         "logicOperation": {
           "enum": ["and", "or", "nand", "nor", "xor", "xnor"]
         },
+        "logicLow": { "type": "string", "maxLength": 64 },
+        "logicHigh": { "type": "string", "maxLength": 64 },
+        "logicThreshold": { "type": "string", "maxLength": 64 },
         "behavioralDialect": {
           "const": "ltspice"
         },

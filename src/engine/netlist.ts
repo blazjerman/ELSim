@@ -786,8 +786,17 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       append(`${part.ref} ${positive} ${negative} ${source.ref} ${value}`, part.id, 'component')
     }
     else if (part.kind === 'logicGate' || part.kind === 'inverter') {
-      const inputA = `V(${pinNet(connectivity, part, 0)}) > 2.5`
-      const inputB = `V(${pinNet(connectivity, part, 1)}) > 2.5`
+      const low = spiceScalar(part.logicLow ?? '0 V', 'v')
+      const high = spiceScalar(part.logicHigh ?? '5 V', 'v')
+      const threshold = spiceScalar(part.logicThreshold ?? '2.5 V', 'v')
+      if (low === null || high === null || threshold === null) {
+        const message = `${part.ref} has invalid logic voltage levels.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const inputA = `V(${pinNet(connectivity, part, 0)}) > ${threshold}`
+      const inputB = `V(${pinNet(connectivity, part, 1)}) > ${threshold}`
       const operation = part.logicOperation ?? 'and'
       const booleanExpression = part.kind === 'inverter' ? `inv(${inputA})`
         : operation === 'and' ? `(${inputA}) & (${inputB})`
@@ -795,7 +804,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
             : operation === 'or' ? `(${inputA}) | (${inputB})`
               : operation === 'nor' ? `!(${inputA} | ${inputB})`
                 : operation === 'xor' ? `xor(${inputA}, ${inputB})` : `!xor(${inputA}, ${inputB})`
-      const expression = `5 * (${booleanExpression})`
+      const expression = `${low} + (${high} - ${low}) * (${booleanExpression})`
       try {
         const parsed = parseBehavioralExpression(expression)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])

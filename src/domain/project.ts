@@ -36,6 +36,9 @@ export type Part = {
   behavioralOutput?: 'voltage' | 'current'
   behavioralDialect?: 'ltspice'
   logicOperation?: 'and' | 'or' | 'nand' | 'nor' | 'xor' | 'xnor'
+  logicLow?: string
+  logicHigh?: string
+  logicThreshold?: string
   sourceMode?: 'pulse' | 'dc' | 'pwl' | 'sine' | 'exp' | 'sffm'
   acMagnitude?: string
   acPhase?: string
@@ -378,6 +381,14 @@ export function validateProject(input: unknown): Project {
       if (candidate.logicOperation !== undefined || candidate.behavioralOutput !== undefined || candidate.behavioralDialect !== undefined) throw new Error(`${candidate.ref} has gate settings on an inverter.`)
       candidate.value = 'NOT'
     } else if (candidate.logicOperation !== undefined) throw new Error(`${candidate.ref} has logic-gate settings on a non-gate component.`)
+    const logicSettings = [candidate.logicLow, candidate.logicHigh, candidate.logicThreshold]
+    if (logicSettings.some((value) => value !== undefined) && (!['logicGate', 'inverter'].includes(candidate.kind) || logicSettings.some((value) => value !== undefined && (typeof value !== 'string' || value.length > 64)))) throw new Error(`${candidate.ref} has malformed logic voltage levels.`)
+    if (candidate.kind === 'logicGate' || candidate.kind === 'inverter') {
+      const low = componentMagnitude(candidate.logicLow ?? '0 V', 'source')
+      const high = componentMagnitude(candidate.logicHigh ?? '5 V', 'source')
+      const threshold = componentMagnitude(candidate.logicThreshold ?? '2.5 V', 'source')
+      if (low === null || high === null || threshold === null || Math.abs(low) > 1000 || Math.abs(high) > 1000 || Math.abs(threshold) > 1000 || !(low < threshold && threshold < high)) throw new Error(`${candidate.ref} needs logic output levels from −1000 V to 1000 V with the input threshold strictly between low and high.`)
+    }
     if (candidate.kind === 'behavioral') {
       if (!['voltage', 'current'].includes(candidate.behavioralOutput ?? '') || !candidate.value.trim()) throw new Error(`${candidate.ref} needs a voltage/current output mode and an expression.`)
       if (candidate.behavioralDialect !== undefined && candidate.behavioralDialect !== 'ltspice') throw new Error(`${candidate.ref} has an unsupported behavioral expression dialect.`)
