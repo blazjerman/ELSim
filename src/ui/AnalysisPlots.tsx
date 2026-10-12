@@ -5,6 +5,7 @@ import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange } from '../domain/pro
 import { extremaIndices, valueRange } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation } from './simulationCursor'
+import { formatTime } from './formatTime'
 import { setAnalysisCursor, useAnalysisCursor } from './analysisCursor'
 
 function nearestAxisIndex(axis: Float64Array, value: number, start: number, end: number): number {
@@ -171,7 +172,7 @@ const PlotPolylineSet = memo(function PlotPolylineSet({ plots }: { plots: { id: 
 
 function TransientCursorTime({ axis }: { axis?: Float64Array }) {
   const cursorIndex = useSimulationCursor()
-  return <span>{cursorIndex === null || !axis ? 'Click plot for cursor values' : `t = ${axis[cursorIndex].toPrecision(5)} s`}</span>
+  return <span>{cursorIndex === null || !axis ? 'Click plot for cursor values' : `t = ${formatTime(axis[cursorIndex], axis[axis.length - 1], 5)}`}</span>
 }
 
 function TransientCursorMarker({ axis, first, last, minTime, maxTime, left, right, top, bottom }: {
@@ -340,15 +341,15 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       return `${trace.label} ${trace.values[index].toPrecision(5)} ${trace.unit}`
     })
     if (shown.length > readings.length) readings.push(`${shown.length - readings.length} more traces`)
-    setKeyboardAnnouncement(`Time ${time.toPrecision(5)} seconds${readings.length ? `. ${readings.join('; ')}.` : '.'}`)
+    setKeyboardAnnouncement(`Time ${formatTime(time, axis[axis.length - 1], 5)}${readings.length ? `. ${readings.join('; ')}.` : '.'}`)
   }
   return <div className="waveform-view">
     <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
+    <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${formatTime(minTime, axis?.[axis.length - 1] ?? maxTime)} to ${formatTime(maxTime, axis?.[axis.length - 1] ?? maxTime)}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
       {minorValueTicks.map((value) => <line key={`y-minor-${value}`} x1={left} x2={right} y1={yForValue(value)} y2={yForValue(value)} className="plot-grid-minor"/>)}
       {valueTicks.map((value) => <g key={`y-major-${value}`}><line x1={left} x2={right} y1={yForValue(value)} y2={yForValue(value)} className={Math.abs(value) <= valueStep * 1e-8 ? 'plot-grid-zero' : 'plot-grid'}/>{Math.abs(value) > valueStep * 1e-8 && hasVoltage && <text x={left - 5} y={yForValue(value) + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(value, 'V')}</text>}{Math.abs(value) > valueStep * 1e-8 && hasCurrent && <text x={right + 4} y={yForValue(value) + 3} className="plot-tick">{formatEngineeringTick(value, 'A')}</text>}</g>)}
       {minorTimeTicks.map((time) => <line key={`x-minor-${time}`} x1={xForTime(time)} x2={xForTime(time)} y1={top} y2={bottom} className="plot-grid-minor"/>)}
-      {timeTicks.map((time, index) => <g key={`x-major-${time}`}><line x1={xForTime(time)} x2={xForTime(time)} y1={top} y2={bottom} className="plot-grid"/><text x={xForTime(time)} y={height - 3} textAnchor={index === 0 ? 'start' : index === timeTicks.length - 1 ? 'end' : 'middle'} className="plot-tick">{formatEngineeringTick(time, 's')}</text></g>)}
+      {timeTicks.map((time, index) => <g key={`x-major-${time}`}><line x1={xForTime(time)} x2={xForTime(time)} y1={top} y2={bottom} className="plot-grid"/><text x={xForTime(time)} y={height - 3} textAnchor={index === 0 ? 'start' : index === timeTicks.length - 1 ? 'end' : 'middle'} className="plot-tick">{formatTime(time, axis?.[axis.length - 1] ?? maxTime, 3)}</text></g>)}
       {(hasVoltage || hasCurrent) && <g className="plot-zero-reference"><line x1={left} x2={right} y1={yForValue(0)} y2={yForValue(0)}/>{hasVoltage && <text x={left - 5} y={yForValue(0) + 3} textAnchor="end">0 V</text>}{hasCurrent && <text x={right + 4} y={yForValue(0) + 3}>0 A</text>}</g>}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>

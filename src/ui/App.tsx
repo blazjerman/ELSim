@@ -23,6 +23,7 @@ import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, renameSheetDefinition, sheetDefinitionSubtreeIds, updateSheetDefinition } from '../domain/sheetDefinition'
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
+import { formatTime } from './formatTime'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
 import type { ComponentPaletteCategory } from './ComponentPalette'
@@ -508,7 +509,7 @@ function SimulationPlaybackControls({ axis, available, running, rate, onRateChan
   return <div className="menu-group playback-controls" role="group" aria-label="Result playback">
     <IconButton title={running ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!running && (sampleIndex ?? 0) >= (axis?.length ?? 1) - 1) setSimulationCursor(0); onRunningChange(!running) }} active={running} disabled={!available}>{running ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton>
     <IconButton title="Rewind result playback to the first solved sample" onClick={() => { onRunningChange(false); setSimulationCursor(0) }} disabled={!available}><RotateCcw size={14}/></IconButton>
-    <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" aria-valuetext={axis?.length ? `${axis[activeSample].toPrecision(4)} seconds` : 'Unavailable'} type="range" min="0" max={Math.max(1, (axis?.length ?? 0) - 1)} step="1" value={activeSample} disabled={!available || !axis?.length} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><output>{axis?.length ? `${axis[activeSample].toPrecision(4)} s` : '— s'}</output></label>
+    <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" aria-valuetext={axis?.length ? formatTime(axis[activeSample], axis[axis.length - 1]) : 'Unavailable'} type="range" min="0" max={Math.max(1, (axis?.length ?? 0) - 1)} step="1" value={activeSample} disabled={!available || !axis?.length} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><output>{axis?.length ? formatTime(axis[activeSample], axis[axis.length - 1]) : '— s'}</output></label>
     <label className="playback-rate-control"><span>Playback</span><select aria-label="Simulation playback speed" value={rate} disabled={!available} onChange={(event) => onRateChange(event.target.value === 'realtime' ? 'realtime' : Number(event.target.value))}>{[0.1, ...Array.from({ length: 12 }, (_, index) => (index + 1) * 0.25), 4, 5, 10].map((speed) => <option key={speed} value={speed}>{speed === 1 ? '1× · current' : `${speed}×`}</option>)}<option value="realtime">Real time · 1 s/s</option></select></label>
   </div>
 }
