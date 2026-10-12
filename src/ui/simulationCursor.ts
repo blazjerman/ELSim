@@ -8,6 +8,8 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
+function subscribeNever(): () => void { return () => {} }
+
 export function getSimulationCursor(): number | null {
   return sampleIndex
 }
@@ -20,4 +22,8 @@ export function setSimulationCursor(next: number | null): void {
 
 export function useSimulationCursor(): number | null {
   return useSyncExternalStore(subscribe, getSimulationCursor, getSimulationCursor)
+}
+
+export function useSimulationCursorWhen(enabled: boolean): number | null {
+  return useSyncExternalStore(enabled ? subscribe : subscribeNever, getSimulationCursor, getSimulationCursor)
 }
