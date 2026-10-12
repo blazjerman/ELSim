@@ -179,6 +179,8 @@ test('quick tour explains the current workspace and project save flow', { tag: '
   const dialog = page.locator('.tour-dialog[role="dialog"]')
   const close = dialog.getByRole('button', { name: 'Close quick tour' })
   const next = dialog.getByRole('button', { name: 'Next' })
+  await expect(dialog.getByRole('heading')).toHaveAttribute('aria-live', 'polite')
+  await expect(dialog.getByRole('heading')).toHaveAttribute('aria-atomic', 'true')
   await expect(next).toBeFocused()
   await page.keyboard.press('Shift+Tab')
   await expect(dialog.getByRole('button', { name: 'Skip tour' })).toBeFocused()
