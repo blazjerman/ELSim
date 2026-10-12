@@ -2368,6 +2368,20 @@ test('wire and component placement tools stay armed until cancelled', async ({ p
   await expect(capacitor).toHaveAttribute('aria-pressed', 'false')
 })
 
+test('sheet tab three-dot menu manages reusable blocks', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  const options = page.locator('.sheet-tab-menu-trigger')
+  await options.click()
+  await expect(page.getByRole('menu')).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Duplicate block' }).click()
+  await expect(options).toBeVisible()
+  await options.click()
+  await page.getByRole('menuitem', { name: 'Sheet and block settings…' }).click()
+  await expect(page.getByRole('dialog', { name: /ports and parameters/ })).toBeVisible()
+  await expect(page.getByLabel('Sheet name')).not.toHaveValue('')
+})
+
 test('placement preview shows component orientation and toolbar controls stay fixed', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('group', { name: 'Result playback' })).toBeVisible()
@@ -2545,6 +2559,27 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(firstWindow.getByRole('button', { name: /Disable V\(R1\)/ })).toBeVisible()
   await expect(firstWindow.getByRole('button', { name: /Disable I\(R1\)/i })).toBeVisible()
+  await page.locator('.plot-window').last().locator('svg.waveform-chart').click({ button: 'middle' })
+  await expect(page.locator('.plot-window')).toHaveCount(1)
+  await expect(firstWindow.locator('.plot-zero-reference').first()).toContainText('0 V')
+  await firstWindow.getByRole('button', { name: 'Zoom in' }).click()
+  const chart = firstWindow.locator('svg.waveform-chart')
+  const axisLabels = () => chart.locator('text.plot-tick').allTextContents()
+  const beforeVerticalDrag = await axisLabels()
+  const chartBounds = (await chart.boundingBox())!
+  await page.mouse.move(chartBounds.x + chartBounds.width / 2, chartBounds.y + chartBounds.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(chartBounds.x + chartBounds.width / 2, chartBounds.y + chartBounds.height / 2 - 50, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(axisLabels).toEqual(beforeVerticalDrag)
+  const beforeHorizontalDrag = await axisLabels()
+  await page.mouse.move(chartBounds.x + chartBounds.width / 2, chartBounds.y + chartBounds.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(chartBounds.x + chartBounds.width / 2 - 70, chartBounds.y + chartBounds.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(axisLabels).not.toEqual(beforeHorizontalDrag)
+  await chart.click({ button: 'middle' })
+  await expect(page.locator('.plot-window')).toHaveCount(0)
 })
 
 test('global simulation temperature is passed to ngspice', { tag: '@ngspice' }, async ({ page }) => {
