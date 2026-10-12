@@ -2009,6 +2009,7 @@ test('junction tool toggles a crossing connection in the schematic', async ({ pa
 
 test('Ctrl+A selects multiple wires and dragging one moves the selected wire group', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = []

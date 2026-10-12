@@ -563,6 +563,37 @@ test('record large-project editor render and selection input-to-frame timings', 
   expect(selectedLabelsMounted).toBeLessThan(500)
   expect(await page.locator('svg.schematic .circuit-part.selected').count()).toBe(5_000)
 
+  const dragTarget = page.locator('.circuit-part[data-part-id="bench-part-1"]')
+  const dragBounds = await dragTarget.boundingBox()
+  expect(dragBounds).not.toBeNull()
+  const dragOrigin = { x: dragBounds!.x + dragBounds!.width / 2, y: dragBounds!.y + dragBounds!.height / 2 }
+  const dragScale = await page.locator('svg.schematic').evaluate((element) => {
+    const matrix = element.getScreenCTM()!
+    return { x: matrix.a, y: matrix.d }
+  })
+  await page.mouse.move(dragOrigin.x, dragOrigin.y)
+  await page.mouse.down()
+  await page.evaluate(() => { (window as Window & { __groupDragBenchStart?: number }).__groupDragBenchStart = performance.now() })
+  await page.mouse.move(dragOrigin.x + dragScale.x * 10, dragOrigin.y + dragScale.y * 10, { steps: 1 })
+  const groupDragInputToFrameMs = await page.evaluate(() => new Promise<number>((resolve) => requestAnimationFrame(() => resolve(performance.now() - (window as Window & { __groupDragBenchStart?: number }).__groupDragBenchStart!))))
+  await expect(page.locator('.circuit-part[data-part-id="bench-part-1"]')).toHaveAttribute('transform', /translate\(10 10\) translate\(120 120\)/)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts[0].x)).toBe(120)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const lastPart = project.parts[4_999]
+    const lastLabel = project.netLabels[9_999]
+    return {
+      firstPart: [project.parts[0].x, project.parts[0].y],
+      lastPart: [lastPart.x, lastPart.y],
+      lastLabel: [lastLabel.x, lastLabel.y],
+    }
+  })).toEqual({
+    firstPart: [130, 130],
+    lastPart: [120 + (4_999 % 24) * 100 + 10, 120 + Math.floor(4_999 / 24) * 70 + 10],
+    lastLabel: [Math.round((120 + (4_999 % 24) * 100 + 52) / 10) * 10 + 10, 120 + Math.floor(4_999 / 24) * 70 + 10],
+  })
+
   const transport = await page.evaluate(async () => {
     const sampleCount = 100_000, traceCount = 6
     const createTraces = () => {
@@ -597,7 +628,7 @@ test('record large-project editor render and selection input-to-frame timings', 
   expect(transport.transfer.sharedAxis).toBe(true)
   expect(transport.transfer.detachedAtSend).toBe(true)
   expect(transport.clone.finalSample).toBeCloseTo(transport.transfer.finalSample, 12)
-  console.log(JSON.stringify({ benchmark: 'editor-large-project-v5', browser: browserName, inputTiming: 'synthetic event dispatch to next animation frame; excludes Playwright locator/actionability overhead', selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), selectedLabelsMounted, results, transport }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'editor-large-project-v6', browser: browserName, inputTiming: 'selection uses synthetic event dispatch; group drag uses Playwright pointer dispatch through the next animation frame', selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), fullSelectionDragInputToFrameMs: Number(groupDragInputToFrameMs.toFixed(2)), draggedSelectedObjects: 15_000, selectedLabelsMounted, results, transport }, null, 2))
 })
 
 test('measure selection latency in a large routed-wire schematic', async ({ page, browserName }) => {

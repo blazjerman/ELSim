@@ -32,7 +32,7 @@ import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
 import { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
-import { createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type Project, type SymbolAsset, type TransientMeasurement } from '../domain/project'
+import { createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type Project, type SymbolAsset, type TransientMeasurement, type Wire } from '../domain/project'
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef, referencePrefixForKind, validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlist'
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -725,6 +725,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
   const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'component-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; pointIndex?: number; points?: [number, number][]; group?: { parts: Part[]; wires: Project['wires']; netLabels: Project['netLabels'] } } | null>(null)
+  const dragPreviewElements = useRef<{ element: SVGGElement; transform: string | null }[]>([])
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [wirePreviewEnd, setWirePreviewEnd] = useState<{ x: number; y: number } | null>(null)
@@ -977,6 +978,35 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     else setSelection({ kind, id })
     beginEdit()
     const groupSize = group.parts.length + group.wires.length + group.netLabels.length
+    if (groupSize > 1) {
+      const view = svg.current?.viewBox.baseVal
+      const preview: { element: SVGGElement; transform: string | null }[] = []
+      const add = (selector: string) => {
+        const element = svg.current?.querySelector<SVGGElement>(selector)
+        if (element) preview.push({ element, transform: element.getAttribute('transform') })
+      }
+      if (view) {
+        for (const item of group.parts) {
+          const margin = item.kind === 'subcircuit' ? Math.max(500, Math.ceil((item.modelPins?.length ?? 0) / 2) * 24 + 60) : 500
+          if (item.x < view.x - margin || item.x > view.x + view.width + margin || item.y < view.y - margin || item.y > view.y + view.height + margin) continue
+          add(`[data-part-id="${CSS.escape(item.id)}"]`)
+        }
+        for (const item of group.wires) {
+          const [[x1, y1], [x2, y2]] = item.points
+          const margin = 100
+          if (Math.max(x1, x2) < view.x - margin || Math.min(x1, x2) > view.x + view.width + margin || Math.max(y1, y2) < view.y - margin || Math.min(y1, y2) > view.y + view.height + margin) continue
+          add(`[data-wire-id="${CSS.escape(item.id)}"]`)
+        }
+        for (const item of group.netLabels) {
+          const margin = 30
+          if (item.x + 9 + item.name.length * 9 < view.x - margin || item.x + 9 > view.x + view.width + margin || item.y - 9 < view.y - margin || item.y - 9 > view.y + view.height + margin) continue
+          add(`[data-net-label-id="${CSS.escape(item.id)}"]`)
+        }
+      }
+      dragPreviewElements.current = preview
+      for (const { element } of preview) element.setAttribute('transform', 'translate(0 0)')
+      svg.current?.querySelectorAll('.wire-current-flow-layer, .wire-connection-dot, .wire-endpoint-handles').forEach((element) => element.setAttribute('visibility', 'hidden'))
+    }
     drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, points: wire?.points.map(([x,y]) => [x,y]), group: groupSize > 1 ? group : undefined }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -1109,14 +1139,14 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     const deltaY = Math.round((point.y - drag.current.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     if (deltaX !== 0 || deltaY !== 0) suppressCanvasClick.current = true
     const { id, kind, originX, originY, points, group, pointIndex } = drag.current
+    if (group) {
+      for (const { element, transform } of dragPreviewElements.current) {
+        element.setAttribute('transform', `translate(${deltaX} ${deltaY})${transform ? ` ${transform}` : ''}`)
+      }
+      return
+    }
     setProject((current) => {
       if (kind === 'wire-point' && points && pointIndex !== undefined) return { ...current, wires: current.wires.map((wire) => wire.id === id ? { ...wire, points: points.map(([x, y], index) => index === pointIndex ? [x + deltaX, y + deltaY] as [number, number] : [x, y]) as [[number, number], [number, number]] } : wire) }
-      if (group) {
-        // The drag snapshot holds the selected immutable objects. Reuse them as
-        // origins directly; looking each one up in the full array made a large
-        // selected group quadratic on every pointer-move event.
-        return moveSelectedSceneObjects(current, group, deltaX, deltaY)
-      }
       if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: [[points[0][0] + deltaX, points[0][1] + deltaY], [points[1][0] + deltaX, points[1][1] + deltaY]] as [[number, number], [number, number]] } : wire) }
       if (kind === 'label') return { ...current, netLabels: current.netLabels.map((label) => label.id === id ? { ...label, x: originX + deltaX, y: originY + deltaY } : label) }
       const moving = current.parts.find((part) => part.id === id)
@@ -1126,6 +1156,19 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     })
   }
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
+    const activeGroupDrag = drag.current?.group ? drag.current : null
+    if (activeGroupDrag?.group) {
+      const point = pointFromEvent(event)
+      const deltaX = Math.round((point.x - activeGroupDrag.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      const deltaY = Math.round((point.y - activeGroupDrag.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      for (const { element, transform } of dragPreviewElements.current) {
+        if (transform === null) element.removeAttribute('transform')
+        else element.setAttribute('transform', transform)
+      }
+      dragPreviewElements.current = []
+      svg.current?.querySelectorAll('.wire-current-flow-layer, .wire-connection-dot, .wire-endpoint-handles').forEach((element) => element.removeAttribute('visibility'))
+      if (deltaX !== 0 || deltaY !== 0) setProject((current) => moveSelectedSceneObjects(current, activeGroupDrag.group!, deltaX, deltaY))
+    }
     if (drag.current?.kind === 'box-select') {
       const boxDrag = drag.current
       const endX = event.clientX, endY = event.clientY
@@ -1250,6 +1293,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     )
   }, [wireFlowSampler, resultValueAt, animatedWireIds])
   const orderedWires = useMemo(() => hoveredWireId ? [...project.wires.filter((wire) => wire.id !== hoveredWireId), ...project.wires.filter((wire) => wire.id === hoveredWireId)] : project.wires, [project.wires, hoveredWireId])
+  const renderWire = (wire: Wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireIdSet.has(wire.id)} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>
   const hoveredWire = hoveredWireId ? project.wires.find((wire) => wire.id === hoveredWireId) : undefined
   const wireConnectionDots = useMemo(() => wireConnectionDotPoints(project), [project.parts, project.wires])
   return <div className="canvas-wrap">
@@ -1323,7 +1367,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
-      {orderedWires.map((wire) => <CanvasWire key={wire.id} wire={wire} selected={selectedWireIdSet.has(wire.id)} hovered={hoveredWireId === wire.id} tool={tool} spacePan={spacePan} onProbe={probeWireStable} onBeginDrag={beginWireDrag} onSelect={selectWire} onHover={setHoveredWireId}/>) }
+      {orderedWires.map(renderWire)}
       {wireFlowSampler && <WireCurrentFlowLayer wireIds={animatedWireIds} wires={project.wires} sampleFlows={sampleWireFlows} animationEnabled={currentAnimationEnabled} animationScale={animationScale} animationSpeed={animationSpeed}/>}
       {wireConnectionDots.map(({ x, y }) => <circle key={`${x}:${y}`} className="wire-connection-dot" data-x={x} data-y={y} cx={x} cy={y} r="4" pointerEvents="none"/>)}
       <CanvasNetLabelLayer labels={project.netLabels} selectedIds={selectedNetLabelIds} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
