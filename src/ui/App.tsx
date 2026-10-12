@@ -139,6 +139,10 @@ function formatLessonCapacitance(capacitanceF: number): string {
   return `${Number((capacitanceF * 1e12).toPrecision(3))} pF`
 }
 
+function formatLessonVoltage(voltage: number): string {
+  return `${Number(voltage.toPrecision(4))} V`
+}
+
 const componentCategoryKinds: Record<Exclude<ComponentCategory, 'all'>, PartKind[]> = {
   basics: ['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'transformer', 'source', 'currentSource', 'switch', 'ground', 'inverter', 'logicGate'],
   semiconductors: ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'],
@@ -1619,6 +1623,14 @@ export default function App() {
   const acFilterCutoffHz = acFilterResistance && acFilterResistance > 0 && acFilterCapacitance && acFilterCapacitance > 0 ? 1 / (2 * Math.PI * acFilterResistance * acFilterCapacitance) : null
   const acFilterResistanceText = acFilterId ? project.parts.find((part) => part.id === `${acFilterId}-r1`)?.value ?? 'changed' : 'changed'
   const acFilterCapacitanceText = acFilterId ? project.parts.find((part) => part.id === `${acFilterId}-c1`)?.value ?? 'changed' : 'changed'
+  const dividerR1 = exampleLesson?.id === 'voltage-divider' ? componentMagnitude(project.parts.find((part) => part.id === 'divider-r1')?.value ?? '1 kΩ', 'resistor') : null
+  const dividerR2 = exampleLesson?.id === 'voltage-divider' ? componentMagnitude(project.parts.find((part) => part.id === 'divider-r2')?.value ?? '1 kΩ', 'resistor') : null
+  const dividerSupply = exampleLesson?.id === 'voltage-divider' ? componentMagnitude(project.parts.find((part) => part.id === 'divider-v1')?.value ?? '10 V', 'source') : null
+  const dividerPrediction = dividerR1 !== null && dividerR2 !== null && dividerSupply !== null && dividerR1 > 0 && dividerR2 > 0 ? dividerSupply * dividerR2 / (dividerR1 + dividerR2) : null
+  const dividerR1Text = project.parts.find((part) => part.id === 'divider-r1')?.value ?? 'changed'
+  const dividerR2Text = project.parts.find((part) => part.id === 'divider-r2')?.value ?? 'changed'
+  const dividerSupplyText = project.parts.find((part) => part.id === 'divider-v1')?.value ?? 'changed'
+  const dividerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const lessonNextStep = exampleLesson?.id === 'rl-step' && simulationResult
     ? simulationResultStale
       ? `R1 is ${project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? 'changed'} and L1 is ${project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? 'changed'}. These plots are from the previous circuit; run again to compare the new current ramp.`
@@ -1643,16 +1655,25 @@ export default function App() {
           : acFilterCutoffHz !== null && acFilterCapacitance !== null
             ? `With R1 = ${acFilterResistanceText} and C1 = ${acFilterCapacitanceText}, the predicted cutoff is about ${formatLessonFrequency(acFilterCutoffHz)}. Double C1 to ${formatLessonCapacitance(acFilterCapacitance * 2)} and run again; the cutoff should halve to about ${formatLessonFrequency(acFilterCutoffHz / 2)}. At cutoff, VOUT is about 0.707×VIN (−3 dB).`
             : 'Enter positive values for R1 and C1, then rerun to compare the cutoff frequency.'
-      : simulationResult && !simulationResultStale ? exampleLesson?.id === 'voltage-divider'
-      ? 'Select R2, change its resistance to 2 kΩ in Properties, and run again. The midpoint should rise from 5 V to about 6.67 V.'
-    : simulationResult.analysis === 'tran'
-    ? 'Pause playback, then move the Time slider. Click the waveform to place the cursor and read each selected voltage or current at that moment.'
-    : simulationResult.analysis === 'ac'
-      ? 'Click the plot to move the frequency cursor. Compare input and output magnitudes in the readout at the selected frequency.'
-      : simulationResult.analysis === 'dc'
-        ? 'Click the sweep plot to move the source cursor. Read how the selected circuit values change as the source is swept.'
-        : 'Read the solved values in the operating-point table. Right-click a wire or component to add a voltage or current waveform.'
-    : null
+      : exampleLesson?.id === 'voltage-divider' && simulationResult
+        ? simulationResultStale
+          ? dividerPrediction !== null
+            ? `R1 is ${dividerR1Text}, R2 is ${dividerR2Text}, and V1 is ${dividerSupplyText}. The previous table is stale; the divider formula predicts VOUT ≈ ${formatLessonVoltage(dividerPrediction)} after rerunning.`
+            : `R1 is ${dividerR1Text}, R2 is ${dividerR2Text}, and V1 is ${dividerSupplyText}. These operating-point results are stale; enter positive resistor values, then run again.`
+          : dividerPrediction !== null
+            ? dividerR1 === 1000 && dividerR2 === 1000 && dividerSupply === 10
+              ? 'Select R2, change its resistance from 1 kΩ to 2 kΩ, and run again. VOUT should rise from 5 V to about 6.67 V because the lower resistor takes a larger share of the supply.'
+              : `For V1 = ${dividerSupplyText}, R1 = ${dividerR1Text}, and R2 = ${dividerR2Text}, the divider formula predicts VOUT = ${formatLessonVoltage(dividerPrediction)}${dividerSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(dividerSolvedOutput)}` : ''}. Make R1 and R2 equal to put VOUT halfway between VIN and ground.`
+            : 'Enter a valid source voltage and positive resistor values, then rerun to compare the midpoint.'
+      : simulationResult && !simulationResultStale
+        ? simulationResult.analysis === 'tran'
+          ? 'Pause playback, then move the Time slider. Click the waveform to place the cursor and read each selected voltage or current at that moment.'
+          : simulationResult.analysis === 'ac'
+            ? 'Click the plot to move the frequency cursor. Compare input and output magnitudes in the readout at the selected frequency.'
+            : simulationResult.analysis === 'dc'
+              ? 'Click the sweep plot to move the source cursor. Read how the selected circuit values change as the source is swept.'
+              : 'Read the solved values in the operating-point table. Right-click a wire or component to add a voltage or current waveform.'
+        : null
   useEffect(() => {
     if (!playbackRunning || !playbackAvailable || !transientAxis) return
     const stride = Math.max(1, Math.ceil(transientAxis.length / 120))
