@@ -2261,6 +2261,10 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
   })
   expect(original.wires.length).toBeGreaterThan(1)
 
+  // Keep the overlapping-wire hover interaction in this regression. React
+  // must retain ownership of the keyed SVG nodes while changing their z-order.
+  await page.locator('.wire-line').first().hover()
+  await expect(page.locator('.wire-line.hovered')).toHaveCount(1)
   await page.keyboard.press('Control+a')
   await page.keyboard.press('Control+c')
   await page.keyboard.press('Control+v')

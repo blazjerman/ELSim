@@ -599,7 +599,7 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
   onHover: (id?: string) => void
 }) {
   const [[x1, y1], [x2, y2]] = wire.points
-  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}. Press Enter to edit endpoints; press Escape to return here.`} aria-pressed={selected} aria-keyshortcuts="Enter Space Escape ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={(event) => { onHover(wire.id); const layer = event.currentTarget.parentElement; if (layer?.lastElementChild !== event.currentTarget) layer?.appendChild(event.currentTarget) }} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id, false, true) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(wire.id, event.shiftKey || event.ctrlKey || event.metaKey) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
+  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}. Press Enter to edit endpoints; press Escape to return here.`} aria-pressed={selected} aria-keyshortcuts="Enter Space Escape ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id, false, true) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(wire.id, event.shiftKey || event.ctrlKey || event.metaKey) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
     <rect x={Math.min(x1, x2) - 7} y={Math.min(y1, y2) - 7} width={Math.max(14, Math.abs(x2 - x1) + 14)} height={Math.max(14, Math.abs(y2 - y1) + 14)} fill="transparent"/>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="14" strokeLinecap="round"/>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round"/>
@@ -819,6 +819,18 @@ function Schematic({ project, connectivity, setSelection, setHoveredSchematicObj
     const focusedWireId = document.activeElement?.closest<SVGGElement>('.wire-line')?.dataset.wireId
     return wiresNear(bounds, focusedWireId)
   }, [wiresNear, viewportLeft, viewportTop, viewWidth, viewHeight])
+  // Keep SVG order under React's control. Moving a keyed wire node with
+  // appendChild during hover left the DOM out of sync with React's child list;
+  // later rerenders could therefore associate selected classes with the wrong
+  // wire. Render the hovered wire last so overlapping wires remain easy to hit.
+  const orderedVisibleWires = useMemo(() => {
+    if (!hoveredWireId) return visibleWires
+    const hoveredIndex = visibleWires.findIndex((wire) => wire.id === hoveredWireId)
+    if (hoveredIndex < 0 || hoveredIndex === visibleWires.length - 1) return visibleWires
+    const ordered = visibleWires.slice()
+    ordered.push(...ordered.splice(hoveredIndex, 1))
+    return ordered
+  }, [visibleWires, hoveredWireId])
   const animatedWireIds = useMemo(() => new Set(visibleWires.map((wire) => wire.id)), [visibleWires])
   const tracesByVector = useMemo(() => {
     const index = new Map<string, Trace>()
@@ -1402,7 +1414,7 @@ function Schematic({ project, connectivity, setSelection, setHoveredSchematicObj
     }}>
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
-      {visibleWires.map(renderWire)}
+      {orderedVisibleWires.map(renderWire)}
       {wireFlowSampler && <WireCurrentFlowLayer wireIds={animatedWireIds} wires={project.wires} sampleFlows={sampleWireFlows} animationEnabled={currentAnimationEnabled} currentMultiplier={currentMultiplier} dotSize={currentDotSize} dotSpacing={currentDotSpacing}/>}
       <CanvasConnectionDotLayer dots={wireConnectionDots} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       <CanvasNetLabelLayer labels={project.netLabels} selectedIds={selectedNetLabelIds} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
