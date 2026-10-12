@@ -1590,6 +1590,15 @@ export default function App() {
   const rlStepInductanceH = exampleLesson?.id === 'rl-step' ? componentMagnitude(project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? '100 mH', 'inductor') : null
   const rlStepTimeConstantMs = rlStepResistance && rlStepResistance > 0 && rlStepInductanceH && rlStepInductanceH > 0 ? 1000 * rlStepInductanceH / rlStepResistance : null
   const rlStepSteadyCurrentMa = rlStepResistance && rlStepResistance > 0 ? 5000 / rlStepResistance : null
+  const rlcResistance = exampleLesson?.id === 'rlc' ? componentMagnitude(project.parts.find((part) => part.id === 'rlc-r1')?.value ?? '5 Ω', 'resistor') : null
+  const rlcInductanceH = exampleLesson?.id === 'rlc' ? componentMagnitude(project.parts.find((part) => part.id === 'rlc-l1')?.value ?? '10 mH', 'inductor') : null
+  const rlcCapacitanceF = exampleLesson?.id === 'rlc' ? componentMagnitude(project.parts.find((part) => part.id === 'rlc-c1')?.value ?? '100 µF', 'capacitor') : null
+  const rlcCriticalResistance = rlcInductanceH && rlcInductanceH > 0 && rlcCapacitanceF && rlcCapacitanceF > 0 ? 2 * Math.sqrt(rlcInductanceH / rlcCapacitanceF) : null
+  const rlcDampingRatio = rlcResistance && rlcResistance > 0 && rlcCriticalResistance ? rlcResistance / rlcCriticalResistance : null
+  const rlcResistanceText = project.parts.find((part) => part.id === 'rlc-r1')?.value ?? 'changed'
+  const rlcInductanceText = project.parts.find((part) => part.id === 'rlc-l1')?.value ?? 'changed'
+  const rlcCapacitanceText = project.parts.find((part) => part.id === 'rlc-c1')?.value ?? 'changed'
+  const rlcCriticalText = rlcCriticalResistance === null ? null : `${Number(rlcCriticalResistance.toPrecision(3))} Ω`
   const lessonNextStep = exampleLesson?.id === 'rl-step' && simulationResult
     ? simulationResultStale
       ? `R1 is ${project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? 'changed'} and L1 is ${project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? 'changed'}. These plots are from the previous circuit; run again to compare the new current ramp.`
@@ -1598,7 +1607,17 @@ export default function App() {
         : rlStepTimeConstantMs !== null && rlStepSteadyCurrentMa !== null
           ? `Compare the new curve with the original. At R1 = ${project.parts.find((part) => part.id === 'rl-step-r1')?.value} and L1 = ${project.parts.find((part) => part.id === 'rl-step-l1')?.value}, the predicted time constant is ${Number(rlStepTimeConstantMs.toPrecision(3))} ms and the current approaches ${Number(rlStepSteadyCurrentMa.toPrecision(3))} mA. ${rlStepInductanceH === 0.1 ? 'Change L1 to alter the ramp time without changing this final current.' : 'Change R1 to see how resistance affects both the ramp time and final current.'}`
           : 'Choose a positive resistance for R1, then rerun to compare how resistance changes the inductor current.'
-    : simulationResult && !simulationResultStale ? exampleLesson?.id === 'voltage-divider'
+    : exampleLesson?.id === 'rlc' && simulationResult
+      ? simulationResultStale
+        ? `R1 is ${rlcResistanceText}, L1 is ${rlcInductanceText}, and C1 is ${rlcCapacitanceText}. These plots are from the previous circuit; run again to compare how damping changed.`
+        : rlcDampingRatio !== null && rlcCriticalResistance !== null && rlcCriticalText
+          ? rlcDampingRatio < 0.95
+            ? `R1 = ${rlcResistanceText} is underdamped, so the circuit rings. For L1 = ${rlcInductanceText} and C1 = ${rlcCapacitanceText}, critical damping is about ${rlcCriticalText}. Change R1 to about ${rlcCriticalText} and run again to see the fastest response without sustained ringing.`
+            : rlcDampingRatio <= 1.05
+              ? `R1 = ${rlcResistanceText} is near critical damping for L1 = ${rlcInductanceText} and C1 = ${rlcCapacitanceText}. The response should settle with little ringing. Increase R1 to about ${Number((rlcCriticalResistance * 2).toPrecision(3))} Ω and run again to compare an overdamped response.`
+              : `R1 = ${rlcResistanceText} is overdamped for L1 = ${rlcInductanceText} and C1 = ${rlcCapacitanceText}; it settles without ringing but more slowly. Reduce R1 toward the critical value of about ${rlcCriticalText} to compare the fastest non-ringing response.`
+          : 'Enter positive values for R1, L1, and C1, then rerun to compare the damping behavior.'
+      : simulationResult && !simulationResultStale ? exampleLesson?.id === 'voltage-divider'
       ? 'Select R2, change its resistance to 2 kΩ in Properties, and run again. The midpoint should rise from 5 V to about 6.67 V.'
     : simulationResult.analysis === 'tran'
     ? 'Pause playback, then move the Time slider. Click the waveform to place the cursor and read each selected voltage or current at that moment.'
