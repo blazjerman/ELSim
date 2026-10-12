@@ -1287,19 +1287,47 @@ test('wire current animation keeps moving while transient playback advances', as
   expect(Math.abs(after - before)).toBeGreaterThan(1)
 })
 
-test('wire current particles outside the schematic viewport are not rendered', { tag: '@ngspice' }, async ({ page }) => {
+test('viewport culling removes off-screen wire flows and restores them when the circuit is fit', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const remoteBranch = { id: 'viewport-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 1000, y: 400, rotation: 0 }
+    const remoteWires = [
+      { id: 'viewport-r2-feed', points: [[930, 400], [950, 400]] },
+      { id: 'viewport-r2-return', points: [[1050, 400], [1070, 400]] },
+    ]
+    const remoteLabels = [
+      { id: 'viewport-r2-vin', name: 'vin', x: 930, y: 400, visible: true },
+      { id: 'viewport-r2-ground', name: '0', x: 1070, y: 400, visible: true },
+    ]
+    project.parts.push(remoteBranch)
+    project.wires.push(...remoteWires)
+    project.netLabels.push(...remoteLabels)
+    project.sheets = project.sheets.map((sheet: { id: string; parts: unknown[]; wires: unknown[]; netLabels: unknown[] }) => sheet.id === project.rootSheetId
+      ? { ...sheet, parts: project.parts, wires: project.wires, netLabels: project.netLabels }
+      : sheet)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   const schematic = page.locator('svg.schematic')
   const flow = schematic.locator('.wire-current-flow')
   const initialFlowCount = await flow.count()
-  const wireCount = await schematic.locator('.wire-line').count()
   expect(initialFlowCount).toBeGreaterThan(0)
-  const zoomIn = page.locator('.canvas-toolset').getByRole('button', { name: 'Zoom in' })
-  for (let index = 0; index < 5; index += 1) await zoomIn.click()
-  await expect.poll(() => flow.count()).toBeLessThan(initialFlowCount)
-  await expect(schematic.locator('.wire-line')).toHaveCount(wireCount)
+  await expect(schematic.locator('.wire-current-flow-layer [data-wire-id^="viewport-r2-"]')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  const feed = schematic.locator('.wire-current-flow-layer [data-wire-id="viewport-r2-feed"] .wire-current-flow')
+  const returned = schematic.locator('.wire-current-flow-layer [data-wire-id="viewport-r2-return"] .wire-current-flow')
+  await expectWireFlow(feed, 'first-to-last')
+  await expectWireFlow(returned, 'first-to-last')
+  expect(Number(await feed.getAttribute('data-current-magnitude'))).toBeCloseTo(0.005, 8)
+  expect(Number(await returned.getAttribute('data-current-magnitude'))).toBeCloseTo(0.005, 8)
+  const fittedFlowCount = await flow.count()
+  const zoomIn = page.getByRole('button', { name: 'Zoom in' })
+  for (let index = 0; index < 5; index++) await zoomIn.click()
+  await expect.poll(() => flow.count()).toBeLessThan(fittedFlowCount)
 })
 
 test('ngspice current animates through the grounded RC return wire', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
