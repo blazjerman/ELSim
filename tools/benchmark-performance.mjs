@@ -199,7 +199,7 @@ try {
   const build = createRequire(import.meta.url)
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
-  const { componentPins, createWireViewportIndex, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
+  const { componentPins, createViewportIndex, createWireViewportIndex, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
   const { moveSelectedSceneObjects } = build(path.join(output, 'domain/sceneEdit.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
   const { createWireCurrentFlowSampler } = build(path.join(output, 'domain/wireFlow.js'))
@@ -295,6 +295,23 @@ try {
           buildAndQuery: { medianMs: indexAndQuery.medianMs, p95Ms: indexAndQuery.p95Ms },
         },
         fullScan: { medianMs: scannedViewport.medianMs, p95Ms: scannedViewport.p95Ms },
+      }
+
+      const partBounds = (part) => ({ left: part.x - 100, top: part.y - 100, right: part.x + 100, bottom: part.y + 100 })
+      const partIndexBuild = measure(() => createViewportIndex(project.parts, partBounds), 1, 5)
+      const partViewportIndex = partIndexBuild.value
+      const indexedParts = measure(() => partViewportIndex(bounds), 2, 7)
+      const scannedParts = measure(() => project.parts.filter((part) => {
+        const itemBounds = partBounds(part)
+        return itemBounds.right >= bounds.left && itemBounds.left <= bounds.right && itemBounds.bottom >= bounds.top && itemBounds.top <= bounds.bottom
+      }), 2, 7)
+      if (JSON.stringify(indexedParts.value.map((part) => part.id)) !== JSON.stringify(scannedParts.value.map((part) => part.id))) throw new Error('Indexed part viewport query changed visible part membership or z-order.')
+      wireViewportCulling.parts = {
+        totalParts: project.parts.length,
+        visibleParts: indexedParts.value.length,
+        spatialIndexBuild: { medianMs: partIndexBuild.medianMs, p95Ms: partIndexBuild.p95Ms },
+        spatialIndexQuery: { medianMs: indexedParts.medianMs, p95Ms: indexedParts.p95Ms },
+        fullScan: { medianMs: scannedParts.medianMs, p95Ms: scannedParts.p95Ms },
       }
 
       const dots = measure(() => wireConnectionDotPoints(project))
@@ -449,7 +466,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 7,
+    benchmarkVersion: 8,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,

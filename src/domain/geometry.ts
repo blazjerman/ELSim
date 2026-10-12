@@ -17,25 +17,24 @@ export function wireSegmentOverlapsBounds(wire: Wire, bounds: { left: number; to
     && Math.max(y1, y2) >= bounds.top && Math.min(y1, y2) <= bounds.bottom
 }
 
-/** Build a reusable spatial broadphase for viewport queries over static wires. */
-export function createWireViewportIndex(wires: readonly Wire[], cellSize = 256, maxCellsPerWire = 64) {
-  if (!Number.isFinite(cellSize) || cellSize <= 0 || !Number.isInteger(maxCellsPerWire) || maxCellsPerWire < 1) throw new RangeError('Wire viewport index limits must be positive.')
+export type ViewportBounds = { left: number; top: number; right: number; bottom: number }
+
+/** Build a reusable spatial broadphase for static schematic objects. */
+export function createViewportIndex<T extends { id: string }>(items: readonly T[], boundsFor: (item: T) => ViewportBounds, cellSize = 256, maxCellsPerItem = 64) {
+  if (!Number.isFinite(cellSize) || cellSize <= 0 || !Number.isInteger(maxCellsPerItem) || maxCellsPerItem < 1) throw new RangeError('Viewport index limits must be positive.')
   const cells = new Map<string, number[]>()
-  const wideWires: number[] = []
-  const indexById = new Map(wires.map((wire, index) => [wire.id, index]))
+  const wideItems: number[] = []
+  const indexById = new Map(items.map((item, index) => [item.id, index]))
+  const cachedItemBounds = items.map(boundsFor)
   const cellKey = (x: number, y: number) => `${x},${y}`
-  const cellRange = (wire: Wire | { left: number; top: number; right: number; bottom: number }) => {
-    if ('points' in wire) {
-      const [[x1, y1], [x2, y2]] = wire.points
-      return [Math.floor(Math.min(x1, x2) / cellSize), Math.floor(Math.min(y1, y2) / cellSize), Math.floor(Math.max(x1, x2) / cellSize), Math.floor(Math.max(y1, y2) / cellSize)] as const
-    }
-    return [Math.floor(wire.left / cellSize), Math.floor(wire.top / cellSize), Math.floor(wire.right / cellSize), Math.floor(wire.bottom / cellSize)] as const
+  const cellRange = (bounds: ViewportBounds) => {
+    return [Math.floor(bounds.left / cellSize), Math.floor(bounds.top / cellSize), Math.floor(bounds.right / cellSize), Math.floor(bounds.bottom / cellSize)] as const
   }
 
-  wires.forEach((wire, index) => {
-    const [left, top, right, bottom] = cellRange(wire)
-    if ((right - left + 1) * (bottom - top + 1) > maxCellsPerWire) {
-      wideWires.push(index)
+  items.forEach((_, index) => {
+    const [left, top, right, bottom] = cellRange(cachedItemBounds[index])
+    if ((right - left + 1) * (bottom - top + 1) > maxCellsPerItem) {
+      wideItems.push(index)
       return
     }
     for (let x = left; x <= right; x += 1) for (let y = top; y <= bottom; y += 1) {
@@ -46,22 +45,36 @@ export function createWireViewportIndex(wires: readonly Wire[], cellSize = 256, 
     }
   })
 
-  return (bounds: { left: number; top: number; right: number; bottom: number }, focusedWireId?: string): Wire[] => {
+  return (bounds: ViewportBounds, focusedId?: string): T[] => {
     const [left, top, right, bottom] = cellRange(bounds)
     const cellCount = (right - left + 1) * (bottom - top + 1)
-    const candidates = new Set<number>(wideWires)
+    const candidates = new Set<number>(wideItems)
     if (cellCount > 4096) {
-      wires.forEach((_, index) => candidates.add(index))
+      items.forEach((_, index) => candidates.add(index))
     } else {
       for (let x = left; x <= right; x += 1) for (let y = top; y <= bottom; y += 1) {
         for (const index of cells.get(cellKey(x, y)) ?? []) candidates.add(index)
       }
     }
-    const focusedIndex = focusedWireId ? indexById.get(focusedWireId) : undefined
+    const focusedIndex = focusedId ? indexById.get(focusedId) : undefined
     if (focusedIndex !== undefined) candidates.add(focusedIndex)
     return [...candidates].sort((a, b) => a - b)
-      .flatMap((index) => index === focusedIndex || wireSegmentOverlapsBounds(wires[index], bounds) ? [wires[index]] : [])
+      .flatMap((index) => {
+        const itemBounds = cachedItemBounds[index]
+        const overlaps = itemBounds.right >= bounds.left && itemBounds.left <= bounds.right
+          && itemBounds.bottom >= bounds.top && itemBounds.top <= bounds.bottom
+        return index === focusedIndex || overlaps ? [items[index]] : []
+      })
   }
+}
+
+/** Build a reusable spatial broadphase for viewport queries over static wires. */
+export function createWireViewportIndex(wires: readonly Wire[], cellSize = 256, maxCellsPerWire = 64) {
+  const query = createViewportIndex(wires, (wire) => {
+    const [[x1, y1], [x2, y2]] = wire.points
+    return { left: Math.min(x1, x2), top: Math.min(y1, y2), right: Math.max(x1, x2), bottom: Math.max(y1, y2) }
+  }, cellSize, maxCellsPerWire)
+  return (bounds: ViewportBounds, focusedWireId?: string) => query(bounds, focusedWireId).filter((wire) => wire.id === focusedWireId || wireSegmentOverlapsBounds(wire, bounds))
 }
 
 export function subcircuitPinOffsets(count: number, layout?: Part['sheetPortLayout']): [number, number][] {

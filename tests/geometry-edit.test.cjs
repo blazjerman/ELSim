@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
 const { moveSelectedSceneObjects } = require(path.join(build, 'domain/sceneEdit.js'))
@@ -107,6 +107,19 @@ test('wire viewport index preserves brute-force visibility, ordering, and focuse
   assert.ok(query({ left: 100_000, top: 100_000, right: 101_000, bottom: 101_000 }, 'indexed-4').some((wire) => wire.id === 'indexed-4'))
   assert.deepEqual(query({ left: -30_000, top: -30_000, right: 30_000, bottom: 30_000 }), wires)
   assert.throws(() => createWireViewportIndex(wires, 0), RangeError)
+})
+
+test('generic viewport index preserves bounded-object visibility and z-order', () => {
+  const items = Array.from({ length: 200 }, (_, index) => ({
+    id: `item-${index}`,
+    bounds: { left: index * 40 - 1, top: index * 20 - 1, right: index * 40 + 1, bottom: index * 20 + 1 },
+  }))
+  const index = createViewportIndex(items, (item) => item.bounds)
+  const viewport = { left: 100, top: 50, right: 400, bottom: 200 }
+  const expected = items.filter(({ bounds }) => bounds.right >= viewport.left && bounds.left <= viewport.right && bounds.bottom >= viewport.top && bounds.top <= viewport.bottom)
+  assert.deepEqual(index(viewport), expected)
+  assert.deepEqual(index({ left: 20_000, top: 20_000, right: 21_000, bottom: 21_000 }), [])
+  assert.deepEqual(index({ left: 20_000, top: 20_000, right: 21_000, bottom: 21_000 }, 'item-5'), [items[5]])
 })
 
 test('opening a manually edited project snaps its stored geometry before net validation', () => {

@@ -15,7 +15,7 @@ import { checkCircuit } from '../domain/electricalCheck'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseLtspiceSchematic } from '../domain/ltspiceSchematic'
-import { componentPins, createWireViewportIndex, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { componentPins, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, pointOnSegment, projectPinLocations, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector } from '../domain/probe'
 import { hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { hierarchyComponentCurrentVector } from '../domain/hierarchyProbe'
@@ -229,12 +229,14 @@ const CanvasNetLabelLayer = memo(function CanvasNetLabelLayer({ labels, selected
   // Preserve only the focused label across a pan; large multi-selections stay viewport-bounded.
   const focusedLabelId = document.activeElement?.closest<SVGGElement>('[data-net-label-id]')?.dataset.netLabelId
   const margin = 30
-  return <>{labels.filter((label) => label.visible !== false && (label.id === focusedLabelId || (
-    label.x + 9 <= viewportRight + margin &&
-    label.x + 9 + label.name.length * 9 >= viewportLeft - margin &&
-    label.y - 9 >= viewportTop - margin &&
-    label.y - 9 <= viewportBottom + margin
-  ))).map((label) => <CanvasNetLabel key={label.id} label={label} selected={selectedIdSet.has(label.id)} tool={tool} onPointerDown={onPointerDown} onSelect={onSelect}/>)}</>
+  const labelViewportIndex = useMemo(() => createViewportIndex(labels, (label) => ({
+    left: label.x + 9,
+    top: label.y - 9,
+    right: label.x + 9 + label.name.length * 9,
+    bottom: label.y - 9,
+  })), [labels])
+  const visibleLabels = labelViewportIndex({ left: viewportLeft - margin, top: viewportTop - margin, right: viewportRight + margin, bottom: viewportBottom + margin }, focusedLabelId)
+  return <>{visibleLabels.filter((label) => label.visible !== false).map((label) => <CanvasNetLabel key={label.id} label={label} selected={selectedIdSet.has(label.id)} tool={tool} onPointerDown={onPointerDown} onSelect={onSelect}/>)}</>
 })
 
 function focusAfterInspectorRender(selector: string) {
@@ -487,7 +489,12 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   viewportBottom: number
 }) {
   const focusedPartId = document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId
-  return <>{parts.map((part) => {
+  const partViewportIndex = useMemo(() => createViewportIndex(parts, (part) => {
+    const margin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
+    return { left: part.x - margin, top: part.y - margin, right: part.x + margin, bottom: part.y + margin }
+  }), [parts])
+  const visibleParts = partViewportIndex({ left: viewportLeft, top: viewportTop, right: viewportRight, bottom: viewportBottom }, focusedPartId)
+  return <>{visibleParts.map((part) => {
     const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
     const margin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
     const detailed = part.x >= viewportLeft - margin && part.x <= viewportRight + margin && part.y >= viewportTop - margin && part.y <= viewportBottom + margin
