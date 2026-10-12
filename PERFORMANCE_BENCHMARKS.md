@@ -374,3 +374,8 @@ Undo history now retains prior immutable `Project` roots by reference. Normal ed
 ### Shared simulation run snapshots (2026-10-12)
 
 Starting a simulation now keeps the current immutable `Project` root as its run snapshot instead of calling `structuredClone` on the entire project. Netlist generation and sweep preparation read project data, and the worker message boundary serializes the simulation payload; this removes the extra main-thread project copy before those steps. The 5,000-part/4,999-wire fixture's removed full-project clone measured 11.28 ms median / 12.43 ms max in the existing nine-run Node microbenchmark. This is not a direct measurement of simulation startup latency or browser peak memory. Firefox verifies the starter circuit run and all eight cases of a three-parameter sweep with the local engine. No WASM rebuild was performed.
+
+
+### Large clipboard paste assembly (2026-10-12)
+
+Paste now builds its local cloned-parts array with one append per copied part instead of copying the growing array for every part. A Node array-assembly microbenchmark with 5,000 existing and 5,000 added references measured the previous repeated-copy pattern at 40.70 ms median / 42.54 ms max and local append at 0.02 ms median / 0.03 ms max across seven runs. This isolates array assembly; it is not an end-to-end browser paste measurement. The Firefox full-circuit regression confirms every newly pasted component and wire is selected, and no original wire is selected.

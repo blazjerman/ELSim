@@ -3192,7 +3192,7 @@ export default function App() {
     const pastedWires = clipboard.wires.map((wire) => ({ id: `w-${crypto.randomUUID()}`, points: [[wire.points[0][0] + offsetX, wire.points[0][1] + offsetY], [wire.points[1][0] + offsetX, wire.points[1][1] + offsetY]] as [[number, number], [number, number]] }))
     const pastedLabels = clipboard.netLabels.map((label) => ({ ...label, id: `label-${crypto.randomUUID()}`, x: label.x + offsetX, y: label.y + offsetY }))
     setProject((current) => {
-      let parts = [...current.parts]
+      const parts = [...current.parts]
       sources.forEach((source, index) => {
         const pasted: Part = {
           ...source,
@@ -3206,7 +3206,9 @@ export default function App() {
           ...(source.sheetParameters ? { sheetParameters: { ...source.sheetParameters } } : {}),
           ...(source.modelParameters ? { modelParameters: { ...source.modelParameters } } : {}),
         }
-        parts = [...parts, pasted]
+        // This array is local to the state updater. Append each cloned part
+        // once instead of copying the growing array for every pasted object.
+        parts.push(pasted)
       })
       return { ...current, sheets: [...current.sheets, ...resolved.sheets], modelAssets: [...(current.modelAssets ?? []), ...resolved.modelAssets], symbolAssets: [...(current.symbolAssets ?? []), ...resolved.symbolAssets], parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))], netLabels: [...current.netLabels, ...pastedLabels] }
     })
