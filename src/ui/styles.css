@@ -47,7 +47,7 @@
   body{min-width:0;min-height:0}
   .app-shell{min-width:0;min-height:0}
   .topbar{height:46px;min-height:46px;padding:0 9px;gap:8px}
-  .brand{gap:6px;font-size:15px}.brand-mark{width:23px;height:23px}.brand-beta,.topbar-divider,.saved-indicator,.topbar-actions .quiet-button:nth-child(2),.avatar{display:none}
+  .brand{gap:6px;font-size:15px}.brand-mark{width:23px;height:23px}.brand-beta,.topbar-divider,.saved-indicator{display:none}
   .project-title{min-width:0;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
   .topbar-actions{gap:3px}.quiet-button{height:29px;padding:0 7px;font-size:10px}
   .main-toolbar{gap:4px 5px;padding:5px;justify-content:flex-start}

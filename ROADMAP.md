@@ -125,6 +125,8 @@ Capacitor charge animation regression (2026-10-12): Firefox now runs the existin
 
 **M1.5 Beginner experience.** Onboarding, searchable components, example circuits, hover explanations, sensible simulation presets, and accessible colors/keyboard operations. Acceptance: scripted first-use test reaches a working circuit without knowledge of netlists.
 
+Top-bar cleanup (2026-10-12): removed the inactive Share placeholder and decorative “B” avatar button, which looked interactive but had no behavior. The mobile toolbar no longer hides the Quick tour control based on the old Share button's position. Typecheck and the focused Firefox 390 px workspace/simulation workflow pass.
+
 The logic-gate examples now include a 3.3 V variant: 0/3.3 V pulse inputs, a 1.65 V input threshold, and 0/3.3 V outputs. It exercises the user-editable logic levels with a solver-backed beginner example; domain netlist and focused Chromium/Firefox browser coverage verify this configuration.
 
 The voltage/current probe destination dialog now takes keyboard focus when it opens, traps Tab and Shift+Tab within its controls, and returns focus to the probed schematic object when dismissed or after opening a plot. The focused Chromium waveform-window workflow verifies initial focus, both tab-wrap boundaries, and focus restoration using the existing local ngspice runtime.

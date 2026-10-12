@@ -4,7 +4,7 @@ import {
   Activity, AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, CircleDot, CircleHelp,
   Command, Copy, Download, FilePlus2, FlipHorizontal2, FolderOpen, GitBranch, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
-  Save, Scan, Search, Share2, SlidersHorizontal, Sparkles, Square, Trash2,
+  Save, Scan, Search, SlidersHorizontal, Sparkles, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
@@ -3294,7 +3294,7 @@ export default function App() {
       <button className="project-title" onClick={() => { const name = window.prompt('Project name', project.name); if (name?.trim()) setProject((p) => ({ ...p, name: name.trim() })) }}>{project.name}<ChevronDown size={14}/></button>
       <span className="saved-indicator"><Check size={13}/> Local project</span>
       <div className="topbar-spacer"/>
-      <div className="topbar-actions"><button ref={examplesTriggerRef} className="quiet-button" onClick={() => { setExampleQuery(''); setExamplesOpen(true) }}><BookOpen size={15}/> Examples</button><button className="quiet-button" onClick={() => setNotice('Project sharing links are planned. Use Save to download a project file.')}><Share2 size={15}/> Share</button><button className="quiet-button" aria-label="Open quick tour" title="Quick tour" onClick={startTour}><CircleHelp size={16}/></button><button className="avatar">B</button></div>
+      <div className="topbar-actions"><button ref={examplesTriggerRef} className="quiet-button" onClick={() => { setExampleQuery(''); setExamplesOpen(true) }}><BookOpen size={15}/> Examples</button><button className="quiet-button" aria-label="Open quick tour" title="Quick tour" onClick={startTour}><CircleHelp size={16}/></button></div>
     </header>
 
     <div className="main-toolbar">
