@@ -320,6 +320,20 @@ test('checks behavioral references in child-sheet scope and selects the visible 
   assert.match(issue?.detail, /unknown parameter “MISSING”/)
 })
 
+test('checks current-controlled source references in child-sheet scope', () => {
+  const project = createHierarchicalExampleProject()
+  const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
+  core.parts.push({ id: 'core-vsense', kind: 'source', ref: 'VSENSE', value: '0 V', x: 600, y: 500, rotation: 0 })
+  const cccs = { id: 'core-cccs', kind: 'cccs', ref: 'FCORE', value: '2', controlSource: 'VSENSE', x: 700, y: 500, rotation: 0 }
+  core.parts.push(cccs)
+  assert.equal(checkCircuit(project).some((item) => item.id === 'missing-control-source:sheet-core:core-cccs'), false)
+
+  cccs.controlSource = 'VNOTTHERE'
+  const issue = checkCircuit(project).find((item) => item.id === 'missing-control-source:sheet-core:core-cccs')
+  assert.equal(issue?.partId, 'example-x2')
+  assert.match(issue?.title, /controlling voltage source.*Core resistor/)
+})
+
 test('accepts declared sheet parameters in behavioral source expressions and explains missing ones', () => {
   const project = createStarterProject()
   const behavioral = { id: 'parameter-behavioral', kind: 'behavioral', ref: 'B1', value: 'GAIN*V(vin)', behavioralOutput: 'voltage', x: 700, y: 600, rotation: 0 }

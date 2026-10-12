@@ -84,6 +84,17 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       return Boolean(expression && sheetParameters.has(expression[1].toLowerCase()))
     }
     for (const part of sheet.parts) {
+      if (part.kind === 'cccs' || part.kind === 'ccvs') {
+        const controlSource = part.controlSource?.trim().toLowerCase()
+        const sourceExists = controlSource && sheet.parts.some((candidate) => candidate.kind === 'source' && candidate.ref.toLowerCase() === controlSource)
+        if (!sourceExists) issues.push({
+          id: `missing-control-source:${sheet.id}:${part.id}`,
+          severity: 'warning',
+          title: `${part.ref} needs a controlling voltage source in ${sheet.name}`,
+          detail: 'Choose a placed independent voltage source on this sheet. Current-controlled sources measure the current through that voltage source; other components cannot provide this control current.',
+          partId: topLevelInstanceId,
+        })
+      }
       const invalidValue = (detail: string) => issues.push({
         id: `invalid-value:${sheet.id}:${part.id}`,
         severity: 'warning',
