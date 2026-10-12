@@ -375,6 +375,18 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
 })
 
+test('reusable block settings expose named controls', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await page.getByRole('button', { name: 'Sheet ports and block settings' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Block 1 ports and parameters' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Duplicate sheet' })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Delete sheet' })).toBeVisible()
+  await expectVisibleKeyboardControlsNamed(page)
+})
+
 test('large imported-model dependency reports are navigable regions, not live status announcements', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.evaluate(async () => {
