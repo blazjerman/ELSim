@@ -594,6 +594,28 @@ test('record large-project editor render and selection input-to-frame timings', 
     lastLabel: [Math.round((120 + (4_999 % 24) * 100 + 52) / 10) * 10 + 10, 120 + Math.floor(4_999 / 24) * 70 + 10],
   })
 
+  const navigationSamples = []
+  for (const deltaY of [120, -120, 120, -120, 120, -120, 120]) {
+    navigationSamples.push(await page.locator('svg.schematic').evaluate(async (element, wheelDelta) => {
+      const svg = element as SVGSVGElement
+      const rect = svg.getBoundingClientRect()
+      const beforeWidth = svg.viewBox.baseVal.width
+      const started = performance.now()
+      const event = new WheelEvent('wheel', {
+        deltaY: wheelDelta,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      })
+      svg.dispatchEvent(event)
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+      return { elapsedMs: performance.now() - started, beforeWidth, afterWidth: svg.viewBox.baseVal.width }
+    }, deltaY))
+  }
+  expect(navigationSamples.every((sample) => sample.beforeWidth !== sample.afterWidth), JSON.stringify(navigationSamples)).toBe(true)
+  const navigationTimes = navigationSamples.map((sample) => sample.elapsedMs).sort((a, b) => a - b)
+
   const transport = await page.evaluate(async () => {
     const sampleCount = 100_000, traceCount = 6
     const createTraces = () => {
@@ -628,7 +650,7 @@ test('record large-project editor render and selection input-to-frame timings', 
   expect(transport.transfer.sharedAxis).toBe(true)
   expect(transport.transfer.detachedAtSend).toBe(true)
   expect(transport.clone.finalSample).toBeCloseTo(transport.transfer.finalSample, 12)
-  console.log(JSON.stringify({ benchmark: 'editor-large-project-v6', browser: browserName, inputTiming: 'selection uses synthetic event dispatch; group drag uses Playwright pointer dispatch through the next animation frame', selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), fullSelectionDragInputToFrameMs: Number(groupDragInputToFrameMs.toFixed(2)), draggedSelectedObjects: 15_000, selectedLabelsMounted, results, transport }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'editor-large-project-v7', browser: browserName, inputTiming: 'selection uses synthetic event dispatch; group drag uses Playwright pointer dispatch through the next animation frame', selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), fullSelectionDragInputToFrameMs: Number(groupDragInputToFrameMs.toFixed(2)), zoomInputToTwoFramesMedianMs: Number(navigationTimes[Math.floor(navigationTimes.length / 2)].toFixed(2)), zoomInputToTwoFramesP95Ms: Number(navigationTimes.at(-1)!.toFixed(2)), draggedSelectedObjects: 15_000, selectedLabelsMounted, results, transport }, null, 2))
 })
 
 test('measure selection latency in a large routed-wire schematic', async ({ page, browserName }) => {

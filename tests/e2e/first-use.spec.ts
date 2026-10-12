@@ -1878,6 +1878,17 @@ test('schematic grid fills the zoomed and panned view and has no fixed placehold
   await page.mouse.move(resizedBox!.x + resizedBox!.width / 2 + 90, resizedBox!.y + resizedBox!.height / 2 + 45, { steps: 4 })
   await page.mouse.up({ button: 'middle' })
   await expect.poll(gridFits).toBe(true)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view.panX)).not.toBe(0)
+  const savedView = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view)
+  await page.reload()
+  await expect.poll(() => page.locator('button.zoom-label').innerText()).toBe(`${Math.round(savedView.zoom * 100)}%`)
+  await expect.poll(async () => svg.evaluate((element, view) => {
+    const bounds = element.getBoundingClientRect()
+    const actual = element.viewBox.baseVal
+    const width = bounds.width / view.zoom, height = bounds.height / view.zoom
+    return Math.abs(actual.x - (380 - width / 2 - view.panX)) < 0.1
+      && Math.abs(actual.y - (300 - height / 2 - view.panY)) < 0.1
+  }, savedView)).toBe(true)
 })
 
 test('starter and newly added native parts use the same 10-unit pin grid', async ({ page }) => {

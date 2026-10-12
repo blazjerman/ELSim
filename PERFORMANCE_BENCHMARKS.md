@@ -316,3 +316,8 @@ Two independent runs of the focused Firefox browser benchmark solved 1,000,130 t
 ### Shared-axis cursor readout fast path (2026-10-12)
 
 Worker-produced traces all reference the same immutable axis array. Transient cursor readouts now use the selected cursor index directly when that shared-array identity is present, retaining binary-search fallback for independently supplied traces on a different axis. TypeScript checking and the focused Firefox million-sample/eight-window benchmark pass after the change. The latest warmed scrub was 31.02 ms versus 31.03 and 32.04 ms in the two immediately preceding runs; that difference is within run noise and is not evidence of a measurable user-visible speedup. The branch removes redundant per-trace binary searches, but the larger cursor/rendering comparison remains open. No WASM build was run.
+
+
+### Large-schematic zoom latency (2026-10-12)
+
+Firefox on the documented i7-12700F host measured pointer-wheel zoom on a 5,000-part / 10,000-label schematic through two animation frames. Before viewport-state isolation, median/p95 were 148/175 ms. Live zoom and pan state now updates inside the schematic; the view is committed to the project after 200 ms of inactivity, and its pending value is included in project export and autosave. One same-host run after the change measured 17/40 ms median/p95, an 88% median and 77% p95 reduction. The focused Firefox regression checks wheel zoom and middle-button pan, waits for persistence, reloads, and verifies the restored viewBox. Typecheck and the focused browser regression pass. This is one before/after pair, not a release budget; a full build or WASM rebuild was not run.
