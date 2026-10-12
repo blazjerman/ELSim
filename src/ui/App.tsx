@@ -952,8 +952,13 @@ function Schematic({ project, setSelection, setHoveredSchematicObject, setSelect
       setContextMenu(null)
       contextMenuReturnFocusRef.current?.focus()
     }
+    const closeOutside = (event: globalThis.PointerEvent) => {
+      if (event.target instanceof Node && contextMenuRef.current?.contains(event.target)) return
+      setContextMenu(null)
+    }
     window.addEventListener('keydown', close)
-    return () => window.removeEventListener('keydown', close)
+    document.addEventListener('pointerdown', closeOutside)
+    return () => { window.removeEventListener('keydown', close); document.removeEventListener('pointerdown', closeOutside) }
   }, [contextMenu?.kind, contextMenu?.id])
   const resultIsCurrent = (simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && simulationResult.metadata.settings.projectUpdatedAt === project.updatedAt
   const transientAxis = resultIsCurrent && simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
@@ -1722,8 +1727,8 @@ export default function App() {
     const value = Number(localStorage.getItem('elsim:wire-current-speed'))
     return value > 0 ? Math.min(100, Math.max(1, Math.round(value))) : 50
   })
-  const [currentDotSize, setCurrentDotSize] = useState(() => { const value = Number(localStorage.getItem('elsim:wire-current-dot-size')); return value >= 1 && value <= 6 ? value : 2 })
-  const [currentDotSpacing, setCurrentDotSpacing] = useState(() => { const value = Number(localStorage.getItem('elsim:wire-current-dot-spacing')); return value >= 2 ? (value === 10.5 ? 16 : Math.min(32, value)) : 16 })
+  const [currentDotSize, setCurrentDotSize] = useState(() => { const value = Number(localStorage.getItem('elsim:wire-current-dot-size')); return value >= 4 ? Math.min(16, value) : 4 })
+  const [currentDotSpacing, setCurrentDotSpacing] = useState(() => { const value = Number(localStorage.getItem('elsim:wire-current-dot-spacing')); return value >= 10 ? Math.min(30, value === 10.5 ? 20 : value) : 20 })
   const [currentAnimationEnabled, setCurrentAnimationEnabled] = useState(() => localStorage.getItem('elsim:current-animation-enabled') !== 'false')
   const prefersReducedMotionRef = useRef(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   useEffect(() => { localStorage.setItem('elsim:wire-current-speed', String(currentMultiplier)) }, [currentMultiplier])
@@ -3945,7 +3950,11 @@ export default function App() {
     setNotice(example === 'hierarchy' ? 'Opened a two-level reusable block example. Run it, open X2’s sheet definition, then open XCORE and probe RCORE.' : `Opened ${next.name}. Press Run simulation to see the results.`)
   }
 
-  return <div className="app-shell" onPointerDownCapture={(event) => { if (!(event.target as HTMLElement).closest('.sheet-tab-menu')) setSheetTabMenu(null) }}>
+  return <div className="app-shell" onPointerDownCapture={(event) => {
+    const target = event.target instanceof Element ? event.target : null
+    if (!target?.closest('.sheet-tab-menu')) setSheetTabMenu(null)
+    if (!target?.closest('.animation-tuning')) document.querySelectorAll<HTMLDetailsElement>('.animation-tuning[open]').forEach((details) => { details.open = false })
+  }}>
     <header className="topbar">
       <div className="brand"><div className="brand-mark"><Zap size={18} fill="currentColor"/></div><span>elsim</span><span className="brand-beta">PREVIEW</span></div>
       <div className="topbar-divider"/>
@@ -3964,7 +3973,7 @@ export default function App() {
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => changeAnalysis(event.target.value as Project['simulation']['analysis'])}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option><option value="noise">Noise analysis</option></select><ChevronDown size={13}/></label>
       <SimulationPlaybackControls axis={transientAxis} available={playbackAvailable} running={playbackRunning} rate={playbackRate} onRateChange={setPlaybackRate} onRunningChange={setPlaybackRunning}/>
-      <div className="menu-group"><details className={`animation-tuning${animationTuningAvailable ? '' : ' is-disabled'}`}><summary aria-label="Current animation settings" aria-disabled={!animationTuningAvailable} tabIndex={animationTuningAvailable ? 0 : -1} title={animationTuningAvailable ? 'Current animation speed' : 'Run a transient or operating-point simulation to enable animation settings'} onClick={(event) => { if (!animationTuningAvailable) event.preventDefault() }}><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} disabled={!animationTuningAvailable} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Current speed <output>{currentMultiplier}</output><input type="range" min="1" max="100" step="1" aria-label="Current animation speed" value={currentMultiplier} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentMultiplier(Number(event.target.value))}/></label><label>Dot size <output>{currentDotSize}</output><input type="range" min="1" max="6" step="0.5" aria-label="Current dot size" value={currentDotSize} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentDotSize(Number(event.target.value))}/></label><label>Dot spacing <output>{currentDotSpacing}</output><input type="range" min="2" max="32" step="0.5" aria-label="Current dot spacing" value={currentDotSpacing} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentDotSpacing(Number(event.target.value))}/></label><small>Dots advance by solved current × speed; size sets their diameter and spacing sets their interval.</small></div></details></div>
+      <div className="menu-group"><details className={`animation-tuning${animationTuningAvailable ? '' : ' is-disabled'}`}><summary aria-label="Current animation settings" aria-disabled={!animationTuningAvailable} tabIndex={animationTuningAvailable ? 0 : -1} title={animationTuningAvailable ? 'Current animation speed' : 'Run a transient or operating-point simulation to enable animation settings'} onClick={(event) => { if (!animationTuningAvailable) event.preventDefault() }}><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} disabled={!animationTuningAvailable} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Current speed <output>{currentMultiplier}</output><input type="range" min="1" max="100" step="1" aria-label="Current animation speed" value={currentMultiplier} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentMultiplier(Number(event.target.value))}/></label><label>Dot size <output>{currentDotSize}</output><input type="range" min="4" max="16" step="0.5" aria-label="Current dot size" value={currentDotSize} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentDotSize(Number(event.target.value))}/></label><label>Dot spacing <output>{currentDotSpacing}</output><input type="range" min="10" max="30" step="0.5" aria-label="Current dot spacing" value={currentDotSpacing} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentDotSpacing(Number(event.target.value))}/></label><small>Dots advance by solved current × speed; size sets their diameter and spacing sets their interval.</small></div></details></div>
       <div className="menu-group waveform-window-actions"><IconButton title="Open generated netlist" aria-label="Netlist" onClick={() => setNetlistOpen(true)}><Command size={14}/></IconButton><IconButton title="Tile waveform windows" aria-label="Tile waveform windows" onClick={tilePlotWindows} disabled={additionalPlotPanels.length < 2}><Grid2X2 size={14}/></IconButton><IconButton title={simulationResult ? 'Download simulation run report' : 'Run a simulation to create a report'} aria-label="Download simulation run report" onClick={downloadRunReport} disabled={!simulationResult}><Download size={14}/></IconButton></div>
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit <span>{electricalIssues.length}</span></button>
       <button className="run-button" onClick={startSimulation} disabled={engineAssetAvailable === null || runState === 'loading' || runState === 'running'} title={engineAssetAvailable === null ? 'Checking for the local ngspice runtime' : undefined}><Play size={15} fill="currentColor"/> Run simulation</button>
