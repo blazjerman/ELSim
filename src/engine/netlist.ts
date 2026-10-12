@@ -3,7 +3,7 @@ import type { Connectivity } from '../domain/connectivity'
 import { sheetModelName, type Part, type PartKind, type Project } from '../domain/project'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
-import { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
+import { MAX_SOURCE_PWL_POINTS, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
 import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import type { NetlistArtifact, NetlistSource } from './contract'
@@ -211,9 +211,9 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'pwl')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
       const points = part.kind === 'source' ? part.pwl : part.currentPwl
-      if (!points || points.length < 2 || points.length > 32) {
-        const settingPath = points && points.length > 32 ? `${part.kind === 'source' ? 'pwl' : 'currentPwl'}.0.time` : `${part.kind === 'source' ? 'pwl' : 'currentPwl'}.points`
-        add('pwlPoints', `${part.ref} PWL source needs between 2 and 32 points.`, part.id, settingPath)
+      if (!points || points.length < 2 || points.length > MAX_SOURCE_PWL_POINTS) {
+        const settingPath = points && points.length > MAX_SOURCE_PWL_POINTS ? `${part.kind === 'source' ? 'pwl' : 'currentPwl'}.0.time` : `${part.kind === 'source' ? 'pwl' : 'currentPwl'}.points`
+        add('pwlPoints', `${part.ref} PWL source needs between 2 and ${MAX_SOURCE_PWL_POINTS} points.`, part.id, settingPath)
         continue
       }
       const pointValues = points.map((point) => 'voltage' in point
@@ -496,13 +496,13 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         const points = part.currentPwl ?? []
         const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), current: spiceSheetValue(point.current, 'currentSource', sheetParameters) }))
         let previousTime = -Infinity
-        let valid = points.length >= 2 && points.length <= 32
+        let valid = points.length >= 2 && points.length <= MAX_SOURCE_PWL_POINTS
         for (const point of normalized) {
           if (point.time === null || point.timeMagnitude === null || point.timeMagnitude < 0 || point.timeMagnitude <= previousTime || point.current === null) { valid = false; break }
           previousTime = point.timeMagnitude
         }
         if (!valid) {
-          const message = `${part.ref} PWL current source needs 2–32 points with valid currents and strictly increasing, nonnegative times.`
+          const message = `${part.ref} PWL current source needs 2–${MAX_SOURCE_PWL_POINTS} points with valid currents and strictly increasing, nonnegative times.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
           continue
@@ -577,13 +577,13 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         const points = part.pwl ?? []
         const normalized = points.map((point) => ({ time: spiceTime(point.time), timeMagnitude: spiceTimeMagnitude(point.time), voltage: spiceSheetValue(point.voltage, 'source', sheetParameters) }))
         let previousTime = -Infinity
-        let valid = points.length >= 2 && points.length <= 32
+        let valid = points.length >= 2 && points.length <= MAX_SOURCE_PWL_POINTS
         for (const point of normalized) {
           if (point.time === null || point.timeMagnitude === null || point.timeMagnitude < 0 || point.timeMagnitude <= previousTime || point.voltage === null) { valid = false; break }
           previousTime = point.timeMagnitude
         }
         if (!valid) {
-          const message = `${part.ref} PWL source needs 2–32 points with valid voltages and strictly increasing, nonnegative times.`
+          const message = `${part.ref} PWL source needs 2–${MAX_SOURCE_PWL_POINTS} points with valid voltages and strictly increasing, nonnegative times.`
           append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
           diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
           continue

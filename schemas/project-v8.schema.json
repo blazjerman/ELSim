@@ -443,7 +443,7 @@
         "pwl": {
           "type": "array",
           "minItems": 2,
-          "maxItems": 32,
+          "maxItems": 256,
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -485,7 +485,7 @@
         "currentPwl": {
           "type": "array",
           "minItems": 2,
-          "maxItems": 32,
+          "maxItems": 256,
           "items": {
             "type": "object",
             "additionalProperties": false,

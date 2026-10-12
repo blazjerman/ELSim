@@ -525,7 +525,7 @@ test('independent current source PWL mode emits validated transient current poin
   assert.match(artifact.text, /^I1 .* .* PWL\(0 0 2m 5m 4m -1m\)$/m)
   current.currentPwl[1].time = '0'
   artifact = createNetlistArtifact(project)
-  assert.match(artifact.diagnostics[0].message, /PWL current source needs 2–32 points/)
+  assert.match(artifact.diagnostics[0].message, /PWL current source needs 2–256 points/)
   project.simulation.parameterSweeps = [{ component: 'I1', start: '1mA', stop: '2mA', points: 2 }]
   current.currentPwl[1].time = '2m'
   assert.deepEqual(validateProject(JSON.parse(JSON.stringify(project))).simulation.parameterSweeps, project.simulation.parameterSweeps)
@@ -624,6 +624,19 @@ test('PWL editor validation reports malformed, negative, and non-increasing time
   assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '2 ms', voltage: '5 V' }]), [null, null, null, null])
   assert.deepEqual(validateSourcePwlPoints([{ time: '0', voltage: '0' }, { time: '0', voltage: 'bad' }]), [null, null, 'Time must be later than the previous point.', 'Enter a numeric voltage such as 3.3 or -5 V.'])
   assert.deepEqual(validateSourcePwlPoints([{ time: '-1m', voltage: '0' }, { time: 'x', voltage: '1' }]), ['Time must be zero or greater.', null, 'Enter a time such as 2m or 2 ms.', null])
+})
+
+test('native PWL source accepts 256 points and rejects more', () => {
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.ref === 'V1')
+  source.sourceMode = 'pwl'
+  source.pwl = Array.from({ length: 256 }, (_, index) => ({ time: `${index}u`, voltage: `${index % 2} V` }))
+  let artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^V1 .* PWL\(0u 0 1u 1/m)
+  source.pwl.push({ time: '256u', voltage: '0 V' })
+  artifact = createNetlistArtifact(project)
+  assert.match(artifact.diagnostics[0].message, /2–256 points/)
 })
 
 test('finite PWL voltage repeats report boundaries that do not join smoothly', () => {

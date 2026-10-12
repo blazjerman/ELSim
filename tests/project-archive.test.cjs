@@ -250,7 +250,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('current') && condition.properties.element.pattern.startsWith('^L')))
   assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc', 'pwl', 'sine', 'exp', 'sffm'])
   assert.deepEqual(schema.$defs.part.properties.sine.required, ['offset', 'amplitude', 'frequency', 'delay', 'damping', 'phase'])
-  assert.equal(schema.$defs.part.properties.pwl.maxItems, 32)
+  assert.equal(schema.$defs.part.properties.pwl.maxItems, 256)
   assert.equal(schema.$defs.part.properties.pwlFileName.maxLength, 256)
   assert.equal(schema.$defs.part.properties.pwlRepeatCount.maximum, 31)
   assert.deepEqual(schema.$defs.part.properties.pulse.required, ['initial', 'delay', 'rise', 'fall', 'width', 'period'])

@@ -1,5 +1,7 @@
 import type { CurrentSourcePwlPoint, SourcePwlPoint } from './project'
 
+export const MAX_SOURCE_PWL_POINTS = 256
+
 const scaleBySuffix: Record<string, number> = { meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 }
 
 function magnitude(value: string, unit: 's' | 'v' | 'a'): number | null {
@@ -24,7 +26,7 @@ export function validateSourcePwlRepeatBoundary(points: (SourcePwlPoint | Curren
 
 /** Returns one accessible inline error per PWL point field, or null for valid input. */
 export function validateSourcePwlPoints(points: (SourcePwlPoint | CurrentSourcePwlPoint)[] | undefined, quantity: 'voltage' | 'current' = 'voltage'): (string | null)[] | null {
-  if (!points || points.length < 2 || points.length > 32) return null
+  if (!points || points.length < 2 || points.length > MAX_SOURCE_PWL_POINTS) return null
   let previousTime = -Infinity
   const errors: (string | null)[] = []
   for (const point of points) {
