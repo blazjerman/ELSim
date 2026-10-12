@@ -662,6 +662,25 @@ test('large imported-model dependency reports are navigable regions, not live st
   await expect(importedModel.getByRole('button', { name: 'Remove model library amp.lib' })).toBeDisabled()
 })
 
+test('model dependency report offers a direct import action for referenced library files', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const parent = '.include "child-models.lib"\n.SUBCKT AMPLIFIER IN OUT\nXCORE IN OUT CORE\n.ENDS AMPLIFIER'
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'amplifier.lib', mimeType: 'text/plain', buffer: Buffer.from(parent) })
+
+  const report = page.getByRole('region', { name: 'Model dependency report' })
+  await expect(report).toContainText('child-models.lib')
+  await report.getByRole('button', { name: 'Import referenced model files' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'child-models.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.SUBCKT CORE IN OUT\nR1 IN OUT 10k\n.ENDS CORE'),
+  })
+
+  await expect(report).toHaveCount(0)
+  await expect(page.getByText('CORE', { exact: true })).toBeVisible()
+})
+
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {

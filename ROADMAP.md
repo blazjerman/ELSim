@@ -234,6 +234,8 @@ The imported-model browser now searches subcircuit names, source filenames, orde
 
 Imported-asset dependency guidance (2026-10-12): When placed ICs require a model library, or an IC uses an imported symbol, the library panel now explains why its remove control is disabled and what must be removed first. A focused UI smoke workflow checks the transitive model-library case.
 
+Direct model-include recovery (2026-10-12): A native model dependency report with unresolved project-local `.include`/`.inc` files now opens the multi-file model picker directly. Users can select the referenced files together; ELSim still imports only user-selected text files and never reads paths from model source. Firefox UI coverage imports a parent `.SUBCKT`, follows its missing include, adds the child library, and confirms the dependency report clears. Unit tests, typecheck, and the focused Firefox workflow pass without rebuilding WASM.
+
 ### M3 — LTspice interoperability
 
 **M3.1 Compatibility matrix and fixtures.** Catalog supported `.asc`, `.asy`, directives, primitives, parameters, and model dialect features. Use original hand-written fixtures or files whose redistribution is permitted. Acceptance: every supported syntax item has a fixture; known unsupported items have a diagnostic.
