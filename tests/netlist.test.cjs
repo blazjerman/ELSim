@@ -767,6 +767,7 @@ test('VCVS amplifier example connects signal and reference pins in SPICE order',
   const project = createControlledSourceExampleProject()
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.wires.length, 8)
   assert.match(artifact.text, /^V1 VIN 0 PULSE\(0 1 0 1u 1u 50m 100m\)$/m)
   assert.match(artifact.text, /^E1 VOUT 0 VIN 0 2$/m)
   assert.match(artifact.text, /^RLOAD VOUT 0 1k$/m)

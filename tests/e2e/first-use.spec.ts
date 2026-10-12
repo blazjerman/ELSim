@@ -3937,6 +3937,8 @@ test('controlled-source example opens and solves with input and output probes', 
   await dialog.locator('.example-list article').filter({ hasText: 'Voltage-controlled sources' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Voltage-controlled amplifier')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(8)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(vin)')
@@ -3949,6 +3951,10 @@ test('controlled-source example opens and solves with input and output probes', 
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 2\.0+/)
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(gout\) = -1\.0+/)
+  for (const [wireId, direction] of [['amp-vcvs-output-rise', 'first-to-last'], ['amp-vcvs-output-top', 'first-to-last'], ['amp-vcvs-load-drop', 'first-to-last'], ['amp-vcvs-load-link', 'first-to-last'], ['amp-vccs-output-rise', 'last-to-first'], ['amp-vccs-output-top', 'last-to-first'], ['amp-vccs-load-drop', 'last-to-first'], ['amp-vccs-load-link', 'last-to-first']] as const) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`)
+    await expectWireFlow(flow, direction)
+  }
   await expect(page.locator('.example-lesson-next-step')).toContainText('Change E1’s gain from 2 to 3')
   await page.locator('.circuit-part[data-part-id="amp-e1"]').focus()
   await page.keyboard.press('Enter')
