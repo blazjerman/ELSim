@@ -1682,7 +1682,26 @@ export default function App() {
   const bridgeCapacitance = exampleLesson?.id === 'bridge-rectifier' ? componentMagnitude(project.parts.find((part) => part.id === 'bridge-c1')?.value ?? '220 µF', 'capacitor') : null
   const bridgeCapacitanceText = project.parts.find((part) => part.id === 'bridge-c1')?.value ?? 'changed'
   const bridgeRippleRatio = bridgeCapacitance && bridgeCapacitance > 0 ? 220e-6 / bridgeCapacitance : null
-  const lessonNextStep = exampleLesson?.id === 'bridge-rectifier' && simulationResult
+  const controlledSourceGain = exampleLesson?.id === 'controlled' ? componentMagnitude(project.parts.find((part) => part.id === 'amp-e1')?.value ?? '2', 'resistor') : null
+  const controlledInputTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vin)') : undefined
+  const controlledOutputTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)') : undefined
+  const controlledCurrentOutputTrace = simulationResult?.analysis === 'tran' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(gout)') : undefined
+  const traceIndexAt25Ms = (trace?: Trace) => trace?.axis.length && trace.values.length
+    ? trace.axis.reduce((best, time, index, axis) => Math.abs(time - 0.025) < Math.abs(axis[best] - 0.025) ? index : best, 0)
+    : undefined
+  const controlledInputAt25Ms = controlledInputTrace?.values[traceIndexAt25Ms(controlledInputTrace) ?? 0]
+  const controlledOutputAt25Ms = controlledOutputTrace?.values[traceIndexAt25Ms(controlledOutputTrace) ?? 0]
+  const controlledCurrentOutputAt25Ms = controlledCurrentOutputTrace?.values[traceIndexAt25Ms(controlledCurrentOutputTrace) ?? 0]
+  const controlledPredictedOutput = controlledSourceGain !== null && controlledInputAt25Ms !== undefined ? controlledSourceGain * controlledInputAt25Ms : undefined
+  const lessonNextStep = exampleLesson?.id === 'controlled' && simulationResult
+    ? controlledSourceGain !== null && Number.isFinite(controlledSourceGain)
+      ? simulationResultStale
+        ? `The old transient is stale. At 25 ms, the previous input was ${controlledInputAt25Ms !== undefined ? formatLessonVoltage(controlledInputAt25Ms) : 'not available'}; the edited E1 gain predicts VOUT = ${controlledPredictedOutput !== undefined ? formatLessonVoltage(controlledPredictedOutput) : 'not available'}. Rerun to compare the voltage-controlled output; G1 is unchanged.`
+        : Math.abs(controlledSourceGain - 2) < 1e-9
+          ? 'At 25 ms, VIN is 1 V and E1’s gain of 2 gives VOUT = 2 V. Change E1’s gain from 2 to 3 and rerun: VOUT should become 3 V, while G1 still produces the same current-controlled output.'
+          : `At 25 ms, E1’s gain predicts VOUT = ${controlledPredictedOutput !== undefined ? formatLessonVoltage(controlledPredictedOutput) : 'not available'}; ngspice solved ${controlledOutputAt25Ms !== undefined ? formatLessonVoltage(controlledOutputAt25Ms) : 'not available'}. G1’s separate transconductance still gives GOUT = ${controlledCurrentOutputAt25Ms !== undefined ? formatLessonVoltage(controlledCurrentOutputAt25Ms) : 'not available'}.`
+      : 'Enter a finite voltage gain for E1, then rerun to compare the two controlled-source outputs.'
+    : exampleLesson?.id === 'bridge-rectifier' && simulationResult
     ? bridgeCapacitance !== null && bridgeRippleRatio !== null
       ? simulationResultStale
         ? `C1 is now ${bridgeCapacitanceText}. The old waveform is stale; with the same load and frequency, ripple should scale to about ${Number((bridgeRippleRatio * 100).toPrecision(3))}% of its previous value. Rerun, then compare C1 voltage between charging peaks.`

@@ -3215,6 +3215,7 @@ test('stop terminates an active ngspice run and leaves the workspace responsive'
 })
 
 test('controlled-source example opens and solves with input and output probes', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
@@ -3235,6 +3236,16 @@ test('controlled-source example opens and solves with input and output probes', 
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 2\.0+/)
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(gout\) = -1\.0+/)
+  await expect(page.locator('.example-lesson-next-step')).toContainText('Change E1’s gain from 2 to 3')
+  await page.locator('.circuit-part[data-part-id="amp-e1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="amp-e1:value"]').fill('3')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('edited E1 gain predicts VOUT = 3 V')
+  await page.locator('.example-lesson-next-step').getByRole('button', { name: 'Run this circuit again' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.example-lesson-next-step')).toContainText('ngspice solved 3 V')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('GOUT = -1 V')
 })
 
 test('voltage-controlled switch example toggles the load with its control pulse', { tag: '@ngspice' }, async ({ page }) => {
