@@ -289,15 +289,44 @@ export function createBridgeRectifierExampleProject(): Project {
   }
   project.name = 'Bridge rectifier and smoothing capacitor'
   project.parts = parts
-  project.wires = []
+  project.wires = [
+    { id: 'bridge-ac-source-rise', points: [[220, 350], [220, 220]] },
+    { id: 'bridge-ac-top', points: [[220, 220], [690, 220]] },
+    { id: 'bridge-ac-d1-branch', points: [[410, 220], [410, 300]] },
+    { id: 'bridge-ac-d3-drop', points: [[690, 220], [690, 300]] },
+    { id: 'bridge-vpos-d1-drop', points: [[510, 300], [510, 320]] },
+    { id: 'bridge-vpos-d1-branch', points: [[510, 320], [760, 320]] },
+    { id: 'bridge-vpos-bus', points: [[760, 300], [760, 450]] },
+    { id: 'bridge-vpos-d2-rise', points: [[510, 500], [510, 420]] },
+    { id: 'bridge-vpos-d2-branch', points: [[510, 420], [760, 420]] },
+    { id: 'bridge-vpos-capacitor', points: [[760, 300], [820, 300]] },
+    { id: 'bridge-vpos-capacitor-pin', points: [[820, 300], [820, 310]] },
+    { id: 'bridge-vpos-load', points: [[760, 450], [820, 450]] },
+    { id: 'bridge-vneg-d3-drop', points: [[590, 300], [590, 340]] },
+    { id: 'bridge-vneg-d3-branch', points: [[590, 340], [720, 340]] },
+    { id: 'bridge-vneg-bus', points: [[720, 340], [720, 460]] },
+    { id: 'bridge-vneg-d4-lead', points: [[590, 500], [560, 500]] },
+    { id: 'bridge-vneg-d4-rise', points: [[560, 500], [560, 460]] },
+    { id: 'bridge-vneg-d4-branch', points: [[560, 460], [720, 460]] },
+    { id: 'bridge-vneg-capacitor', points: [[720, 410], [820, 410]] },
+    { id: 'bridge-vneg-right', points: [[820, 410], [900, 410]] },
+    { id: 'bridge-vneg-right-bus', points: [[900, 410], [900, 550]] },
+    { id: 'bridge-vneg-load', points: [[900, 550], [820, 550]] },
+    { id: 'bridge-vneg-reference', points: [[900, 500], [950, 500]] },
+    { id: 'bridge-ground-source', points: [[220, 450], [220, 620]] },
+    { id: 'bridge-ground-bus', points: [[220, 620], [1050, 620]] },
+    { id: 'bridge-ground-d2', points: [[410, 500], [410, 620]] },
+    { id: 'bridge-ground-d4', points: [[690, 500], [690, 620]] },
+    { id: 'bridge-ground-reference', points: [[1050, 500], [1050, 620]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('bridge-vin-source', 'VIN', source, 0), labelAt('bridge-vin-d1', 'VIN', diodes[0], 0), labelAt('bridge-vin-d3', 'VIN', diodes[2], 1),
-    labelAt('bridge-ground-source', '0', source, 1), labelAt('bridge-ground-d2', '0', diodes[1], 0), labelAt('bridge-ground-d4', '0', diodes[3], 1), labelAt('bridge-ground-reference', '0', reference, 1),
-    labelAt('bridge-vpos-d1', 'VPOS', diodes[0], 1), labelAt('bridge-vpos-d2', 'VPOS', diodes[1], 1), labelAt('bridge-vpos-capacitor', 'VPOS', capacitor, 0), labelAt('bridge-vpos-load', 'VPOS', load, 0),
-    labelAt('bridge-vneg-d3', 'VNEG', diodes[2], 0), labelAt('bridge-vneg-d4', 'VNEG', diodes[3], 0), labelAt('bridge-vneg-capacitor', 'VNEG', capacitor, 1), labelAt('bridge-vneg-load', 'VNEG', load, 1), labelAt('bridge-vneg-reference', 'VNEG', reference, 0),
+    labelAt('bridge-vin-source', 'VIN', source, 0),
+    labelAt('bridge-ground-source', '0', source, 1),
+    labelAt('bridge-vpos-capacitor', 'VPOS', capacitor, 0),
+    labelAt('bridge-vneg-capacitor', 'VNEG', capacitor, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
   project.plotSettings = { selectedTraceIds: ['v(vin)'], ranges: {} }
   project.view = { zoom: 0.85, panX: -40, panY: 0 }

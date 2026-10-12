@@ -3507,11 +3507,17 @@ test('bridge rectifier example keeps capacitor voltage positive between AC peaks
   await expect(page.locator('.project-title')).toHaveText('Bridge rectifier and smoothing capacitor')
   await expect(page.getByLabel('Guided example')).toContainText('both input half-cycles')
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(28)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   const plot = await openComponentVoltagePlot(page, 'C1')
   await expect(plot.locator('.trace-toggles button', { hasText: 'V(C1)' })).toBeVisible()
   const slider = page.getByRole('slider', { name: 'Simulation time' })
+  await scrubToTime(slider, 0.005)
+  for (const wireId of ['bridge-ac-source-rise', 'bridge-vpos-load', 'bridge-vneg-load']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.001)
+  }
   await scrubToTime(slider, 0.01)
   const readout = await plot.locator('.cursor-readout').innerText()
   const capacitorVoltage = Number(readout.match(/V\(C1\) = ([+-]?[\d.e+-]+)/i)?.[1])
