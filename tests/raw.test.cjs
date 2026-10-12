@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { isTraceVariable, parseAsciiRawFile, parseBinaryRawFile, rawTraceUnit } = require(path.join(build, 'engine/raw.js'))
+const { isTraceVariable, parseAsciiRawFile, parseBinaryRawFile, parseRawFile, rawTraceUnit } = require(path.join(build, 'engine/raw.js'))
 const { serializeWaveformCsv } = require(path.join(build, 'engine/csv.js'))
 
 const validRaw = `Title: RC fixture
@@ -231,6 +231,12 @@ test('binary raw parser reads interleaved real and imaginary AC values', () => {
 test('binary raw parser rejects truncated payloads', () => {
   const data = binaryRaw(validRaw.replace(/Values:[\s\S]*$/, 'Values:'), [0, 5, -0.001])
   assert.throws(() => parseBinaryRawFile(data), /ended before all numeric points/)
+})
+
+test('raw-file entry point detects binary payloads and retains ASCII compatibility', () => {
+  const binary = binaryRaw(validRaw.replace(/Values:[\s\S]*$/, 'Values:'), [0, 5, -0.001, 0.001, 4, -0.002])
+  assert.deepEqual([...parseRawFile(binary).variables[0].values], [5, 4])
+  assert.deepEqual([...parseRawFile(Buffer.from(validRaw)).variables[0].values], [5, 4])
 })
 
 test('waveform CSV includes units, quoted labels, and synchronized mixed-unit samples', () => {
