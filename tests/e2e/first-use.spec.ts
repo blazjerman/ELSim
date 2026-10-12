@@ -2371,6 +2371,7 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
 })
 
 test('inductor current ramp lesson shows gradual current rise and decay after the pulse', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser workflow').toEqual([])
   await page.goto('/')
@@ -2394,6 +2395,29 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
     expect(match).not.toBeNull()
     return Math.abs(Number(match![1]))
   }
+  const currentAtTime = async (targetSeconds: number) => {
+    let low = 0
+    let high = maxSample
+    let closest = 0
+    let closestDifference = Number.POSITIVE_INFINITY
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2)
+      await slider.fill(String(middle))
+      const sampleTime = Number((await slider.getAttribute('aria-valuetext'))?.split(' ')[0])
+      const difference = Math.abs(sampleTime - targetSeconds)
+      if (difference < closestDifference) {
+        closest = middle
+        closestDifference = difference
+      }
+      if (sampleTime < targetSeconds) low = middle + 1
+      else high = middle - 1
+    }
+    await slider.fill(String(closest))
+    await expect.poll(async () => (await inductorTitle.textContent()) ?? '').toMatch(/[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)? A,/i)
+    const match = (await inductorTitle.textContent())?.match(/([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?) A,/i)
+    expect(match).not.toBeNull()
+    return Math.abs(Number(match![1]))
+  }
   const risingCurrent = await currentAt(0.4)
   expect(risingCurrent).toBeGreaterThan(0.04)
   expect(risingCurrent).toBeLessThan(0.06)
@@ -2405,7 +2429,7 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
   await page.locator('.circuit-part[data-part-id="rl-step-r1"]').click()
   await page.getByRole('textbox', { name: 'Resistance (Ω)' }).fill('200 Ω')
   await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
-  await expect(page.locator('.example-lesson-next-step')).toContainText('R1 is now 200 Ω')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('R1 is 200 Ω and L1 is 100 mH')
   await page.locator('.example-lesson-next-step').getByRole('button', { name: 'Run this circuit again' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.locator('.example-lesson-next-step')).toContainText('the current approaches 25 mA')
@@ -2414,6 +2438,20 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
   expect(reducedCurrent).toBeGreaterThan(0.02)
   expect(reducedCurrent).toBeLessThan(0.03)
   expect(reducedCurrent).toBeLessThan(risingCurrent * 0.7)
+  const currentWith100mHAtHalfMs = await currentAtTime(0.0005)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.locator('.circuit-part[data-part-id="rl-step-l1"]').click()
+  await page.locator('[data-part-setting="rl-step-l1:value"]').fill('50 mH')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('R1 is 200 Ω and L1 is 50 mH')
+  await page.locator('.example-lesson-next-step').getByRole('button', { name: 'Run this circuit again' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.example-lesson-next-step')).toContainText('time constant is 0.25 ms')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('current approaches 25 mA')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('Change R1')
+  const currentWith50mHAtHalfMs = await currentAtTime(0.0005)
+  expect(currentWith50mHAtHalfMs).toBeGreaterThan(currentWith100mHAtHalfMs * 1.25)
+  expect(currentWith50mHAtHalfMs).toBeLessThan(currentWith100mHAtHalfMs * 1.5)
 })
 
 test('voltage-divider example teaches and solves the equal-resistor midpoint', { tag: '@ngspice' }, async ({ page }) => {

@@ -1587,15 +1587,16 @@ export default function App() {
   const simulationResultStale = Boolean(simulationResult && simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt)
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && !simulationResultStale)
   const rlStepResistance = exampleLesson?.id === 'rl-step' ? componentMagnitude(project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? '100 Ω', 'resistor') : null
-  const rlStepTimeConstantMs = rlStepResistance && rlStepResistance > 0 ? 100 / rlStepResistance : null
+  const rlStepInductanceH = exampleLesson?.id === 'rl-step' ? componentMagnitude(project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? '100 mH', 'inductor') : null
+  const rlStepTimeConstantMs = rlStepResistance && rlStepResistance > 0 && rlStepInductanceH && rlStepInductanceH > 0 ? 1000 * rlStepInductanceH / rlStepResistance : null
   const rlStepSteadyCurrentMa = rlStepResistance && rlStepResistance > 0 ? 5000 / rlStepResistance : null
   const lessonNextStep = exampleLesson?.id === 'rl-step' && simulationResult
     ? simulationResultStale
-      ? `R1 is now ${project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? 'changed'}, so the displayed results are from the previous circuit. Run again to see whether the inductor current reaches its new level faster.`
-      : rlStepResistance === 100
+      ? `R1 is ${project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? 'changed'} and L1 is ${project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? 'changed'}. These plots are from the previous circuit; run again to compare the new current ramp.`
+      : rlStepResistance === 100 && rlStepInductanceH === 0.1
         ? 'Select R1, change its resistance from 100 Ω to 200 Ω, and run again. The time constant halves from 1 ms to 0.5 ms, and the current approaches 25 mA instead of 50 mA.'
         : rlStepTimeConstantMs !== null && rlStepSteadyCurrentMa !== null
-          ? `Compare the new curve with the original. At R1 = ${project.parts.find((part) => part.id === 'rl-step-r1')?.value}, the predicted time constant is ${Number(rlStepTimeConstantMs.toPrecision(3))} ms and the current approaches ${Number(rlStepSteadyCurrentMa.toPrecision(3))} mA. Change L1 to alter the ramp time without changing this final current.`
+          ? `Compare the new curve with the original. At R1 = ${project.parts.find((part) => part.id === 'rl-step-r1')?.value} and L1 = ${project.parts.find((part) => part.id === 'rl-step-l1')?.value}, the predicted time constant is ${Number(rlStepTimeConstantMs.toPrecision(3))} ms and the current approaches ${Number(rlStepSteadyCurrentMa.toPrecision(3))} mA. ${rlStepInductanceH === 0.1 ? 'Change L1 to alter the ramp time without changing this final current.' : 'Change R1 to see how resistance affects both the ramp time and final current.'}`
           : 'Choose a positive resistance for R1, then rerun to compare how resistance changes the inductor current.'
     : simulationResult && !simulationResultStale ? exampleLesson?.id === 'voltage-divider'
       ? 'Select R2, change its resistance to 2 kΩ in Properties, and run again. The midpoint should rise from 5 V to about 6.67 V.'
