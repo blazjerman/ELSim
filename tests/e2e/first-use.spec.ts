@@ -259,6 +259,9 @@ test('keyboard opens schematic probe actions and restores focus after closing', 
 
 test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await expect(page.getByRole('complementary', { name: 'Component library' })).toBeVisible()
+  await expect(page.getByRole('main', { name: 'Schematic workspace' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Properties inspector' })).toBeVisible()
   const expectNamedFormControls = async () => {
     const unnamed = await page.locator('input:not([type="hidden"]), select, textarea, [role="textbox"], [role="combobox"], [role="checkbox"], [role="radio"], [role="switch"], [role="slider"], [role="spinbutton"]').evaluateAll((controls) => controls.flatMap((control) => {
       const element = control as HTMLElement & { labels?: NodeListOf<HTMLLabelElement> }
