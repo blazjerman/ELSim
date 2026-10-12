@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, EDITOR_GRID_SIZE, snapToEditorGrid, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, pointOnSegment } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
 const { moveSelectedSceneObjects } = require(path.join(build, 'domain/sceneEdit.js'))
@@ -24,6 +24,19 @@ test('native component pins and the RC starter share one 10-unit placement grid'
   }
   assert.equal(snapToEditorGrid(375), 380)
   assert.equal(snapToEditorGrid(374), 370)
+})
+
+test('reusable block direction markers point inward and outward on every side', () => {
+  for (const [side, x, y] of [['left', -80, 0], ['right', 80, 0], ['top', 0, -60], ['bottom', 0, 60]]) {
+    for (const direction of ['input', 'output', 'inout']) {
+      const path = subcircuitPortDirectionPath(x, y, side, direction)
+      assert.match(path, /^M/)
+      assert.equal((path.match(/Z/g) ?? []).length, direction === 'inout' ? 2 : 1, `${side} ${direction} arrows`)
+    }
+  }
+  assert.equal(subcircuitPortDirectionPath(-80, 0, 'left', 'output'), 'M-70 0L-66 -3L-66 3Z')
+  assert.equal(subcircuitPortDirectionPath(-80, 0, 'left', 'input'), 'M-70 0L-74 3L-74 -3Z')
+  assert.equal(subcircuitPortDirectionPath(0, -60, 'top', 'input'), 'M0 -50L-3 -54L3 -54Z')
 })
 
 test('wire-connection dot broadphase preserves exact pin, T-join, and crossing geometry', () => {

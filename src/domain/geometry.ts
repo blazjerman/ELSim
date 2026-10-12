@@ -44,6 +44,23 @@ export function subcircuitPinOffsets(count: number, layout?: Part['sheetPortLayo
   return Array.from({ length: count }, (_, index) => [index % 2 === 0 ? -80 : 80, -height / 2 + Math.floor(index / 2) * spacing])
 }
 
+/** Direction marker for a reusable-block pin, pointing into/out of its body. */
+export function subcircuitPortDirectionPath(x: number, y: number, side: NonNullable<Part['sheetPortLayout']>[number]['side'], direction: NonNullable<Part['sheetPortLayout']>[number]['direction']): string {
+  if (side === 'auto') return ''
+  const outward = side === 'left' ? [-1, 0] : side === 'right' ? [1, 0] : side === 'top' ? [0, -1] : [0, 1]
+  const center = [x - outward[0] * 10, y - outward[1] * 10]
+  const arrow = (dx: number, dy: number, offset: number) => {
+    const tipX = center[0] + dx * offset, tipY = center[1] + dy * offset
+    const baseX = tipX - dx * 4, baseY = tipY - dy * 4
+    const sideX = -dy * 3, sideY = dx * 3
+    return `M${tipX} ${tipY}L${baseX + sideX} ${baseY + sideY}L${baseX - sideX} ${baseY - sideY}Z`
+  }
+  const directions = direction === 'inout'
+    ? [[outward[0], outward[1], 5], [-outward[0], -outward[1], 5]]
+    : [[outward[0] * (direction === 'output' ? 1 : -1), outward[1] * (direction === 'output' ? 1 : -1), 0]]
+  return directions.map(([dx, dy, offset]) => arrow(dx, dy, offset)).join('')
+}
+
 export function componentPins(part: Part): PinLocation[] {
   let local: [number, number][]
   if (part.symbolPinOffsets) local = part.symbolPinOffsets
