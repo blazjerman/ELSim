@@ -308,6 +308,14 @@ Use this section as the goal prompt for AI agents:
 
 > Build ELSim according to the active milestones in `ROADMAP.md`; implement remaining app functionality without reopening the deferred license/release review. The owner builds the ngspice WebAssembly runtime locally; do not rebuild it during ordinary app work. Work in small, reviewable changes. Preserve architecture boundaries and the versioned project schema. Every new component must include electrical pin order, netlist generation, properties/units, original symbol rendering, optional animation mapping, and a numeric reference circuit. Every import path must produce a loss/diagnostic report. Update the roadmap's decision log and compatibility matrix when engineering evidence changes. Report completed acceptance criteria and focused test results with each change.
 
+### Fast feedback rules
+
+- For routine changes, run only the directly relevant unit test or focused browser test, plus TypeScript checking when source types change. The 28-group `npm test` suite is also short enough to use when a change crosses shared domain/engine code; do not automatically add full Playwright runs.
+- For UI changes, run the smallest matching Playwright case in Firefox. Add an ngspice browser case only when the change affects simulation or result behavior; use the already-built local runtime.
+- Do not rebuild ngspice WASM unless changing its build/runtime integration, testing a changed engine source, or the existing local runtime is absent or known stale. `npm run benchmark:performance` reuses the local runtime and is reserved for performance changes.
+- Do not run or poll GitHub Pages as a development test. The Pages workflow is only the owner’s preview deployment; it builds the editor without ngspice.
+- Run broader UI/engine suites only for milestone acceptance, a suspected cross-feature regression, or an explicit request. Report what was run and any skipped gate; a focused check must not be described as broad acceptance.
+
 Suggested agent ownership once M0 contracts are agreed: engine/WASM; document/netlister; editor/design system; waveforms/animation; interoperability; release/legal inventory. Agents may prototype independently, but a maintainer resolves schema/adapter changes before merging.
 
 ### Definition of done for any issue
