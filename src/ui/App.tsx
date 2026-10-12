@@ -143,6 +143,10 @@ function formatLessonVoltage(voltage: number): string {
   return `${Number(voltage.toPrecision(4))} V`
 }
 
+function formatLessonCurrent(milliamps: number): string {
+  return `${Number(milliamps.toPrecision(3))} mA`
+}
+
 const componentCategoryKinds: Record<Exclude<ComponentCategory, 'all'>, PartKind[]> = {
   basics: ['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'transformer', 'source', 'currentSource', 'switch', 'ground', 'inverter', 'logicGate'],
   semiconductors: ['diode', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'],
@@ -1638,6 +1642,15 @@ export default function App() {
   const potentiometerPositionText = potentiometerPosition === null ? 'changed' : `${Number((potentiometerPosition * 100).toPrecision(3))}% from the upper terminal`
   const potentiometerSupplyText = project.parts.find((part) => part.id === 'pot-v1')?.value ?? 'changed'
   const potentiometerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const zenerResistance = exampleLesson?.id === 'zener' ? componentMagnitude(project.parts.find((part) => part.id === 'zener-r1')?.value ?? '1 kΩ', 'resistor') : null
+  const zenerSupply = exampleLesson?.id === 'zener' ? componentMagnitude(project.parts.find((part) => part.id === 'zener-v1')?.value ?? '12 V', 'source') : null
+  const zenerEstimatedCurrentMa = zenerResistance && zenerResistance > 0 && zenerSupply !== null ? (zenerSupply - 5.1) / zenerResistance * 1000 : null
+  const zenerResistanceText = project.parts.find((part) => part.id === 'zener-r1')?.value ?? 'changed'
+  const zenerSupplyText = project.parts.find((part) => part.id === 'zener-v1')?.value ?? 'changed'
+  const zenerSolvedVoltage = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vz)')?.values[0] : undefined
+  const zenerSolvedCurrentMa = simulationResult?.analysis === 'op' && zenerResistance && zenerResistance > 0 && zenerSupply !== null && zenerSolvedVoltage !== undefined
+    ? Math.max(0, (zenerSupply - zenerSolvedVoltage) / zenerResistance * 1000)
+    : undefined
   const lessonNextStep = exampleLesson?.id === 'rl-step' && simulationResult
     ? simulationResultStale
       ? `R1 is ${project.parts.find((part) => part.id === 'rl-step-r1')?.value ?? 'changed'} and L1 is ${project.parts.find((part) => part.id === 'rl-step-l1')?.value ?? 'changed'}. These plots are from the previous circuit; run again to compare the new current ramp.`
@@ -1682,6 +1695,16 @@ export default function App() {
               ? 'Move the wiper to 25% from the upper terminal and run again. The lower section becomes 75% of the track, so VOUT should rise from 5 V to 7.5 V.'
               : `At ${potentiometerPositionText} on ${potentiometerSupplyText}, the divider predicts VOUT = ${formatLessonVoltage(potentiometerPrediction)}${potentiometerSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(potentiometerSolvedOutput)}` : ''}. Move the wiper to 75% from the upper terminal to compare the complementary output.`
             : 'Set a valid wiper position and source voltage, then rerun to compare the divider output.'
+      : exampleLesson?.id === 'zener' && simulationResult
+        ? simulationResultStale
+          ? zenerEstimatedCurrentMa !== null && zenerEstimatedCurrentMa > 0
+            ? `R1 is ${zenerResistanceText} on a ${zenerSupplyText} supply. The previous operating point is stale; assuming VZ stays near 5.1 V, estimated Zener current is ${formatLessonCurrent(zenerEstimatedCurrentMa)}. Rerun to check whether it remains above the model’s 1 mA knee.`
+            : `R1 is ${zenerResistanceText} and V1 is ${zenerSupplyText}. These operating-point results are stale; enter a valid supply above 5.1 V and positive resistance, then rerun.`
+      : zenerResistance !== null && zenerSupply !== null && zenerEstimatedCurrentMa !== null
+        ? zenerResistance === 1000 && zenerSupply === 12
+          ? 'Increase R1 from 1 kΩ to 2 kΩ and rerun. Assuming VZ stays near 5.1 V, current should fall from about 6.9 mA to 3.45 mA while the Zener remains above its 1 mA knee.'
+          : `At R1 = ${zenerResistanceText} and V1 = ${zenerSupplyText}, the simple estimate is ${formatLessonCurrent(Math.max(0, zenerEstimatedCurrentMa))}. ngspice solved VZ = ${zenerSolvedVoltage !== undefined ? formatLessonVoltage(zenerSolvedVoltage) : '—'}; from the solved output, the series and Zener current is about ${zenerSolvedCurrentMa !== undefined ? formatLessonCurrent(zenerSolvedCurrentMa) : '—'}. ${zenerSolvedCurrentMa !== undefined && zenerSolvedCurrentMa < 1 ? 'This is below the model’s 1 mA knee, so the reference has fallen out of regulation.' : 'Increase R1 to 10 kΩ (about 0.69 mA by the estimate) to see when regulation starts to fail.'}`
+            : 'Enter a valid supply above 5.1 V and positive series resistance, then rerun to compare regulation.'
       : simulationResult && !simulationResultStale
         ? simulationResult.analysis === 'tran'
           ? 'Pause playback, then move the Time slider. Click the waveform to place the cursor and read each selected voltage or current at that moment.'
@@ -2978,7 +3001,7 @@ export default function App() {
       'current-source': { title: 'A current source sets load current', guidance: 'Run the operating point. The 1 mA through 1 kΩ produces 1 V; probe the load to confirm.' },
       potentiometer: { title: 'The wiper adjusts the output', guidance: 'Run the operating point and inspect V(VOUT). The wiper percentage is measured from the upper terminal: 50% gives about 5 V from the 10 V supply, while a smaller percentage moves the output closer to VIN.' },
       'voltage-divider': { title: 'Two resistors split a voltage', guidance: 'Run the operating point and probe V(VOUT). Equal 1 kΩ resistors share the 10 V supply evenly, so the midpoint is 5 V. Change either resistor and see how the ratio changes.' },
-      zener: { title: 'A Zener diode holds a reference voltage', guidance: 'Run the operating point and probe V(VZ). The reverse-connected Zener clamps the output near 5.1 V while R1 limits current. Change the input or series resistor and observe when regulation changes.' },
+      zener: { title: 'A Zener diode holds a reference voltage', guidance: 'Run the operating point and inspect V(VZ) and I(DZ1). The reverse-connected Zener holds the output near 5.1 V while it has enough current; R1 limits current from the 12 V supply.' },
       transformer: { title: 'A transformer changes AC voltage', guidance: 'Run the AC sweep and compare V(VIN) and V(VOUT). A 2:1 secondary-to-primary turns ratio gives about twice the primary voltage. The coupled-inductor model omits winding loss, leakage, and core saturation.' },
       'imported-opamp': { title: 'Inspect and simulate a user IC', guidance: 'This five-pin op-amp is an imported subcircuit model. Inspect XU1 to see the declared pin order, then run the operating point: the 0.5 V input and 2:1 feedback network produce about 1.5 V at VOUT. This original teaching model omits bandwidth, slew rate, and input bias; it is not a physical device model.' },
       'inverting-opamp': { title: 'Negative feedback reverses and scales the input', guidance: 'Run the operating point and compare V(VIN) with V(VOUT). With the non-inverting input grounded, 10 kΩ at the input, and 20 kΩ in feedback, the output is about −2 times the input (−1 V here). Inspect V(FB) to see feedback hold the inverting input near 0 V. This original teaching model omits bandwidth, slew rate, and input bias.' },
