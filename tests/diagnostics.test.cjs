@@ -32,6 +32,13 @@ test('ngspice errors written to stderr are retained and map original model lines
   assert.match(diagnostic.hint, /if\(\).*does not provide/i)
 })
 
+test('fatal ngspice errors retain their message and source-line location', () => {
+  const message = firstNgspiceError('', 'Fatal error: unknown device model\n    in line no. 7 from file /project.cir', 1)
+  assert.equal(message, 'Fatal error: unknown device model in line no. 7 from file /project.cir')
+  const diagnostic = diagnosticForNgspice(message, { ...artifact, sourceMap: [{ line: 7, sourceId: 'part-q1', role: 'component' }] })
+  assert.equal(diagnostic.sourceId, 'part-q1')
+})
+
 test('ngspice line no. diagnostics map source references', () => {
   const message = firstNgspiceError('', 'Error: unknown subckt: x1 in out MISSING_CORE\n    in line no. 3 from file /project.cir', 1)
   const subcircuitArtifact = { ...artifact, sourceMap: [{ line: 3, sourceId: 'part-x1', role: 'component' }] }

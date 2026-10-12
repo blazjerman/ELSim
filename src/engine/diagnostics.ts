@@ -3,7 +3,7 @@ import type { NetlistArtifact, SimulationDiagnostic } from './contract'
 /** Select ngspice's actionable error line across both output streams. */
 export function firstNgspiceError(stdout: string, stderr: string, status: number): string | undefined {
   const lines = `${stdout}\n${stderr}`.split(/\r?\n/)
-  const explicitIndex = lines.findIndex((line) => /^\s*(?:Error|Fatal):/i.test(line))
+  const explicitIndex = lines.findIndex((line) => /^\s*(?:Error|Fatal(?:\s+Error)?):/i.test(line))
   if (explicitIndex >= 0) {
     const explicit = lines[explicitIndex].trim()
     const location = lines.slice(explicitIndex + 1, explicitIndex + 3).find((line) => /line\s+no\.?\s*\d+/i.test(line))
