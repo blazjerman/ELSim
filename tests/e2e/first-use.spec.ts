@@ -1401,6 +1401,7 @@ test('reused sheet interface edits update block pins and attached wires', async 
   })
   await page.reload()
   const reusableBlock = page.locator('.circuit-part[data-part-id="root-load"]')
+  await expect(reusableBlock).toHaveAccessibleName(/pins: IN input on left, OUT output on right/)
   await expect(reusableBlock.locator('.subcircuit-port-direction[data-direction="input"]')).toHaveCount(1)
   await expect(reusableBlock.locator('.subcircuit-port-direction[data-direction="output"]')).toHaveCount(1)
   await expect(reusableBlock.locator('[data-port-direction="input"]')).toHaveAttribute('data-port-side', 'left')

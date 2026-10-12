@@ -398,11 +398,18 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const symbolCoordinates = symbol ? [...symbol.primitives.flatMap((primitive) => primitive.kind === 'polyline' ? primitive.points : primitive.kind === 'text' ? [[primitive.x, primitive.y]] : [[primitive.x1, primitive.y1], [primitive.x2, primitive.y2]]), ...symbol.pins.map(({ x, y }) => [x, y])] : []
   const symbolBounds = symbolCoordinates.length ? { minX: Math.min(...symbolCoordinates.map(([x]) => x)), minY: Math.min(...symbolCoordinates.map(([, y]) => y)), maxX: Math.max(...symbolCoordinates.map(([x]) => x)), maxY: Math.max(...symbolCoordinates.map(([, y]) => y)) } : null
   const isInteractiveSwitch = part.kind === 'switch'
+  const accessiblePortSummary = part.kind === 'subcircuit' && part.sheetId
+    ? (part.modelPins ?? []).slice(0, 8).map((name, index) => {
+      const layout = part.sheetPortLayout?.[index]
+      const side = layout?.side && layout.side !== 'auto' ? layout.side : index % 2 === 0 ? 'left' : 'right'
+      return `${name} ${layout?.direction ?? 'inout'} on ${side}`
+    }).join(', ') + ((part.modelPins?.length ?? 0) > 8 ? `, and ${(part.modelPins?.length ?? 0) - 8} more pins` : '')
+    : ''
   const accessibilityLabel = isInteractiveSwitch
     ? `${part.ref}, ${kindNames[part.kind]}, switch ${part.value.toLowerCase()}${selected ? ', selected' : ''}`
     : `${part.ref}, ${kindNames[part.kind]}, ${part.value || 'no value'}${selected ? ', selected' : ''}`
   const showDetails = detailed || Boolean(symbol)
-  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} data-polarized={part.polarized ? 'true' : undefined} data-logic-state={logicState} data-visual-detail={showDetails ? 'full' : 'compact'} role="button" tabIndex={focusable ? 0 : -1} aria-label={`${accessibilityLabel}${part.kind === 'capacitor' && part.polarized ? ', polarized, pin 1 positive' : ''}${logicState ? `, output ${logicState}` : ''}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space ContextMenu Shift+F10" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onKeyDown={(event) => {
+  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} data-polarized={part.polarized ? 'true' : undefined} data-logic-state={logicState} data-visual-detail={showDetails ? 'full' : 'compact'} role="button" tabIndex={focusable ? 0 : -1} aria-label={`${accessibilityLabel}${accessiblePortSummary ? `, pins: ${accessiblePortSummary}` : ''}${part.kind === 'capacitor' && part.polarized ? ', polarized, pin 1 positive' : ''}${logicState ? `, output ${logicState}` : ''}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space ContextMenu Shift+F10" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onKeyDown={(event) => {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); onNavigate(part.id, event.key); return }
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
