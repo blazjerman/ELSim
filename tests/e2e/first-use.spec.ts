@@ -1428,6 +1428,7 @@ test('copying a hierarchical block into a new project preserves nested definitio
   await expect.poll(() => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const instance = project.parts.find((part: { ref: string }) => part.ref === 'X1')
+    if (!instance) return null
     const outer = project.sheets.find((sheet: { id: string }) => sheet.id === instance.sheetId)
     const innerInstance = outer?.parts.find((part: { ref: string }) => part.ref === 'XCORE')
     const inner = project.sheets.find((sheet: { id: string }) => sheet.id === innerInstance?.sheetId)
