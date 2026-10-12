@@ -27,6 +27,14 @@ export default function PwlPointsEditor({ points, onChange, partId, validationMe
     onChange(parsed.points)
     setPasteError(null)
   }
+  const importPointFile = async (file: File | undefined) => {
+    if (!file) return
+    const parsed = parseSourcePwlText(await file.text(), quantity)
+    if (parsed.error || !parsed.points) { setPasteError(`${file.name}: ${parsed.error ?? 'The point table is invalid.'}`); return }
+    onChange(parsed.points)
+    setPasteText('')
+    setPasteError(null)
+  }
   return <div className="pwl-points-editor">
     <div className="pwl-point-heading"><span>Time (s)</span><span>{quantity === 'voltage' ? 'Voltage (V)' : 'Current (A)'}</span><span className="sr-only">Actions</span></div>
     {validationMessage && <div className="field-error" id={countErrorId} role="alert">{validationMessage}</div>}
@@ -36,7 +44,7 @@ export default function PwlPointsEditor({ points, onChange, partId, validationMe
       <button type="button" aria-label={`Remove PWL point ${index + 1}`} disabled={rows.length <= 2} onClick={() => onChange(rows.filter((_, itemIndex) => itemIndex !== index))}>×</button>
     </div>)}
     <button type="button" className="add-pwl-point" data-part-setting={`${partId}:${fieldPrefix}.points`} aria-invalid={Boolean(validationMessage)} aria-describedby={validationMessage ? countErrorId : undefined} disabled={rows.length >= MAX_SOURCE_PWL_POINTS} onClick={addPoint}>+ Add point{rows.length >= MAX_SOURCE_PWL_POINTS ? ` (limit ${MAX_SOURCE_PWL_POINTS})` : ''}</button>
-    <details className="pwl-paste-panel"><summary>Paste point table</summary><label className="field-label">Time and {quantity} rows<textarea aria-label={`Paste PWL time and ${quantity} rows`} placeholder={`time, ${quantity}\n0, 0\n1m, ${quantity === 'voltage' ? '5 V' : '5 mA'}`} value={pasteText} onChange={(event) => { setPasteText(event.target.value); setPasteError(null) }}/></label><small className="field-hint">Paste CSV, TSV, or space-separated rows. An optional “time, {quantity}” header is allowed. Import replaces the current points.</small>{pasteError && <small className="field-error" role="alert">{pasteError}</small>}<button type="button" className="add-pwl-point" onClick={importPastedPoints}>Replace points with pasted table</button></details>
+    <details className="pwl-paste-panel"><summary>Import point table</summary><label className="field-label">Time and {quantity} rows<textarea aria-label={`Paste PWL time and ${quantity} rows`} placeholder={`time, ${quantity}\n0, 0\n1m, ${quantity === 'voltage' ? '5 V' : '5 mA'}`} value={pasteText} onChange={(event) => { setPasteText(event.target.value); setPasteError(null) }}/></label><small className="field-hint">Paste rows or choose a CSV, TSV, or text file. Use two columns: time and {quantity}; an optional header is allowed.</small><label className="pwl-file-import">Choose point file<input aria-label="Import PWL point file" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onChange={(event) => { void importPointFile(event.target.files?.[0]); event.currentTarget.value = '' }}/></label>{pasteError && <small className="field-error" role="alert">{pasteError}</small>}<button type="button" className="add-pwl-point" onClick={importPastedPoints}>Replace points with pasted table</button></details>
     {onRepeatForeverChange && <label className="field-label"><input type="checkbox" aria-label="Repeat PWL waveform forever" checked={repeatForever} onChange={(event) => onRepeatForeverChange(event.target.checked)}/>Repeat waveform forever</label>}
     {onRepeatCountChange && <label className="field-label">Finite repeat cycles<input type="number" aria-label="PWL repeat cycles" min="1" max={maxRepeatCount || undefined} step="1" disabled={repeatForever || maxRepeatCount === 0} aria-invalid={Boolean(repeatBoundaryError)} aria-describedby={repeatBoundaryError ? `pwl-repeat-boundary-${partId}` : undefined} placeholder="Once" value={repeatForever ? '' : repeatCount ?? ''} onChange={(event) => { const value = event.target.value; if (!value) onRepeatCountChange(undefined); else { const count = Number(value); if (Number.isInteger(count) && count >= 1 && count <= maxRepeatCount) onRepeatCountChange(count) } }}/>{repeatBoundaryError && <small className="field-error" id={`pwl-repeat-boundary-${partId}`} role="alert">{repeatBoundaryError}</small>}<small className="field-hint">Leave blank to play once. {maxRepeatCount ? `This point count allows up to ${maxRepeatCount} cycles; ` : 'This table is too large for finite repeats; '}finite repeats require matching first and last levels.</small></label>}
   </div>

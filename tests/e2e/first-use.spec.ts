@@ -873,13 +873,17 @@ test('voltage source accepts a pasted PWL point table', { tag: '@ui-smoke' }, as
   await page.goto('/')
   await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
   await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('pwl')
-  await page.getByText('Paste point table').click()
+  await page.getByText('Import point table').click()
   await page.getByLabel('Paste PWL time and voltage rows').fill('time, voltage\n0, 0 V\n1m, 5 V\n2m, 0 V')
   await page.getByRole('button', { name: 'Replace points with pasted table' }).click()
   await expect(page.getByLabel('PWL point 2 time')).toHaveValue('1m')
   await expect(page.getByLabel('PWL point 2 voltage')).toHaveValue('5 V')
   await expect(page.getByLabel('PWL point 3 time')).toHaveValue('2m')
   await expect(page.getByLabel('PWL point 3 voltage')).toHaveValue('0 V')
+  await page.getByLabel('Import PWL point file').setInputFiles({ name: 'drive.csv', mimeType: 'text/csv', buffer: Buffer.from('time, voltage\n0, 1 V\n3m, 4 V') })
+  await expect(page.getByLabel('PWL point 2 time')).toHaveValue('3m')
+  await expect(page.getByLabel('PWL point 2 voltage')).toHaveValue('4 V')
+  await expect(page.getByLabel('PWL point 3 time')).toHaveCount(0)
 })
 
 test('invalid component values select and focus the value field before engine checks', async ({ page }) => {
