@@ -1312,7 +1312,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   }
   const viewBox = `${viewportLeft} ${viewportTop} ${viewWidth} ${viewHeight}`
   const contextPart = contextMenu?.kind === 'part' ? project.parts.find((part) => part.id === contextMenu.id) : undefined
-  const contextPinNames = contextPart ? contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name) : []
+  const contextPinNames = contextPart ? (contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name)).map((name, index) => name === 'pin1' || name === 'pin2' ? `terminal ${index + 1}` : name) : []
   const currentProbesUnavailable = simulationResult?.analysis === 'ac' || simulationResult?.analysis === 'noise'
   const wireFlowSampler = useMemo(() => currentAnimationEnabled && resultIsCurrent && resultConnectivity
     ? createWireCurrentFlowSampler(project, resultConnectivity)

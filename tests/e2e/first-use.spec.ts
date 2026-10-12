@@ -386,7 +386,7 @@ test('right-click probes wire voltage to ground and component voltage across its
   await expect(page.locator('.plot-window')).toHaveCount(0)
 
   await page.locator('.circuit-part[data-part-id="p-r1"]').click({ button: 'right' })
-  await page.getByRole('menuitem', { name: /Plot voltage across pin1 → pin2/ }).click()
+  await page.getByRole('menuitem', { name: 'Plot voltage across terminal 1 → terminal 2' }).click()
   const voltageChooser = page.getByRole('dialog', { name: 'V(R1)' })
   await voltageChooser.getByRole('button', { name: 'Open waveform' }).click()
   const plot = page.locator('.plot-window').last()
@@ -1643,7 +1643,7 @@ test('floating waveform windows can be moved and resized from the keyboard', { t
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await page.locator('.circuit-part[data-part-id="p-r1"]').click({ button: 'right' })
-  await page.getByRole('menuitem', { name: /Plot voltage across pin1/ }).click()
+  await page.getByRole('menuitem', { name: /Plot voltage across terminal 1/ }).click()
   const destination = page.getByRole('dialog', { name: 'V(R1)' })
   await destination.getByRole('radio', { name: /New waveform window/ }).check()
   await destination.getByRole('button', { name: 'Open waveform' }).click()
