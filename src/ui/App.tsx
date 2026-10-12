@@ -1588,6 +1588,8 @@ export default function App() {
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && !simulationResultStale)
   const lessonNextStep = simulationResult && !simulationResultStale ? exampleLesson?.id === 'voltage-divider'
     ? 'Select R2, change its resistance to 2 kΩ in Properties, and run again. The midpoint should rise from 5 V to about 6.67 V.'
+    : exampleLesson?.id === 'rl-step'
+      ? 'Select R1, change its resistance from 100 Ω to 200 Ω, and run again. The time constant halves from 1 ms to 0.5 ms, and the current approaches 25 mA instead of 50 mA.'
     : simulationResult.analysis === 'tran'
     ? 'Pause playback, then move the Time slider. Click the waveform to place the cursor and read each selected voltage or current at that moment.'
     : simulationResult.analysis === 'ac'

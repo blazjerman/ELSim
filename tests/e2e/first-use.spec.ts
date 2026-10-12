@@ -2401,6 +2401,16 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
   const decayingCurrent = await currentAt(0.9)
   expect(decayingCurrent).toBeLessThan(0.01)
   expect(decayingCurrent).toBeLessThan(risingCurrent / 10)
+  await expect(page.locator('.example-lesson-next-step')).toContainText('change its resistance from 100 Ω to 200 Ω')
+  await page.locator('.circuit-part[data-part-id="rl-step-r1"]').click()
+  await page.getByRole('textbox', { name: 'Resistance (Ω)' }).fill('200 Ω')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const reducedCurrent = await currentAt(0.4)
+  expect(reducedCurrent).toBeGreaterThan(0.02)
+  expect(reducedCurrent).toBeLessThan(0.03)
+  expect(reducedCurrent).toBeLessThan(risingCurrent * 0.7)
 })
 
 test('voltage-divider example teaches and solves the equal-resistor midpoint', { tag: '@ngspice' }, async ({ page }) => {
