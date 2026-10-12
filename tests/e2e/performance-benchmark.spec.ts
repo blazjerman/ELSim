@@ -11,6 +11,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect(page.locator('.project-title')).toHaveText('RC step response')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(4)
   await page.evaluate(() => {
@@ -55,6 +56,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
+  await expect(page.locator('.project-title')).toHaveText('Browser benchmark · 500 component animated transient')
   await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(501)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 90_000 })
