@@ -4,7 +4,7 @@ import {
   Activity, AlertTriangle, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, CircleDot, CircleHelp,
   Command, Copy, Download, FilePlus2, FlipHorizontal2, FolderOpen, Grid2X2,
   Lightbulb, Minus, MoreHorizontal, MousePointer2, Pause, Play, Plus, Redo2, RotateCcw, RotateCw,
-  Save, Scan, Search, SlidersHorizontal, Sparkles, Square, Trash2,
+  Save, Scan, Search, SlidersHorizontal, Square, Trash2,
   Undo2, Waypoints, X, Zap,
 } from 'lucide-react'
 import { analyzeConnectivity, hasSameElectricalConnectivity, pinNet } from '../domain/connectivity'
@@ -34,7 +34,7 @@ import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
 import { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
-import { createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type Project, type SymbolAsset, type TransientMeasurement, type Wire } from '../domain/project'
+import { createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type Project, type SymbolAsset, type TransientMeasurement, type Wire } from '../domain/project'
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef, referencePrefixForKind, validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlist'
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -43,7 +43,7 @@ import { clearProjectAutosave, readProjectAutosave, writeProjectAutosave } from 
 import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
-type ComponentCategory = 'all' | ComponentPaletteCategory
+type ComponentCategory = ComponentPaletteCategory
 type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 type Selection = { kind: 'part' | 'label'; id: string } | null
 type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
@@ -172,7 +172,7 @@ const CanvasNetLabel = memo(function CanvasNetLabel({ label, selected, tool, onP
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault(); event.stopPropagation(); onSelect(label.id)
   }} onPointerDown={(event) => onPointerDown(event, label.id)} onClick={(event) => {
-    if (tool === 'select') { event.stopPropagation(); onSelect(label.id, event.shiftKey) }
+    if (tool === 'select') { event.stopPropagation(); onSelect(label.id, event.shiftKey || event.ctrlKey || event.metaKey) }
   }}><text x={label.x + 9} y={label.y - 9} stroke="transparent" strokeWidth="30" pointerEvents="all">{label.name}</text></g>
 })
 
@@ -393,7 +393,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     event.preventDefault()
     if (tool === 'probe') { if (part.kind !== 'ground') onProbe(part.id); return }
     if (tool === 'select') { onSelect(part.id); if (isInteractiveSwitch) onSwitchToggle(part.id) }
-  }} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); onSelect(part.id, event.shiftKey); if (isInteractiveSwitch && !event.shiftKey) onSwitchToggle(part.id) } }}>
+  }} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); const additive = event.shiftKey || event.ctrlKey || event.metaKey; onSelect(part.id, additive); if (isInteractiveSwitch && !additive) onSwitchToggle(part.id) } }}>
     {(voltage !== undefined || current !== undefined || logicOutput !== undefined) && <title>{`${part.ref}: ${logicOutput === undefined ? '' : `output ${logicState} (${logicOutput.toPrecision(4)} V); `}${part.kind === 'lamp' ? `illustrative brightness follows solved electrical power; nominal ${part.animationNominalPower ?? 10} W; ` : part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'zener' ? 'reverse breakdown follows the selected Zener model; ' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'illustrative channel indicator follows solved drain current; ' : part.kind === 'capacitor' ? `plate charge animation follows solved charge; ${Number.isFinite(capacitorCharge) ? `Q = C × V = ${capacitorCharge!.toPrecision(4)} C; ` : ''}` : part.kind === 'inductor' ? `illustrative coil glow follows current; ${Number.isFinite(inductorEnergy) ? `magnetic field energy E = ½ L I² = ${inductorEnergy!.toPrecision(4)} J; ` : ''}` : ''}${voltage === undefined || logicOutput !== undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${currentDescription}`}`}</title>}
     <rect x={symbolBounds ? symbolBounds.minX - 14 : part.kind === 'subcircuit' ? -customWidth / 2 - 20 : -40} y={symbolBounds ? symbolBounds.minY - 24 : part.kind === 'subcircuit' ? -customHeight / 2 - 22 : -38} width={symbolBounds ? Math.max(80, symbolBounds.maxX - symbolBounds.minX + 28) : part.kind === 'subcircuit' ? customWidth + 40 : 80} height={symbolBounds ? Math.max(76, symbolBounds.maxY - symbolBounds.minY + 48) : part.kind === 'subcircuit' ? customHeight + 44 : 76} rx="9" className="part-hit" />
     {detailed || symbol ? <><g transform={part.flipX ? 'scale(-1 1)' : undefined}>
@@ -467,13 +467,14 @@ function sameView(left: Project['view'], right: Project['view']): boolean {
   return left.zoom === right.zoom && left.panX === right.panX && left.panY === right.panY
 }
 
-function SimulationPlaybackControls({ axis, available, running, onRunningChange }: { axis?: Float64Array; available: boolean; running: boolean; onRunningChange: (running: boolean) => void }) {
+function SimulationPlaybackControls({ axis, available, running, rate, onRateChange, onRunningChange }: { axis?: Float64Array; available: boolean; running: boolean; rate: number | 'realtime'; onRateChange: (rate: number | 'realtime') => void; onRunningChange: (running: boolean) => void }) {
   const sampleIndex = useSimulationCursor()
   const activeSample = axis?.length ? Math.max(0, Math.min(axis.length - 1, sampleIndex ?? axis.length - 1)) : 0
   return <div className="menu-group playback-controls" role="group" aria-label="Result playback">
     <IconButton title={running ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!running && (sampleIndex ?? 0) >= (axis?.length ?? 1) - 1) setSimulationCursor(0); onRunningChange(!running) }} active={running} disabled={!available}>{running ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton>
     <IconButton title="Rewind result playback to the first solved sample" onClick={() => { onRunningChange(false); setSimulationCursor(0) }} disabled={!available}><RotateCcw size={14}/></IconButton>
     {axis?.length ? <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" aria-valuetext={`${axis[activeSample].toPrecision(4)} seconds`} type="range" min="0" max={axis.length - 1} step="1" value={activeSample} disabled={!available} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><output>{axis[activeSample].toPrecision(4)} s</output></label> : null}
+    <label className="playback-rate-control"><span>Playback</span><select aria-label="Simulation playback speed" value={rate} disabled={!available} onChange={(event) => onRateChange(event.target.value === 'realtime' ? 'realtime' : Number(event.target.value))}>{[0.1, ...Array.from({ length: 12 }, (_, index) => (index + 1) * 0.25), 4, 5, 10].map((speed) => <option key={speed} value={speed}>{speed === 1 ? '1× · current' : `${speed}×`}</option>)}<option value="realtime">Real time · 1 s/s</option></select></label>
   </div>
 }
 
@@ -532,7 +533,7 @@ function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onAct
       setKeyboardAnnouncement(event.shiftKey
         ? `${title} resized to ${Math.round(next.width)} by ${Math.round(next.height)} pixels.`
         : `${title} moved to ${Math.round(next.x)} pixels from the left and ${Math.round(next.y)} pixels from the top.`)
-    }} onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> {title}</span><span><button aria-label={`Close ${title}`} title="Close waveform window" onClick={onClose}><X size={14}/></button></span></div>
+    }} onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button') || event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> {title}</span><span><button aria-label={`Close ${title}`} title="Close waveform window" onClick={onClose}><X size={14}/></button></span></div>
     <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{keyboardAnnouncement}</span>
     <div className="plot-window-content">{children}</div>
   </section>
@@ -659,11 +660,11 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
   spacePan: boolean
   onProbe: (id: string) => void
   onBeginDrag: (event: PointerEvent<SVGGElement>, id: string) => void
-  onSelect: (id: string, focusEndpoint?: boolean) => void
+  onSelect: (id: string, additive?: boolean, focusEndpoint?: boolean) => void
   onHover: (id?: string) => void
 }) {
   const [[x1, y1], [x2, y2]] = wire.points
-  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}. Press Enter to edit endpoints; press Escape to return here.`} aria-pressed={selected} aria-keyshortcuts="Enter Space Escape ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id, true) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(wire.id) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
+  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}. Press Enter to edit endpoints; press Escape to return here.`} aria-pressed={selected} aria-keyshortcuts="Enter Space Escape ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id, false, true) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(wire.id, event.shiftKey || event.ctrlKey || event.metaKey) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="14" strokeLinecap="round"/>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round"/>
   </g>
@@ -855,7 +856,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
   }, [])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
-  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'component-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; pointIndex?: number; points?: [number, number][]; group?: { parts: Part[]; wires: Project['wires']; netLabels: Project['netLabels'] } } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'component-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; additive?: boolean; pointIndex?: number; points?: [number, number][]; group?: { parts: Part[]; wires: Project['wires']; netLabels: Project['netLabels'] } } | null>(null)
   const dragPreviewElements = useRef<{ element: SVGGElement; transform: string | null }[]>([])
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
@@ -1092,14 +1093,14 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     const target = event.target instanceof Element ? event.target : null
     if (target?.closest('.circuit-part, .wire-line, .canvas-label, .schematic-context-menu')) return
     const point = pointFromEvent(event)
-    drag.current = { kind: 'box-select', id: 'selection', pointer: event.pointerId, x: point.x, y: point.y, originX: point.x, originY: point.y, screenX: event.clientX, screenY: event.clientY }
+    drag.current = { kind: 'box-select', id: 'selection', pointer: event.pointerId, x: point.x, y: point.y, originX: point.x, originY: point.y, screenX: event.clientX, screenY: event.clientY, additive: event.shiftKey || event.ctrlKey || event.metaKey }
     setSelectionBox({ x: point.x, y: point.y, width: 0, height: 0, crossing: false })
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const beginDrag = (event: PointerEvent<SVGGElement>, kind: 'part' | 'wire' | 'label', id: string) => {
     if (pendingComponent) return
     if (event.button !== 0 || spacePan) return
-    if ((kind === 'part' || kind === 'label') && event.shiftKey) return
+    if (event.shiftKey || event.ctrlKey || event.metaKey) return
     const part = kind === 'part' ? project.parts.find((item) => item.id === id) : undefined
     const wire = kind === 'wire' ? project.wires.find((item) => item.id === id) : undefined
     const label = kind === 'label' ? project.netLabels.find((item) => item.id === id) : undefined
@@ -1131,7 +1132,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     } else if (kind === 'part' && !selectedPartIdSet.has(id)) {
       setSelectedPartIds(partIds)
     }
-    if (kind === 'wire') { if (!alreadySelected) setSelectedWireId(id) }
+    if (kind === 'wire') { if (!alreadySelected) { setSelectedWireId(id); setSelection(null) } }
     else setSelection({ kind, id })
     beginEdit()
     const groupSize = group.parts.length + group.wires.length + group.netLabels.length
@@ -1256,17 +1257,24 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
     event.preventDefault()
     event.stopPropagation()
     const point = pointFromEvent(event)
-    setSelectedWireId(id)
+    setSelectedWireId(id); setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null)
     beginEdit()
     drag.current = { kind: 'wire-point', id, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, pointIndex, points: wire.points.map(([x, y]) => [x, y]) }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const probeWireStable = useCallback((id: string) => wireEventHandlers.current.probeWire(id), [])
-  const selectWire = useCallback((id: string, focusEndpoint = false) => {
-    setSelectedWireId(id)
-    if (!focusEndpoint) return
+  const selectedWireIdsRef = useRef(selectedWireIds)
+  selectedWireIdsRef.current = selectedWireIds
+  const selectWire = useCallback((id: string, additive = false, focusEndpoint = false) => {
+    if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return }
+    const current = selectedWireIdsRef.current
+    const next = additive ? current.includes(id) ? current.filter((item) => item !== id) : [...current, id] : [id]
+    selectedWireIdsRef.current = next
+    setSelectedWireIds(next)
+    if (!additive) { setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null) }
+    if (!focusEndpoint || !next.includes(id)) return
     window.requestAnimationFrame(() => svg.current?.querySelector<SVGCircleElement>(`[data-wire-endpoint-id="${CSS.escape(id)}"][data-endpoint-index="0"]`)?.focus())
-  }, [setSelectedWireId])
+  }, [setSelectedWireIds, setSelectedPartIds, setSelectedNetLabelIds, setSelection])
   const beginPan = (event: PointerEvent<SVGSVGElement>) => {
     if (event.button !== 1 && !(event.button === 0 && spacePan)) return
     event.preventDefault()
@@ -1372,10 +1380,13 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
             ? bounds.right >= left && bounds.left <= right && bounds.bottom >= top && bounds.top <= bottom
             : bounds.left >= left && bounds.right <= right && bounds.top >= top && bounds.bottom <= bottom
         }).map((label) => label.id)
-        setSelectedPartIds(selectedIds)
-        setSelectedWireIds(selectedWireIds)
-        setSelectedNetLabelIds(selectedNetLabelIds)
-        setSelection(selectedIds.length ? { kind: 'part', id: selectedIds.at(-1)! } : selectedNetLabelIds.length ? { kind: 'label', id: selectedNetLabelIds.at(-1)! } : null)
+        const nextPartIds = boxDrag.additive ? [...new Set([...selectedPartIdsRef.current, ...selectedIds])] : selectedIds
+        const nextWireIds = boxDrag.additive ? [...new Set([...selectedWireIdsRef.current, ...selectedWireIds])] : selectedWireIds
+        const nextLabelIds = boxDrag.additive ? [...new Set([...selectedNetLabelIdsRef.current, ...selectedNetLabelIds])] : selectedNetLabelIds
+        setSelectedPartIds(nextPartIds)
+        setSelectedWireIds(nextWireIds)
+        setSelectedNetLabelIds(nextLabelIds)
+        setSelection(nextPartIds.length ? { kind: 'part', id: nextPartIds.at(-1)! } : nextLabelIds.length ? { kind: 'label', id: nextLabelIds.at(-1)! } : null)
         suppressCanvasClick.current = true
       }
       setSelectionBox(null)
@@ -1527,7 +1538,7 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
         const hit = wireNetAt(project, point, 12)
         const connectivity = analyzeConnectivity(project)
         const node = hit ? connectivity.wireNets.get(hit.wireId) : undefined
-        setSelectedWireId(id)
+        setSelectedWireId(id); setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null)
         setContextMenu({ kind: 'wire', id, x, y, point: hit ? { x: hit.point.x, y: hit.point.y } : point, ...(node ? { node } : {}) })
       } else setContextMenu(null)
     }} onWheel={(event) => {
@@ -1675,8 +1686,7 @@ export default function App() {
   const [parameterDefaultDrafts, setParameterDefaultDrafts] = useState<Record<string, string>>({})
   const [parameterFormError, setParameterFormError] = useState('')
   const [additionalPlotPanels, setAdditionalPlotPanels] = useState<PlotPanel[]>(() => project.plotSettings?.panels ?? [])
-  const [pendingWaveformTrace, setPendingWaveformTrace] = useState<{ traceIds: string[]; label: string } | null>(null)
-  const [waveformDestination, setWaveformDestination] = useState<'new' | 'current'>('new')
+  const [pendingWaveformTrace, setPendingWaveformTrace] = useState<{ traceIds: string[]; label: string; componentVoltageProbe?: ComponentVoltageProbe } | null>(null)
   const waveformReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const closeWaveformDestination = () => {
     setPendingWaveformTrace(null)
@@ -1687,6 +1697,16 @@ export default function App() {
   const [switchSolveQueued, setSwitchSolveQueued] = useState(false)
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   const [playbackRunning, setPlaybackRunning] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState<number | 'realtime'>(() => {
+    const stored = localStorage.getItem('elsim:simulation-playback-rate')
+    if (stored === 'realtime') return stored
+    const value = Number(stored)
+    const supported = [0.1, ...Array.from({ length: 12 }, (_, index) => (index + 1) * 0.25), 4, 5, 10]
+    if (supported.includes(value)) return value
+    const previousAnimationSpeed = Number(localStorage.getItem('elsim:current-animation-speed'))
+    return supported.includes(previousAnimationSpeed) ? previousAnimationSpeed : 1
+  })
+  useEffect(() => { localStorage.setItem('elsim:simulation-playback-rate', String(playbackRate)) }, [playbackRate])
   const [animationScale, setAnimationScale] = useState(() => {
     const value = Number(localStorage.getItem('elsim:current-animation-scale'))
     return value > 0 ? Math.min(3, Math.max(0.5, value)) : 1
@@ -1710,7 +1730,7 @@ export default function App() {
   const [visibleImportedSubcircuits, setVisibleImportedSubcircuits] = useState(50)
   const [importedDeviceModelQuery, setImportedDeviceModelQuery] = useState('')
   const [visibleImportedDeviceModelCount, setVisibleImportedDeviceModelCount] = useState(50)
-  const [componentCategory, setComponentCategory] = useState<ComponentCategory>('all')
+  const [componentCategory, setComponentCategory] = useState<ComponentCategory>('basics')
   const [tourStep, setTourStep] = useState<number | null>(null)
   const tourNextButtonRef = useRef<HTMLButtonElement>(null)
   const tourTriggerRef = useRef<HTMLElement | null>(null)
@@ -2193,15 +2213,40 @@ export default function App() {
               : 'Read the solved values in the operating-point table. Right-click a wire or component to add a voltage or current waveform.'
         : null
   useEffect(() => {
-    if (!playbackRunning || !playbackAvailable || !transientAxis) return
-    const stride = Math.max(1, Math.ceil(transientAxis.length / 120))
-    const timer = window.setInterval(() => {
-      const next = Math.min((getSimulationCursor() ?? 0) + stride, transientAxis.length - 1)
+    if (!playbackRunning || !playbackAvailable || !transientAxis?.length) return
+    if (playbackRate !== 'realtime') {
+      const stride = Math.max(1, Math.ceil(transientAxis.length / 120))
+      const timer = window.setInterval(() => {
+        const next = Math.min((getSimulationCursor() ?? 0) + stride, transientAxis.length - 1)
+        setSimulationCursor(next)
+        if (next >= transientAxis.length - 1) setPlaybackRunning(false)
+      }, Math.max(10, Math.round(33 / playbackRate)))
+      return () => window.clearInterval(timer)
+    }
+    const startIndex = Math.max(0, Math.min(transientAxis.length - 1, getSimulationCursor() ?? 0))
+    const startTime = transientAxis[startIndex]
+    const wallStart = performance.now()
+    let frame = 0
+    const advance = (now: number) => {
+      const target = startTime + (now - wallStart) / 1000
+      if (target >= transientAxis[transientAxis.length - 1]) {
+        setSimulationCursor(transientAxis.length - 1)
+        setPlaybackRunning(false)
+        return
+      }
+      let low = startIndex, high = transientAxis.length - 1
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2)
+        if (transientAxis[middle] < target) low = middle + 1
+        else high = middle
+      }
+      const next = low > startIndex && target - transientAxis[low - 1] <= transientAxis[low] - target ? low - 1 : low
       setSimulationCursor(next)
-      if (next >= transientAxis.length - 1) setPlaybackRunning(false)
-    }, Math.max(10, Math.round(33 / animationSpeed)))
-    return () => window.clearInterval(timer)
-  }, [playbackRunning, playbackAvailable, transientAxis, animationSpeed])
+      frame = requestAnimationFrame(advance)
+    }
+    frame = requestAnimationFrame(advance)
+    return () => cancelAnimationFrame(frame)
+  }, [playbackRunning, playbackAvailable, transientAxis, playbackRate])
   const electricalSheetsRef = useRef(project.sheets)
   if (!sameElectricalSheetData(electricalSheetsRef.current, project.sheets)) electricalSheetsRef.current = project.sheets
   const modelLibraryRevision = useMemo(() => JSON.stringify((project.modelAssets ?? []).map((asset) => [asset.id, asset.filename, asset.sha256, asset.selectedSections ?? []])), [project.modelAssets])
@@ -2313,7 +2358,7 @@ export default function App() {
     })
   }, [])
   useEffect(() => { setAdditionalPlotPanels(project.plotSettings?.panels ?? []) }, [project.rootSheetId, project.plotSettings?.panels])
-  const createWaveformWindow = (traceIds: string[]) => {
+  const createWaveformWindow = (traceIds: string[], componentVoltageProbe?: ComponentVoltageProbe) => {
     if (additionalPlotPanels.length >= 8) { setNotice('Close a waveform window before opening another. A project can show up to eight windows.'); return null }
     const offset = (additionalPlotPanels.length % 5) * 26
     const canvasToolbarBottom = Math.max(48, Math.ceil(document.querySelector('.canvas-toolbar')?.getBoundingClientRect().bottom ?? document.querySelector('.workspace')?.getBoundingClientRect().top ?? 112))
@@ -2324,6 +2369,7 @@ export default function App() {
       id: crypto.randomUUID(),
       bounds: { x: Math.max(8, window.innerWidth - width - 16 - offset), y: top, width, height },
       selectedTraceIds: [...new Set(traceIds)],
+      ...(componentVoltageProbe ? { componentVoltageProbes: Object.fromEntries(traceIds.map((traceId) => [traceId, componentVoltageProbe])) } : {}),
       ranges: { ...(project.plotSettings?.ranges ?? {}) },
     }
     saveAdditionalPlotPanels([...additionalPlotPanels, panel])
@@ -2347,16 +2393,18 @@ export default function App() {
     })))
     setNotice(`Tiled ${windows.length} waveform windows. Each window keeps its own traces and zoom.`)
   }
-  const commitWaveformTrace = () => {
+  const commitWaveformTrace = (destination: 'new' | 'current') => {
     if (!pendingWaveformTrace) return
     const ids = [...new Set(pendingWaveformTrace.traceIds)]
-    if (waveformDestination === 'current' && additionalPlotPanels.length) {
+    if (destination === 'current' && additionalPlotPanels.length) {
       const current = additionalPlotPanels.at(-1)!
-      const next = [...additionalPlotPanels.slice(0, -1), { ...current, selectedTraceIds: [...new Set([...current.selectedTraceIds, ...ids])] }]
+      const componentVoltageProbes = { ...(current.componentVoltageProbes ?? {}) }
+      if (pendingWaveformTrace.componentVoltageProbe) for (const id of ids) componentVoltageProbes[id] = pendingWaveformTrace.componentVoltageProbe
+      const next = [...additionalPlotPanels.slice(0, -1), { ...current, selectedTraceIds: [...new Set([...current.selectedTraceIds, ...ids])], ...(Object.keys(componentVoltageProbes).length ? { componentVoltageProbes } : {}) }]
       saveAdditionalPlotPanels(next)
       setNotice(`Added ${pendingWaveformTrace.label} to the current waveform window.`)
     } else {
-      const id = createWaveformWindow(ids)
+      const id = createWaveformWindow(ids, pendingWaveformTrace.componentVoltageProbe)
       if (!id) return
       setNotice(`Opened ${pendingWaveformTrace.label} in a waveform window.`)
     }
@@ -2597,7 +2645,7 @@ export default function App() {
     updatePartUiState(selectedIds, selected?.id ?? project.parts[0]?.id)
   }, [selectedPartIds, selected, project.parts])
   const filteredPalette = componentPaletteItems.filter(({ kind }) => {
-    const matchesCategory = componentCategory === 'all' || componentCategoryKinds[componentCategory].includes(kind)
+    const matchesCategory = Boolean(componentQuery.trim()) || componentCategoryKinds[componentCategory].includes(kind)
     const definition = componentDefinitionFor(kind)
     const matchesSearch = `${definition.paletteName ?? definition.name} ${definition.name} ${kindNames[kind]} ${definition.paletteSubtitle ?? ''}`.toLowerCase().includes(componentQuery.trim().toLowerCase())
     return (componentQuery.trim() || matchesCategory) && matchesSearch
@@ -2609,7 +2657,7 @@ export default function App() {
     setPendingPolarizedCapacitor(kind === 'capacitor' && polarized)
     setPendingLogicOperation(kind === 'logicGate' ? logicOperation ?? 'and' : undefined)
     setTool('select')
-    setComponentCategory('all')
+    setComponentCategory('basics')
     setComponentQuery('')
     const definition = componentDefinitionFor(kind)
     setNotice(`${definition.paletteName ?? definition.name} selected. Drag on the schematic to place it and set its orientation.`)
@@ -3252,7 +3300,6 @@ export default function App() {
           ? document.querySelector<SVGElement>(`[data-net-label-id="${CSS.escape(selection.id)}"]`)
           : null
     waveformReturnFocusRef.current = focusTarget
-    setWaveformDestination(additionalPlotPanels.length ? 'current' : 'new')
     setPendingWaveformTrace({ traceIds: relatedIds, label: trace.label })
   }
   const addComponentVoltageProbe = (partId: string, positivePin = 0, negativePin = 1) => {
@@ -3281,10 +3328,10 @@ export default function App() {
     const additions = derived.filter((trace) => !existingIds.has(trace.id))
     if (additions.length) setSimulationResult({ ...simulationResult, traces: [...simulationResult.traces, ...additions] })
     const ids = derived.map((trace) => trace.id)
+    const componentVoltageProbe: ComponentVoltageProbe = { partId, positivePin, negativePin, positiveNet, negativeNet, positiveVector, negativeVector, ref, vectorRef }
     const pinName = (index: number) => index < 0 ? 'ground' : part.modelPins?.[index] ?? componentDefinitionFor(part.kind).pins[index]?.name ?? `pin ${index + 1}`
     waveformReturnFocusRef.current = document.querySelector<SVGElement>(`[data-part-id="${CSS.escape(partId)}"]`)
-    setWaveformDestination(additionalPlotPanels.length ? 'current' : 'new')
-    setPendingWaveformTrace({ traceIds: ids, label: `V(${ref})` })
+    setPendingWaveformTrace({ traceIds: ids, label: `V(${ref})`, componentVoltageProbe })
     setNotice(`Voltage is measured from pin ${positivePin + 1} (${pinName(positivePin)}) to ${negativePin < 0 ? 'ground' : `pin ${negativePin + 1} (${pinName(negativePin)})`}.`)
   }
   const exportWaveformCsv = (traceIds: string[] = selectedTraceIds) => {
@@ -3408,7 +3455,6 @@ export default function App() {
             return
           }
         }
-        setSimulationResult(response.result)
         const transientSamples = response.result.analysis === 'tran' ? response.result.traces[0]?.axis.length ?? 1 : 0
         setSimulationCursor(response.result.analysis === 'tran' ? 0 : null)
         setPlaybackRunning(!prefersReducedMotionRef.current && response.result.analysis === 'tran' && transientSamples > 1)
@@ -3434,16 +3480,31 @@ export default function App() {
         if (!initialTraces.length && response.result.analysis !== 'noise') initialTraces = response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.baseId ?? trace.id)).slice(0, response.result.analysis === 'op' ? undefined : response.result.analysis === 'dc' ? undefined : 2).map((trace) => trace.id)
         setSelectedTraceIds(initialTraces)
         savePlotSettings((settings) => ({ ...settings, selectedTraceIds: initialTraces }))
-        const traceIds = new Set(response.result.traces.map((trace) => trace.id))
         const savedPanels = projectRef.current.plotSettings?.panels ?? []
-        if (savedPanels.length) saveAdditionalPlotPanels(savedPanels.map((panel) => {
-          const restored = panel.selectedTraceIds.filter((id) => traceIds.has(id))
-          return { ...panel, selectedTraceIds: restored.length ? restored : initialTraces }
-        }))
+        if (savedPanels.length) {
+          const currentProject = projectRef.current
+          const currentConnectivity = analyzeConnectivity(currentProject)
+          const nextPanels = savedPanels.map((panel) => {
+            const componentVoltageProbes = { ...(panel.componentVoltageProbes ?? {}) }
+            for (const [traceId, probe] of Object.entries(componentVoltageProbes)) {
+              if (!panel.selectedTraceIds.includes(traceId)) { delete componentVoltageProbes[traceId]; continue }
+              const part = currentProject.parts.find((candidate) => candidate.id === probe.partId)
+              const positiveNet = part ? pinNet(currentConnectivity, part, probe.positivePin) : 'unconnected'
+              const negativeNet = !part ? 'unconnected' : probe.negativePin < 0 ? '0' : pinNet(currentConnectivity, part, probe.negativePin)
+              if (positiveNet !== probe.positiveNet || negativeNet !== probe.negativeNet) { delete componentVoltageProbes[traceId]; continue }
+              const derived = deriveComponentVoltageTraces(response.result.traces, probe.positiveVector, probe.negativeVector, probe.ref, probe.vectorRef)
+              response.result.traces.push(...derived.filter((trace) => !response.result.traces.some((existing) => existing.id === trace.id)))
+            }
+            const traceIds = new Set(response.result.traces.map((trace) => trace.id))
+            return { ...panel, selectedTraceIds: panel.selectedTraceIds.filter((id) => traceIds.has(id)), componentVoltageProbes: Object.keys(componentVoltageProbes).length ? componentVoltageProbes : undefined }
+          })
+          saveAdditionalPlotPanels(nextPanels)
+        }
         else {
           saveAdditionalPlotPanels([])
           if (response.result.analysis === 'noise' && initialTraces.length) createWaveformWindow(initialTraces)
         }
+        setSimulationResult(response.result)
         setRunState('idle')
         if (hierarchyWalkthroughStep === 0) {
           setHierarchyWalkthroughStep(1)
@@ -3741,7 +3802,7 @@ export default function App() {
       <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (r)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (Y)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected (Delete)" onClick={deleteSelection} disabled={!selection && !selectedPartIds.length && !selectedWireIds.length && !selectedNetLabelIds.length}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => changeAnalysis(event.target.value as Project['simulation']['analysis'])}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option><option value="noise">Noise analysis</option></select><ChevronDown size={13}/></label>
-      {simulationResult?.analysis === 'tran' && <SimulationPlaybackControls axis={transientAxis} available={playbackAvailable} running={playbackRunning} onRunningChange={setPlaybackRunning}/>}{(simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && <div className="menu-group"><details className="animation-tuning"><summary aria-label="Current animation settings" title="Current animation size and speed"><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div>}
+      {simulationResult?.analysis === 'tran' && <SimulationPlaybackControls axis={transientAxis} available={playbackAvailable} running={playbackRunning} rate={playbackRate} onRateChange={setPlaybackRate} onRunningChange={setPlaybackRunning}/>}{(simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && <div className="menu-group"><details className="animation-tuning"><summary aria-label="Current animation settings" title="Current animation size and speed"><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Flow size <output>{animationScale.toFixed(1)}×</output><input type="range" min="0.5" max="3" step="0.25" aria-label="Current animation size" value={animationScale} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationScale(Number(event.target.value))}/></label><label>Animation speed <output>{animationSpeed.toFixed(2)}×</output><input type="range" min="0.25" max="3" step="0.25" aria-label="Current animation speed" value={animationSpeed} disabled={!currentAnimationEnabled} onChange={(event) => setAnimationSpeed(Number(event.target.value))}/></label></div></details></div>}
       {simulationResultStale && <div className="result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</div>}
       <div className="menu-group waveform-window-actions"><IconButton title="Open generated netlist" aria-label="Netlist" onClick={() => setNetlistOpen(true)}><Command size={14}/></IconButton><IconButton title="Tile waveform windows" aria-label="Tile waveform windows" onClick={tilePlotWindows} disabled={additionalPlotPanels.length < 2}><Grid2X2 size={14}/></IconButton>{simulationResult && <IconButton title="Download simulation run report" aria-label="Download simulation run report" onClick={downloadRunReport}><Download size={14}/></IconButton>}</div>
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit <span>{electricalIssues.length}</span></button>
@@ -3760,12 +3821,11 @@ export default function App() {
         <div className="panel-heading"><div><span className="eyebrow">DESIGN</span><h2>Components</h2></div><span className="library-count" aria-label={`${filteredPalette.length} components shown`}>{filteredPalette.length}</span></div>
         <label className="search-box"><Search size={15}/><input ref={componentSearchRef} aria-label="Find a component" placeholder="Find a component" value={componentQuery} onChange={(event) => setComponentQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && filteredPalette[0]) { event.preventDefault(); selectComponentForPlacement(filteredPalette[0].kind); componentSearchRef.current?.blur() } }}/>{componentQuery ? <button type="button" aria-label="Clear component search" onClick={() => { setComponentQuery(''); componentSearchRef.current?.focus() }}><X size={13}/></button> : <kbd>/</kbd>}</label>
         <div className="library-categories" role="group" aria-label="Component category">
-          <button className={`category${componentCategory === 'all' ? ' active' : ''}`} aria-pressed={componentCategory === 'all'} onClick={() => setComponentCategory('all')}><Grid2X2 size={14}/> All parts</button>
           <button className={`category${componentCategory === 'basics' ? ' active' : ''}`} aria-pressed={componentCategory === 'basics'} onClick={() => setComponentCategory('basics')}><Zap size={14}/> Basics</button>
           <button className={`category${componentCategory === 'semiconductors' ? ' active' : ''}`} aria-pressed={componentCategory === 'semiconductors'} onClick={() => setComponentCategory('semiconductors')}><Waypoints size={14}/> Semiconductors</button>
           <button className={`category${componentCategory === 'controlled' ? ' active' : ''}`} aria-pressed={componentCategory === 'controlled'} onClick={() => setComponentCategory('controlled')}><Activity size={14}/> Controlled sources</button>
         </div>
-        <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'all' ? 'ALL COMPONENTS' : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
+        <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
         {filteredPalette.length ? <ComponentPalette items={filteredPalette} pendingKind={pendingComponentKind} onSelect={selectComponentForPlacement}/> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
         {project.sheets.some((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)) && <div className="imported-models"><div className="component-list-label">PROJECT BLOCKS</div>{project.sheets.filter((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)).map((sheet) => <div className="imported-model" key={sheet.id}><div><strong>{sheet.name}</strong><span>{sheet.ports.length} ordered ports · {sheet.ports.map((port) => port.name).join(', ')}</span><small>Defined by this project</small><button className="place-model" onClick={() => placeSheetBlock(sheet)}>Place block</button></div><button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button></div>)}</div>}
         {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.missingIncludes.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Model dependency report"><strong>MODEL DEPENDENCIES</strong>{modelDependencyAnalysis.missingIncludes.length > 0 && <><p>ELSim never reads paths from a model file. Import each referenced file into this project; imported file contents are added directly to the generated netlist.</p><ul>{modelDependencyAnalysis.missingIncludes.slice(0, 20).map((include, index) => <li key={`${include.assetId}:${include.sourceLine}:${index}`}><code>{include.reference || '(empty include)'}</code> · {include.assetFilename}:{include.sourceLine} — {include.reason === 'missing' ? 'file not imported' : include.reason === 'ambiguous' ? 'matches multiple imported filenames' : 'path is unsupported; use a project-local relative path'}</li>)}</ul>{modelDependencyAnalysis.missingIncludes.some((include) => include.reason === 'missing') && <button className="place-model" onClick={() => { if (modelFileInput.current) { modelFileInput.current.value = ''; modelFileInput.current.click() } }}>Import referenced model files</button>}{modelDependencyAnalysis.missingIncludes.length > 20 && <p>{modelDependencyAnalysis.missingIncludes.length - 20} additional include references are omitted.</p>}</>}{modelDependencyAnalysis.missing.length > 0 && <><p>These references are not present in the imported project libraries. Import the library that defines each name before running a circuit that uses it.</p><ul>{modelDependencyAnalysis.missing.slice(0, 20).map((dependency, index) => <li key={`${dependency.assetId}:${dependency.sourceLine}:${index}`}><code>{dependency.modelName}</code> ({dependency.kind}) · {dependency.filename}:{dependency.sourceLine}, in {dependency.owner}</li>)}</ul>{modelDependencyAnalysis.missing.length > 20 && <p>{modelDependencyAnalysis.missing.length - 20} additional missing references are omitted.</p>}</>}{modelDependencyAnalysis.recursiveChains.length > 0 && <><p>A circuit that instantiates one of these recursive call chains will fail in ngspice.</p><ul>{modelDependencyAnalysis.recursiveChains.map((chain) => <li key={chain.join(':')}>{chain.join(' → ')}</li>)}</ul></>}</div>}
@@ -3897,7 +3957,7 @@ export default function App() {
     {pendingModelImport && <div className="tour-backdrop" onClick={() => setPendingModelImport(null)}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="model-sections-title" onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogTab}><div className="modal-heading"><div><span className="eyebrow">MODEL LIBRARY · {pendingModelImport.filename}</span><h2 id="model-sections-title">Choose model sections</h2></div><button className="subtle-icon" aria-label="Cancel model section selection" onClick={() => setPendingModelImport(null)}><X size={17}/></button></div><p className="tour-copy">This library has multiple named sections. Select the section or sections your circuit needs. The original file stays intact in your project; only selected sections are loaded for simulation.</p><div className="example-list">{pendingModelImport.sections.map((section) => <label className="lt-export-license" key={section}><input type="checkbox" aria-label={`Include section ${section}`} checked={pendingModelImport.selectedSections.some((selected) => selected.toLowerCase() === section.toLowerCase())} onChange={(event) => setPendingModelImport((current) => !current ? current : ({ ...current, selectedSections: event.target.checked ? [...current.selectedSections, section] : current.selectedSections.filter((selected) => selected.toLowerCase() !== section.toLowerCase()) }))}/><span>{section}</span></label>)}</div><div className="modal-footer"><button className="tour-secondary" autoFocus onClick={() => setPendingModelImport(null)}>Cancel</button><button className="primary-small" disabled={!pendingModelImport.selectedSections.length} onClick={() => { const pending = pendingModelImport; void commitModelLibraryImport(pending.filename, pending.content, pending.replaceId, pending.selectedSections).then((imported) => { if (imported) setPendingModelImport(null) }) }}>Import selected sections</button></div></section></div>}
     {saveWarningOpen && <div className="tour-backdrop" onClick={closeSaveWarning}><section className="tour-dialog examples-dialog" role="alertdialog" aria-modal="true" aria-labelledby="export-warning-title" aria-describedby="export-warning-description" onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogTab}><div className="modal-heading"><div><span className="eyebrow">PORTABLE PROJECT EXPORT</span><h2 id="export-warning-title">Review imported files</h2></div><button className="subtle-icon" aria-label="Cancel project export" onClick={closeSaveWarning}><X size={17}/></button></div><p id="export-warning-description" className="tour-copy">This project file will include user-imported source files whose redistribution rights are unknown. Saving a copy for your own use does not grant permission to share or publish those files. Check with each file’s author or supplier before redistributing the archive.</p><ul className="export-warning-files">{exportProvenanceFiles().map((asset, index) => <li key={`${asset.type}:${asset.filename}:${index}`}><strong>{asset.filename}</strong><span>{asset.type} · redistribution rights unknown</span>{asset.sourceUrl && <span>Recorded source: {asset.sourceUrl}</span>}{asset.licenseReference && <span>User-entered license reference: {asset.licenseReference}</span>}{asset.rightsNotes && <span>{asset.rightsNotes}</span>}</li>)}</ul><div className="modal-footer"><button className="tour-secondary" autoFocus onClick={closeSaveWarning}>Cancel</button><button className="primary-small" onClick={() => { closeSaveWarning(); downloadProjectArchive() }}>Save project file</button></div></section></div>}
     {sheetSettingsOpen && <div className="tour-backdrop" onClick={() => { setSheetSettingsOpen(false); restoreDialogTriggerFocus(sheetSettingsTriggerRef) }}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="sheet-settings-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">REUSABLE BLOCK</span><h2 id="sheet-settings-title">{activeSheet?.name ?? 'Sheet'} ports and parameters</h2></div><button autoFocus className="subtle-icon" aria-label="Close sheet settings" onClick={() => { setSheetSettingsOpen(false); restoreDialogTriggerFocus(sheetSettingsTriggerRef) }}><X size={17}/></button></div><div className="block-parameter-form sheet-name-form"><label className="field-label">Sheet name<input aria-label="Sheet name" aria-describedby={sheetNameError ? 'sheet-name-error' : undefined} maxLength={80} value={sheetNameDraft} onChange={(event) => { setSheetNameDraft(event.target.value); setSheetNameError('') }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveSheetName() } }}/></label><button className="tour-secondary" disabled={!sheetNameDraft.trim() || sheetNameDraft.trim() === activeSheet?.name} onClick={saveSheetName}>Rename sheet</button>{sheetNameError && <small className="field-error" id="sheet-name-error" role="alert">{sheetNameError}</small>}</div>{activeSheet?.parentSheetId !== null && <div className="sheet-delete-control"><div><button className="tour-secondary" onClick={duplicateActiveSheet}>Duplicate sheet</button><button className="sheet-delete-button" disabled={Boolean(activeSheetDeleteReason)} onClick={deleteActiveSheet}>Delete sheet</button></div>{activeSheetDeleteReason && <small className="field-hint">{activeSheetDeleteReason}</small>}</div>}{activeSheet?.parentSheetId === null ? <p className="tour-copy">The root circuit is the project entry point. Add a child sheet to define a reusable block and its ports.</p> : <><p className="tour-copy">Expose labeled nodes as ordered pins. Choose each pin’s side and direction. Changes update all placed instances; removing a port may leave connected wires open, so review the parent sheet afterward.</p>{activeSheet?.ports.length ? <div className="example-list">{activeSheet.ports.map((port, index) => <article key={port.id}><div><strong>Pin {index + 1} · {port.name}</strong><p>Connected to the sheet net labeled {port.name}.</p><div className="port-metadata-controls"><label>Side<select aria-label={`Pin ${index + 1} placement`} value={port.side ?? 'auto'} onChange={(event) => updateSheetPort(port.id, { side: event.target.value as NonNullable<typeof port.side> })}><option value="auto">Automatic</option><option value="left">Left</option><option value="right">Right</option><option value="top">Top</option><option value="bottom">Bottom</option></select></label><label>Direction<select aria-label={`Pin ${index + 1} direction`} value={port.direction ?? 'inout'} onChange={(event) => updateSheetPort(port.id, { direction: event.target.value as NonNullable<typeof port.direction> })}><option value="input">Input</option><option value="output">Output</option><option value="inout">Bidirectional</option></select></label></div></div><div className="sheet-port-actions"><button className="tour-secondary" aria-label={`Move pin ${index + 1} up`} disabled={index === 0} onClick={() => moveSheetPort(port.id, -1)}>↑</button><button className="tour-secondary" aria-label={`Move pin ${index + 1} down`} disabled={index === (activeSheet?.ports.length ?? 0) - 1} onClick={() => moveSheetPort(port.id, 1)}>↓</button><button className="tour-secondary" disabled={activeSheetInstances.length > 0 && index !== (activeSheet?.ports.length ?? 0) - 1} title={activeSheetInstances.length > 0 && index !== (activeSheet?.ports.length ?? 0) - 1 ? "Remove ports from the end of the ordered pin list" : "Remove port"} onClick={() => removeSheetPort(port.id)}>Remove</button></div></article>)}</div> : <div className="example-confirm"><strong>No ports yet</strong><p>Add net labels to the circuit first, then expose those nodes here.</p></div>}<div className="field-label">Labeled node<select aria-label="Labeled node for new port" value={portSelection} onChange={(event) => setPortSelection(event.target.value)}><option value="">Choose a node</option>{[...new Set(activeSheet?.netLabels.map((label) => label.name).filter((name) => !activeSheet.ports.some((port) => port.name.toLowerCase() === name.toLowerCase())) ?? [])].map((name) => <option key={name} value={name}>{name}</option>)}</select></div><div className="modal-footer"><span>Port order follows the list above. With placed blocks, remove pins from the end.</span><button className="primary-small" disabled={!portSelection} onClick={() => { addSheetPort(portSelection); setPortSelection('') }}>Expose as port</button></div><h3>Block parameters</h3>{activeSheet?.parameters?.length ? <div className="example-list">{activeSheet.parameters.map((parameter) => <article key={parameter.id}><div><strong>{parameter.name} = {parameter.defaultValue}</strong><label className="field-label">Default value<input aria-label={`Default value for ${parameter.name}`} value={parameterDefaultDrafts[parameter.id] ?? parameter.defaultValue} onChange={(event) => setParameterDefaultDrafts((drafts) => ({ ...drafts, [parameter.id]: event.target.value }))} onBlur={(event) => updateSheetParameterDefault(parameter.id, event.target.value)}/></label><p>Use {'{'}{parameter.name}{'}'} as a component value inside this sheet.</p></div><button className="tour-secondary" onClick={() => removeSheetParameter(parameter.id)}>Remove</button></article>)}</div> : <p className="field-hint">No parameters. Add one to let each block instance use a different value.</p>}<div className="block-parameter-form"><label className="field-label">Parameter name<input aria-label="New block parameter name" value={parameterNameDraft} maxLength={64} placeholder="RLOAD" onChange={(event) => { setParameterNameDraft(event.target.value); setParameterFormError('') }}/></label><label className="field-label">Default SPICE value<input aria-label="New block parameter default" value={parameterValueDraft} maxLength={64} placeholder="{RBASE * 2}" onChange={(event) => { setParameterValueDraft(event.target.value); setParameterFormError('') }}/><small className="field-hint">Use a number such as 1k or braced arithmetic such as {'{'}RBASE * 2{'}'}. Operators: +, -, *, /, ^.</small></label>{parameterFormError && <small className="field-error" role="alert">{parameterFormError}</small>}<button className="tour-secondary" disabled={(activeSheet?.parameters?.length ?? 0) >= 32 || !parameterNameDraft.trim()} onClick={addSheetParameter}>Add block parameter</button></div></>}<div className="modal-footer"><span>{project.sheets.length} sheets in this project</span><button className="tour-secondary" onClick={() => { setSheetSettingsOpen(false); restoreDialogTriggerFocus(sheetSettingsTriggerRef) }}>Done</button></div></section></div>}
-    {pendingWaveformTrace && <div className="waveform-destination-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeWaveformDestination() }}><section className="waveform-destination-dialog" role="dialog" aria-modal="true" aria-labelledby="waveform-destination-title" onKeyDown={trapDialogTab}><div className="dialog-heading"><div><span className="eyebrow">WAVEFORM PROBE</span><h2 id="waveform-destination-title">{pendingWaveformTrace.label}</h2></div><button className="subtle-icon" aria-label="Close" onClick={closeWaveformDestination}><X size={15}/></button></div><p>Choose where this trace should appear.</p><label className="waveform-destination-option"><input autoFocus type="radio" name="waveform-destination" checked={waveformDestination === 'new'} disabled={additionalPlotPanels.length >= 8} onChange={() => setWaveformDestination('new')}/><span><strong>New waveform window</strong><small>Open a separate plot with this trace.</small></span></label><label className="waveform-destination-option"><input type="radio" name="waveform-destination" checked={waveformDestination === 'current'} disabled={!additionalPlotPanels.length} onChange={() => setWaveformDestination('current')}/><span><strong>Add to current window</strong><small>{additionalPlotPanels.length ? `Add to ${waveformWindowTitle(additionalPlotPanels.at(-1)!, additionalPlotPanels.length - 1)}.` : 'Open a waveform window first.'}</small></span></label><div className="dialog-actions"><button className="quiet-button" onClick={closeWaveformDestination}>Cancel</button><button className="run-button" onClick={commitWaveformTrace} disabled={waveformDestination === 'new' && additionalPlotPanels.length >= 8}>Open waveform</button></div></section></div>}
+    {pendingWaveformTrace && <div className="waveform-destination-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeWaveformDestination() }}><section className="waveform-destination-dialog" role="dialog" aria-modal="true" aria-labelledby="waveform-destination-title" onKeyDown={trapDialogTab}><div className="dialog-heading"><div><span className="eyebrow">WAVEFORM PROBE</span><h2 id="waveform-destination-title">{pendingWaveformTrace.label}</h2></div><button className="subtle-icon" aria-label="Close" onClick={closeWaveformDestination}><X size={15}/></button></div><p>Choose where this trace should appear. Selecting an option opens it immediately.</p><div className="waveform-destination-options" role="group" aria-label="Waveform destination"><button autoFocus type="button" className="waveform-destination-option" disabled={additionalPlotPanels.length >= 8} onClick={() => commitWaveformTrace('new')}><span><strong>New waveform window</strong><small>Open a separate plot with this trace.</small></span></button><button type="button" className="waveform-destination-option" disabled={!additionalPlotPanels.length} onClick={() => commitWaveformTrace('current')}><span><strong>Add to current window</strong><small>{additionalPlotPanels.length ? `Add to ${waveformWindowTitle(additionalPlotPanels.at(-1)!, additionalPlotPanels.length - 1)}.` : 'Open a waveform window first.'}</small></span></button></div><div className="dialog-actions"><button className="quiet-button" onClick={closeWaveformDestination}>Cancel</button></div></section></div>}
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={() => setNetlistOpen(false)}><section className="netlist-modal" role="dialog" aria-modal="true" aria-labelledby="netlist-dialog-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2 id="netlist-dialog-title">Generated SPICE netlist</h2></div><button autoFocus className="subtle-icon" aria-label="Close netlist" onClick={() => setNetlistOpen(false)}><X size={17}/></button></div><pre>{createNetlist(project)}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist}><Copy size={13}/> Copy netlist</button></div></section></div>}
     {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button autoFocus className="subtle-icon" aria-label="Close circuit checks" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><X size={17}/></button></div><p className="erc-intro">These checks look for common wiring mistakes and missing model references. They do not decide whether ngspice can solve your circuit.</p>{electricalIssues.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={`erc-severity ${issue.severity}`}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => { const part = project.parts.find((item) => item.id === issue.partId); setSelection({ kind: 'part', id: issue.partId! }); if (part) setView((view) => ({ ...view, panX: 380 - part.x, panY: 300 - part.y })); setElectricalCheckOpen(false) }}>Select affected component</button>}{issue.wireId && <button onClick={() => { const wire = project.wires.find((item) => item.id === issue.wireId); if (wire) { const [[x1, y1], [x2, y2]] = wire.points; setView((view) => ({ ...view, panX: 380 - (x1 + x2) / 2, panY: 300 - (y1 + y2) / 2 })) } setSelectedWireId(issue.wireId!); setTool('select'); setElectricalCheckOpen(false) }}>Select wire</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalIssues.length} finding{electricalIssues.length === 1 ? '' : 's'}</span><button className="primary-small" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}>Done</button></div></section></div>}
     {shortcutsOpen && <Suspense fallback={null}><KeyboardShortcuts editing={EDITOR_SHORTCUTS} components={[["C", "Polarized capacitor"] as const, ...componentPaletteItems.filter(({ kind }) => COMPONENT_SHORTCUTS[kind] && kind !== 'logicGate' && kind !== 'inverter').map(({ kind }) => [COMPONENT_SHORTCUTS[kind]!, (componentDefinitionFor(kind).paletteName ?? componentDefinitionFor(kind).name)] as const)]} logicGates={LOGIC_GATE_SHORTCUTS_HELP} reserved={Object.entries(FUTURE_COMPONENT_SHORTCUTS)} onClose={() => { setShortcutsOpen(false); restoreDialogTriggerFocus(shortcutsTriggerRef) }}/></Suspense>}
@@ -3913,6 +3973,6 @@ export default function App() {
       'Use Save to download an .elsim project file containing your circuit and its project data. Later, choose Open and select that file to continue. Imported symbols and model libraries remain project assets, so review the rights notice before sharing files that contain them.',
     ][tourStep]}</p>{tourStep === 1 && <button className="tour-run-action" onClick={editTourComponentValue}>Edit resistor value</button>}{tourStep === 2 && <button className="tour-run-action" onClick={() => { setTourStep(null); void startSimulation() }}><Play size={13} fill="currentColor"/> Run this circuit now</button>}<div className="tour-progress" role="progressbar" aria-label="Quick tour progress" aria-valuemin={1} aria-valuemax={5} aria-valuenow={tourStep + 1} aria-valuetext={`Step ${tourStep + 1} of 5`}>{[0, 1, 2, 3, 4].map((step) => <span key={step} className={step <= tourStep ? 'current' : ''} aria-hidden="true"/> )}</div><div className="tour-actions"><button className="tour-skip" onClick={() => setTourStep(null)}>Skip tour</button><span/>{tourStep > 0 && <button className="tour-secondary" onClick={() => setTourPage(tourStep - 1)}>Back</button>}<button ref={tourNextButtonRef} className="primary-small" onClick={() => tourStep === 4 ? setTourStep(null) : setTourPage(tourStep + 1)}>{tourStep === 4 ? 'Finish' : 'Next'} <ArrowUp size={13}/></button></div></section></div>}
     {!projectRecoveryReady && <div className="project-recovery-overlay" role="status" aria-live="polite"><span className="status-dot saving"/>Restoring your local project…</div>}
-    <footer className="app-status"><span role="status" aria-live="polite"><span className={`status-dot ${autosaveStatus}`}/>{autosaveStatus === 'saving' ? 'Saving changes locally…' : autosaveStatus === 'recovered' ? 'Saved in browser recovery storage' : autosaveStatus === 'error' ? 'Local save failed. Use Save to download a copy.' : 'All changes saved locally'}</span><span>Original ELSim component symbols</span><span><Sparkles size={13}/> Built for curious minds</span></footer>
+    <footer className="app-status"><span role="status" aria-live="polite"><span className={`status-dot ${autosaveStatus}`}/>{autosaveStatus === 'saving' ? 'Saving changes locally…' : autosaveStatus === 'recovered' ? 'Saved in browser recovery storage' : autosaveStatus === 'error' ? 'Local save failed. Use Save to download a copy.' : 'All changes saved locally'}</span><span>Original ELSim component symbols</span></footer>
   </div>
 }

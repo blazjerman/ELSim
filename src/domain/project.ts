@@ -74,7 +74,8 @@ export type Part = {
 export type Wire = { id: string; points: [[number, number], [number, number]] }
 export type NetLabel = { id: string; name: string; x: number; y: number; visible: boolean }
 export type PlotRange = { start: number; end: number }
-export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>> }
+export type ComponentVoltageProbe = { partId: string; positivePin: number; negativePin: number; positiveNet: string; negativeNet: string; positiveVector: string; negativeVector: string; ref: string; vectorRef: string }
+export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; componentVoltageProbes?: Record<string, ComponentVoltageProbe>; ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>> }
 export type PlotSettings = {
   selectedTraceIds: string[]
   ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>>
@@ -677,6 +678,12 @@ export function validateProject(input: unknown): Project {
       for (const panel of plotSettings.panels) {
         const bounds = panel?.bounds
         if (!panel || typeof panel.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(panel.id) || panelIds.has(panel.id) || !Array.isArray(panel.selectedTraceIds) || panel.selectedTraceIds.length > 256 || panel.selectedTraceIds.some((id) => typeof id !== 'string') || !panel.ranges || typeof panel.ranges !== 'object' || Array.isArray(panel.ranges) || !bounds || !Number.isFinite(bounds.x) || !Number.isFinite(bounds.y) || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height) || Math.abs(bounds.x) > 100_000 || Math.abs(bounds.y) > 100_000 || bounds.width < 280 || bounds.width > 4_000 || bounds.height < 160 || bounds.height > 3_000) throw new Error('Plot panel settings are malformed.')
+        if (panel.componentVoltageProbes !== undefined) {
+          if (!panel.componentVoltageProbes || typeof panel.componentVoltageProbes !== 'object' || Array.isArray(panel.componentVoltageProbes) || Object.keys(panel.componentVoltageProbes).length > 256) throw new Error('Component voltage probe settings are malformed.')
+          for (const probe of Object.values(panel.componentVoltageProbes)) {
+            if (!probe || typeof probe.partId !== 'string' || !Number.isInteger(probe.positivePin) || probe.positivePin < 0 || !Number.isInteger(probe.negativePin) || probe.negativePin < -1 || typeof probe.positiveNet !== 'string' || typeof probe.negativeNet !== 'string' || typeof probe.positiveVector !== 'string' || typeof probe.negativeVector !== 'string' || typeof probe.ref !== 'string' || typeof probe.vectorRef !== 'string') throw new Error('Component voltage probe settings are malformed.')
+          }
+        }
         for (const analysis of ['tran', 'ac', 'dc'] as const) {
           const range = panel.ranges[analysis]
           if (range !== undefined && (!range || !Number.isFinite(range.start) || !Number.isFinite(range.end) || range.start < 0 || range.end > 1 || range.end - range.start < 0.03)) throw new Error('Plot panel view range is malformed.')
