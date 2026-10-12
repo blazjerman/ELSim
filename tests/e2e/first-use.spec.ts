@@ -4554,6 +4554,7 @@ test('transistor switch example demonstrates base drive and collector switching'
   await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('NPN low-side switch')
+  await expect(page.locator('.app-status [role="status"]')).toHaveText('All changes saved locally')
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.wires.push(
@@ -4572,6 +4573,7 @@ test('transistor switch example demonstrates base drive and collector switching'
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
+  await expect(page.locator('.project-title')).toHaveText('NPN low-side switch')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(base)')
