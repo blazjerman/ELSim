@@ -3320,6 +3320,8 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   const directionArrow = inductor.locator('.inductor-current-arrow')
   await expect(directionArrow).toBeVisible()
   await expect(directionArrow).toHaveAttribute('data-direction', (await inductorTitle.textContent())?.includes('from pin 2 toward pin 1') ? 'pin-2-to-pin-1' : 'pin-1-to-pin-2')
+  await expect(inductor.locator('.inductor-current-glow')).toBeVisible()
+  await expect(inductor.locator('.inductor-current-glow')).toHaveAttribute('d', /^M-34 0a9 9/)
   await expect(inductor.locator('.component-current-flow')).toHaveCount(0)
   await expect(page.locator('.component-current-flow')).toHaveCount(0)
 })
