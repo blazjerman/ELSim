@@ -431,14 +431,23 @@ export function createVoltageDividerExampleProject(): Project {
   }
   project.name = 'Voltage divider'
   project.parts = [source, upper, lower]
-  project.wires = []
+  project.wires = [
+    { id: 'divider-feed-rise', points: [[260, 310], [260, 260]] },
+    { id: 'divider-feed-top', points: [[260, 260], [470, 260]] },
+    { id: 'divider-feed-drop', points: [[470, 260], [470, 300]] },
+    { id: 'divider-series', points: [[570, 300], [710, 300]] },
+    { id: 'divider-return-right', points: [[810, 300], [850, 300]] },
+    { id: 'divider-return-drop', points: [[850, 300], [850, 440]] },
+    { id: 'divider-return-ground', points: [[850, 440], [260, 440]] },
+    { id: 'divider-return-source', points: [[260, 440], [260, 410]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('divider-vin-source', 'VIN', source, 0), labelAt('divider-vin-r1', 'VIN', upper, 0),
-    labelAt('divider-vout-r1', 'VOUT', upper, 1), labelAt('divider-vout-r2', 'VOUT', lower, 0),
-    labelAt('divider-ground-source', '0', source, 1), labelAt('divider-ground-r2', '0', lower, 1),
+    labelAt('divider-vin-source', 'VIN', source, 0),
+    labelAt('divider-vout-r1', 'VOUT', upper, 1),
+    labelAt('divider-ground-source', '0', source, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'op' }
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)'], ranges: {} }
   project.view = { zoom: 0.9, panX: -10, panY: 0 }

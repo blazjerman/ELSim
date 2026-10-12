@@ -3050,8 +3050,14 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Voltage divider')
   await expect(page.getByLabel('Guided example')).toContainText('Equal 1 kΩ resistors share the 10 V supply evenly')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(8)
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  for (const wireId of ['divider-feed-top', 'divider-series', 'divider-return-ground']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.004)
+  }
   await expect(page.getByLabel('Guided example')).toContainText('TRY THIS NEXT')
   await expect(page.getByLabel('Guided example')).toContainText('Select R2, change its resistance from 1 kΩ to 2 kΩ')
   await expectAvailableTrace(page, 'V(vout)')
