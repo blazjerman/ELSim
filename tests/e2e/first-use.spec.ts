@@ -1405,6 +1405,22 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(switchPart).toHaveAttribute('aria-pressed', 'true')
   await expect(switchPart).toHaveAttribute('aria-label', /switch on/)
   await expect(page.getByText('S1 switched on. Run simulation to calculate the updated circuit.')).toBeVisible()
+
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await page.evaluate(() => {
+    const key = 'elsim:project:v7'
+    const project = JSON.parse(localStorage.getItem(key)!)
+    const distantPart = { id: 'keyboard-far-part', kind: 'resistor', ref: 'R99', value: '1 kΩ', x: 10000, y: 400, rotation: 0 }
+    project.parts.push(distantPart)
+    project.sheets = project.sheets.map((sheet: { id: string; parts: unknown[] }) => sheet.id === project.rootSheetId ? { ...sheet, parts: project.parts } : sheet)
+    localStorage.setItem(key, JSON.stringify(project))
+  })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  const distantPart = page.locator('.circuit-part[data-part-id="keyboard-far-part"]')
+  await expect(distantPart).toHaveCount(0)
+  await page.locator('.circuit-part[data-part-id="p-c1"]').focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(distantPart).toBeFocused()
 })
 
 test('schematic wire segments and net labels can be selected from the keyboard', { tag: '@ui-smoke' }, async ({ page }) => {
