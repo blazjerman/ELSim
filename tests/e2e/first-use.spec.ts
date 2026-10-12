@@ -2566,11 +2566,17 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await expect(firstWindow.getByRole('button', { name: /Disable V\(C1\)/ })).toBeVisible()
   await expect(page.locator('.plot-window').last().getByRole('button', { name: /Disable V\(C1\)/ })).toHaveCount(0)
 
+  const originalVoltageColor = await firstWindow.getByRole('button', { name: /Disable V\(C1\)/ }).locator('span').getAttribute('style')
+  await page.getByLabel('Reference designator').fill('C4')
+  await page.getByLabel('Reference designator').press('Enter')
+  await page.locator('[data-part-setting="p-c1:value"]').fill('22u')
+
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(firstWindow.getByRole('button', { name: /Disable V\(R1\)/ })).toBeVisible()
   await expect(firstWindow.getByRole('button', { name: /Disable I\(R1\)/i })).toBeVisible()
-  await expect(firstWindow.getByRole('button', { name: /Disable V\(C1\)/ })).toBeVisible()
+  await expect(firstWindow.getByRole('button', { name: /Disable V\(C4\)/ })).toBeVisible()
+  await expect(firstWindow.getByRole('button', { name: /Disable V\(C4\)/ }).locator('span')).toHaveAttribute('style', originalVoltageColor ?? '')
   await page.locator('.plot-window').last().locator('svg.waveform-chart').click({ button: 'middle' })
   await expect(page.locator('.plot-window')).toHaveCount(1)
   await expect(firstWindow.locator('.plot-zero-reference').first()).toContainText('0 V')

@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import type { PlotPanel, PlotRange } from '../domain/project'
+import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange } from '../domain/project'
 import { extremaIndices, valueRange } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor } from './simulationCursor'
@@ -161,6 +161,10 @@ function useTraceIndexById(traces: Trace[]) {
   return useMemo(() => new Map(traces.map((trace, index) => [trace.id, index])), [traces])
 }
 
+function colorsForTraces(traces: Trace[], saved: Record<string, string> = {}): string[] {
+  return traces.map((trace, index) => saved[trace.id] ?? saved[trace.baseId ?? ''] ?? PLOT_TRACE_COLORS[index % PLOT_TRACE_COLORS.length])
+}
+
 const PlotPolylineSet = memo(function PlotPolylineSet({ plots }: { plots: { id: string; points: string; color: string }[] }) {
   return <>{plots.map((plot) => <polyline key={plot.id} points={plot.points} fill="none" stroke={plot.color} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}</>
 })
@@ -249,7 +253,7 @@ function formatEngineeringTick(value: number, unit: string): string {
   return `${scaled} ${prefix}${unit}`
 }
 
-function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; measurements: MeasurementResult[] }) {
+function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, measurements, savedColors }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; measurements: MeasurementResult[]; savedColors: Record<string, string> }) {
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
@@ -295,7 +299,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const anchorIndex = nearestAxisIndex(axis ?? Float64Array.of(0), timeAtPointer, first, Math.min(last, (axis?.length ?? 1) - 1))
     navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchorIndex / Math.max(1, (axis?.length ?? 1) - 1))
   }
-  const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
+  const colors = colorsForTraces(traces, savedColors)
   const valueStep = niceTickStep(scopeRange[1] - scopeRange[0], Math.max(3, Math.floor((bottom - top) / 42)))
   const valueTicks = ticksInRange(scopeRange[0], scopeRange[1], valueStep)
   const minorValueStep = valueStep / 5
@@ -356,11 +360,11 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   </div>
 }
 
-function OperatingPointView({ traces, selectedIds, onToggle, onExport }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void }) {
+function OperatingPointView({ traces, selectedIds, onToggle, onExport, savedColors }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; savedColors: Record<string, string> }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id))
   const traceIndexById = useTraceIndexById(traces)
-  const colors = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d']
+  const colors = colorsForTraces(traces, savedColors)
   return <div className="waveform-view op-view">
     <div className="waveform-title"><strong>DC operating point</strong><span>{traces.length} vectors · one solved bias point</span><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="operating-point traces" colorFor={(index) => colors[index % colors.length]}/>
@@ -368,7 +372,7 @@ function OperatingPointView({ traces, selectedIds, onToggle, onExport }: { trace
   </div>
 }
 
-function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
+function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange, savedColors }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; savedColors: Record<string, string> }) {
   const isNoise = result.analysis === 'noise'
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
@@ -379,7 +383,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const [mode, setMode] = useState<'magnitude' | 'phase' | 'noise'>(isNoise ? 'noise' : 'magnitude')
   useEffect(() => setMode(isNoise ? 'noise' : 'magnitude'), [isNoise])
   const cursorValue = useAnalysisCursor(result)
-  const colors = useMemo(() => ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d'], [])
+  const colors = colorsForTraces(traces, savedColors)
   const plotSize = useResponsivePlotSize()
   const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = width - 12, top = 12, bottom = height - 30
   const frequencies = traces[0]?.axis ?? Float64Array.of(1, 10)
@@ -449,7 +453,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   </div>
 }
 
-function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void }) {
+function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange, savedColors }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; savedColors: Record<string, string> }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const traceIndexById = useTraceIndexById(traces)
@@ -488,7 +492,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
     navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchor / Math.max(1, axis.length - 1))
   }
   const span = max - min || 1
-  const colors = useMemo(() => ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d'], [])
+  const colors = colorsForTraces(traces, savedColors)
   const xFor = (value: number) => left + (value - x0) / (x1 - x0 || 1) * (right - left)
   const yFor = (value: number) => bottom - (value - min) / span * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
@@ -515,11 +519,11 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   </div>
 }
 
-export function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void }) {
-  if (result.analysis === 'op') return <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport}/>
-  if (result.analysis === 'ac') return <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} onExport={onExport}/>
-  if (result.analysis === 'noise') return <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.noise} onRangeChange={(range) => onRangeChange('noise', range)} onExport={onExport}/>
-  if (result.analysis === 'dc') return <DcSweepPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.dc} onRangeChange={(range) => onRangeChange('dc', range)} onExport={onExport}/>
-  return <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} onExport={onExport} measurements={result.measurements}/>
+export function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, traceColors = {} }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void; traceColors?: Record<string, string> }) {
+  if (result.analysis === 'op') return <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors}/>
+  if (result.analysis === 'ac') return <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} onExport={onExport} savedColors={traceColors}/>
+  if (result.analysis === 'noise') return <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.noise} onRangeChange={(range) => onRangeChange('noise', range)} onExport={onExport} savedColors={traceColors}/>
+  if (result.analysis === 'dc') return <DcSweepPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.dc} onRangeChange={(range) => onRangeChange('dc', range)} onExport={onExport} savedColors={traceColors}/>
+  return <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} onExport={onExport} measurements={result.measurements} savedColors={traceColors}/>
 }
 

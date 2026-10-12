@@ -74,8 +74,13 @@ export type Part = {
 export type Wire = { id: string; points: [[number, number], [number, number]] }
 export type NetLabel = { id: string; name: string; x: number; y: number; visible: boolean }
 export type PlotRange = { start: number; end: number }
-export type ComponentVoltageProbe = { partId: string; positivePin: number; negativePin: number; positiveNet: string; negativeNet: string; positiveVector: string; negativeVector: string; ref: string; vectorRef: string }
-export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; componentVoltageProbes?: Record<string, ComponentVoltageProbe>; ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>> }
+export type ComponentVoltageProbe = { partId: string; positivePin: number; negativePin: number; positiveNet: string; negativeNet: string; positiveVector: string; negativeVector: string; ref: string; vectorRef: string; sheetId?: string; scopeSheetId?: string; instancePath?: string[] }
+export type PlotTraceReference =
+  | { kind: 'node'; name: string; sheetId: string; scopeSheetId: string; instancePath: string[]; wireId?: string; labelId?: string }
+  | { kind: 'part-current'; partId: string; sheetId: string; scopeSheetId: string; instancePath: string[]; winding?: 'P' | 'S' }
+  | { kind: 'component-voltage'; partId: string; positivePin: number; negativePin: number; sheetId: string; scopeSheetId: string; instancePath: string[] }
+export const PLOT_TRACE_COLORS = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d'] as const
+export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; componentVoltageProbes?: Record<string, ComponentVoltageProbe>; traceReferences?: Record<string, PlotTraceReference>; traceColors?: Record<string, string>; ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>> }
 export type PlotSettings = {
   selectedTraceIds: string[]
   ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>>
@@ -681,9 +686,21 @@ export function validateProject(input: unknown): Project {
         if (panel.componentVoltageProbes !== undefined) {
           if (!panel.componentVoltageProbes || typeof panel.componentVoltageProbes !== 'object' || Array.isArray(panel.componentVoltageProbes) || Object.keys(panel.componentVoltageProbes).length > 256) throw new Error('Component voltage probe settings are malformed.')
           for (const probe of Object.values(panel.componentVoltageProbes)) {
-            if (!probe || typeof probe.partId !== 'string' || !Number.isInteger(probe.positivePin) || probe.positivePin < 0 || !Number.isInteger(probe.negativePin) || probe.negativePin < -1 || typeof probe.positiveNet !== 'string' || typeof probe.negativeNet !== 'string' || typeof probe.positiveVector !== 'string' || typeof probe.negativeVector !== 'string' || typeof probe.ref !== 'string' || typeof probe.vectorRef !== 'string') throw new Error('Component voltage probe settings are malformed.')
+            if (!probe || typeof probe.partId !== 'string' || !Number.isInteger(probe.positivePin) || probe.positivePin < 0 || !Number.isInteger(probe.negativePin) || probe.negativePin < -1 || typeof probe.positiveNet !== 'string' || typeof probe.negativeNet !== 'string' || typeof probe.positiveVector !== 'string' || typeof probe.negativeVector !== 'string' || typeof probe.ref !== 'string' || typeof probe.vectorRef !== 'string' || (probe.sheetId !== undefined && typeof probe.sheetId !== 'string') || (probe.scopeSheetId !== undefined && typeof probe.scopeSheetId !== 'string') || (probe.instancePath !== undefined && (!Array.isArray(probe.instancePath) || probe.instancePath.length > 32 || probe.instancePath.some((id) => typeof id !== 'string')))) throw new Error('Component voltage probe settings are malformed.')
           }
         }
+        if (panel.traceReferences !== undefined) {
+          if (!panel.traceReferences || typeof panel.traceReferences !== 'object' || Array.isArray(panel.traceReferences) || Object.keys(panel.traceReferences).length > 256) throw new Error('Plot trace references are malformed.')
+          for (const reference of Object.values(panel.traceReferences)) {
+            const validPath = Array.isArray(reference?.instancePath) && reference.instancePath.length <= 32 && reference.instancePath.every((id) => typeof id === 'string')
+            const validBase = typeof reference?.sheetId === 'string' && typeof reference?.scopeSheetId === 'string' && validPath
+            const validNode = reference?.kind === 'node' && validBase && typeof reference.name === 'string' && (reference.wireId === undefined || typeof reference.wireId === 'string') && (reference.labelId === undefined || typeof reference.labelId === 'string')
+            const validCurrent = reference?.kind === 'part-current' && validBase && typeof reference.partId === 'string' && (reference.winding === undefined || reference.winding === 'P' || reference.winding === 'S')
+            const validVoltage = reference?.kind === 'component-voltage' && validBase && typeof reference.partId === 'string' && Number.isInteger(reference.positivePin) && reference.positivePin >= 0 && Number.isInteger(reference.negativePin) && reference.negativePin >= -1
+            if (!validNode && !validCurrent && !validVoltage) throw new Error('Plot trace references are malformed.')
+          }
+        }
+        if (panel.traceColors !== undefined && (!panel.traceColors || typeof panel.traceColors !== 'object' || Array.isArray(panel.traceColors) || Object.keys(panel.traceColors).length > 256 || Object.values(panel.traceColors).some((color) => typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)))) throw new Error('Plot trace colors are malformed.')
         for (const analysis of ['tran', 'ac', 'dc'] as const) {
           const range = panel.ranges[analysis]
           if (range !== undefined && (!range || !Number.isFinite(range.start) || !Number.isFinite(range.end) || range.start < 0 || range.end > 1 || range.end - range.start < 0.03)) throw new Error('Plot panel view range is malformed.')

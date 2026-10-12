@@ -34,7 +34,7 @@ import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
 import { createFilesZip, createProjectArchive, isProjectArchive, readProjectArchive } from '../domain/projectArchive'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
-import { createStarterProject, kindNames, kindPrefix, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type Project, type SymbolAsset, type TransientMeasurement, type Wire } from '../domain/project'
+import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type PlotTraceReference, type Project, type SymbolAsset, type TransientMeasurement, type Wire } from '../domain/project'
 import { componentMagnitude, createNetlist, createNetlistArtifact, nextRef, referencePrefixForKind, validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlist'
 import { prepareParameterSweep } from '../engine/sweep'
 import { serializeWaveformCsv } from '../engine/csv'
@@ -46,6 +46,7 @@ type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = ComponentPaletteCategory
 type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 type Selection = { kind: 'part' | 'label'; id: string } | null
+type ProbeRequest = { kind: 'node'; name: string; wireId?: string; labelId?: string } | { kind: 'part'; id: string; winding?: 'P' | 'S' }
 type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
 
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
@@ -805,7 +806,7 @@ function InitialConditionEditor({ conditions, nodes, inductors, capacitors, skip
   </div>
 }
 
-function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; setSelection: (selection: Selection) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: { kind: 'node'; name: string } | { kind: 'part'; id: string; winding?: 'P' | 'S' }) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
+function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, animationScale, animationSpeed }: { project: Project; setSelection: (selection: Selection) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; animationScale: number; animationSpeed: number }) {
   const selectedWireIdSet = useMemo(() => new Set(selectedWireIds), [selectedWireIds])
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const selectedNetLabelIdSet = useMemo(() => new Set(selectedNetLabelIds), [selectedNetLabelIds])
@@ -1616,11 +1617,11 @@ function Schematic({ project, setSelection, setSelectedWireId, selectedWireIds, 
         <button role="menuitem" onClick={() => setContextMenu(null)}>Edit properties</button>
       </> : contextMenu.kind === 'label' ? <>
         <div className="context-menu-heading">Net {contextMenu.node ?? '0'}</div>
-        <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node }); setContextMenu(null) }}>Plot voltage to ground</button>
+        <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node, labelId: contextMenu.id }); setContextMenu(null) }}>Plot voltage to ground</button>
         <button role="menuitem" onClick={() => { const label = project.netLabels.find((item) => item.id === contextMenu.id); if (label) setLabelDraft({ id: label.id, name: label.name, x: label.x, y: label.y }); setContextMenu(null) }}>Edit net label</button>
       </> : contextMenu.kind === 'wire' ? <>
         <div className="context-menu-heading">{contextMenu.node ? 'Net ' + contextMenu.node : 'Wire'}</div>
-        <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node }); setContextMenu(null) }}>Plot voltage to ground</button>
+        <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node, wireId: contextMenu.id }); setContextMenu(null) }}>Plot voltage to ground</button>
         <button role="menuitem" onClick={() => { const existing = project.netLabels.find((label) => Math.hypot(label.x - contextMenu.point.x, label.y - contextMenu.point.y) < 1); setLabelDraft({ ...contextMenu.point, id: existing?.id, name: existing?.name ?? contextMenu.node ?? 'net' }); setContextMenu(null) }}>{project.netLabels.some((label) => Math.hypot(label.x - contextMenu.point.x, label.y - contextMenu.point.y) < 1) ? 'Edit net label' : 'Add net label'}</button>
         <button role="menuitem" onClick={() => setContextMenu(null)}>Select wire</button>
       </> : null}
@@ -1692,7 +1693,7 @@ export default function App() {
   const [parameterDefaultDrafts, setParameterDefaultDrafts] = useState<Record<string, string>>({})
   const [parameterFormError, setParameterFormError] = useState('')
   const [additionalPlotPanels, setAdditionalPlotPanels] = useState<PlotPanel[]>(() => project.plotSettings?.panels ?? [])
-  const [pendingWaveformTrace, setPendingWaveformTrace] = useState<{ traceIds: string[]; label: string; componentVoltageProbe?: ComponentVoltageProbe } | null>(null)
+  const [pendingWaveformTrace, setPendingWaveformTrace] = useState<{ traceIds: string[]; label: string; reference?: PlotTraceReference; componentVoltageProbe?: ComponentVoltageProbe } | null>(null)
   const waveformReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const closeWaveformDestination = () => {
     setPendingWaveformTrace(null)
@@ -2402,6 +2403,11 @@ export default function App() {
       bounds,
       selectedTraceIds: [...new Set(traceIds)],
       ...(componentVoltageProbe ? { componentVoltageProbes: Object.fromEntries(traceIds.map((traceId) => [traceId, componentVoltageProbe])) } : {}),
+      ...(pendingWaveformTrace?.reference ? { traceReferences: Object.fromEntries(traceIds.map((traceId) => [traceId, pendingWaveformTrace.reference!])) } : {}),
+      traceColors: Object.fromEntries(traceIds.map((traceId) => {
+        const index = simulationResult?.traces.findIndex((trace) => trace.id === traceId) ?? -1
+        return [traceId, PLOT_TRACE_COLORS[(index < 0 ? 0 : index) % PLOT_TRACE_COLORS.length]]
+      })),
       ranges: { ...(project.plotSettings?.ranges ?? {}) },
     }
     // Creating a new scope must not retile or resize windows the user has already arranged.
@@ -2423,7 +2429,14 @@ export default function App() {
       if (!current) return
       const componentVoltageProbes = { ...(current.componentVoltageProbes ?? {}) }
       if (pendingWaveformTrace.componentVoltageProbe) for (const id of ids) componentVoltageProbes[id] = pendingWaveformTrace.componentVoltageProbe
-      const next = additionalPlotPanels.map((panel) => panel.id === targetId ? { ...current, selectedTraceIds: [...new Set([...current.selectedTraceIds, ...ids])], ...(Object.keys(componentVoltageProbes).length ? { componentVoltageProbes } : {}) } : panel)
+      const traceReferences = { ...(current.traceReferences ?? {}) }
+      if (pendingWaveformTrace.reference) for (const id of ids) traceReferences[id] = pendingWaveformTrace.reference
+      const traceColors = { ...(current.traceColors ?? {}) }
+      for (const id of ids) if (!traceColors[id]) {
+        const index = simulationResult?.traces.findIndex((trace) => trace.id === id) ?? -1
+        traceColors[id] = PLOT_TRACE_COLORS[(index < 0 ? 0 : index) % PLOT_TRACE_COLORS.length]
+      }
+      const next = additionalPlotPanels.map((panel) => panel.id === targetId ? { ...current, selectedTraceIds: [...new Set([...current.selectedTraceIds, ...ids])], componentVoltageProbes: Object.keys(componentVoltageProbes).length ? componentVoltageProbes : undefined, traceReferences, traceColors } : panel)
       saveAdditionalPlotPanels(next)
       setNotice(`Added ${pendingWaveformTrace.label} to ${waveformWindowTitle(current, additionalPlotPanels.findIndex((panel) => panel.id === targetId))}.`)
     } else {
@@ -3287,7 +3300,7 @@ export default function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     setNotice('Simulation run report downloaded')
   }
-  const addProbe = (target: { kind: 'node'; name: string } | { kind: 'part'; id: string; winding?: 'P' | 'S' }) => {
+  const addProbe = (target: ProbeRequest) => {
     if (target.kind === 'part' && projectRef.current.parts.find((item) => item.id === target.id)?.kind === 'subcircuit') { setNotice('Probe a connected pin wire to inspect this subcircuit’s node voltage. Port-current vectors are not exposed for imported subcircuits yet.'); return }
     const scopeSheetId = typeof simulationResult?.metadata.settings.scopeSheetId === 'string' ? simulationResult.metadata.settings.scopeSheetId : projectRef.current.rootSheetId
     const scopePath = (() => { try { const value = JSON.parse(String(simulationResult?.metadata.settings.scopeInstancePath ?? '[]')); return Array.isArray(value) && value.every((partId) => typeof partId === 'string') ? value as string[] : [] } catch { return [] } })()
@@ -3323,7 +3336,10 @@ export default function App() {
           ? document.querySelector<SVGElement>(`[data-net-label-id="${CSS.escape(selection.id)}"]`)
           : null
     waveformReturnFocusRef.current = focusTarget
-    setPendingWaveformTrace({ traceIds: relatedIds, label: trace.label })
+    const reference: PlotTraceReference = target.kind === 'node'
+      ? { kind: 'node', name: target.name, sheetId: projectRef.current.activeSheetId, scopeSheetId, instancePath: activePath, ...(target.wireId ? { wireId: target.wireId } : {}), ...(target.labelId ? { labelId: target.labelId } : {}) }
+      : { kind: 'part-current', partId: target.id, sheetId: projectRef.current.activeSheetId, scopeSheetId, instancePath: activePath, ...(target.winding ? { winding: target.winding } : {}) }
+    setPendingWaveformTrace({ traceIds: relatedIds, label: trace.label, reference })
   }
   const addComponentVoltageProbe = (partId: string, positivePin = 0, negativePin = 1) => {
     const currentProject = projectRef.current
@@ -3351,10 +3367,11 @@ export default function App() {
     const additions = derived.filter((trace) => !existingIds.has(trace.id))
     if (additions.length) setSimulationResult({ ...simulationResult, traces: [...simulationResult.traces, ...additions] })
     const ids = derived.map((trace) => trace.id)
-    const componentVoltageProbe: ComponentVoltageProbe = { partId, positivePin, negativePin, positiveNet, negativeNet, positiveVector, negativeVector, ref, vectorRef }
+    const componentVoltageProbe: ComponentVoltageProbe = { partId, positivePin, negativePin, positiveNet, negativeNet, positiveVector, negativeVector, ref, vectorRef, sheetId: currentProject.activeSheetId, scopeSheetId, instancePath: activePath }
     const pinName = (index: number) => index < 0 ? 'ground' : part.modelPins?.[index] ?? componentDefinitionFor(part.kind).pins[index]?.name ?? `pin ${index + 1}`
     waveformReturnFocusRef.current = document.querySelector<SVGElement>(`[data-part-id="${CSS.escape(partId)}"]`)
-    setPendingWaveformTrace({ traceIds: ids, label: `V(${ref})`, componentVoltageProbe })
+    const reference: PlotTraceReference = { kind: 'component-voltage', partId, positivePin, negativePin, sheetId: currentProject.activeSheetId, scopeSheetId, instancePath: activePath }
+    setPendingWaveformTrace({ traceIds: ids, label: `V(${ref})`, componentVoltageProbe, reference })
     setNotice(`Voltage is measured from pin ${positivePin + 1} (${pinName(positivePin)}) to ${negativePin < 0 ? 'ground' : `pin ${negativePin + 1} (${pinName(negativePin)})`}.`)
   }
   const exportWaveformCsv = (traceIds: string[] = selectedTraceIds) => {
@@ -3506,20 +3523,105 @@ export default function App() {
         const savedPanels = projectRef.current.plotSettings?.panels ?? []
         if (savedPanels.length) {
           const currentProject = projectRef.current
-          const currentConnectivity = analyzeConnectivity(currentProject)
+          const sceneForSheet = (sheetId: string) => {
+            const sheet = currentProject.sheets.find((candidate) => candidate.id === sheetId)
+            return sheet ? { ...currentProject, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view } : currentProject
+          }
           const nextPanels = savedPanels.map((panel) => {
-            const componentVoltageProbes = { ...(panel.componentVoltageProbes ?? {}) }
-            for (const [traceId, probe] of Object.entries(componentVoltageProbes)) {
-              if (!panel.selectedTraceIds.includes(traceId)) { delete componentVoltageProbes[traceId]; continue }
-              const part = currentProject.parts.find((candidate) => candidate.id === probe.partId)
-              const positiveNet = part ? pinNet(currentConnectivity, part, probe.positivePin) : 'unconnected'
-              const negativeNet = !part ? 'unconnected' : probe.negativePin < 0 ? '0' : pinNet(currentConnectivity, part, probe.negativePin)
-              if (positiveNet !== probe.positiveNet || negativeNet !== probe.negativeNet) { delete componentVoltageProbes[traceId]; continue }
-              const derived = deriveComponentVoltageTraces(response.result.traces, probe.positiveVector, probe.negativeVector, probe.ref, probe.vectorRef)
-              response.result.traces.push(...derived.filter((trace) => !response.result.traces.some((existing) => existing.id === trace.id)))
+            const selectedTraceIds: string[] = []
+            const traceReferences: NonNullable<PlotPanel['traceReferences']> = {}
+            const traceColors: NonNullable<PlotPanel['traceColors']> = {}
+            const componentVoltageProbes: NonNullable<PlotPanel['componentVoltageProbes']> = {}
+            const addMissingTraces = (derived: Trace[]) => {
+              for (const trace of derived) if (!response.result.traces.some((existing) => existing.id === trace.id)) response.result.traces.push(trace)
             }
-            const traceIds = new Set(response.result.traces.map((trace) => trace.id))
-            return { ...panel, selectedTraceIds: panel.selectedTraceIds.filter((id) => traceIds.has(id)), componentVoltageProbes: Object.keys(componentVoltageProbes).length ? componentVoltageProbes : undefined }
+            const matchVector = (vector: string) => {
+              const key = vector.toLowerCase()
+              return response.result.traces.filter((trace) => trace.id.toLowerCase() === key || trace.baseId?.toLowerCase() === key || trace.id.toLowerCase().startsWith(`${key}::sweep-`))
+            }
+            for (const oldId of panel.selectedTraceIds) {
+              const priorComponentProbe = panel.componentVoltageProbes?.[oldId]
+              let reference = panel.traceReferences?.[oldId] ?? (priorComponentProbe ? {
+                kind: 'component-voltage' as const,
+                partId: priorComponentProbe.partId,
+                positivePin: priorComponentProbe.positivePin,
+                negativePin: priorComponentProbe.negativePin,
+                sheetId: priorComponentProbe.sheetId ?? currentProject.sheets.find((sheet) => sheet.parts.some((part) => part.id === priorComponentProbe.partId))?.id ?? currentProject.activeSheetId,
+                scopeSheetId: priorComponentProbe.scopeSheetId ?? currentProject.rootSheetId,
+                instancePath: priorComponentProbe.instancePath ?? [],
+              } : undefined)
+              if (!reference) {
+                outer: for (const sheet of currentProject.sheets) for (const part of sheet.parts) {
+                  if (part.kind === 'ground' || part.kind === 'subcircuit') continue
+                  const instancePath = findSheetInstancePath(sheet.id, currentProject.rootSheetId) ?? []
+                  const vector = instancePath.length ? hierarchyComponentCurrentVector(currentProject, sheet.id, instancePath, part.id, currentProject.rootSheetId) : componentCurrentVector(part)
+                  if (vector?.toLowerCase() === oldId.toLowerCase()) {
+                    reference = { kind: 'part-current', partId: part.id, sheetId: sheet.id, scopeSheetId: currentProject.rootSheetId, instancePath }
+                    break outer
+                  }
+                }
+              }
+              if (!reference) {
+                const nodeMatch = /^v\(([^)]+)\)(?:::sweep-\d+)?$/i.exec(oldId)
+                const nodeName = nodeMatch?.[1]
+                const isPartVoltage = nodeName && currentProject.sheets.some((sheet) => sheet.parts.some((part) => part.ref.toLowerCase() === nodeName.toLowerCase()))
+                if (nodeName && !isPartVoltage) reference = { kind: 'node', name: nodeName, sheetId: currentProject.rootSheetId, scopeSheetId: currentProject.rootSheetId, instancePath: [] }
+              }
+              let matches: Trace[] = []
+              let refreshedVoltageProbe: ComponentVoltageProbe | undefined
+              if (reference?.kind === 'node') {
+                const scene = sceneForSheet(reference.sheetId)
+                const node = reference.wireId ? analyzeConnectivity(scene).wireNets.get(reference.wireId) : reference.labelId ? scene.netLabels.find((label) => label.id === reference.labelId)?.name : reference.name
+                const vector = node ? hierarchyNodeVector(currentProject, reference.sheetId, reference.instancePath, node, reference.scopeSheetId) : null
+                if (vector) {
+                  matches = matchVector(vector)
+                  if (vector.toLowerCase() === 'v(0)' && !matches.length) {
+                    const sweepReferences = response.result.traces.filter((trace, index) => !response.result.traces.slice(0, index).some((previous) => previous.sweep?.index === trace.sweep?.index))
+                    addMissingTraces(sweepReferences.map(groundVoltageTrace))
+                    matches = matchVector(vector)
+                  }
+                }
+              } else if (reference?.kind === 'part-current') {
+                const scene = sceneForSheet(reference.sheetId)
+                const part = scene.parts.find((candidate) => candidate.id === reference.partId)
+                const vector = part ? reference.instancePath.length
+                  ? hierarchyComponentCurrentVector(currentProject, reference.sheetId, reference.instancePath, part.id, reference.scopeSheetId, reference.winding)
+                  : part.kind === 'transformer' && reference.winding ? transformerWindingCurrentVector(part.ref, reference.winding) : componentCurrentVector(part)
+                  : null
+                if (vector) matches = matchVector(vector)
+              } else if (reference?.kind === 'component-voltage') {
+                const scene = sceneForSheet(reference.sheetId)
+                const part = scene.parts.find((candidate) => candidate.id === reference.partId)
+                if (part) {
+                  const connectivity = analyzeConnectivity(scene)
+                  const positiveNet = pinNet(connectivity, part, reference.positivePin)
+                  const negativeNet = reference.negativePin < 0 ? '0' : pinNet(connectivity, part, reference.negativePin)
+                  if (positiveNet !== 'unconnected' && negativeNet !== 'unconnected') {
+                    const vectorFor = (net: string) => net === '0' ? 'v(0)' : hierarchyNodeVector(currentProject, reference.sheetId, reference.instancePath, net, reference.scopeSheetId)
+                    const positiveVector = vectorFor(positiveNet), negativeVector = vectorFor(negativeNet)
+                    const partsById = new Map(currentProject.sheets.flatMap((sheet) => sheet.parts.map((candidate) => [candidate.id, candidate] as const)))
+                    const refName = [...reference.instancePath.map((id) => partsById.get(id)?.ref).filter((value): value is string => Boolean(value)), part.ref].join('.')
+                    const vectorRef = reference.negativePin < 0 ? `${refName}.p${reference.positivePin + 1}-gnd` : reference.positivePin === 0 && reference.negativePin === 1 ? refName : `${refName}.p${reference.positivePin + 1}-${reference.negativePin + 1}`
+                    if (positiveVector && negativeVector) {
+                      const derived = deriveComponentVoltageTraces(response.result.traces, positiveVector, negativeVector, refName, vectorRef)
+                      addMissingTraces(derived)
+                      matches = derived
+                      refreshedVoltageProbe = { partId: part.id, positivePin: reference.positivePin, negativePin: reference.negativePin, positiveNet, negativeNet, positiveVector, negativeVector, ref: refName, vectorRef, sheetId: reference.sheetId, scopeSheetId: reference.scopeSheetId, instancePath: reference.instancePath }
+                    }
+                  }
+                }
+              }
+              if (!reference && !matches.length) matches = response.result.traces.filter((trace) => trace.id === oldId || trace.baseId === oldId)
+              const oldIndex = simulationResult?.traces.findIndex((trace) => trace.id === oldId) ?? -1
+              const color = panel.traceColors?.[oldId] ?? PLOT_TRACE_COLORS[(oldIndex < 0 ? 0 : oldIndex) % PLOT_TRACE_COLORS.length]
+              for (const trace of matches) {
+                if (!selectedTraceIds.includes(trace.id)) selectedTraceIds.push(trace.id)
+                traceColors[trace.id] = color
+                if (reference) traceReferences[trace.id] = reference
+                if (refreshedVoltageProbe) componentVoltageProbes[trace.id] = refreshedVoltageProbe
+              }
+            }
+            return { ...panel, selectedTraceIds, traceReferences, traceColors, componentVoltageProbes: Object.keys(componentVoltageProbes).length ? componentVoltageProbes : undefined }
           })
           saveAdditionalPlotPanels(nextPanels)
         }
@@ -3884,7 +3986,7 @@ export default function App() {
       </main>
 
       {additionalPlotPanels.map((panel, index) => <FloatingPlotPanel key={panel.id} panel={panel} index={index} title={waveformWindowTitle(panel, index)} onBoundsChange={(bounds) => updatePlotPanel(panel.id, (current) => ({ ...current, bounds }))} onClose={() => saveAdditionalPlotPanels(additionalPlotPanels.filter((item) => item.id !== panel.id))} onActivate={() => { if (index !== additionalPlotPanels.length - 1) saveAdditionalPlotPanels([...additionalPlotPanels.filter((item) => item.id !== panel.id), panel]) }}>
-        {simulationResult ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={simulationResult} selectedIds={panel.selectedTraceIds} onToggle={(traceId) => togglePlotPanelTrace(panel.id, traceId)} onExport={() => exportWaveformCsv(panel.selectedTraceIds)} ranges={panel.ranges} onRangeChange={(analysis, range) => changePlotPanelRange(panel.id, analysis, range)}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
+        {simulationResult ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={simulationResult} selectedIds={panel.selectedTraceIds} traceColors={panel.traceColors} onToggle={(traceId) => togglePlotPanelTrace(panel.id, traceId)} onExport={() => exportWaveformCsv(panel.selectedTraceIds)} ranges={panel.ranges} onRangeChange={(analysis, range) => changePlotPanelRange(panel.id, analysis, range)}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
       </FloatingPlotPanel>)}
 
       <aside aria-label="Properties inspector" className={`inspector-panel${mobilePane === 'properties' ? ' mobile-active' : ''}`}>

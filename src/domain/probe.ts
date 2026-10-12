@@ -3,7 +3,7 @@ import { wireNetAt, type Point } from './geometry'
 import type { Part, Project } from './project'
 import type { Trace } from '../engine/contract'
 
-export type ProbeTarget = { kind: 'node'; name: string } | { kind: 'part'; id: string }
+export type ProbeTarget = { kind: 'node'; name: string; wireId?: string } | { kind: 'part'; id: string }
 
 export function transformerWindingCurrentVector(ref: string, winding: 'P' | 'S'): string {
   return `i(@L${ref}_${winding}[i])`
@@ -84,7 +84,7 @@ export function resolveProbeTarget(project: Project, point: Point, tolerance = 1
   const wire = wireNetAt(project, point, tolerance)
   if (wire) {
     const name = analyzeConnectivity(project).wireNets.get(wire.wireId)
-    return name ? { kind: 'node', name } : null
+    return name ? { kind: 'node', name, wireId: wire.wireId } : null
   }
   const part = project.parts.find((candidate) => {
     if (candidate.kind === 'ground') return false
