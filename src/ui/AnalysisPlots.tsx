@@ -148,6 +148,42 @@ const PlotPolylineSet = memo(function PlotPolylineSet({ plots }: { plots: { id: 
   return <>{plots.map((plot) => <polyline key={plot.id} points={plot.points} fill="none" stroke={plot.color} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}</>
 })
 
+function TransientCursorTime({ axis }: { axis?: Float64Array }) {
+  const cursorIndex = useSimulationCursor()
+  return <span>{cursorIndex === null || !axis ? 'Click plot for cursor values' : `t = ${axis[cursorIndex].toPrecision(5)} s`}</span>
+}
+
+function TransientCursorMarker({ axis, first, last, minTime, maxTime, left, right, top, bottom }: {
+  axis?: Float64Array
+  first: number
+  last: number
+  minTime: number
+  maxTime: number
+  left: number
+  right: number
+  top: number
+  bottom: number
+}) {
+  const cursorIndex = useSimulationCursor()
+  if (cursorIndex === null || !axis || cursorIndex < first || cursorIndex > last) return null
+  const x = left + ((axis[cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)
+  return <line x1={x} x2={x} y1={top} y2={bottom} className="plot-cursor"/>
+}
+
+function TransientCursorReadout({ axis, shown, traceIndexById, colors }: {
+  axis?: Float64Array
+  shown: Trace[]
+  traceIndexById: Map<string, number>
+  colors: string[]
+}) {
+  const cursorIndex = useSimulationCursor()
+  return <div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => {
+    const time = axis?.[cursorIndex] ?? 0
+    const index = nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
+    return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span>
+  })}</div>
+}
+
 function useResponsivePlotSize() {
   const ref = useRef<SVGSVGElement>(null)
   const [size, setSize] = useState({ width: 760, height: 160 })
@@ -172,7 +208,6 @@ function useResponsivePlotSize() {
 }
 
 function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, measurements }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; measurements: MeasurementResult[] }) {
-  const cursorIndex = useSimulationCursor()
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const traceIndexById = useTraceIndexById(traces)
@@ -235,18 +270,17 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const next = nearestAxisIndex(axis, minTime + fraction * (maxTime - minTime), first, Math.min(last, axis.length - 1))
     setSimulationCursor(next)
   }
-  const cursorTime = cursorIndex === null || !axis ? null : axis[cursorIndex]
   return <div className="waveform-view">
-    <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><span>{cursorTime === null ? 'Click plot for cursor values' : `t = ${cursorTime.toPrecision(5)} s`}</span><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Transient waveforms from ${minTime.toPrecision(3)} to ${maxTime.toPrecision(3)} seconds`} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event, height, bottom - top)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
       {[0, 1, 2, 3].map((line) => { const y = top + (line / 3) * (bottom - top); const v = voltageRange[1] - (line / 3) * (voltageRange[1] - voltageRange[0]); const a = currentRange[1] - (line / 3) * (currentRange[1] - currentRange[0]); return <g key={line}><line x1={left} x2={right} y1={y} y2={y} className="plot-grid"/>{hasVoltage && <text x={left - 5} y={y + 3} textAnchor="end" className="plot-tick">{v.toPrecision(3)} V</text>}{hasCurrent && <text x={right + 4} y={y + 3} className="plot-tick">{a.toPrecision(3)} A</text>}</g> })}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
-      {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} x2={left + ((axis![cursorIndex] - minTime) / (maxTime - minTime || 1)) * (right - left)} y1={top} y2={bottom} className="plot-cursor"/>}
+      <TransientCursorMarker axis={axis} first={first} last={last} minTime={minTime} maxTime={maxTime} left={left} right={right} top={top} bottom={bottom}/>
       <text x={left} y={height - 3} className="plot-tick">{minTime.toPrecision(3)} s</text><text x={right} y={height - 3} textAnchor="end" className="plot-tick">{maxTime.toPrecision(3)} s</text>
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="waveform traces" colorFor={(index) => colors[index % colors.length]}/>
-    <div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => { const index = nearestAxisIndex(trace.axis, axis?.[cursorIndex] ?? 0, 0, Math.max(0, trace.axis.length - 1)); return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[index].toPrecision(5)} {trace.unit}</span> })}</div>
+    <TransientCursorReadout axis={axis} shown={shown} traceIndexById={traceIndexById} colors={colors}/>
     {measurements.length > 0 && <div className="measurement-results"><div className="form-section-title">MEASUREMENTS</div><table className="op-table"><thead><tr><th>Name</th><th>Operation</th><th>Value</th></tr></thead><tbody>{measurements.map((measurement) => <tr key={`${measurement.sweep?.index ?? 0}-${measurement.id}`}><td>{measurement.id}{measurement.sweep ? ` · ${measurement.sweep.label}` : ''}</td><td>{measurement.operation === 'delay' ? `DELAY ${measurement.vector} → ${measurement.targetVector ?? 'target'}` : `${measurement.operation.toUpperCase()} ${measurement.vector}${measurement.from || measurement.to ? ` · ${measurement.from ? `from ${measurement.from}` : ''}${measurement.from && measurement.to ? ' ' : ''}${measurement.to ? `to ${measurement.to}` : ''}` : ''}`}</td><td>{measurement.value.toPrecision(7)} {measurement.unit}</td></tr>)}</tbody></table></div>}
   </div>
 }
