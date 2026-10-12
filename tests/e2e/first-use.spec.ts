@@ -3809,6 +3809,8 @@ test('transformer transient animation follows both solved winding currents', { t
   await expect(page.locator('.example-lesson-next-step')).toContainText(/Ngspice's final sample is \|Iprimary\| = .* mA and \|Isecondary\| = .* mA/)
   const slider = page.getByLabel('Simulation time')
   await scrubToTime(slider, 0.025)
+  await expect(transformer.locator('.transformer-primary-current-glow')).toBeVisible()
+  await expect(transformer.locator('.transformer-secondary-current-glow')).toBeVisible()
   await expect(transformer.locator('.component-current-arrow')).toBeVisible()
   await expect(transformer.locator('.transformer-secondary-current-arrow')).toBeVisible()
   await expect(transformer.locator('.transformer-secondary-current-arrow')).toHaveAttribute('data-direction', /pin-3-to-pin-4|pin-4-to-pin-3/)
