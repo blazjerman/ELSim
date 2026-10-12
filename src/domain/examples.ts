@@ -901,7 +901,25 @@ export function createCurrentControlledSourcesExampleProject(): Project {
   }
   project.name = 'Current-controlled sources'
   project.parts = [control, senseResistor, sensor, cccs, cccsLoad, ccvs, ccvsLoad]
-  project.wires = []
+  project.wires = [
+    { id: 'current-vin-feed', points: [[180, 310], [340, 300]] },
+    { id: 'current-sense-link', points: [[440, 300], [600, 370]] },
+    { id: 'current-sense-return-v', points: [[600, 470], [600, 520]] },
+    { id: 'current-sense-return-h', points: [[600, 520], [180, 520]] },
+    { id: 'current-sense-return-source', points: [[180, 520], [180, 410]] },
+    { id: 'current-cccs-output-rise', points: [[770, 300], [770, 280]] },
+    { id: 'current-cccs-output-h', points: [[770, 280], [1010, 280]] },
+    { id: 'current-cccs-output-drop', points: [[1010, 280], [1010, 300]] },
+    { id: 'current-cccs-return-v', points: [[1110, 300], [1110, 380]] },
+    { id: 'current-cccs-return-h', points: [[1110, 380], [870, 380]] },
+    { id: 'current-cccs-return-source', points: [[870, 380], [870, 300]] },
+    { id: 'current-ccvs-output-rise', points: [[770, 620], [770, 600]] },
+    { id: 'current-ccvs-output-h', points: [[770, 600], [1010, 600]] },
+    { id: 'current-ccvs-output-drop', points: [[1010, 600], [1010, 620]] },
+    { id: 'current-ccvs-return-v', points: [[1110, 620], [1110, 700]] },
+    { id: 'current-ccvs-return-h', points: [[1110, 700], [870, 700]] },
+    { id: 'current-ccvs-return-source', points: [[870, 700], [870, 620]] },
+  ]
   project.junctions = []
   project.netLabels = [
     labelAt('current-vin-source', 'VIN', control, 0), labelAt('current-vin-r', 'VIN', senseResistor, 0),
@@ -912,7 +930,7 @@ export function createCurrentControlledSourcesExampleProject(): Project {
     labelAt('current-h-out', 'V_H', ccvs, 0), labelAt('current-h-load', 'V_H', ccvsLoad, 0),
     labelAt('current-h-ground', '0', ccvs, 1), labelAt('current-rh-ground', '0', ccvsLoad, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
   project.plotSettings = { selectedTraceIds: ['V(VIN)', 'I(VSENSE)', 'V(V_F)', 'V(V_H)'], ranges: {} }
   project.view = { zoom: 0.75, panX: -110, panY: -50 }

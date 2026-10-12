@@ -131,6 +131,8 @@ Capacitor charge animation regression (2026-10-12): Firefox now runs the existin
 
 Voltage-controlled switch current-flow follow-up (2026-10-12): The wire sampler now maps `I(Sx)` onto conduction pins 1–2 and leaves control pins 3–4 at zero current. The switch example now draws explicit feed, output, and ground-return wire segments, so the full solved load current is visible along its path. Unit coverage and the focused Firefox/ngspice switch workflow verify all five wire segments animate at the expected current.
 
+Controlled-source current-flow follow-up (2026-10-12): CCCS/CCVS branch currents now drive their two output-pin wire paths; ideal inverter and logic-gate current is assigned to the output pin while input pins remain at zero. The current-controlled-source lesson now draws explicit sensor, load, and return wires, with output paths routed around the opposite terminals to preserve topology. Unit tests cover output-versus-input flow, and the Firefox/ngspice lesson verifies both controlled-source loops animate after solving.
+
 **M1.5 Beginner experience.** Onboarding, searchable components, example circuits, hover explanations, sensible simulation presets, and accessible colors/keyboard operations. Acceptance: scripted first-use test reaches a working circuit without knowledge of netlists.
 
 Example confirmation follow-up (2026-10-12): the replace-circuit prompt now reads the selected example's title from the same catalog used by the picker, removing the duplicated per-example title conditional and keeping the confirmation text aligned as examples are added or renamed. TypeScript checking passes.

@@ -4330,6 +4330,7 @@ test('current-controlled sources example shows CCCS gain and CCVS transresistanc
   await dialog.locator('.example-list article').filter({ hasText: 'Current-controlled sources' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Current-controlled sources')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(v_f)')
@@ -4340,6 +4341,11 @@ test('current-controlled sources example shows CCCS gain and CCVS transresistanc
   await timeSlider.fill(String(Math.floor(finalSample / 4)))
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(v_f\) = -2\.0+/)
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(v_h\) = 2\.0+/)
+  for (const wireId of ['current-cccs-output-rise', 'current-cccs-output-h', 'current-cccs-output-drop', 'current-cccs-return-v', 'current-cccs-return-h', 'current-cccs-return-source', 'current-ccvs-output-rise', 'current-ccvs-output-h', 'current-ccvs-output-drop', 'current-ccvs-return-v', 'current-ccvs-return-h', 'current-ccvs-return-source']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    await expect(flow).toHaveAttribute('data-current-magnitude', /\d/)
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.001)
+  }
   await expect(page.locator('.example-lesson-next-step')).toContainText('Change H1 from 2 kΩ to 4 kΩ')
   await page.locator('.circuit-part[data-part-id="current-h1"]').focus()
   await page.keyboard.press('Enter')

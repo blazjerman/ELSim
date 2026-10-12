@@ -111,6 +111,32 @@ test('transistor terminal currents resolve otherwise unknown wire branches', () 
   assert.ok(flows.get('q-collector-wire').length > 0)
 })
 
+test('ideal logic devices animate output current but not input-pin current', () => {
+  for (const kind of ['inverter', 'logicGate']) {
+    const project = createStarterProject()
+    const gate = { id: `p-${kind}`, kind, ref: 'B1', value: kind === 'inverter' ? 'NOT' : 'AND', logicOperation: 'and', x: 500, y: 300, rotation: 0 }
+    const resistor = { id: 'p-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 700, y: 300, rotation: 0 }
+    const ground = { id: 'p-gnd', kind: 'ground', ref: 'GND', value: '', x: 750, y: 400, rotation: 0 }
+    const pins = componentPins(gate)
+    const outputPin = kind === 'inverter' ? 1 : 2
+    project.parts = [gate, resistor, ground]
+    project.netLabels = []
+    project.wires = [
+      { id: 'gate-output-wire', points: [[pins[outputPin].x, pins[outputPin].y], [650, 300]] },
+      { id: 'gate-return-wire', points: [[750, 300], [750, 380]] },
+      ...pins.flatMap((pin, index) => index === outputPin ? [] : [{ id: `gate-input-${index}`, points: [[pin.x, pin.y], [pin.x - 20, pin.y]] }]),
+    ]
+    const connectivity = analyzeConnectivity(project)
+    const flows = wireCurrentFlowSegments(project, connectivity, (part) => part.ref === 'B1' ? -0.002 : part.ref === 'RLOAD' ? 0.002 : undefined)
+    assert.equal(flows.get('gate-output-wire')[0].magnitude, 0.002, `${kind} output`)
+    assert.equal(flows.get('gate-return-wire')[0].magnitude, 0.002, `${kind} return`)
+    for (const [index] of pins.entries()) {
+      if (index === outputPin) continue
+      assert.equal(flows.get(`gate-input-${index}`)[0].magnitude, 0, `${kind} input ${index}`)
+    }
+  }
+})
+
 test('voltage-controlled switch animates conduction current but not its control pins', () => {
   const project = createStarterProject()
   const source = { id: 'p-v1', kind: 'source', ref: 'V1', value: '5 V', x: 100, y: 300, rotation: 0 }

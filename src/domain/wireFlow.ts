@@ -51,7 +51,12 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
     const current = currentForPin?.(part, pinIndex)
     return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex === 2 ? current : -current }
   }
-  const twoTerminal = ['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'switch', 'behavioral'].includes(part.kind)
+  if (part.kind === 'inverter' || part.kind === 'logicGate') {
+    const current = currentForPart(part)
+    const outputPin = part.kind === 'inverter' ? 1 : 2
+    return pinIndex !== outputPin ? { value: 0 } : current === undefined || !Number.isFinite(current) ? {} : { value: -current }
+  }
+  const twoTerminal = ['source', 'currentSource', 'resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'switch', 'cccs', 'ccvs', 'behavioral'].includes(part.kind)
   if (!twoTerminal || pinIndex > 1) return {}
   const current = currentForPart(part)
   return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex === 0 ? -current : current }
