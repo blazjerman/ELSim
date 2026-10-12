@@ -41,6 +41,7 @@ import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type Simulat
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = ComponentPaletteCategory
 type Selection = { kind: 'part' | 'label'; id: string } | null
+type SheetSelectionState = { selection: Selection; partIds: string[]; wireIds: string[]; labelIds: string[] }
 type HoveredSchematicObject = { kind: 'part' | 'wire' | 'label'; id: string } | null
 type ProbeRequest = { kind: 'node'; name: string; wireId?: string; labelId?: string } | { kind: 'part'; id: string; winding?: 'P' | 'S' }
 import type { ExampleId } from './ExamplesDialog'
@@ -1502,6 +1503,7 @@ export default function App() {
   const selectedWireId = selectedWireIds.at(-1) ?? null
   const setSelectedWireId = (id: string | null) => setSelectedWireIds(id ? [id] : [])
   const [selectedPartIds, setSelectedPartIds] = useState<string[]>(['p-r1'])
+  const sheetSelectionState = useRef(new Map<string, SheetSelectionState>())
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const [selectedNetLabelIds, setSelectedNetLabelIds] = useState<string[]>([])
   const [tool, setTool] = useState<ToolMode>('select')
@@ -1698,7 +1700,10 @@ export default function App() {
   }, [])
   const clipboardProjectRef = useRef(project.rootSheetId)
   useEffect(() => {
-    if (clipboardProjectRef.current !== project.rootSheetId) copiedParts.current = null
+    if (clipboardProjectRef.current !== project.rootSheetId) {
+      copiedParts.current = null
+      sheetSelectionState.current.clear()
+    }
     clipboardProjectRef.current = project.rootSheetId
   }, [project.rootSheetId])
   useEffect(() => {
@@ -2383,13 +2388,31 @@ export default function App() {
     if (hierarchyWalkthroughStep === 2 && viaPartId === 'divider-core-instance') setHierarchyWalkthroughStep(3)
     const sheet = project.sheets.find((candidate) => candidate.id === sheetId)
     if (!sheet) return
+    const currentSheet = project.sheets.find((candidate) => candidate.id === project.activeSheetId)
+    if (currentSheet) sheetSelectionState.current.set(currentSheet.id, {
+      selection,
+      partIds: selectedPartIds,
+      wireIds: selectedWireIds,
+      labelIds: selectedNetLabelIds,
+    })
+    const savedSelection = sheetSelectionState.current.get(sheet.id)
+    const partIds = savedSelection?.partIds.filter((id) => sheet.parts.some((part) => part.id === id)) ?? []
+    const wireIds = savedSelection?.wireIds.filter((id) => sheet.wires.some((wire) => wire.id === id)) ?? []
+    const labelIds = savedSelection?.labelIds.filter((id) => sheet.netLabels.some((label) => label.id === id)) ?? []
+    const nextSelection = savedSelection?.selection && (savedSelection.selection.kind === 'part'
+      ? sheet.parts.some((part) => part.id === savedSelection.selection!.id)
+      : sheet.netLabels.some((label) => label.id === savedSelection.selection!.id))
+      ? savedSelection.selection
+      : null
     const viaPart = viaPartId ? project.parts.find((part) => part.id === viaPartId && part.sheetId === sheetId) : undefined
     const path = sheet.id === project.rootSheetId ? [] : viaPart ? [...sheetInstancePath, viaPart.id] : preferredSheetInstancePath(project, sheet.id, sheetInstancePath) ?? findSheetInstancePath(sheet.id) ?? []
     setSheetInstancePath(path)
     setProjectState((current) => ({ ...current, activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view }))
     history.current = { past: [], future: [] }
-    setSelection(null)
-    setSelectedWireId(null)
+    setSelection(nextSelection)
+    setSelectedPartIds(partIds)
+    setSelectedWireIds(wireIds)
+    setSelectedNetLabelIds(labelIds)
     setNotice(simulationResult ? `Opened ${sheet.name}. Probe labeled internal nodes to inspect this block instance in the current simulation.` : `Opened sheet ${sheet.name}. Run the root circuit to probe this block in context.`)
   }
   const addSheet = () => {
