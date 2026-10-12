@@ -38,6 +38,9 @@ async function rightClickNetLabel(page: import('@playwright/test').Page, name: s
       })
       if (!box) continue
       const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      const canvasBounds = await page.locator('.canvas-wrap').boundingBox()
+      const edgeInset = 8
+      if (!canvasBounds || point.x < canvasBounds.x + edgeInset || point.x > canvasBounds.x + canvasBounds.width - edgeInset || point.y < canvasBounds.y + edgeInset || point.y > canvasBounds.y + canvasBounds.height - edgeInset) continue
       let coveringPlot: Locator | undefined
       const plots = page.locator('.plot-window')
       for (let plotIndex = await plots.count() - 1; plotIndex >= 0; plotIndex -= 1) {
