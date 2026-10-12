@@ -3388,24 +3388,48 @@ test('Examples, Circuit checks, and Sheet settings keep keyboard focus inside mo
 
 test('circuit checks can select the affected component and orphan wire', async ({ page }) => {
   await page.goto('/')
-  await page.evaluate(() => {
-    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    project.parts.find((part: { id: string }) => part.id === 'p-r1').value = 'not-a-value'
-    project.wires.push({ id: 'orphan-wire', points: [[700, 650], [760, 650]] })
-    project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires }
-    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
-  })
-  await page.reload()
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  await page.locator('[data-part-setting="p-r1:value"]').fill('not-a-value')
   await page.getByRole('button', { name: /Check circuit/ }).click()
   const report = page.getByRole('dialog', { name: 'Circuit checks' })
   await expect(report).toContainText('R1 has an invalid value')
   await report.getByRole('button', { name: 'Select affected component' }).first().click()
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('R1')
 
+  await page.getByRole('button', { name: 'Draw wire (W)' }).click()
+  await expect(page.getByRole('button', { name: 'Draw wire (W)' })).toHaveClass(/active/)
+  const svg = page.locator('svg.schematic')
+  const dragWire = async (x1: number, y1: number, x2: number, y2: number) => {
+    const start = await svg.evaluate((element, point) => {
+      const target = (element as SVGSVGElement).createSVGPoint(); target.x = point.x; target.y = point.y
+      const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+      return { x: screen.x, y: screen.y }
+    }, { x: x1, y: y1 })
+    const end = await svg.evaluate((element, point) => {
+      const target = (element as SVGSVGElement).createSVGPoint(); target.x = point.x; target.y = point.y
+      const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+      return { x: screen.x, y: screen.y }
+    }, { x: x2, y: y2 })
+    await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
+  }
+  await dragWire(500, 160, 560, 160)
+  await expect(page.locator('.wire-line')).toHaveCount(8)
   await page.getByRole('button', { name: /Check circuit/ }).click()
   await expect(report).toContainText('Wire is not attached to a component or label')
   await report.getByRole('button', { name: 'Select wire' }).click()
   await expect(page.locator('.wire-line.selected')).toHaveCount(1)
+
+  await page.getByRole('button', { name: 'Select and move (M)' }).click()
+  const ground = page.locator('.circuit-part[data-part-id="p-gnd"]')
+  await ground.focus()
+  await page.keyboard.press('Enter')
+  await expect(ground).toHaveClass(/selected/)
+  await page.keyboard.press('Delete')
+  await expect(ground).toHaveCount(0)
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  await expect(report).toContainText('Check the negative terminal of V1')
+  await report.getByRole('button', { name: 'Select affected component' }).last().click()
+  await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('V1')
 })
 
 test('inspector rejects a duplicate case-insensitive SPICE reference before saving', async ({ page }) => {

@@ -293,7 +293,18 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     })
     if (sheetParts.some((part) => part.kind !== 'ground' && componentPins(part).some((pin) => sheetConnectivity.pinNets.get(`${part.id}:${pin.index}`) === '0'))) hasGround = true
   }
-  if (!hasGround) issues.push({ id: 'ground', severity: 'warning', title: 'No ground reference found', detail: 'Most SPICE circuits need a node named 0. Add a ground symbol or a net label named 0.' })
+  if (!hasGround) {
+    const supply = project.parts.find((part) => part.kind === 'source')
+    issues.push({
+      id: 'ground',
+      severity: 'warning',
+      title: 'No ground reference found',
+      detail: supply
+        ? `Most SPICE circuits need a node named 0. Check the negative terminal of ${supply.ref}; if that is your circuit's reference point, connect a ground symbol there or add a net label named 0. Keep a different reference if your circuit is intentionally floating.`
+        : 'Most SPICE circuits need a node named 0. Add a ground symbol or a net label named 0.',
+      ...(supply ? { partId: supply.id } : {}),
+    })
+  }
   for (const [index, diagnostic] of connectivity.diagnostics.entries()) {
     issues.push({ id: `connectivity:${index}`, severity: 'warning', title: 'Conflicting net labels', detail: diagnostic.message })
   }

@@ -160,8 +160,19 @@ test('reports missing ground and conflicting labels without stopping simulation'
   project.parts = project.parts.filter((part) => part.kind !== 'ground')
   project.netLabels.push({ id: 'conflict', name: 'other-name', x: 245, y: 290, visible: true })
   const issues = checkCircuit(project)
-  assert.ok(issues.some((item) => item.id === 'ground'))
+  const ground = issues.find((item) => item.id === 'ground')
+  assert.equal(ground.partId, 'p-v1')
+  assert.match(ground.detail, /negative terminal of V1/)
+  assert.match(ground.detail, /intentionally floating/)
   assert.ok(issues.some((item) => item.title === 'Conflicting net labels'))
+})
+
+test('missing-ground guidance stays generic when no independent voltage source exists', () => {
+  const project = createStarterProject()
+  project.parts = project.parts.filter((part) => part.kind === 'resistor')
+  const ground = checkCircuit(project).find((item) => item.id === 'ground')
+  assert.equal(ground.partId, undefined)
+  assert.match(ground.detail, /Add a ground symbol or a net label named 0/)
 })
 
 test('ground inside an instantiated child sheet counts as the shared SPICE node 0', () => {
