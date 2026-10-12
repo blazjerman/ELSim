@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -44,6 +44,27 @@ test('inverting op-amp lesson wires negative feedback and its resistor ratio', (
   assert.match(artifact.text, /^RIN VIN FB 10k$/m)
   assert.match(artifact.text, /^RF VOUT FB 20k$/m)
   assert.match(artifact.text, /^\.op$/m)
+})
+
+test('logic gate lesson creates labeled, transient behavioral gates', () => {
+  const project = validateProject(createLogicGatesExampleProject())
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.simulation.analysis, 'tran')
+  assert.match(artifact.text, /^VA A 0 PULSE\(0 5 0 1u 1u 20m 40m\)$/m)
+  assert.match(artifact.text, /^VB B 0 PULSE\(0 5 0 1u 1u 10m 20m\)$/m)
+  assert.match(artifact.text, /^BAND OUT_AND 0 V=\{/m)
+  assert.match(artifact.text, /^BNOT OUT_NOT 0 V=\{/m)
+  for (const operation of ['and', 'or', 'nand', 'nor', 'xor', 'xnor']) {
+    const gate = { id: `gate-${operation}`, kind: 'logicGate', ref: `B_${operation.toUpperCase()}`, value: operation.toUpperCase(), logicOperation: operation, x: 800, y: 500, rotation: 0 }
+    const testProject = structuredClone(project)
+    testProject.parts.push(gate)
+    const pins = componentPins(gate)
+    for (let index = 0; index < pins.length; index += 1) testProject.netLabels.push({ id: `gate-${operation}-pin-${index}`, name: index === 0 ? 'A' : index === 1 ? 'B' : `OUT_${operation.toUpperCase()}`, x: pins[index].x, y: pins[index].y, visible: true })
+    const gateDeck = createNetlistArtifact(validateProject(testProject))
+    assert.deepEqual(gateDeck.diagnostics, [], `${operation} should produce a valid deck`)
+    assert.match(gateDeck.text, new RegExp(`^B_${operation.toUpperCase()} OUT_${operation.toUpperCase()} 0 V=\\{`, 'm'))
+  }
 })
 
 test('AC transformer example emits coupled windings with the selected turns ratio', () => {

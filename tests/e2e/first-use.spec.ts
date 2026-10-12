@@ -483,7 +483,7 @@ test('LTspice schematic import preserves and reports duplicate model library fil
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets.map((asset: { filename: string }) => asset.filename))).toEqual(['amp-a.lib', 'amp-b.lib'])
 })
 
-test('component shortcuts are case-sensitive and future Falstad shortcuts stay reserved', { tag: '@ui-smoke' }, async ({ page }) => {
+test('component shortcuts are case-sensitive and logic-gate keys select their matching parts', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.keyboard.press('Escape')
   const shortcuts: [string, string][] = [
@@ -502,14 +502,19 @@ test('component shortcuts are case-sensitive and future Falstad shortcuts stay r
   await page.keyboard.press('Shift+C')
   await expect(page.locator('.component-card').filter({ hasText: 'Capacitor' })).toHaveAttribute('aria-pressed', 'true')
   await page.keyboard.press('Escape')
-  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output'], ['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate']] as const) {
+  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output']] as const) {
     await page.keyboard.press(shortcut)
     await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
   }
-  for (const [key, label] of [['@', 'NAND gate'], ['#', 'NOR gate']] as const) {
-    await page.evaluate((shortcut) => window.dispatchEvent(new KeyboardEvent('keydown', { key: shortcut, bubbles: true })), key)
-    await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
+  const gateCard = page.locator('.component-card').filter({ hasText: 'Logic gate' })
+  for (const [key, operation] of [['2', 'and'], ['3', 'or'], ['4', 'xor'], ['@', 'nand'], ['#', 'nor']] as const) {
+    if (key === '@' || key === '#') await page.evaluate((shortcut) => window.dispatchEvent(new KeyboardEvent('keydown', { key: shortcut, bubbles: true })), key)
+    else await page.keyboard.press(key)
+    await expect(gateCard, `${key} should select the ${operation.toUpperCase()} gate`).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('.toast')).toContainText('Logic gate selected')
   }
+  await page.keyboard.press('1')
+  await expect(page.locator('.component-card').filter({ hasText: 'Inverter' })).toHaveAttribute('aria-pressed', 'true')
   await page.keyboard.press('w')
   await expect(page.getByRole('button', { name: 'Draw wire (W)' })).toHaveClass(/active/)
   await page.keyboard.press('m')
@@ -2338,6 +2343,46 @@ test('inverting op-amp lesson demonstrates negative feedback gain', { tag: ['@ng
   await expectAvailableTrace(page, 'V(VOUT)')
   const table = page.locator('.plot-window').last().locator('.op-table')
   await expect(table.getByRole('row', { name: /V\(vout\)/i })).toContainText('-0.999')
+})
+
+test('logic gate lesson simulates the four input truth-table states', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Logic gate basics' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Logic gate basics')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  for (const trace of ['V(A)', 'V(B)', 'V(OUT_AND)', 'V(OUT_OR)', 'V(OUT_XOR)', 'V(OUT_NOT)', 'V(OUT_NAND)', 'V(OUT_NOR)', 'V(OUT_XNOR)']) await expectAvailableTrace(page, trace)
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  const sample = async (time: number) => {
+    await scrubToTime(slider, time)
+    const readout = await page.locator('.plot-window').first().locator('.cursor-readout').innerText()
+    const value = (name: string) => {
+      const found = readout.match(new RegExp(`${name} = ([+-]?[\\d.e+-]+)`, 'i'))
+      if (!found) throw new Error(`Missing ${name} in cursor readout: ${readout}`)
+      return Number(found[1])
+    }
+    return [value('V\\(a\\)'), value('V\\(b\\)'), value('V\\(out_and\\)'), value('V\\(out_or\\)'), value('V\\(out_xor\\)'), value('V\\(out_not\\)'), value('V\\(out_nand\\)'), value('V\\(out_nor\\)'), value('V\\(out_xnor\\)')]
+  }
+  const expectState = async (time: number, levels: number[]) => {
+    const measured = await sample(time)
+    expect(measured).toHaveLength(levels.length)
+    measured.forEach((value, index) => expect(value, `at ${time}s, trace ${index}`).toBeCloseTo(levels[index], 1))
+  }
+  await expectState(0.005, [5, 5, 5, 5, 0, 0, 0, 0, 5])
+  await expectState(0.015, [5, 0, 0, 5, 5, 0, 5, 0, 0])
+  await expectState(0.025, [0, 5, 0, 5, 5, 5, 5, 0, 0])
+  await expectState(0.035, [0, 0, 0, 0, 0, 5, 5, 5, 5])
+  await page.locator('.additional-plot-window').getByRole('button', { name: /Close/ }).click()
+  await page.locator('.circuit-part[data-part-id="logic-and"]').click()
+  const gateType = page.getByLabel('Logic gate type')
+  await expect(gateType).toHaveValue('and')
+  await gateType.selectOption('nand')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'logic-and')?.logicOperation)).toBe('nand')
 })
 
 test('potentiometer example adjusts the simulated output with its wiper', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

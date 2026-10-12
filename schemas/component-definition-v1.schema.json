@@ -46,6 +46,8 @@
         "cccs",
         "ccvs",
         "behavioral",
+        "inverter",
+        "logicGate",
         "npn",
         "pnp",
         "subcircuit",

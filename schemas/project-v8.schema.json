@@ -165,6 +165,8 @@
             "cccs",
             "ccvs",
             "behavioral",
+            "inverter",
+            "logicGate",
             "npn",
             "pnp",
             "nmos",
@@ -251,6 +253,9 @@
             "voltage",
             "current"
           ]
+        },
+        "logicOperation": {
+          "enum": ["and", "or", "nand", "nor", "xor", "xnor"]
         },
         "behavioralDialect": {
           "const": "ltspice"

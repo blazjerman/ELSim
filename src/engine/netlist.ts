@@ -265,7 +265,7 @@ export function validateAnalysisSettings(project: Project): AnalysisSettingError
 }
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
@@ -346,7 +346,7 @@ function hierarchicalSaveVectors(project: Project): string[] {
     }
     if (path.length) for (const part of sheet.parts) {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmos' || part.kind === 'pmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' ? 'b' : 'g'
+      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmos' || part.kind === 'pmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
       if (part.kind === 'transformer') {
         saves.add(`.save i(l.${device}_p)`)
@@ -407,8 +407,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
-    const value = part.kind === 'behavioral' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
-    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && value === null) {
+    const value = part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
+    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && value === null) {
       const message = `${part.ref} has an invalid numeric value.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -785,6 +785,28 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       append(`${part.ref} ${positive} ${negative} ${source.ref} ${value}`, part.id, 'component')
     }
+    else if (part.kind === 'logicGate' || part.kind === 'inverter') {
+      const inputA = `V(${pinNet(connectivity, part, 0)}) > 2.5`
+      const inputB = `V(${pinNet(connectivity, part, 1)}) > 2.5`
+      const operation = part.logicOperation ?? 'and'
+      const booleanExpression = part.kind === 'inverter' ? `inv(${inputA})`
+        : operation === 'and' ? `(${inputA}) & (${inputB})`
+          : operation === 'nand' ? `!(${inputA} & ${inputB})`
+            : operation === 'or' ? `(${inputA}) | (${inputB})`
+              : operation === 'nor' ? `!(${inputA} | ${inputB})`
+                : operation === 'xor' ? `xor(${inputA}, ${inputB})` : `!xor(${inputA}, ${inputB})`
+      const expression = `5 * (${booleanExpression})`
+      try {
+        const parsed = parseBehavioralExpression(expression)
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        const translated = translateBehavioralExpression(expression)
+        append(`${part.ref} ${pinNet(connectivity, part, part.kind === 'inverter' ? 1 : 2)} 0 V={${translated}}`, part.id, 'component')
+      } catch (error) {
+        const message = error instanceof Error ? `${part.ref}: ${error.message}` : `${part.ref} has an invalid logic-gate expression.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+      }
+    }
     else if (part.kind === 'behavioral') {
       try {
         const parsed = parseBehavioralExpression(part.value)
@@ -909,7 +931,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 }
 
 export function referencePrefixForKind(kind: Part['kind']): string {
-  return ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[kind]
+  return ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[kind]
 }
 
 export function nextRef(parts: Part[], kind: Part['kind']): string {

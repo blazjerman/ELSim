@@ -109,6 +109,49 @@ export function createInvertingOpampExampleProject(): Project {
   return project
 }
 
+/** A transient truth-table lesson built from the built-in ideal logic gates. */
+export function createLogicGatesExampleProject(): Project {
+  const project = createStarterProject()
+  const sourceA: Part = { id: 'logic-va', kind: 'source', ref: 'VA', value: '5 V', sourceMode: 'pulse', pulse: { initial: '0 V', delay: '0', rise: '1 µs', fall: '1 µs', width: '20 ms', period: '40 ms' }, x: 180, y: 320, rotation: 0 }
+  const sourceB: Part = { id: 'logic-vb', kind: 'source', ref: 'VB', value: '5 V', sourceMode: 'pulse', pulse: { initial: '0 V', delay: '0', rise: '1 µs', fall: '1 µs', width: '10 ms', period: '20 ms' }, x: 180, y: 520, rotation: 0 }
+  const gates: Part[] = [
+    { id: 'logic-and', kind: 'logicGate', ref: 'BAND', value: 'AND', logicOperation: 'and', x: 520, y: 280, rotation: 0 },
+    { id: 'logic-or', kind: 'logicGate', ref: 'BOR', value: 'OR', logicOperation: 'or', x: 520, y: 400, rotation: 0 },
+    { id: 'logic-xor', kind: 'logicGate', ref: 'BXOR', value: 'XOR', logicOperation: 'xor', x: 520, y: 520, rotation: 0 },
+    { id: 'logic-not', kind: 'inverter', ref: 'BNOT', value: 'NOT', x: 520, y: 660, rotation: 0 },
+    { id: 'logic-nand', kind: 'logicGate', ref: 'BNAND', value: 'NAND', logicOperation: 'nand', x: 800, y: 280, rotation: 0 },
+    { id: 'logic-nor', kind: 'logicGate', ref: 'BNOR', value: 'NOR', logicOperation: 'nor', x: 800, y: 400, rotation: 0 },
+    { id: 'logic-xnor', kind: 'logicGate', ref: 'BXNOR', value: 'XNOR', logicOperation: 'xnor', x: 800, y: 520, rotation: 0 },
+  ]
+  const parts = [sourceA, sourceB, ...gates]
+  const labelAt = (id: string, name: string, part: Part, pinIndex: number) => {
+    const pin = componentPins(part)[pinIndex]
+    return { id, name, x: pin.x, y: pin.y, visible: true }
+  }
+  project.name = 'Logic gate basics'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    labelAt('logic-a-source', 'A', sourceA, 0), labelAt('logic-a-and', 'A', gates[0], 0),
+    labelAt('logic-a-or', 'A', gates[1], 0), labelAt('logic-a-xor', 'A', gates[2], 0), labelAt('logic-a-not', 'A', gates[3], 0),
+    labelAt('logic-a-nand', 'A', gates[4], 0), labelAt('logic-a-nor', 'A', gates[5], 0), labelAt('logic-a-xnor', 'A', gates[6], 0),
+    labelAt('logic-b-source', 'B', sourceB, 0), labelAt('logic-b-and', 'B', gates[0], 1),
+    labelAt('logic-b-or', 'B', gates[1], 1), labelAt('logic-b-xor', 'B', gates[2], 1), labelAt('logic-b-nand', 'B', gates[4], 1),
+    labelAt('logic-b-nor', 'B', gates[5], 1), labelAt('logic-b-xnor', 'B', gates[6], 1),
+    labelAt('logic-ground-a', '0', sourceA, 1), labelAt('logic-ground-b', '0', sourceB, 1),
+    labelAt('logic-out-and', 'OUT_AND', gates[0], 2), labelAt('logic-out-or', 'OUT_OR', gates[1], 2),
+    labelAt('logic-out-xor', 'OUT_XOR', gates[2], 2), labelAt('logic-out-not', 'OUT_NOT', gates[3], 1),
+    labelAt('logic-out-nand', 'OUT_NAND', gates[4], 2), labelAt('logic-out-nor', 'OUT_NOR', gates[5], 2), labelAt('logic-out-xnor', 'OUT_XNOR', gates[6], 2),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '40 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(A)', 'V(B)', 'V(OUT_AND)', 'V(OUT_OR)', 'V(OUT_XOR)', 'V(OUT_NOT)', 'V(OUT_NAND)', 'V(OUT_NOR)', 'V(OUT_XNOR)'], ranges: {} }
+  project.view = { zoom: 0.8, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 export function createLedExampleProject(): Project {
   const project = createStarterProject()
   project.name = 'LED pulse response'
