@@ -50,9 +50,25 @@ test('fatal timestep and convergence messages are surfaced even without an Error
   assert.equal(firstNgspiceError(message, '', 0), message)
   assert.equal(firstNgspiceError('Warning: source stepping failed; trying gmin stepping\nTransient analysis completed', '', 0), undefined)
   assert.equal(firstNgspiceError('No convergence problems found; transient analysis completed', '', 0), undefined)
-  const diagnostic = diagnosticForNgspice(message, artifact)
-  assert.match(diagnostic.hint, /component values and switch states/i)
-  assert.match(diagnostic.hint, /smaller maximum time step/i)
+  const diagnostic = diagnosticForNgspice(message, artifact, 'tran')
+  assert.match(diagnostic.hint, /source edges, switch states, initial conditions/i)
+  assert.match(diagnostic.hint, /not a general convergence fix/i)
+  assert.doesNotMatch(diagnostic.hint, /try a smaller maximum time step/i)
+  assert.equal(firstNgspiceError('Singular matrix: check nodes', '', 0), 'Singular matrix: check nodes')
+})
+
+test('convergence guidance explains the first useful check for each analysis', () => {
+  const cases = [
+    ['tran', /source edges, switch states, initial conditions/i],
+    ['op', /DC paths to ground, floating nodes, conflicting ideal voltage sources/i],
+    ['ac', /AC analysis starts from a DC operating point/i],
+    ['dc', /DC sweep solves the circuit at each source value/i],
+  ]
+  for (const [analysis, expected] of cases) {
+    const diagnostic = diagnosticForNgspice('failed to converge', artifact, analysis)
+    assert.match(diagnostic.hint, /Run Circuit checks/i)
+    assert.match(diagnostic.hint, expected)
+  }
 })
 
 test('common floating-node failures include beginner recovery guidance', () => {
@@ -102,11 +118,13 @@ test('imported model failures explain common card, type, parameter, and dependen
 
 test('imported model convergence failures retain source context and give solver-focused recovery guidance', () => {
   const modelArtifact = { text: '.SUBCKT AMP IN OUT\nQ1 OUT IN 0 QCORE', sourceMap: [{ line: 2, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 24 }], diagnostics: [] }
-  const diagnostic = diagnosticForNgspice('doAnalyses: TRAN: Timestep too small at line 2', modelArtifact)
+  const diagnostic = diagnosticForNgspice('doAnalyses: TRAN: Timestep too small at line 2', modelArtifact, 'tran')
   assert.equal(diagnostic.line, 2)
   assert.equal(diagnostic.assetLine, 24)
   assert.equal(diagnostic.sourceId, 'model-file:asset-7')
-  assert.match(diagnostic.hint, /did not converge while evaluating this imported model/)
-  assert.match(diagnostic.hint, /parameter values, supply and bias conditions, and connected pins/)
-  assert.match(diagnostic.hint, /smaller maximum time step or a small series resistance/)
+  assert.match(diagnostic.hint, /could not find a stable solution while evaluating this imported model/)
+  assert.match(diagnostic.hint, /parameter values, supply and bias conditions, pin order, and required companion components/)
+  assert.match(diagnostic.hint, /pin order, and required companion components/)
+  assert.match(diagnostic.hint, /Run Circuit checks first/)
+  assert.doesNotMatch(diagnostic.hint, /smaller maximum time step/)
 })

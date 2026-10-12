@@ -35,6 +35,8 @@ function makeTraces(rawText: string): Trace[] {
 }
 
 async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<RunMetadata, 'completedAt'>, parameterSweep: Extract<EngineRequest, { type: 'run' }>['parameterSweep'] = [], measurements: TransientMeasurement[] = []): Promise<void> {
+  const configuredAnalysis = metadata.settings.analysis
+  const analysis = configuredAnalysis === 'tran' || configuredAnalysis === 'op' || configuredAnalysis === 'ac' || configuredAnalysis === 'dc' ? configuredAnalysis : undefined
   const stdout: string[] = []
   const stderr: string[] = []
   const profileStarted = profileWorker ? performance.now() : 0
@@ -63,7 +65,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     const output = stdout.join('\n')
     const message = firstNgspiceError(output, stderr.join('\n'), status)
     if (message) {
-      worker.postMessage({ type: 'error', requestId, error: diagnosticForNgspice(message, artifact) } satisfies EngineResponse)
+      worker.postMessage({ type: 'error', requestId, error: diagnosticForNgspice(message, artifact, analysis) } satisfies EngineResponse)
       return
     }
     const resultProcessingStarted = profileWorker ? performance.now() : 0
@@ -97,7 +99,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse, transferableTraceBuffers(traces))
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    worker.postMessage({ type: 'error', requestId, error: diagnosticForNgspice(message, artifact) } satisfies EngineResponse)
+    worker.postMessage({ type: 'error', requestId, error: diagnosticForNgspice(message, artifact, analysis) } satisfies EngineResponse)
   }
 }
 
