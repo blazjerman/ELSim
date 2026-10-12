@@ -137,6 +137,26 @@ test('editing a reused sheet definition updates instance pins and keeps survivin
   assert.deepEqual(validateProject(updated).parts[1].sheetPortLayout, ports.map(({ side, direction }) => ({ side, direction })))
 })
 
+test('reordering used sheet ports keeps parent wires attached to the same named port', () => {
+  const project = createBlockProject()
+  const block = project.parts[1]
+  const originalPins = componentPins(block)
+  project.wires = originalPins.map((pin, index) => ({ id: `port-wire-${index}`, points: [[pin.x, pin.y], [pin.x + 30, pin.y]] }))
+  project.junctions = [{ x: originalPins[0].x, y: originalPins[0].y }]
+  project.netLabels.push({ id: 'port-in-label', name: 'IN', x: originalPins[0].x, y: originalPins[0].y, visible: true })
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels }
+
+  const reorderedPorts = [...project.sheets[1].ports].reverse()
+  const updated = updateSheetDefinition(project, 'sheet-load', reorderedPorts)
+  const reorderedPins = componentPins(updated.parts[1])
+
+  assert.deepEqual(updated.parts[1].modelPins, ['OUT', 'IN'])
+  assert.deepEqual(updated.wires.map((wire) => wire.points[0]), [[reorderedPins[1].x, reorderedPins[1].y], [reorderedPins[0].x, reorderedPins[0].y]])
+  assert.deepEqual(updated.wires.map((wire) => wire.points[1]), originalPins.map((pin) => [pin.x + 30, pin.y]))
+  assert.deepEqual(updated.junctions, [{ x: reorderedPins[1].x, y: reorderedPins[1].y }])
+  assert.deepEqual([updated.netLabels.at(-1).x, updated.netLabels.at(-1).y], [reorderedPins[1].x, reorderedPins[1].y])
+})
+
 test('removing block parameters prunes stale per-instance overrides', () => {
   const project = createBlockProject()
   project.sheets[1].parameters = [{ id: 'param-r', name: 'RLOAD', defaultValue: '1k' }]

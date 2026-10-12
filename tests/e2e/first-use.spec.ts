@@ -1161,6 +1161,8 @@ test('wire selection stays separate from the inspector and active tool', async (
 
 test('reused sheet interface edits update block pins and attached wires', async ({ page }) => {
   await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const child = {
@@ -1201,6 +1203,8 @@ test('reused sheet interface edits update block pins and attached wires', async 
   const parameter = page.locator('.example-list article').filter({ hasText: 'RLOAD = 3k' })
   await parameter.getByRole('button', { name: 'Remove' }).click()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets.find((sheet: { id: string }) => sheet.id === 'sheet-main').parts.find((part: { id: string }) => part.id === 'root-load').sheetParameters)).toEqual({})
+  await page.getByRole('button', { name: 'Move pin 2 up' }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets.find((sheet: { id: string }) => sheet.id === 'sheet-main').parts.find((part: { id: string }) => part.id === 'root-load').modelPins)).toEqual(['OUT', 'IN'])
 })
 
 test('hierarchical block parameter overrides validate before saving and update the netlist', async ({ page }) => {

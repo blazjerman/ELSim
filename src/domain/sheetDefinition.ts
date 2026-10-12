@@ -82,7 +82,9 @@ export function updateSheetDefinition(
       const oldPins = componentPins(part)
       const nextPins = componentPins(nextPart)
       oldPins.forEach((pin, index) => {
-        const target = nextPins[index]
+        const oldPortId = definition.ports[index]?.id
+        const nextIndex = oldPortId ? ports.findIndex((port) => port.id === oldPortId) : index
+        const target = nextIndex >= 0 ? nextPins[nextIndex] : undefined
         if (target && (pin.x !== target.x || pin.y !== target.y)) moves.set(`${pin.x},${pin.y}`, [target.x, target.y])
       })
       return nextPart
