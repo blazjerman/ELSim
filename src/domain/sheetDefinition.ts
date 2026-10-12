@@ -42,7 +42,7 @@ export function duplicateSheetDefinition(project: Project, sheetId: string, crea
     parts: sheet.parts.map((part) => {
       const childId = part.sheetId ? idMap.get(part.sheetId) : undefined
       return {
-        ...part,
+        ...structuredClone(part),
         id: `p-${createId()}`,
         ...(childId ? { sheetId: childId, value: nameMap.get(part.sheetId!)!, modelName: sheetModelName(childId) } : {}),
         ...(part.modelPins ? { modelPins: [...part.modelPins] } : {}),

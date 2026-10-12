@@ -126,6 +126,9 @@ test('duplicating a reusable sheet clones nested definitions with fresh identiti
   project.sheets[1].parts = [{
     id: 'nested-block', kind: 'subcircuit', componentDefinitionId: 'elsim.subcircuit', ref: 'XCORE',
     value: 'Core', modelName: sheetModelName(nested.id), modelPins: ['IN'], sheetId: nested.id, x: 500, y: 300, rotation: 0,
+  }, {
+    id: 'pulse-source', kind: 'source', componentDefinitionId: 'elsim.voltage-source', ref: 'VSTEP', value: '5 V', sourceMode: 'pulse',
+    pulse: { initial: '0 V', delay: '0', rise: '1 µs', fall: '1 µs', width: '2 ms', period: '4 ms' }, x: 700, y: 300, rotation: 0,
   }]
   project.sheets.push(nested)
 
@@ -137,6 +140,10 @@ test('duplicating a reusable sheet clones nested definitions with fresh identiti
   assert.equal(copy.parentSheetId, project.rootSheetId)
   assert.notEqual(copy.ports[0].id, project.sheets[1].ports[0].id)
   assert.notEqual(copy.parts[0].id, project.sheets[1].parts[0].id)
+  assert.deepEqual(copy.parts[1].pulse, project.sheets[1].parts[1].pulse)
+  assert.notEqual(copy.parts[1].pulse, project.sheets[1].parts[1].pulse)
+  copy.parts[1].pulse.period = '8 ms'
+  assert.equal(project.sheets[1].parts[1].pulse.period, '4 ms')
   const copiedNested = duplicated.sheets.find((sheet) => sheet.parentSheetId === copy.id)
   assert.ok(copiedNested)
   assert.notEqual(copiedNested.id, nested.id)
