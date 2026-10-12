@@ -131,3 +131,4 @@
 
 @media(max-width:600px){.shortcut-columns{grid-template-columns:1fr;gap:8px}.shortcuts-dialog{max-height:calc(100vh - 20px);padding:15px}.shortcut-columns dl>div{grid-template-columns:minmax(105px,auto) 1fr}}
 .project-recovery-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;gap:9px;background:#101412f5;color:#c5d0c7;font-size:12px}
+.library-import-hint{display:block;margin:-3px 0 7px;color:var(--muted);font-size:10px;line-height:1.45}

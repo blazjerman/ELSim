@@ -756,6 +756,32 @@ test('project-local model includes resolve as imported assets and shared paramet
   expect(netlist).not.toMatch(/^\.include/im)
 })
 
+test('batch-importing related model libraries resolves their includes immediately', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles([
+    {
+      name: 'batch-amplifier.lib',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('.include "batch-shared.lib"\n.SUBCKT BATCH_AMP IN OUT\nXCORE IN OUT BATCH_CORE\n.ENDS BATCH_AMP\n'),
+    },
+    {
+      name: 'batch-shared.lib',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('.PARAM RBASE=2k\n.SUBCKT BATCH_CORE IN OUT\nR1 IN OUT {RBASE}\n.ENDS BATCH_CORE\n'),
+    },
+  ])
+  await expect(page.getByRole('region', { name: 'Model dependency report' })).toHaveCount(0)
+  await expect(page.getByText('BATCH_AMP', { exact: true })).toBeVisible()
+  await expect(page.getByText('BATCH_CORE', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = await page.getByRole('dialog', { name: 'Generated SPICE netlist' }).innerText()
+  expect(netlist).toContain('.PARAM RBASE=2k')
+  expect(netlist).toContain('.SUBCKT BATCH_AMP')
+  expect(netlist).toContain('.SUBCKT BATCH_CORE')
+  expect(netlist).not.toMatch(/^\.include/im)
+})
+
 test('large imported IC lists can be searched and expanded on demand', async ({ page }) => {
   await page.goto('/')
   const subcircuitSources = Array.from({ length: 52 }, (_, index) => {

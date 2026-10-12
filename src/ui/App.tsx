@@ -2634,12 +2634,66 @@ export default function App() {
       return false
     }
   }
+  const commitModelLibraryImports = async (imports: { filename: string; content: string; selectedSections?: string[] }[]) => {
+    try {
+      if (!imports.length) throw new Error('Choose at least one model library.')
+      const currentAssets = projectRef.current.modelAssets ?? []
+      if (currentAssets.length + imports.length > 16) throw new Error('A project can store up to 16 imported model libraries.')
+      const incomingNames = new Set<string>()
+      for (const item of imports) {
+        const key = item.filename.toLowerCase()
+        if (incomingNames.has(key) || currentAssets.some((asset) => asset.filename.toLowerCase() === key)) throw new Error(`A model library named ${item.filename} is already in this project.`)
+        incomingNames.add(key)
+      }
+      const incomingBytes = imports.reduce((sum, item) => sum + new TextEncoder().encode(item.content).length, 0)
+      const currentBytes = currentAssets.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0)
+      if (currentBytes + incomingBytes > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
+      const parsed = imports.map((item) => parseSubcircuitLibrary(item.content, item.selectedSections))
+      const addedAssets = await Promise.all(imports.map(async (item) => ({
+        id: `model-${crypto.randomUUID()}`,
+        filename: item.filename,
+        content: item.content,
+        ...(item.selectedSections?.length ? { selectedSections: item.selectedSections } : {}),
+        sha256: await sha256Text(item.content),
+        licenseStatus: 'unknown' as const,
+        importedAt: new Date().toISOString(),
+      })))
+      const validated = validateProject({ ...projectRef.current, modelAssets: [...currentAssets, ...addedAssets] })
+      setProject(() => validated)
+      setCompatibilityDiagnostic(null)
+      const subcircuitCount = parsed.reduce((sum, library) => sum + library.subcircuits.length, 0)
+      const deviceModelCount = parsed.reduce((sum, library) => sum + library.models.length, 0)
+      setNotice(`Imported ${imports.length} model libraries with ${subcircuitCount} subcircuit${subcircuitCount === 1 ? '' : 's'} and ${deviceModelCount} device model${deviceModelCount === 1 ? '' : 's'}. Redistribution rights remain unknown.`)
+      return true
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not import these model libraries.')
+      return false
+    }
+  }
   const importModelLibrary = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+    const files = [...(event.target.files ?? [])]
     const replaceId = replacementModelAssetId
     setReplacementModelAssetId(null)
-    if (!file) return
+    if (!files.length) return
     try {
+      if (files.length > 1) {
+        if (replaceId) throw new Error('Choose one file when replacing an existing model library.')
+        const importedSources = [projectRef.current.importedSchematicSource, ...(projectRef.current.importedChildSchematicSources ?? [])].filter((item): item is NonNullable<typeof projectRef.current.importedSchematicSource> => Boolean(item))
+        const imports = [] as { filename: string; content: string; selectedSections?: string[] }[]
+        for (const file of files) {
+          if (file.size > 4 * 1024 * 1024) throw new Error(`${file.name}: model libraries are limited to 4 MiB per file.`)
+          const content = decodeModelLibrary(new Uint8Array(await file.arrayBuffer()))
+          const sections = listModelLibrarySections(content)
+          let selectedSections: string[] | undefined
+          if (sections.length > 1) {
+            selectedSections = sectionsReferencedBySchematics(importedSources.map((item) => item.originalText), file.name, sections)
+            if (!selectedSections.length) throw new Error(`${file.name} has multiple .LIB sections with no schematic selection. Import it separately to choose sections.`)
+          } else if (sections.length) selectedSections = sections
+          imports.push({ filename: file.name, content, selectedSections })
+        }
+        await commitModelLibraryImports(imports)
+      } else {
+        const file = files[0]
       if (file.size > 4 * 1024 * 1024) throw new Error('Model libraries are limited to 4 MiB per file.')
       const content = decodeModelLibrary(new Uint8Array(await file.arrayBuffer()))
       const sections = listModelLibrarySections(content)
@@ -2652,6 +2706,7 @@ export default function App() {
         } else setPendingModelImport({ filename: file.name, content, replaceId, sections, selectedSections: [] })
       } else {
         await commitModelLibraryImport(file.name, content, replaceId, sections.length ? sections : undefined)
+      }
       }
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this model library.') }
     event.target.value = ''
@@ -3543,9 +3598,9 @@ export default function App() {
         {(project.importedSchematicSource || project.importedChildSchematicSources?.length) ? <div className="imported-models"><div className="component-list-label">ORIGINAL SCHEMATIC SOURCES</div>{[...(project.importedSchematicSource ? [project.importedSchematicSource] : []), ...(project.importedChildSchematicSources ?? [])].map((source, index) => <div className="asset-provenance-card" key={`${source.filename}:${index}`}><strong>{source.filename}</strong><small>Original LTspice source · redistribution rights unknown</small>{schematicSourceProvenanceEditor(source, index)}</div>)}</div> : null}
         {(project.modelAssets?.length ?? 0) > 0 && <div className="imported-models"><div className="component-list-label">MODEL LIBRARY PROVENANCE</div>{project.modelAssets?.map((asset) => <div className="asset-provenance-card" key={asset.id}><strong>{asset.filename}</strong>{asset.selectedSections?.length && <small>Loaded sections: {asset.selectedSections.join(', ')}</small>}<details className="model-source-viewer" open={modelSourceReview?.assetId === asset.id} onToggle={(event) => { if (event.currentTarget.open) setModelSourceReview((current) => current?.assetId === asset.id ? current : { assetId: asset.id, line: 1 }); else if (modelSourceReview?.assetId === asset.id) setModelSourceReview(null) }}><summary>View original library source</summary>{modelSourceReview?.assetId === asset.id && <ol>{asset.content.split(/\r?\n/).map((line, index) => <li key={index} id={`model-source-${asset.id}-line-${index + 1}`} tabIndex={0} className={modelSourceReview.line === index + 1 ? 'active-source-line' : undefined}><code>{line || ' '}</code></li>)}</ol>}</details>{assetProvenanceEditor('modelAssets', asset)}</div>)}</div>}
         {importedSymbols.length > 0 && <div className="imported-models"><div className="component-list-label">IMPORTED SYMBOLS</div>{importedSymbols.map((symbol) => { const used = project.sheets.some((sheet) => sheet.parts.some((part) => part.symbolAssetId === symbol.assetId)); const asset = project.symbolAssets?.find((candidate) => candidate.id === symbol.assetId); const allCompatible = filteredImportedModels.filter((model) => model.pins.length === symbol.pins.length); const compatible = allCompatible.slice(0, 50); return <div className="imported-model" key={symbol.assetId}><div><strong>{symbol.name}</strong><span>{symbol.pins.length} ordered pins · {symbol.pins.map((pin) => pin.name).join(', ')}</span><small>{symbol.filename} · redistribution unknown</small>{used && <small>This symbol is used by a placed IC. Remove the instance before deleting this symbol.</small>}{symbol.warnings.length > 0 && <details className="field-hint"><summary>{symbol.warnings.length} unsupported drawing records</summary><ul>{symbol.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}{compatible.map((model) => { const mismatches = model.pins.filter((pin, index) => pin.toLowerCase() !== symbol.pins[index].name.toLowerCase()); return <div className="imported-symbol-match" key={`${symbol.assetId}:${model.assetId}:${model.name}`}><button className="place-model" onClick={() => addSubcircuit(model, symbol)}>Place {model.name} with this symbol</button>{mismatches.length > 0 && <small>Pin mapping by SpiceOrder: {model.pins.map((pin, index) => `${pin} → ${symbol.pins[index].name}`).join(', ')}</small>}</div>})}{allCompatible.length > compatible.length && <small>Showing the first 50 matches. Search imported ICs by model name to narrow this list.</small>}{asset && assetProvenanceEditor('symbolAssets', asset)}</div><button aria-label={`Remove symbol ${symbol.filename}`} title={used ? 'Remove instances using this symbol first' : 'Remove imported symbol'} disabled={used} onClick={() => setProject((current) => ({ ...current, symbolAssets: (current.symbolAssets ?? []).filter((candidate) => candidate.id !== symbol.assetId) }))}><X size={13}/></button></div>})}</div>}
-        <input ref={modelFileInput} type="file" accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain" hidden onChange={importModelLibrary}/>
+        <input ref={modelFileInput} type="file" accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain" multiple hidden onChange={importModelLibrary}/>
         <input ref={symbolFileInput} type="file" accept=".asy,text/plain" hidden onChange={importSymbol}/>
-        <button className="library-import" onClick={() => modelFileInput.current?.click()}><Plus size={15}/> Import SPICE model library</button>
+        <button className="library-import" onClick={() => modelFileInput.current?.click()}><Plus size={15}/> Import SPICE model library</button><small className="library-import-hint">Select multiple related files together to resolve model dependencies.</small>
         <button className="library-import" onClick={() => symbolFileInput.current?.click()}><Plus size={15}/> Import LTspice symbol</button>
         <div className="model-import-note">Imported model and symbol files stay in this project. Import only files you are authorized to use; ELSim does not grant redistribution rights.</div>
         <div className="library-bottom"><div className="tip-card"><span className="tip-icon"><Lightbulb size={17}/></span><div><strong>New to circuits?</strong><p>Start with a resistor, capacitor, and a voltage source.</p><button onClick={startTour}>Take a quick tour <ArrowUp size={12}/></button></div></div><div className="library-version">ELSim Preview <span>·</span> v0.1</div></div>
