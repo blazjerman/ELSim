@@ -14,11 +14,21 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   const schema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8'))
   assert.equal(schema.properties.version.const, 1)
   const ids = new Set()
+  const shortcuts = new Set()
   for (const definition of componentDefinitions) {
     assert.match(definition.id, /^elsim\.[a-z0-9-]+$/)
     assert.equal(definition.version, 1)
     assert.equal(typeof definition.help, 'string')
     assert.ok(definition.help.length > 0)
+    if (definition.kind !== 'subcircuit') {
+      assert.ok(definition.paletteSubtitle, `${definition.kind} palette subtitle`)
+      assert.ok(definition.paletteCategory, `${definition.kind} palette category`)
+      assert.ok(definition.shortcut, `${definition.kind} placement shortcut`)
+    }
+    if (definition.shortcut) {
+      assert.equal(shortcuts.has(definition.shortcut), false, `duplicate case-sensitive shortcut ${definition.shortcut}`)
+      shortcuts.add(definition.shortcut)
+    }
     if (definition.paletteName) assert.equal(schema.properties.paletteName.maxLength, 120)
     if (definition.paletteSubtitle) assert.equal(schema.properties.paletteSubtitle.maxLength, 24)
     if (definition.paletteCategory) assert.ok(schema.properties.paletteCategory.enum.includes(definition.paletteCategory))

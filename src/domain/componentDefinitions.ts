@@ -21,6 +21,10 @@ export type ComponentDefinition = {
   modelParameters?: readonly ComponentModelParameter[]
   provenance?: { assetId: string; filename: string; sha256: string }
 }
+type BuiltInComponentDefinition = ComponentDefinition & (
+  | { kind: 'subcircuit' }
+  | { paletteSubtitle: string; paletteCategory: 'basics' | 'semiconductors' | 'controlled'; shortcut: string }
+)
 
 const twoPin: readonly ComponentPinDefinition[] = [
   { name: 'pin1', direction: 'passive', spiceOrder: 1 },
@@ -55,7 +59,7 @@ const definitions = [
   { id: 'elsim.nmos', version: 1, kind: 'nmos', name: 'N-channel MOSFET', paletteSubtitle: 'M', shortcut: 'N', paletteCategory: 'semiconductors', electricalType: 'M', pins: [{ name: 'drain', direction: 'passive', spiceOrder: 1 }, { name: 'gate', direction: 'input', spiceOrder: 2 }, { name: 'source', direction: 'passive', spiceOrder: 3 }, { name: 'bulk', direction: 'passive', spiceOrder: 4 }], properties: [{ key: 'value', label: 'Model', unit: '', defaultValue: '0' }, { key: 'deviceModel', label: 'Model', unit: '' }], animationChannels: ['current.drain'] },
   { id: 'elsim.pmos', version: 1, kind: 'pmos', name: 'P-channel MOSFET', paletteSubtitle: 'M', shortcut: 'P', paletteCategory: 'semiconductors', electricalType: 'M', pins: [{ name: 'drain', direction: 'passive', spiceOrder: 1 }, { name: 'gate', direction: 'input', spiceOrder: 2 }, { name: 'source', direction: 'passive', spiceOrder: 3 }, { name: 'bulk', direction: 'passive', spiceOrder: 4 }], properties: [{ key: 'value', label: 'Model', unit: '', defaultValue: '0' }, { key: 'deviceModel', label: 'Model', unit: '' }], animationChannels: ['current.drain'] },
   { id: 'elsim.subcircuit', version: 1, kind: 'subcircuit', name: 'Imported subcircuit', electricalType: 'X', pins: [], properties: [{ key: 'modelName', label: 'Model', unit: '', required: true }], animationChannels: [] },
-] as const satisfies readonly ComponentDefinition[]
+] as const satisfies readonly BuiltInComponentDefinition[]
 
 const componentHelpByKind: Readonly<Record<PartKind, string>> = {
   source: 'Sets a voltage between its positive and negative pins. Choose DC, pulse, or PWL in Properties.',
