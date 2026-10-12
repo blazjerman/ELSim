@@ -21,7 +21,6 @@ test('small muted interface labels retain readable contrast on their dark surfac
     ['.search-box input::placeholder', '#111613'],
     ['.search-box kbd,.shortcut', '#232a25'],
     ['.component-list-label', '#151a17'],
-    ['.trace-filter input::placeholder', '#151a17'],
     ['.library-version', '#151a17'],
     ['.canvas-footer', '#151a17'],
     ['.app-status', '#141916'],

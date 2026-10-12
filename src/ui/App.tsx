@@ -3376,7 +3376,8 @@ export default function App() {
       const invalidPart = selectReportedComponent(invalid.sourceId)
       if (invalidPart) {
         if (invalidPart.id === invalid.sourceId && /invalid numeric value|forward beta|series resistance|winding resistance/i.test(invalid.message)) {
-          focusAfterInspectorRender(`[data-part-setting="${invalidPart.id}:value"]`)
+          const setting = /series resistance|winding resistance/i.test(invalid.message) ? 'seriesResistance' : 'value'
+          focusAfterInspectorRender(`[data-part-setting="${invalidPart.id}:${setting}"]`)
         }
       }
       setRunState('error'); setNotice(invalid.message); return
