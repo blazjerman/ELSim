@@ -22,7 +22,13 @@ function interpolateCrossing(axis: Float64Array, values: Float64Array, threshold
 }
 
 function calculateFromTraces(measurement: TransientMeasurement, traces: readonly Trace[]): number | null {
-  const traceFor = (vector: string) => traces.find((trace) => trace.id.toLowerCase() === vector.trim().toLowerCase() || trace.baseId?.toLowerCase() === vector.trim().toLowerCase())
+  const traceFor = (vector: string) => {
+    const normalized = vector.trim().toLowerCase()
+    const component = normalized.match(/^i\(([rcldsegfhqbjm][a-z0-9_]*)\)$/i)?.[1]
+    const internalCurrent = component ? `i(@${component}[${/^[djm]/.test(component) ? 'id' : /^q/.test(component) ? 'ic' : 'i'}])` : ''
+    const candidates = internalCurrent ? [normalized, internalCurrent] : [normalized]
+    return traces.find((trace) => candidates.includes(trace.id.toLowerCase()) || candidates.includes(trace.baseId?.toLowerCase() ?? ''))
+  }
   const source = traceFor(measurement.vector)
   if (!source || source.values.length < 2) return null
   const axis = source.axis
@@ -83,6 +89,7 @@ function calculateFromTraces(measurement: TransientMeasurement, traces: readonly
   const duration = end - start
   if (!(duration > 0)) return null
   const average = integral / duration
+  if (measurement.operation === 'integ') return integral
   return measurement.operation === 'rms' ? Math.sqrt(Math.max(0, average)) : average
 }
 
@@ -96,7 +103,7 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
       const expression = new RegExp(`^\\s*${name}\\s*=\\s*([-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[-+]?\\d+)?)`, 'im')
       const match = output.match(expression)
       const sourceCurrent = currentSourceVector.test(measurement.vector.trim()) || (measurement.operation === 'delay' && currentSourceVector.test(measurement.targetVector.trim()))
-      const calculateWithTraces = measurement.operation === 'delay' || (!match && sourceCurrent)
+      const calculateWithTraces = measurement.operation === 'delay' || measurement.operation === 'integ' || (!match && sourceCurrent)
       const calculated = calculateWithTraces ? calculateFromTraces(measurement, traceSets[index] ?? traceSets[0] ?? []) : null
       if ((!match || measurement.operation === 'delay') && calculated === null) {
         diagnostics.push({ severity: 'warning', message: `ngspice did not return the ${measurement.operation.toUpperCase()} measurement for ${measurement.vector}. Check that the vector exists and the transient run covers enough data.`, sourceId: 'analysis:tran' })
@@ -108,7 +115,8 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
         continue
       }
       const isCurrent = measurement.vector.trim().toLowerCase().startsWith('i(')
-      results.push({ id: measurement.id, operation: measurement.operation, vector: measurement.vector, ...(measurement.operation === 'delay' ? { targetVector: measurement.targetVector } : { ...(measurement.from ? { from: measurement.from } : {}), ...(measurement.to ? { to: measurement.to } : {}) }), value, unit: measurement.operation === 'delay' ? 's' : isCurrent ? 'A' : 'V', ...(caseCount ? { sweep: { label: sweepLabels[index], index } } : {}) })
+      const unit = measurement.operation === 'delay' ? 's' : measurement.operation === 'integ' ? isCurrent ? 'C' : 'V·s' : isCurrent ? 'A' : 'V'
+      results.push({ id: measurement.id, operation: measurement.operation, vector: measurement.vector, ...(measurement.operation === 'delay' ? { targetVector: measurement.targetVector } : { ...(measurement.from ? { from: measurement.from } : {}), ...(measurement.to ? { to: measurement.to } : {}) }), value, unit, ...(caseCount ? { sweep: { label: sweepLabels[index], index: index } } : {}) })
     }
   }
   return { results, diagnostics }

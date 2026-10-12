@@ -922,13 +922,13 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const targetThreshold = delay ? spiceScalar(delay.targetThreshold, delay.targetVector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v') : null
     const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (delay
       ? vectorPattern.test(measurement.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && triggerThreshold !== null && targetThreshold !== null && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
-      : ['max', 'min', 'pp', 'avg', 'rms'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()) && rangeValid)
+      : ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()) && rangeValid)
     if (!valid) {
       const message = `Transient measurement ${cleanComment(measurement.id)} has an unsupported name, operation, or vector.`
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       continue
     }
-    if (sourceCurrent) append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id}${scalarMeasurement ? `${scalarMeasurement.from ? ` from ${scalarMeasurement.from}` : ''}${scalarMeasurement.to ? ` to ${scalarMeasurement.to}` : ''}` : ''} from the solved current-source samples.`, 'analysis:tran', 'analysis')
+    if (sourceCurrent || measurement.operation === 'integ') append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id}${scalarMeasurement ? `${scalarMeasurement.from ? ` from ${scalarMeasurement.from}` : ''}${scalarMeasurement.to ? ` to ${scalarMeasurement.to}` : ''}` : ''} from solved waveform samples.`, 'analysis:tran', 'analysis')
     else if (delay) append(`.meas tran ELSIM_${delay.id} TRIG ${delay.vector.trim()} VAL=${triggerThreshold} ${delay.edge === 'either' ? 'CROSS' : delay.edge.toUpperCase()}=${delay.triggerCount ?? 1} TARG ${delay.targetVector.trim()} VAL=${targetThreshold} ${delay.targetEdge === 'either' ? 'CROSS' : delay.targetEdge.toUpperCase()}=${delay.targetCount ?? 1}`, 'analysis:tran', 'analysis')
     else {
       const scalarMeasure = scalarMeasurement!

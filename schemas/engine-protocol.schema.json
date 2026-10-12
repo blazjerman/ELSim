@@ -97,13 +97,13 @@
       "required": ["id", "operation", "vector", "value", "unit"],
       "properties": {
         "id": { "type": "string" },
-        "operation": { "enum": ["max", "min", "pp", "avg", "rms", "delay"] },
+        "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ", "delay"] },
         "vector": { "type": "string" },
         "targetVector": { "type": "string" },
         "from": { "type": "string", "maxLength": 48 },
         "to": { "type": "string", "maxLength": 48 },
         "value": { "type": "number" },
-        "unit": { "enum": ["V", "A", "s"] },
+        "unit": { "enum": ["V", "A", "C", "V·s", "s"] },
         "sweep": { "type": "object", "additionalProperties": false, "required": ["label", "index"], "properties": { "label": { "type": "string" }, "index": { "type": "integer", "minimum": 0 } } }
       }
     },
@@ -133,7 +133,7 @@
           "required": ["id", "operation", "vector"],
           "properties": {
             "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,23}$" },
-            "operation": { "enum": ["max", "min", "pp", "avg", "rms"] },
+            "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ"] },
             "vector": { "type": "string", "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$" },
             "from": { "type": "string", "maxLength": 48 },
             "to": { "type": "string", "maxLength": 48 }

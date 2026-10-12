@@ -78,7 +78,7 @@ export type PlotSettings = {
 }
 export type SourceSweepParameter = 'pulse.initial' | 'pulse.high' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pwl.scale' | `pwl.point.${number}` | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
 export type ParameterSweep = { component: string; parameter?: string; sourceParameter?: SourceSweepParameter; globalParameter?: string; listValues?: string[]; start: string; stop: string; points: number }
-export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms'; vector: string; from?: string; to?: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either'; triggerCount?: number; targetCount?: number }
+export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ'; vector: string; from?: string; to?: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either'; triggerCount?: number; targetCount?: number }
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
 export type AssetProvenance = { sourceUrl?: string; licenseReference?: string; rightsNotes?: string }
 export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; selectedSections?: string[]; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
@@ -612,7 +612,7 @@ export function validateProject(input: unknown): Project {
       const from = measurement?.operation === 'delay' ? null : measurement?.from === undefined ? null : typeof measurement.from === 'string' ? timeMagnitude(measurement.from) ?? Number.NaN : Number.NaN
       const to = measurement?.operation === 'delay' ? null : measurement?.to === undefined ? null : typeof measurement.to === 'string' ? timeMagnitude(measurement.to) ?? Number.NaN : Number.NaN
       const validRange = !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)
-      const validScalar = measurement && ['max', 'min', 'pp', 'avg', 'rms'].includes(measurement.operation) && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && validRange
+      const validScalar = measurement && ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(measurement.operation) && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && validRange
       if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !(validDelay || validScalar)) throw new Error('Transient measurements require a unique name, supported operation, and valid voltage or device-current vectors and thresholds.')
       measurementIds.add(measurement.id.toLowerCase())
     }

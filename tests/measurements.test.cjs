@@ -131,6 +131,24 @@ test('current-source scalar measurements clip and integrate only the requested t
   assert.equal(outside.diagnostics.length, 1)
 })
 
+test('time integrals use solved samples, clip to the requested window, and report charge or volt-seconds', () => {
+  const axis = Float64Array.from([0, 1, 2, 3])
+  const current = { id: 'i(@i1[current])', label: 'I(I1)', unit: 'A', axisLabel: 'Time', axisUnit: 's', axis, values: Float64Array.from([0, 2, 0, 2]) }
+  const resistorCurrent = { id: 'i(@r1[i])', label: 'I(r1)', unit: 'A', axisLabel: 'Time', axisUnit: 's', axis, values: Float64Array.from([0, 2, 0, 2]) }
+  const voltage = { id: 'v(out)', label: 'V(out)', unit: 'V', axisLabel: 'Time', axisUnit: 's', axis, values: Float64Array.from([0, 2, 0, 2]) }
+  const parsed = parseMeasurementOutput('', [
+    { id: 'Charge', operation: 'integ', vector: 'i(@I1[current])', from: '500m', to: '2500m' },
+    { id: 'ResistorCharge', operation: 'integ', vector: 'I(R1)' },
+    { id: 'VoltSeconds', operation: 'integ', vector: 'V(out)', from: '500m', to: '2500m' },
+  ], [], [[current, resistorCurrent, voltage]])
+  assert.deepEqual(parsed.diagnostics, [])
+  assert.deepEqual(parsed.results.map(({ id, value, unit, from, to }) => ({ id, value, unit, from, to })), [
+    { id: 'Charge', value: 2, unit: 'C', from: '500m', to: '2500m' },
+    { id: 'ResistorCharge', value: 3, unit: 'C', from: undefined, to: undefined },
+    { id: 'VoltSeconds', value: 2, unit: 'V·s', from: '500m', to: '2500m' },
+  ])
+})
+
 test('missing or non-finite measurement results become warnings', () => {
   const measurement = [{ id: 'Mean', operation: 'avg', vector: 'V(missing)' }]
   const parsed = parseMeasurementOutput('elsim_mean = NaN', measurement)
@@ -143,16 +161,19 @@ test('project measurements validate, persist in project JSON, and enter the gene
   const project = createStarterProject()
   project.parts.push({ id: 'measurement-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 700, y: 600, rotation: 0 })
   project.sheets[0].parts = project.parts
-  project.simulation.transientMeasurements = [{ id: 'PeakOutput', operation: 'max', vector: 'V(vout)', from: '2m', to: '8m' }, { id: 'OutputSwing', operation: 'pp', vector: 'V(vout)' }, { id: 'InputRms', operation: 'rms', vector: 'I(R1)' }, { id: 'SourceCurrent', operation: 'avg', vector: 'i(@I1[current])' }]
+  project.simulation.transientMeasurements = [{ id: 'PeakOutput', operation: 'max', vector: 'V(vout)', from: '2m', to: '8m' }, { id: 'OutputSwing', operation: 'pp', vector: 'V(vout)' }, { id: 'Charge', operation: 'integ', vector: 'I(R1)' }, { id: 'InputRms', operation: 'rms', vector: 'I(R1)' }, { id: 'SourceCurrent', operation: 'avg', vector: 'i(@I1[current])' }]
   const reloaded = validateProject(JSON.parse(JSON.stringify(project)))
   const deck = createNetlistArtifact(reloaded).text
   const controlled = addResultControl(deck, [], reloaded.simulation.transientMeasurements)
   assert.match(deck, /\.meas tran ELSIM_PeakOutput max V\(vout\) FROM=2m TO=8m/)
   assert.match(deck, /\.meas tran ELSIM_OutputSwing pp V\(vout\)/)
+  assert.match(deck, /ELSim calculates INTEG measurement Charge from solved waveform samples/)
+  assert.doesNotMatch(deck, /\.meas tran ELSIM_Charge integ/)
   assert.match(deck, /\.meas tran ELSIM_InputRms rms I\(R1\)/)
-  assert.match(deck, /ELSim calculates AVG measurement SourceCurrent from the solved current-source samples/)
+  assert.match(deck, /ELSim calculates AVG measurement SourceCurrent from solved waveform samples/)
   assert.doesNotMatch(controlled, /\.meas tran ELSIM_SourceCurrent/)
   assert.match(controlled, /meas tran ELSIM_PeakOutput max V\(vout\) FROM=2m TO=8m/i)
+  assert.doesNotMatch(controlled, /meas tran ELSIM_Charge integ/i)
   assert.match(controlled, /\.save all .*@i1\[current\]/i)
   reloaded.simulation.analysis = 'ac'
   assert.throws(() => validateProject(reloaded), /require transient analysis/)

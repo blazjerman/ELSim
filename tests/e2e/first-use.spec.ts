@@ -1681,14 +1681,14 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 854)
 })
 
-test('RC starter measures average and peak-to-peak waveform values with ngspice', { tag: '@ngspice' }, async ({ page }) => {
+test('RC starter measures average, peak-to-peak, and transferred charge with ngspice', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before testing measurement windows').toEqual([])
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    project.simulation.transientMeasurements = [{ id: 'WindowAverage', operation: 'avg', vector: 'V(vout)', from: '2m', to: '8m' }, { id: 'OutputSwing', operation: 'pp', vector: 'V(vout)' }]
+    project.simulation.transientMeasurements = [{ id: 'WindowAverage', operation: 'avg', vector: 'V(vout)', from: '2m', to: '8m' }, { id: 'OutputSwing', operation: 'pp', vector: 'V(vout)' }, { id: 'ChargeR1', operation: 'integ', vector: 'I(R1)', from: '0', to: '50m' }]
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
@@ -1705,6 +1705,12 @@ test('RC starter measures average and peak-to-peak waveform values with ngspice'
   const peakToPeak = Number((await swing.locator('td').nth(2).textContent())?.trim().split(/\s+/)[0])
   expect(peakToPeak).toBeGreaterThan(4.9)
   expect(peakToPeak).toBeLessThan(5.1)
+  const charge = plot.locator('.measurement-results tbody tr').filter({ hasText: 'ChargeR1' })
+  await expect(charge).toContainText('INTEGRAL I(R1)')
+  const transferredCharge = Number((await charge.locator('td').nth(2).textContent())?.trim().split(/\s+/)[0])
+  expect((await charge.locator('td').nth(2).textContent())?.trim()).toContain('C')
+  expect(transferredCharge).toBeGreaterThan(45e-6)
+  expect(transferredCharge).toBeLessThan(55e-6)
 })
 
 test('RC lesson predicts the time constant and checks a slower resistor against ngspice', { tag: '@ngspice' }, async ({ page }) => {
@@ -4064,6 +4070,11 @@ test('transient measurements expose peak-to-peak and preserve it in the netlist'
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0].operation)).toBe('pp')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('.meas tran ELSIM_OutputSwing pp V(vout)')
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('combobox', { name: 'Calculate', exact: true }).selectOption('integ')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0].operation)).toBe('integ')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('ELSim calculates INTEG measurement OutputSwing from solved waveform samples')
 })
 
 test('transient measurement time windows persist and appear in the netlist', async ({ page }) => {
