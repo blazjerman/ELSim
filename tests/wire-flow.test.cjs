@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { createWireCurrentFlowSampler, wireCurrentFlowSegments } = require(path.join(build, 'domain/wireFlow.js'))
 const { createStarterProject } = require(path.join(build, 'domain/project.js'))
-const { createCapacitorDischargeExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createCapacitorDischargeExampleProject, createCurrentSourceExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('current animates across each independent starter wire segment, including ground return', () => {
@@ -32,6 +32,18 @@ test('capacitor discharge wires inherit the known resistor current across both r
     const segments = flows.get(wire.id)
     assert.equal(segments.length, 1, wire.id)
     assert.equal(segments[0].magnitude, 0.00184, wire.id)
+  }
+})
+
+test('current-source example uses explicit rails and animates its one-milliamp loop', () => {
+  const project = createCurrentSourceExampleProject()
+  assert.equal(project.wires.length, 4)
+  const connectivity = analyzeConnectivity(project)
+  const flows = wireCurrentFlowSegments(project, connectivity, (part) => part.ref === 'I1' || part.ref === 'R1' ? 0.001 : undefined)
+  for (const wire of project.wires) {
+    const segments = flows.get(wire.id)
+    assert.equal(segments.length, 1, wire.id)
+    assert.equal(segments[0].magnitude, 0.001, wire.id)
   }
 })
 

@@ -363,13 +363,18 @@ export function createCurrentSourceExampleProject(): Project {
   }
   project.name = 'Current source and load'
   project.parts = [source, load]
-  project.wires = []
+  project.wires = [
+    { id: 'isource-output-link', points: [[350, 360], [470, 360]] },
+    { id: 'isource-ground-drop', points: [[570, 360], [570, 440]] },
+    { id: 'isource-ground-return', points: [[570, 440], [250, 440]] },
+    { id: 'isource-ground-rise', points: [[250, 440], [250, 360]] },
+  ]
   project.junctions = []
   project.netLabels = [
-    labelAt('isource-ground-source', '0', source, 0), labelAt('isource-output', 'OUT', source, 1),
-    labelAt('isource-output-load', 'OUT', load, 0), labelAt('isource-ground-load', '0', load, 1),
+    labelAt('isource-ground-source', '0', source, 0),
+    labelAt('isource-output', 'OUT', source, 1),
   ]
-  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'op' }
   project.plotSettings = { selectedTraceIds: [], ranges: {} }
   project.view = { zoom: 1, panX: 0, panY: 0 }

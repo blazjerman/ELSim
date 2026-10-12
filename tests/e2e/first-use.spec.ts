@@ -3822,10 +3822,16 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', {
   await dialog.locator('.example-list article').filter({ hasText: 'Current source and load' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Current source and load')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(4)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expectAvailableTrace(page, 'V(out)')
   const operatingPoint = page.locator('.plot-window').last().locator('.op-table')
   await expect(operatingPoint.getByRole('row', { name: /V\(out\).*1\.000000 V/i })).toBeVisible()
+  for (const wireId of ['isource-output-link', 'isource-ground-drop', 'isource-ground-return', 'isource-ground-rise']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`)
+    await expectWireFlow(flow, 'first-to-last')
+  }
   await expect(page.locator('.example-lesson-next-step')).toContainText('Double R1 to 2 kΩ')
   await page.locator('.circuit-part[data-part-id="isource-r1"]').focus()
   await page.keyboard.press('Enter')
