@@ -17,12 +17,16 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   for (const definition of componentDefinitions) {
     assert.match(definition.id, /^elsim\.[a-z0-9-]+$/)
     assert.equal(definition.version, 1)
+    assert.equal(typeof definition.help, 'string')
+    assert.ok(definition.help.length > 0)
+    if (definition.paletteName) assert.equal(schema.properties.paletteName.maxLength, 120)
     assert.equal(ids.has(definition.id), false)
     ids.add(definition.id)
     assert.deepEqual(definition.pins.map((pin) => pin.spiceOrder), definition.pins.map((_, index) => index + 1))
     assert.equal(new Set(definition.pins.map((pin) => pin.name)).size, definition.pins.length)
     assert.equal(new Set(definition.properties.map((property) => property.key)).size, definition.properties.length)
     assert.ok(schema.properties.kind.enum.includes(definition.kind))
+    assert.equal(schema.properties.help.maxLength, 512)
     assert.ok(schema.properties.electricalType.enum.includes(definition.electricalType))
     assert.ok(definition.pins.every((pin) => schema.properties.pins.items.properties.direction.enum.includes(pin.direction)))
   }
@@ -36,6 +40,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.equal(componentPropertyDefault('resistor', 'missingProperty'), undefined)
   for (const part of project.parts) assert.equal(componentDefinitionFor(part.kind).pins.length, componentPins(part).length, `${part.ref} definition pin count`)
   assert.deepEqual(componentDefinitionFor('source').pins.map(({ name }) => name), ['positive', 'negative'])
+  assert.deepEqual(['vcvs', 'vccs', 'cccs', 'ccvs'].map((kind) => componentDefinitionFor(kind).paletteName), ['VCVS', 'VCCS', 'CCCS', 'CCVS'])
   assert.deepEqual(componentDefinitionFor('pnp').pins.map(({ name }) => name), ['collector', 'base', 'emitter'])
   assert.ok(componentDefinitionFor('capacitor').animationChannels.includes('charge.voltage'))
   assert.ok(componentDefinitionFor('inductor').animationChannels.includes('field.current'))
@@ -74,6 +79,7 @@ test('imported subcircuits become content-addressed component definitions with o
     { name: 'OUT', direction: 'inout', spiceOrder: 2 },
   ])
   assert.deepEqual(definition.modelParameters, [{ name: 'gain', defaultValue: '2' }, { name: 'bias', defaultValue: '{0.5}' }])
+  assert.equal(definition.help, componentDefinitionFor('subcircuit').help)
   assert.deepEqual(definition.provenance, provenance)
   assert.throws(() => importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'bad' }), /SHA-256/)
   assert.notEqual(importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'b'.repeat(64) }).id, definition.id)

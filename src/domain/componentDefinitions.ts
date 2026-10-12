@@ -9,10 +9,12 @@ export type ComponentDefinition = {
   version: 1
   kind: PartKind
   name: string
+  paletteName?: string
   electricalType: string
   pins: readonly ComponentPinDefinition[]
   properties: readonly ComponentPropertyDefinition[]
   animationChannels: readonly string[]
+  help?: string
   modelParameters?: readonly ComponentModelParameter[]
   provenance?: { assetId: string; filename: string; sha256: string }
 }
@@ -36,10 +38,10 @@ const definitions = [
   { id: 'elsim.led', version: 1, kind: 'led', name: 'LED', electricalType: 'D', pins: [{ name: 'anode', direction: 'passive', spiceOrder: 1 }, { name: 'cathode', direction: 'passive', spiceOrder: 2 }], properties: [{ key: 'value', label: 'Model', unit: '', defaultValue: 'Default LED', required: true }], animationChannels: ['brightness.current'] },
   { id: 'elsim.switch', version: 1, kind: 'switch', name: 'Switch', electricalType: 'S', pins: twoPin, properties: [{ key: 'value', label: 'State', unit: '', defaultValue: 'Off', required: true }], animationChannels: ['position.state'] },
   { id: 'elsim.voltage-switch', version: 1, kind: 'voltageSwitch', name: 'Voltage-controlled switch', electricalType: 'S', pins: [{ name: 'positive', direction: 'passive', spiceOrder: 1 }, { name: 'negative', direction: 'passive', spiceOrder: 2 }, { name: 'controlPositive', direction: 'input', spiceOrder: 3 }, { name: 'controlNegative', direction: 'input', spiceOrder: 4 }], properties: [{ key: 'value', label: 'Control threshold', unit: 'V', defaultValue: '2.5 V', required: true }, { key: 'onResistance', label: 'On resistance', unit: 'Ω', defaultValue: '1 Ω', required: true }, { key: 'offResistance', label: 'Off resistance', unit: 'Ω', defaultValue: '1 GΩ', required: true }, { key: 'hysteresis', label: 'Hysteresis', unit: 'V', defaultValue: '0 V', required: true }], animationChannels: ['position.controlVoltage'] },
-  { id: 'elsim.vcvs', version: 1, kind: 'vcvs', name: 'Voltage-controlled voltage source', electricalType: 'E', pins: [{ name: 'positive', direction: 'output', spiceOrder: 1 }, { name: 'negative', direction: 'passive', spiceOrder: 2 }, { name: 'controlPositive', direction: 'input', spiceOrder: 3 }, { name: 'controlNegative', direction: 'input', spiceOrder: 4 }], properties: [{ key: 'value', label: 'Gain', unit: 'V/V', defaultValue: '2', required: true }], animationChannels: [] },
-  { id: 'elsim.vccs', version: 1, kind: 'vccs', name: 'Voltage-controlled current source', electricalType: 'G', pins: [{ name: 'positive', direction: 'output', spiceOrder: 1 }, { name: 'negative', direction: 'passive', spiceOrder: 2 }, { name: 'controlPositive', direction: 'input', spiceOrder: 3 }, { name: 'controlNegative', direction: 'input', spiceOrder: 4 }], properties: [{ key: 'value', label: 'Transconductance', unit: 'S', defaultValue: '1 mS', required: true }], animationChannels: [] },
-  { id: 'elsim.cccs', version: 1, kind: 'cccs', name: 'Current-controlled current source', electricalType: 'F', pins: twoPin, properties: [{ key: 'value', label: 'Current gain', unit: 'A/A', defaultValue: '2', required: true }, { key: 'controlSource', label: 'Sensing voltage source', unit: '', required: true }], animationChannels: [] },
-  { id: 'elsim.ccvs', version: 1, kind: 'ccvs', name: 'Current-controlled voltage source', electricalType: 'H', pins: twoPin, properties: [{ key: 'value', label: 'Transresistance', unit: 'Ω', defaultValue: '1 kΩ', required: true }, { key: 'controlSource', label: 'Sensing voltage source', unit: '', required: true }], animationChannels: [] },
+  { id: 'elsim.vcvs', version: 1, kind: 'vcvs', name: 'Voltage-controlled voltage source', paletteName: 'VCVS', electricalType: 'E', pins: [{ name: 'positive', direction: 'output', spiceOrder: 1 }, { name: 'negative', direction: 'passive', spiceOrder: 2 }, { name: 'controlPositive', direction: 'input', spiceOrder: 3 }, { name: 'controlNegative', direction: 'input', spiceOrder: 4 }], properties: [{ key: 'value', label: 'Gain', unit: 'V/V', defaultValue: '2', required: true }], animationChannels: [] },
+  { id: 'elsim.vccs', version: 1, kind: 'vccs', name: 'Voltage-controlled current source', paletteName: 'VCCS', electricalType: 'G', pins: [{ name: 'positive', direction: 'output', spiceOrder: 1 }, { name: 'negative', direction: 'passive', spiceOrder: 2 }, { name: 'controlPositive', direction: 'input', spiceOrder: 3 }, { name: 'controlNegative', direction: 'input', spiceOrder: 4 }], properties: [{ key: 'value', label: 'Transconductance', unit: 'S', defaultValue: '1 mS', required: true }], animationChannels: [] },
+  { id: 'elsim.cccs', version: 1, kind: 'cccs', name: 'Current-controlled current source', paletteName: 'CCCS', electricalType: 'F', pins: twoPin, properties: [{ key: 'value', label: 'Current gain', unit: 'A/A', defaultValue: '2', required: true }, { key: 'controlSource', label: 'Sensing voltage source', unit: '', required: true }], animationChannels: [] },
+  { id: 'elsim.ccvs', version: 1, kind: 'ccvs', name: 'Current-controlled voltage source', paletteName: 'CCVS', electricalType: 'H', pins: twoPin, properties: [{ key: 'value', label: 'Transresistance', unit: 'Ω', defaultValue: '1 kΩ', required: true }, { key: 'controlSource', label: 'Sensing voltage source', unit: '', required: true }], animationChannels: [] },
   { id: 'elsim.behavioral', version: 1, kind: 'behavioral', name: 'Behavioral source', electricalType: 'B', pins: twoPin, properties: [{ key: 'value', label: 'Expression', unit: '', defaultValue: 'V(vin) * 2', required: true }, { key: 'behavioralOutput', label: 'Output type', unit: '', defaultValue: 'voltage' }], animationChannels: [] },
   { id: 'elsim.inverter', version: 1, kind: 'inverter', name: 'Inverter', electricalType: 'B', pins: [{ name: 'input', direction: 'input', spiceOrder: 1 }, { name: 'output', direction: 'output', spiceOrder: 2 }], properties: [{ key: 'logicLow', label: 'Low output', unit: 'V', defaultValue: '0 V', required: true }, { key: 'logicHigh', label: 'High output', unit: 'V', defaultValue: '5 V', required: true }, { key: 'logicThreshold', label: 'Input threshold', unit: 'V', defaultValue: '2.5 V', required: true }], animationChannels: ['output.logicState'] },
   { id: 'elsim.logic-gate', version: 1, kind: 'logicGate', name: 'Logic gate', electricalType: 'B', pins: [{ name: 'inputA', direction: 'input', spiceOrder: 1 }, { name: 'inputB', direction: 'input', spiceOrder: 2 }, { name: 'output', direction: 'output', spiceOrder: 3 }], properties: [{ key: 'logicOperation', label: 'Gate', unit: '', defaultValue: 'and', required: true }, { key: 'logicLow', label: 'Low output', unit: 'V', defaultValue: '0 V', required: true }, { key: 'logicHigh', label: 'High output', unit: 'V', defaultValue: '5 V', required: true }, { key: 'logicThreshold', label: 'Input threshold', unit: 'V', defaultValue: '2.5 V', required: true }], animationChannels: ['output.logicState'] },
@@ -52,8 +54,40 @@ const definitions = [
   { id: 'elsim.subcircuit', version: 1, kind: 'subcircuit', name: 'Imported subcircuit', electricalType: 'X', pins: [], properties: [{ key: 'modelName', label: 'Model', unit: '', required: true }], animationChannels: [] },
 ] as const satisfies readonly ComponentDefinition[]
 
+const componentHelpByKind: Readonly<Record<PartKind, string>> = {
+  source: 'Sets a voltage between its positive and negative pins. Choose DC, pulse, or PWL in Properties.',
+  currentSource: 'Sets current direction and magnitude. Use a DC, pulse, or PWL value in Properties.',
+  resistor: 'Limits current. A larger resistance gives less current for the same voltage.',
+  potentiometer: 'An adjustable three-terminal resistor. Connect the upper terminal, wiper, and lower terminal; move the wiper to change the divider ratio.',
+  lamp: 'Acts as a resistor; its glow follows simulated electrical power, not filament temperature.',
+  capacitor: 'Stores electric charge. Lowercase c places a standard capacitor; uppercase C places a polarized capacitor with pin 1 marked positive.',
+  ground: 'Sets the circuit reference node to 0 volts. Most circuits need at least one ground.',
+  inductor: 'Stores energy in a magnetic field. Its current changes over time as the field builds or collapses.',
+  transformer: 'Transfers AC energy between two windings. Set the turns ratio, magnetic coupling, and each winding’s resistance; core saturation is not modeled.',
+  diode: 'Lets current flow mainly from anode to cathode. Reverse the pins to change its direction.',
+  zener: 'Conducts forward like a diode and holds a nearly constant reverse voltage near its 5.1 V educational breakdown point.',
+  led: 'A diode that glows from its simulated forward current. The glow is visual, not a thermal model.',
+  switch: 'An ideal on/off connection. Toggle it on the schematic, then rerun to calculate the new circuit.',
+  voltageSwitch: 'Connect the left and right pins in series with a load. The top and bottom control pins switch it when their voltage difference crosses the threshold.',
+  vcvs: 'Creates an output voltage proportional to the voltage across its two control pins.',
+  vccs: 'Creates an output current proportional to the voltage across its two control pins.',
+  cccs: 'Creates an output current proportional to current through a selected sensing voltage source.',
+  ccvs: 'Creates an output voltage proportional to current through a selected sensing voltage source.',
+  behavioral: 'Defines a voltage or current with an expression using circuit values and math functions.',
+  inverter: 'An ideal NOT gate. Its default input threshold is 2.5 V and output levels are 0 V / 5 V; edit those voltages in Properties to match your logic supply.',
+  logicGate: 'A two-input digital gate. Choose AND, OR, NAND, NOR, XOR, or XNOR in Properties. Set the input threshold and low/high output voltages to match your logic supply.',
+  npn: 'A simple transistor model. A small base current can control a larger collector current.',
+  pnp: 'A simple transistor model with polarity opposite to an NPN transistor.',
+  njfet: 'A junction-gate field-effect transistor. Its gate-source voltage controls drain current; the default model is illustrative.',
+  pjfet: 'A junction-gate field-effect transistor with polarity opposite to an N-channel JFET.',
+  nmos: 'A voltage on the gate controls current from drain to source. The built-in Level 1 model is educational; choose a user-supplied model for device-specific results.',
+  pmos: 'A voltage on the gate controls current from source to drain. The built-in Level 1 model is educational; choose a user-supplied model for device-specific results.',
+  subcircuit: 'An imported or project-defined circuit block. Its pins follow the model’s declared order.',
+}
+
 export const componentDefinitions: readonly ComponentDefinition[] = Object.freeze(definitions.map((definition) => Object.freeze({
   ...definition,
+  help: componentHelpByKind[definition.kind],
   pins: Object.freeze(definition.pins.map((pin) => Object.freeze({ ...pin }))),
   properties: Object.freeze(definition.properties.map((property) => Object.freeze({ ...property }))),
   animationChannels: Object.freeze([...definition.animationChannels]),
@@ -90,6 +124,7 @@ export function importedSubcircuitComponentDefinition(
     name: subcircuit.name,
     electricalType: 'X',
     pins: Object.freeze(subcircuit.pins.map((name, index) => Object.freeze({ name, direction: 'inout' as const, spiceOrder: index + 1 }))),
+    help: componentHelpByKind.subcircuit,
     properties: Object.freeze([{ key: 'modelName', label: 'Model', unit: '', defaultValue: subcircuit.name, required: true }]),
     modelParameters: Object.freeze(subcircuit.parameters.map(({ name, defaultValue }) => Object.freeze({ name, defaultValue }))),
     animationChannels: Object.freeze([]),
