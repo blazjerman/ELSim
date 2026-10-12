@@ -2821,7 +2821,7 @@ test('transformer example solves the configured AC turns ratio', { tag: '@ngspic
   await page.getByRole('textbox', { name: 'Primary winding resistance' }).fill('10 Ω')
   await page.getByRole('textbox', { name: 'Secondary winding resistance' }).fill('100 Ω')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  const lossyNetlist = await page.locator('.netlist-panel pre').innerText()
+  const lossyNetlist = await page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre').innerText()
   expect(lossyNetlist).toMatch(/^RT1_P VIN __ELSIM_transformer_t1_P 10$/m)
   expect(lossyNetlist).toMatch(/^RT1_S VOUT __ELSIM_transformer_t1_S 100$/m)
 })
