@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlStepExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodeRectifierExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createRlStepExampleProject, createRlcExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -134,6 +134,26 @@ test('inverting op-amp lesson wires negative feedback and its resistor ratio', (
   assert.match(artifact.text, /^RIN VIN FB 10k$/m)
   assert.match(artifact.text, /^RF VOUT FB 20k$/m)
   assert.match(artifact.text, /^\.op$/m)
+})
+
+test('common-emitter amplifier lesson wires an AC-coupled and resistor-biased NPN stage', () => {
+  const project = validateProject(createCommonEmitterExampleProject())
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'NPN common-emitter amplifier')
+  assert.equal(project.simulation.analysis, 'ac')
+  assert.equal(project.wires.length, 21)
+  assert.match(artifact.text, /^VIN VIN 0 AC 1 0$/m)
+  assert.match(artifact.text, /^VCC VCC 0 DC 12 AC 0 0$/m)
+  assert.match(artifact.text, /^Q1 COLLECTOR BASE EMITTER ELSIM_MODEL_Q1$/m)
+  assert.match(artifact.text, /^RBIAS1 VCC BASE 100k$/m)
+  assert.match(artifact.text, /^RBIAS2 BASE 0 22k$/m)
+  assert.match(artifact.text, /^RC VCC COLLECTOR 2\.2k$/m)
+  assert.match(artifact.text, /^RE EMITTER 0 470$/m)
+  assert.match(artifact.text, /^CIN VIN BASE 10u$/m)
+  assert.match(artifact.text, /^COUT COLLECTOR VOUT 10u$/m)
+  assert.match(artifact.text, /^RLOAD VOUT 0 10k$/m)
+  assert.match(artifact.text, /^\.ac dec 20 10 100k$/m)
 })
 
 test('logic gate lesson creates labeled, transient behavioral gates', () => {
@@ -517,6 +537,11 @@ test('AC analysis uses each source magnitude and phase override', () => {
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^V1 vin 0 AC 250m 45$/m)
   assert.match(artifact.text, /^I1 .* .* AC 3m -90$/m)
+  voltage.sourceMode = 'dc'
+  current.sourceMode = 'dc'
+  const biasedArtifact = createNetlistArtifact(project)
+  assert.match(biasedArtifact.text, /^V1 vin 0 DC 5 AC 250m 45$/m)
+  assert.match(biasedArtifact.text, /^I1 .* .* DC 2m AC 3m -90$/m)
   voltage.acPhase = 'not-a-phase'
   assert.match(createNetlistArtifact(project).diagnostics[0].message, /AC voltage magnitude and phase/)
 })

@@ -125,6 +125,71 @@ export function createInvertingOpampExampleProject(): Project {
   return project
 }
 
+/** A beginner AC lesson that uses an NPN stage to demonstrate gain and phase inversion. */
+export function createCommonEmitterExampleProject(): Project {
+  const project = createStarterProject()
+  const input: Part = { id: 'common-emitter-vin', kind: 'source', ref: 'VIN', value: '0 V', acMagnitude: '1 V', acPhase: '0', x: 150, y: 400, rotation: 0 }
+  const inputCapacitor: Part = { id: 'common-emitter-cin', kind: 'capacitor', ref: 'CIN', value: '10 µF', x: 400, y: 400, rotation: 0 }
+  const biasTop: Part = { id: 'common-emitter-rbias1', kind: 'resistor', ref: 'RBIAS1', value: '100 kΩ', x: 400, y: 250, rotation: 90 }
+  const biasBottom: Part = { id: 'common-emitter-rbias2', kind: 'resistor', ref: 'RBIAS2', value: '22 kΩ', x: 400, y: 550, rotation: 90 }
+  const transistor: Part = { id: 'common-emitter-q1', kind: 'npn', ref: 'Q1', value: '100', x: 650, y: 400, rotation: 0 }
+  const collectorLoad: Part = { id: 'common-emitter-rc', kind: 'resistor', ref: 'RC', value: '2.2 kΩ', x: 850, y: 250, rotation: 90 }
+  const emitterResistor: Part = { id: 'common-emitter-re', kind: 'resistor', ref: 'RE', value: '470 Ω', x: 850, y: 550, rotation: 90 }
+  const supply: Part = { id: 'common-emitter-vcc', kind: 'source', ref: 'VCC', value: '12 V', sourceMode: 'dc', acMagnitude: '0 V', x: 850, y: 100, rotation: 0 }
+  const outputCapacitor: Part = { id: 'common-emitter-cout', kind: 'capacitor', ref: 'COUT', value: '10 µF', x: 850, y: 400, rotation: 0 }
+  const outputLoad: Part = { id: 'common-emitter-rload', kind: 'resistor', ref: 'RLOAD', value: '10 kΩ', x: 1050, y: 400, rotation: 90 }
+  const parts = [input, inputCapacitor, biasTop, biasBottom, transistor, collectorLoad, emitterResistor, supply, outputCapacitor, outputLoad]
+  const atPin = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'NPN common-emitter amplifier'
+  project.parts = parts
+  project.wires = [
+    { id: 'common-emitter-input-source', points: [[150, 350], [150, 400]] },
+    { id: 'common-emitter-input-capacitor', points: [[150, 400], [350, 400]] },
+    { id: 'common-emitter-input-base', points: [[450, 400], [600, 400]] },
+    { id: 'common-emitter-bias-upper', points: [[400, 300], [400, 400]] },
+    { id: 'common-emitter-bias-to-base', points: [[400, 400], [450, 400]] },
+    { id: 'common-emitter-bias-lower', points: [[400, 400], [400, 500]] },
+    { id: 'common-emitter-vcc-rail-right', points: [[850, 50], [900, 50]] },
+    { id: 'common-emitter-vcc-rail-drop', points: [[900, 50], [900, 200]] },
+    { id: 'common-emitter-vcc-collector-feed', points: [[900, 200], [850, 200]] },
+    { id: 'common-emitter-vcc-bias-rail', points: [[900, 50], [400, 50]] },
+    { id: 'common-emitter-vcc-bias-drop', points: [[400, 50], [400, 200]] },
+    { id: 'common-emitter-collector-feed', points: [[850, 300], [850, 350]] },
+    { id: 'common-emitter-collector-link', points: [[850, 350], [690, 350]] },
+    { id: 'common-emitter-collector-output-rise', points: [[690, 350], [740, 350]] },
+    { id: 'common-emitter-collector-output-drop', points: [[740, 350], [740, 400]] },
+    { id: 'common-emitter-output-capacitor', points: [[740, 400], [800, 400]] },
+    { id: 'common-emitter-output-load-rise', points: [[900, 400], [950, 400]] },
+    { id: 'common-emitter-output-load-drop', points: [[950, 400], [950, 350]] },
+    { id: 'common-emitter-output-load', points: [[950, 350], [1050, 350]] },
+    { id: 'common-emitter-emitter-link', points: [[690, 450], [690, 500]] },
+    { id: 'common-emitter-emitter-resistor', points: [[690, 500], [850, 500]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    atPin('common-emitter-vin-label', 'VIN', input, 0),
+    atPin('common-emitter-base-label', 'BASE', transistor, 1),
+    atPin('common-emitter-collector-label', 'COLLECTOR', transistor, 0),
+    atPin('common-emitter-emitter-label', 'EMITTER', transistor, 2),
+    atPin('common-emitter-output-label', 'VOUT', outputLoad, 0),
+    atPin('common-emitter-ground-input', '0', input, 1),
+    atPin('common-emitter-ground-bias', '0', biasBottom, 1),
+    atPin('common-emitter-ground-emitter', '0', emitterResistor, 1),
+    atPin('common-emitter-ground-supply', '0', supply, 1),
+    atPin('common-emitter-ground-load', '0', outputLoad, 1),
+    atPin('common-emitter-vcc-label', 'VCC', supply, 0),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'ac', acSweep: { scale: 'dec', points: 20, startFrequency: '10 Hz', stopFrequency: '100 kHz' } }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'V(BASE)', 'V(COLLECTOR)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: -20, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A transient truth-table lesson built from the built-in ideal logic gates. */
 export function createLogicGatesExampleProject(): Project {
   const project = createStarterProject()

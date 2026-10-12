@@ -532,7 +532,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'tran' ? transientValue : value}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'tran' ? transientValue : value}`, part.id, 'component')
     }
     else if (part.kind === 'source') {
       const acMagnitude = spiceNumber(part.acMagnitude ?? project.simulation.sourceAcMagnitude ?? '1 V', 'source')
@@ -628,7 +628,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period}${cycleCount ? ` ${cycleCount}` : ''})`
       }
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
     }
     else if (part.kind === 'transformer') {
       const secondaryPositive = pinNet(connectivity, part, 2)
