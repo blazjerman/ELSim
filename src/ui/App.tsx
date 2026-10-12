@@ -1714,6 +1714,8 @@ export default function App() {
     : undefined
   const transformer = exampleLesson?.id === 'transformer' ? project.parts.find((part) => part.id === 'transformer-t1') : undefined
   const transformerTurnsRatio = transformer ? Number(transformer.turnsRatio ?? '2') : null
+  const transformerCurrent = exampleLesson?.id === 'transformer-current' ? project.parts.find((part) => part.id === 'transformer-t1') : undefined
+  const transformerCurrentTurnsRatio = transformerCurrent ? Number(transformerCurrent.turnsRatio ?? '2') : null
   const transformerInputTrace = simulationResult?.analysis === 'ac' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vin)') : undefined
   const transformerOutputTrace = simulationResult?.analysis === 'ac' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)') : undefined
   const transformerSampleIndexAt1kHz = (trace?: Trace) => trace?.axis.length && trace.values.length
@@ -1747,8 +1749,10 @@ export default function App() {
       : 'Choose a positive turns ratio, then rerun AC to compare primary and secondary voltage.'
     : exampleLesson?.id === 'transformer-current' && simulationResult
       ? simulationResultStale
-        ? 'T1 has changed since this transient run. Rerun to refresh both winding-current arrows and compare the new current ratio.'
-        : 'For an ideal transformer, a 2:1 secondary-to-primary turns ratio gives roughly twice the secondary voltage and half the secondary current. Change T1 to 3:1, rerun, and compare the winding-current arrows or plot both winding currents. Winding resistance and leakage make the real result differ from the ideal ratio.'
+        ? `T1 is now ${transformerCurrent?.turnsRatio ?? 'changed'}:1. These arrows are from the previous transient; rerun to refresh both winding currents and compare the new ratio.`
+        : transformerCurrentTurnsRatio !== null && Number.isFinite(transformerCurrentTurnsRatio) && transformerCurrentTurnsRatio > 0
+          ? `At ${transformerCurrentTurnsRatio}:1 secondary-to-primary turns, an ideal transformer predicts secondary voltage ≈ ${transformerCurrentTurnsRatio}× primary voltage and secondary current ≈ primary current ÷ ${transformerCurrentTurnsRatio}. Change T1 to 3:1, rerun, and compare the winding-current arrows or plot both winding currents. Winding resistance and leakage make the simulated result differ from the ideal ratio.`
+          : 'Choose a positive turns ratio, then rerun and compare the separately solved winding currents.'
     : exampleLesson?.id === 'current-controlled' && simulationResult
     ? currentControlledSenseAt25Ms !== undefined && currentControlledTransresistance !== null
       ? simulationResultStale
