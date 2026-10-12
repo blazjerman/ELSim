@@ -2419,10 +2419,7 @@ export default function App() {
     setProjectState((current) => {
       const next = fn(current)
       if (next === current) return current
-      if (!groupedEdit) {
-        const snapshot = { ...current, parts: current.parts.map((part) => ({ ...part })), wires: current.wires.map((wire) => ({ ...wire, points: [[...wire.points[0]], [...wire.points[1]]] as [[number, number], [number, number]] })), netLabels: current.netLabels.map((label) => ({ ...label })) }
-        history.current = { past: [...history.current.past, snapshot].slice(-100), future: [] }
-      }
+      if (!groupedEdit) recordUndoSnapshot(current)
       const scene = { parts: next.parts, wires: next.wires, junctions: next.junctions, netLabels: next.netLabels, view: next.view }
       return { ...next, sheets: next.sheets.map((sheet) => sheet.id === next.activeSheetId ? { ...sheet, ...scene } : sheet), updatedAt: new Date().toISOString() }
     })
@@ -2563,7 +2560,7 @@ export default function App() {
     const parent = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
     const name = nextBlockSheetName(project, parent?.id ?? project.rootSheetId)
     const sheet = { id: `sheet-${crypto.randomUUID()}`, name, parentSheetId: parent?.id ?? null, parts: [] as Part[], wires: [] as Project['wires'], junctions: [] as Project['junctions'], netLabels: [] as Project['netLabels'], view: { zoom: 1, panX: 0, panY: 0 }, ports: [] as { id: string; name: string }[], parameters: [] as NonNullable<Project['sheets'][number]['parameters']> }
-    history.current = { past: [...history.current.past, structuredClone(projectRef.current)].slice(-100), future: [] }
+    recordUndoSnapshot(projectRef.current)
     setProjectState((current) => ({ ...current, sheets: [...current.sheets, sheet], activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, updatedAt: new Date().toISOString() }))
     setSelection(null)
     setSelectedWireId(null)
@@ -2697,11 +2694,17 @@ export default function App() {
     setNotice(`Placed ${sheet.name}. Connect its pins in the order shown in the inspector.`)
   }
   const history = useRef<{ past: Project[]; future: Project[] }>({ past: [], future: [] })
+  // Project updates are immutable. Share prior project trees in undo history so
+  // a gesture does not clone every component and wire before it starts.
+  const recordUndoSnapshot = (snapshot: Project) => {
+    if (history.current.past.at(-1) === snapshot) return
+    history.current = { past: [...history.current.past, snapshot].slice(-100), future: [] }
+  }
   const editGroup = useRef(false)
   const beginEdit = () => {
     if (editGroup.current) return
     editGroup.current = true
-    history.current = { past: [...history.current.past, structuredClone(projectRef.current)].slice(-100), future: [] }
+    recordUndoSnapshot(projectRef.current)
   }
   const endEdit = () => { editGroup.current = false }
   const partsById = useMemo(() => new Map(project.parts.map((part) => [part.id, part])), [project.parts])
