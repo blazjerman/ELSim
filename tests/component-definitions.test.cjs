@@ -104,6 +104,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.equal(componentDefinitionFor('transformer').properties.find((property) => property.key === 'coupling')?.defaultValue, '1')
   assert.deepEqual(componentDefinitionFor('potentiometer').pins.map(({ name }) => name), ['upper', 'wiper', 'lower'])
   assert.equal(componentDefinitionFor('potentiometer').properties.find((property) => property.key === 'wiperPosition')?.defaultValue, '0.5')
+  assert.ok(componentDefinitionFor('potentiometer').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.className === 'potentiometer-track'))
   assert.ok(componentDefinitionFor('lamp').animationChannels.includes('brightness.power'))
   assert.deepEqual(componentDefinitionFor('lamp').symbolGeometry.map(({ kind }) => kind), ['line', 'circle', 'line'])
   assert.ok(project.parts.every((part) => part.componentDefinitionId === componentDefinitionFor(part.kind).id))

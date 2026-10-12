@@ -3634,6 +3634,16 @@ test('3.3 V logic gate example runs with matching thresholds and outputs', { tag
   await expect(page.locator('.plot-window').first().locator('.cursor-readout')).toContainText(/V\(out_and\) = 3\.3/i)
 })
 
+test('potentiometer static track renders from the component registry', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Potentiometer voltage divider' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="pot-p1"] .potentiometer-track')).toHaveAttribute('d', 'M0 -24L-10 -18L10 -12L-10 -6L10 0L-10 6L10 12L-10 18L0 24')
+  await expect(page.locator('.circuit-part[data-part-id="pot-p1"] .potentiometer-symbol')).toHaveAttribute('data-wiper-position', '0.5')
+})
+
 test('potentiometer example adjusts the simulated output with its wiper', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
