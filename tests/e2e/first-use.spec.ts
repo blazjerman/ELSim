@@ -408,10 +408,12 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
 
 test('large imported IC lists can be searched and expanded on demand', async ({ page }) => {
   await page.goto('/')
-  const library = Array.from({ length: 52 }, (_, index) => {
+  const subcircuitSources = Array.from({ length: 52 }, (_, index) => {
     const name = `USER_${String(index + 1).padStart(3, '0')}`
     return `.SUBCKT ${name} IN OUT\nR1 IN OUT 1k\n.ENDS ${name}`
-  }).join('\n')
+  })
+  const deviceModels = Array.from({ length: 52 }, (_, index) => `.MODEL DMOD_${String(index + 1).padStart(3, '0')} D(IS=1n)`)
+  const library = [...subcircuitSources, ...deviceModels].join('\n')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'large-user-library.lib',
@@ -426,6 +428,25 @@ test('large imported IC lists can be searched and expanded on demand', async ({ 
   await expect(subcircuits.locator('.imported-model')).toHaveCount(1)
   await expect(subcircuits.locator('.imported-model').first()).toContainText('USER_052')
   await expect(subcircuits.getByRole('button', { name: 'Show 2 more imported ICs' })).toHaveCount(0)
+  await subcircuits.getByRole('button', { name: 'Clear imported IC search' }).click()
+
+  const devices = page.locator('.imported-models').filter({ has: page.getByRole('textbox', { name: 'Find an imported device model' }) })
+  await expect(devices.locator('.imported-model')).toHaveCount(50)
+  await expect(devices.getByRole('button', { name: 'Show 2 more device models' })).toBeVisible()
+  await devices.getByRole('textbox', { name: 'Find an imported device model' }).fill('DMOD_052')
+  await expect(devices.locator('.imported-model')).toHaveCount(1)
+  await expect(devices.locator('.imported-model').first()).toContainText('DMOD_052')
+
+  const symbol = ['Version 4', 'SymbolType CELL', 'PIN -32 0 R', 'PINATTR PinName IN', 'PINATTR SpiceOrder 1', 'PIN 32 0 L', 'PINATTR PinName OUT', 'PINATTR SpiceOrder 2', 'SYMATTR Prefix X', 'SYMATTR Value USER_SYMBOL'].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice symbol' }).click()
+  await page.locator('input[accept=".asy,text/plain"]').setInputFiles({ name: 'user-symbol.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol) })
+  const symbols = page.locator('.imported-models').filter({ has: page.getByText('IMPORTED SYMBOLS', { exact: true }) })
+  const symbolCard = symbols.locator('.imported-model')
+  await expect(symbolCard.locator('button').filter({ hasText: /^Place USER_/ })).toHaveCount(50)
+  await expect(symbolCard).toContainText('Showing the first 50 matches')
+  await subcircuits.getByRole('textbox', { name: 'Find an imported IC' }).fill('USER_052')
+  await expect(symbolCard.locator('button').filter({ hasText: /^Place USER_/ })).toHaveCount(1)
+  await expect(symbolCard.getByRole('button', { name: 'Place USER_052 with this symbol' })).toBeVisible()
 })
 
 test('duplicate model definitions show both library locations and open the source line', async ({ page }) => {
