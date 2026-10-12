@@ -349,3 +349,7 @@ Connection-dot coordinates are indexed when wire geometry changes and the SVG la
 ### Viewport-culling junction markers (2026-10-12)
 
 Junction SVG groups now use a memoized point index and render only markers in the world-space viewport, with a 6-unit margin matching the marker radius. A focused Firefox regression checks that an offscreen marker is omitted and returns after Fit All; it passes alongside the connection-dot culling regression. The domain test suite, TypeScript check, and production build pass. No SVG frame-time comparison is available yet, so no rendering speedup is claimed.
+
+### Large selection clipboard indexing (2026-10-12)
+
+Selected-part clipboard creation previously checked every selected pin against every wire, then checked every copied junction against every copied wire. It now queries the existing wire spatial index at each selected pin and copied junction, retaining the exact point-on-segment checks and original wire order. A local stress run with 5,000 selected resistors and 4,999 endpoint wires retained every wire and measured 16.63 ms median / 36.07 ms max across nine runs. This is a single-host current measurement, not a before/after claim or budget. The Firefox full-circuit copy/paste test confirms the selection includes all newly pasted wires and no source wire IDs; the test waits for the debounced project save before inspecting local storage.

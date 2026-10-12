@@ -2049,6 +2049,7 @@ test('copy and paste a selected wire path without connected parts', async ({ pag
 
 test('copying and pasting the full circuit selects only all newly pasted wires', async ({ page }) => {
   await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   const original = await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return {
@@ -2061,6 +2062,7 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
   await page.keyboard.press('Control+a')
   await page.keyboard.press('Control+c')
   await page.keyboard.press('Control+v')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(original.wires.length * 2)
 
   const pasted = await page.evaluate((originalIds) => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
