@@ -231,12 +231,16 @@ export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'
     return false
   }
   const dots = new Map<string, Point>()
-  const add = (point: Point) => dots.set(`${Math.round(point.x * 1000)},${Math.round(point.y * 1000)}`, point)
+  const pointKey = (point: Point) => `${Math.round(point.x * 1000)},${Math.round(point.y * 1000)}`
+  const add = (point: Point) => dots.set(pointKey(point), point)
   for (const pin of pins) {
     if (wiresAt(pin).some((wire) => pointOnSegment(pin, { x: wire.points[0][0], y: wire.points[0][1] }, { x: wire.points[1][0], y: wire.points[1][1] }))) add({ x: pin.x, y: pin.y })
   }
   for (const wire of project.wires) for (const [x, y] of wire.points) {
     const point = { x, y }
+    // Pin-to-wire processing has already confirmed this coordinate. Avoid
+    // repeating pin and wire broadphase checks for the same visible join.
+    if (dots.has(pointKey(point))) continue
     const connectedToWire = wiresAt(point).some((other) => other.id !== wire.id && pointOnSegment(point, { x: other.points[0][0], y: other.points[0][1] }, { x: other.points[1][0], y: other.points[1][1] }))
     if (hasPinAt(point) || connectedToWire) add(point)
   }
