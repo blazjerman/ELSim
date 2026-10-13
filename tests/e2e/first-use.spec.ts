@@ -355,6 +355,22 @@ test('examples dialog code loads only when the picker opens', { tag: '@ui-smoke'
   expect(requested.some((url) => url.includes('ExamplesDialog'))).toBe(true)
 })
 
+test('guided lesson analysis loads only when a lesson is opened', { tag: '@ui-smoke' }, async ({ page }) => {
+  const requested: string[] = []
+  page.on('request', (request) => requested.push(request.url()))
+  await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  expect(requested.some((url) => url.includes('exampleLessonAnalysis'))).toBe(false)
+
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'RC step response' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.getByLabel('Guided example')).toBeVisible()
+  await expect.poll(() => requested.some((url) => url.includes('exampleLessonAnalysis'))).toBe(true)
+  await expect(page.locator('.example-lesson')).toContainText('Run this circuit')
+})
+
 test('examples search and topic filter persist across close and reopen', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
