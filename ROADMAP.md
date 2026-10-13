@@ -451,6 +451,8 @@ Connection-dot recomputation follow-up (2026-10-13): schematic pin locations are
 
 Floating waveform render isolation (2026-10-13): plot windows and their result plots are memoized behind stable per-window callbacks. Schematic selection/property updates no longer recreate each plot's React tree when its result, traces, range, and panel geometry are unchanged; editing one window still updates that window independently. Firefox verifies all 116 non-engine UI cases and the two solver-backed probe/window workflows for adding traces, preserving panel geometry/colors, resizing, and rerunning. Unit tests, typecheck, and production build pass. This is a render-boundary improvement; a before/after browser timing has not yet been measured. No WASM rebuild was needed.
 
+Modal keyboard handling follow-up (2026-10-13): modal Tab trapping is shared by the app dialogs and keyboard-shortcut dialog instead of maintaining duplicate implementations. Closing the generated-netlist dialog with Escape or its close action now restores focus to the control that opened it; Firefox covers this alongside the Examples, Circuit Checks, and sheet-settings focus loops. All 52 Firefox UI smoke cases and all 7 Firefox browser performance benchmarks pass, including 5,000-part selection/navigation and large waveform workflows; no WASM rebuild was needed. Manual screen-reader review and broader focus-indicator review remain open under M4.1.
+
 ## 7. Primary references checked
 
 - ngspice source: https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/ (M0.3 spike pinned to `a80f6e3e95d51534905b1f23410a951802666656`)
