@@ -2520,6 +2520,7 @@ test('starter and newly added native parts use the same 10-unit pin grid', async
 
 test('component hotkeys choose parts and newly placed parts stay unselected', async ({ page }) => {
   await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled()
   await page.keyboard.press('Escape')
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
   await page.keyboard.press('r')
@@ -2531,8 +2532,8 @@ test('component hotkeys choose parts and newly placed parts stay unselected', as
     const screen = location.matrixTransform(svg.getScreenCTM()!)
     return { x: screen.x, y: screen.y }
   }, { x, y })
-  const start = await point(500, 160), end = await point(540, 160)
-  await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
+  const end = await point(540, 160)
+  await page.mouse.click(end.x, end.y)
   await expect.poll(() => page.evaluate(() => {
     const saved = localStorage.getItem('elsim:project:v7')
     return saved ? JSON.parse(saved).parts.some((part: { ref: string }) => part.ref === 'R2') : false

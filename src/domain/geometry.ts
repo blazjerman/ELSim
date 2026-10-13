@@ -174,14 +174,32 @@ export function componentPins(part: Part): PinLocation[] {
   let local: [number, number][]
   if (part.symbolPinOffsets) local = part.symbolPinOffsets
   else if (part.kind === 'subcircuit') local = subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout)
-  else local = componentDefinitionFor(part.kind).pinOffsets?.map(([x, y]) => [x, y] as [number, number]) ?? []
-  const angle = part.rotation * Math.PI / 180
+  else local = pinOffsetsByKind.get(part.kind) ?? cachePinOffsets(part.kind)
+  const normalizedRotation = ((part.rotation % 360) + 360) % 360
+  let cosine: number, sine: number
+  if (normalizedRotation === 0) { cosine = 1; sine = 0 }
+  else if (normalizedRotation === 90) { cosine = 0; sine = 1 }
+  else if (normalizedRotation === 180) { cosine = -1; sine = 0 }
+  else if (normalizedRotation === 270) { cosine = 0; sine = -1 }
+  else {
+    const angle = part.rotation * Math.PI / 180
+    cosine = Math.cos(angle)
+    sine = Math.sin(angle)
+  }
   return local.map(([x, y], index) => ({
     partId: part.id,
     index,
-    x: clean(part.x + (part.flipX ? -x : x) * Math.cos(angle) - y * Math.sin(angle)),
-    y: clean(part.y + (part.flipX ? -x : x) * Math.sin(angle) + y * Math.cos(angle)),
+    x: clean(part.x + (part.flipX ? -x : x) * cosine - y * sine),
+    y: clean(part.y + (part.flipX ? -x : x) * sine + y * cosine),
   }))
+}
+
+const pinOffsetsByKind = new Map<Part['kind'], [number, number][]>()
+
+function cachePinOffsets(kind: Part['kind']): [number, number][] {
+  const offsets = componentDefinitionFor(kind).pinOffsets?.map(([x, y]) => [x, y] as [number, number]) ?? []
+  pinOffsetsByKind.set(kind, offsets)
+  return offsets
 }
 
 function clean(value: number): number {
@@ -214,7 +232,27 @@ export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'
       else segmentCells.set(key, [wire])
     }
   }
-  const wiresAt = (point: Point): Wire[] => [...longSegments, ...(segmentCells.get(cellKey(point.x, point.y)) ?? [])]
+  const onWire = (point: Point, wire: Wire) => {
+    const [[x1, y1], [x2, y2]] = wire.points
+    const toleranceSquared = 1e-12
+    if (x1 === x2) {
+      const dx = point.x - x1
+      const dy = point.y < Math.min(y1, y2) ? Math.min(y1, y2) - point.y : point.y > Math.max(y1, y2) ? point.y - Math.max(y1, y2) : 0
+      return dx * dx + dy * dy <= toleranceSquared
+    }
+    if (y1 === y2) {
+      const dy = point.y - y1
+      const dx = point.x < Math.min(x1, x2) ? Math.min(x1, x2) - point.x : point.x > Math.max(x1, x2) ? point.x - Math.max(x1, x2) : 0
+      return dx * dx + dy * dy <= toleranceSquared
+    }
+    return pointOnSegment(point, { x: x1, y: y1 }, { x: x2, y: y2 })
+  }
+  const hasWireAt = (point: Point, excludedWireId?: string) => {
+    const matches = (wire: Wire) => wire.id !== excludedWireId && onWire(point, wire)
+    for (const wire of longSegments) if (matches(wire)) return true
+    for (const wire of segmentCells.get(cellKey(point.x, point.y)) ?? []) if (matches(wire)) return true
+    return false
+  }
   const pinCells = new Map<string, PinLocation[]>()
   for (const pin of pins) {
     const key = cellKey(pin.x, pin.y)
@@ -226,7 +264,10 @@ export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'
     const minX = Math.floor((point.x - 0.5) / cellSize), maxX = Math.floor((point.x + 0.5) / cellSize)
     const minY = Math.floor((point.y - 0.5) / cellSize), maxY = Math.floor((point.y + 0.5) / cellSize)
     for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
-      if ((pinCells.get(`${x}:${y}`) ?? []).some((pin) => Math.hypot(pin.x - point.x, pin.y - point.y) < 0.5)) return true
+      for (const pin of pinCells.get(`${x}:${y}`) ?? []) {
+        const dx = pin.x - point.x, dy = pin.y - point.y
+        if (dx * dx + dy * dy < 0.25) return true
+      }
     }
     return false
   }
@@ -234,14 +275,14 @@ export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'
   const pointKey = (point: Point) => `${Math.round(point.x * 1000)},${Math.round(point.y * 1000)}`
   const add = (point: Point) => dots.set(pointKey(point), point)
   for (const pin of pins) {
-    if (wiresAt(pin).some((wire) => pointOnSegment(pin, { x: wire.points[0][0], y: wire.points[0][1] }, { x: wire.points[1][0], y: wire.points[1][1] }))) add({ x: pin.x, y: pin.y })
+    if (hasWireAt(pin)) add({ x: pin.x, y: pin.y })
   }
   for (const wire of project.wires) for (const [x, y] of wire.points) {
     const point = { x, y }
     // Pin-to-wire processing has already confirmed this coordinate. Avoid
     // repeating pin and wire broadphase checks for the same visible join.
     if (dots.has(pointKey(point))) continue
-    const connectedToWire = wiresAt(point).some((other) => other.id !== wire.id && pointOnSegment(point, { x: other.points[0][0], y: other.points[0][1] }, { x: other.points[1][0], y: other.points[1][1] }))
+    const connectedToWire = hasWireAt(point, wire.id)
     if (hasPinAt(point) || connectedToWire) add(point)
   }
   return [...dots.values()]
