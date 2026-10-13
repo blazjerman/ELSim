@@ -52,7 +52,7 @@ async function rightClickNetLabel(page: import('@playwright/test').Page, name: s
       const edgeInset = 8
       if (!canvasBounds) continue
       for (const point of box.points) {
-        if (!point.isTopmost || point.x < canvasBounds.x + edgeInset || point.x > canvasBounds.x + canvasBounds.width - edgeInset || point.y < canvasBounds.y + edgeInset || point.y > canvasBounds.y + canvasBounds.height - edgeInset) continue
+        if (point.x < canvasBounds.x + edgeInset || point.x > canvasBounds.x + canvasBounds.width - edgeInset || point.y < canvasBounds.y + edgeInset || point.y > canvasBounds.y + canvasBounds.height - edgeInset) continue
         let coveringPlot: Locator | undefined
         const plots = page.locator('.plot-window')
         for (let plotIndex = await plots.count() - 1; plotIndex >= 0; plotIndex -= 1) {
@@ -63,6 +63,7 @@ async function rightClickNetLabel(page: import('@playwright/test').Page, name: s
             break
           }
         }
+        if (!coveringPlot && !point.isTopmost) continue
         if (!coveringPlot) {
           await page.mouse.click(point.x, point.y, { button: 'right' })
           return
