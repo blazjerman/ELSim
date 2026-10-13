@@ -57,7 +57,9 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   })
   await page.reload()
   await expect(page.locator('.project-title')).toHaveText('Browser benchmark · 500 component animated transient')
-  await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(501)
+  const initiallyMountedParts = page.locator('svg.schematic .circuit-part')
+  await expect.poll(() => initiallyMountedParts.count()).toBeGreaterThan(0)
+  await expect.poll(() => initiallyMountedParts.count()).toBeLessThan(501)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 90_000 })
   await expect(page.locator('.toast')).toContainText('1001 result vectors')
@@ -253,6 +255,10 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const saved = localStorage.getItem('elsim:project:v7')
+    return saved ? JSON.parse(saved).parts.length : null
+  })).toBe(4)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const sourceTemplate = project.parts.find((part: { kind: string }) => part.kind === 'source')
@@ -285,6 +291,11 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
     project.simulation.stopTime = '10 ms'
     project.simulation.maxStep = '1 µs'
     project.plotSettings.selectedTraceIds = []
+    const selectedTraceIds = [
+      ...Array.from({ length: 24 }, (_, index) => `v(n${index})`),
+      ...Array.from({ length: 16 }, (_, index) => `i(@r${index + 1}[i])`),
+    ]
+    project.plotSettings.panels = [{ id: 'benchmark-40-traces', bounds: { x: 24, y: 112, width: 900, height: 560 }, selectedTraceIds, ranges: {} }]
     project.sheets = project.sheets.map((sheet: { id: string }) => sheet.id === project.rootSheetId
       ? { ...sheet, parts, wires: [], junctions: [], netLabels }
       : sheet)
@@ -299,26 +310,33 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
   await expect(sampleSlider).toBeVisible()
   const solvedSamples = Number(await sampleSlider.getAttribute('max')) + 1
   expect(solvedSamples).toBeGreaterThanOrEqual(9_000)
-  const traceButtons = page.locator('.trace-toggles button')
-  const availableTraceCount = await traceButtons.count()
-  expect(availableTraceCount).toBeGreaterThanOrEqual(40)
-  const selection = await page.evaluate(async () => {
-    const buttons = [...document.querySelectorAll<HTMLButtonElement>('.trace-toggles button')]
-    const selected = buttons.slice(0, 40)
+  const plot = page.locator('.plot-window').first()
+  const selectedTraces = plot.locator('.trace-selected-item')
+  await expect(selectedTraces).toHaveCount(40)
+  const traceNames = (await selectedTraces.allTextContents()).join('\n')
+  expect(traceNames).toMatch(/I\(R1\)/i)
+  expect(traceNames).toMatch(/V\(N23\)/i)
+  const selection = await selectedTraces.evaluateAll(async (items) => {
+    const buttons = items.map((item) => item.querySelector<HTMLButtonElement>('.trace-visibility')).filter((button): button is HTMLButtonElement => button !== null)
     const started = performance.now()
-    for (const button of selected) {
-      if (button.getAttribute('aria-pressed') !== 'true') button.click()
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    const waitFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    for (const button of buttons) {
+      if (button.getAttribute('aria-pressed') === 'true') button.click()
+      await waitFrame()
     }
-    return { elapsedMs: performance.now() - started, selectedCount: document.querySelectorAll('.trace-toggles button[aria-pressed="true"]').length }
+    for (const button of buttons) {
+      if (button.getAttribute('aria-pressed') !== 'true') button.click()
+      await waitFrame()
+    }
+    return { elapsedMs: performance.now() - started, selectedCount: buttons.filter((button) => button.getAttribute('aria-pressed') === 'true').length }
   })
-  await expect(page.locator('.waveform-chart polyline')).toHaveCount(selection.selectedCount)
-  expect(selection.selectedCount).toBeGreaterThanOrEqual(40)
+  await expect(plot.locator('.waveform-chart polyline')).toHaveCount(selection.selectedCount)
+  expect(selection.selectedCount).toBe(40)
   expect(pageErrors).toEqual([])
-  const plottedPoints = await page.locator('.waveform-chart polyline').evaluateAll((lines) => lines.map((line) => (line as SVGPolylineElement).points.numberOfItems))
+  const plottedPoints = await plot.locator('.waveform-chart polyline').evaluateAll((lines) => lines.map((line) => (line as SVGPolylineElement).points.numberOfItems))
   expect(plottedPoints.length).toBe(selection.selectedCount)
   expect(Math.max(...plottedPoints)).toBeLessThanOrEqual(902)
-  console.log(JSON.stringify({ benchmark: 'browser-24-section-40-trace-transient-v2', browser: browserName, sections: 24, solvedSamples, availableTraces: availableTraceCount, plottedTraces: selection.selectedCount, maxRenderedPointsPerTrace: Math.max(...plottedPoints), resultReadyMs: Number(resultReadyMs.toFixed(2)), selectAndRenderNextFrameMs: Number(selection.elapsedMs.toFixed(2)) }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-24-section-40-trace-transient-v3', browser: browserName, sections: 24, solvedSamples, plottedTraces: selection.selectedCount, maxRenderedPointsPerTrace: Math.max(...plottedPoints), resultReadyMs: Number(resultReadyMs.toFixed(2)), visibilityToggleAndRenderMs: Number(selection.elapsedMs.toFixed(2)) }, null, 2))
 })
 
 test('measure high-sample multi-trace rendering for a nonlinear diode circuit', async ({ page, browserName }) => {
@@ -329,6 +347,10 @@ test('measure high-sample multi-trace rendering for a nonlinear diode circuit', 
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const saved = localStorage.getItem('elsim:project:v7')
+    return saved ? JSON.parse(saved).parts.length : null
+  })).toBe(4)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const sourceTemplate = project.parts.find((part: { kind: string }) => part.kind === 'source')
@@ -385,13 +407,20 @@ test('measure high-sample multi-trace rendering for a nonlinear diode circuit', 
     project.simulation.stopTime = '100 ms'
     project.simulation.maxStep = '1 µs'
     project.plotSettings.selectedTraceIds = []
+    const selectedTraceIds = [
+      ...Array.from({ length: 24 }, (_, index) => `v(dout${index + 1})`),
+      ...Array.from({ length: 16 }, (_, index) => `i(@d${index + 1}[id])`),
+    ]
+    project.plotSettings.panels = [{ id: 'benchmark-nonlinear-traces', bounds: { x: 24, y: 112, width: 900, height: 560 }, selectedTraceIds, ranges: {} }]
     project.sheets = project.sheets.map((sheet: { id: string }) => sheet.id === project.rootSheetId
       ? { ...sheet, parts, wires: [], junctions: [], netLabels }
       : sheet)
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
-  await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(49)
+  const initiallyMountedParts = page.locator('svg.schematic .circuit-part')
+  await expect.poll(() => initiallyMountedParts.count()).toBeGreaterThan(0)
+  await expect.poll(() => initiallyMountedParts.count()).toBeLessThan(49)
   const started = performance.now()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 105_000 })
@@ -400,45 +429,44 @@ test('measure high-sample multi-trace rendering for a nonlinear diode circuit', 
   await expect(slider).toBeVisible()
   const solvedSamples = Number(await slider.getAttribute('max')) + 1
   expect(solvedSamples).toBeGreaterThanOrEqual(100_000)
-  const traces = page.locator('.trace-toggles button')
-  const availableTraceCount = await traces.count()
-  expect(availableTraceCount).toBeGreaterThanOrEqual(49)
+  const plot = page.locator('.plot-window').first()
+  const traces = plot.locator('.trace-selected-item')
+  await expect(traces).toHaveCount(40)
   const vectorNames = (await traces.allTextContents()).join('\n')
   expect(vectorNames).toMatch(/I\(D1\)/i)
   expect(vectorNames).toMatch(/V\(DOUT24\)/i)
-  const requestedTraceCount = 40
-  const selection = await page.evaluate(async (count) => {
-    const buttons = [...document.querySelectorAll<HTMLButtonElement>('.trace-toggles button')]
+  const selection = await traces.evaluateAll(async (items) => {
+    const buttons = items.map((item) => item.querySelector<HTMLButtonElement>('.trace-visibility')).filter((button): button is HTMLButtonElement => button !== null)
     const started = performance.now()
-    for (const [index, button] of buttons.entries()) {
-      const shouldSelect = index < count
-      if ((button.getAttribute('aria-pressed') === 'true') !== shouldSelect) button.click()
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    const waitFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    for (const button of buttons) {
+      if (button.getAttribute('aria-pressed') === 'true') button.click()
+      await waitFrame()
     }
-    return {
-      elapsedMs: performance.now() - started,
-      selectedCount: document.querySelectorAll('.trace-toggles button[aria-pressed="true"]').length,
+    for (const button of buttons) {
+      if (button.getAttribute('aria-pressed') !== 'true') button.click()
+      await waitFrame()
     }
-  }, requestedTraceCount)
+    return { elapsedMs: performance.now() - started, selectedCount: buttons.filter((button) => button.getAttribute('aria-pressed') === 'true').length }
+  })
   const selectAndRenderMs = selection.elapsedMs
-  expect(selection.selectedCount).toBe(requestedTraceCount)
-  await expect(page.locator('.waveform-chart polyline')).toHaveCount(requestedTraceCount)
-  const pointCounts = await page.locator('.waveform-chart polyline').evaluateAll((lines) => lines.map((line) => (line as SVGPolylineElement).points.numberOfItems))
+  expect(selection.selectedCount).toBe(40)
+  await expect(plot.locator('.waveform-chart polyline')).toHaveCount(40)
+  const pointCounts = await plot.locator('.waveform-chart polyline').evaluateAll((lines) => lines.map((line) => (line as SVGPolylineElement).points.numberOfItems))
   expect(Math.max(...pointCounts)).toBeLessThanOrEqual(902)
   await slider.press('End')
   await expect(page.locator('.cursor-readout')).toBeVisible()
   expect(pageErrors).toEqual([])
   console.log(JSON.stringify({
-    benchmark: 'browser-nonlinear-100k-sample-40-trace-v1',
+    benchmark: 'browser-nonlinear-100k-sample-40-trace-v2',
     browser: browserName,
     circuit: '24 parallel resistor-diode branches with pulse excitation',
     nonlinearDevices: 24,
     solvedSamples,
-    availableTraceCount,
-    plottedTraceCount: requestedTraceCount,
+    plottedTraceCount: selection.selectedCount,
     maxRenderedPointsPerTrace: Math.max(...pointCounts),
     resultReadyMs: Number(resultReadyMs.toFixed(2)),
-    selectAndRenderMs: Number(selectAndRenderMs.toFixed(2)),
+    visibilityToggleAndRenderMs: Number(selectAndRenderMs.toFixed(2)),
   }, null, 2))
 })
 
