@@ -746,6 +746,22 @@ test('waveform window title, plot, and navigation retain visible keyboard focus'
   await expectFocusRing(zoomIn)
 })
 
+test('keyboard waveform cursor announces the selected time and trace readings', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const plotWindow = await openComponentVoltagePlot(page)
+  await page.getByTitle('Pause result playback (does not pause ngspice)').click()
+
+  const plot = plotWindow.getByRole('group', { name: /Transient waveforms from/ })
+  const announcement = plotWindow.locator('.waveform-view > .sr-only[aria-live="polite"]')
+  await plot.focus()
+  await page.keyboard.press('Home')
+  await page.keyboard.press('ArrowRight')
+  await expect(announcement).toContainText('Time')
+  await expect(announcement).toContainText('V(R1)')
+})
+
 test('solver errors select and bring the reported component into view', { tag: '@ui-smoke' }, async ({ page }) => {
   const project = createStarterProject()
   const target = project.parts.find((part) => part.kind === 'resistor')!
