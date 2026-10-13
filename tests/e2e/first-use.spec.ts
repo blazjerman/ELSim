@@ -198,6 +198,7 @@ async function scrubToTime(slider: Locator, targetSeconds: number) {
   while (low <= high) {
     const index = Math.floor((low + high) / 2)
     await slider.fill(String(index))
+    await expect(slider).toHaveValue(String(index))
     const seconds = parseDisplayedTimeSeconds((await output.textContent()) ?? '')
     const difference = Math.abs(seconds - targetSeconds)
     if (difference < bestDifference) { bestDifference = difference; bestIndex = index }
@@ -206,6 +207,10 @@ async function scrubToTime(slider: Locator, targetSeconds: number) {
     else break
   }
   await slider.fill(String(bestIndex))
+  // Cursor-linked plots and component animations publish on the next
+  // animation frame. Wait for the controlled range to reflect the final
+  // selected sample so assertions cannot observe an intermediate search step.
+  await expect(slider).toHaveValue(String(bestIndex))
 }
 
 function parseDisplayedTimeSeconds(value: string): number {

@@ -238,6 +238,19 @@ function nearestAxisIndex(axis: Float64Array, value: number, start: number, end:
   return Math.abs(axis[low] - value) < Math.abs(axis[low - 1] - value) ? low : low - 1
 }
 
+type ComponentSampleValues = { voltage?: number; current?: number; secondaryCurrent?: number; switchClosed?: boolean; logicOutput?: number }
+type ComponentTraceReading = Trace | 0 | undefined
+type ComponentAnimationPlan = { positive: ComponentTraceReading; negative: ComponentTraceReading; current?: Trace; secondaryCurrent?: Trace; logicOutput: ComponentTraceReading }
+
+function readComponentTrace(reading: ComponentTraceReading, primaryAxis: Float64Array | undefined, sampleIndex: number | null): number | undefined {
+  if (reading === 0) return 0
+  if (!reading) return undefined
+  const activeSample = primaryAxis?.length ? Math.max(0, Math.min(primaryAxis.length - 1, sampleIndex ?? primaryAxis.length - 1)) : 0
+  const time = primaryAxis?.[activeSample] ?? reading.axis[activeSample] ?? 0
+  const index = reading.axis === primaryAxis ? activeSample : nearestAxisIndex(reading.axis, time, 0, Math.max(0, reading.axis.length - 1))
+  return reading.values[index]
+}
+
 
 function defaultSweepStop(part: Part): string {
   const magnitude = componentMagnitude(part.value, part.kind)
@@ -283,10 +296,10 @@ function defaultPlacementRotation(kind: PartKind): Part['rotation'] {
   return (((-Math.round(native / 90) * 90) % 360 + 360) % 360) as Part['rotation']
 }
 
-const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, componentSample, animate = false, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; componentSample: (part: Part) => { voltage?: number; current?: number; secondaryCurrent?: number; switchClosed?: boolean; logicOutput?: number }; animate?: boolean; symbol?: ImportedSymbol; detailed?: boolean }) {
+const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, componentSample, animate = false, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; componentSample: (part: Part, sampleIndex: number | null) => ComponentSampleValues; animate?: boolean; symbol?: ImportedSymbol; detailed?: boolean }) {
   const uiState = usePartUiState(part.id)
   const animationSample = useSimulationCursorWhen(animate)
-  const { voltage, current, secondaryCurrent, switchClosed, logicOutput } = useMemo(() => animate ? componentSample(part) : {}, [animate, animationSample, componentSample, part])
+  const { voltage, current, secondaryCurrent, switchClosed, logicOutput } = useMemo(() => animate ? componentSample(part, animationSample) : {}, [animate, animationSample, componentSample, part])
   const selected = (uiState & 1) !== 0
   const focusable = (uiState & 2) !== 0
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
@@ -436,7 +449,7 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   parts: Part[]
   symbolsById: Map<string, ImportedSymbol>
   tool: ToolMode
-  componentSample: (part: Part) => { voltage?: number; current?: number; secondaryCurrent?: number; switchClosed?: boolean }
+  componentSample: (part: Part, sampleIndex: number | null) => ComponentSampleValues
   animationEnabled: boolean
   onSelect: (id: string, additive?: boolean) => void
   onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void
@@ -871,6 +884,27 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     }
     return index
   }, [simulationResult])
+  const componentAnimationPlans = useMemo(() => {
+    return new WeakMap<Part, ComponentAnimationPlan>()
+  }, [project.parts, resultIsCurrent, resultConnectivity, tracesByVector])
+  const componentAnimationPlanFor = (part: Part): ComponentAnimationPlan | undefined => {
+    const cached = componentAnimationPlans.get(part)
+    if (cached) return cached
+    if (!resultIsCurrent || !resultConnectivity || part.kind === 'subcircuit') return undefined
+    const traceForNode = (node: string): ComponentTraceReading => node === '0' ? 0 : tracesByVector.get(`v(${node})`.toLowerCase())
+    const traceForVector = (vector: string) => tracesByVector.get(vector.toLowerCase())
+    const currentVector = componentCurrentVector(part)
+    const outputIndex = part.kind === 'inverter' ? 1 : part.kind === 'logicGate' ? 2 : undefined
+    const plan = {
+      positive: traceForNode(pinNet(resultConnectivity, part, 0)),
+      negative: traceForNode(pinNet(resultConnectivity, part, 1)),
+      current: traceForVector(currentVector) ?? traceForVector(`i(${part.ref})`),
+      secondaryCurrent: part.kind === 'transformer' ? traceForVector(transformerWindingCurrentVector(part.ref, 'S')) : undefined,
+      logicOutput: outputIndex === undefined ? undefined : traceForNode(pinNet(resultConnectivity, part, outputIndex)),
+    }
+    componentAnimationPlans.set(part, plan)
+    return plan
+  }
   const resultValueAt = useCallback((id: string, sampleIndex: number | null): number | undefined => {
     const trace = tracesByVector.get(id.toLowerCase())
     if (!trace) return undefined
@@ -880,9 +914,8 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     const index = trace.axis === primaryAxis ? activeSample : nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
     return trace.values[index]
   }, [simulationResult, tracesByVector])
-  const resultValue = (id: string): number | undefined => resultValueAt(id, getSimulationCursor())
   const voltageSwitchStateCache = useRef<{ result: SimulationResult | null; states: Map<string, Uint8Array> }>({ result: null, states: new Map() })
-  const voltageSwitchStateAt = (part: Part): boolean | undefined => {
+  const voltageSwitchStateAt = (part: Part, sampleIndex: number | null): boolean | undefined => {
     const axis = transientAxis
     if (part.kind !== 'voltageSwitch' || !resultConnectivity || !axis?.length || !simulationResult) return undefined
     const cache = voltageSwitchStateCache.current
@@ -912,7 +945,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
       }
       cache.states.set(part.id, samples)
     }
-    const activeSample = Math.max(0, Math.min(samples.length - 1, getSimulationCursor() ?? samples.length - 1))
+    const activeSample = Math.max(0, Math.min(samples.length - 1, sampleIndex ?? samples.length - 1))
     return Boolean(samples[activeSample])
   }
   const toggleSwitch = (id: string) => {
@@ -926,24 +959,25 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
       ? `${part.ref} switched ${value.toLowerCase()}. Recalculating the circuit.`
       : `${part.ref} switched ${value.toLowerCase()}. Run simulation to calculate the updated circuit.`)
   }
-  const voltageAtNode = (name: string): number | undefined => name === '0' ? 0 : resultValue(`v(${name})`)
-  const componentSample = (part: Part) => {
+  const componentSample = (part: Part, sampleIndex: number | null): ComponentSampleValues => {
     // Offscreen parts cannot display the cursor-linked animation. Keep their
     // result props stable so a scrub does not rerender every symbol in a large
     // sheet; the latest sample is applied when the viewport reaches them.
     if (!resultIsCurrent || part.kind === 'subcircuit' || part.x < viewportLeft - 100 || part.x > viewportLeft + viewWidth + 100 || part.y < viewportTop - 100 || part.y > viewportTop + viewHeight + 100) return {}
-    const positive = voltageAtNode(pinNet(resultConnectivity!, part, 0))
-    const negative = voltageAtNode(pinNet(resultConnectivity!, part, 1))
-    const current = resultValue(componentCurrentVector(part)) ?? resultValue(`i(${part.ref})`)
-    const secondaryCurrent = part.kind === 'transformer' ? resultValue(transformerWindingCurrentVector(part.ref, 'S')) : undefined
-    const switchClosed = voltageSwitchStateAt(part)
-    const outputIndex = part.kind === 'inverter' ? 1 : part.kind === 'logicGate' ? 2 : undefined
-    const logicOutput = outputIndex === undefined ? undefined : voltageAtNode(pinNet(resultConnectivity!, part, outputIndex))
+    const plan = componentAnimationPlanFor(part)
+    if (!plan) return {}
+    const axis = simulationResult?.traces[0]?.axis
+    const positive = readComponentTrace(plan.positive, axis, sampleIndex)
+    const negative = readComponentTrace(plan.negative, axis, sampleIndex)
+    const current = readComponentTrace(plan.current, axis, sampleIndex)
+    const secondaryCurrent = readComponentTrace(plan.secondaryCurrent, axis, sampleIndex)
+    const switchClosed = voltageSwitchStateAt(part, sampleIndex)
+    const logicOutput = readComponentTrace(plan.logicOutput, axis, sampleIndex)
     return { voltage: positive !== undefined && negative !== undefined ? positive - negative : undefined, current, secondaryCurrent, switchClosed, logicOutput }
   }
   const componentSampleRef = useRef(componentSample)
   componentSampleRef.current = componentSample
-  const samplePart = useCallback((part: Part) => componentSampleRef.current(part), [])
+  const samplePart = useCallback((part: Part, sampleIndex: number | null) => componentSampleRef.current(part, sampleIndex), [])
   const pointFromEvent = (event: PointerEvent<SVGElement> | MouseEvent<SVGSVGElement>) => {
     const rect = svg.current!.getBoundingClientRect()
     const view = svg.current!.viewBox.baseVal

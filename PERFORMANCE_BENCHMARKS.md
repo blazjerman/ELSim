@@ -499,3 +499,9 @@ All seven Firefox browser performance cases passed using the existing local ngsp
 ### Wire-selection isolation experiment (2026-10-13)
 
 A trial moved per-wire selected state to an external store and memoized the visible-wire layer. Focused selection tests and the build passed, but repeated Firefox select-all-to-frame observations varied from 43–64 ms with the store-only trial and 71–74 ms after adding the memoized layer, against an earlier single 63 ms observation. These samples do not demonstrate a gain and the added store requires scanning/notifying selected wire IDs. The experiment was fully reverted; the existing selected-wire prop path remains. The benchmark needs controlled repeat/interleaved profiling before another change is justified.
+
+### Lazy component animation trace plans (2026-10-13)
+
+Visible component animation now resolves pin nets and result-vector references once per part/result through a lazy `WeakMap`, then reads values by the cursor sample index. Off-screen parts allocate no plan until they enter the animation viewport. Trace reads preserve the previous shared-axis fast path and nearest-time lookup for distinct axes. Five Firefox runs of the 500-part/1,000-vector scrub measured 27.1, 27.1, 28.1, 34.8, and 36.1 ms (median 28.1 ms), versus three pre-change runs at 30.6, 30.7, and 32.6 ms (median 30.7 ms). The overlap and spread mean this is a promising local observation, not a reliable performance guarantee. Wire, capacitor, transformer, lamp, logic-gate, and voltage-controlled-switch animation regressions pass against the existing local runtime. No WASM rebuild was run.
+
+The shared `scrubToTime` browser helper now waits for the controlled sample to render after each binary-search step before reading the time label. Three repeated capacitor-animation runs pass; this removes a test race where intermediate scrub updates could select the wrong sample.
