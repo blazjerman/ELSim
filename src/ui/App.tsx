@@ -1674,7 +1674,15 @@ export default function App() {
     } catch { return createStarterProject() }
   })
   const [selection, setSelection] = useState<Selection>({ kind: 'part', id: 'p-r1' })
-  const [hoveredSchematicObject, setHoveredSchematicObject] = useState<HoveredSchematicObject>(null)
+  const hoveredSchematicObjectRef = useRef<HoveredSchematicObject>(null)
+  const [hasHoveredSchematicObject, setHasHoveredSchematicObject] = useState(false)
+  const setHoveredSchematicObject = useCallback((target: HoveredSchematicObject | ((current: HoveredSchematicObject) => HoveredSchematicObject)) => {
+    const current = hoveredSchematicObjectRef.current
+    const next = typeof target === 'function' ? target(current) : target
+    if (current?.kind === next?.kind && current?.id === next?.id) return
+    hoveredSchematicObjectRef.current = next
+    setHasHoveredSchematicObject((hasHovered) => hasHovered === Boolean(next) ? hasHovered : Boolean(next))
+  }, [])
   const [selectedWireIds, setSelectedWireIds] = useState<string[]>([])
   const selectedWireId = selectedWireIds.at(-1) ?? null
   const setSelectedWireId = (id: string | null) => setSelectedWireIds(id ? [id] : [])
@@ -2978,6 +2986,7 @@ export default function App() {
     const partIds = new Set(selectedPartIds.length ? selectedPartIds : selectedWireIds.length ? [] : selection?.kind === 'part' ? [selection.id] : [])
     const wireIds = new Set(selectedWireIds)
     const labelIds = new Set(selectedNetLabelIds.length ? selectedNetLabelIds : selectedWireIds.length ? [] : selection?.kind === 'label' ? [selection.id] : [])
+    const hoveredSchematicObject = hoveredSchematicObjectRef.current
     if (!partIds.size && !wireIds.size && !labelIds.size && hoveredSchematicObject) {
       if (hoveredSchematicObject.kind === 'part') partIds.add(hoveredSchematicObject.id)
       else if (hoveredSchematicObject.kind === 'wire') wireIds.add(hoveredSchematicObject.id)
@@ -3099,7 +3108,7 @@ export default function App() {
       else if (event.key === '=') { setPendingComponentKind(null); setTool('junction') }
       else if (event.key === '.' && activeSelected) rotateActiveSelected()
       else if (event.key === 'y' && activeSelected) flipActiveSelected()
-      else if ((key === 'delete' || key === 'backspace') && (selection || selectedPartIds.length || selectedWireIds.length || selectedNetLabelIds.length || hoveredSchematicObject)) { event.preventDefault(); deleteSelection() }
+      else if ((key === 'delete' || key === 'backspace') && (selection || selectedPartIds.length || selectedWireIds.length || selectedNetLabelIds.length || hoveredSchematicObjectRef.current)) { event.preventDefault(); deleteSelection() }
       else if (key === 'escape') { setPendingComponentKind(null); setSelection(null); setSelectedPartIds([]); setSelectedWireId(null); setSelectedNetLabelIds([]) }
     }
     const onKeyUp = (event: KeyboardEvent) => { if (event.code === 'Space') setSpacePan(false) }
@@ -3110,7 +3119,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onSpaceKeyDown, true); window.removeEventListener('keyup', onSpaceKeyUp, true); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy, pendingComponentKind, hoveredSchematicObject])
+  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingModelImport, ltspiceExport, ltspiceExportBusy, pendingComponentKind, hasHoveredSchematicObject])
   const openGeneratedNetlist = () => {
     setNetlistText(null)
     setNetlistOpen(true)
@@ -3861,7 +3870,7 @@ export default function App() {
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
-      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (r)" onClick={rotateActiveSelected} disabled={!activeSelected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (Y)" onClick={flipActiveSelected} disabled={!activeSelected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected or hovered (Delete)" onClick={deleteSelection} disabled={!selection && !selectedPartIds.length && !selectedWireIds.length && !selectedNetLabelIds.length && !hoveredSchematicObject}><Trash2 size={14}/></IconButton></div>
+      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (r)" onClick={rotateActiveSelected} disabled={!activeSelected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (Y)" onClick={flipActiveSelected} disabled={!activeSelected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected or hovered (Delete)" onClick={deleteSelection} disabled={!selection && !selectedPartIds.length && !selectedWireIds.length && !selectedNetLabelIds.length && !hasHoveredSchematicObject}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => changeAnalysis(event.target.value as Project['simulation']['analysis'])}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option><option value="noise">Noise analysis</option></select><ChevronDown size={13}/></label>
       <SimulationPlaybackControls axis={transientAxis} available={playbackAvailable} running={playbackRunning} rate={playbackRate} onRateChange={setPlaybackRate} onRunningChange={setPlaybackRunning}/>

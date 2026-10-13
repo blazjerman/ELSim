@@ -3789,6 +3789,22 @@ test('deleting a component keeps its independent wire and selected wires use the
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(0)
 })
 
+test('hovering between schematic objects keeps the latest unselected object as the delete target', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const canvas = page.locator('svg.schematic')
+  await canvas.click({ position: { x: 20, y: 20 } })
+  await expect(page.locator('.circuit-part.selected, .wire-line.selected, .canvas-label.selected')).toHaveCount(0)
+  const first = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const latest = page.locator('.circuit-part[data-part-id="p-c1"]')
+  await first.hover()
+  await latest.hover()
+  const deleteButton = page.getByRole('button', { name: 'Delete selected or hovered (Delete)' })
+  await expect(deleteButton).toBeEnabled()
+  await deleteButton.click()
+  await expect(page.locator('.circuit-part[data-part-id="p-r1"]')).toHaveCount(1)
+  await expect(page.locator('.circuit-part[data-part-id="p-c1"]')).toHaveCount(0)
+})
+
 test('wire mode does not select or move an existing wire', async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
