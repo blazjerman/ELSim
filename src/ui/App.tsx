@@ -994,7 +994,16 @@ function Schematic({ project, connectivity, setSelection, setHoveredSchematicObj
     } else if (kind === 'part' && !selectedPartIdSet.has(id)) {
       setSelectedPartIds(partIds)
     }
-    if (kind === 'wire') { if (!alreadySelected) { setSelectedWireId(id); setSelection(null) } }
+    // Selecting a wire affects its movement/selection set, but leaves the
+    // inspector's current component context alone. The wire remains an
+    // independent movable object; it does not replace the active properties view.
+    if (kind === 'wire') {
+      if (!alreadySelected) setSelectedWireId(id)
+      // Pointer capture can retarget the eventual click to the SVG root in
+      // Firefox. Consume that click there so the blank-canvas handler does not
+      // clear the inspector selection that this wire click intentionally kept.
+      suppressCanvasClick.current = true
+    }
     else setSelection({ kind, id })
     beginEdit()
     const groupSize = group.parts.length + group.wires.length + group.netLabels.length
@@ -1090,7 +1099,9 @@ function Schematic({ project, connectivity, setSelection, setHoveredSchematicObj
     event.preventDefault()
     event.stopPropagation()
     const point = pointFromEvent(event)
-    setSelectedWireId(id); setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null)
+    setSelectedWireId(id); setSelectedPartIds([]); setSelectedNetLabelIds([])
+    // Keep the inspector's current component while moving this independent wire endpoint.
+    suppressCanvasClick.current = true
     beginEdit()
     drag.current = { kind: 'wire-point', id, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, pointIndex, points: wire.points.map(([x, y]) => [x, y]) }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -1104,7 +1115,7 @@ function Schematic({ project, connectivity, setSelection, setHoveredSchematicObj
     const next = additive ? current.includes(id) ? current.filter((item) => item !== id) : [...current, id] : [id]
     selectedWireIdsRef.current = next
     setSelectedWireIds(next)
-    if (!additive) { setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null) }
+    if (!additive) { setSelectedPartIds([]); setSelectedNetLabelIds([]) }
     if (!focusEndpoint || !next.includes(id)) return
     window.requestAnimationFrame(() => svg.current?.querySelector<SVGCircleElement>(`[data-wire-endpoint-id="${CSS.escape(id)}"][data-endpoint-index="0"]`)?.focus())
   }, [setSelectedWireIds, setSelectedPartIds, setSelectedNetLabelIds, setSelection])
@@ -1193,7 +1204,9 @@ function Schematic({ project, connectivity, setSelection, setHoveredSchematicObj
     })
   }
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
-    const activeGroupDrag = drag.current?.group ? drag.current : null
+    const endedDrag = drag.current
+    if (event.type === 'pointercancel') suppressCanvasClick.current = false
+    const activeGroupDrag = endedDrag?.group ? endedDrag : null
     if (activeGroupDrag?.group) {
       const point = pointFromEvent(event)
       const deltaX = Math.round((point.x - activeGroupDrag.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
@@ -1260,6 +1273,18 @@ function Schematic({ project, connectivity, setSelection, setHoveredSchematicObj
       return
     }
     if (drag.current?.kind === 'pan' && drag.current.id === 'middle') suppressCanvasClick.current = false
+    if (endedDrag?.kind === 'wire') {
+      const point = pointFromEvent(event)
+      const deltaX = Math.round((point.x - endedDrag.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      const deltaY = Math.round((point.y - endedDrag.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      if (deltaX === 0 && deltaY === 0) {
+        // A click on one member of a mixed selection selects only that wire;
+        // a real drag still moves the explicitly selected group together.
+        setSelectedPartIds([])
+        setSelectedWireIds([endedDrag.id])
+        setSelectedNetLabelIds([])
+      }
+    }
     if (drag.current?.kind !== 'pan' && drag.current) endEdit()
     drag.current = null
     if (svg.current) svg.current.style.cursor = ''
@@ -2237,23 +2262,26 @@ export default function App() {
   })
   const updateNoiseSweep = (patch: Partial<NonNullable<Project['simulation']['noiseSweep']>>) => setProject((current) => ({ ...current, simulation: { ...current.simulation, noiseSweep: { outputNode: 'vout', inputSource: 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz', ...current.simulation.noiseSweep, ...patch } } }))
   const selected = selection?.kind === 'part' ? partsById.get(selection.id) ?? null : null
+  // A selected wire may leave the last component open in the inspector for
+  // context, while the canvas selection and edit shortcuts target only the wire.
+  const activeSelected = selected && (selectedPartIdSet.has(selected.id) || selectedWireIds.length === 0) ? selected : null
   const selectedPropertyDefault = (key: string, fallback: string) => selected ? componentPropertyDefault(selected.kind, key) ?? fallback : fallback
   const selectedParts = useMemo(() => {
     const parts = selectedPartIds.flatMap((id) => {
       const part = partsById.get(id)
       return part ? [part] : []
     })
-    return selected && !parts.some((part) => part.id === selected.id) ? [selected] : parts
-  }, [partsById, selected, selectedPartIds])
+    return activeSelected && !parts.some((part) => part.id === activeSelected.id) ? [activeSelected] : parts
+  }, [partsById, activeSelected, selectedPartIds])
   const selectedLabel = selection?.kind === 'label' ? project.netLabels.find((label) => label.id === selection.id) ?? null : null
   useEffect(() => {
     const validIds = selectedWireIds.filter((id) => projectWireIds.has(id))
     if (validIds.length !== selectedWireIds.length) setSelectedWireIds(validIds)
   }, [projectWireIds, selectedWireIds])
   useLayoutEffect(() => {
-    const selectedIds = selected && !selectedPartIdSet.has(selected.id) ? [selected.id] : selectedPartIds
-    updatePartUiState(selectedIds, selected?.id ?? project.parts[0]?.id)
-  }, [selectedPartIds, selected, project.parts])
+    const selectedIds = activeSelected && !selectedPartIdSet.has(activeSelected.id) ? [activeSelected.id] : selectedPartIds
+    updatePartUiState(selectedIds, activeSelected?.id ?? project.parts[0]?.id)
+  }, [selectedPartIds, selectedWireIds, activeSelected, project.parts])
   const filteredPalette = componentPaletteItems.filter(({ kind }) => {
     const matchesCategory = Boolean(componentQuery.trim()) || componentCategoryKinds[componentCategory].includes(kind)
     const definition = componentDefinitionFor(kind)
@@ -2673,6 +2701,8 @@ export default function App() {
   }
   const rotateSelected = () => selected && updateSelected({ rotation: ((selected.rotation + 90) % 360) as Part['rotation'] })
   const flipSelected = () => selected && updateSelected({ flipX: !selected.flipX })
+  const rotateActiveSelected = () => activeSelected && rotateSelected()
+  const flipActiveSelected = () => activeSelected && flipSelected()
   const duplicateSelected = () => selectedParts.length && pasteParts(createPartClipboard(project, selectedParts.map((part) => part.id), [], selectedWireIds), 80, 60)
   const pasteParts = (clipboard = copiedParts.current, offsetX = 40, offsetY = 40) => {
     if (!clipboard || (!clipboard.parts.length && !clipboard.netLabels.length && !clipboard.wires.length)) return
@@ -2739,9 +2769,9 @@ export default function App() {
     setSelectedPartIds([])
   }
   const deleteSelection = () => {
-    const partIds = new Set(selectedPartIds.length ? selectedPartIds : selection?.kind === 'part' ? [selection.id] : [])
+    const partIds = new Set(selectedPartIds.length ? selectedPartIds : selectedWireIds.length ? [] : selection?.kind === 'part' ? [selection.id] : [])
     const wireIds = new Set(selectedWireIds)
-    const labelIds = new Set(selectedNetLabelIds.length ? selectedNetLabelIds : selection?.kind === 'label' ? [selection.id] : [])
+    const labelIds = new Set(selectedNetLabelIds.length ? selectedNetLabelIds : selectedWireIds.length ? [] : selection?.kind === 'label' ? [selection.id] : [])
     if (!partIds.size && !wireIds.size && !labelIds.size && hoveredSchematicObject) {
       if (hoveredSchematicObject.kind === 'part') partIds.add(hoveredSchematicObject.id)
       else if (hoveredSchematicObject.kind === 'wire') wireIds.add(hoveredSchematicObject.id)
@@ -2845,9 +2875,9 @@ export default function App() {
       if ((event.ctrlKey || event.metaKey) && key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return }
       if ((event.ctrlKey || event.metaKey) && key === 'y') { event.preventDefault(); redo(); return }
       if (event.ctrlKey || event.metaKey || event.altKey) return
-      const hasSchematicSelection = Boolean(selection || selectedPartIds.length || selectedWireIds.length || selectedNetLabelIds.length)
+      const hasSchematicSelection = Boolean(activeSelected || selectedPartIds.length || selectedWireIds.length || selectedNetLabelIds.length)
       if (pendingComponentKind && (event.key === 'r' || event.key === '.')) { setPendingComponentRotation((rotation) => ((rotation + 90) % 360) as Part['rotation']); return }
-      if (event.key === 'r' && selected) { rotateSelected(); return }
+      if (event.key === 'r' && activeSelected) { rotateActiveSelected(); return }
       if (hasSchematicSelection && (Object.values(COMPONENT_SHORTCUTS).includes(event.key) || FUTURE_COMPONENT_SHORTCUTS[event.key] || event.key === 'C')) return
       if (event.key === 'C') { selectComponentForPlacement('capacitor', true); return }
       const logicOperation = LOGIC_GATE_SHORTCUTS[event.key]
@@ -2861,8 +2891,8 @@ export default function App() {
       else if (event.key === ';') { setPendingComponentKind(null); setTool('label') }
       else if (event.key === '?') { setPendingComponentKind(null); setTool('probe') }
       else if (event.key === '=') { setPendingComponentKind(null); setTool('junction') }
-      else if (event.key === '.' && selected) rotateSelected()
-      else if (event.key === 'y' && selected) flipSelected()
+      else if (event.key === '.' && activeSelected) rotateActiveSelected()
+      else if (event.key === 'y' && activeSelected) flipActiveSelected()
       else if ((key === 'delete' || key === 'backspace') && (selection || selectedPartIds.length || selectedWireIds.length || selectedNetLabelIds.length || hoveredSchematicObject)) { event.preventDefault(); deleteSelection() }
       else if (key === 'escape') { setPendingComponentKind(null); setSelection(null); setSelectedPartIds([]); setSelectedWireId(null); setSelectedNetLabelIds([]) }
     }
@@ -3613,7 +3643,7 @@ export default function App() {
       <span className="toolbar-separator"/>
       <div className="menu-group"><IconButton title="Undo (Ctrl/⌘+Z)" onClick={undo} disabled={history.current.past.length === 0}><Undo2 size={15}/></IconButton><IconButton title="Redo (Ctrl/⌘+Shift+Z)" onClick={redo} disabled={history.current.future.length === 0}><Redo2 size={15}/></IconButton></div>
       <span className="toolbar-separator"/>
-      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (r)" onClick={rotateSelected} disabled={!selected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (Y)" onClick={flipSelected} disabled={!selected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected or hovered (Delete)" onClick={deleteSelection} disabled={!selection && !selectedPartIds.length && !selectedWireIds.length && !selectedNetLabelIds.length && !hoveredSchematicObject}><Trash2 size={14}/></IconButton></div>
+      <div className="menu-group"><IconButton title="Select tool" active={tool === 'select'} onClick={() => { setPendingComponentKind(null); setTool('select') }}><MousePointer2 size={15}/></IconButton><IconButton title="Place or edit net label (;)" active={tool === 'label'} onClick={() => { setPendingComponentKind(null); setTool('label') }}><Bookmark size={14}/></IconButton><IconButton title="Rotate selected (r)" onClick={rotateActiveSelected} disabled={!activeSelected}><RotateCw size={15}/></IconButton><IconButton title="Flip selected horizontally (Y)" onClick={flipActiveSelected} disabled={!activeSelected}><FlipHorizontal2 size={15}/></IconButton><IconButton title="Delete selected or hovered (Delete)" onClick={deleteSelection} disabled={!selection && !selectedPartIds.length && !selectedWireIds.length && !selectedNetLabelIds.length && !hoveredSchematicObject}><Trash2 size={14}/></IconButton></div>
       <div className="topbar-spacer"/>
       <label className="analysis-select" title="Choose the circuit analysis"><Activity size={15}/><select aria-label="Analysis type" value={project.simulation.analysis} onChange={(event) => changeAnalysis(event.target.value as Project['simulation']['analysis'])}><option value="tran">Transient</option><option value="op">DC operating point</option><option value="ac">AC sweep</option><option value="dc">DC source sweep</option><option value="noise">Noise analysis</option></select><ChevronDown size={13}/></label>
       <SimulationPlaybackControls axis={transientAxis} available={playbackAvailable} running={playbackRunning} rate={playbackRate} onRateChange={setPlaybackRate} onRunningChange={setPlaybackRunning}/>
