@@ -6050,6 +6050,7 @@ test('circuit checks can select the affected component and orphan wire', async (
   await expect(report).toContainText('R1 has an invalid value')
   await report.getByRole('button', { name: 'Select affected component' }).first().click()
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('R1')
+  await expect(page.locator('.circuit-part[data-part-id="p-r1"]')).toBeFocused()
 
   await page.getByRole('button', { name: 'Draw wire (W)' }).click()
   await expect(page.getByRole('button', { name: 'Draw wire (W)' })).toHaveClass(/active/)
@@ -6073,6 +6074,7 @@ test('circuit checks can select the affected component and orphan wire', async (
   await expect(report).toContainText('Wire is not attached to a component or label')
   await report.getByRole('button', { name: 'Select wire' }).click()
   await expect(page.locator('.wire-line.selected')).toHaveCount(1)
+  await expect(page.locator('.wire-line.selected')).toBeFocused()
 
   await page.getByRole('button', { name: 'Select and move (M)' }).click()
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
