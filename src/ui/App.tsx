@@ -2639,12 +2639,16 @@ export default function App() {
     const selectedIds = activeSelected && !selectedPartIdSet.has(activeSelected.id) ? [activeSelected.id] : selectedPartIds
     updatePartUiState(selectedIds, activeSelected?.id ?? project.parts[0]?.id)
   }, [selectedPartIds, selectedWireIds, activeSelected, project.parts])
-  const filteredPalette = componentPaletteItems.filter(({ kind }) => {
-    const matchesCategory = Boolean(componentQuery.trim()) || componentCategoryKinds[componentCategory].includes(kind)
-    const definition = componentDefinitionFor(kind)
-    const matchesSearch = `${definition.paletteName ?? definition.name} ${definition.name} ${kindNames[kind]} ${definition.paletteSubtitle ?? ''}`.toLowerCase().includes(componentQuery.trim().toLowerCase())
-    return (componentQuery.trim() || matchesCategory) && matchesSearch
-  })
+  const filteredPalette = useMemo(() => {
+    const query = componentQuery.trim().toLowerCase()
+    const categoryKinds = componentCategoryKinds[componentCategory]
+    return componentPaletteItems.filter(({ kind }) => {
+      if (!query && !categoryKinds.includes(kind)) return false
+      if (!query) return true
+      const definition = componentDefinitionFor(kind)
+      return `${definition.paletteName ?? definition.name} ${definition.name} ${kindNames[kind]} ${definition.paletteSubtitle ?? ''}`.toLowerCase().includes(query)
+    })
+  }, [componentCategory, componentQuery])
   const selectComponentForPlacement = (kind: PartKind, polarized = false, logicOperation?: Part['logicOperation']) => {
     const component = componentPaletteItems.find((item) => item.kind === kind)
     if (!component) return

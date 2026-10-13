@@ -1600,6 +1600,60 @@ test('Ctrl+A selects components and wires; drag boxes use window and crossing se
   await expect(resistor).toHaveClass(/selected/)
 })
 
+test('copying the whole schematic selects and moves only the pasted wires with pasted parts', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.keyboard.press('Control+a')
+
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  const partCount = before.parts.length
+  const wireCount = before.wires.length
+  expect(partCount).toBeGreaterThan(0)
+  expect(wireCount).toBeGreaterThan(0)
+
+  await page.keyboard.press('Control+c')
+  await page.keyboard.press('Control+v')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(partCount * 2)
+  await expect.poll(() => page.locator('.wire-line.selected').count()).toBe(wireCount)
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(partCount)
+
+  const pasted = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return {
+      parts: project.parts.slice(-project.parts.length / 2).map((part: { id: string; x: number; y: number }) => part),
+      wires: project.wires.slice(-project.wires.length / 2).map((wire: { id: string; points: [[number, number], [number, number]] }) => wire),
+    }
+  })
+  expect(pasted.parts).toHaveLength(partCount)
+  expect(pasted.wires).toHaveLength(wireCount)
+
+  const draggedPart = page.locator(`.circuit-part[data-part-id="${pasted.parts[0].id}"]`)
+  const bounds = await draggedPart.boundingBox()
+  expect(bounds).not.toBeNull()
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(bounds!.x + bounds!.width / 2 + 40, bounds!.y + bounds!.height / 2 + 20, { steps: 3 })
+  await page.mouse.up()
+
+  await expect.poll(() => page.evaluate((wireId) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return project.wires.find((wire: { id: string }) => wire.id === wireId)?.points
+  }, pasted.wires[0].id)).not.toEqual(pasted.wires[0].points)
+  const moved = await page.evaluate((pastedWireIds) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return project.wires.filter((wire: { id: string }) => pastedWireIds.includes(wire.id))
+  }, pasted.wires.map((wire: { id: string }) => wire.id))
+  expect(moved).toHaveLength(wireCount)
+  for (let index = 0; index < wireCount; index += 1) {
+    const [[beforeX, beforeY], [beforeEndX, beforeEndY]] = pasted.wires[index].points
+    const [[afterX, afterY], [afterEndX, afterEndY]] = moved[index].points
+    expect(afterX - beforeX).toBe(afterEndX - beforeEndX)
+    expect(afterY - beforeY).toBe(afterEndY - beforeEndY)
+    expect(afterX - beforeX).toBeGreaterThan(0)
+    expect(afterY - beforeY).toBeGreaterThan(0)
+  }
+})
+
 test('Ctrl-click adds parts and wires to selection; clicking blank canvas clears them', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
