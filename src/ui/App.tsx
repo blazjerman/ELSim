@@ -2906,7 +2906,37 @@ export default function App() {
       return
     }
     const id = `p-${crypto.randomUUID()}`
-    const position = [{ x: 720, y: 520 }, { x: 880, y: 520 }, { x: 720, y: 700 }, { x: 880, y: 700 }].find(({ x, y }) => project.parts.every((part) => Math.hypot(part.x - x, part.y - y) > 150)) ?? { x: 900 + (project.parts.length % 3) * 170, y: 520 + Math.floor(project.parts.length / 3) * 170 }
+    const canvasWidth = window.innerWidth <= 800
+      ? window.innerWidth
+      : window.innerWidth <= 1120 ? window.innerWidth - 390 : window.innerWidth - 512
+    const canvasHeight = Math.max(220, window.innerHeight - 250)
+    const viewWidth = canvasWidth / project.view.zoom
+    const viewHeight = canvasHeight / project.view.zoom
+    const viewportLeft = 380 - viewWidth / 2 - project.view.panX
+    const viewportTop = 300 - viewHeight / 2 - project.view.panY
+    const center = { x: 380 - project.view.panX, y: 300 - project.view.panY }
+    const visibleBounds = {
+      left: viewportLeft + 50 / project.view.zoom,
+      right: viewportLeft + viewWidth - 50 / project.view.zoom,
+      top: viewportTop + 50 / project.view.zoom,
+      bottom: viewportTop + viewHeight - 50 / project.view.zoom,
+    }
+    const offsets = [0, -40, 40, -80, 80, -120, 120]
+    let position = { x: snapToEditorGrid(center.x), y: snapToEditorGrid(center.y) }
+    let bestClearance = -1
+    let bestOffset = Infinity
+    for (const offsetX of offsets) for (const offsetY of offsets) {
+      const candidate = { x: snapToEditorGrid(center.x + offsetX), y: snapToEditorGrid(center.y + offsetY) }
+      if (candidate.x < visibleBounds.left || candidate.x > visibleBounds.right || candidate.y < visibleBounds.top || candidate.y > visibleBounds.bottom) continue
+      let clearance = Infinity
+      for (const part of project.parts) clearance = Math.min(clearance, Math.hypot(part.x - candidate.x, part.y - candidate.y))
+      const offset = Math.hypot(candidate.x - center.x, candidate.y - center.y)
+      if (clearance > bestClearance || (clearance === bestClearance && offset < bestOffset)) {
+        position = candidate
+        bestClearance = clearance
+        bestOffset = offset
+      }
+    }
     const part: Part = { id, kind: model.definition.kind, componentDefinitionId: model.definition.id, ref: nextRef(project.parts, model.definition.kind), value: model.definition.name, modelName: model.definition.name, modelPins: orderedPins, ...(symbol ? { symbolAssetId: symbol.assetId, symbolPinOffsets: symbol.pins.map(({ x, y }) => [x, y] as [number, number]) } : {}), x: position.x, y: position.y, rotation: 0 }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
     setPendingComponentKind(null)
