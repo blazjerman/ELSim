@@ -192,8 +192,8 @@ function colorsForTraces(traces: Trace[], saved: Record<string, string> = {}): s
   return traces.map((trace, index) => saved[trace.id] ?? saved[trace.baseId ?? ''] ?? PLOT_TRACE_COLORS[index % PLOT_TRACE_COLORS.length])
 }
 
-const PlotPolylineSet = memo(function PlotPolylineSet({ plots }: { plots: { id: string; points: string; color: string }[] }) {
-  return <>{plots.map((plot) => <polyline key={plot.id} points={plot.points} fill="none" stroke={plot.color} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}</>
+const PlotPolylineSet = memo(function PlotPolylineSet({ plots }: { plots: { id: string; points: string; color: string; accessibleName: string }[] }) {
+  return <>{plots.map((plot) => <polyline key={plot.id} role="img" aria-label={plot.accessibleName} points={plot.points} fill="none" stroke={plot.color} strokeWidth="1.7" vectorEffect="non-scaling-stroke"/>)}</>
 })
 
 function TransientCursorTime({ axis }: { axis?: Float64Array }) {
@@ -347,7 +347,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const points = plotPolylinePoints(trace.axis, trace.values, indices, coordinateKey,
       (time) => left + ((time - minTime) / (maxTime - minTime || 1)) * (right - left),
       (value) => bottom - ((value - minValue) / (maxValue - minValue)) * (bottom - top))
-    return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points }
+    return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points, accessibleName: `${trace.label}, trace in ${trace.unit}` }
   }), [shown, minTime, maxTime, width, height, scopeRange[0], scopeRange[1], traceIndexById, colors])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
@@ -498,7 +498,10 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     const points = plotPolylinePoints(trace.axis, trace.values, indices, coordinateKey,
       (frequency) => left + ((Math.log10(frequency) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left),
       (_value, index) => bottom - (valueFor(trace, index) - minValue) / (maxValue - minValue) * (bottom - top))
-    return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }
+    const accessibleName = mode === 'noise'
+      ? `${trace.label}, noise density in ${trace.unit}`
+      : `${trace.label}, AC ${mode === 'magnitude' ? 'magnitude in decibels' : 'phase in degrees'}`
+    return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], accessibleName }
   }), [traces, shown, first, last, width, height, minFrequency, maxFrequency, minValue, maxValue, mode, colors, traceIndexById, sampledIndicesById])
   return <div className="waveform-view ac-view">
     <div className="waveform-title"><strong>{isNoise ? 'Noise spectral density' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><AcCursorTime result={result} frequencies={frequencies}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
@@ -603,7 +606,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
     const points = plotPolylinePoints(trace.axis, trace.values, indices, coordinateKey,
       (value) => left + (value - x0) / (x1 - x0 || 1) * (right - left),
       (value) => bottom - (value - min) / span * (bottom - top))
-    return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }
+    return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], accessibleName: `${trace.label}, swept response in ${trace.unit}` }
   }), [traces, shown, first, last, width, height, x0, x1, min, span, colors, traceIndexById])
   return <div className="waveform-view">
     <div className="waveform-title"><strong>DC sweep results</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><DcCursorTime result={result} axis={axis} axisUnit={traces[0]?.axisUnit}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
