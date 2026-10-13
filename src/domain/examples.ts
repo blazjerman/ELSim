@@ -906,6 +906,43 @@ export function createPotentiometerExampleProject(): Project {
   return project
 }
 
+/** A Wheatstone bridge whose right-hand arm stands in for a resistive sensor. */
+export function createWheatstoneBridgeExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'bridge-v1', kind: 'source', ref: 'V1', value: '10 V', sourceMode: 'dc', x: 260, y: 370, rotation: 0 }
+  const leftTop: Part = { id: 'bridge-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 440, y: 320, rotation: 90 }
+  const leftBottom: Part = { id: 'bridge-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 440, y: 420, rotation: 90 }
+  const rightTop: Part = { id: 'bridge-r3', kind: 'resistor', ref: 'R3', value: '1 kΩ', x: 680, y: 320, rotation: 90 }
+  const sensor: Part = { id: 'bridge-r4', kind: 'resistor', ref: 'R4', value: '2 kΩ', x: 680, y: 420, rotation: 90 }
+  const parts = [source, leftTop, leftBottom, rightTop, sensor]
+  const pin = (part: Part, index: number) => componentPins(part)[index]
+  const labelAt = (id: string, name: string, part: Part, index: number) => {
+    const location = pin(part, index)
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Wheatstone bridge sensor'
+  project.parts = parts
+  project.wires = [
+    { id: 'bridge-source-top', points: [[260, 320], [260, 270]] },
+    { id: 'bridge-supply-rail', points: [[260, 270], [680, 270]] },
+    { id: 'bridge-source-bottom', points: [[260, 420], [260, 470]] },
+    { id: 'bridge-ground-rail', points: [[260, 470], [680, 470]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    labelAt('bridge-vin', 'VIN', source, 0),
+    labelAt('bridge-ground', '0', source, 1),
+    labelAt('bridge-left', 'VLEFT', leftTop, 1),
+    labelAt('bridge-output', 'VOUT', rightTop, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VLEFT)', 'V(VOUT)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A beginner Zener shunt regulator with a 12 V source and a 5.1 V model. */
 export function createZenerRegulatorExampleProject(): Project {
   const project = createStarterProject()

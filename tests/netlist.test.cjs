@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -774,6 +774,25 @@ test("Ohm's law beginner example predicts 5 mA through 1 kΩ at 5 V", () => {
   assert.match(artifact.text, /^R1 VIN 0 1k$/m)
   assert.equal(project.wires.length, 6)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'I(R1)'])
+})
+
+test('Wheatstone bridge example compares divider ratios and supports balancing the sensor arm', () => {
+  const project = createWheatstoneBridgeExampleProject()
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'Wheatstone bridge sensor')
+  assert.equal(project.simulation.analysis, 'op')
+  assert.match(artifact.text, /^V1 VIN 0 DC 10$/m)
+  assert.match(artifact.text, /^R1 VIN VLEFT 1k$/m)
+  assert.match(artifact.text, /^R2 VLEFT 0 1k$/m)
+  assert.match(artifact.text, /^R3 VIN VOUT 1k$/m)
+  assert.match(artifact.text, /^R4 VOUT 0 2k$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VLEFT)', 'V(VOUT)'])
+  const balanced = structuredClone(project)
+  balanced.parts.find((part) => part.ref === 'R4').value = '1 kΩ'
+  const balancedArtifact = createNetlistArtifact(balanced)
+  assert.deepEqual(balancedArtifact.diagnostics, [])
+  assert.match(balancedArtifact.text, /^R4 VOUT 0 1k$/m)
 })
 
 test('source pulse levels and timing are editable and validated before netlisting', () => {

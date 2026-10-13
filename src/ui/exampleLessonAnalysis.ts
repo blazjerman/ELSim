@@ -269,6 +269,21 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const potentiometerPositionText = potentiometerPosition === null ? 'changed' : `${Number((potentiometerPosition * 100).toPrecision(3))}% from the upper terminal`
   const potentiometerSupplyText = partsById.get('pot-v1')?.value ?? 'changed'
   const potentiometerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const isWheatstoneBridgeLesson = lessonId === 'wheatstone-bridge'
+  const bridgeSupply = isWheatstoneBridgeLesson ? componentMagnitude(partsById.get('bridge-v1')?.value ?? '10 V', 'source') : null
+  const bridgeResistances = isWheatstoneBridgeLesson ? ['bridge-r1', 'bridge-r2', 'bridge-r3', 'bridge-r4'].map((id, index) => componentMagnitude(partsById.get(id)?.value ?? ['1 kΩ', '1 kΩ', '1 kΩ', '2 kΩ'][index], 'resistor')) : []
+  const bridgeLeftPrediction = bridgeSupply !== null && bridgeResistances.length === 4 && bridgeResistances[0] !== null && bridgeResistances[1] !== null && bridgeResistances[0] + bridgeResistances[1] > 0
+    ? bridgeSupply * bridgeResistances[1] / (bridgeResistances[0] + bridgeResistances[1])
+    : null
+  const bridgeRightPrediction = bridgeSupply !== null && bridgeResistances.length === 4 && bridgeResistances[2] !== null && bridgeResistances[3] !== null && bridgeResistances[2] + bridgeResistances[3] > 0
+    ? bridgeSupply * bridgeResistances[3] / (bridgeResistances[2] + bridgeResistances[3])
+    : null
+  const bridgeLeftText = partsById.get('bridge-r1')?.value ?? 'changed'
+  const bridgeBottomLeftText = partsById.get('bridge-r2')?.value ?? 'changed'
+  const bridgeRightText = partsById.get('bridge-r3')?.value ?? 'changed'
+  const bridgeSensorText = partsById.get('bridge-r4')?.value ?? 'changed'
+  const bridgeSolvedLeft = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vleft)')?.values[0] : undefined
+  const bridgeSolvedRight = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const zenerResistance = exampleLesson?.id === 'zener' ? componentMagnitude(partsById.get('zener-r1')?.value ?? '1 kΩ', 'resistor') : null
   const zenerSupply = exampleLesson?.id === 'zener' ? componentMagnitude(partsById.get('zener-v1')?.value ?? '12 V', 'source') : null
   const zenerEstimatedCurrentMa = zenerResistance && zenerResistance > 0 && zenerSupply !== null ? (zenerSupply - 5.1) / zenerResistance * 1000 : null
@@ -581,6 +596,16 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
               ? 'Move the wiper to 25% from the upper terminal and run again. The lower section becomes 75% of the track, so VOUT should rise from 5 V to 7.5 V.'
               : `At ${potentiometerPositionText} on ${potentiometerSupplyText}, the divider predicts VOUT = ${formatLessonVoltage(potentiometerPrediction)}${potentiometerSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(potentiometerSolvedOutput)}` : ''}. Move the wiper to 75% from the upper terminal to compare the complementary output.`
             : 'Set a valid wiper position and source voltage, then rerun to compare the divider output.'
+      : isWheatstoneBridgeLesson && simulationResult
+        ? simulationResultStale
+          ? bridgeLeftPrediction !== null && bridgeRightPrediction !== null
+            ? `The old table is stale. With R1 = ${bridgeLeftText}, R2 = ${bridgeBottomLeftText}, R3 = ${bridgeRightText}, and sensor R4 = ${bridgeSensorText}, the divider ratios predict VLEFT = ${formatLessonVoltage(bridgeLeftPrediction)} and VOUT = ${formatLessonVoltage(bridgeRightPrediction)}. Rerun to compare the bridge midpoints.`
+            : 'Enter a positive supply and positive resistor values, then rerun to compare the bridge midpoints.'
+          : bridgeLeftPrediction !== null && bridgeRightPrediction !== null
+            ? bridgeLeftText === '1 kΩ' && bridgeBottomLeftText === '1 kΩ' && bridgeRightText === '1 kΩ' && bridgeSensorText === '2 kΩ' && bridgeSupply === 10
+              ? `The left midpoint is 5 V and the sensor arm puts VOUT at about ${formatLessonVoltage(bridgeRightPrediction)}, so the bridge difference is about ${formatLessonVoltage(bridgeRightPrediction - bridgeLeftPrediction)}. Change sensor R4 from 2 kΩ to 1 kΩ and rerun; equal arm ratios should balance both midpoints.`
+              : `The divider ratios predict VLEFT = ${formatLessonVoltage(bridgeLeftPrediction)} and VOUT = ${formatLessonVoltage(bridgeRightPrediction)}; the bridge difference is ${formatLessonVoltage(bridgeRightPrediction - bridgeLeftPrediction)}${bridgeSolvedLeft !== undefined && bridgeSolvedRight !== undefined ? ` (ngspice solved ${formatLessonVoltage(bridgeSolvedLeft)} and ${formatLessonVoltage(bridgeSolvedRight)})` : ''}. Balance it by matching R1/R2 to R3/R4; equal arms give zero midpoint difference.`
+            : 'Enter a positive supply and positive resistor values, then rerun to compare the bridge midpoints.'
       : exampleLesson?.id === 'zener' && simulationResult
         ? simulationResultStale
           ? zenerEstimatedCurrentMa !== null && zenerEstimatedCurrentMa > 0
