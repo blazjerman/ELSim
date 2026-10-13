@@ -6570,6 +6570,7 @@ test('large parameter-sweep component lists stay bounded and can find late compo
     localStorage.setItem(key, JSON.stringify(project))
   })
   await page.reload()
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled()
   await page.keyboard.press('Escape')
 
   const componentSelect = page.getByRole('combobox', { name: 'Parameter 1 component' })
