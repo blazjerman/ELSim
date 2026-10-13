@@ -1061,7 +1061,7 @@ test('NMOS switch example drives the gate and returns the drain load to the supp
   assert.match(artifact.text, /^RLOAD VCC DRAIN 1k$/m)
   assert.match(artifact.text, /^M1 DRAIN GATE 0 0 ELSIM_MODEL_M1$/m)
   assert.match(artifact.text, /^\.model ELSIM_MODEL_M1 NMOS \(LEVEL=1 VTO=2 KP=20u LAMBDA=0\.02\)$/m)
-  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(GATE)', 'V(DRAIN)', 'I(M1)'])
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(GATE)', 'V(DRAIN)', 'I(RGATE)', 'I(RLOAD)', 'I(M1)'])
 })
 
 test('PMOS high-side example uses active-low gate drive and ties source and bulk to supply', () => {

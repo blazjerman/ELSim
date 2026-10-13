@@ -391,6 +391,41 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const pnpSolvedBaseCurrent = pnpBaseCurrentPart ? pnpTraceAt25Ms(componentCurrentVector(pnpBaseCurrentPart)) : undefined
   const pnpSolvedLoadCurrent = pnpLoadCurrentPart ? pnpTraceAt25Ms(componentCurrentVector(pnpLoadCurrentPart)) : undefined
   const pnpSolvedCollectorVoltage = pnpTraceAt25Ms('v(collector)')
+  const isMosfetSwitchLesson = lessonId === 'mosfet'
+  const mosfetDrive = isMosfetSwitchLesson ? componentMagnitude(partsById.get('mos-switch-vdrive')?.value ?? '5 V', 'source') : null
+  const mosfetSupply = isMosfetSwitchLesson ? componentMagnitude(partsById.get('mos-switch-vcc')?.value ?? '5 V', 'source') : null
+  const mosfetLoadResistance = isMosfetSwitchLesson ? componentMagnitude(partsById.get('mos-switch-rload')?.value ?? '1 kΩ', 'resistor') : null
+  const mosfetDriveText = partsById.get('mos-switch-vdrive')?.value ?? 'changed'
+  const mosfetSupplyText = partsById.get('mos-switch-vcc')?.value ?? 'changed'
+  const mosfetLoadResistanceText = partsById.get('mos-switch-rload')?.value ?? 'changed'
+  const mosfetSuggestedDrive = mosfetDrive !== null && mosfetDrive >= 10 ? '5 V' : '10 V'
+  const mosfetModel = partsById.get('mos-switch-m1')
+  const hasEducationalMosfetModel = !mosfetModel?.deviceModel
+  const mosfetOverdrive = mosfetDrive !== null ? Math.max(0, mosfetDrive - 2) : null
+  const mosfetEstimatedSaturationCurrent = hasEducationalMosfetModel && mosfetOverdrive !== null
+    ? 0.5 * 20e-6 * mosfetOverdrive * mosfetOverdrive
+    : null
+  const mosfetEstimatedLoadCurrent = mosfetLoadResistance !== null && mosfetLoadResistance > 0 && mosfetSupply !== null
+    ? Math.max(0, (mosfetSupply - 0.2) / mosfetLoadResistance)
+    : null
+  const mosfetEstimatedDrainVoltage = mosfetEstimatedSaturationCurrent !== null && mosfetEstimatedLoadCurrent !== null && mosfetLoadResistance !== null && mosfetSupply !== null
+    ? mosfetSupply - Math.min(mosfetEstimatedSaturationCurrent, mosfetEstimatedLoadCurrent) * mosfetLoadResistance
+    : null
+  const mosfetSampleAt25Ms = isMosfetSwitchLesson && simulationResult?.analysis === 'tran' && simulationResult.traces[0]?.axis.length
+    ? nearestAxisIndex(simulationResult.traces[0].axis, 0.025)
+    : undefined
+  const mosfetTraceAt25Ms = (vectorId: string): number | undefined => {
+    if (mosfetSampleAt25Ms === undefined) return undefined
+    const normalized = vectorId.toLowerCase()
+    const trace = simulationResult?.traces.find((item) => item.id.toLowerCase() === normalized || item.baseId?.toLowerCase() === normalized)
+    return trace?.values[mosfetSampleAt25Ms]
+  }
+  const mosfetGateResistance = partsById.get('mos-switch-rgate')
+  const mosfetLoadPart = partsById.get('mos-switch-rload')
+  const mosfetSolvedGateCurrent = mosfetGateResistance ? mosfetTraceAt25Ms(componentCurrentVector(mosfetGateResistance)) : undefined
+  const mosfetSolvedLoadCurrent = mosfetLoadPart ? mosfetTraceAt25Ms(componentCurrentVector(mosfetLoadPart)) : undefined
+  const mosfetSolvedDrainCurrent = mosfetModel ? mosfetTraceAt25Ms(componentCurrentVector(mosfetModel)) : undefined
+  const mosfetSolvedDrainVoltage = mosfetTraceAt25Ms('v(drain)')
   const potentiometer = exampleLesson?.id === 'potentiometer' ? partsById.get('pot-p1') : undefined
   const potentiometerPosition = potentiometer ? Number(potentiometer.wiperPosition ?? '0.5') : null
   const potentiometerSupply = exampleLesson?.id === 'potentiometer' ? componentMagnitude(partsById.get('pot-v1')?.value ?? '10 V', 'source') : null
@@ -781,6 +816,16 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
               ? `At 25 ms, with the PNP turned on, (VCC − VDRIVE − 0.7 V)/RBASE estimates ${formatLessonCurrent(pnpEstimatedBaseCurrent * 1000)} base current and β × IB estimates up to ${formatLessonCurrent(pnpEstimatedCollectorCapacity * 1000)} collector current. RLOAD needs about ${formatLessonCurrent(pnpEstimatedLoadCurrent * 1000)} to raise the output close to VCC. Ngspice solved ${formatLessonCurrent(Math.abs(pnpSolvedBaseCurrent) * 1000)} through RBASE, ${formatLessonCurrent(Math.abs(pnpSolvedLoadCurrent) * 1000)} through RLOAD, and V(COLLECTOR) = ${formatLessonVoltage(pnpSolvedCollectorVoltage)}. ${pnpSuggestedBaseResistance === '150 kΩ' ? 'Increase' : 'Lower'} RBASE to ${pnpSuggestedBaseResistance} and rerun; limiting base drive should pull the high-side output lower. Beta and 0.7 V are approximate teaching estimates.`
               : `At 25 ms, the rough estimate gives ${formatLessonCurrent(pnpEstimatedBaseCurrent * 1000)} base current and ${formatLessonCurrent(pnpEstimatedCollectorCapacity * 1000)} maximum collector current by β × IB. Run the transient to compare with the solved currents and collector voltage.`
           : 'Enter valid positive source, resistor, and beta values, then rerun to compare the estimated base drive with the collector load.'
+      : isMosfetSwitchLesson && simulationResult
+        ? simulationResultStale
+          ? hasEducationalMosfetModel && mosfetEstimatedSaturationCurrent !== null && mosfetEstimatedLoadCurrent !== null && mosfetEstimatedDrainVoltage !== null
+            ? `The old transient is stale. With VDRIVE = ${mosfetDriveText}, the built-in model's rough saturation estimate is ½ × KP × (VGS − VTO)² ≈ ${formatLessonCurrent(mosfetEstimatedSaturationCurrent * 1000)} (KP = 20 µA/V², VTO = 2 V). The ${mosfetSupplyText} supply and RLOAD = ${mosfetLoadResistanceText} need about ${formatLessonCurrent(mosfetEstimatedLoadCurrent * 1000)} to pull DRAIN near 0.2 V; the simple estimate predicts V(DRAIN) ≈ ${formatLessonVoltage(mosfetEstimatedDrainVoltage)}. Rerun to compare with ngspice.`
+            : `The old result is stale. Rerun with the selected MOSFET model to compare its gate voltage, load current, and drain voltage.`
+          : mosfetSolvedDrainCurrent !== undefined && mosfetSolvedGateCurrent !== undefined && mosfetSolvedLoadCurrent !== undefined && mosfetSolvedDrainVoltage !== undefined
+            ? hasEducationalMosfetModel && mosfetEstimatedSaturationCurrent !== null && mosfetEstimatedLoadCurrent !== null
+              ? `At 25 ms with VDRIVE = ${mosfetDriveText}, the built-in model estimates up to ${formatLessonCurrent(mosfetEstimatedSaturationCurrent * 1000)} drain current; pulling DRAIN near 0.2 V through RLOAD = ${mosfetLoadResistanceText} would need about ${formatLessonCurrent(mosfetEstimatedLoadCurrent * 1000)}. Ngspice solved ${formatLessonCurrent(Math.abs(mosfetSolvedDrainCurrent) * 1000)} through M1, ${formatLessonCurrent(Math.abs(mosfetSolvedLoadCurrent) * 1000)} through RLOAD, ${formatLessonCurrent(Math.abs(mosfetSolvedGateCurrent) * 1000)} through RGATE, and V(DRAIN) = ${formatLessonVoltage(mosfetSolvedDrainVoltage)}. ${mosfetSuggestedDrive === '10 V' ? 'Raise' : 'Lower'} VDRIVE to ${mosfetSuggestedDrive} and rerun; gate current stays near zero while drain current should change. This simplified model is for learning, not device selection.`
+              : `At 25 ms, ngspice solved ${formatLessonCurrent(Math.abs(mosfetSolvedGateCurrent) * 1000)} through RGATE, ${formatLessonCurrent(Math.abs(mosfetSolvedLoadCurrent) * 1000)} through RLOAD, ${formatLessonCurrent(Math.abs(mosfetSolvedDrainCurrent) * 1000)} through M1, and V(DRAIN) = ${formatLessonVoltage(mosfetSolvedDrainVoltage)}. The gate draws almost no steady current; its voltage controls the drain current. Compare another gate drive or load value.`
+            : 'Run the transient to compare the gate voltage, gate-path current, load current, and drain voltage.'
       : exampleLesson?.id === 'common-emitter' && simulationResult
         ? commonEmitterMeasurement && commonEmitterCollectorResistance !== null
           ? simulationResultStale
