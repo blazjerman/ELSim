@@ -873,8 +873,8 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     return Boolean(samples[activeSample])
   }
   const toggleSwitch = (id: string) => {
-    const part = project.parts.find((candidate) => candidate.id === id && candidate.kind === 'switch')
-    if (!part) return
+    const part = partsById.get(id)
+    if (!part || part.kind !== 'switch') return
     const value = part.value.toLowerCase() === 'on' ? 'Off' : 'On'
     beginEdit()
     setProject((current) => ({ ...current, parts: current.parts.map((candidate) => candidate.id === id ? { ...candidate, value } : candidate) }))
@@ -951,7 +951,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     setSelection(null); setSelectedPartIds([]); setSelectedWireId(null); setSelectedNetLabelIds([])
   }
   const probeWire = (wireId: string) => {
-    const wire = project.wires.find((candidate) => candidate.id === wireId)
+    const wire = wiresById.get(wireId)
     const point = wire?.points[0]
     const target = point ? resolveProbeTarget(project, { x: point[0], y: point[1] }, 12, connectivity, wiresNear({ left: point[0] - 12, top: point[1] - 12, right: point[0] + 12, bottom: point[1] + 12 })) : null
     if (target?.kind === 'node') onProbe(target)
@@ -1042,7 +1042,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     setSelection(next.length ? { kind: 'label', id: next.at(-1)! } : null)
   }, [setSelectedNetLabelIds, setSelectedPartIds, setSelectedWireIds, setSelection])
   const navigatePart = (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => {
-    const origin = project.parts.find((part) => part.id === id)
+    const origin = partsById.get(id)
     if (!origin || project.parts.length < 2) return
     const horizontal = key === 'ArrowLeft' || key === 'ArrowRight'
     const sign = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1
@@ -1111,7 +1111,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
   const beginWireDrag = useCallback((event: PointerEvent<SVGGElement>, id: string) => wireEventHandlers.current.beginDrag(event, 'wire', id), [])
   const beginWirePointDrag = (event: PointerEvent<SVGCircleElement>, id: string, pointIndex: number) => {
     if (pendingComponent || event.button !== 0 || spacePan || tool !== 'select') return
-    const wire = project.wires.find((item) => item.id === id)
+    const wire = wiresById.get(id)
     if (!wire) return
     event.preventDefault()
     event.stopPropagation()
@@ -1408,7 +1408,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     setLabelDraft(null)
   }
   const viewBox = `${viewportLeft} ${viewportTop} ${viewWidth} ${viewHeight}`
-  const contextPart = contextMenu?.kind === 'part' ? project.parts.find((part) => part.id === contextMenu.id) : undefined
+  const contextPart = contextMenu?.kind === 'part' ? partsById.get(contextMenu.id) : undefined
   const contextPinNames = contextPart ? (contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name)).map((name, index) => name === 'pin1' || name === 'pin2' ? `terminal ${index + 1}` : name) : []
   const currentProbesUnavailable = simulationResult?.analysis === 'ac' || simulationResult?.analysis === 'noise'
   const wireFlowSampler = useMemo(() => currentAnimationEnabled && resultIsCurrent && resultConnectivity
@@ -1479,7 +1479,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
       const x = Math.max(4, Math.min(bounds.width - 220, event.clientX - bounds.left))
       const y = Math.max(4, Math.min(bounds.height - 210, event.clientY - bounds.top))
       if (labelId) {
-        const label = project.netLabels.find((item) => item.id === labelId)
+        const label = labelsById.get(labelId)
         if (!label) { setContextMenu(null); return }
         setSelection({ kind: 'label', id: label.id })
         setSelectedNetLabelIds([label.id])
@@ -1547,7 +1547,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
       })}</g>}
     </svg>
     <div className="sr-only wire-endpoint-announcement" role="status" aria-live="polite" aria-atomic="true">{wireEndpointAnnouncement}</div>
-    {contextMenu && <div ref={contextMenuRef} className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : contextMenu.kind === 'label' ? `Options for net ${project.netLabels.find((label) => label.id === contextMenu.id)?.name ?? ''}` : contextMenu.kind === 'wire' ? 'Wire options' : 'Schematic options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
+    {contextMenu && <div ref={contextMenuRef} className="schematic-context-menu" role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : contextMenu.kind === 'label' ? `Options for net ${labelsById.get(contextMenu.id)?.name ?? ''}` : contextMenu.kind === 'wire' ? 'Wire options' : 'Schematic options'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setContextMenu(null); contextMenuReturnFocusRef.current?.focus(); return }
       navigateMenuByKeyboard(event)
     }}>

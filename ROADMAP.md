@@ -433,7 +433,7 @@ Potentiometer library slice (2026-10-12): Added a native three-pin linear potent
 
 ### UI interaction rendering follow-up (2026-10-13)
 
-Single-object component, wire-segment, and net-label dragging uses an SVG transform preview, while wire-endpoint dragging previews line, hit-target, and handle geometry directly. Both paths commit the scene change on pointer release instead of rewriting project state for every pointer event. Current-flow and connection-dot overlays are hidden during the relevant preview and restored after it. Eight focused Firefox drag, keyboard, hover, and connection-dot regressions, all 29 unit groups, TypeScript, and the local production build pass; the build remains within its initial download budgets. This is a code-path optimization; no end-to-end latency gain is claimed from a before/after measurement. No WASM or Pages build was run.
+Single-object component, wire-segment, and net-label dragging uses an SVG transform preview, while wire-endpoint dragging previews line, hit-target, and handle geometry directly. Both paths commit the scene change on pointer release instead of rewriting project state for every pointer event. Current-flow and connection-dot overlays are hidden during the relevant preview and restored afterward. Common schematic actions now resolve component, wire, and label IDs from the existing memoized indexes. Eight focused Firefox drag, keyboard, hover, and connection-dot regressions, all 29 unit groups, TypeScript, and the local production build pass; the build remains within its initial download budgets. This is a code-path optimization; no end-to-end latency gain is claimed from a before/after measurement. No WASM or Pages build was run.
 
 ## 7. Primary references checked
 
