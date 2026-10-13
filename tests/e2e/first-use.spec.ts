@@ -6793,7 +6793,7 @@ test('phone-width workspace switches panels without horizontal page scrolling', 
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
 })
 
-test('waveform click moves the cursor, wheel zooms horizontally, and drag keeps the time range fixed', { tag: '@ngspice' }, async ({ page }) => {
+test('waveform cursor, zoom, and drag-pan preserve the view and selected traces across reruns', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
@@ -6817,13 +6817,13 @@ test('waveform click moves the cursor, wheel zooms horizontally, and drag keeps 
     const range = await readSavedTransientRange()
     return range ? range.end - range.start : Infinity
   }).toBeLessThan(zoomedRange.end - zoomedRange.start)
-  const wheelRange = await readSavedTransientRange()
+  const rangeBeforeDrag = await readSavedTransientRange()
   await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.55)
   await page.mouse.down()
   await page.mouse.move(box!.x + box!.width * 0.58, box!.y + box!.height * 0.55, { steps: 5 })
   await page.mouse.up()
+  await expect.poll(readSavedTransientRange).not.toEqual(rangeBeforeDrag)
   const draggedRange = await readSavedTransientRange()
-  expect(draggedRange).toEqual(wheelRange)
 
   await chart.click({ position: { x: box!.width * 0.5, y: box!.height * 0.45 } })
   const timeReadout = page.getByText(/^t = /)
@@ -6836,6 +6836,12 @@ test('waveform click moves the cursor, wheel zooms horizontally, and drag keeps 
   const keyboardAnnouncement = plotWindow.locator('.waveform-view > .sr-only[aria-live="polite"]')
   await expect(keyboardAnnouncement).toContainText(/Time .* (?:s|ms|µs|ns|ps)\./)
   await expect(keyboardAnnouncement).toContainText(/[0-9].* [VA]/)
+
+  const plotSettingsBeforeRerun = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings)
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect.poll(readSavedTransientRange).toEqual(draggedRange)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels?.at(-1)?.selectedTraceIds as string[])).toEqual(plotSettingsBeforeRerun.panels.at(-1).selectedTraceIds)
 })
 
 test('AC waveform supports frequency cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
