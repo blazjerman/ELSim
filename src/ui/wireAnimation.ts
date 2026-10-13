@@ -6,6 +6,7 @@ const phases = new Map<string, number>()
 let frame: number | null = null
 let motionPreference: MediaQueryList | null = null
 let previousFrameTime: number | null = null
+let movingFlowCount = 0
 
 const REFERENCE_FRAME_MS = 1000 / 60
 const MAX_FRAME_DELTA_MS = 50
@@ -26,10 +27,11 @@ function cancelFrame() {
 }
 
 function hasMovingFlow() {
-  for (const config of configurations.values()) {
-    if (config.magnitude > 1e-12) return true
-  }
-  return false
+  return movingFlowCount > 0
+}
+
+function hasCurrent(config: AnimationConfig | undefined): boolean {
+  return Boolean(config && config.magnitude > 1e-12)
 }
 
 function onMotionPreferenceChange(event: MediaQueryListEvent) {
@@ -84,6 +86,8 @@ function tick(timestamp: number) {
 export function registerWireAnimation(key: string, element: SVGPolylineElement | null) {
   if (!element) {
     elements.delete(key)
+    const previous = configurations.get(key)
+    if (hasCurrent(previous)) movingFlowCount -= 1
     configurations.delete(key)
     phases.delete(key)
     if (!elements.size || !hasMovingFlow()) cancelFrame()
@@ -95,6 +99,10 @@ export function registerWireAnimation(key: string, element: SVGPolylineElement |
 
 /** Update result values without detaching the SVG ref or resetting its phase. */
 export function updateWireAnimation(key: string, config?: AnimationConfig) {
+  const previous = configurations.get(key)
+  const wasMoving = hasCurrent(previous)
+  const isMoving = hasCurrent(config)
+  if (wasMoving !== isMoving) movingFlowCount += isMoving ? 1 : -1
   if (!config) {
     configurations.delete(key)
     phases.delete(key)

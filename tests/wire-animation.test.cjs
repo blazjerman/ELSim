@@ -133,21 +133,29 @@ test('wire playback schedules frames only while a visible wire carries current',
   global.cancelAnimationFrame = (id) => callbacks.delete(id)
   const element = { setAttribute() {} }
   const key = 'idle-wire:0'
+  const secondKey = 'moving-wire:0'
+  const secondElement = { setAttribute() {} }
 
   try {
     registerWireAnimation(key, element)
+    registerWireAnimation(secondKey, secondElement)
     updateWireAnimation(key, { key, magnitude: 0, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
-    assert.equal(callbacks.size, 0, 'zero current does not start a frame loop')
+    updateWireAnimation(secondKey, { key: secondKey, magnitude: 0.001, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    assert.equal(callbacks.size, 1, 'an idle wire does not prevent another wire from animating')
 
     updateWireAnimation(key, { key, magnitude: 0.001, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
     assert.equal(callbacks.size, 1, 'nonzero current starts animation')
     updateWireAnimation(key, { key, magnitude: 0, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
-    assert.equal(callbacks.size, 0, 'animation stops immediately when current returns to zero')
+    assert.equal(callbacks.size, 1, 'one zero-current wire does not stop another active wire')
+
+    updateWireAnimation(secondKey, { key: secondKey, magnitude: 0, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    assert.equal(callbacks.size, 0, 'animation stops when all visible wires have zero current')
 
     updateWireAnimation(key, { key, magnitude: 0.001, forward: false, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
     assert.equal(callbacks.size, 1, 'animation resumes when current flows again')
   } finally {
     registerWireAnimation(key, null)
+    registerWireAnimation(secondKey, null)
     global.window = previousWindow
     global.requestAnimationFrame = previousRequest
     global.cancelAnimationFrame = previousCancel
