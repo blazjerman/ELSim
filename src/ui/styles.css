@@ -109,7 +109,7 @@
 .waveform-view .cursor-readout{position:static;box-sizing:border-box;display:flex;align-items:center;flex:0 0 22px;width:100%;height:22px;min-height:22px;max-height:22px;max-width:100%;overflow:auto;white-space:nowrap}
 .result-stale-warning{display:flex;align-items:center;gap:5px;flex:0 0 auto;padding:5px 8px;border:1px solid #57462d;border-radius:5px;background:#241f16;color:#d8bd82;font-size:9px;white-space:nowrap}
 .result-stale-warning svg{flex:0 0 auto}
-.wire-endpoint-handles circle{fill:#b8f0c8;stroke:#16221a;stroke-width:2;cursor:move;pointer-events:all}.wire-endpoint-handles circle:hover{fill:#f4d77c;stroke:#293020;stroke-width:2.5}
+.wire-endpoint-handles circle{fill:#b8f0c8;stroke:#16221a;stroke-width:2;cursor:move;pointer-events:all}.wire-endpoint-handles circle:hover{fill:#f4d77c;stroke:#293020;stroke-width:2.5}.wire-endpoint-handles circle:focus-visible{fill:#f4d77c;stroke:#fff2bc;stroke-width:3;filter:drop-shadow(0 0 3px #f4d77c)}
 .component-card[aria-pressed="true"]{background:#26382b;border-color:#8bc79b;box-shadow:0 0 0 1px #8bc79b33}
 .component-placement-preview .circuit-part{opacity:.76;filter:drop-shadow(0 0 5px #8fe0af77)}
 .component-placement-preview .circuit-part .part-hit{display:none}
