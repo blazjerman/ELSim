@@ -1203,6 +1203,29 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
+test('placing a reusable hierarchical block keeps it visible in the current viewport', async ({ page }) => {
+  await page.addInitScript((project) => {
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now()))
+  }, createHierarchicalExampleProject())
+  await page.goto('/')
+  const blockCard = page.locator('.imported-model').filter({ hasText: 'Parameterized divider' })
+  await expect(blockCard.getByRole('button', { name: 'Place block' })).toBeVisible()
+  await blockCard.getByRole('button', { name: 'Place block' }).click()
+  const block = page.locator('.circuit-part[aria-label^="X3,"]')
+  await expect(block).toBeVisible()
+  const bounds = await page.evaluate(() => {
+    const part = document.querySelector('.circuit-part[aria-label^="X3,"]')!.getBoundingClientRect()
+    const schematic = document.querySelector('svg.schematic')!.getBoundingClientRect()
+    return { part: { x: part.x, y: part.y, right: part.right, bottom: part.bottom }, schematic: { x: schematic.x, y: schematic.y, right: schematic.right, bottom: schematic.bottom } }
+  })
+  expect(bounds.part.x).toBeGreaterThanOrEqual(bounds.schematic.x)
+  expect(bounds.part.right).toBeLessThanOrEqual(bounds.schematic.right)
+  expect(bounds.part.y).toBeGreaterThanOrEqual(bounds.schematic.y)
+  expect(bounds.part.bottom).toBeLessThanOrEqual(bounds.schematic.bottom)
+  await block.click()
+})
+
 test('project-local model includes and shared parameter records load through browser ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
   const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
