@@ -99,7 +99,7 @@ function PlotNavigation({ zoom, reset, valueZoom, valuePan, disabled = false }: 
 }
 
 function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
-  const drag = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null)
+  const drag = useRef<{ pointerId: number; x: number; y: number; width: number; moved: boolean } | null>(null)
   const suppressClick = useRef(false)
   const pendingPan = useRef(0)
   const panFrame = useRef<number | null>(null)
@@ -118,7 +118,10 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
   const start = (event: PointerEvent<SVGSVGElement>) => {
     if (event.button !== 0) return
     pendingPan.current = 0
-    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+    // Measure once when the gesture starts. Reading layout on every pointermove
+    // can force synchronous layout while the browser is processing the drag.
+    const width = event.currentTarget.getBoundingClientRect().width
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, width, moved: false }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const move = (event: PointerEvent<SVGSVGElement>) => {
@@ -129,9 +132,8 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
     active.moved = true
     active.x = event.clientX
     active.y = event.clientY
-    const rect = event.currentTarget.getBoundingClientRect()
     if (Math.abs(dx) >= 1) {
-      pendingPan.current -= dx / Math.max(rect.width, 1)
+      pendingPan.current -= dx / Math.max(active.width, 1)
       if (panFrame.current === null) {
         panFrame.current = requestAnimationFrame(() => {
           panFrame.current = null
