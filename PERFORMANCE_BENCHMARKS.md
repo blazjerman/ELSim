@@ -549,3 +549,5 @@ Trace toggle controls now have stable visibility/removal callbacks and render be
 ### AC/DC cursor update isolation (2026-10-13)
 
 AC, noise, and DC sweep plot parents no longer subscribe to cursor changes. Small cursor label, marker, and readout components subscribe independently, so cursor movement updates those elements without reconstructing chart axes, grid labels, trace selectors, and the chart's other SVG children. Firefox AC cursor/keyboard/zoom and cross-window synchronization, noise analysis rendering, and DC sweep cursor/zoom checks pass. All 30 unit groups, TypeScript, and the production build pass (207.1 KiB initial JS+CSS gzip). This is a render-boundary change; no controlled timing comparison was run. No WASM rebuild or Pages workflow ran.
+
+The complete engine-independent Firefox Playwright suite was rerun after the plot changes: 119 tests passed in 2.5 minutes. This is broad UI regression coverage, not a performance comparison. Engine-tagged workflows are excluded from this command; no WASM rebuild was performed.
