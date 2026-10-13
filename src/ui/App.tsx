@@ -2364,7 +2364,21 @@ export default function App() {
   }, [saveAdditionalPlotPanels])
   const togglePlotPanelTrace = useCallback((panelId: string, traceId: string) => updatePlotPanel(panelId, (panel) => ({ ...panel, selectedTraceIds: panel.selectedTraceIds.includes(traceId) ? panel.selectedTraceIds.filter((id) => id !== traceId) : [...panel.selectedTraceIds, traceId] })), [updatePlotPanel])
   const changePlotPanelRange = useCallback((panelId: string, analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => updatePlotPanel(panelId, (panel) => ({ ...panel, ranges: { ...panel.ranges, [analysis]: range } })), [updatePlotPanel])
-  const closePlotPanel = useCallback((panelId: string) => saveAdditionalPlotPanels(additionalPlotPanelsRef.current.filter((panel) => panel.id !== panelId)), [saveAdditionalPlotPanels])
+  const closePlotPanel = useCallback((panelId: string) => {
+    const closingWindow = [...document.querySelectorAll<HTMLElement>('.additional-plot-window')].find((window) => window.dataset.plotPanelId === panelId)
+    const restoreFocus = closingWindow?.contains(document.activeElement) ?? false
+    const remaining = additionalPlotPanelsRef.current.filter((panel) => panel.id !== panelId)
+    const nextPanelId = remaining.at(-1)?.id
+    saveAdditionalPlotPanels(remaining)
+    if (!restoreFocus) return
+    window.requestAnimationFrame(() => {
+      const nextWindow = [...document.querySelectorAll<HTMLElement>('.additional-plot-window')].find((window) => window.dataset.plotPanelId === nextPanelId)
+      const nextTitle = nextWindow?.querySelector<HTMLElement>('.plot-window-title')
+      if (nextTitle) { nextTitle.focus(); return }
+      const schematic = document.querySelector<SVGElement>('.schematic')
+      if (schematic) { schematic.setAttribute('tabindex', '-1'); schematic.focus() }
+    })
+  }, [saveAdditionalPlotPanels])
   const activatePlotPanel = useCallback((panelId: string) => {
     const current = additionalPlotPanelsRef.current
     const index = current.findIndex((panel) => panel.id === panelId)

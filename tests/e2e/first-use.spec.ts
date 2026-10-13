@@ -746,6 +746,28 @@ test('waveform window title, plot, and navigation retain visible keyboard focus'
   await expectFocusRing(zoomIn)
 })
 
+test('closing floating waveform windows restores keyboard focus', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await openComponentVoltagePlot(page)
+  await openComponentVoltagePlot(page, 'C1')
+
+  const windows = page.locator('.additional-plot-window')
+  await expect(windows).toHaveCount(2)
+  const firstClose = windows.first().getByRole('button', { name: /Close/ })
+  await firstClose.focus()
+  await page.keyboard.press('Enter')
+  await expect(windows).toHaveCount(1)
+  await expect(windows.locator('.plot-window-title')).toBeFocused()
+
+  const lastClose = windows.getByRole('button', { name: /Close/ })
+  await lastClose.focus()
+  await page.keyboard.press('Enter')
+  await expect(windows).toHaveCount(0)
+  await expect(page.locator('.schematic')).toBeFocused()
+})
+
 test('keyboard waveform cursor announces the selected time and trace readings', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
