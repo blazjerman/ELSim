@@ -2997,8 +2997,11 @@ test('invalid global temperature focuses its setting before simulation', { tag: 
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   const temperature = page.locator('[data-analysis-setting="temperature"]')
   await temperature.fill('-274')
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  await expect(page.locator('[data-part-setting="p-r1:value"]')).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('#analysis-error-temperature')).toBeVisible()
+  await expect(page.locator('[data-part-setting="p-r1:value"]')).toHaveCount(0)
   await expect(temperature).toBeFocused()
 })
 

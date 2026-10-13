@@ -3070,6 +3070,12 @@ export default function App() {
       if (firstSettingError.sourceId) {
         setSelection({ kind: 'part', id: firstSettingError.sourceId })
         setSelectedPartIds([firstSettingError.sourceId])
+      } else {
+        setSelection(null)
+        setSelectedPartIds([])
+        setSelectedWireId(null)
+        setSelectedWireIds([])
+        setSelectedNetLabelIds([])
       }
       const selector = firstSettingError.sourceId
         ? `[data-part-setting="${firstSettingError.sourceId}:${firstSettingError.settingPath ?? firstSettingError.field}"]`
