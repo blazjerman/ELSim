@@ -678,10 +678,12 @@ test('solver errors select and bring the reported component into view', { tag: '
     Object.defineProperty(window, 'Worker', { configurable: true, value: MockWorker })
   }, { projectJson: JSON.stringify(project), sourceId: target.id })
   await page.goto('/')
+  await page.locator('.circuit-part[data-part-id="p-v1"]').click()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('.toast')).toContainText('Simulated solver error')
   const affected = page.locator(`.circuit-part[data-part-id="${target.id}"]`)
   await expect(affected).toHaveClass(/selected/)
+  await expect.poll(() => page.locator('.circuit-part.selected').evaluateAll((parts) => parts.map((part) => part.getAttribute('data-part-id')))).toEqual([target.id])
   const centered = await page.locator('svg.schematic').evaluate((svg) => {
     const { x, y, width, height } = (svg as SVGSVGElement).viewBox.baseVal
     return [x + width / 2, y + height / 2]

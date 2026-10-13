@@ -3058,6 +3058,10 @@ export default function App() {
     }
     if (!visiblePart) return undefined
     setSelection({ kind: 'part', id: visiblePart.id })
+    setSelectedPartIds([visiblePart.id])
+    setSelectedWireId(null)
+    setSelectedWireIds([])
+    setSelectedNetLabelIds([])
     setView((view) => ({ ...view, panX: 380 - visiblePart!.x, panY: 300 - visiblePart!.y }))
     return visiblePart
   }
