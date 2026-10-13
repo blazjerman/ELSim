@@ -2533,7 +2533,10 @@ test('component hotkeys choose parts and newly placed parts stay unselected', as
   }, { x, y })
   const start = await point(500, 160), end = await point(540, 160)
   await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
+  await expect.poll(() => page.evaluate(() => {
+    const saved = localStorage.getItem('elsim:project:v7')
+    return saved ? JSON.parse(saved).parts.some((part: { ref: string }) => part.ref === 'R2') : false
+  })).toBe(true)
   const newPartId = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R2').id)
   const newPart = page.locator(`.circuit-part[data-part-id="${newPartId}"]`)
   await expect(newPart).not.toHaveClass(/selected/)
