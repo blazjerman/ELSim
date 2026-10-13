@@ -2442,7 +2442,8 @@ export default function App() {
     setSimulationCursor(null)
     setNotice(`Created ${name} inside ${parent?.name ?? 'the project'}.`)
   }
-  const activeSheet = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
+  const sheetsById = useMemo(() => new Map(project.sheets.map((sheet) => [sheet.id, sheet])), [project.sheets])
+  const activeSheet = sheetsById.get(project.activeSheetId)
   const activeSheetInstances = useMemo(() => activeSheet ? project.sheets.flatMap((sheet) => sheet.parts.filter((part) => part.sheetId === activeSheet.id)) : [], [activeSheet?.id, project.sheets])
   const activeSheetDeleteReason = useMemo(() => !activeSheet || activeSheet.parentSheetId === null
     ? 'The root circuit cannot be deleted.'
@@ -2458,7 +2459,7 @@ export default function App() {
     if (sheetId === targetId) return true
     if (visited.has(sheetId)) return false
     visited.add(sheetId)
-    const sheet = project.sheets.find((candidate) => candidate.id === sheetId)
+    const sheet = sheetsById.get(sheetId)
     return Boolean(sheet?.parts.some((part) => part.sheetId && sheetContains(part.sheetId, targetId, visited)))
   }
   const addSheetPort = (name: string) => {
