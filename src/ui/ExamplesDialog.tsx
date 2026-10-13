@@ -15,7 +15,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'ohms-law', title: "Ohm's law: voltage, current, resistance", description: 'Use I = V/R to predict 5 mA through 1 kΩ at 5 V, then double the resistance and compare.' },
   { id: 'potentiometer', title: 'Potentiometer voltage divider', description: 'Turn a wiper into a variable output from a 10 V supply.' },
   { id: 'voltage-divider', title: 'Voltage divider', description: 'Two equal resistors split a 10 V supply into a predictable 5 V midpoint.' },
-  { id: 'loaded-voltage-divider', title: 'How a load changes a voltage divider', description: 'Connect a load to a 1 kΩ divider and watch VOUT fall from 5 V to about 3.33 V.' },
+  { id: 'loaded-voltage-divider', title: 'Loaded divider and Thevenin equivalent', description: 'Replace a 10 V resistor divider with its 5 V, 500 Ω Thevenin model and predict how different loads change VOUT.' },
   { id: 'parallel-resistors', title: 'Parallel resistor current divider', description: 'Compare current through 1 kΩ and 2 kΩ branches across the same 10 V supply.' },
   { id: 'resistor-power', title: 'Resistor power dissipation', description: 'Use P = V × I to compare 25 mW at 1 kΩ with 250 mW at 100 Ω.' },
   { id: 'series-resistors', title: 'Voltage drops in series resistors', description: 'Two series resistors share the same current; compare their individual voltage drops.' },

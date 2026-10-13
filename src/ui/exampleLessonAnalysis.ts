@@ -151,16 +151,21 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const loadedDividerR2 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r2')?.value ?? '1 kΩ', 'resistor') : null
   const loadedDividerLoad = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-rload')?.value ?? '1 kΩ', 'resistor') : null
   const loadedDividerSupply = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-v1')?.value ?? '10 V', 'source') : null
+  const loadedDividerTheveninResistance = loadedDividerR1 !== null && loadedDividerR2 !== null && loadedDividerR1 > 0 && loadedDividerR2 > 0
+    ? loadedDividerR1 * loadedDividerR2 / (loadedDividerR1 + loadedDividerR2)
+    : null
+  const loadedDividerTheveninVoltage = loadedDividerR1 !== null && loadedDividerR2 !== null && loadedDividerSupply !== null && loadedDividerR1 > 0 && loadedDividerR2 > 0
+    ? loadedDividerSupply * loadedDividerR2 / (loadedDividerR1 + loadedDividerR2)
+    : null
   const loadedDividerBottom = loadedDividerR2 !== null && loadedDividerLoad !== null && loadedDividerR2 > 0 && loadedDividerLoad > 0
     ? loadedDividerR2 * loadedDividerLoad / (loadedDividerR2 + loadedDividerLoad)
     : null
-  const loadedDividerPrediction = loadedDividerR1 !== null && loadedDividerR1 > 0 && loadedDividerBottom !== null && loadedDividerSupply !== null
-    ? loadedDividerSupply * loadedDividerBottom / (loadedDividerR1 + loadedDividerBottom)
+  const loadedDividerPrediction = loadedDividerTheveninResistance !== null && loadedDividerTheveninVoltage !== null && loadedDividerLoad !== null && loadedDividerLoad > 0
+    ? loadedDividerTheveninVoltage * loadedDividerLoad / (loadedDividerTheveninResistance + loadedDividerLoad)
     : null
   const loadedDividerR1Text = partsById.get('loaded-divider-r1')?.value ?? 'changed'
   const loadedDividerR2Text = partsById.get('loaded-divider-r2')?.value ?? 'changed'
   const loadedDividerLoadText = partsById.get('loaded-divider-rload')?.value ?? 'changed'
-  const loadedDividerSupplyText = partsById.get('loaded-divider-v1')?.value ?? 'changed'
   const loadedDividerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const loadedDividerLoadPart = partsById.get('loaded-divider-rload')
   const loadedDividerLoadVector = loadedDividerLoadPart ? componentCurrentVector(loadedDividerLoadPart).toLowerCase() : ''
@@ -507,13 +512,13 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
             : 'Enter a valid source voltage and positive resistor values, then rerun to compare the midpoint.'
       : isLoadedDividerLesson && simulationResult
         ? simulationResultStale
-          ? loadedDividerPrediction !== null && loadedDividerBottom !== null
-            ? `R1 is ${loadedDividerR1Text}, R2 is ${loadedDividerR2Text}, and RLOAD is ${loadedDividerLoadText}. R2 and RLOAD are in parallel, giving ${formatLessonResistance(loadedDividerBottom)} below VOUT; the loaded-divider formula predicts VOUT ≈ ${formatLessonVoltage(loadedDividerPrediction)} after rerunning.`
+          ? loadedDividerPrediction !== null && loadedDividerBottom !== null && loadedDividerTheveninResistance !== null && loadedDividerTheveninVoltage !== null
+            ? `R1 is ${loadedDividerR1Text}, R2 is ${loadedDividerR2Text}, and RLOAD is ${loadedDividerLoadText}. Removing the load makes the divider equivalent to a ${formatLessonVoltage(loadedDividerTheveninVoltage)} source with ${formatLessonResistance(loadedDividerTheveninResistance)} series resistance (R1 ∥ R2). With RLOAD connected, R2 ∥ RLOAD = ${formatLessonResistance(loadedDividerBottom)}; the Thevenin model predicts VOUT ≈ ${formatLessonVoltage(loadedDividerPrediction)} after rerunning.`
             : 'Enter positive values for R1, R2, RLOAD, and V1, then rerun to compare the loaded output.'
-          : loadedDividerPrediction !== null && loadedDividerBottom !== null
+          : loadedDividerPrediction !== null && loadedDividerBottom !== null && loadedDividerTheveninResistance !== null && loadedDividerTheveninVoltage !== null
             ? loadedDividerR1 === 1000 && loadedDividerR2 === 1000 && loadedDividerLoad === 1000 && loadedDividerSupply === 10
-              ? `With RLOAD = 1 kΩ, the bottom leg is R2 ∥ RLOAD = ${formatLessonResistance(loadedDividerBottom)}, so VOUT falls from the unloaded 5 V prediction to ${loadedDividerSolvedOutput !== undefined ? formatLessonVoltage(loadedDividerSolvedOutput) : formatLessonVoltage(loadedDividerPrediction)}. Ngspice solved ${loadedDividerSolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(loadedDividerSolvedCurrent) * 1000) : formatLessonCurrent(loadedDividerPrediction / loadedDividerLoad! * 1000)} through RLOAD. Increase RLOAD to 10 kΩ and rerun; VOUT should rise toward 5 V.`
-              : `With R2 = ${loadedDividerR2Text} in parallel with RLOAD = ${loadedDividerLoadText}, the effective lower resistance is ${formatLessonResistance(loadedDividerBottom)}. For R1 = ${loadedDividerR1Text} and V1 = ${loadedDividerSupplyText}, the formula predicts VOUT = ${formatLessonVoltage(loadedDividerPrediction)}${loadedDividerSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(loadedDividerSolvedOutput)}` : ''}${loadedDividerSolvedCurrent !== undefined ? ` and ${formatLessonCurrent(Math.abs(loadedDividerSolvedCurrent) * 1000)} through RLOAD` : ''}. Increase RLOAD to make the output approach the unloaded divider value.`
+              ? `With RLOAD removed, the divider looks like a ${formatLessonVoltage(loadedDividerTheveninVoltage)} source in series with RTH = R1 ∥ R2 = ${formatLessonResistance(loadedDividerTheveninResistance)}. Reconnecting RLOAD = 1 kΩ gives R2 ∥ RLOAD = ${formatLessonResistance(loadedDividerBottom)} and predicts VOUT = ${formatLessonVoltage(loadedDividerPrediction)}; ngspice solved ${loadedDividerSolvedOutput !== undefined ? formatLessonVoltage(loadedDividerSolvedOutput) : formatLessonVoltage(loadedDividerPrediction)}. Ngspice solved ${loadedDividerSolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(loadedDividerSolvedCurrent) * 1000) : formatLessonCurrent(loadedDividerPrediction / loadedDividerLoad! * 1000)} through RLOAD. Increase RLOAD to 10 kΩ and rerun; VOUT should rise toward VTH.`
+              : `The unloaded Thevenin equivalent is VTH = ${formatLessonVoltage(loadedDividerTheveninVoltage)} with RTH = R1 ∥ R2 = ${formatLessonResistance(loadedDividerTheveninResistance)}. With RLOAD = ${loadedDividerLoadText}, the physical lower leg is R2 ∥ RLOAD = ${formatLessonResistance(loadedDividerBottom)}, and the model predicts VOUT = ${formatLessonVoltage(loadedDividerPrediction)}${loadedDividerSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(loadedDividerSolvedOutput)}` : ''}${loadedDividerSolvedCurrent !== undefined ? ` and ${formatLessonCurrent(Math.abs(loadedDividerSolvedCurrent) * 1000)} through RLOAD` : ''}. Increase RLOAD to make VOUT approach VTH.`
             : 'Enter valid positive resistor and supply values, then rerun to compare the divider output.'
       : exampleLesson?.id === 'potentiometer' && simulationResult
         ? simulationResultStale
