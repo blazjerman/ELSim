@@ -99,8 +99,23 @@ function PlotNavigation({ zoom, reset, valueZoom, valuePan, disabled = false }: 
 function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
   const drag = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null)
   const suppressClick = useRef(false)
+  const pendingPan = useRef(0)
+  const panFrame = useRef<number | null>(null)
+  const onHorizontalPanRef = useRef(onHorizontalPan)
+  onHorizontalPanRef.current = onHorizontalPan
+  const flushPan = () => {
+    if (panFrame.current !== null) cancelAnimationFrame(panFrame.current)
+    panFrame.current = null
+    const delta = pendingPan.current
+    pendingPan.current = 0
+    if (delta) onHorizontalPanRef.current(delta)
+  }
+  useEffect(() => () => {
+    if (panFrame.current !== null) cancelAnimationFrame(panFrame.current)
+  }, [])
   const start = (event: PointerEvent<SVGSVGElement>) => {
     if (event.button !== 0) return
+    pendingPan.current = 0
     drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -113,16 +128,27 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
     active.x = event.clientX
     active.y = event.clientY
     const rect = event.currentTarget.getBoundingClientRect()
-    if (Math.abs(dx) >= 1) onHorizontalPan(-dx / Math.max(rect.width, 1))
+    if (Math.abs(dx) >= 1) {
+      pendingPan.current -= dx / Math.max(rect.width, 1)
+      if (panFrame.current === null) {
+        panFrame.current = requestAnimationFrame(() => {
+          panFrame.current = null
+          const delta = pendingPan.current
+          pendingPan.current = 0
+          if (delta) onHorizontalPanRef.current(delta)
+        })
+      }
+    }
   }
   const end = (event: PointerEvent<SVGSVGElement>) => {
     if (drag.current?.pointerId === event.pointerId) {
+      flushPan()
       suppressClick.current = drag.current.moved
       drag.current = null
     }
   }
   const cancel = (event: PointerEvent<SVGSVGElement>) => {
-    if (drag.current?.pointerId === event.pointerId) drag.current = null
+    if (drag.current?.pointerId === event.pointerId) { flushPan(); drag.current = null }
     suppressClick.current = false
   }
   const shouldSuppressClick = () => {

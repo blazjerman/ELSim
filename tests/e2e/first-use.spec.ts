@@ -6364,7 +6364,7 @@ test('waveform click moves the cursor, wheel zooms horizontally, and drag keeps 
   await chart.press('ArrowRight')
   await expect.poll(() => timeReadout.innerText()).not.toBe(clickedTime)
   const keyboardAnnouncement = plotWindow.locator('.waveform-view > .sr-only[aria-live="polite"]')
-  await expect(keyboardAnnouncement).toContainText(/Time .* seconds/)
+  await expect(keyboardAnnouncement).toContainText(/Time .* (?:s|ms|µs|ns|ps)\./)
   await expect(keyboardAnnouncement).toContainText(/[0-9].* [VA]/)
 })
 
