@@ -663,6 +663,54 @@ test('keyboard focus remains visible in search, analysis, inspector, PWL, and co
   await expectFocusRing(firstMenuItem)
 })
 
+test('waveform window title, plot, and navigation retain visible keyboard focus', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const plotWindow = await openComponentVoltagePlot(page)
+  const expectFocusRing = async (locator: Locator) => {
+    const outline = await locator.evaluate((element) => {
+      const style = getComputedStyle(element)
+      const rgb = (color: string) => color.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? []
+      const luminance = (color: string) => {
+        const channels = rgb(color)
+        if (channels.length !== 3) throw new Error(`Cannot parse focus contrast color ${color}`)
+        const linear = channels.map((channel) => {
+          const value = channel / 255
+          return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+        })
+        return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
+      }
+      let background = getComputedStyle(element).backgroundColor
+      for (let parent = element.parentElement; parent && background.endsWith(', 0)'); parent = parent.parentElement) {
+        background = getComputedStyle(parent).backgroundColor
+      }
+      const [light, dark] = [luminance(style.outlineColor), luminance(background)].sort((left, right) => right - left)
+      return { style: style.outlineStyle, width: Number.parseFloat(style.outlineWidth), color: style.outlineColor, contrast: (light + 0.05) / (dark + 0.05) }
+    })
+    expect(outline.style).toBe('solid')
+    expect(outline.width).toBeGreaterThanOrEqual(2)
+    expect(outline.color).not.toBe('rgba(0, 0, 0, 0)')
+    expect(outline.contrast).toBeGreaterThanOrEqual(3)
+  }
+  // Establish keyboard modality, then focus each independently named target.
+  // The page has many schematic endpoints, so traversing every stop would not
+  // add coverage to this focused visual-indicator check.
+  await page.keyboard.press('Tab')
+  const title = plotWindow.locator('.plot-window-title')
+  await title.focus()
+  await expect(title).toBeFocused()
+  await expectFocusRing(title)
+  const chart = plotWindow.getByRole('group', { name: /Transient waveforms from/ })
+  await chart.focus()
+  await expect(chart).toBeFocused()
+  await expectFocusRing(chart)
+  const zoomIn = plotWindow.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Zoom in' })
+  await zoomIn.focus()
+  await expect(zoomIn).toBeFocused()
+  await expectFocusRing(zoomIn)
+})
+
 test('solver errors select and bring the reported component into view', { tag: '@ui-smoke' }, async ({ page }) => {
   const project = createStarterProject()
   const target = project.parts.find((part) => part.kind === 'resistor')!
