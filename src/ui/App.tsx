@@ -604,18 +604,24 @@ function visibleComponentPlacement(parts: Part[], view: Project['view'], viewpor
   }
   const offsets = [0, -40, 40, -80, 80, -120, 120]
   let position = { x: snapToEditorGrid(center.x), y: snapToEditorGrid(center.y) }
-  let bestClearance = -1
-  let bestOffset = Infinity
+  let bestClearanceSquared = -1
+  let bestOffsetSquared = Infinity
   for (const offsetX of offsets) for (const offsetY of offsets) {
     const candidate = { x: snapToEditorGrid(center.x + offsetX), y: snapToEditorGrid(center.y + offsetY) }
     if (candidate.x < visibleBounds.left || candidate.x > visibleBounds.right || candidate.y < visibleBounds.top || candidate.y > visibleBounds.bottom) continue
-    let clearance = Infinity
-    for (const part of parts) clearance = Math.min(clearance, Math.hypot(part.x - candidate.x, part.y - candidate.y))
-    const offset = Math.hypot(candidate.x - center.x, candidate.y - center.y)
-    if (clearance > bestClearance || (clearance === bestClearance && offset < bestOffset)) {
+    let clearanceSquared = Infinity
+    for (const part of parts) {
+      const dx = part.x - candidate.x
+      const dy = part.y - candidate.y
+      clearanceSquared = Math.min(clearanceSquared, dx * dx + dy * dy)
+    }
+    const offsetXFromCenter = candidate.x - center.x
+    const offsetYFromCenter = candidate.y - center.y
+    const offsetSquared = offsetXFromCenter * offsetXFromCenter + offsetYFromCenter * offsetYFromCenter
+    if (clearanceSquared > bestClearanceSquared || (clearanceSquared === bestClearanceSquared && offsetSquared < bestOffsetSquared)) {
       position = candidate
-      bestClearance = clearance
-      bestOffset = offset
+      bestClearanceSquared = clearanceSquared
+      bestOffsetSquared = offsetSquared
     }
   }
   return position
@@ -1244,7 +1250,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     })
     setView((view) => ({ ...view, panX: 380 - target.x, panY: 300 - target.y }))
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const element = [...(svg.current?.querySelectorAll<SVGGElement>('.circuit-part') ?? [])].find((part) => part.dataset.partId === target.id)
+      const element = svg.current?.querySelector<SVGGElement>(`.circuit-part[data-part-id="${CSS.escape(target.id)}"]`)
       element?.focus()
     }))
   }

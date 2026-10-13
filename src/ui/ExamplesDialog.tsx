@@ -58,7 +58,7 @@ const exampleTopicOptions: { id: ExampleTopic; label: string }[] = [
   { id: 'ac', label: 'AC & reactive' }, { id: 'switching', label: 'Switching' }, { id: 'advanced', label: 'Advanced' },
 ]
 const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
-  start: ['switch-lamp', 'rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
+  start: ['switch-lamp', 'ohms-law', 'rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
   basics: ['ohms-law', 'rc', 'capacitor-discharge', 'voltage-divider', 'loaded-voltage-divider', 'series-resistors', 'parallel-resistors', 'resistor-power', 'lamp-power', 'switch-lamp', 'supply-droop', 'potentiometer', 'wheatstone-bridge', 'current-source', 'led-current-limiter'],
   diodes: ['diode-polarity', 'led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
