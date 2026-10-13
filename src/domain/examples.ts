@@ -646,6 +646,47 @@ export function createParallelResistorsExampleProject(): Project {
   return project
 }
 
+/** Model a supply's internal resistance and demonstrate load-dependent voltage sag. */
+export function createSupplyDroopExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'supply-droop-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'dc', x: 280, y: 400, rotation: 0 }
+  const internal: Part = { id: 'supply-droop-rsource', kind: 'resistor', ref: 'RSOURCE', value: '100 Ω', x: 520, y: 360, rotation: 90 }
+  const load: Part = { id: 'supply-droop-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 760, y: 460, rotation: 90 }
+  const parts = [source, internal, load]
+  const wires = [
+    { id: 'supply-droop-source-rise', points: [[280, 350], [280, 260]] as [[number, number], [number, number]] },
+    { id: 'supply-droop-supply-bus', points: [[280, 260], [520, 260]] as [[number, number], [number, number]] },
+    { id: 'supply-droop-source-feed', points: [[520, 260], [520, 310]] as [[number, number], [number, number]] },
+    { id: 'supply-droop-output-link', points: [[520, 410], [760, 410]] as [[number, number], [number, number]] },
+    { id: 'supply-droop-load-return', points: [[760, 510], [760, 560]] as [[number, number], [number, number]] },
+    { id: 'supply-droop-ground-bus', points: [[280, 560], [760, 560]] as [[number, number], [number, number]] },
+    { id: 'supply-droop-source-return', points: [[280, 560], [280, 450]] as [[number, number], [number, number]] },
+  ]
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const netLabels = [
+    labelAt('supply-droop-vin-source', 'VIN', source, 0),
+    labelAt('supply-droop-vin-rsource', 'VIN', internal, 0),
+    labelAt('supply-droop-vout-rsource', 'VOUT', internal, 1),
+    labelAt('supply-droop-vout-load', 'VOUT', load, 0),
+    labelAt('supply-droop-ground-source', '0', source, 1),
+    labelAt('supply-droop-ground-load', '0', load, 1),
+  ]
+  project.name = 'Supply voltage under load'
+  project.parts = parts
+  project.wires = wires
+  project.junctions = []
+  project.netLabels = netLabels
+  project.sheets = [{ ...project.sheets[0], parts, wires, junctions: [], netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'I(RLOAD)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A grounded resistor circuit for learning electrical power dissipation. */
 export function createResistorPowerExampleProject(): Project {
   const project = createStarterProject()

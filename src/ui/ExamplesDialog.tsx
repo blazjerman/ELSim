@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Search, X } from 'lucide-react'
 
-export type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'parallel-resistors' | 'resistor-power' | 'series-resistors' | 'loaded-voltage-divider' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
+export type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'parallel-resistors' | 'resistor-power' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
 type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 
 const exampleCatalog: { id: ExampleId; title: string; description: string }[] = [
@@ -18,6 +18,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'parallel-resistors', title: 'Parallel resistor current divider', description: 'Compare current through 1 kΩ and 2 kΩ branches across the same 10 V supply.' },
   { id: 'resistor-power', title: 'Resistor power dissipation', description: 'Use P = V × I to compare 25 mW at 1 kΩ with 250 mW at 100 Ω.' },
   { id: 'series-resistors', title: 'Voltage drops in series resistors', description: 'Two series resistors share the same current; compare their individual voltage drops.' },
+  { id: 'supply-droop', title: 'Why a supply voltage sags under load', description: 'A simple series resistance models internal loss; a heavier load draws more current and lowers VOUT.' },
   { id: 'zener', title: 'Zener voltage reference', description: 'A resistor limits current while a reverse-connected 5.1 V Zener holds the output near its breakdown voltage.' },
   { id: 'transformer', title: 'AC transformer', description: 'Compare the primary and secondary waveforms of a coupled-inductor transformer with a 2:1 turns ratio.' },
   { id: 'transformer-current', title: 'Transformer winding currents', description: 'Run a 50 Hz transient and watch the solved primary and secondary currents animate independently.' },
@@ -52,7 +53,7 @@ const exampleTopicOptions: { id: ExampleTopic; label: string }[] = [
 ]
 const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
   start: ['rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
-  basics: ['rc', 'capacitor-discharge', 'voltage-divider', 'loaded-voltage-divider', 'series-resistors', 'parallel-resistors', 'resistor-power', 'potentiometer', 'current-source', 'led-current-limiter'],
+  basics: ['rc', 'capacitor-discharge', 'voltage-divider', 'loaded-voltage-divider', 'series-resistors', 'parallel-resistors', 'resistor-power', 'supply-droop', 'potentiometer', 'current-source', 'led-current-limiter'],
   diodes: ['led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
   switching: ['voltage-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],

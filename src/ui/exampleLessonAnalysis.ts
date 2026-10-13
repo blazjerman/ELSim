@@ -204,6 +204,22 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const seriesResistorSolvedR1 = seriesResistorVectorAtOp(seriesResistorR1Part)
   const seriesResistorSolvedR2 = seriesResistorVectorAtOp(seriesResistorR2Part)
   const seriesResistorSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const isSupplyDroopLesson = lessonId === 'supply-droop'
+  const supplyDroopSource = isSupplyDroopLesson ? componentMagnitude(partsById.get('supply-droop-v1')?.value ?? '5 V', 'source') : null
+  const supplyDroopInternalResistance = isSupplyDroopLesson ? componentMagnitude(partsById.get('supply-droop-rsource')?.value ?? '100 Ω', 'resistor') : null
+  const supplyDroopLoad = isSupplyDroopLesson ? componentMagnitude(partsById.get('supply-droop-rload')?.value ?? '1 kΩ', 'resistor') : null
+  const supplyDroopOutputPrediction = supplyDroopSource !== null && supplyDroopInternalResistance !== null && supplyDroopLoad !== null && supplyDroopInternalResistance + supplyDroopLoad > 0
+    ? supplyDroopSource * supplyDroopLoad / (supplyDroopInternalResistance + supplyDroopLoad)
+    : null
+  const supplyDroopCurrentPrediction = supplyDroopSource !== null && supplyDroopInternalResistance !== null && supplyDroopLoad !== null && supplyDroopInternalResistance + supplyDroopLoad > 0
+    ? supplyDroopSource / (supplyDroopInternalResistance + supplyDroopLoad)
+    : null
+  const supplyDroopLoadPart = partsById.get('supply-droop-rload')
+  const supplyDroopLoadVector = supplyDroopLoadPart ? componentCurrentVector(supplyDroopLoadPart).toLowerCase() : ''
+  const supplyDroopSolvedCurrent = simulationResult?.analysis === 'op' && supplyDroopLoadVector
+    ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === supplyDroopLoadVector || trace.baseId?.toLowerCase() === supplyDroopLoadVector)?.values[0]
+    : undefined
+  const supplyDroopSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const potentiometer = exampleLesson?.id === 'potentiometer' ? partsById.get('pot-p1') : undefined
   const potentiometerPosition = potentiometer ? Number(potentiometer.wiperPosition ?? '0.5') : null
   const potentiometerSupply = exampleLesson?.id === 'potentiometer' ? componentMagnitude(partsById.get('pot-v1')?.value ?? '10 V', 'source') : null
@@ -393,6 +409,14 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
               : `For V1 = ${parallelResistorSupplyText}, R1 = ${parallelResistorR1Text}, and R2 = ${parallelResistorR2Text}, V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. Ngspice solved ${formatLessonCurrent(Math.abs(parallelResistorR1SolvedMa) * 1000)} and ${formatLessonCurrent(Math.abs(parallelResistorR2SolvedMa) * 1000)}. The total supply current is the sum of both branch currents.`
             : `With both branches across ${parallelResistorSupplyText}, I = V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. The branch with half the resistance carries twice the current.`
         : 'Enter a valid source voltage and positive resistor values, then rerun to compare the branch currents.'
+    : isSupplyDroopLesson && simulationResult
+      ? supplyDroopOutputPrediction !== null && supplyDroopCurrentPrediction !== null
+        ? simulationResultStale
+          ? `The old result is stale. With RSOURCE = ${partsById.get('supply-droop-rsource')?.value} and RLOAD = ${partsById.get('supply-droop-rload')?.value}, the simple series model predicts VOUT ≈ ${formatLessonVoltage(supplyDroopOutputPrediction)} and load current ≈ ${formatLessonCurrent(supplyDroopCurrentPrediction * 1000)}. Rerun to compare.`
+          : supplyDroopInternalResistance === 100 && supplyDroopLoad === 1000 && supplyDroopSource === 5
+            ? `With a 5 V source, 100 Ω internal resistance, and 1 kΩ load, the model predicts VOUT ≈ ${formatLessonVoltage(supplyDroopOutputPrediction)} and ${formatLessonCurrent(supplyDroopCurrentPrediction * 1000)}. Ngspice solved ${supplyDroopSolvedOutput !== undefined ? formatLessonVoltage(supplyDroopSolvedOutput) : formatLessonVoltage(supplyDroopOutputPrediction)} and ${supplyDroopSolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(supplyDroopSolvedCurrent) * 1000) : formatLessonCurrent(supplyDroopCurrentPrediction * 1000)}. Reduce RLOAD to 100 Ω: the load draws more current, the internal resistor drops more voltage, and VOUT falls to 2.5 V. This simple model does not simulate battery chemistry.`
+            : `For V1 = ${partsById.get('supply-droop-v1')?.value}, RSOURCE = ${partsById.get('supply-droop-rsource')?.value}, and RLOAD = ${partsById.get('supply-droop-rload')?.value}, the divider model predicts VOUT ≈ ${formatLessonVoltage(supplyDroopOutputPrediction)} and load current ≈ ${formatLessonCurrent(supplyDroopCurrentPrediction * 1000)}${supplyDroopSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(supplyDroopSolvedOutput)}` : ''}. Lower load resistance draws more current and increases the voltage lost across RSOURCE.`
+        : 'Enter a positive source voltage and resistor values, then rerun to compare the supply output and load current.'
     : isSeriesResistorLesson && simulationResult
       ? seriesResistorCurrent !== null
         ? simulationResultStale
