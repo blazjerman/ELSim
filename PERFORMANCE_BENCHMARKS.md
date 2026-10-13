@@ -321,6 +321,10 @@ Two independent runs of the focused Firefox browser benchmark solved 1,000,130 t
 
 Worker-produced traces all reference the same immutable axis array. Transient cursor readouts now use the selected cursor index directly when that shared-array identity is present, retaining binary-search fallback for independently supplied traces on a different axis. TypeScript checking and the focused Firefox million-sample/eight-window benchmark pass after the change. The latest warmed scrub was 31.02 ms versus 31.03 and 32.04 ms in the two immediately preceding runs; that difference is within run noise and is not evidence of a measurable user-visible speedup. The branch removes redundant per-trace binary searches, but the larger cursor/rendering comparison remains open. No WASM build was run.
 
+### Playback sample lookup (2026-10-13)
+
+Scaled and real-time playback now build one sample lookup when playback starts instead of repeating the same full-axis binary search code in each animation mode. The lookup estimates an index from the run's first/last times, checks a small nearby bracket, and falls back to exact binary search when adaptive steps exceed the bracket. Unit tests compare it against a nearest-sample reference for uniform, cubic-adaptive, and strongly nonuniform axes. A synthetic one-million-sample uniform axis with 500,000 lookups measured 35.73 ms median for the previous full binary search and 16.40 ms median for the bracketed lookup across five runs. This is a local microbenchmark, not an end-to-end browser playback measurement. The focused Firefox playback workflow could not run because the configured Vite server was denied local port binding; no WASM rebuild was performed.
+
 
 ### Large-schematic zoom latency (2026-10-12)
 

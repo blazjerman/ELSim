@@ -23,6 +23,7 @@ import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../do
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
+import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
 import type { ComponentPaletteCategory } from './ComponentPalette'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
@@ -1732,6 +1733,7 @@ export default function App() {
   }, [exampleLesson, project.parts, project.simulation.initialConditions, simulationResult, simulationResultStale, rlcResonancePeak])
   useEffect(() => {
     if (!playbackRunning || !playbackAvailable || !transientAxis?.length) return
+    const findSample = createTimeAxisLookup(transientAxis)
     if (playbackRate !== 'realtime') {
       const startIndex = Math.max(0, Math.min(transientAxis.length - 1, getSimulationCursor() ?? 0))
       const startTime = transientAxis[startIndex]
@@ -1753,14 +1755,7 @@ export default function App() {
           setPlaybackRunning(false)
           return
         }
-        let low = startIndex, high = transientAxis.length - 1
-        while (low < high) {
-          const middle = Math.floor((low + high) / 2)
-          if (transientAxis[middle] < target) low = middle + 1
-          else high = middle
-        }
-        const next = low > startIndex && target - transientAxis[low - 1] <= transientAxis[low] - target ? low - 1 : low
-        setSimulationCursor(next)
+        setSimulationCursor(findSample(target, startIndex))
         frame = requestAnimationFrame(advance)
       }
       frame = requestAnimationFrame(advance)
@@ -1777,14 +1772,7 @@ export default function App() {
         setPlaybackRunning(false)
         return
       }
-      let low = startIndex, high = transientAxis.length - 1
-      while (low < high) {
-        const middle = Math.floor((low + high) / 2)
-        if (transientAxis[middle] < target) low = middle + 1
-        else high = middle
-      }
-      const next = low > startIndex && target - transientAxis[low - 1] <= transientAxis[low] - target ? low - 1 : low
-      setSimulationCursor(next)
+      setSimulationCursor(findSample(target, startIndex))
       frame = requestAnimationFrame(advance)
     }
     frame = requestAnimationFrame(advance)
