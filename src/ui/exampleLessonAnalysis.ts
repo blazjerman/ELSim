@@ -212,6 +212,16 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const lampPowerSolvedCurrent = simulationResult?.analysis === 'op' && lampPowerVector
     ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === lampPowerVector || trace.baseId?.toLowerCase() === lampPowerVector)?.values[0]
     : undefined
+  const isDiodePolarityLesson = lessonId === 'diode-polarity'
+  const diodePolaritySupply = isDiodePolarityLesson ? componentMagnitude(partsById.get('diode-polarity-v1')?.value ?? '5 V', 'source') : null
+  const diodePolarityPart = partsById.get('diode-polarity-d1')
+  const diodePolarityVector = diodePolarityPart ? componentCurrentVector(diodePolarityPart).toLowerCase() : ''
+  const diodePolaritySolvedCurrent = simulationResult?.analysis === 'op' && diodePolarityVector
+    ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === diodePolarityVector || trace.baseId?.toLowerCase() === diodePolarityVector)?.values[0]
+    : undefined
+  const diodePolaritySolvedVoltage = simulationResult?.analysis === 'op'
+    ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(anode)' || trace.baseId?.toLowerCase() === 'v(anode)')?.values[0]
+    : undefined
   const isSeriesResistorLesson = lessonId === 'series-resistors'
   const seriesResistorR1 = isSeriesResistorLesson ? componentMagnitude(partsById.get('divider-r1')?.value ?? '1 kΩ', 'resistor') : null
   const seriesResistorR2 = isSeriesResistorLesson ? componentMagnitude(partsById.get('divider-r2')?.value ?? '2 kΩ', 'resistor') : null
@@ -472,6 +482,14 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
             ? `At V1 = ${partsById.get('lamp-power-v1')?.value} across R1 = ${lampPowerPart?.value}, P = V²/R predicts ${formatLessonPower(lampPowerPrediction)}. Ngspice solved ${formatLessonCurrent(Math.abs(lampPowerSolvedCurrent) * 1000)}, giving ${formatLessonPower(Math.abs(lampPowerSupply * lampPowerSolvedCurrent))}. The lamp's nominal animation power is ${formatLessonPower(lampPowerNominal)}. Change V1 from 5 V to 2.5 V and rerun: power falls to one quarter, ${formatLessonPower(lampPowerPrediction / 4)}, so the illustration dims. The fixed-resistance circuit does not model filament temperature.`
             : `P = V²/R predicts ${formatLessonPower(lampPowerPrediction)}. Compare V(VIN) and I(R1), then change V1 to 2.5 V and rerun to see the lamp dim. This is an illustrative glow, not a thermal model.`
         : 'Enter a valid supply voltage and positive lamp resistance, then rerun to compare electrical power.'
+    : isDiodePolarityLesson && simulationResult
+      ? diodePolaritySupply !== null
+        ? simulationResultStale
+          ? `The previous operating point is stale. V1 is now ${partsById.get('diode-polarity-v1')?.value}; run again to see whether D1 is forward or reverse biased and compare its solved current.`
+          : diodePolaritySupply >= 0
+            ? `With V1 = ${partsById.get('diode-polarity-v1')?.value}, D1 is forward biased. Ngspice solved V(ANODE) = ${diodePolaritySolvedVoltage !== undefined ? formatLessonVoltage(diodePolaritySolvedVoltage) : '—'} and ${diodePolaritySolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(diodePolaritySolvedCurrent) * 1000) : '—'} through D1. Change V1 to −5 V and rerun: the diode should block, leaving almost no current.`
+            : `With V1 = ${partsById.get('diode-polarity-v1')?.value}, D1 is reverse biased. Ngspice solved V(ANODE) = ${diodePolaritySolvedVoltage !== undefined ? formatLessonVoltage(diodePolaritySolvedVoltage) : '—'} and ${diodePolaritySolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(diodePolaritySolvedCurrent) * 1000) : '—'} through D1. The current is near zero; change V1 back to +5 V and rerun to forward bias it.`
+        : 'Set V1 to a valid DC voltage and rerun to compare forward and reverse bias.'
     : exampleLesson?.id === 'capacitor-discharge' && simulationResult
       ? capacitorDischargeResistance !== null && capacitorDischargeCapacitance !== null && capacitorDischargeInitialVoltage !== null && capacitorDischargeTimeConstant !== null
         ? simulationResultStale

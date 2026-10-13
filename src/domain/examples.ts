@@ -271,6 +271,47 @@ export function createLedCurrentLimiterExampleProject(): Project {
   return project
 }
 
+/** A DC diode-polarity lesson that compares forward and reverse bias. */
+export function createDiodePolarityExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'diode-polarity-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'dc', x: 280, y: 360, rotation: 90 }
+  const resistor: Part = { id: 'diode-polarity-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 460, y: 360, rotation: 0 }
+  const diode: Part = { id: 'diode-polarity-d1', kind: 'diode', componentDefinitionId: 'elsim.diode', ref: 'D1', value: 'Default diode', x: 640, y: 360, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const parts = [source, resistor, diode]
+  const wires = [
+    { id: 'diode-polarity-source-rise', points: [[280, 310], [280, 260]] as [[number, number], [number, number]] },
+    { id: 'diode-polarity-supply-bus', points: [[280, 260], [410, 260]] as [[number, number], [number, number]] },
+    { id: 'diode-polarity-resistor-feed', points: [[410, 260], [410, 360]] as [[number, number], [number, number]] },
+    { id: 'diode-polarity-resistor-diode', points: [[510, 360], [590, 360]] as [[number, number], [number, number]] },
+    { id: 'diode-polarity-cathode-return', points: [[690, 360], [740, 360]] as [[number, number], [number, number]] },
+    { id: 'diode-polarity-return-drop', points: [[740, 360], [740, 520]] as [[number, number], [number, number]] },
+    { id: 'diode-polarity-ground-bus', points: [[740, 520], [280, 520]] as [[number, number], [number, number]] },
+    { id: 'diode-polarity-source-return', points: [[280, 520], [280, 410]] as [[number, number], [number, number]] },
+  ]
+  const netLabels = [
+    labelAt('diode-polarity-vin-source', 'VIN', source, 0),
+    labelAt('diode-polarity-vin-r1', 'VIN', resistor, 0),
+    labelAt('diode-polarity-anode', 'ANODE', diode, 0),
+    labelAt('diode-polarity-ground-source', '0', source, 1),
+    labelAt('diode-polarity-ground-d1', '0', diode, 1),
+  ]
+  project.name = 'Diode forward and reverse bias'
+  project.parts = parts
+  project.wires = wires
+  project.junctions = []
+  project.netLabels = netLabels
+  project.sheets = [{ ...project.sheets[0], parts, wires, junctions: [], netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(ANODE)', 'I(D1)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A beginner lesson showing why each parallel LED branch needs its own resistor. */
 export function createParallelLedExampleProject(): Project {
   const project = createStarterProject()

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 
-export type ExampleId = 'ohms-law' | 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'parallel-resistors' | 'resistor-power' | 'lamp-power' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
+export type ExampleId = 'ohms-law' | 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'diode-polarity' | 'parallel-resistors' | 'resistor-power' | 'lamp-power' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
 type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 
 const exampleCatalog: { id: ExampleId; title: string; description: string }[] = [
@@ -31,6 +31,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'common-emitter', title: 'NPN common-emitter amplifier', description: 'Use a resistor-biased NPN stage to amplify a small AC signal and invert its phase.' },
   { id: 'led-current-limiter', title: 'LED current limiter', description: 'See how a series resistor limits current through an LED from a 5 V supply.' },
   { id: 'led-parallel', title: 'Parallel LEDs with separate resistors', description: 'Compare two LED branches and see how each series resistor sets its own branch current.' },
+  { id: 'diode-polarity', title: 'Diode direction: forward and reverse bias', description: 'Change a DC source from +5 V to −5 V and compare the diode voltage and current in forward and reverse bias.' },
   { id: 'capacitor-discharge', title: 'Capacitor discharge', description: 'Start with a charged capacitor and watch voltage and resistor current decay through an RC time constant.' },
   { id: 'rectifier', title: 'Diode half-wave rectifier', description: 'Compare a 50 Hz AC input with the positive half-wave across a diode and load resistor.' },
   { id: 'bridge-rectifier', title: 'Bridge rectifier and smoothing capacitor', description: 'Four diodes turn both AC half-cycles positive; a capacitor smooths the output between peaks.' },
@@ -56,7 +57,7 @@ const exampleTopicOptions: { id: ExampleTopic; label: string }[] = [
 const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
   start: ['rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
   basics: ['ohms-law', 'rc', 'capacitor-discharge', 'voltage-divider', 'loaded-voltage-divider', 'series-resistors', 'parallel-resistors', 'resistor-power', 'lamp-power', 'supply-droop', 'potentiometer', 'current-source', 'led-current-limiter'],
-  diodes: ['led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
+  diodes: ['diode-polarity', 'led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
   switching: ['voltage-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
   advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'imported-opamp', 'inverting-opamp', 'common-emitter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier'],
