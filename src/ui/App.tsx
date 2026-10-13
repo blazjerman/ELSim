@@ -1726,10 +1726,10 @@ export default function App() {
     let active = true
     setLessonNextStep(null)
     void import('./exampleLessonAnalysis').then(({ calculateExampleLessonNextStep }) => {
-      if (active) setLessonNextStep(calculateExampleLessonNextStep(exampleLesson, project, simulationResult, simulationResultStale, rlcResonancePeak))
+      if (active) setLessonNextStep(calculateExampleLessonNextStep(exampleLesson, project.parts, project.simulation.initialConditions, simulationResult, simulationResultStale, rlcResonancePeak))
     }).catch(() => { if (active) setLessonNextStep(null) })
     return () => { active = false }
-  }, [exampleLesson, project, simulationResult, simulationResultStale, rlcResonancePeak])
+  }, [exampleLesson, project.parts, project.simulation.initialConditions, simulationResult, simulationResultStale, rlcResonancePeak])
   useEffect(() => {
     if (!playbackRunning || !playbackAvailable || !transientAxis?.length) return
     if (playbackRate !== 'realtime') {

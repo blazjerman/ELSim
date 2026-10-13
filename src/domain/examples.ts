@@ -957,10 +957,10 @@ export function createControlledSourceExampleProject(): Project {
   project.netLabels = [
     labelAt('amp-in-source', 'VIN', source, 0), labelAt('amp-in-control', 'VIN', amplifier, 2),
     labelAt('amp-source-ground', '0', source, 1), labelAt('amp-control-ground', '0', amplifier, 3),
-    labelAt('amp-output', 'VOUT', amplifier, 0),
+    { id: 'amp-output', name: 'VOUT', x: 450, y: 320, visible: true },
     labelAt('amp-output-ground', '0', amplifier, 1), labelAt('amp-load-ground', '0', load, 1),
     labelAt('amp-g-control', 'VIN', transconductance, 2), labelAt('amp-g-control-ground', '0', transconductance, 3),
-    labelAt('amp-g-output', 'GOUT', transconductance, 0),
+    { id: 'amp-g-output', name: 'GOUT', x: 450, y: 640, visible: true },
     labelAt('amp-g-output-ground', '0', transconductance, 1), labelAt('amp-g-load-ground', '0', currentLoad, 1),
   ]
   project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
@@ -1239,9 +1239,11 @@ export function createCurrentControlledSourcesExampleProject(): Project {
     labelAt('current-vin-source', 'VIN', control, 0), labelAt('current-vin-r', 'VIN', senseResistor, 0),
     labelAt('current-sense-r', 'SENSE', senseResistor, 1), labelAt('current-sense-v', 'SENSE', sensor, 0),
     labelAt('current-ground-vctrl', '0', control, 1), labelAt('current-ground-vsense', '0', sensor, 1),
-    labelAt('current-f-out', 'V_F', cccs, 0), labelAt('current-f-load', 'V_F', cccsLoad, 0),
+    { id: 'current-f-out', name: 'V_F', x: 770, y: 280, visible: true },
+    { id: 'current-f-load', name: 'V_F', x: 1010, y: 280, visible: true },
     labelAt('current-f-ground', '0', cccs, 1), labelAt('current-rf-ground', '0', cccsLoad, 1),
-    labelAt('current-h-out', 'V_H', ccvs, 0), labelAt('current-h-load', 'V_H', ccvsLoad, 0),
+    { id: 'current-h-out', name: 'V_H', x: 770, y: 600, visible: true },
+    { id: 'current-h-load', name: 'V_H', x: 1010, y: 600, visible: true },
     labelAt('current-h-ground', '0', ccvs, 1), labelAt('current-rh-ground', '0', ccvsLoad, 1),
   ]
   project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]

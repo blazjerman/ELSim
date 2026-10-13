@@ -36,28 +36,35 @@ async function rightClickNetLabel(page: import('@playwright/test').Page, name: s
         const text = element.querySelector('text')
         if (!text) return null
         const rect = text.getBoundingClientRect()
-        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+        const points = [0.15, 0.5, 0.85].map((fraction) => {
+          const point = { x: rect.x + rect.width * fraction, y: rect.y + rect.height / 2 }
+          const hit = document.elementFromPoint(point.x, point.y)?.closest('[data-net-label-id]')
+          return { ...point, isTopmost: hit === element }
+        })
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, points }
       })
       if (!box) continue
-      const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
       const canvasBounds = await page.locator('.canvas-wrap').boundingBox()
       const edgeInset = 8
-      if (!canvasBounds || point.x < canvasBounds.x + edgeInset || point.x > canvasBounds.x + canvasBounds.width - edgeInset || point.y < canvasBounds.y + edgeInset || point.y > canvasBounds.y + canvasBounds.height - edgeInset) continue
-      let coveringPlot: Locator | undefined
-      const plots = page.locator('.plot-window')
-      for (let plotIndex = await plots.count() - 1; plotIndex >= 0; plotIndex -= 1) {
-        const plot = plots.nth(plotIndex)
-        const plotBox = await plot.boundingBox()
-        if (plotBox && point.x >= plotBox.x && point.x <= plotBox.x + plotBox.width && point.y >= plotBox.y && point.y <= plotBox.y + plotBox.height) {
-          coveringPlot = plot
-          break
+      if (!canvasBounds) continue
+      for (const point of box.points) {
+        if (!point.isTopmost || point.x < canvasBounds.x + edgeInset || point.x > canvasBounds.x + canvasBounds.width - edgeInset || point.y < canvasBounds.y + edgeInset || point.y > canvasBounds.y + canvasBounds.height - edgeInset) continue
+        let coveringPlot: Locator | undefined
+        const plots = page.locator('.plot-window')
+        for (let plotIndex = await plots.count() - 1; plotIndex >= 0; plotIndex -= 1) {
+          const plot = plots.nth(plotIndex)
+          const plotBox = await plot.boundingBox()
+          if (plotBox && point.x >= plotBox.x && point.x <= plotBox.x + plotBox.width && point.y >= plotBox.y && point.y <= plotBox.y + plotBox.height) {
+            coveringPlot = plot
+            break
+          }
         }
+        if (!coveringPlot) {
+          await page.mouse.click(point.x, point.y, { button: 'right' })
+          return
+        }
+        blocked.push({ box, plot: coveringPlot })
       }
-      if (!coveringPlot) {
-        await page.mouse.click(point.x, point.y, { button: 'right' })
-        return
-      }
-      blocked.push({ box, plot: coveringPlot })
     }
     const obstructed = blocked.at(-1)
     if (obstructed) {
