@@ -3,10 +3,10 @@ type AnimationConfig = { key: string; magnitude: number; forward: boolean; curre
 const elements = new Map<string, SVGPolylineElement>()
 const configurations = new Map<string, AnimationConfig>()
 const phases = new Map<string, number>()
+const movingFlowKeys = new Set<string>()
 let frame: number | null = null
 let motionPreference: MediaQueryList | null = null
 let previousFrameTime: number | null = null
-let movingFlowCount = 0
 
 const REFERENCE_FRAME_MS = 1000 / 60
 const MAX_FRAME_DELTA_MS = 50
@@ -27,7 +27,7 @@ function cancelFrame() {
 }
 
 function hasMovingFlow() {
-  return movingFlowCount > 0
+  return movingFlowKeys.size > 0
 }
 
 function hasCurrent(config: AnimationConfig | undefined): boolean {
@@ -67,9 +67,10 @@ function tick(timestamp: number) {
   }
   const elapsedMs = previousFrameTime === null ? REFERENCE_FRAME_MS : timestamp - previousFrameTime
   previousFrameTime = timestamp
-  for (const [key, config] of configurations) {
+  for (const key of movingFlowKeys) {
+    const config = configurations.get(key)
     const element = elements.get(key)
-    if (!element || config.magnitude <= 1e-12) continue
+    if (!element || !config) continue
     // Match CircuitJS: advance dot position by current × current-speed setting.
     // Round-capped zero-length dashes render as dots at the configured spacing.
     const phase = advanceWireAnimationPhase(phases.get(key) ?? 0, config, elapsedMs)
@@ -86,8 +87,7 @@ function tick(timestamp: number) {
 export function registerWireAnimation(key: string, element: SVGPolylineElement | null) {
   if (!element) {
     elements.delete(key)
-    const previous = configurations.get(key)
-    if (hasCurrent(previous)) movingFlowCount -= 1
+    movingFlowKeys.delete(key)
     configurations.delete(key)
     phases.delete(key)
     if (!elements.size || !hasMovingFlow()) cancelFrame()
@@ -99,17 +99,16 @@ export function registerWireAnimation(key: string, element: SVGPolylineElement |
 
 /** Update result values without detaching the SVG ref or resetting its phase. */
 export function updateWireAnimation(key: string, config?: AnimationConfig) {
-  const previous = configurations.get(key)
-  const wasMoving = hasCurrent(previous)
-  const isMoving = hasCurrent(config)
-  if (wasMoving !== isMoving) movingFlowCount += isMoving ? 1 : -1
   if (!config) {
+    movingFlowKeys.delete(key)
     configurations.delete(key)
     phases.delete(key)
     if (!hasMovingFlow()) cancelFrame()
     return
   }
   configurations.set(key, config)
+  if (hasCurrent(config)) movingFlowKeys.add(key)
+  else movingFlowKeys.delete(key)
   if (hasMovingFlow()) schedule()
   else cancelFrame()
 }

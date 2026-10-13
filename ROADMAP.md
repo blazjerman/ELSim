@@ -437,6 +437,8 @@ Single-object component, wire-segment, and net-label dragging uses an SVG transf
 
 Waveform cursor notification follow-up (2026-10-13): the cursor snapshot changes immediately to the latest solved sample, but React subscribers for toolbar, schematic animation, and plots now receive at most one notification per display frame. This coalesces bursty scrub events without interpolating sample times. A unit regression verifies immediate exact reads and single-frame notification; Firefox confirms wire motion continues during playback. The full unit suite and production build pass; no WASM rebuild was needed.
 
+Wire animation follow-up (2026-10-13): the requestAnimationFrame loop now iterates only wire segments whose solved current is nonzero, rather than scanning every visible segment and skipping idle ones on every frame. The active-flow set is updated with each current sample and cleaned up when paths unmount; unit coverage checks simultaneous flowing wires and confirms idle paths are not written. All 116 non-engine Firefox UI cases, both focused Firefox current-animation playback/reduced-motion cases, all 30 unit groups, typecheck, Chromium UI smoke, and production build pass. This reduces frame-loop work in large schematics without changing current magnitude, phase, or dot appearance; it does not yet claim a measured end-to-end frame-rate gain. No WASM rebuild was needed.
+
 ## 7. Primary references checked
 
 - ngspice source: https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/ (M0.3 spike pinned to `a80f6e3e95d51534905b1f23410a951802666656`)

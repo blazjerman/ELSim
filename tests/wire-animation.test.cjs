@@ -161,3 +161,37 @@ test('wire playback schedules frames only while a visible wire carries current',
     global.cancelAnimationFrame = previousCancel
   }
 })
+
+test('animation frames update only wires carrying current', () => {
+  const previousWindow = global.window
+  const previousRequest = global.requestAnimationFrame
+  const previousCancel = global.cancelAnimationFrame
+  const callbacks = new Map()
+  let nextFrame = 1
+  global.window = { matchMedia: () => ({ matches: false, addEventListener() {} }) }
+  global.requestAnimationFrame = (callback) => { const id = nextFrame++; callbacks.set(id, callback); return id }
+  global.cancelAnimationFrame = (id) => callbacks.delete(id)
+  const idleUpdates = [], movingUpdates = []
+  const idleKey = 'idle-wire:0', movingKey = 'moving-wire:0'
+  const idleElement = { setAttribute: (_name, value) => idleUpdates.push(value) }
+  const movingElement = { setAttribute: (_name, value) => movingUpdates.push(value) }
+  const config = (key, magnitude) => ({ key, magnitude, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+
+  try {
+    registerWireAnimation(idleKey, idleElement)
+    registerWireAnimation(movingKey, movingElement)
+    updateWireAnimation(idleKey, config(idleKey, 0))
+    updateWireAnimation(movingKey, config(movingKey, 0.001))
+    const [frameId, frame] = callbacks.entries().next().value
+    callbacks.delete(frameId)
+    frame(performance.now() + 20)
+    assert.equal(idleUpdates.length, 0, 'zero-current wires are skipped by the frame loop')
+    assert.equal(movingUpdates.length, 1, 'a flowing wire advances its dash phase')
+  } finally {
+    registerWireAnimation(idleKey, null)
+    registerWireAnimation(movingKey, null)
+    global.window = previousWindow
+    global.requestAnimationFrame = previousRequest
+    global.cancelAnimationFrame = previousCancel
+  }
+})
