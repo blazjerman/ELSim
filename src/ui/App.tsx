@@ -726,6 +726,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
   const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; additive?: boolean; pointIndex?: number; points?: [number, number][]; group?: { parts: Part[]; wires: Project['wires']; netLabels: Project['netLabels'] }; previewInitialized?: boolean } | null>(null)
   const dragPreviewElements = useRef<{ element: SVGGElement; transform: string | null }[]>([])
+  const wirePointPreview = useRef<{ attributes: { element: Element; values: [string, string | null][] }[] } | null>(null)
   const suppressCanvasClick = useRef(false)
   const [wireStart, setWireStart] = useState<{ x: number; y: number } | null>(null)
   const [wirePreviewEnd, setWirePreviewEnd] = useState<{ x: number; y: number } | null>(null)
@@ -1218,7 +1219,36 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     }
     if (kind === 'wire-point') {
       if (!points || pointIndex === undefined) return
-      setProject((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === id ? { ...wire, points: points.map(([x, y], index) => index === pointIndex ? [x + deltaX, y + deltaY] as [number, number] : [x, y]) as [[number, number], [number, number]] } : wire) }))
+      if (!drag.current.previewInitialized) {
+        const wireElement = svg.current?.querySelector<SVGGElement>(`.wire-line[data-wire-id="${CSS.escape(id)}"]`)
+        const endpoint = svg.current?.querySelector<SVGCircleElement>(`[data-wire-endpoint-id="${CSS.escape(id)}"][data-endpoint-index="${pointIndex}"]`)
+        const elements: Element[] = [...(wireElement?.querySelectorAll('line, rect') ?? []), ...(endpoint ? [endpoint] : [])]
+        const attributes = elements.map((element) => ({
+          element,
+          values: (element instanceof SVGLineElement ? ['x1', 'y1', 'x2', 'y2']
+            : element instanceof SVGRectElement ? ['x', 'y', 'width', 'height']
+              : ['cx', 'cy']).map((name) => [name, element.getAttribute(name)] as [string, string | null]),
+        }))
+        wirePointPreview.current = { attributes }
+        svg.current?.querySelectorAll('.wire-current-flow-layer, .wire-connection-dot').forEach((overlay) => overlay.setAttribute('visibility', 'hidden'))
+        drag.current.previewInitialized = true
+      }
+      const movedPoints = points.map(([x, y], index) => index === pointIndex ? [x + deltaX, y + deltaY] as [number, number] : [x, y] as [number, number])
+      const [[x1, y1], [x2, y2]] = movedPoints
+      const left = Math.min(x1, x2), top = Math.min(y1, y2)
+      for (const { element } of wirePointPreview.current?.attributes ?? []) {
+        if (element instanceof SVGLineElement) {
+          element.setAttribute('x1', String(x1)); element.setAttribute('y1', String(y1))
+          element.setAttribute('x2', String(x2)); element.setAttribute('y2', String(y2))
+        } else if (element instanceof SVGRectElement) {
+          element.setAttribute('x', String(left - 7)); element.setAttribute('y', String(top - 7))
+          element.setAttribute('width', String(Math.max(14, Math.abs(x2 - x1) + 14)))
+          element.setAttribute('height', String(Math.max(14, Math.abs(y2 - y1) + 14)))
+        } else {
+          const [x, y] = movedPoints[pointIndex]
+          element.setAttribute('cx', String(x)); element.setAttribute('cy', String(y))
+        }
+      }
       return
     }
     if (!drag.current.previewInitialized) {
@@ -1273,6 +1303,29 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
           return { ...current, parts: current.parts.map((part) => part.id === activeSingleDrag.id ? { ...part, x: activeSingleDrag.originX + deltaX, y: activeSingleDrag.originY + deltaY } : part) }
         })
       }
+    }
+    const activeWirePointDrag = endedDrag?.kind === 'wire-point' && endedDrag.previewInitialized && endedDrag.points && endedDrag.pointIndex !== undefined ? endedDrag : null
+    if (activeWirePointDrag?.points && activeWirePointDrag.pointIndex !== undefined) {
+      const point = pointFromEvent(event)
+      const deltaX = Math.round((point.x - activeWirePointDrag.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      const deltaY = Math.round((point.y - activeWirePointDrag.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      for (const { element, values } of wirePointPreview.current?.attributes ?? []) {
+        for (const [name, value] of values) {
+          if (value === null) element.removeAttribute(name)
+          else element.setAttribute(name, value)
+        }
+      }
+      wirePointPreview.current = null
+      svg.current?.querySelectorAll('.wire-current-flow-layer, .wire-connection-dot').forEach((overlay) => overlay.removeAttribute('visibility'))
+      if (deltaX !== 0 || deltaY !== 0) setProject((current) => ({
+        ...current,
+        wires: current.wires.map((wire) => wire.id === activeWirePointDrag.id ? {
+          ...wire,
+          points: activeWirePointDrag.points!.map(([x, y], index) => index === activeWirePointDrag.pointIndex
+            ? [x + deltaX, y + deltaY] as [number, number]
+            : [x, y]) as [[number, number], [number, number]],
+        } : wire),
+      }))
     }
     if (drag.current?.kind === 'box-select') {
       const boxDrag = drag.current
