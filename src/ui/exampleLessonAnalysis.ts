@@ -146,6 +146,14 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const dividerR2Text = partsById.get('divider-r2')?.value ?? 'changed'
   const dividerSupplyText = partsById.get('divider-v1')?.value ?? 'changed'
   const dividerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const isInvertingOpampLesson = lessonId === 'inverting-opamp'
+  const invertingInput = isInvertingOpampLesson ? componentMagnitude(partsById.get('example-opamp-vin')?.value ?? '0.5 V', 'source') : null
+  const invertingInputResistance = isInvertingOpampLesson ? componentMagnitude(partsById.get('example-opamp-rg')?.value ?? '10 kΩ', 'resistor') : null
+  const invertingFeedbackResistance = isInvertingOpampLesson ? componentMagnitude(partsById.get('example-opamp-rf')?.value ?? '20 kΩ', 'resistor') : null
+  const invertingPrediction = invertingInput !== null && invertingInputResistance !== null && invertingFeedbackResistance !== null && invertingInputResistance > 0
+    ? -invertingInput * invertingFeedbackResistance / invertingInputResistance
+    : null
+  const invertingSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const isNonInvertingOpampLesson = lessonId === 'noninverting-opamp'
   const nonInvertingInput = isNonInvertingOpampLesson ? componentMagnitude(partsById.get('example-opamp-vin')?.value ?? '0.5 V', 'source') : null
   const nonInvertingFeedback = isNonInvertingOpampLesson ? componentMagnitude(partsById.get('example-opamp-rf')?.value ?? '20 kΩ', 'resistor') : null
@@ -574,6 +582,16 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
           : acFilterCutoffHz !== null && acFilterCapacitance !== null
             ? `With R1 = ${acFilterResistanceText} and C1 = ${acFilterCapacitanceText}, the predicted cutoff is about ${formatLessonFrequency(acFilterCutoffHz)}. Double C1 to ${formatLessonCapacitance(acFilterCapacitance * 2)} and run again; the cutoff should halve to about ${formatLessonFrequency(acFilterCutoffHz / 2)}. At cutoff, VOUT is about 0.707×VIN (−3 dB).`
             : 'Enter positive values for R1 and C1, then rerun to compare the cutoff frequency.'
+      : isInvertingOpampLesson && simulationResult
+        ? simulationResultStale
+          ? invertingPrediction !== null
+            ? `The old operating point is stale. With VIN = ${partsById.get('example-opamp-vin')?.value}, RIN = ${partsById.get('example-opamp-rg')?.value}, and RF = ${partsById.get('example-opamp-rf')?.value}, VOUT = −VIN × RF/RIN predicts ${formatLessonVoltage(invertingPrediction)}. Rerun to compare. The ideal formula applies while the output stays within the supply rails.`
+            : 'Enter a valid input voltage and positive input/feedback resistances, then rerun.'
+          : invertingPrediction !== null
+            ? Math.abs((invertingInputResistance ?? 0) - 10000) < 1e-6 && Math.abs((invertingFeedbackResistance ?? 0) - 20000) < 1e-6 && Math.abs((invertingInput ?? 0) - 0.5) < 1e-9
+              ? `The gain is −RF/RIN = −2, so VIN = ${formatLessonVoltage(invertingInput!)} predicts VOUT = ${formatLessonVoltage(invertingPrediction)}${invertingSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(invertingSolvedOutput)}` : ''}. Change RF from 20 kΩ to 40 kΩ and rerun: the gain should become −4 and VOUT about −2 V.`
+              : `The current values give gain = −RF/RIN = ${Number((-(invertingFeedbackResistance ?? 0) / (invertingInputResistance ?? 1)).toPrecision(4))}, predicting VOUT = ${formatLessonVoltage(invertingPrediction)}${invertingSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(invertingSolvedOutput)}` : ''}. The real output is limited by the ±5 V supply rails.`
+            : 'Enter a valid input voltage and positive input/feedback resistances, then rerun.'
       : isNonInvertingOpampLesson && simulationResult
         ? simulationResultStale
           ? nonInvertingPrediction !== null
