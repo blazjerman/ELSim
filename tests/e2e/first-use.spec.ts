@@ -1239,6 +1239,20 @@ test('toggling an interactive switch reruns a current circuit automatically', { 
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'S1')?.value)).toBe('On')
 })
 
+test('@ui-smoke active toolbar tools expose their pressed state to assistive technology', async ({ page }) => {
+  await page.goto('/')
+  const tools = page.locator('.canvas-toolset')
+  const selectTool = tools.getByRole('button', { name: 'Select and move (M)' })
+  const wireTool = tools.getByRole('button', { name: 'Draw wire (W)' })
+  await expect(selectTool).toHaveAttribute('aria-pressed', 'true')
+  await expect(wireTool).toHaveAttribute('aria-pressed', 'false')
+  await wireTool.click()
+  await expect(wireTool).toHaveAttribute('aria-pressed', 'true')
+  await expect(selectTool).toHaveAttribute('aria-pressed', 'false')
+  const zoom = tools.getByRole('button', { name: 'Zoom in' })
+  await expect(zoom).not.toHaveAttribute('aria-pressed')
+})
+
 test('component categories filter the library and search crosses categories', async ({ page }) => {
   await page.goto('/')
   const cards = page.locator('.component-card')
@@ -3217,6 +3231,13 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await expect(playbackSpeed).toHaveValue('0.25')
   await playbackSpeed.selectOption('realtime')
   await expect(playbackSpeed).toHaveValue('realtime')
+  const playAnimation = page.getByRole('button', { name: 'Play result animation (does not run or pause ngspice)' })
+  await expect(playAnimation).toHaveAttribute('aria-pressed', 'false')
+  await playAnimation.click()
+  const pauseAnimation = page.getByRole('button', { name: 'Pause result playback (does not pause ngspice)' })
+  await expect(pauseAnimation).toHaveAttribute('aria-pressed', 'true')
+  await pauseAnimation.click()
+  await expect(page.getByRole('button', { name: 'Play result animation (does not run or pause ngspice)' })).toHaveAttribute('aria-pressed', 'false')
 
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
   await resistor.click({ button: 'right' })

@@ -87,8 +87,8 @@ const exampleSelection: Record<ExampleId, string> = {
   pjfet: 'pjfet-switch-j1', mosfet: 'mos-switch-m1', pmos: 'pmos-switch-m1', jfet: 'jfet-switch-j1', hierarchy: 'example-x1', 'rlc-resonance': 'resonance-l1', 'parallel-resistors': 'current-divider-r1', 'resistor-power': 'resistor-power-r1', 'lamp-power': 'lamp-power-r1', 'series-resistors': 'divider-r2', 'supply-droop': 'supply-droop-rload',
   pwl: 'p-v1', 'current-source': 'isource-i1', rectifier: 'rectifier-d1', 'bridge-rectifier': 'bridge-d1', 'voltage-divider': 'divider-r1', 'loaded-voltage-divider': 'loaded-divider-r1', zener: 'zener-d1', transformer: 'transformer-t1', 'transformer-current': 'transformer-t1', 'imported-opamp': 'example-opamp-xu1', 'inverting-opamp': 'example-opamp-xu1', 'noninverting-opamp': 'example-opamp-xu1', 'common-emitter': 'common-emitter-q1', 'logic-gates': 'logic-and', 'logic-gates-3v3': 'logic-and',
 }
-function IconButton({ title, children, onClick, active = false, disabled = false }: { title: string; children: ReactNode; onClick?: () => void; active?: boolean; disabled?: boolean }) {
-  return <button className={`icon-button${active ? ' active' : ''}`} title={title} aria-label={title} onClick={onClick} disabled={disabled}>{children}</button>
+function IconButton({ title, children, onClick, active, disabled = false }: { title: string; children: ReactNode; onClick?: () => void; active?: boolean; disabled?: boolean }) {
+  return <button className={`icon-button${active ? ' active' : ''}`} title={title} aria-label={title} aria-pressed={active} onClick={onClick} disabled={disabled}>{children}</button>
 }
 
 const CanvasConnectionDotLayer = memo(function CanvasConnectionDotLayer({ dots, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
