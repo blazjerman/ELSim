@@ -551,6 +551,16 @@ export function createVoltageDividerExampleProject(): Project {
   return project
 }
 
+/** Two unequal series resistors demonstrate shared current and individual voltage drops. */
+export function createSeriesResistorsExampleProject(): Project {
+  const project = createVoltageDividerExampleProject()
+  project.name = 'Series resistor voltage drops'
+  project.parts = project.parts.map((part) => part.id === 'divider-r2' ? { ...part, value: '2 kΩ' } : part)
+  project.sheets = project.sheets.map((sheet) => ({ ...sheet, parts: project.parts }))
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'I(R1)', 'I(R2)'], ranges: {} }
+  return project
+}
+
 /** A loaded voltage divider showing how a connected load pulls down its output. */
 export function createLoadedVoltageDividerExampleProject(): Project {
   const project = createStarterProject()

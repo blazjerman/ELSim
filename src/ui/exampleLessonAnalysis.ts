@@ -187,6 +187,23 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const resistorPowerSolvedCurrent = simulationResult?.analysis === 'op' && resistorPowerVector
     ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === resistorPowerVector || trace.baseId?.toLowerCase() === resistorPowerVector)?.values[0]
     : undefined
+  const isSeriesResistorLesson = lessonId === 'series-resistors'
+  const seriesResistorR1 = isSeriesResistorLesson ? componentMagnitude(partsById.get('divider-r1')?.value ?? '1 kΩ', 'resistor') : null
+  const seriesResistorR2 = isSeriesResistorLesson ? componentMagnitude(partsById.get('divider-r2')?.value ?? '2 kΩ', 'resistor') : null
+  const seriesResistorSupply = isSeriesResistorLesson ? componentMagnitude(partsById.get('divider-v1')?.value ?? '10 V', 'source') : null
+  const seriesResistorCurrent = seriesResistorR1 !== null && seriesResistorR2 !== null && seriesResistorSupply !== null && seriesResistorR1 + seriesResistorR2 > 0
+    ? seriesResistorSupply / (seriesResistorR1 + seriesResistorR2)
+    : null
+  const seriesResistorR1Part = partsById.get('divider-r1')
+  const seriesResistorR2Part = partsById.get('divider-r2')
+  const seriesResistorVectorAtOp = (part: typeof seriesResistorR1Part): number | undefined => {
+    if (simulationResult?.analysis !== 'op' || !part) return undefined
+    const vectorId = componentCurrentVector(part).toLowerCase()
+    return simulationResult.traces.find((trace) => trace.id.toLowerCase() === vectorId || trace.baseId?.toLowerCase() === vectorId)?.values[0]
+  }
+  const seriesResistorSolvedR1 = seriesResistorVectorAtOp(seriesResistorR1Part)
+  const seriesResistorSolvedR2 = seriesResistorVectorAtOp(seriesResistorR2Part)
+  const seriesResistorSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const potentiometer = exampleLesson?.id === 'potentiometer' ? partsById.get('pot-p1') : undefined
   const potentiometerPosition = potentiometer ? Number(potentiometer.wiperPosition ?? '0.5') : null
   const potentiometerSupply = exampleLesson?.id === 'potentiometer' ? componentMagnitude(partsById.get('pot-v1')?.value ?? '10 V', 'source') : null
@@ -376,6 +393,14 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
               : `For V1 = ${parallelResistorSupplyText}, R1 = ${parallelResistorR1Text}, and R2 = ${parallelResistorR2Text}, V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. Ngspice solved ${formatLessonCurrent(Math.abs(parallelResistorR1SolvedMa) * 1000)} and ${formatLessonCurrent(Math.abs(parallelResistorR2SolvedMa) * 1000)}. The total supply current is the sum of both branch currents.`
             : `With both branches across ${parallelResistorSupplyText}, I = V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. The branch with half the resistance carries twice the current.`
         : 'Enter a valid source voltage and positive resistor values, then rerun to compare the branch currents.'
+    : isSeriesResistorLesson && simulationResult
+      ? seriesResistorCurrent !== null
+        ? simulationResultStale
+          ? `The previous operating point is stale. V1 is ${partsById.get('divider-v1')?.value}, R1 is ${partsById.get('divider-r1')?.value}, and R2 is ${partsById.get('divider-r2')?.value}; the series formula predicts ${formatLessonCurrent(seriesResistorCurrent * 1000)} through both resistors and VOUT ≈ ${formatLessonVoltage(seriesResistorCurrent * seriesResistorR2!)}. Rerun to compare.`
+          : seriesResistorR1 === 1000 && seriesResistorR2 === 2000 && seriesResistorSupply === 10
+            ? `Ngspice solved ${seriesResistorSolvedR1 !== undefined ? formatLessonCurrent(Math.abs(seriesResistorSolvedR1) * 1000) : formatLessonCurrent(seriesResistorCurrent * 1000)} through R1 and ${seriesResistorSolvedR2 !== undefined ? formatLessonCurrent(Math.abs(seriesResistorSolvedR2) * 1000) : formatLessonCurrent(seriesResistorCurrent * 1000)} through R2. The current is the same in series. The predicted drops are 3.333 V across R1 and 6.667 V across R2. Change R2 to 1 kΩ and rerun: both drops become 5 V and current rises to 5 mA.`
+            : `For V1 = ${partsById.get('divider-v1')?.value}, R1 = ${partsById.get('divider-r1')?.value}, and R2 = ${partsById.get('divider-r2')?.value}, I = V/(R1 + R2) predicts ${formatLessonCurrent(seriesResistorCurrent * 1000)} through each resistor and ${formatLessonVoltage(seriesResistorCurrent * seriesResistorR2!)} at VOUT${seriesResistorSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(seriesResistorSolvedOutput)}` : ''}. The voltage drops across both resistors add to the supply voltage.`
+        : 'Enter a valid source voltage and positive resistor values, then rerun to compare the series current and voltage drops.'
     : isResistorPowerLesson && simulationResult
       ? resistorPowerPrediction !== null && resistorPowerSupply !== null
         ? simulationResultStale
