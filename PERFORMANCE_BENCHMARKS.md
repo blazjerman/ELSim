@@ -545,3 +545,7 @@ After this change, the focused 501-component/1,001-vector Firefox playback bench
 ### Waveform trace-control memoization (2026-10-13)
 
 Trace toggle controls now have stable visibility/removal callbacks and render behind a memo boundary. Plot zoom or responsive resize can update chart axes without rebuilding unchanged selected-probe controls. Two Firefox workflows passed: rerunning preserves probe colors and visibility, and opening probes across multiple waveform windows preserves the selected traces. TypeScript and the production budget build pass (207.1 KiB initial JS+CSS gzip). No controlled timing comparison was run; this records fewer redundant React renders by construction, not a measured speedup. No WASM rebuild or Pages workflow ran.
+
+### AC/DC cursor update isolation (2026-10-13)
+
+AC, noise, and DC sweep plot parents no longer subscribe to cursor changes. Small cursor label, marker, and readout components subscribe independently, so cursor movement updates those elements without reconstructing chart axes, grid labels, trace selectors, and the chart's other SVG children. Firefox AC cursor/keyboard/zoom and cross-window synchronization, noise analysis rendering, and DC sweep cursor/zoom checks pass. All 30 unit groups, TypeScript, and the production build pass (207.1 KiB initial JS+CSS gzip). This is a render-boundary change; no controlled timing comparison was run. No WASM rebuild or Pages workflow ran.

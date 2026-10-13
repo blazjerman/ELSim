@@ -6,7 +6,7 @@ import { extremaIndices, plotPolylinePoints, valueRange } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation } from './simulationCursor'
 import { formatTime } from './formatTime'
-import { setAnalysisCursor, useAnalysisCursor } from './analysisCursor'
+import { getAnalysisCursor, setAnalysisCursor, useAnalysisCursor } from './analysisCursor'
 
 function nearestAxisIndex(axis: Float64Array, value: number, start: number, end: number): number {
   let low = start, high = end
@@ -385,6 +385,47 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   </div>
 }
 
+function AcCursorTime({ result, frequencies }: { result: SimulationResult; frequencies: Float64Array }) {
+  const cursorValue = useAnalysisCursor(result)
+  const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1)
+  return <span>{cursorIndex === null ? 'Click plot for cursor values' : `${frequencies[cursorIndex].toPrecision(5)} Hz`}</span>
+}
+
+function AcCursorMarker({ result, frequencies, first, last, minFrequency, maxFrequency, left, right, top, bottom }: {
+  result: SimulationResult
+  frequencies: Float64Array
+  first: number
+  last: number
+  minFrequency: number
+  maxFrequency: number
+  left: number
+  right: number
+  top: number
+  bottom: number
+}) {
+  const cursorValue = useAnalysisCursor(result)
+  if (cursorValue === null || frequencies.length === 0) return null
+  const cursorIndex = nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1)
+  if (cursorIndex < first || cursorIndex > last) return null
+  const x = left + ((Math.log10(frequencies[cursorIndex]) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left)
+  return <line x1={x} x2={x} y1={top} y2={bottom} className="plot-cursor"/>
+}
+
+function AcCursorReadout({ result, frequencies, first, last, shown, colors, traceIndexById, mode }: {
+  result: SimulationResult
+  frequencies: Float64Array
+  first: number
+  last: number
+  shown: Trace[]
+  colors: string[]
+  traceIndexById: Map<string, number>
+  mode: 'magnitude' | 'phase' | 'noise'
+}) {
+  const cursorValue = useAnalysisCursor(result)
+  const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1)
+  return <div className="cursor-readout" aria-live="polite" aria-atomic="true">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <><span className="sr-only">Frequency {frequencies[cursorIndex].toPrecision(5)} hertz. </span>{shown.map((trace) => { const real = trace.values[cursorIndex], imaginary = trace.imaginaryValues?.[cursorIndex] ?? 0; const readout = mode === 'noise' ? `${real.toPrecision(5)} ${trace.unit}` : mode === 'magnitude' ? `${(20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE)).toPrecision(5)} dB` : `${(Math.atan2(imaginary, real) * 180 / Math.PI).toPrecision(5)}°`; return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {readout}</span> })}</>}</div>
+}
+
 function OperatingPointView({ traces, selectedIds, onToggle, onExport, savedColors }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; savedColors: Record<string, string> }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id))
@@ -402,13 +443,12 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const isNoise = result.analysis === 'noise'
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
-  const visibleNoiseUnits = isNoise ? [...new Set(shown.map((trace) => trace.unit))] : []
+  const visibleNoiseUnits = useMemo(() => isNoise ? [...new Set(shown.map((trace) => trace.unit))] : [], [isNoise, shown])
   const noiseAxisUnit = visibleNoiseUnits.length === 1 ? visibleNoiseUnits[0] : visibleNoiseUnits.length > 1 ? 'mixed units' : 'noise density'
   const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(traces, range, onRangeChange)
   const [mode, setMode] = useState<'magnitude' | 'phase' | 'noise'>(isNoise ? 'noise' : 'magnitude')
   useEffect(() => setMode(isNoise ? 'noise' : 'magnitude'), [isNoise])
-  const cursorValue = useAnalysisCursor(result)
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorFor = useCallback((index: number) => colors[index % colors.length], [colors])
   const plotSize = useResponsivePlotSize()
@@ -416,7 +456,6 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const frequencies = traces[0]?.axis ?? Float64Array.of(1, 10)
   const first = Math.floor(navigation.window.start * Math.max(0, frequencies.length - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, frequencies.length - 1)))
-  const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1)
   const minFrequency = frequencies[first] || 1, maxFrequency = frequencies[Math.min(last, frequencies.length - 1)] || 10
   const valueFor = (trace: Trace, index: number) => {
     const real = trace.values[index]
@@ -452,7 +491,6 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     const anchor = nearestAxisIndex(frequencies, 10 ** logAnchor, first, Math.min(last, frequencies.length - 1))
     navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchor / Math.max(1, frequencies.length - 1))
   }
-  const xFor = (frequency: number) => left + ((Math.log10(frequency) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left)
   const yFor = (value: number) => bottom - (value - minValue) / (maxValue - minValue) * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
     const indices = sampledIndicesById.get(trace.id) ?? []
@@ -463,19 +501,60 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }
   }), [traces, shown, first, last, width, height, minFrequency, maxFrequency, minValue, maxValue, mode, colors, traceIndexById, sampledIndicesById])
   return <div className="waveform-view ac-view">
-    <div className="waveform-title"><strong>{isNoise ? 'Noise spectral density' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${frequencies[cursorIndex].toPrecision(5)} Hz`}</span><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <div className="waveform-title"><strong>{isNoise ? 'Noise spectral density' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><AcCursorTime result={result} frequencies={frequencies}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <div className="ac-mode">{isNoise ? <span>Noise density · {noiseAxisUnit}</span> : <><button className={mode === 'magnitude' ? 'active' : ''} onClick={() => setMode('magnitude')}>Magnitude (dB)</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setMode('phase')}>Phase (°)</button></>}</div>
-    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`${isNoise ? 'Noise density' : `AC ${mode}`} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => handleCursorKeyDown(event, cursorIndex, first, Math.min(last, frequencies.length - 1), (index) => setAnalysisCursor(result, frequencies[index]))} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); const index = nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1)); setAnalysisCursor(result, frequencies[index]) }}>
+    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`${isNoise ? 'Noise density' : `AC ${mode}`} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => { const cursorValue = getAnalysisCursor(result); const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1); handleCursorKeyDown(event, cursorIndex, first, Math.min(last, frequencies.length - 1), (index) => setAnalysisCursor(result, frequencies[index])) }} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); const index = nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1)); setAnalysisCursor(result, frequencies[index]) }}>
       {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} {mode === 'magnitude' ? 'dB' : mode === 'phase' ? '°' : isNoise && visibleNoiseUnits.length > 1 ? '' : isNoise ? noiseAxisUnit : ''}</text></g> })}
       <g className="plot-zero-reference"><line x1={left} x2={right} y1={yFor(0)} y2={yFor(0)}/><text x={left - 6} y={yFor(0) + 3} textAnchor="end">0 {mode === 'magnitude' ? 'dB' : mode === 'phase' ? '°' : noiseAxisUnit}</text></g>
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
-      {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(frequencies[cursorIndex])} x2={xFor(frequencies[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
+      <AcCursorMarker result={result} frequencies={frequencies} first={first} last={last} minFrequency={minFrequency} maxFrequency={maxFrequency} left={left} right={right} top={top} bottom={bottom}/>
       <text x={left} y={height - 5} className="plot-tick">{minFrequency.toPrecision(3)} Hz</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{maxFrequency.toPrecision(3)} Hz</text>
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel={isNoise ? 'noise result vectors' : 'AC result vectors'} colorFor={colorFor}/>
-    <div className="cursor-readout" aria-live="polite" aria-atomic="true">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <><span className="sr-only">Frequency {frequencies[cursorIndex].toPrecision(5)} hertz. </span>{shown.map((trace) => { const real = trace.values[cursorIndex], imaginary = trace.imaginaryValues?.[cursorIndex] ?? 0; const readout = mode === 'noise' ? `${real.toPrecision(5)} ${trace.unit}` : mode === 'magnitude' ? `${(20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE)).toPrecision(5)} dB` : `${(Math.atan2(imaginary, real) * 180 / Math.PI).toPrecision(5)}°`; return <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {readout}</span> })}</>}</div>
+    <AcCursorReadout result={result} frequencies={frequencies} first={first} last={last} shown={shown} colors={colors} traceIndexById={traceIndexById} mode={mode}/>
   </div>
+}
+
+function DcCursorTime({ result, axis, axisUnit }: { result: SimulationResult; axis: Float64Array; axisUnit?: string }) {
+  const cursorValue = useAnalysisCursor(result)
+  const cursorIndex = cursorValue === null || axis.length === 0 ? null : nearestAxisIndex(axis, cursorValue, 0, axis.length - 1)
+  return <span>{cursorIndex === null ? 'Click plot for cursor values' : `${axis[cursorIndex].toPrecision(5)} ${axisUnit}`}</span>
+}
+
+function DcCursorMarker({ result, axis, first, last, x0, x1, left, right, top, bottom }: {
+  result: SimulationResult
+  axis: Float64Array
+  first: number
+  last: number
+  x0: number
+  x1: number
+  left: number
+  right: number
+  top: number
+  bottom: number
+}) {
+  const cursorValue = useAnalysisCursor(result)
+  if (cursorValue === null || axis.length === 0) return null
+  const cursorIndex = nearestAxisIndex(axis, cursorValue, 0, axis.length - 1)
+  if (cursorIndex < first || cursorIndex > last) return null
+  const x = left + (axis[cursorIndex] - x0) / (x1 - x0 || 1) * (right - left)
+  return <line x1={x} x2={x} y1={top} y2={bottom} className="plot-cursor"/>
+}
+
+function DcCursorReadout({ result, axis, axisUnit, first, last, shown, colors, traceIndexById }: {
+  result: SimulationResult
+  axis: Float64Array
+  axisUnit?: string
+  first: number
+  last: number
+  shown: Trace[]
+  colors: string[]
+  traceIndexById: Map<string, number>
+}) {
+  const cursorValue = useAnalysisCursor(result)
+  const cursorIndex = cursorValue === null || axis.length === 0 ? null : nearestAxisIndex(axis, cursorValue, 0, axis.length - 1)
+  return <div className="cursor-readout" aria-live="polite" aria-atomic="true">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <><span className="sr-only">Sweep value {axis[cursorIndex].toPrecision(5)} {axisUnit}. </span>{shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</>}</div>
 }
 
 function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange, savedColors }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; savedColors: Record<string, string> }) {
@@ -483,13 +562,11 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(traces, range, onRangeChange)
-  const cursorValue = useAnalysisCursor(result)
   const plotSize = useResponsivePlotSize()
   const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = width - 12, top = 10, bottom = height - 30
   const axis = traces[0]?.axis ?? Float64Array.of(0, 1)
   const first = Math.floor(navigation.window.start * Math.max(0, axis.length - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, axis.length - 1)))
-  const cursorIndex = cursorValue === null || axis.length === 0 ? null : nearestAxisIndex(axis, cursorValue, 0, axis.length - 1)
   const x0 = axis[first] ?? 0, x1 = axis[Math.min(last, axis.length - 1)] ?? 1
   const [dataMin, dataMax] = useMemo(() => {
     let min = Infinity, max = -Infinity
@@ -519,7 +596,6 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   const span = max - min || 1
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorFor = useCallback((index: number) => colors[index % colors.length], [colors])
-  const xFor = (value: number) => left + (value - x0) / (x1 - x0 || 1) * (right - left)
   const yFor = (value: number) => bottom - (value - min) / span * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
     const indices = extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900)
@@ -530,17 +606,17 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }
   }), [traces, shown, first, last, width, height, x0, x1, min, span, colors, traceIndexById])
   return <div className="waveform-view">
-    <div className="waveform-title"><strong>DC sweep results</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><span>{cursorIndex === null ? 'Click plot for cursor values' : `${axis[cursorIndex].toPrecision(5)} ${traces[0]?.axisUnit}`}</span><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => handleCursorKeyDown(event, cursorIndex, first, Math.min(last, axis.length - 1), (index) => setAnalysisCursor(result, axis[index]))} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const index = nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1)); setAnalysisCursor(result, axis[index]) }}>
+    <div className="waveform-title"><strong>DC sweep results</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><DcCursorTime result={result} axis={axis} axisUnit={traces[0]?.axisUnit}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
+    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => { const cursorValue = getAnalysisCursor(result); const cursorIndex = cursorValue === null || axis.length === 0 ? null : nearestAxisIndex(axis, cursorValue, 0, axis.length - 1); handleCursorKeyDown(event, cursorIndex, first, Math.min(last, axis.length - 1), (index) => setAnalysisCursor(result, axis[index])) }} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const index = nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1)); setAnalysisCursor(result, axis[index]) }}>
       {[0, 1, 2, 3].map((line) => { const value = max - line / 3 * span; return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)}</text></g> })}
       <g className="plot-zero-reference"><line x1={left} x2={right} y1={yFor(0)} y2={yFor(0)}/><text x={left - 6} y={yFor(0) + 3} textAnchor="end">0 {traces[0]?.unit ?? ''}</text></g>
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
-      {cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <line x1={xFor(axis[cursorIndex])} x2={xFor(axis[cursorIndex])} y1={top} y2={bottom} className="plot-cursor"/>}
+      <DcCursorMarker result={result} axis={axis} first={first} last={last} x0={x0} x1={x1} left={left} right={right} top={top} bottom={bottom}/>
       <text x={left} y={height - 5} className="plot-tick">{x0.toPrecision(3)} {traces[0]?.axisUnit}</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{x1.toPrecision(3)} {traces[0]?.axisUnit}</text>
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel="DC sweep vectors" colorFor={colorFor}/>
-    <div className="cursor-readout" aria-live="polite" aria-atomic="true">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <><span className="sr-only">Sweep value {axis[cursorIndex].toPrecision(5)} {traces[0]?.axisUnit}. </span>{shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</>}</div>
+    <DcCursorReadout result={result} axis={axis} axisUnit={traces[0]?.axisUnit} first={first} last={last} shown={shown} colors={colors} traceIndexById={traceIndexById}/>
   </div>
 }
 

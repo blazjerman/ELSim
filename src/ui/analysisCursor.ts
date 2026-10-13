@@ -13,6 +13,10 @@ function stateFor(result: SimulationResult): CursorState {
   return state
 }
 
+export function getAnalysisCursor(result: SimulationResult): number | null {
+  return stateFor(result).value
+}
+
 export function setAnalysisCursor(result: SimulationResult, value: number): void {
   const state = stateFor(result)
   if (Object.is(state.value, value)) return
