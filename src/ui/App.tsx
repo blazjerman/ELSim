@@ -1521,7 +1521,17 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     : undefined, [project.parts, project.wires, project.junctions, project.netLabels, resultConnectivity, resultIsCurrent, currentAnimationEnabled])
   const sampleWireFlows = useCallback((sampleIndex: number | null) => {
     if (!wireFlowSampler) return new Map<string, WireCurrentFlowSegment[]>()
-    const valueAt = (id: string) => resultValueAt(id, sampleIndex)
+    // Multiple component pins can reference the same ngspice vector (both
+    // terminals of a two-terminal part, or both ends of one transformer
+    // winding). Resolve each vector once for this cursor sample.
+    const valuesAtSample = new Map<string, number | undefined>()
+    const valueAt = (id: string) => {
+      const key = id.toLowerCase()
+      if (valuesAtSample.has(key)) return valuesAtSample.get(key)
+      const value = resultValueAt(key, sampleIndex)
+      valuesAtSample.set(key, value)
+      return value
+    }
     return wireFlowSampler(
       (part) => valueAt(componentCurrentVector(part)) ?? valueAt(`i(${part.ref})`),
       (part, pinIndex) => {
