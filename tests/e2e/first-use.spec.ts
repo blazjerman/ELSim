@@ -761,6 +761,12 @@ test('keyboard waveform cursor announces the selected time and trace readings', 
   await page.keyboard.press('ArrowRight')
   await expect(announcement).toContainText('Time')
   await expect(announcement).toContainText('V(R1)')
+  const traceGraphic = plotWindow.getByRole('img', { name: 'V(R1), trace in V' })
+  await expect(traceGraphic).toBeVisible()
+  await plotWindow.getByRole('button', { name: 'Disable V(R1)' }).click()
+  await expect(traceGraphic).toHaveCount(0)
+  await plotWindow.getByRole('button', { name: 'Enable V(R1)' }).click()
+  await expect(traceGraphic).toBeVisible()
 })
 
 test('solver errors select and bring the reported component into view', { tag: '@ui-smoke' }, async ({ page }) => {
