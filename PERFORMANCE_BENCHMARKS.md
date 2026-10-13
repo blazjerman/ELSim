@@ -531,3 +531,7 @@ Multi-object drag start now retains immutable project-record references instead 
 ### Wire-flow sample vector lookup reuse (2026-10-13)
 
 The UI's per-cursor wire-flow sampling now caches result-vector reads for the duration of one sample. Both endpoints of a two-terminal component, and repeated winding/pin references, therefore reuse the same resolved scalar rather than re-querying the result trace. Four Firefox animation regressions pass (wire playback, capacitor charge, LC energy exchange, and transformer windings). Five 500-component Firefox scrub runs measured 24.68, 26.85, 27.58, 28.45, and 41.87 ms (median 27.58 ms), overlapping the prior five-run 27.1–36.1 ms range (median 28.1 ms); this does not establish an end-to-end speedup. All 30 unit groups and TypeScript pass. No WASM rebuild or Pages workflow ran.
+
+### Imported symbol render memoization (2026-10-13)
+
+Imported symbol artwork is now a memoized child of each circuit part. A cursor update can still refresh the part's result readout and animation, but static imported lines, arcs, text, and pin labels are not mapped into a new React element tree unless the parsed symbol or selection color changes. The Firefox imported-IC symbol workflow passes, along with all 30 unit groups and TypeScript. No dedicated timing comparison is available, so this records a reduction in redundant React work rather than a measured speedup. No WASM rebuild or Pages workflow ran.
