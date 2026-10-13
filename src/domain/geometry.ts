@@ -27,6 +27,8 @@ export function createViewportIndex<T extends { id: string }>(items: readonly T[
   const wideItems: number[] = []
   const indexById = new Map(items.map((item, index) => [item.id, index]))
   const cachedItemBounds = items.map(boundsFor)
+  const candidateMarks = new Uint32Array(items.length)
+  let queryGeneration = 0
   const cellKey = (x: number, y: number) => `${x},${y}`
   const cellRange = (bounds: ViewportBounds) => {
     return [Math.floor(bounds.left / cellSize), Math.floor(bounds.top / cellSize), Math.floor(bounds.right / cellSize), Math.floor(bounds.bottom / cellSize)] as const
@@ -47,25 +49,46 @@ export function createViewportIndex<T extends { id: string }>(items: readonly T[
   })
 
   return (bounds: ViewportBounds, focusedId?: string): T[] => {
+    if (queryGeneration === 0xffffffff) {
+      candidateMarks.fill(0)
+      queryGeneration = 1
+    } else queryGeneration += 1
     const [left, top, right, bottom] = cellRange(bounds)
     const cellCount = (right - left + 1) * (bottom - top + 1)
-    const candidates = new Set<number>(wideItems)
+    const candidates: number[] = []
+    for (const index of wideItems) {
+      candidateMarks[index] = queryGeneration
+      candidates.push(index)
+    }
     if (cellCount > 4096) {
-      items.forEach((_, index) => candidates.add(index))
+      for (let index = 0; index < items.length; index += 1) {
+        if (candidateMarks[index] === queryGeneration) continue
+        candidateMarks[index] = queryGeneration
+        candidates.push(index)
+      }
     } else {
       for (let x = left; x <= right; x += 1) for (let y = top; y <= bottom; y += 1) {
-        for (const index of cells.get(cellKey(x, y)) ?? []) candidates.add(index)
+        for (const index of cells.get(cellKey(x, y)) ?? []) {
+          if (candidateMarks[index] === queryGeneration) continue
+          candidateMarks[index] = queryGeneration
+          candidates.push(index)
+        }
       }
     }
     const focusedIndex = focusedId ? indexById.get(focusedId) : undefined
-    if (focusedIndex !== undefined) candidates.add(focusedIndex)
-    return [...candidates].sort((a, b) => a - b)
-      .flatMap((index) => {
-        const itemBounds = cachedItemBounds[index]
-        const overlaps = itemBounds.right >= bounds.left && itemBounds.left <= bounds.right
-          && itemBounds.bottom >= bounds.top && itemBounds.top <= bounds.bottom
-        return index === focusedIndex || overlaps ? [items[index]] : []
-      })
+    if (focusedIndex !== undefined && candidateMarks[focusedIndex] !== queryGeneration) {
+      candidateMarks[focusedIndex] = queryGeneration
+      candidates.push(focusedIndex)
+    }
+    candidates.sort((a, b) => a - b)
+    const visible: T[] = []
+    for (const index of candidates) {
+      const itemBounds = cachedItemBounds[index]
+      const overlaps = itemBounds.right >= bounds.left && itemBounds.left <= bounds.right
+        && itemBounds.bottom >= bounds.top && itemBounds.top <= bounds.bottom
+      if (index === focusedIndex || overlaps) visible.push(items[index])
+    }
+    return visible
   }
 }
 
@@ -73,6 +96,8 @@ export function createViewportIndex<T extends { id: string }>(items: readonly T[
 export function createPointViewportIndex<T extends Point>(points: readonly T[], radius = 0, cellSize = 256) {
   if (!Number.isFinite(radius) || radius < 0 || !Number.isFinite(cellSize) || cellSize <= 0) throw new RangeError('Point viewport index limits must be positive.')
   const cells = new Map<string, number[]>()
+  const candidateMarks = new Uint32Array(points.length)
+  let queryGeneration = 0
   const cellKey = (x: number, y: number) => `${x},${y}`
   points.forEach((point, index) => {
     const left = Math.floor((point.x - radius) / cellSize), right = Math.floor((point.x + radius) / cellSize)
@@ -85,20 +110,34 @@ export function createPointViewportIndex<T extends Point>(points: readonly T[], 
     }
   })
   return (bounds: ViewportBounds): T[] => {
+    if (queryGeneration === 0xffffffff) {
+      candidateMarks.fill(0)
+      queryGeneration = 1
+    } else queryGeneration += 1
     const left = Math.floor(bounds.left / cellSize), right = Math.floor(bounds.right / cellSize)
     const top = Math.floor(bounds.top / cellSize), bottom = Math.floor(bounds.bottom / cellSize)
-    const candidates = new Set<number>()
+    const candidates: number[] = []
     if ((right - left + 1) * (bottom - top + 1) > 4096) {
-      for (let index = 0; index < points.length; index += 1) candidates.add(index)
+      for (let index = 0; index < points.length; index += 1) {
+        candidateMarks[index] = queryGeneration
+        candidates.push(index)
+      }
     } else {
       for (let x = left; x <= right; x += 1) for (let y = top; y <= bottom; y += 1) {
-        for (const index of cells.get(cellKey(x, y)) ?? []) candidates.add(index)
+        for (const index of cells.get(cellKey(x, y)) ?? []) {
+          if (candidateMarks[index] === queryGeneration) continue
+          candidateMarks[index] = queryGeneration
+          candidates.push(index)
+        }
       }
     }
-    return [...candidates].sort((a, b) => a - b).flatMap((index) => {
+    candidates.sort((a, b) => a - b)
+    const visible: T[] = []
+    for (const index of candidates) {
       const point = points[index]
-      return point.x + radius >= bounds.left && point.x - radius <= bounds.right && point.y + radius >= bounds.top && point.y - radius <= bounds.bottom ? [point] : []
-    })
+      if (point.x + radius >= bounds.left && point.x - radius <= bounds.right && point.y + radius >= bounds.top && point.y - radius <= bounds.bottom) visible.push(point)
+    }
+    return visible
   }
 }
 
