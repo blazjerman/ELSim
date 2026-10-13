@@ -738,6 +738,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
+  const wiresById = useMemo(() => new Map(project.wires.map((wire) => [wire.id, wire])), [project.wires])
   useEffect(() => {
     if (!pendingComponent) { setComponentPreview(null); return }
     setComponentPreview((current) => current ? { ...current, kind: pendingComponent, componentDefinitionId: componentDefinitionFor(pendingComponent).id, rotation: pendingRotation, polarized: pendingPolarizedCapacitor } : current)
@@ -1357,7 +1358,8 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
       ? current
       : { id: 'placement-preview', kind: pendingComponent, componentDefinitionId: componentDefinitionFor(pendingComponent).id, ref: '', value: componentDefaultValue(pendingComponent), x, y, rotation: pendingRotation, polarized: pendingPolarizedCapacitor })
   }
-  const hoveredWire = project.wires.find((wire) => wire.id === selectedWireIds.at(-1)) ?? project.wires.find((wire) => wire.id === hoveredWireId)
+  const hoveredWire = (selectedWireIds.length ? wiresById.get(selectedWireIds[selectedWireIds.length - 1]) : undefined)
+    ?? (hoveredWireId ? wiresById.get(hoveredWireId) : undefined)
   const wireConnectionDots = useMemo(() => wireConnectionDotPoints(project), [project.parts, project.wires])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
