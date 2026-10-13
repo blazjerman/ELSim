@@ -9,6 +9,10 @@ import { componentPins } from '../../src/domain/geometry'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
 import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
 
+async function waitForProjectAutosave(page: Page) {
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+}
+
 async function expectVisibleKeyboardControlsNamed(page: Page) {
   const unnamed = await page.locator('a[href], button, input:not([type="hidden"]), select, textarea, [tabindex], [role]').evaluateAll((controls) => controls.flatMap((control) => {
     const element = control as HTMLElement
@@ -1082,6 +1086,7 @@ test('component categories filter the library and search crosses categories', as
 test('imported library provenance notes persist while rights remain unverified', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 })
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'provenance-test.lib',
@@ -1095,7 +1100,7 @@ test('imported library provenance notes persist while rights remain unverified',
   await page.getByLabel('Rights review notes for provenance-test.lib').fill('Received from supplier; redistribution permission still needs confirmation.')
   await expect.poll(() => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    return project.modelAssets[0]
+    return project.modelAssets?.find((asset: { filename: string }) => asset.filename === 'provenance-test.lib')
   })).toMatchObject({
     licenseStatus: 'unknown',
     sourceUrl: 'https://models.example.test/provenance-test.lib',
@@ -1112,6 +1117,7 @@ test('imported library provenance notes persist while rights remain unverified',
 
 test('user model library adds a subcircuit with ordered pins and parameter defaults', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   const modelLibrary = '.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -1238,13 +1244,14 @@ test('large imported IC lists can be searched and expanded on demand', async ({ 
 
 test('duplicate model definitions show both library locations and open the source line', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   const picker = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await picker.setInputFiles({ name: 'amp-a.lib', mimeType: 'text/plain', buffer: Buffer.from('.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP\n.MODEL DFAST D(Is=1n)') })
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await picker.setInputFiles({ name: 'amp-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.SUBCKT amp A B\nR1 A B 2k\n.ENDS amp\n.MODEL dfast D(Is=2n)') })
 
-  const conflicts = page.getByRole('status', { name: 'Conflicting model definitions' })
+  const conflicts = page.getByRole('region', { name: 'Conflicting model definitions' })
   await expect(conflicts).toBeVisible()
   await expect(conflicts).toContainText('.SUBCKT AMP')
   await expect(conflicts).toContainText('amp-a.lib:1')
@@ -1264,7 +1271,7 @@ test('LTspice schematic import preserves and reports duplicate model library fil
     { name: 'amp-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.SUBCKT amp A B\nR1 A B 2k\n.ENDS amp') },
   ])
   await expect(page.getByText(/Imported duplicate-models/)).toBeVisible()
-  const conflicts = page.getByRole('status', { name: 'Conflicting model definitions' })
+  const conflicts = page.getByRole('region', { name: 'Conflicting model definitions' })
   await expect(conflicts).toContainText('amp-a.lib:1')
   await expect(conflicts).toContainText('amp-b.lib:1')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets.map((asset: { filename: string }) => asset.filename))).toEqual(['amp-a.lib', 'amp-b.lib'])
@@ -1379,22 +1386,27 @@ test('Ctrl-click adds parts and wires to selection; clicking blank canvas clears
   await expect(page.locator('.circuit-part.selected, .wire-line.selected, .canvas-label.selected')).toHaveCount(0)
 })
 
-test('drag placement aligns a transistor collector-to-emitter axis with the drag', async ({ page }) => {
+test('NPN placement preview shows its orientation and click places that orientation', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   const canvas = page.locator('svg.schematic')
-  const bounds = await canvas.boundingBox()
-  expect(bounds).not.toBeNull()
+  const point = await canvas.evaluate((element) => {
+    const svg = element as SVGSVGElement
+    const target = svg.createSVGPoint()
+    target.x = 580; target.y = 500
+    const screen = target.matrixTransform(svg.getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
   await page.keyboard.press('Escape')
-  await page.mouse.click(bounds!.x + 20, bounds!.y + 20)
   await page.keyboard.press('n')
-  await page.mouse.move(bounds!.x + 90, bounds!.y + 110)
-  await page.mouse.down()
-  await page.mouse.move(bounds!.x + 190, bounds!.y + 110)
-  await page.mouse.up()
-  await expect.poll(() => page.evaluate(() => {
-    const savedProject = localStorage.getItem('elsim:project:v7')
-    return savedProject ? JSON.parse(savedProject).parts.filter((part: { kind: string }) => part.kind === 'npn').at(-1)?.rotation : undefined
-  })).toBe(270)
+  await page.mouse.move(point.x, point.y)
+  const preview = page.locator('.component-placement-preview .circuit-part')
+  await expect(preview).toBeVisible()
+  await expect(preview).toHaveAttribute('transform', /rotate\(180\)/)
+  await page.keyboard.press('r')
+  await expect(preview).toHaveAttribute('transform', /rotate\(270\)/)
+  await page.mouse.click(point.x, point.y)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.filter((part: { kind: string }) => part.kind === 'npn').at(-1)?.rotation)).toBe(270)
 })
 
 test('component cards explain behavior on hover and keyboard focus', async ({ page }) => {
@@ -1517,6 +1529,7 @@ test('invalid pulse timing selects its source and focuses the exact setting', as
 
 test('invalid PWL points focus the exact source field before simulation', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const source = project.parts.find((part: { id: string }) => part.id === 'p-v1')
@@ -1559,6 +1572,7 @@ test('voltage source accepts a pasted PWL point table', { tag: '@ui-smoke' }, as
 
 test('invalid component values select and focus the value field before engine checks', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   const value = page.locator('[data-part-setting="p-r1:value"]')
   await value.fill('not-a-resistance')
   await page.getByRole('button', { name: 'Run simulation' }).click()
@@ -1571,6 +1585,7 @@ test('invalid component values select and focus the value field before engine ch
 
 test('invalid educational transistor beta selects and focuses its inspector field before engine checks', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts.push({ id: 'ui-beta-q1', kind: 'npn', ref: 'Q1', value: '100', x: 450, y: 350, rotation: 0 })
@@ -1589,6 +1604,7 @@ test('invalid educational transistor beta selects and focuses its inspector fiel
 
 test('transient resolution presets derive and save a maximum step from stop time', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.keyboard.press('Escape')
   await page.getByLabel('Stop time').fill('200 ms')
   const presets = page.getByRole('group', { name: 'Transient resolution presets' })
@@ -2006,6 +2022,7 @@ test('reused sheet interface edits update block pins and attached wires', async 
 
 test('hierarchical block parameter overrides validate before saving and update the netlist', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const child = {
@@ -2041,6 +2058,7 @@ test('hierarchical block parameter overrides validate before saving and update t
 
 test('shift selection moves, copies, pastes, and deletes a group of parts', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
   const capacitor = page.locator('.circuit-part[data-part-id="p-c1"]')
   await resistor.click()
@@ -2071,7 +2089,7 @@ test('shift selection moves, copies, pastes, and deletes a group of parts', asyn
   await page.keyboard.press('Control+v')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial + 2)
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(wiresBeforeCopy)
-  await expect(page.getByRole('status')).toContainText('Pasted 2 components')
+  await expect(page.locator('.toast')).toContainText('Pasted 2 components')
   await expect(page.locator('.circuit-part.selected')).toHaveCount(2)
   await page.keyboard.press('Delete')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(initial)
@@ -2218,6 +2236,7 @@ test('copying a user IC into a new project carries transitive libraries and its 
   const symbol = parseLtspiceSymbol(symbolSource, 'user-top.asy')
   const symbolAsset = { id: 'symbol-top', filename: 'user-top.asy', content: symbolSource, sha256: createHash('sha256').update(symbolSource).digest('hex'), licenseStatus: 'unknown' as const, importedAt: '2026-01-01T00:00:00.000Z' }
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(({ topAsset, coreAsset, symbolAsset, definition, symbol }) => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const part = {
@@ -2248,6 +2267,7 @@ test('copying a user IC into a new project carries transitive libraries and its 
   await expect.poll(() => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const part = project.parts.find((candidate: { ref: string }) => candidate.ref === 'X1')
+    if (!part) return undefined
     return {
       libraries: project.modelAssets.map((asset: { filename: string }) => asset.filename).sort(),
       symbol: project.symbolAssets.find((asset: { id: string }) => asset.id === part.symbolAssetId)?.filename,
@@ -2282,6 +2302,7 @@ test('imported IC symbols announce ordered pin names to assistive technology', {
 
 test('copy and paste an explicitly selected net label with its global connection semantics', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.locator('.canvas-label').filter({ hasText: 'vout' }).click()
   await page.keyboard.press('Control+c')
   await expect(page.locator('.toast')).toContainText('Pasting it keeps the same name')
@@ -2296,6 +2317,7 @@ test('copy and paste an explicitly selected net label with its global connection
 
 test('copy and paste a selected wire path without connected parts', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = []
@@ -2451,6 +2473,7 @@ test('schematic grid fills the zoomed and panned view and has no fixed placehold
 
 test('starter and newly added native parts use the same 10-unit pin grid', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   const readGridErrors = () => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const offGrid: string[] = []
@@ -2473,20 +2496,15 @@ test('starter and newly added native parts use the same 10-unit pin grid', async
     const screen = location.matrixTransform(svg.getScreenCTM()!)
     return { x: screen.x, y: screen.y }
   }, { x, y })
-  const start = await screenPoint(500, 300)
   const end = await screenPoint(500, 340)
-  await page.mouse.move(start.x, start.y)
-  await page.mouse.down()
-  await page.mouse.move(end.x, end.y, { steps: 4 })
-  await page.mouse.up()
+  await page.mouse.move(end.x, end.y)
+  await page.mouse.click(end.x, end.y)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
   const placed = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R2'))
-  expect(placed).toMatchObject({ x: 500, y: 320, rotation: 90 })
-  await expect(page.locator('.component-card').filter({ hasText: 'Resistor' })).toHaveAttribute('aria-pressed', 'false')
-  await page.locator('.component-card').filter({ hasText: 'Resistor' }).click()
-  const secondStart = await screenPoint(500, 180)
+  expect(placed).toMatchObject({ x: 500, y: 340, rotation: 0 })
+  await expect(page.locator('.component-card').filter({ hasText: 'Resistor' })).toHaveAttribute('aria-pressed', 'true')
   const secondEnd = await screenPoint(540, 180)
-  await page.mouse.move(secondStart.x, secondStart.y); await page.mouse.down(); await page.mouse.move(secondEnd.x, secondEnd.y, { steps: 4 }); await page.mouse.up()
+  await page.mouse.move(secondEnd.x, secondEnd.y); await page.mouse.click(secondEnd.x, secondEnd.y)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R3'))).toBe(true)
   await expect.poll(readGridErrors).toEqual([])
 })
@@ -2520,6 +2538,7 @@ test('component hotkeys choose parts and newly placed parts stay unselected', as
 
 test('uppercase C places a polarized capacitor with editable polarity marks', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.keyboard.press('Escape')
   await page.keyboard.press('Shift+C')
   const canvas = page.locator('svg.schematic')
@@ -2556,6 +2575,7 @@ test('uppercase C places a polarized capacitor with editable polarity marks', as
 
 test('r rotates a selected part and component shortcuts do not replace an active selection', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = [project.parts.find((part: { id: string }) => part.id === 'p-r1')]
@@ -2582,6 +2602,7 @@ test('r rotates a selected part and component shortcuts do not replace an active
 
 test('reorientation preserves connected pins and wire topology survives a project archive round trip', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts.push({ id: 'free-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 700, y: 560, rotation: 0 })
@@ -2760,7 +2781,8 @@ test('click placement preview rotates with R and toolbar controls stay fixed', a
 
 test('new voltage-controlled switches use their component definition defaults', async ({ page }) => {
   await page.goto('/')
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Controlled sources' }).click()
   await page.locator('.component-card').filter({ hasText: 'Voltage-controlled switch' }).click()
   const svg = page.locator('svg.schematic')
   const screenPoint = (x: number, y: number) => svg.evaluate((element, point) => {
@@ -2777,7 +2799,7 @@ test('new voltage-controlled switches use their component definition defaults', 
   const switchPart = page.locator('.circuit-part[aria-label^="S1,"]')
   await expect(switchPart.locator('circle[cy="0"][r="3"][fill="#86e3b7"]')).toHaveCount(2)
   await expect(switchPart.locator('line[x1="0"][y1="-50"][x2="0"][y2="-24"]')).toHaveCount(1)
-  await expect(switchPart.locator('line[x1="-12"][y1="-2"]')).toHaveCount(1)
+  await expect(switchPart.locator('path.voltage-switch-lever')).toHaveCount(1)
   await expect(page.getByLabel('Switch on resistance')).toHaveValue('1 Ω')
   await expect(page.getByLabel('Switch off resistance')).toHaveValue('1 GΩ')
   await expect(page.getByLabel('Switch hysteresis')).toHaveValue('0 V')
@@ -3427,6 +3449,7 @@ test('lets users choose sections when importing a library without a schematic re
 
 test('junction tool toggles a crossing connection in the schematic', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = []
@@ -3564,6 +3587,7 @@ test('dragging a mixed component, wire, and label selection moves every selected
 
 test('wire segments move independently and wheel zoom preserves their geometry', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = []
@@ -3604,6 +3628,7 @@ test('wire segments move independently and wheel zoom preserves their geometry',
 
 test('moving a component leaves independent wire geometry in place', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = [{ id: 'independent-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 330, rotation: 0 }]
@@ -3629,6 +3654,7 @@ test('moving a component leaves independent wire geometry in place', async ({ pa
 
 test('deleting a component keeps its independent wire and selected wires use the common delete action', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = [{ id: 'independent-resistor', kind: 'resistor', ref: 'R1', value: '1k', x: 350, y: 330, rotation: 0 }]
@@ -3816,6 +3842,7 @@ test('connection dots render at wire T joins and component pins on a wire', asyn
 
 test('moving a component leaves all wire objects fixed in place', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   const svg = page.locator('svg.schematic')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')
   await expect(source).toBeVisible()
@@ -5046,6 +5073,7 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', {
 
 test('current-source inspector edits a finite-cycle PULSE waveform', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const source = { id: 'ui-pulse-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 450, y: 350, rotation: 0 }
@@ -5741,6 +5769,7 @@ test('circuit checks can select the affected component and orphan wire', async (
 
 test('inspector rejects a duplicate case-insensitive SPICE reference before saving', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.getByRole('button', { name: /Add Resistor/ }).click()
   const svg = page.locator('svg.schematic')
   const start = await svg.evaluate((element) => {
@@ -5755,8 +5784,10 @@ test('inspector rejects a duplicate case-insensitive SPICE reference before savi
     const screen = point.matrixTransform(svg.getScreenCTM()!)
     return { x: screen.x, y: screen.y }
   })
-  await page.mouse.move(start.x, start.y); await page.mouse.down(); await page.mouse.move(end.x, end.y, { steps: 4 }); await page.mouse.up()
+  await page.mouse.move(start.x, start.y); await page.mouse.click(end.x, end.y)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.some((part: { ref: string }) => part.ref === 'R2'))).toBe(true)
   const newPartId = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R2').id)
+  await page.keyboard.press('Escape')
   await page.locator(`.circuit-part[data-part-id="${newPartId}"]`).click()
   const reference = page.getByLabel('Reference designator')
   await reference.fill('C9')
@@ -5804,6 +5835,7 @@ test('circuit checks distinguish a behavioral node from a same-named component',
 
 test('circuit checks explain missing transitive model dependencies and select the affected block', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(async (fallbackProjectJson) => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null') ?? JSON.parse(fallbackProjectJson)
     const content = '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n'
@@ -6134,6 +6166,7 @@ test('transient measurements expose peak-to-peak and preserve it in the netlist'
 
 test('transient measurement time windows persist and appear in the netlist', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.simulation.transientMeasurements = [{ id: 'WindowPeak', operation: 'max', vector: 'V(vout)' }]
