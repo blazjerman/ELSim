@@ -97,7 +97,8 @@ export function resolvePartClipboard(project: Project, clipboard: PartClipboard,
 export function createPartClipboard(project: Project, selectedPartIds: readonly string[], selectedLabelIds: readonly string[] = [], selectedWireIds: readonly string[] = []): PartClipboard {
   const selected = new Set(selectedPartIds)
   const parts = project.parts.filter((part) => selected.has(part.id)).map((part) => ({ ...part }))
-  const netLabels = project.netLabels.filter((label) => selectedLabelIds.includes(label.id)).map((label) => ({ ...label }))
+  const selectedLabels = new Set(selectedLabelIds)
+  const netLabels = project.netLabels.filter((label) => selectedLabels.has(label.id)).map((label) => ({ ...label }))
   if (!parts.length && !selectedWireIds.length) return { parts: [], wires: [], junctions: [], netLabels }
 
   const selectedWires = new Set(selectedWireIds)

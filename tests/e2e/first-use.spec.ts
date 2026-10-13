@@ -2605,9 +2605,11 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
     return {
       wires: project.wires.map((wire: { id: string }) => wire.id),
       parts: project.parts.map((part: { id: string }) => part.id),
+      labels: project.netLabels.map((label: { id: string }) => label.id),
     }
   })
   expect(original.wires.length).toBeGreaterThan(1)
+  expect(original.labels.length).toBeGreaterThan(0)
 
   // Keep the overlapping-wire hover interaction in this regression. React
   // must retain ownership of the keyed SVG nodes while changing their z-order.
@@ -2623,18 +2625,23 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
     return {
       wires: project.wires.map((wire: { id: string }) => wire.id).filter((id: string) => !originalIds.wires.includes(id)),
       parts: project.parts.map((part: { id: string }) => part.id).filter((id: string) => !originalIds.parts.includes(id)),
+      labels: project.netLabels.map((label: { id: string }) => label.id).filter((id: string) => !originalIds.labels.includes(id)),
       refs: project.parts.map((part: { ref: string }) => part.ref.toLowerCase()),
     }
   }, original)
   expect(pasted.wires).toHaveLength(original.wires.length)
   expect(pasted.parts).toHaveLength(original.parts.length)
+  expect(pasted.labels).toHaveLength(original.labels.length)
   expect(new Set(pasted.refs).size).toBe(pasted.refs.length)
   await expect(page.locator('.wire-line.selected')).toHaveCount(pasted.wires.length)
+  await expect(page.locator('.canvas-label.selected')).toHaveCount(pasted.labels.length)
   const selected = await page.locator('.wire-line.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-wire-id')))
   expect(new Set(selected)).toEqual(new Set(pasted.wires))
   expect(selected.some((id) => original.wires.includes(id))).toBe(false)
   const selectedParts = await page.locator('.circuit-part.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-part-id')))
   expect(new Set(selectedParts)).toEqual(new Set(pasted.parts))
+  const selectedLabels = await page.locator('.canvas-label.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-net-label-id')))
+  expect(new Set(selectedLabels)).toEqual(new Set(pasted.labels))
 
   // Verify the pasted mixed selection is a coherent movable group. A stale
   // selection containing original wires can look correct by count, then move
@@ -2651,8 +2658,10 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
   const afterMove = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
   const originalPartIds = new Set(original.parts)
   const originalWireIds = new Set(original.wires)
+  const originalLabelIds = new Set(original.labels)
   expect(afterMove.parts.filter((part: { id: string }) => originalPartIds.has(part.id))).toEqual(beforeMove.parts.filter((part: { id: string }) => originalPartIds.has(part.id)))
   expect(afterMove.wires.filter((wire: { id: string }) => originalWireIds.has(wire.id))).toEqual(beforeMove.wires.filter((wire: { id: string }) => originalWireIds.has(wire.id)))
+  expect(afterMove.netLabels.filter((label: { id: string }) => originalLabelIds.has(label.id))).toEqual(beforeMove.netLabels.filter((label: { id: string }) => originalLabelIds.has(label.id)))
   const dx = afterMove.parts.find((part: { id: string }) => part.id === pasted.parts[0]).x - beforeMove.parts.find((part: { id: string }) => part.id === pasted.parts[0]).x
   const dy = afterMove.parts.find((part: { id: string }) => part.id === pasted.parts[0]).y - beforeMove.parts.find((part: { id: string }) => part.id === pasted.parts[0]).y
   expect(dx).not.toBe(0)
@@ -2665,6 +2674,11 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
     const before = beforeMove.wires.find((wire: { id: string }) => wire.id === wireId)
     const after = afterMove.wires.find((wire: { id: string }) => wire.id === wireId)
     expect(after.points).toEqual(before.points.map(([x, y]: [number, number]) => [x + dx, y + dy]))
+  }
+  for (const labelId of pasted.labels) {
+    const before = beforeMove.netLabels.find((label: { id: string }) => label.id === labelId)
+    const after = afterMove.netLabels.find((label: { id: string }) => label.id === labelId)
+    expect([after.x - before.x, after.y - before.y]).toEqual([dx, dy])
   }
 })
 

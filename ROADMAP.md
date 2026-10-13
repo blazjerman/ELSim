@@ -469,6 +469,8 @@ Focus-indicator contrast review (2026-10-13): Firefox now checks the 2 px focus 
 
 Model-section dialog focus follow-up (2026-10-13): opening a multi-section model library records the actual picker trigger. Escape, Cancel, backdrop dismissal, and successful import return focus to that trigger. Firefox verifies cancellation restores focus, the dialog’s visible keyboard controls have accessible names, and a subsequent section selection still imports only the chosen model; all 53 Firefox UI smoke cases, 30 unit-test groups, TypeScript, and the production size-budget build pass. The build is 206.5 KiB initial JS+CSS gzip. No WASM rebuild was needed.
 
+Clipboard and large-schematic UI audit (2026-10-14): Ctrl+C now includes net labels explicitly selected together with components and wires, so copied mixed selections retain the full circuit annotation and pasted labels remain selected and movable with the copied circuit. Clipboard label lookup uses a `Set` instead of repeated array searches. All 122 engine-independent Firefox UI tests and all 30 unit-test groups pass, as do TypeScript and the production size-budget build (209.2 KiB initial JS+CSS gzip). The 5,000-part Firefox benchmark mounted 64 parts and 551 wires; selection median/p95 was 11/20 ms, select-all input-to-frame was 62 ms, and zoom input-to-two-frames median/max was 40/54 ms. These are current local observations, not before/after claims. No WASM or Pages build was run.
+
 ## 7. Primary references checked
 
 - ngspice source: https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/ (M0.3 spike pinned to `a80f6e3e95d51534905b1f23410a951802666656`)

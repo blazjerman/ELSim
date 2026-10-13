@@ -71,6 +71,18 @@ test('global net labels are copied only when selected explicitly', () => {
   assert.deepEqual(labelClipboard.parts, [])
 })
 
+test('mixed selections copy explicitly selected labels alongside parts and wires', () => {
+  const project = connectedPartsProject()
+  project.netLabels = [
+    { id: 'label-vin', name: 'vin', x: 1050, y: 500, visible: true },
+    { id: 'label-vout', name: 'vout', x: 1250, y: 500, visible: true },
+  ]
+  const clipboard = createPartClipboard(project, ['r1'], ['label-vout', 'label-vin', 'label-vout'], ['inside'])
+  assert.deepEqual(clipboard.parts.map((part) => part.id), ['r1'])
+  assert.deepEqual(clipboard.wires.map((wire) => wire.id), ['inside'])
+  assert.deepEqual(clipboard.netLabels.map((label) => label.id), ['label-vin', 'label-vout'])
+})
+
 test('copying a reusable block into another project includes and remaps nested sheet definitions', () => {
   const source = createStarterProject()
   const root = source.sheets[0]

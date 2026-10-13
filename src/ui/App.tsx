@@ -3213,19 +3213,25 @@ export default function App() {
         return
       }
       if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
-      if ((event.ctrlKey || event.metaKey) && key === 'c' && (selectedParts.length || selectedWireIds.length)) {
+      if ((event.ctrlKey || event.metaKey) && key === 'c' && (selectedParts.length || selectedWireIds.length || selectedNetLabelIds.length || selectedLabel)) {
         event.preventDefault()
-        copiedParts.current = createPartClipboard(project, selectedParts.map((part) => part.id), [], selectedWireIds)
-        const copiedDescription = selectedParts.length
-          ? `${selectedParts.length === 1 ? selectedParts[0].ref : `${selectedParts.length} components`} and ${copiedParts.current.wires.length} wire segments`
+        const partIds = selectedParts.map((part) => part.id)
+        const labelIds = selectedNetLabelIds.length ? selectedNetLabelIds : selectedLabel ? [selectedLabel.id] : []
+        copiedParts.current = createPartClipboard(project, partIds, labelIds, selectedWireIds)
+        if (!partIds.length && !selectedWireIds.length && copiedParts.current.netLabels.length) {
+          const labels = copiedParts.current.netLabels
+          setNotice(labels.length === 1
+            ? `Copied net label ${labels[0].name}. Pasting it keeps the same name; same-name labels on this sheet connect.`
+            : `Copied ${labels.length} net labels. Pasting keeps their names; same-name labels on this sheet connect.`)
+          return
+        }
+        const copiedDescription = partIds.length
+          ? `${partIds.length === 1 ? selectedParts[0].ref : `${partIds.length} components`} and ${copiedParts.current.wires.length} wire segments`
           : `${copiedParts.current.wires.length} wire segment${copiedParts.current.wires.length === 1 ? '' : 's'}`
-        setNotice(`Copied ${copiedDescription}. Pasting keeps wire endpoints; net labels are copied only when selected explicitly.`)
-        return
-      }
-      if ((event.ctrlKey || event.metaKey) && key === 'c' && selectedLabel) {
-        event.preventDefault()
-        copiedParts.current = createPartClipboard(project, [], [selectedLabel.id])
-        setNotice(`Copied net label ${selectedLabel.name}. Pasting it keeps the same name; same-name labels on this sheet connect.`)
+        const copiedLabels = copiedParts.current.netLabels.length
+          ? ` and ${copiedParts.current.netLabels.length} net label${copiedParts.current.netLabels.length === 1 ? '' : 's'}`
+          : ''
+        setNotice(`Copied ${copiedDescription}${copiedLabels}. Pasting preserves wire endpoints and net-label names.`)
         return
       }
       if ((event.ctrlKey || event.metaKey) && key === 'v' && (copiedParts.current?.parts.length || copiedParts.current?.netLabels.length || copiedParts.current?.wires.length)) {
