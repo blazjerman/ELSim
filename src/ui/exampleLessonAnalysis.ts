@@ -146,6 +146,14 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const dividerR2Text = partsById.get('divider-r2')?.value ?? 'changed'
   const dividerSupplyText = partsById.get('divider-v1')?.value ?? 'changed'
   const dividerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const isNonInvertingOpampLesson = lessonId === 'noninverting-opamp'
+  const nonInvertingInput = isNonInvertingOpampLesson ? componentMagnitude(partsById.get('example-opamp-vin')?.value ?? '0.5 V', 'source') : null
+  const nonInvertingFeedback = isNonInvertingOpampLesson ? componentMagnitude(partsById.get('example-opamp-rf')?.value ?? '20 kΩ', 'resistor') : null
+  const nonInvertingGroundResistance = isNonInvertingOpampLesson ? componentMagnitude(partsById.get('noninverting-rg')?.value ?? '10 kΩ', 'resistor') : null
+  const nonInvertingPrediction = nonInvertingInput !== null && nonInvertingFeedback !== null && nonInvertingGroundResistance !== null && nonInvertingGroundResistance > 0
+    ? nonInvertingInput * (1 + nonInvertingFeedback / nonInvertingGroundResistance)
+    : null
+  const nonInvertingSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const isLoadedDividerLesson = lessonId === 'loaded-voltage-divider'
   const loadedDividerR1 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r1')?.value ?? '1 kΩ', 'resistor') : null
   const loadedDividerR2 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r2')?.value ?? '1 kΩ', 'resistor') : null
@@ -566,6 +574,16 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
           : acFilterCutoffHz !== null && acFilterCapacitance !== null
             ? `With R1 = ${acFilterResistanceText} and C1 = ${acFilterCapacitanceText}, the predicted cutoff is about ${formatLessonFrequency(acFilterCutoffHz)}. Double C1 to ${formatLessonCapacitance(acFilterCapacitance * 2)} and run again; the cutoff should halve to about ${formatLessonFrequency(acFilterCutoffHz / 2)}. At cutoff, VOUT is about 0.707×VIN (−3 dB).`
             : 'Enter positive values for R1 and C1, then rerun to compare the cutoff frequency.'
+      : isNonInvertingOpampLesson && simulationResult
+        ? simulationResultStale
+          ? nonInvertingPrediction !== null
+            ? `The old operating point is stale. With VIN = ${partsById.get('example-opamp-vin')?.value}, RF = ${partsById.get('example-opamp-rf')?.value}, and RG = ${partsById.get('noninverting-rg')?.value}, the non-inverting gain formula predicts VOUT ≈ ${formatLessonVoltage(nonInvertingPrediction)}. Rerun to compare. This simple formula assumes the output remains within the supply rails.`
+            : 'Enter a valid input voltage and positive feedback resistances, then rerun.'
+          : nonInvertingPrediction !== null
+            ? Math.abs((nonInvertingFeedback ?? 0) - 20000) < 1e-6 && Math.abs((nonInvertingGroundResistance ?? 0) - 10000) < 1e-6 && Math.abs((nonInvertingInput ?? 0) - 0.5) < 1e-9
+              ? `The gain is 1 + RF/RG = 3, so VIN = ${formatLessonVoltage(nonInvertingInput!)} predicts VOUT = ${formatLessonVoltage(nonInvertingPrediction)}${nonInvertingSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(nonInvertingSolvedOutput)}` : ''}. Change RF from 20 kΩ to 40 kΩ and rerun: the gain should become 5 and VOUT about 2.5 V.`
+              : `The current values give gain = 1 + RF/RG = ${Number((1 + (nonInvertingFeedback ?? 0) / (nonInvertingGroundResistance ?? 1)).toPrecision(4))}, predicting VOUT = ${formatLessonVoltage(nonInvertingPrediction)}${nonInvertingSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(nonInvertingSolvedOutput)}` : ''}. The real output is limited by the ±5 V supply rails.`
+            : 'Enter a valid input voltage and positive feedback resistances, then rerun.'
       : exampleLesson?.id === 'voltage-divider' && simulationResult
         ? simulationResultStale
           ? dividerPrediction !== null

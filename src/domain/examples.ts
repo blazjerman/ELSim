@@ -125,6 +125,68 @@ export function createInvertingOpampExampleProject(): Project {
   return project
 }
 
+/** A beginner non-inverting amplifier lesson using the original ELSim op-amp model. */
+export function createNonInvertingOpampExampleProject(): Project {
+  const project = createInvertingOpampExampleProject()
+  const amplifier = project.parts.find((part) => part.ref === 'XU1')!
+  const input = project.parts.find((part) => part.ref === 'VIN')!
+  const feedback = project.parts.find((part) => part.ref === 'RF')!
+  const load = project.parts.find((part) => part.ref === 'RLOAD')!
+  const lower: Part = { id: 'noninverting-rg', kind: 'resistor', ref: 'RG', value: '10 kΩ', x: 360, y: 470, rotation: 90 }
+  project.parts = [...project.parts.filter((part) => part.ref !== 'RIN'), lower]
+  const pin = (part: Part, index: number) => componentPins(part)[index]
+  const point = ({ x, y }: { x: number; y: number }): [number, number] => [x, y]
+  const labelAt = (id: string, name: string, part: Part, index: number) => {
+    const point = pin(part, index)
+    return { id, name, x: point.x, y: point.y, visible: true }
+  }
+  const [inputPositive, inputNegative] = [pin(amplifier, 0), pin(amplifier, 1)]
+  const [output, feedbackUpper, feedbackLower] = [pin(amplifier, 4), pin(feedback, 0), pin(feedback, 1)]
+  const wires = [
+    { id: 'noninverting-input-rise', points: [point(pin(input, 0)), [240, 300]] },
+    { id: 'noninverting-input-top', points: [[240, 300], [inputPositive.x, 300]] },
+    { id: 'noninverting-input-drop', points: [[inputPositive.x, 300], point(inputPositive)] },
+    { id: 'noninverting-output-link', points: [point(output), [640, 400]] },
+    { id: 'noninverting-output-rise', points: [[640, 400], [640, 200]] },
+    { id: 'noninverting-feedback-top', points: [[640, 200], [feedbackUpper.x, 200]] },
+    { id: 'noninverting-feedback-drop', points: [[feedbackUpper.x, 200], point(feedbackUpper)] },
+    { id: 'noninverting-feedback-input', points: [point(inputNegative), [430, inputNegative.y]] },
+    { id: 'noninverting-feedback-trunk', points: [[430, inputNegative.y], [430, 580]] },
+    { id: 'noninverting-feedback-rg', points: [[430, 420], point(pin(lower, 0))] },
+    { id: 'noninverting-feedback-return', points: [point(feedbackLower), [feedbackLower.x, 580]] },
+    { id: 'noninverting-feedback-bottom', points: [[feedbackLower.x, 580], [430, 580]] },
+    { id: 'noninverting-output-load-drop', points: [[640, 400], [640, 430]] },
+    { id: 'noninverting-output-load-link', points: [[640, 430], [pin(load, 0).x, 430]] },
+    { id: 'noninverting-output-load-top', points: [[pin(load, 0).x, 430], point(pin(load, 0))] },
+  ] as Project['wires']
+  const positiveSupply = project.parts.find((part) => part.ref === 'VCC')!
+  const negativeSupply = project.parts.find((part) => part.ref === 'VEE')!
+  project.name = 'Non-inverting op-amp amplifier'
+  project.wires = wires
+  project.netLabels = [
+    labelAt('noninverting-input-source', 'VIN', input, 0),
+    labelAt('noninverting-input-positive', 'VIN', amplifier, 0),
+    labelAt('noninverting-ground-input', '0', input, 1),
+    labelAt('noninverting-feedback-input', 'FB', amplifier, 1),
+    labelAt('noninverting-feedback-rf', 'FB', feedback, 1),
+    labelAt('noninverting-feedback-rg', 'FB', lower, 0),
+    labelAt('noninverting-ground-rg', '0', lower, 1),
+    labelAt('noninverting-vpos-opamp', 'VPOS', amplifier, 2),
+    labelAt('noninverting-vpos-source', 'VPOS', positiveSupply, 0),
+    labelAt('noninverting-vneg-opamp', 'VNEG', amplifier, 3),
+    labelAt('noninverting-vneg-source', 'VNEG', negativeSupply, 1),
+    labelAt('noninverting-ground-vpos', '0', positiveSupply, 1),
+    labelAt('noninverting-ground-vneg', '0', negativeSupply, 0),
+    labelAt('noninverting-output-opamp', 'VOUT', amplifier, 4),
+    labelAt('noninverting-output-rf', 'VOUT', feedback, 0),
+    labelAt('noninverting-output-load', 'VOUT', load, 0),
+    labelAt('noninverting-ground-load', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires, junctions: [], netLabels: project.netLabels }]
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(FB)', 'V(VOUT)', 'I(RLOAD)'], ranges: {} }
+  return project
+}
+
 /** A beginner AC lesson that uses an NPN stage to demonstrate gain and phase inversion. */
 export function createCommonEmitterExampleProject(): Project {
   const project = createStarterProject()
