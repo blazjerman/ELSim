@@ -45,7 +45,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'voltage-switch', title: 'Voltage-controlled switch', description: 'Use a pulse voltage to connect a 5 V supply to a load, then inspect the output switching.' },
   { id: 'current-controlled', title: 'Current-controlled sources', description: 'A 1 mA sense branch controls a gain-of-two CCCS and a 2 kΩ CCVS.' },
   { id: 'transistor', title: 'NPN low-side switch', description: 'Estimate base current from RBASE, compare it with the 1 kΩ load demand, then verify the transistor switch with ngspice.' },
-  { id: 'pnp', title: 'PNP high-side switch', description: 'See an active-low base turn on a PNP that supplies a 1 kΩ load from 5 V.' },
+  { id: 'pnp', title: 'PNP high-side switch', description: 'Estimate base current from RBASE, compare it with the current needed to raise the collector output, then verify the active-low PNP switch with ngspice.' },
   { id: 'mosfet', title: 'NMOS low-side switch', description: 'See gate voltage control drain current, with the bulk tied to ground and a 1 kΩ drain load.' },
   { id: 'pmos', title: 'PMOS high-side switch', description: 'See an active-low gate turn on a high-side PMOS, with its source and bulk tied to the 5 V supply.' },
   { id: 'jfet', title: 'N-JFET low-side switch', description: 'See a JFET conduct at zero gate bias, then turn off when the gate goes negative.' },
