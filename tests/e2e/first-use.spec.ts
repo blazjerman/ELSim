@@ -2849,8 +2849,16 @@ test('floating waveform windows can be moved and resized from the keyboard', { t
   await page.keyboard.press('ArrowRight')
   await expect.poll(async () => (await plotWindow.boundingBox())?.x).toBe(initial!.x + 10)
   await expect(plotWindow.getByRole('status')).toContainText(/V\(R1\).*moved to .* pixels from the left/)
+  const waveform = plotWindow.locator('.waveform-chart')
+  for (let step = 0; step < 20 && !(await waveform.evaluate((element) => element === document.activeElement)); step += 1) {
+    await page.keyboard.press('Tab')
+  }
+  await expect(waveform).toBeFocused()
+  await expect(waveform).toHaveCSS('outline-style', 'solid')
+  await expect(waveform).toHaveCSS('outline-width', '2px')
   const moved = await plotWindow.boundingBox()
   expect(moved).not.toBeNull()
+  await moveHandle.focus()
   await page.keyboard.press('Shift+ArrowDown')
   await expect.poll(async () => (await plotWindow.boundingBox())?.height).toBe(moved!.height + 20)
   await expect(plotWindow.getByRole('status')).toContainText(/V\(R1\).*resized to .* pixels/)
