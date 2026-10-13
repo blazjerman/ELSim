@@ -6879,6 +6879,20 @@ test('transient advanced editors load only when a measurement or initial conditi
   await expect.poll(() => requests.some((url) => url.includes('/src/ui/TransientEditors.tsx'))).toBe(true)
 })
 
+test('advanced source waveform fields load only after selecting an advanced waveform', { tag: '@ui-smoke' }, async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', (request) => requests.push(request.url()))
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: /^V1, Voltage source/ })).toBeVisible()
+  expect(requests.some((url) => url.includes('/src/ui/AdvancedSourceWaveformEditor.tsx'))).toBe(false)
+
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('sine')
+  await expect(page.getByLabel('Phase (°)')).toBeVisible()
+  await expect.poll(() => requests.some((url) => url.includes('/src/ui/AdvancedSourceWaveformEditor.tsx'))).toBe(true)
+})
+
 test('pulse source high levels can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
