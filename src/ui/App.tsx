@@ -1177,26 +1177,33 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
       if (!drag.current.previewInitialized) {
         const view = svg.current?.viewBox.baseVal
         const preview: { element: SVGGElement; transform: string | null }[] = []
-        const add = (selector: string) => {
-          const element = svg.current?.querySelector<SVGGElement>(selector)
+        const elementsByObjectId = new Map<string, SVGGElement>()
+        svg.current?.querySelectorAll<SVGGElement>('[data-part-id], [data-wire-id], [data-net-label-id]').forEach((element) => {
+          const key = element.dataset.partId ? `part:${element.dataset.partId}`
+            : element.dataset.wireId ? `wire:${element.dataset.wireId}`
+              : element.dataset.netLabelId ? `label:${element.dataset.netLabelId}` : undefined
+          if (key) elementsByObjectId.set(key, element)
+        })
+        const add = (kind: 'part' | 'wire' | 'label', id: string) => {
+          const element = elementsByObjectId.get(`${kind}:${id}`)
           if (element) preview.push({ element, transform: element.getAttribute('transform') })
         }
         if (view) {
           for (const item of group.parts) {
             const margin = item.kind === 'subcircuit' ? Math.max(500, Math.ceil((item.modelPins?.length ?? 0) / 2) * 24 + 60) : 500
             if (item.x < view.x - margin || item.x > view.x + view.width + margin || item.y < view.y - margin || item.y > view.y + view.height + margin) continue
-            add(`[data-part-id="${CSS.escape(item.id)}"]`)
+            add('part', item.id)
           }
           for (const item of group.wires) {
             const [[x1, y1], [x2, y2]] = item.points
             const margin = 100
             if (Math.max(x1, x2) < view.x - margin || Math.min(x1, x2) > view.x + view.width + margin || Math.max(y1, y2) < view.y - margin || Math.min(y1, y2) > view.y + view.height + margin) continue
-            add(`[data-wire-id="${CSS.escape(item.id)}"]`)
+            add('wire', item.id)
           }
           for (const item of group.netLabels) {
             const margin = 30
             if (item.x + 9 + item.name.length * 9 < view.x - margin || item.x + 9 > view.x + view.width + margin || item.y - 9 < view.y - margin || item.y - 9 > view.y + view.height + margin) continue
-            add(`[data-net-label-id="${CSS.escape(item.id)}"]`)
+            add('label', item.id)
           }
         }
         dragPreviewElements.current = preview
