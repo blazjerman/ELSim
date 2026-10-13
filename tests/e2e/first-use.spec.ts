@@ -5607,7 +5607,7 @@ test('LTspice PWL file source imports its table and simulates in the browser eng
 })
 
 
-test('LTspice current-source SINE waveform edits and simulates in the browser engine', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
+test('current-source SINE waveform edits and simulates in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
   await page.goto('/')
