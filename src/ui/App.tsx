@@ -762,6 +762,15 @@ const WireCurrentFlowLayer = memo(function WireCurrentFlowLayer({ wireIds, wires
   })}</g>)}</g>
 })
 
+function sameFlowPathGeometry(left: readonly [number, number][], right: readonly [number, number][]): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index++) {
+    if (left[index][0] !== right[index][0] || left[index][1] !== right[index][1]) return false
+  }
+  return true
+}
+
 const WireFlowPath = memo(function WireFlowPath({ wireId, index, segment, enabled, dotSize, dotSpacing }: {
   wireId: string
   index: number
@@ -772,9 +781,13 @@ const WireFlowPath = memo(function WireFlowPath({ wireId, index, segment, enable
 }) {
   const key = `${wireId}:${index}`
   const config = enabled ? { key, magnitude: segment.magnitude, forward: segment.forward, dotSize, dotSpacing } : undefined
+  const pointString = useRef<{ geometry: WireCurrentFlowSegment['points']; value: string } | null>(null)
+  if (!pointString.current || !sameFlowPathGeometry(pointString.current.geometry, segment.points)) {
+    pointString.current = { geometry: segment.points, value: segment.points.map(([x, y]) => `${x},${y}`).join(' ') }
+  }
   const ref = useCallback((element: SVGPolylineElement | null) => registerWireAnimation(key, element), [key])
   useLayoutEffect(() => updateWireAnimation(key, config), [key, config?.magnitude, config?.forward, config?.dotSize, config?.dotSpacing])
-  return <polyline ref={ref} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={segment.points.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#f0c674" strokeWidth={dotSize} strokeLinecap="round" strokeDasharray={`0 ${dotSpacing}`} opacity="0.9"><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
+  return <polyline ref={ref} className="wire-current-flow" data-current-direction={segment.forward ? 'first-to-last' : 'last-to-first'} data-current-magnitude={segment.magnitude} points={pointString.current.value} fill="none" stroke="#f0c674" strokeWidth={dotSize} strokeLinecap="round" strokeDasharray={`0 ${dotSpacing}`} opacity="0.9"><title>Conventional current {segment.forward ? 'from the first to last wire endpoint' : 'from the last to first endpoint'} · {segment.magnitude.toPrecision(4)} A</title></polyline>
 })
 
 function SineSourceWaveformEditor({ part, onChange, analysisSettingError }: { part: Part; onChange: (patch: Partial<Part>) => void; analysisSettingError: (field: AnalysisSettingField, sourceId?: string) => string | undefined }) {
