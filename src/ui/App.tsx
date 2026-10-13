@@ -445,22 +445,30 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const labelBounds = useMemo(() => {
     const angle = part.rotation * Math.PI / 180
     const cosine = Math.cos(angle), sine = Math.sin(angle)
-    // componentPins returns world coordinates already rotated. Convert pins
-    // back to local coordinates before the common bounds rotation below.
-    const points: [number, number][] = componentPins(part).map((pin) => {
-      const x = pin.x - part.x, y = pin.y - part.y
-      return [x * cosine + y * sine, -x * sine + y * cosine]
-    })
-    for (const primitive of symbolGeometry) {
-      if (primitive.kind === 'line') points.push([primitive.x1, primitive.y1], [primitive.x2, primitive.y2])
-      else if (primitive.kind === 'rect') points.push([primitive.x, primitive.y], [primitive.x + primitive.width, primitive.y + primitive.height])
-      else if (primitive.kind === 'circle') points.push([primitive.cx - primitive.r, primitive.cy - primitive.r], [primitive.cx + primitive.r, primitive.cy + primitive.r])
-      else if (primitive.kind === 'text') points.push([primitive.x, primitive.y])
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    const include = (x: number, y: number) => {
+      const rotatedX = x * cosine - y * sine
+      const rotatedY = x * sine + y * cosine
+      minX = Math.min(minX, rotatedX)
+      minY = Math.min(minY, rotatedY)
+      maxX = Math.max(maxX, rotatedX)
+      maxY = Math.max(maxY, rotatedY)
     }
-    if (symbolBounds) points.push([symbolBounds.minX, symbolBounds.minY], [symbolBounds.maxX, symbolBounds.maxY])
-    if (part.kind === 'subcircuit') points.push([-customWidth / 2, -customHeight / 2], [customWidth / 2, customHeight / 2])
-    const rotated = points.map(([x, y]) => [x * Math.cos(angle) - y * Math.sin(angle), x * Math.sin(angle) + y * Math.cos(angle)])
-    return rotated.length ? { minX: Math.min(...rotated.map(([x]) => x)), minY: Math.min(...rotated.map(([, y]) => y)), maxX: Math.max(...rotated.map(([x]) => x)), maxY: Math.max(...rotated.map(([, y]) => y)) } : { minX: -24, minY: -24, maxX: 24, maxY: 24 }
+    // componentPins returns world coordinates already rotated. Convert each
+    // pin back to local coordinates before adding its rotated bounds.
+    for (const pin of componentPins(part)) {
+      const x = pin.x - part.x, y = pin.y - part.y
+      include(x * cosine + y * sine, -x * sine + y * cosine)
+    }
+    for (const primitive of symbolGeometry) {
+      if (primitive.kind === 'line') { include(primitive.x1, primitive.y1); include(primitive.x2, primitive.y2) }
+      else if (primitive.kind === 'rect') { include(primitive.x, primitive.y); include(primitive.x + primitive.width, primitive.y + primitive.height) }
+      else if (primitive.kind === 'circle') { include(primitive.cx - primitive.r, primitive.cy - primitive.r); include(primitive.cx + primitive.r, primitive.cy + primitive.r) }
+      else if (primitive.kind === 'text') include(primitive.x, primitive.y)
+    }
+    if (symbolBounds) { include(symbolBounds.minX, symbolBounds.minY); include(symbolBounds.maxX, symbolBounds.maxY) }
+    if (part.kind === 'subcircuit') { include(-customWidth / 2, -customHeight / 2); include(customWidth / 2, customHeight / 2) }
+    return Number.isFinite(minX) ? { minX, minY, maxX, maxY } : { minX: -24, minY: -24, maxX: 24, maxY: 24 }
   }, [part, symbolGeometry, symbolBounds, customWidth, customHeight])
   const labelAnchor = (x: number, y: number) => {
     const angle = part.rotation * Math.PI / 180
