@@ -490,29 +490,46 @@ function clampPlotPanelBounds(bounds: PlotPanel['bounds']): PlotPanel['bounds'] 
 function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onActivate, children }: { panel: PlotPanel; index: number; title: string; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onActivate: () => void; children: ReactNode }) {
   const ref = useRef<HTMLElement>(null)
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
+  const draggedBounds = useRef<PlotPanel['bounds'] | null>(null)
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   useEffect(() => {
     const initial = clampPlotPanelBounds(panel.bounds)
     if (initial.x !== panel.bounds.x || initial.y !== panel.bounds.y || initial.width !== panel.bounds.width || initial.height !== panel.bounds.height) onBoundsChange(initial)
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined
     const saveSize = () => {
       const rect = ref.current?.getBoundingClientRect()
       if (!rect) return
       const next = clampPlotPanelBounds({ ...panel.bounds, width: rect.width, height: rect.height })
-      if (next.width !== panel.bounds.width || next.height !== panel.bounds.height) onBoundsChange(next)
+      if (next.width === panel.bounds.width && next.height === panel.bounds.height) return
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => onBoundsChange(next), 120)
     }
     const observer = new ResizeObserver(saveSize)
     if (ref.current) observer.observe(ref.current)
-    const move = (event: globalThis.PointerEvent) => {
+    const previewPosition = (event: globalThis.PointerEvent) => {
       if (!drag.current) return
       const { x, y, left, top } = drag.current
-      onBoundsChange(clampPlotPanelBounds({ ...panel.bounds, x: left + event.clientX - x, y: top + event.clientY - y }))
+      const next = clampPlotPanelBounds({ ...panel.bounds, x: left + event.clientX - x, y: top + event.clientY - y })
+      draggedBounds.current = next
+      if (ref.current) {
+        ref.current.style.left = `${next.x}px`
+        ref.current.style.top = `${next.y}px`
+      }
     }
-    const up = () => { drag.current = null }
+    const finishDrag = (event: globalThis.PointerEvent) => {
+      if (!drag.current) return
+      previewPosition(event)
+      const next = draggedBounds.current
+      drag.current = null
+      draggedBounds.current = null
+      if (next && (next.x !== panel.bounds.x || next.y !== panel.bounds.y)) onBoundsChange(next)
+    }
     const resize = () => onBoundsChange(clampPlotPanelBounds(panel.bounds))
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+    window.addEventListener('pointermove', previewPosition)
+    window.addEventListener('pointerup', finishDrag)
+    window.addEventListener('pointercancel', finishDrag)
     window.addEventListener('resize', resize)
-    return () => { observer.disconnect(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('resize', resize) }
+    return () => { observer.disconnect(); clearTimeout(resizeTimer); window.removeEventListener('pointermove', previewPosition); window.removeEventListener('pointerup', finishDrag); window.removeEventListener('pointercancel', finishDrag); window.removeEventListener('resize', resize) }
   }, [panel.bounds, onBoundsChange])
   return <section ref={ref} data-plot-panel-id={panel.id} className="plot-window additional-plot-window" role="dialog" aria-label={title} title="Middle-click anywhere in this window to close it" style={{ left: panel.bounds.x, top: panel.bounds.y, width: panel.bounds.width, height: panel.bounds.height, zIndex: 9 + index }} onPointerDownCapture={onActivate} onMouseDownCapture={(event) => { if (event.button === 1) { event.preventDefault(); event.stopPropagation(); onClose() } }}>
     <div className="plot-window-title" role="group" aria-label={`Move and resize ${title}. Drag or use arrow keys to move; hold Shift with an arrow key to resize.`} aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight" tabIndex={0} title="Drag or use arrow keys to move this waveform window; Shift+arrow keys resize it" onKeyDown={(event) => {
@@ -536,7 +553,7 @@ function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onAct
       setKeyboardAnnouncement(event.shiftKey
         ? `${title} resized to ${Math.round(next.width)} by ${Math.round(next.height)} pixels.`
         : `${title} moved to ${Math.round(next.x)} pixels from the left and ${Math.round(next.y)} pixels from the top.`)
-    }} onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button') || event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> {title}</span><span><button aria-label={`Close ${title}`} title="Close waveform window" onClick={onClose}><X size={14}/></button></span></div>
+    }} onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button') || event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); draggedBounds.current = null; drag.current = { x: event.clientX, y: event.clientY, left: panel.bounds.x, top: panel.bounds.y } }}><span><Activity size={14}/> {title}</span><span><button aria-label={`Close ${title}`} title="Close waveform window" onClick={onClose}><X size={14}/></button></span></div>
     <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{keyboardAnnouncement}</span>
     <div className="plot-window-content">{children}</div>
   </section>
