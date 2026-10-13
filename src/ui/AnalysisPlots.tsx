@@ -493,7 +493,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
     navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchor / Math.max(1, axis.length - 1))
   }
   const span = max - min || 1
-  const colors = colorsForTraces(traces, savedColors)
+  const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const xFor = (value: number) => left + (value - x0) / (x1 - x0 || 1) * (right - left)
   const yFor = (value: number) => bottom - (value - min) / span * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
