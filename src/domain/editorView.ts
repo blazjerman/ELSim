@@ -5,14 +5,21 @@ export type EditorView = Project['view']
 
 /** Calculate a bounded zoom/pan that brings the active sheet content into view. */
 export function fitEditorView(project: Project, viewport = { width: 760, height: 600 }, padding = 100): EditorView {
-  const points = [
-    ...project.parts.flatMap((part) => [{ x: part.x, y: part.y }, ...componentPins(part)]),
-    ...project.wires.flatMap((wire) => wire.points.map(([x, y]) => ({ x, y }))),
-    ...project.netLabels.map(({ x, y }) => ({ x, y })),
-  ]
-  if (!points.length) return { ...project.view, zoom: 1, panX: 0, panY: 0 }
-  const minX = Math.min(...points.map(({ x }) => x)), maxX = Math.max(...points.map(({ x }) => x))
-  const minY = Math.min(...points.map(({ y }) => y)), maxY = Math.max(...points.map(({ y }) => y))
+  let minX = Number.POSITIVE_INFINITY, maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY, maxY = Number.NEGATIVE_INFINITY
+  const include = (x: number, y: number) => {
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, y)
+    maxY = Math.max(maxY, y)
+  }
+  for (const part of project.parts) {
+    include(part.x, part.y)
+    for (const pin of componentPins(part)) include(pin.x, pin.y)
+  }
+  for (const wire of project.wires) for (const [x, y] of wire.points) include(x, y)
+  for (const label of project.netLabels) include(label.x, label.y)
+  if (minX === Number.POSITIVE_INFINITY) return { ...project.view, zoom: 1, panX: 0, panY: 0 }
   const zoom = Math.max(.1, Math.min(2.5,
     viewport.width / Math.max(1, maxX - minX + padding * 2),
     viewport.height / Math.max(1, maxY - minY + padding * 2)))

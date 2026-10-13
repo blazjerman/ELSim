@@ -332,6 +332,37 @@ test('fit view centers and bounds distant parts, wire points, and labels', () =>
   assert.ok(resizedView.zoom < view.zoom)
 })
 
+test('fit view handles the maximum-size schematic without argument-limit failures', () => {
+  const project = createStarterProject()
+  const modelPins = Array.from({ length: 64 }, (_, index) => `P${index + 1}`)
+  project.parts = Array.from({ length: 3000 }, (_, index) => ({
+    id: `large-block-${index}`,
+    kind: 'subcircuit',
+    ref: `X${index + 1}`,
+    value: 'large_block',
+    modelName: 'large_block',
+    modelPins,
+    x: index * 10,
+    y: index % 7 * 10,
+    rotation: 0,
+  }))
+  project.wires = Array.from({ length: 20_000 }, (_, index) => ({
+    id: `large-wire-${index}`,
+    points: [[index * 10, 0], [index * 10 + 10, 0]],
+  }))
+  project.netLabels = Array.from({ length: 20_000 }, (_, index) => ({
+    id: `large-label-${index}`,
+    name: `N${index}`,
+    x: index * 10,
+    y: 100,
+    visible: true,
+  }))
+
+  const view = fitEditorView(project)
+  assert.ok(Number.isFinite(view.zoom) && view.zoom >= 0.1 && view.zoom <= 2.5)
+  assert.ok(Number.isFinite(view.panX) && Number.isFinite(view.panY))
+})
+
 test('flip state validates while older project records remain valid', () => {
   const project = createStarterProject()
   const valid = structuredClone(project)
