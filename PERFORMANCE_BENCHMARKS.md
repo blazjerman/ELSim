@@ -593,3 +593,14 @@ The focused 5,000-part/4,900-wire Firefox benchmark mounted 64 parts and 551 wir
 ### Full Firefox UI sweep (2026-10-13)
 
 The complete 121-case engine-independent Firefox UI suite passed, including mixed-object drag, full-circuit copy/paste wire selection, endpoint movement, waveform windows, responsive layout, and keyboard focus. All 30 unit groups, TypeScript, and the production transfer-budget build pass (207.4 KiB initial JS+CSS gzip against 245 KiB). The 5,000-part/4,900-wire Firefox benchmark mounted 64 parts and 551 wires; render took 778 ms, selection median/p95 was 8/17 ms, Ctrl+A reached the next frame in 67 ms, zoom-to-two-frames median/max was 39/57 ms, and arrow navigation took 15 ms. Compared with the previous 787 ms run, these are within single-run variation and do not establish a speedup. No additional reproducible UI defect surfaced, so this sweep does not justify a broad renderer rewrite. No WASM rebuild or Pages workflow ran.
+
+### Indexed keyboard navigation (2026-10-13)
+
+Directional part navigation on the 5,000-part schematic now uses a memoized spatially ordered index and binary search to avoid scanning all parts on each arrow-key press. Selection semantics remain unchanged: the closest part in the requested direction wins by the existing weighted-distance rule, with project order as the tie-breaker, and the prior nearest-part fallback is retained. A deterministic unit comparison checks the indexed result against the former brute-force rule across 20 varied layouts, 25 origins per layout, and all four directions. The focused browser benchmark now samples seven successive keyboard moves and reports their median plus maximum (the maximum of seven is not a statistical p95).
+
+| Browser | Arrow input to two frames, median | Maximum of seven samples |
+| --- | ---: | ---: |
+| Chromium | 15.1 ms | 25.3 ms |
+| Firefox | 18.0 ms | 32.0 ms |
+
+An earlier one-sample Chromium observation was 33 ms; the new repeated measurements suggest lower latency, but this is a single post-change run and is not a controlled before/after comparison. All 30 unit groups, TypeScript, and the focused two-browser benchmark pass. The browser benchmark config reuses a running local server outside CI to avoid a port collision; CI still starts a fresh server. No WASM rebuild or Pages workflow ran.

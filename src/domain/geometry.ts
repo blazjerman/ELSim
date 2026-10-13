@@ -20,6 +20,105 @@ export function wireSegmentOverlapsBounds(wire: Wire, bounds: { left: number; to
 
 export type ViewportBounds = { left: number; top: number; right: number; bottom: number }
 
+type PartNavigationKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown'
+type PartAxisEntry = { part: Part; order: number; coordinate: number }
+
+/** Index part centers by both schematic axes for exact directional keyboard navigation. */
+export function createPartNavigationIndex(parts: readonly Part[]) {
+  const partById = new Map(parts.map((part) => [part.id, part]))
+  const byX = parts.map((part, order) => ({ part, order, coordinate: part.x })).sort((a, b) => a.coordinate - b.coordinate || a.order - b.order)
+  const byY = parts.map((part, order) => ({ part, order, coordinate: part.y })).sort((a, b) => a.coordinate - b.coordinate || a.order - b.order)
+  const lowerBound = (entries: readonly PartAxisEntry[], coordinate: number) => {
+    let low = 0, high = entries.length
+    while (low < high) {
+      const middle = low + Math.floor((high - low) / 2)
+      if (entries[middle].coordinate < coordinate) low = middle + 1
+      else high = middle
+    }
+    return low
+  }
+  const upperBound = (entries: readonly PartAxisEntry[], coordinate: number) => {
+    let low = 0, high = entries.length
+    while (low < high) {
+      const middle = low + Math.floor((high - low) / 2)
+      if (entries[middle].coordinate <= coordinate) low = middle + 1
+      else high = middle
+    }
+    return low
+  }
+
+  return (originId: string, key: PartNavigationKey): Part | undefined => {
+    const origin = partById.get(originId)
+    if (!origin || parts.length < 2) return undefined
+    const horizontal = key === 'ArrowLeft' || key === 'ArrowRight'
+    const entries = horizontal ? byX : byY
+    const primaryOrigin = horizontal ? origin.x : origin.y
+    const secondaryOrigin = horizontal ? origin.y : origin.x
+    const sign = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1
+    let best: Part | undefined
+    let bestRank = Number.POSITIVE_INFINITY
+    let bestOrder = Number.POSITIVE_INFINITY
+    const consider = (entry: PartAxisEntry, directionalOnly: boolean) => {
+      if (entry.part.id === originId) return
+      const primaryDelta = entry.coordinate - primaryOrigin
+      if (directionalOnly && sign * primaryDelta <= 0) return
+      const secondary = horizontal ? entry.part.y : entry.part.x
+      const rank = Math.abs(primaryDelta) + Math.abs(secondary - secondaryOrigin) * 2
+      if (rank < bestRank || rank === bestRank && entry.order < bestOrder) {
+        best = entry.part
+        bestRank = rank
+        bestOrder = entry.order
+      }
+    }
+
+    // First preserve the editor's direction-first behavior. The primary-axis
+    // distance is a lower bound for the existing weighted-Manhattan rank, so
+    // no entries beyond the current best rank can win.
+    if (sign > 0) {
+      let index = upperBound(entries, primaryOrigin)
+      while (index < entries.length) {
+        const coordinate = entries[index].coordinate
+        if (coordinate - primaryOrigin > bestRank) break
+        do { consider(entries[index], true); index += 1 } while (index < entries.length && entries[index].coordinate === coordinate)
+      }
+    } else {
+      let index = lowerBound(entries, primaryOrigin) - 1
+      while (index >= 0) {
+        const coordinate = entries[index].coordinate
+        if (primaryOrigin - coordinate > bestRank) break
+        do { consider(entries[index], true); index -= 1 } while (index >= 0 && entries[index].coordinate === coordinate)
+      }
+    }
+    if (best) return best
+
+    // If the requested half-plane is empty, search both sides from the origin.
+    // Ties across coordinates still resolve to the original project order.
+    const equalStart = lowerBound(entries, primaryOrigin)
+    let equalEnd = equalStart
+    while (equalEnd < entries.length && entries[equalEnd].coordinate === primaryOrigin) {
+      consider(entries[equalEnd], false)
+      equalEnd += 1
+    }
+    let left = equalStart - 1
+    let right = equalEnd
+    while (left >= 0 || right < entries.length) {
+      const leftDistance = left >= 0 ? primaryOrigin - entries[left].coordinate : Number.POSITIVE_INFINITY
+      const rightDistance = right < entries.length ? entries[right].coordinate - primaryOrigin : Number.POSITIVE_INFINITY
+      const nextDistance = Math.min(leftDistance, rightDistance)
+      if (nextDistance > bestRank) break
+      if (leftDistance === nextDistance) {
+        const coordinate = entries[left].coordinate
+        do { consider(entries[left], false); left -= 1 } while (left >= 0 && entries[left].coordinate === coordinate)
+      }
+      if (rightDistance === nextDistance) {
+        const coordinate = entries[right].coordinate
+        do { consider(entries[right], false); right += 1 } while (right < entries.length && entries[right].coordinate === coordinate)
+      }
+    }
+    return best
+  }
+}
+
 /** Build a reusable spatial broadphase for static schematic objects. */
 export function createViewportIndex<T extends { id: string }>(items: readonly T[], boundsFor: (item: T) => ViewportBounds, cellSize = 256, maxCellsPerItem = 64) {
   if (!Number.isFinite(cellSize) || cellSize <= 0 || !Number.isInteger(maxCellsPerItem) || maxCellsPerItem < 1) throw new RangeError('Viewport index limits must be positive.')

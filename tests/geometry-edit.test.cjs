@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, createPartNavigationIndex, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
@@ -25,6 +25,55 @@ test('native component pins and the RC starter share one 10-unit placement grid'
   }
   assert.equal(snapToEditorGrid(375), 380)
   assert.equal(snapToEditorGrid(374), 370)
+})
+
+test('part navigation index preserves direction-first weighted distance and project-order ties', () => {
+  const parts = [
+    { id: 'origin', kind: 'resistor', ref: 'R1', value: '1k', x: 0, y: 0 },
+    { id: 'near-down', kind: 'resistor', ref: 'R2', value: '1k', x: 0, y: 10 },
+    { id: 'near-right', kind: 'resistor', ref: 'R3', value: '1k', x: 10, y: 0 },
+    { id: 'far-right', kind: 'resistor', ref: 'R4', value: '1k', x: 100, y: 0 },
+    { id: 'tie-first', kind: 'resistor', ref: 'R5', value: '1k', x: -10, y: -5 },
+    { id: 'tie-second', kind: 'resistor', ref: 'R6', value: '1k', x: -10, y: 5 },
+  ]
+  const navigate = createPartNavigationIndex(parts)
+  assert.equal(navigate('origin', 'ArrowRight').id, 'near-right')
+  assert.equal(navigate('origin', 'ArrowLeft').id, 'tie-first')
+  assert.equal(navigate('origin', 'ArrowDown').id, 'near-down')
+  // No part is below the origin, so fall back to the same nearest weighted distance.
+  assert.equal(navigate('far-right', 'ArrowRight').id, 'near-right')
+  assert.equal(navigate('missing', 'ArrowRight'), undefined)
+})
+
+test('part navigation index matches a brute-force reference across varied layouts and directions', () => {
+  let seed = 734_219
+  const random = () => { seed = (seed * 1_103_515_245 + 12_345) & 0x7fffffff; return seed / 0x80000000 }
+  const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']
+  for (let layout = 0; layout < 20; layout += 1) {
+    const parts = Array.from({ length: 180 }, (_, index) => ({
+      id: `layout-${layout}-part-${index}`,
+      kind: 'resistor', ref: `R${index}`, value: '1k',
+      x: Math.round((random() - 0.5) * 400), y: Math.round((random() - 0.5) * 400),
+    }))
+    const navigate = createPartNavigationIndex(parts)
+    for (let sample = 0; sample < 25; sample += 1) {
+      const origin = parts[Math.floor(random() * parts.length)]
+      for (const key of keys) {
+        const horizontal = key === 'ArrowLeft' || key === 'ArrowRight'
+        const sign = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1
+        const nearest = (directionalOnly) => parts.reduce((best, part) => {
+          if (part.id === origin.id) return best
+          const primaryDelta = horizontal ? part.x - origin.x : part.y - origin.y
+          if (directionalOnly && sign * primaryDelta <= 0) return best
+          const secondaryDelta = horizontal ? part.y - origin.y : part.x - origin.x
+          const rank = Math.abs(primaryDelta) + Math.abs(secondaryDelta) * 2
+          return rank < best.rank ? { part, rank } : best
+        }, { part: undefined, rank: Number.POSITIVE_INFINITY }).part
+        const expected = nearest(true) ?? nearest(false)
+        assert.equal(navigate(origin.id, key)?.id, expected?.id, `layout ${layout}, origin ${origin.id}, ${key}`)
+      }
+    }
+  }
 })
 
 test('connectivity handles long reverse-ordered global-label chains without deep recursion', () => {

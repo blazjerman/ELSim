@@ -15,7 +15,7 @@ import type { ElectricalIssue } from '../domain/electricalCheck'
 import { trapDialogTab } from './dialogKeyboard'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
-import { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, retainConnectedJunctions, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { componentPins, createPartNavigationIndex, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, retainConnectedJunctions, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector } from '../domain/probe'
 import { hierarchyComponentCurrentVector, hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
@@ -885,6 +885,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
   const contextMenuReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
   const partsById = useMemo(() => new Map(project.parts.map((part) => [part.id, part])), [project.parts])
+  const partNavigationIndex = useMemo(() => createPartNavigationIndex(project.parts), [project.parts])
   const wiresById = useMemo(() => new Map(project.wires.map((wire) => [wire.id, wire])), [project.wires])
   const labelsById = useMemo(() => new Map(project.netLabels.map((label) => [label.id, label])), [project.netLabels])
   useEffect(() => {
@@ -1214,24 +1215,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     setSelection(next.length ? { kind: 'label', id: next.at(-1)! } : null)
   }, [setSelectedNetLabelIds, setSelectedPartIds, setSelectedWireIds, setSelection])
   const navigatePart = (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => {
-    const origin = partsById.get(id)
-    if (!origin || project.parts.length < 2) return
-    const horizontal = key === 'ArrowLeft' || key === 'ArrowRight'
-    const sign = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1
-    const nearest = (directionalOnly: boolean) => {
-      let best: Part | undefined
-      let bestRank = Number.POSITIVE_INFINITY
-      for (const part of project.parts) {
-        if (part.id === id) continue
-        const primaryDelta = horizontal ? part.x - origin.x : part.y - origin.y
-        if (directionalOnly && sign * primaryDelta <= 0) continue
-        const secondaryDelta = horizontal ? part.y - origin.y : part.x - origin.x
-        const rank = Math.abs(primaryDelta) + Math.abs(secondaryDelta) * 2
-        if (rank < bestRank) { best = part; bestRank = rank }
-      }
-      return best
-    }
-    const target = nearest(true) ?? nearest(false)
+    const target = partNavigationIndex(id, key)
     if (!target) return
     const nextSelected = [target.id]
     selectedPartIdsRef.current = nextSelected

@@ -777,16 +777,21 @@ test('measure selection and navigation latency in a 5000-part wire schematic', a
   await firstPart.evaluate((element) => element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window })))
   await expect(page.locator('svg.schematic .circuit-part.selected')).toHaveCount(1)
   await firstPart.focus()
-  const startingPartId = await firstPart.getAttribute('data-part-id')
-  const keyboardNavigationMs = await page.evaluate(() => new Promise<number>((resolve) => {
-    const focused = document.activeElement
-    if (!(focused instanceof SVGGElement)) { resolve(Number.NaN); return }
-    const started = performance.now()
-    focused.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now() - started)))
-  }))
-  await expect.poll(() => page.evaluate(() => document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId)).not.toBe(startingPartId)
+  const keyboardNavigationSamples: number[] = []
+  for (let index = 0; index < 7; index += 1) {
+    const startingPartId = await page.evaluate(() => document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId)
+    const keyboardNavigationMs = await page.evaluate(() => new Promise<number>((resolve) => {
+      const focused = document.activeElement
+      if (!(focused instanceof SVGGElement)) { resolve(Number.NaN); return }
+      const started = performance.now()
+      focused.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now() - started)))
+    }))
+    await expect.poll(() => page.evaluate(() => document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId)).not.toBe(startingPartId)
+    keyboardNavigationSamples.push(keyboardNavigationMs)
+  }
+  keyboardNavigationSamples.sort((a, b) => a - b)
   await page.getByTitle('Fit all circuit content in view').click()
   await expect.poll(() => mountedPartLocator.count()).toBeGreaterThan(mountedPartCount)
-  console.log(JSON.stringify({ benchmark: 'editor-wire-heavy-navigation-v7', browser: browserName, parts: 5000, wires: 4900, mountedParts: mountedPartCount, mountedWires: mountedWireCount, wireEndpointsPerSegment: 2, renderMs: Number(renderMs.toFixed(2)), selectionMedianMs: Number(samples[3].toFixed(2)), selectionP95Ms: Number(samples[6].toFixed(2)), selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), zoomSamplesChanged: changedNavigationSamples.length, zoomInputToTwoFramesMedianMs: Number(navigationTimes[Math.floor(navigationTimes.length / 2)].toFixed(2)), zoomInputToTwoFramesMaxOfChangedSamplesMs: Number(navigationTimes.at(-1)!.toFixed(2)), arrowNavigationInputToTwoFramesMs: Number(keyboardNavigationMs.toFixed(2)) }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'editor-wire-heavy-navigation-v9', browser: browserName, parts: 5000, wires: 4900, mountedParts: mountedPartCount, mountedWires: mountedWireCount, wireEndpointsPerSegment: 2, renderMs: Number(renderMs.toFixed(2)), selectionMedianMs: Number(samples[3].toFixed(2)), selectionP95Ms: Number(samples[6].toFixed(2)), selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), zoomSamplesChanged: changedNavigationSamples.length, zoomInputToTwoFramesMedianMs: Number(navigationTimes[Math.floor(navigationTimes.length / 2)].toFixed(2)), zoomInputToTwoFramesMaxOfChangedSamplesMs: Number(navigationTimes.at(-1)!.toFixed(2)), arrowNavigationSamples: keyboardNavigationSamples.length, arrowNavigationInputToTwoFramesMedianMs: Number(keyboardNavigationSamples[Math.floor(keyboardNavigationSamples.length / 2)].toFixed(2)), arrowNavigationInputToTwoFramesMaxOfSevenMs: Number(keyboardNavigationSamples.at(-1)!.toFixed(2)) }, null, 2))
 })
