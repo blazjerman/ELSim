@@ -445,6 +445,7 @@ try {
     for (const sampleCount of [100_000, 1_000_000]) {
       const solved = await runWasm(pathToFileURL(engineModule).href, makeTransientDeck(sampleCount), { summaryOnly: true, rawParserPath: path.join(output, 'engine/raw.js') })
       if (solved.status !== 0) throw new Error(`ngspice failed its ${sampleCount}-sample transient benchmark (status ${solved.status}).`)
+      if (!Number.isFinite(solved.wasmMemoryBytesBeforeRun) || !Number.isFinite(solved.wasmMemoryBytesAfterRun) || solved.wasmMemoryBytesAfterRun < solved.wasmMemoryBytesBeforeRun) throw new Error(`Could not read a valid ngspice WASM linear-memory high-water mark for the ${sampleCount}-sample benchmark.`)
       if (solved.points < sampleCount * 0.95) throw new Error(`The ${sampleCount}-sample transient produced only ${solved.points} adaptive samples.`)
       if (solved.variables !== 2) throw new Error(`The ${sampleCount}-sample transient should preserve time and one voltage vector; got ${solved.variables} variables.`)
       if (solved.traceNames?.length !== 1 || solved.traceNames[0].toLowerCase() !== 'v(out)') throw new Error(`The ${sampleCount}-sample transient did not preserve its expected V(out) trace.`)
@@ -459,6 +460,8 @@ try {
         rawBytes: solved.rawBytes,
         vectorBytes: solved.vectorBytes,
         rawParsingMs: Number(solved.parsingMs.toFixed(3)),
+        wasmLinearMemoryBytesBeforeRun: solved.wasmMemoryBytesBeforeRun,
+        wasmLinearMemoryHighWaterBytes: solved.wasmMemoryBytesAfterRun,
         baselineProcessRssBytes: solved.baselineRssBytes,
         sampledPeakProcessRssBytes: solved.peakRssBytes,
         sampledPeakRssIncreaseBytes: solved.peakRssBytes - solved.baselineRssBytes,
@@ -488,7 +491,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 8,
+    benchmarkVersion: 9,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
