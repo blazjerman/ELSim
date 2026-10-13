@@ -183,22 +183,35 @@ function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: str
 export function analyzeConnectivity(project: Project): Connectivity {
   const { dsu, groundToken } = connectedTokens(project)
   const tokens = dsu.values()
-  const groups = new Map<string, string[]>()
+  const groups = new Map<string, { minimumToken: string }>()
   for (const token of tokens) {
     const root = dsu.find(token)
-    groups.set(root, [...(groups.get(root) ?? []), token])
+    const group = groups.get(root)
+    if (group) {
+      if (token < group.minimumToken) group.minimumToken = token
+    } else groups.set(root, { minimumToken: token })
   }
 
   const labelsByRoot = new Map<string, string[]>()
+  const labelNamesByRoot = new Map<string, Set<string>>()
   for (const label of project.netLabels) {
-    const values = labelsByRoot.get(dsu.find(`label:${label.id}`)) ?? []
-    if (!values.includes(label.name)) values.push(label.name)
-    labelsByRoot.set(dsu.find(`label:${label.id}`), values)
+    const root = dsu.find(`label:${label.id}`)
+    let values = labelsByRoot.get(root)
+    let names = labelNamesByRoot.get(root)
+    if (!values) {
+      values = []
+      names = new Set()
+      labelsByRoot.set(root, values)
+      labelNamesByRoot.set(root, names)
+    }
+    if (!names!.has(label.name)) {
+      names!.add(label.name)
+      values.push(label.name)
+    }
   }
   const groundRoot = dsu.find(groundToken)
   const namedGroups = [...groups.entries()].filter(([root]) => root !== groundRoot).sort(([, left], [, right]) => {
-    const leftKey = left.slice().sort()[0] ?? '', rightKey = right.slice().sort()[0] ?? ''
-    return leftKey.localeCompare(rightKey)
+    return left.minimumToken.localeCompare(right.minimumToken)
   })
   const nameByRoot = new Map<string, string>([[groundRoot, '0']])
   const diagnostics: Connectivity['diagnostics'] = []

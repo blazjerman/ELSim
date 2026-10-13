@@ -159,7 +159,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const transistorModels: { part: Part; name: string }[] = []
   const jfetModels: { part: Part; name: string }[] = []
   const mosfetModels: { part: Part; name: string }[] = []
-  const importedDeviceModels = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models)
+  const parsedModelAssets = (project.modelAssets ?? []).map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections))
+  const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models)
+  const importedSubcircuits = parsedModelAssets.flatMap((library) => library.subcircuits)
+  const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary).subcircuits : []
+  const subcircuitsByName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()
+  for (const definition of [...importedSubcircuits, ...generatedSubcircuits]) {
+    const key = definition.name.toLowerCase()
+    if (!subcircuitsByName.has(key)) subcircuitsByName.set(key, definition)
+  }
   const usedReferences = new Set(project.parts.map((part) => part.ref.toLowerCase()))
   const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.map((label) => label.name)].map((name) => name.toLowerCase()))
   const usedModelNames = new Set([...importedDeviceModels.map((model) => model.name.toLowerCase()), ...usedReferences, ...usedNodes, 'ddefault', 'dzener', 'elsim_internal_sw'])
@@ -529,8 +537,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       if (!part.deviceModel) mosfetModels.push({ part, name: model })
     }
     else if (part.kind === 'subcircuit') {
-      const generatedDefinitions = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary).subcircuits : []
-      const definition = [...(project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).subcircuits), ...generatedDefinitions].find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())
+      const definition = subcircuitsByName.get(part.modelName?.toLowerCase() ?? '')
       if (!definition || !part.modelPins || definition.pins.length !== part.modelPins.length || definition.pins.some((pin, index) => pin.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) {
         const message = `${part.ref} refers to a missing or pin-incompatible imported subcircuit ${part.modelName ?? ''}.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
