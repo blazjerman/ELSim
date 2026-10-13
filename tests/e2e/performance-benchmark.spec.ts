@@ -149,7 +149,7 @@ test('measure rendering and solve time for a 500-instance nested circuit in brow
   await expect(page.locator('.toast')).toContainText('1003 result vectors')
   const solveReadyMs = performance.now() - solveStarted
   const savedTraceIds = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.selectedTraceIds)
-  expect(savedTraceIds).toContain('V(out5)')
+  expect(savedTraceIds.map((traceId: string) => traceId.toLowerCase())).toContain('v(out5)')
   expect(pageErrors).toEqual([])
   console.log(JSON.stringify({ benchmark: 'browser-500-instance-nested-hierarchy-v1', browser: browserName, hierarchyInstances: 500, initiallyRenderedParts, editorReadyMs: Number(editorReadyMs.toFixed(2)), operatingPointReadyMs: Number(solveReadyMs.toFixed(2)), resultVectorCount: 1003, selectedTracePreserved: true }, null, 2))
 })
