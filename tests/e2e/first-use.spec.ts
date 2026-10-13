@@ -461,6 +461,12 @@ test('keyboard opens schematic probe actions and restores focus after closing', 
   const actions = menu.getByRole('menuitem')
   await expect(menu).toBeVisible()
   await expect(actions.first()).toBeFocused()
+  const focusRing = await actions.first().evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { style: style.outlineStyle, width: style.outlineWidth, color: style.outlineColor }
+  })
+  expect(focusRing.style).not.toBe('none')
+  expect(Number.parseFloat(focusRing.width)).toBeGreaterThanOrEqual(2)
   await page.keyboard.press('ArrowDown')
   await expect(actions.nth(1)).toBeFocused()
   await page.keyboard.press('Escape')
