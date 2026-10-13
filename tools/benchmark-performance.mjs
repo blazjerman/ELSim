@@ -199,7 +199,7 @@ try {
   const build = createRequire(import.meta.url)
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
-  const { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
+  const { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, projectPinLocations, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
   const { moveSelectedSceneObjects } = build(path.join(output, 'domain/sceneEdit.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
   const { createWireCurrentFlowSampler } = build(path.join(output, 'domain/wireFlow.js'))
@@ -315,6 +315,10 @@ try {
       }
 
       const dots = measure(() => wireConnectionDotPoints(project))
+      const cachedPins = projectPinLocations(project)
+      const cachedPinDots = measure(() => wireConnectionDotPoints(project, cachedPins))
+      const dotCoordinates = (items) => items.map(({ x, y }) => [x, y])
+      if (JSON.stringify(dotCoordinates(cachedPinDots.value)) !== JSON.stringify(dotCoordinates(dots.value))) throw new Error('Reusing editor pin locations changed connection-dot membership or order.')
       if (dots.value.length !== wireSegments * 2) throw new Error(`Wire-grid fixture expected ${wireSegments * 2} pin-connection dots; got ${dots.value.length}.`)
       const indexedDots = dots.value.map((dot) => ({ ...dot, id: `${Math.round(dot.x * 1000)}:${Math.round(dot.y * 1000)}` }))
       const genericDotBuild = measure(() => createViewportIndex(indexedDots, (dot) => ({ left: dot.x - 8, top: dot.y - 8, right: dot.x + 8, bottom: dot.y + 8 })), 1, 5)
@@ -326,6 +330,7 @@ try {
       connectionDots = {
         count: dots.value.length,
         compute: { medianMs: dots.medianMs, p95Ms: dots.p95Ms },
+        computeWithCachedPins: { medianMs: cachedPinDots.medianMs, p95Ms: cachedPinDots.p95Ms },
         viewport: {
           genericIndexBuild: { medianMs: genericDotBuild.medianMs, p95Ms: genericDotBuild.p95Ms },
           genericQuery: { medianMs: genericDotQuery.medianMs, p95Ms: genericDotQuery.p95Ms },

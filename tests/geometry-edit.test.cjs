@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
@@ -61,6 +61,7 @@ test('wire-connection dot broadphase preserves exact pin, T-join, and crossing g
     if (connectedToPin || connectedToWire) add(x, y)
   }
   assert.deepEqual(wireConnectionDotPoints(project), [...expected.values()])
+  assert.deepEqual(wireConnectionDotPoints(project, projectPinLocations(project)), [...expected.values()])
   assert.deepEqual(wireConnectionDotPoints(project).map(({ x, y }) => [x, y]), [[-50, 0], [50, 0], [0, 0]])
 })
 

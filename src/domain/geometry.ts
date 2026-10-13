@@ -207,15 +207,15 @@ function clean(value: number): number {
   return Object.is(rounded, -0) ? 0 : rounded
 }
 
-export function projectPinLocations(project: Project): PinLocation[] {
+export function projectPinLocations(project: Pick<Project, 'parts'>): PinLocation[] {
   return project.parts.flatMap(componentPins)
 }
 
 /** Find schematic dots at pin/wire joins and wire-to-wire endpoint joins.
  * The spatial broadphase avoids testing every pin against every wire on edits;
  * pointOnSegment remains the exact geometry check. */
-export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'>): Point[] {
-  const pins = project.parts.flatMap(componentPins)
+export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'>, cachedPins?: readonly PinLocation[]): Point[] {
+  const pins = cachedPins ?? projectPinLocations(project)
   const cellSize = 64
   const cellKey = (x: number, y: number) => `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`
   const segmentCells = new Map<string, Wire[]>()

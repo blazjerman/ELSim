@@ -439,6 +439,8 @@ Waveform cursor notification follow-up (2026-10-13): the cursor snapshot changes
 
 Wire animation follow-up (2026-10-13): the requestAnimationFrame loop now iterates only wire segments whose solved current is nonzero, rather than scanning every visible segment and skipping idle ones on every frame. The active-flow set is updated with each current sample and cleaned up when paths unmount; unit coverage checks simultaneous flowing wires and confirms idle paths are not written. All 116 non-engine Firefox UI cases, both focused Firefox current-animation playback/reduced-motion cases, all 30 unit groups, typecheck, Chromium UI smoke, and production build pass. This reduces frame-loop work in large schematics without changing current magnitude, phase, or dot appearance; it does not yet claim a measured end-to-end frame-rate gain. No WASM rebuild was needed.
 
+Connection-dot recomputation follow-up (2026-10-13): schematic pin locations are now reused by wire connection-dot generation instead of being recalculated on each edit. The 5,000-part benchmark still produces all 9,800 expected dots; paired measurements were 10.361 ms median / 29.885 ms p95 without pin reuse and 8.257 ms / 10.089 ms with it. Geometry regressions verify identical dot membership and coordinates. This removes duplicate pin-position work from the UI update path; it is not a frame-time claim. See [PERFORMANCE_BENCHMARKS.md](PERFORMANCE_BENCHMARKS.md). No WASM rebuild was needed.
+
 ## 7. Primary references checked
 
 - ngspice source: https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/ (M0.3 spike pinned to `a80f6e3e95d51534905b1f23410a951802666656`)
