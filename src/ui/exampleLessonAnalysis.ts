@@ -37,6 +37,10 @@ function formatLessonEnergy(joules: number): string {
   return `${Number((joules * 1e6).toPrecision(3))} µJ`
 }
 
+function formatLessonPower(watts: number): string {
+  return watts < 1 ? `${Number((watts * 1e3).toPrecision(3))} mW` : `${Number(watts.toPrecision(3))} W`
+}
+
 function formatLessonTime(seconds: number): string {
   if (seconds < 0.1) return `${Number((seconds * 1000).toPrecision(3))} ms`
   return `${Number(seconds.toPrecision(3))} s`
@@ -172,6 +176,17 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   }
   const parallelResistorR1SolvedMa = parallelResistorCurrentAtOp('current-divider-r1')
   const parallelResistorR2SolvedMa = parallelResistorCurrentAtOp('current-divider-r2')
+  const isResistorPowerLesson = lessonId === 'resistor-power'
+  const resistorPowerResistance = isResistorPowerLesson ? componentMagnitude(partsById.get('resistor-power-r1')?.value ?? '1 kΩ', 'resistor') : null
+  const resistorPowerSupply = isResistorPowerLesson ? componentMagnitude(partsById.get('resistor-power-v1')?.value ?? '5 V', 'source') : null
+  const resistorPowerPrediction = resistorPowerResistance !== null && resistorPowerResistance > 0 && resistorPowerSupply !== null
+    ? resistorPowerSupply ** 2 / resistorPowerResistance
+    : null
+  const resistorPowerPart = partsById.get('resistor-power-r1')
+  const resistorPowerVector = resistorPowerPart ? componentCurrentVector(resistorPowerPart).toLowerCase() : ''
+  const resistorPowerSolvedCurrent = simulationResult?.analysis === 'op' && resistorPowerVector
+    ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === resistorPowerVector || trace.baseId?.toLowerCase() === resistorPowerVector)?.values[0]
+    : undefined
   const potentiometer = exampleLesson?.id === 'potentiometer' ? partsById.get('pot-p1') : undefined
   const potentiometerPosition = potentiometer ? Number(potentiometer.wiperPosition ?? '0.5') : null
   const potentiometerSupply = exampleLesson?.id === 'potentiometer' ? componentMagnitude(partsById.get('pot-v1')?.value ?? '10 V', 'source') : null
@@ -361,6 +376,14 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
               : `For V1 = ${parallelResistorSupplyText}, R1 = ${parallelResistorR1Text}, and R2 = ${parallelResistorR2Text}, V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. Ngspice solved ${formatLessonCurrent(Math.abs(parallelResistorR1SolvedMa) * 1000)} and ${formatLessonCurrent(Math.abs(parallelResistorR2SolvedMa) * 1000)}. The total supply current is the sum of both branch currents.`
             : `With both branches across ${parallelResistorSupplyText}, I = V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. The branch with half the resistance carries twice the current.`
         : 'Enter a valid source voltage and positive resistor values, then rerun to compare the branch currents.'
+    : isResistorPowerLesson && simulationResult
+      ? resistorPowerPrediction !== null && resistorPowerSupply !== null
+        ? simulationResultStale
+          ? `The previous solve is stale. With V1 = ${partsById.get('resistor-power-v1')?.value} and R1 = ${partsById.get('resistor-power-r1')?.value}, P = V²/R predicts ${formatLessonPower(resistorPowerPrediction)}. Rerun to compare the updated resistor current and power.`
+          : resistorPowerSolvedCurrent !== undefined
+            ? `At V1 = ${partsById.get('resistor-power-v1')?.value} and R1 = ${partsById.get('resistor-power-r1')?.value}, P = V × I = V²/R predicts ${formatLessonPower(resistorPowerPrediction)}. Ngspice solved ${formatLessonCurrent(Math.abs(resistorPowerSolvedCurrent) * 1000)} through R1, giving ${formatLessonPower(Math.abs(resistorPowerSupply * resistorPowerSolvedCurrent))}. Change R1 from 1 kΩ to 100 Ω and rerun: power rises from 25 mW to 250 mW. Resistor temperature is not modeled.`
+            : `P = V²/R predicts ${formatLessonPower(resistorPowerPrediction)}. Compare V(VIN) and I(R1), then change R1 to 100 Ω and rerun. Resistor temperature is not modeled.`
+        : 'Enter a valid supply voltage and positive resistor value, then rerun to compare electrical power.'
     : exampleLesson?.id === 'capacitor-discharge' && simulationResult
       ? capacitorDischargeResistance !== null && capacitorDischargeCapacitance !== null && capacitorDischargeInitialVoltage !== null && capacitorDischargeTimeConstant !== null
         ? simulationResultStale

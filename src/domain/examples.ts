@@ -636,6 +636,43 @@ export function createParallelResistorsExampleProject(): Project {
   return project
 }
 
+/** A grounded resistor circuit for learning electrical power dissipation. */
+export function createResistorPowerExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'resistor-power-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'dc', x: 280, y: 400, rotation: 0 }
+  const resistor: Part = { id: 'resistor-power-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 520, y: 360, rotation: 90 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const parts = [source, resistor]
+  const wires = [
+    { id: 'resistor-power-source-rise', points: [[280, 350], [280, 260]] as [[number, number], [number, number]] },
+    { id: 'resistor-power-supply-bus', points: [[280, 260], [520, 260]] as [[number, number], [number, number]] },
+    { id: 'resistor-power-r1-supply', points: [[520, 260], [520, 310]] as [[number, number], [number, number]] },
+    { id: 'resistor-power-r1-return', points: [[520, 410], [520, 500]] as [[number, number], [number, number]] },
+    { id: 'resistor-power-return-bus', points: [[280, 500], [520, 500]] as [[number, number], [number, number]] },
+    { id: 'resistor-power-source-return', points: [[280, 450], [280, 500]] as [[number, number], [number, number]] },
+  ]
+  const netLabels = [
+    labelAt('resistor-power-vin-source', 'VIN', source, 0),
+    labelAt('resistor-power-vin-r1', 'VIN', resistor, 0),
+    labelAt('resistor-power-ground-source', '0', source, 1),
+    labelAt('resistor-power-ground-r1', '0', resistor, 1),
+  ]
+  project.name = 'Resistor power dissipation'
+  project.parts = parts
+  project.wires = wires
+  project.junctions = []
+  project.netLabels = netLabels
+  project.sheets = [{ ...project.sheets[0], parts, wires, junctions: [], netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'I(R1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A three-terminal adjustable divider whose wiper position sets the output voltage. */
 export function createPotentiometerExampleProject(): Project {
   const project = createStarterProject()
