@@ -551,6 +551,46 @@ export function createVoltageDividerExampleProject(): Project {
   return project
 }
 
+/** A grounded parallel-resistor network for learning how current divides by resistance. */
+export function createParallelResistorsExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'current-divider-v1', kind: 'source', ref: 'V1', value: '10 V', sourceMode: 'dc', x: 280, y: 400, rotation: 0 }
+  const upper: Part = { id: 'current-divider-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 520, y: 360, rotation: 90 }
+  const lower: Part = { id: 'current-divider-r2', kind: 'resistor', ref: 'R2', value: '2 kΩ', x: 760, y: 360, rotation: 90 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const parts = [source, upper, lower]
+  project.name = 'Parallel resistor current divider'
+  project.parts = parts
+  project.wires = [
+    { id: 'current-divider-source-rise', points: [[280, 350], [280, 260]] },
+    { id: 'current-divider-supply-bus', points: [[280, 260], [760, 260]] },
+    { id: 'current-divider-r1-supply', points: [[520, 260], [520, 310]] },
+    { id: 'current-divider-r2-supply', points: [[760, 260], [760, 310]] },
+    { id: 'current-divider-r1-return', points: [[520, 410], [520, 500]] },
+    { id: 'current-divider-return-bus', points: [[280, 500], [760, 500]] },
+    { id: 'current-divider-r2-return', points: [[760, 410], [760, 500]] },
+    { id: 'current-divider-source-return', points: [[280, 450], [280, 500]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    labelAt('current-divider-source-positive', 'VIN', source, 0),
+    labelAt('current-divider-r1-positive', 'VIN', upper, 0),
+    labelAt('current-divider-r2-positive', 'VIN', lower, 0),
+    labelAt('current-divider-source-ground', '0', source, 1),
+    labelAt('current-divider-r1-ground', '0', upper, 1),
+    labelAt('current-divider-r2-ground', '0', lower, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'I(R1)', 'I(R2)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: -5, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A three-terminal adjustable divider whose wiper position sets the output voltage. */
 export function createPotentiometerExampleProject(): Project {
   const project = createStarterProject()

@@ -130,6 +130,23 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const dividerR2Text = partsById.get('divider-r2')?.value ?? 'changed'
   const dividerSupplyText = partsById.get('divider-v1')?.value ?? 'changed'
   const dividerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const isParallelResistorLesson = lessonId === 'parallel-resistors'
+  const parallelResistorSupply = isParallelResistorLesson ? componentMagnitude(partsById.get('current-divider-v1')?.value ?? '10 V', 'source') : null
+  const parallelResistorR1 = isParallelResistorLesson ? componentMagnitude(partsById.get('current-divider-r1')?.value ?? '1 kΩ', 'resistor') : null
+  const parallelResistorR2 = isParallelResistorLesson ? componentMagnitude(partsById.get('current-divider-r2')?.value ?? '2 kΩ', 'resistor') : null
+  const parallelResistorR1Text = partsById.get('current-divider-r1')?.value ?? 'changed'
+  const parallelResistorR2Text = partsById.get('current-divider-r2')?.value ?? 'changed'
+  const parallelResistorSupplyText = partsById.get('current-divider-v1')?.value ?? 'changed'
+  const parallelResistorPredictedR1Ma = parallelResistorSupply !== null && parallelResistorR1 !== null && parallelResistorR1 > 0 ? parallelResistorSupply / parallelResistorR1 * 1000 : null
+  const parallelResistorPredictedR2Ma = parallelResistorSupply !== null && parallelResistorR2 !== null && parallelResistorR2 > 0 ? parallelResistorSupply / parallelResistorR2 * 1000 : null
+  const parallelResistorCurrentAtOp = (partId: string): number | undefined => {
+    if (!isParallelResistorLesson || simulationResult?.analysis !== 'op') return undefined
+    const part = partsById.get(partId)
+    const vectorId = part ? componentCurrentVector(part).toLowerCase() : ''
+    return simulationResult.traces.find((trace) => trace.id.toLowerCase() === vectorId || trace.baseId?.toLowerCase() === vectorId)?.values[0]
+  }
+  const parallelResistorR1SolvedMa = parallelResistorCurrentAtOp('current-divider-r1')
+  const parallelResistorR2SolvedMa = parallelResistorCurrentAtOp('current-divider-r2')
   const potentiometer = exampleLesson?.id === 'potentiometer' ? partsById.get('pot-p1') : undefined
   const potentiometerPosition = potentiometer ? Number(potentiometer.wiperPosition ?? '0.5') : null
   const potentiometerSupply = exampleLesson?.id === 'potentiometer' ? componentMagnitude(partsById.get('pot-v1')?.value ?? '10 V', 'source') : null
@@ -309,6 +326,16 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
         : parallelLedUpperCurrent !== undefined && parallelLedLowerCurrent !== undefined
           ? `Ngspice solved ${formatLessonCurrent(Math.abs(parallelLedUpperCurrent) * 1000)} through D1 and ${formatLessonCurrent(Math.abs(parallelLedLowerCurrent) * 1000)} through D2. Each LED has its own series resistor. Change R2 from 330 Ω to 680 Ω and rerun: D2's current should fall while D1's branch stays about the same.`
           : 'Run the operating point, then compare I(D1) and I(D2). Each LED needs its own resistor so one branch does not set the current for both.'
+    : exampleLesson?.id === 'parallel-resistors' && simulationResult
+      ? parallelResistorPredictedR1Ma !== null && parallelResistorPredictedR2Ma !== null
+        ? simulationResultStale
+          ? `The previous result is stale. With V1 = ${parallelResistorSupplyText}, R1 = ${parallelResistorR1Text}, and R2 = ${parallelResistorR2Text}, V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} in the R1 branch and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} in R2. Rerun to compare the solved currents.`
+          : parallelResistorR1SolvedMa !== undefined && parallelResistorR2SolvedMa !== undefined
+            ? Math.abs((Math.abs(parallelResistorR1SolvedMa) / Math.abs(parallelResistorR2SolvedMa)) - (parallelResistorR2 ?? 1) / (parallelResistorR1 ?? 1)) < 0.03
+              ? `Ngspice solved ${formatLessonCurrent(Math.abs(parallelResistorR1SolvedMa) * 1000)} through R1 and ${formatLessonCurrent(Math.abs(parallelResistorR2SolvedMa) * 1000)} through R2. The lower resistance carries more current: I = V/R. Change R2 to match R1 at ${parallelResistorR1Text} and rerun; both branches should carry ${formatLessonCurrent(parallelResistorPredictedR1Ma)}.`
+              : `For V1 = ${parallelResistorSupplyText}, R1 = ${parallelResistorR1Text}, and R2 = ${parallelResistorR2Text}, V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. Ngspice solved ${formatLessonCurrent(Math.abs(parallelResistorR1SolvedMa) * 1000)} and ${formatLessonCurrent(Math.abs(parallelResistorR2SolvedMa) * 1000)}. The total supply current is the sum of both branch currents.`
+            : `With both branches across ${parallelResistorSupplyText}, I = V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. The branch with half the resistance carries twice the current.`
+        : 'Enter a valid source voltage and positive resistor values, then rerun to compare the branch currents.'
     : exampleLesson?.id === 'capacitor-discharge' && simulationResult
       ? capacitorDischargeResistance !== null && capacitorDischargeCapacitance !== null && capacitorDischargeInitialVoltage !== null && capacitorDischargeTimeConstant !== null
         ? simulationResultStale

@@ -76,7 +76,7 @@ const EMPTY_SYMBOL_GEOMETRY: NonNullable<ReturnType<typeof componentDefinitionFo
 const exampleSelection: Record<ExampleId, string> = {
   potentiometer: 'pot-p1', rc: 'p-r1', 'ac-lowpass': 'ac-lowpass-c1', 'ac-highpass': 'ac-highpass-c1', led: 'p-c1', 'led-current-limiter': 'p-r1', 'led-parallel': 'parallel-led-d1', 'capacitor-discharge': 'cap-discharge-c1',
   rlc: 'rlc-l1', 'lc-energy': 'lc-energy-c1', 'rl-step': 'rl-step-l1', flyback: 'flyback-d1', controlled: 'amp-e1', 'current-controlled': 'current-f1', transistor: 'switch-q1', 'voltage-switch': 'vswitch-s1', pnp: 'pnp-switch-q1',
-  pjfet: 'pjfet-switch-j1', mosfet: 'mos-switch-m1', pmos: 'pmos-switch-m1', jfet: 'jfet-switch-j1', hierarchy: 'example-x1', 'rlc-resonance': 'resonance-l1',
+  pjfet: 'pjfet-switch-j1', mosfet: 'mos-switch-m1', pmos: 'pmos-switch-m1', jfet: 'jfet-switch-j1', hierarchy: 'example-x1', 'rlc-resonance': 'resonance-l1', 'parallel-resistors': 'current-divider-r1',
   pwl: 'p-v1', 'current-source': 'isource-i1', rectifier: 'rectifier-d1', 'bridge-rectifier': 'bridge-d1', 'voltage-divider': 'divider-r1', zener: 'zener-d1', transformer: 'transformer-t1', 'transformer-current': 'transformer-t1', 'imported-opamp': 'example-opamp-xu1', 'inverting-opamp': 'example-opamp-xu1', 'common-emitter': 'common-emitter-q1', 'logic-gates': 'logic-and', 'logic-gates-3v3': 'logic-and',
 }
 function IconButton({ title, children, onClick, active = false, disabled = false }: { title: string; children: ReactNode; onClick?: () => void; active?: boolean; disabled?: boolean }) {
@@ -3924,7 +3924,7 @@ export default function App() {
           mosfet: examples.createMosfetSwitchExampleProject, pmos: examples.createMosfetHighSideExampleProject,
           jfet: examples.createJfetSwitchExampleProject, hierarchy: examples.createHierarchicalExampleProject,
           pwl: examples.createPwlExampleProject, 'current-source': examples.createCurrentSourceExampleProject,
-          rectifier: examples.createDiodeRectifierExampleProject, 'bridge-rectifier': examples.createBridgeRectifierExampleProject, 'voltage-divider': examples.createVoltageDividerExampleProject, potentiometer: examples.createPotentiometerExampleProject,
+          rectifier: examples.createDiodeRectifierExampleProject, 'bridge-rectifier': examples.createBridgeRectifierExampleProject, 'voltage-divider': examples.createVoltageDividerExampleProject, 'parallel-resistors': examples.createParallelResistorsExampleProject, potentiometer: examples.createPotentiometerExampleProject,
           zener: examples.createZenerRegulatorExampleProject, transformer: examples.createTransformerExampleProject,
           'transformer-current': examples.createTransformerCurrentExampleProject,
           'imported-opamp': examples.createImportedOpampExampleProject,
@@ -3977,6 +3977,7 @@ export default function App() {
       'current-source': { title: 'A current source sets load current', guidance: 'Run the operating point. The 1 mA through 1 kΩ produces 1 V; probe the load to confirm.' },
       potentiometer: { title: 'The wiper adjusts the output', guidance: 'Run the operating point and inspect V(VOUT). The wiper percentage is measured from the upper terminal: 50% gives about 5 V from the 10 V supply, while a smaller percentage moves the output closer to VIN.' },
       'voltage-divider': { title: 'Two resistors split a voltage', guidance: 'Run the operating point and probe V(VOUT). Equal 1 kΩ resistors share the 10 V supply evenly, so the midpoint is 5 V. Change either resistor and see how the ratio changes.' },
+      'parallel-resistors': { title: 'Compare current in parallel branches', guidance: 'Run the operating point and compare I(R1) with I(R2). Both resistors have the same 10 V across them, so the 1 kΩ branch carries twice the current of the 2 kΩ branch. Change R2 to 1 kΩ and rerun: the branch currents should match.' },
       zener: { title: 'A Zener diode holds a reference voltage', guidance: 'Run the operating point and inspect V(VZ) and I(DZ1). The reverse-connected Zener holds the output near 5.1 V while it has enough current; R1 limits current from the 12 V supply.' },
       transformer: { title: 'A transformer changes AC voltage', guidance: 'Run the AC sweep and compare V(VIN) and V(VOUT). A 2:1 secondary-to-primary turns ratio gives about twice the primary voltage. The coupled-inductor model omits winding loss, leakage, and core saturation.' },
       'transformer-current': { title: 'Watch current in both transformer windings', guidance: 'Run the transient and scrub the time bar. The two winding arrows follow their separately solved ngspice currents; right-click T1 to plot either winding current. The coupled-inductor model does not simulate core saturation.' },

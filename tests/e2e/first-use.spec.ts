@@ -409,7 +409,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   const search = dialog.getByRole('textbox', { name: 'Find an example' })
   const cards = dialog.locator('.example-list article')
-  await expect(cards).toHaveCount(36)
+  await expect(cards).toHaveCount(37)
   await search.fill('P-JFET')
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('P-JFET positive-rail switch')
@@ -419,7 +419,7 @@ test('examples can be searched by title and description', { tag: '@ui-smoke' }, 
   await search.fill('no such circuit')
   await expect(dialog.getByRole('status')).toContainText('No examples found')
   await dialog.getByRole('button', { name: 'Clear example search' }).click()
-  await expect(cards).toHaveCount(36)
+  await expect(cards).toHaveCount(37)
 })
 
 test('examples can be browsed by topic and combined with search', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -439,7 +439,7 @@ test('examples can be browsed by topic and combined with search', { tag: '@ui-sm
   await topicFilters.getByRole('button', { name: 'AC & reactive' }).click()
   await expect(cards).toHaveCount(8)
   await topicFilters.getByRole('button', { name: 'All' }).click()
-  await expect(cards).toHaveCount(36)
+  await expect(cards).toHaveCount(37)
 })
 
 test('example picker offers a short beginner path before the full catalog', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -455,7 +455,7 @@ test('example picker offers a short beginner path before the full catalog', { ta
   await expect(cards.nth(2)).toContainText('LED current limiter')
   await expect(cards.nth(3)).toContainText('Capacitor discharge')
   await topicFilters.getByRole('button', { name: 'All' }).click()
-  await expect(cards).toHaveCount(36)
+  await expect(cards).toHaveCount(37)
 })
 
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -4409,6 +4409,40 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expect(outputRow).toContainText('6.666667')
   await expect(page.locator('.example-lesson-next-step')).toContainText('divider formula predicts VOUT = 6.667 V; ngspice solved 6.667 V')
+})
+
+test('parallel-resistor lesson predicts, solves, and compares branch current division', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Compare current through 1 kΩ and 2 kΩ branches' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Parallel resistor current divider')
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await expect(page.locator('svg.schematic .wire-line')).toHaveCount(8)
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  const lesson = page.locator('.example-lesson-next-step')
+  await expect(lesson).toContainText('10 mA through R1')
+  await expect(lesson).toContainText('5 mA through R2')
+  await expectAvailableTrace(page, 'I(R1)')
+  await expectAvailableTrace(page, 'I(R2)')
+  for (const wireId of ['current-divider-source-rise', 'current-divider-r1-supply', 'current-divider-r1-return', 'current-divider-source-return']) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    await expect(flow).toHaveAttribute('data-current-magnitude', /\d/)
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.004)
+  }
+  await page.locator('.circuit-part[data-part-id="current-divider-r2"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="current-divider-r2:value"]').fill('1 kΩ')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(lesson).toContainText('V/R predicts 10 mA in the R1 branch and 10 mA in R2')
+  await lesson.getByRole('button', { name: 'Run this circuit again' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(lesson).toContainText('10 mA through R1 and 10 mA through R2')
 })
 
 test('imported op-amp lesson opens its IC model and solves the feedback gain', { tag: '@ngspice' }, async ({ page }) => {
