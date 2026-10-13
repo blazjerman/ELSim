@@ -2020,11 +2020,44 @@ test('schematic components use one roving tab stop and arrow-key spatial navigat
   await expect(distantPart).toBeFocused()
 })
 
-test('schematic wire segments and net labels can be selected from the keyboard', { tag: '@ui-smoke' }, async ({ page }) => {
+test('schematic parts, wire segments, and net labels show keyboard focus and can be selected', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  const focusContrast = (foreground: string) => {
+    const linearLuminance = (channels: number[]) => {
+      const linear = channels.map((channel) => {
+        const value = channel / 255
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      })
+      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
+    }
+    const rgb = foreground.match(/[\d.]+/g)?.slice(0, 3).map(Number)
+    if (!rgb || rgb.length !== 3) throw new Error(`Cannot parse focus stroke ${foreground}`)
+    const [light, dark] = [linearLuminance(rgb), linearLuminance([0x47, 0x53, 0x4a])].sort((left, right) => right - left)
+    return (light + 0.05) / (dark + 0.05)
+  }
+  const component = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await component.focus()
+  await page.keyboard.press('Enter')
+  const componentFocus = await component.locator('.part-hit').evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { stroke: style.stroke, width: style.strokeWidth, dash: style.strokeDasharray }
+  })
+  expect(componentFocus).toMatchObject({ stroke: 'rgb(150, 226, 177)', width: '2px', dash: '3px, 3px' })
+  expect(focusContrast(componentFocus.stroke)).toBeGreaterThanOrEqual(3)
+
   const wire = page.getByRole('button', { name: /^Wire segment from/ }).first()
   await expect(wire).toHaveAttribute('tabindex', '0')
   await wire.focus()
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Shift+Tab')
+  await expect(wire).toBeFocused()
+  const wireFocus = await wire.locator('line').nth(1).evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { stroke: style.stroke, width: style.strokeWidth, filter: style.filter }
+  })
+  expect(wireFocus).toMatchObject({ stroke: 'rgb(184, 240, 200)', width: '3px' })
+  expect(wireFocus.filter).not.toBe('none')
+  expect(focusContrast(wireFocus.stroke)).toBeGreaterThanOrEqual(3)
   await page.keyboard.press('Enter')
   await expect(wire).toHaveClass(/selected/)
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
@@ -2040,6 +2073,12 @@ test('schematic wire segments and net labels can be selected from the keyboard',
   await expect(label).toHaveAttribute('tabindex', '0')
   await label.focus()
   await page.keyboard.press('Space')
+  const labelFocus = await label.locator('text').evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { stroke: style.stroke, width: style.strokeWidth, dash: style.strokeDasharray }
+  })
+  expect(labelFocus).toMatchObject({ stroke: 'rgb(167, 237, 191)', width: '2px', dash: '3px, 2px' })
+  expect(focusContrast(labelFocus.stroke)).toBeGreaterThanOrEqual(3)
   await expect(label).toHaveClass(/selected/)
   await expect(label).toHaveAttribute('aria-pressed', 'true')
   const labelY = Number(await label.locator('text').getAttribute('y'))
