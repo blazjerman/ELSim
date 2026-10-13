@@ -1,5 +1,5 @@
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { X } from 'lucide-react'
+import { trapDialogTab } from './dialogKeyboard'
 
 type Shortcut = readonly [string, string]
 type Props = {
@@ -8,20 +8,6 @@ type Props = {
   logicGates: readonly Shortcut[]
   reserved: readonly Shortcut[]
   onClose: () => void
-}
-
-function trapDialogTab(event: ReactKeyboardEvent<HTMLElement>) {
-  if (event.key !== 'Tab') return
-  const controls = [...event.currentTarget.querySelectorAll<HTMLElement>(
-    'a[href], button, input, select, textarea, [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
-  )].filter((control) => !control.hidden && !control.matches(':disabled') && getComputedStyle(control).visibility !== 'hidden' && control.getClientRects().length > 0 && !control.closest('[aria-hidden="true"], [inert]'))
-  const first = controls[0], last = controls.at(-1)
-  if (!first || !last) { event.preventDefault(); return }
-  if (event.shiftKey && (document.activeElement === first || !event.currentTarget.contains(document.activeElement))) {
-    event.preventDefault(); last.focus()
-  } else if (!event.shiftKey && (document.activeElement === last || !event.currentTarget.contains(document.activeElement))) {
-    event.preventDefault(); first.focus()
-  }
 }
 
 export default function KeyboardShortcuts({ editing, components, logicGates, reserved, onClose }: Props) {

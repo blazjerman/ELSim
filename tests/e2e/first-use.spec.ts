@@ -5867,6 +5867,14 @@ test('Examples, Circuit checks, and Sheet settings keep keyboard focus inside mo
   await expect(sheetSettings.getByRole('button', { name: 'Done' })).toBeFocused()
   await sheetSettings.getByRole('button', { name: 'Done' }).click()
   await expect(sheetSettingsTrigger).toBeFocused()
+
+  const netlistTrigger = page.getByRole('button', { name: 'Open generated netlist' })
+  await netlistTrigger.click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(netlist).toBeHidden()
+  await expect(netlistTrigger).toBeFocused()
 })
 
 test('circuit checks flag two declared hierarchical outputs connected to one net', async ({ page }) => {
