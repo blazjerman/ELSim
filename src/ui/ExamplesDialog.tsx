@@ -56,7 +56,7 @@ const exampleTopicOptions: { id: ExampleTopic; label: string }[] = [
   { id: 'ac', label: 'AC & reactive' }, { id: 'switching', label: 'Switching' }, { id: 'advanced', label: 'Advanced' },
 ]
 const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
-  start: ['rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
+  start: ['switch-lamp', 'rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
   basics: ['ohms-law', 'rc', 'capacitor-discharge', 'voltage-divider', 'loaded-voltage-divider', 'series-resistors', 'parallel-resistors', 'resistor-power', 'lamp-power', 'switch-lamp', 'supply-droop', 'potentiometer', 'current-source', 'led-current-limiter'],
   diodes: ['diode-polarity', 'led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
@@ -81,6 +81,10 @@ export function ExamplesDialog({ open, onClose, onOpen, onKeyDown }: {
   const dialogRef = useRef<HTMLElement>(null)
   const cancelPendingRef = useRef<HTMLButtonElement>(null)
   const filtered = exampleCatalog.filter(({ id, title, description }) => (topic === 'all' || exampleTopicIds[topic].includes(id)) && `${title} ${description}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  if (topic !== 'all') {
+    const topicOrder = exampleTopicIds[topic]
+    filtered.sort((left, right) => topicOrder.indexOf(left.id) - topicOrder.indexOf(right.id))
+  }
   useEffect(() => {
     if (pending) cancelPendingRef.current?.focus()
     else if (restoreExampleFocus) {
