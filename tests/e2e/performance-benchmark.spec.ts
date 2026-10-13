@@ -97,7 +97,7 @@ test('measure rendering and solve time for a 500-instance nested circuit in brow
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
   await page.getByRole('button', { name: 'Examples' }).click()
   await page.locator('.example-list article').filter({ hasText: 'Nested reusable divider' }).getByRole('button', { name: 'Open example' }).click()
-  await page.getByRole('alert').getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)).toBe('Nested reusable divider')
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
