@@ -4,7 +4,7 @@ let sampleIndex: number | null = null
 const listeners = new Set<() => void>()
 const animationListeners = new Set<() => void>()
 
-function subscribe(listener: () => void): () => void {
+export function subscribeSimulationCursor(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
@@ -18,12 +18,13 @@ export function getSimulationCursor(): number | null {
 export function setSimulationCursor(next: number | null): void {
   if (Object.is(sampleIndex, next)) return
   sampleIndex = next
-  for (const listener of animationListeners) listener()
-  // Keep React subscribers (including the toolbar) in sync at most once per frame.
-  // Canvas/SVG cursors can subscribe directly for immediate animation updates.
-  if (listeners.size && !notificationFrame) notificationFrame = requestAnimationFrame(() => {
+  // Pointer scrubbing can deliver several changes before paint. Notify both
+  // subscriber groups once per display frame while snapshots expose the newest
+  // exact sample immediately; this keeps cursor-linked React work frame-bound.
+  if ((listeners.size || animationListeners.size) && !notificationFrame) notificationFrame = requestAnimationFrame(() => {
     notificationFrame = 0
     for (const listener of listeners) listener()
+    for (const listener of animationListeners) listener()
   })
 }
 
@@ -39,9 +40,9 @@ export function useSimulationCursorAnimation(): number | null {
 }
 
 export function useSimulationCursor(): number | null {
-  return useSyncExternalStore(subscribe, getSimulationCursor, getSimulationCursor)
+  return useSyncExternalStore(subscribeSimulationCursor, getSimulationCursor, getSimulationCursor)
 }
 
 export function useSimulationCursorWhen(enabled: boolean): number | null {
-  return useSyncExternalStore(enabled ? subscribe : subscribeNever, getSimulationCursor, getSimulationCursor)
+  return useSyncExternalStore(enabled ? subscribeSimulationCursor : subscribeNever, getSimulationCursor, getSimulationCursor)
 }
