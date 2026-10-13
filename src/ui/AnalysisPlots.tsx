@@ -33,11 +33,13 @@ function handleCursorKeyDown(event: ReactKeyboardEvent<SVGSVGElement>, currentIn
 }
 
 type PlotWindow = { start: number; end: number }
-function usePlotWindow(traces: Trace[], savedRange: PlotRange | undefined, onRangeChange: (range: PlotRange) => void) {
+function usePlotWindow(savedRange: PlotRange | undefined, onRangeChange: (range: PlotRange) => void) {
   const [window, setWindow] = useState<PlotWindow>(savedRange ?? { start: 0, end: 1 })
   const windowRef = useRef(window)
   windowRef.current = window
-  useEffect(() => { const next = savedRange ?? { start: 0, end: 1 }; windowRef.current = next; setWindow(next) }, [traces, savedRange])
+  // Trace arrays are recreated for every simulation result. Sync only the
+  // persisted viewport so rerunning an unchanged circuit keeps the user's zoom.
+  useEffect(() => { const next = savedRange ?? { start: 0, end: 1 }; windowRef.current = next; setWindow(next) }, [savedRange])
   const update = (next: PlotRange) => { windowRef.current = next; setWindow(next); onRangeChange(next) }
   const panBy = (delta: number) => {
     const current = windowRef.current
@@ -285,7 +287,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const traceIndexById = useTraceIndexById(traces)
-  const navigation = usePlotWindow(traces, range, onRangeChange)
+  const navigation = usePlotWindow(range, onRangeChange)
   const plotSize = useResponsivePlotSize()
   const width = plotSize.size.width, height = plotSize.size.height, left = 42, right = width - 12, top = 8, bottom = height - 21
   const axis = shown[0]?.axis ?? traces[0]?.axis
@@ -446,7 +448,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const visibleNoiseUnits = useMemo(() => isNoise ? [...new Set(shown.map((trace) => trace.unit))] : [], [isNoise, shown])
   const noiseAxisUnit = visibleNoiseUnits.length === 1 ? visibleNoiseUnits[0] : visibleNoiseUnits.length > 1 ? 'mixed units' : 'noise density'
   const traceIndexById = useTraceIndexById(traces)
-  const navigation = usePlotWindow(traces, range, onRangeChange)
+  const navigation = usePlotWindow(range, onRangeChange)
   const [mode, setMode] = useState<'magnitude' | 'phase' | 'noise'>(isNoise ? 'noise' : 'magnitude')
   useEffect(() => setMode(isNoise ? 'noise' : 'magnitude'), [isNoise])
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
@@ -564,7 +566,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const traceIndexById = useTraceIndexById(traces)
-  const navigation = usePlotWindow(traces, range, onRangeChange)
+  const navigation = usePlotWindow(range, onRangeChange)
   const plotSize = useResponsivePlotSize()
   const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = width - 12, top = 10, bottom = height - 30
   const axis = traces[0]?.axis ?? Float64Array.of(0, 1)
