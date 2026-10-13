@@ -159,7 +159,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const transistorModels: { part: Part; name: string }[] = []
   const jfetModels: { part: Part; name: string }[] = []
   const mosfetModels: { part: Part; name: string }[] = []
-  const parsedModelAssets = (project.modelAssets ?? []).map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections))
+  const modelAssets = project.modelAssets ?? []
+  const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections))
   const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models)
   const importedSubcircuits = parsedModelAssets.flatMap((library) => library.subcircuits)
   const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary).subcircuits : []
@@ -652,9 +653,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   }
 
-  for (const asset of project.modelAssets ?? []) {
-    const modelRecords = parseSubcircuitLibrary(asset.content, asset.selectedSections).modelRecords
-    for (const record of modelRecords) if (record.text.trim()) append(record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
+  for (let assetIndex = 0; assetIndex < modelAssets.length; assetIndex += 1) {
+    const asset = modelAssets[assetIndex]
+    for (const record of parsedModelAssets[assetIndex].modelRecords) {
+      if (record.text.trim()) append(record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
+    }
   }
   if (includeHierarchyProbes) for (const directive of hierarchicalSaveVectors(project)) append(directive, 'hierarchy:probe', 'generated')
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')

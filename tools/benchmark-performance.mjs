@@ -147,6 +147,39 @@ function makeHierarchy(createHierarchicalExampleProject, componentPins, count) {
   return project
 }
 
+function makeImportedModelProject(createStarterProject, count, definitionCount) {
+  const project = createStarterProject()
+  const modelName = 'BENCH_IMPORTED_001'
+  const parts = Array.from({ length: count }, (_, index) => ({
+    id: `imported-bench-x-${index + 1}`,
+    kind: 'subcircuit',
+    ref: `XIC${index + 1}`,
+    value: '',
+    x: 160 + (index % 50) * 160,
+    y: 200 + Math.floor(index / 50) * 120,
+    rotation: 0,
+    modelName,
+    modelPins: ['IN', 'OUT'],
+    modelParameters: {},
+  }))
+  const content = Array.from({ length: definitionCount }, (_, index) => {
+    const name = `BENCH_IMPORTED_${String(index + 1).padStart(3, '0')}`
+    return `.SUBCKT ${name} IN OUT\nR1 IN OUT 1k\n.ENDS ${name}`
+  }).join('\n')
+  project.name = `Benchmark imported model library (${count} ICs, ${definitionCount} definitions)`
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = []
+  project.modelAssets = [{ id: 'bench-imported-models', filename: 'bench-models.lib', sha256: '0'.repeat(64), content, licenseStatus: 'unknown', importedAt: 'benchmark' }]
+  project.activeSheetId = project.rootSheetId
+  project.sheets = project.sheets.map((sheet) => sheet.id === project.rootSheetId
+    ? { ...sheet, parts, wires: [], junctions: [], netLabels: [] }
+    : sheet)
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  return project
+}
+
 function runWasm(moduleUrl, deck, options = {}) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(path.join(root, 'tests/wasm/ngspice-benchmark-worker.mjs'), { workerData: { moduleUrl, deck, ...options } })
@@ -258,6 +291,20 @@ try {
       circuitChecks: { medianMs: circuitChecks.medianMs, p95Ms: circuitChecks.p95Ms, issues: circuitChecks.value.length },
       fullCircuitChecks: { medianMs: fullCircuitChecks.medianMs, p95Ms: fullCircuitChecks.p95Ms },
     })
+  }
+
+  const importedModelProject = makeImportedModelProject(createStarterProject, 400, 600)
+  const importedModelNetlist = measure(() => createNetlistArtifact(importedModelProject))
+  const importedModelArtifact = importedModelNetlist.value
+  if (importedModelArtifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error('Imported-model benchmark produced netlist errors.')
+  if (!/^XIC400\s/m.test(importedModelArtifact.text) || !/^\.SUBCKT BENCH_IMPORTED_600 /m.test(importedModelArtifact.text)) throw new Error('Imported-model benchmark omitted its final instance or library definition.')
+  const importedModelResults = {
+    instances: importedModelProject.parts.length,
+    definitions: 600,
+    modelLibraryBytes: Buffer.byteLength(importedModelProject.modelAssets[0].content),
+    netlistLines: importedModelArtifact.text.trimEnd().split('\n').length,
+    netlistBytes: Buffer.byteLength(importedModelArtifact.text),
+    netlisting: { medianMs: importedModelNetlist.medianMs, p95Ms: importedModelNetlist.p95Ms },
   }
 
   const wireResults = []
@@ -497,6 +544,7 @@ try {
     circuitResults,
     wireResults,
     hierarchyResults,
+    importedModelResults,
     plotResults,
     simulationResults: simulationResults ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations'),
     transientResults: transientResults ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to include large transient and process-memory observations'),
