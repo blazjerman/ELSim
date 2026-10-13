@@ -503,6 +503,42 @@ function clampPlotPanelBounds(bounds: PlotPanel['bounds']): PlotPanel['bounds'] 
   return { x: Math.max(8 - width, Math.min(window.innerWidth - 48, bounds.x)), y: Math.max(8, Math.min(window.innerHeight - 48, bounds.y)), width, height }
 }
 
+function visibleComponentPlacement(parts: Part[], view: Project['view'], viewportWidth: number, viewportHeight: number) {
+  const canvasWidth = viewportWidth <= 800
+    ? viewportWidth
+    : viewportWidth <= 1120 ? viewportWidth - 390 : viewportWidth - 512
+  const canvasHeight = Math.max(220, viewportHeight - 250)
+  const viewWidth = canvasWidth / view.zoom
+  const viewHeight = canvasHeight / view.zoom
+  const viewportLeft = 380 - viewWidth / 2 - view.panX
+  const viewportTop = 300 - viewHeight / 2 - view.panY
+  const center = { x: 380 - view.panX, y: 300 - view.panY }
+  const inset = 50 / view.zoom
+  const visibleBounds = {
+    left: viewportLeft + inset,
+    right: viewportLeft + viewWidth - inset,
+    top: viewportTop + inset,
+    bottom: viewportTop + viewHeight - inset,
+  }
+  const offsets = [0, -40, 40, -80, 80, -120, 120]
+  let position = { x: snapToEditorGrid(center.x), y: snapToEditorGrid(center.y) }
+  let bestClearance = -1
+  let bestOffset = Infinity
+  for (const offsetX of offsets) for (const offsetY of offsets) {
+    const candidate = { x: snapToEditorGrid(center.x + offsetX), y: snapToEditorGrid(center.y + offsetY) }
+    if (candidate.x < visibleBounds.left || candidate.x > visibleBounds.right || candidate.y < visibleBounds.top || candidate.y > visibleBounds.bottom) continue
+    let clearance = Infinity
+    for (const part of parts) clearance = Math.min(clearance, Math.hypot(part.x - candidate.x, part.y - candidate.y))
+    const offset = Math.hypot(candidate.x - center.x, candidate.y - center.y)
+    if (clearance > bestClearance || (clearance === bestClearance && offset < bestOffset)) {
+      position = candidate
+      bestClearance = clearance
+      bestOffset = offset
+    }
+  }
+  return position
+}
+
 const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onActivate, children }: { panel: PlotPanel; index: number; title: string; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onActivate: () => void; children: ReactNode }) {
   const ref = useRef<HTMLElement>(null)
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
@@ -2439,7 +2475,8 @@ export default function App() {
   }
   const placeSheetBlock = (sheet: Project['sheets'][number]) => {
     if (!sheet.ports.length) return
-    const part: Part = { id: `p-${crypto.randomUUID()}`, kind: 'subcircuit', componentDefinitionId: componentDefinitionFor('subcircuit').id, ref: nextRef(project.parts, 'subcircuit'), value: sheet.name, modelName: sheetModelName(sheet.id), modelPins: sheet.ports.map((port) => port.name), sheetId: sheet.id, sheetPortLayout: sheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })), x: 680 + (project.parts.length % 3) * 130, y: 440 + Math.floor(project.parts.length / 3) * 100, rotation: 0 }
+    const position = visibleComponentPlacement(project.parts, project.view, window.innerWidth, window.innerHeight)
+    const part: Part = { id: `p-${crypto.randomUUID()}`, kind: 'subcircuit', componentDefinitionId: componentDefinitionFor('subcircuit').id, ref: nextRef(project.parts, 'subcircuit'), value: sheet.name, modelName: sheetModelName(sheet.id), modelPins: sheet.ports.map((port) => port.name), sheetId: sheet.id, sheetPortLayout: sheet.ports.map((port) => ({ side: port.side ?? 'auto', direction: port.direction ?? 'inout' })), x: position.x, y: position.y, rotation: 0 }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
     setSelection({ kind: 'part', id: part.id })
     setNotice(`Placed ${sheet.name}. Connect its pins in the order shown in the inspector.`)
@@ -2906,37 +2943,7 @@ export default function App() {
       return
     }
     const id = `p-${crypto.randomUUID()}`
-    const canvasWidth = window.innerWidth <= 800
-      ? window.innerWidth
-      : window.innerWidth <= 1120 ? window.innerWidth - 390 : window.innerWidth - 512
-    const canvasHeight = Math.max(220, window.innerHeight - 250)
-    const viewWidth = canvasWidth / project.view.zoom
-    const viewHeight = canvasHeight / project.view.zoom
-    const viewportLeft = 380 - viewWidth / 2 - project.view.panX
-    const viewportTop = 300 - viewHeight / 2 - project.view.panY
-    const center = { x: 380 - project.view.panX, y: 300 - project.view.panY }
-    const visibleBounds = {
-      left: viewportLeft + 50 / project.view.zoom,
-      right: viewportLeft + viewWidth - 50 / project.view.zoom,
-      top: viewportTop + 50 / project.view.zoom,
-      bottom: viewportTop + viewHeight - 50 / project.view.zoom,
-    }
-    const offsets = [0, -40, 40, -80, 80, -120, 120]
-    let position = { x: snapToEditorGrid(center.x), y: snapToEditorGrid(center.y) }
-    let bestClearance = -1
-    let bestOffset = Infinity
-    for (const offsetX of offsets) for (const offsetY of offsets) {
-      const candidate = { x: snapToEditorGrid(center.x + offsetX), y: snapToEditorGrid(center.y + offsetY) }
-      if (candidate.x < visibleBounds.left || candidate.x > visibleBounds.right || candidate.y < visibleBounds.top || candidate.y > visibleBounds.bottom) continue
-      let clearance = Infinity
-      for (const part of project.parts) clearance = Math.min(clearance, Math.hypot(part.x - candidate.x, part.y - candidate.y))
-      const offset = Math.hypot(candidate.x - center.x, candidate.y - center.y)
-      if (clearance > bestClearance || (clearance === bestClearance && offset < bestOffset)) {
-        position = candidate
-        bestClearance = clearance
-        bestOffset = offset
-      }
-    }
+    const position = visibleComponentPlacement(project.parts, project.view, window.innerWidth, window.innerHeight)
     const part: Part = { id, kind: model.definition.kind, componentDefinitionId: model.definition.id, ref: nextRef(project.parts, model.definition.kind), value: model.definition.name, modelName: model.definition.name, modelPins: orderedPins, ...(symbol ? { symbolAssetId: symbol.assetId, symbolPinOffsets: symbol.pins.map(({ x, y }) => [x, y] as [number, number]) } : {}), x: position.x, y: position.y, rotation: 0 }
     setProject((current) => ({ ...current, parts: [...current.parts, part] }))
     setPendingComponentKind(null)

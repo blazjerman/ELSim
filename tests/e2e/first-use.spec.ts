@@ -1178,8 +1178,10 @@ test('imported library provenance notes persist while rights remain unverified',
 })
 
 test('user model library adds a subcircuit with ordered pins and parameter defaults', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
   await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Components', exact: true }).click()
   const modelLibrary = '.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -1191,9 +1193,12 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   const importedModel = page.locator('.imported-model').filter({ hasText: 'USER_DOUBLE' })
   await expect(importedModel).toContainText('Parameters: gain=2')
   await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await page.getByRole('button', { name: 'Schematic', exact: true }).click()
   const instance = page.locator('.circuit-part[aria-label^="X1,"]')
   await expect(instance).toBeVisible()
+  await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
   await instance.click()
+  await page.getByRole('button', { name: 'Properties', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'gain model value' })).toHaveValue('2')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
