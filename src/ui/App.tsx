@@ -567,7 +567,22 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
   onHover: (id?: string) => void
 }) {
   const [[x1, y1], [x2, y2]] = wire.points
-  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}. Press Enter to edit endpoints; press Escape to return here.`} aria-pressed={selected} aria-keyshortcuts="Enter Space Escape ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id, false, true) }} onPointerDown={(event) => { if (event.button === 1 || (event.button === 0 && spacePan)) return; if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id) } else onBeginDrag(event, wire.id) }} onClick={(event) => { if (tool === 'select') { event.stopPropagation(); onSelect(wire.id, event.shiftKey || event.ctrlKey || event.metaKey) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
+  const additiveClick = useRef(false)
+  return <g data-wire-id={wire.id} className={`wire-line${selected ? ' selected' : ''}${hovered ? ' hovered' : ''}`} role="button" tabIndex={0} aria-label={`Wire segment from ${wire.points[0].join(', ')} to ${wire.points[1].join(', ')}. Press Enter to edit endpoints; press Escape to return here.`} aria-pressed={selected} aria-keyshortcuts="Enter Space Escape ContextMenu Shift+F10 Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight Delete Backspace" onPointerEnter={() => onHover(wire.id)} onPointerLeave={() => onHover()} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); onSelect(wire.id, false, true) }} onPointerDown={(event) => {
+    if (event.button === 1 || (event.button === 0 && spacePan)) return
+    if (tool === 'probe') { event.stopPropagation(); onProbe(wire.id); return }
+    // Additive selection is a click action. Do it on pointerdown and stop the
+    // editor's drag/capture path from retargeting the matching click to the SVG
+    // root, which otherwise turns this into a blank-canvas click in some browsers.
+    if (tool === 'select' && event.button === 0 && (event.shiftKey || event.ctrlKey || event.metaKey)) {
+      event.preventDefault()
+      event.stopPropagation()
+      additiveClick.current = true
+      onSelect(wire.id, true)
+      return
+    }
+    onBeginDrag(event, wire.id)
+  }} onPointerUp={() => { if (additiveClick.current) window.setTimeout(() => { additiveClick.current = false }, 0) }} onPointerCancel={() => { additiveClick.current = false }} onClick={(event) => { if (additiveClick.current) { additiveClick.current = false; event.stopPropagation(); return } if (tool === 'select') { event.stopPropagation(); onSelect(wire.id, event.shiftKey || event.ctrlKey || event.metaKey) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
     <rect x={Math.min(x1, x2) - 7} y={Math.min(y1, y2) - 7} width={Math.max(14, Math.abs(x2 - x1) + 14)} height={Math.max(14, Math.abs(y2 - y1) + 14)} fill="transparent"/>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="14" strokeLinecap="round"/>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round"/>
