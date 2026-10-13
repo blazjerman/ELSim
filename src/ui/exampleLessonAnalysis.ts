@@ -5,8 +5,8 @@ import type { Project } from '../domain/project'
 import type { SimulationResult, Trace } from '../engine/contract'
 
 function formatLessonFrequency(frequencyHz: number): string {
-  if (frequencyHz >= 1e6) return `${Number((frequencyHz / 1e6).toPrecision(3))} MHz`
-  if (frequencyHz >= 1e3) return `${Number((frequencyHz / 1e3).toPrecision(3))} kHz`
+  if (frequencyHz >= 1e6 || Number((frequencyHz / 1e6).toPrecision(3)) >= 1) return `${Number((frequencyHz / 1e6).toPrecision(3))} MHz`
+  if (frequencyHz >= 1e3 || Number((frequencyHz / 1e3).toPrecision(3)) >= 1) return `${Number((frequencyHz / 1e3).toPrecision(3))} kHz`
   return `${Number(frequencyHz.toPrecision(3))} Hz`
 }
 
@@ -39,6 +39,10 @@ function formatLessonEnergy(joules: number): string {
 
 function formatLessonPower(watts: number): string {
   return watts < 1 ? `${Number((watts * 1e3).toPrecision(3))} mW` : `${Number(watts.toPrecision(3))} W`
+}
+
+function formatLessonDecibels(decibels: number): string {
+  return `${Number(decibels.toPrecision(3))} dB`
 }
 
 function formatLessonTime(seconds: number): string {
@@ -162,6 +166,27 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
     ? nonInvertingInput * (1 + nonInvertingFeedback / nonInvertingGroundResistance)
     : null
   const nonInvertingSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const commonEmitterCollectorResistance = lessonId === 'common-emitter'
+    ? componentMagnitude(partsById.get('common-emitter-rc')?.value ?? '2.2 kΩ', 'resistor')
+    : null
+  const commonEmitterMeasurement = (() => {
+    if (lessonId !== 'common-emitter' || simulationResult?.analysis !== 'ac') return null
+    const input = simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vin)')
+    const output = simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')
+    if (!input?.axis.length || !output?.axis.length) return null
+    const index = nearestAxisIndex(input.axis, 1000)
+    const inputMagnitude = Math.hypot(input.values[index] ?? 0, input.imaginaryValues?.[index] ?? 0)
+    const outputMagnitude = Math.hypot(output.values[index] ?? 0, output.imaginaryValues?.[index] ?? 0)
+    if (!Number.isFinite(inputMagnitude) || !Number.isFinite(outputMagnitude) || inputMagnitude <= Number.MIN_VALUE || outputMagnitude <= 0) return null
+    const inputPhase = Math.atan2(input.imaginaryValues?.[index] ?? 0, input.values[index] ?? 0)
+    const outputPhase = Math.atan2(output.imaginaryValues?.[index] ?? 0, output.values[index] ?? 0)
+    const phaseDifference = Math.abs(Math.atan2(Math.sin(outputPhase - inputPhase), Math.cos(outputPhase - inputPhase))) * 180 / Math.PI
+    return {
+      frequency: input.axis[index],
+      gainDb: 20 * Math.log10(outputMagnitude / inputMagnitude),
+      phaseDifference,
+    }
+  })()
   const isLoadedDividerLesson = lessonId === 'loaded-voltage-divider'
   const loadedDividerR1 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r1')?.value ?? '1 kΩ', 'resistor') : null
   const loadedDividerR2 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r2')?.value ?? '1 kΩ', 'resistor') : null
@@ -652,6 +677,12 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
           ? 'Increase R1 from 1 kΩ to 2 kΩ and rerun. Assuming VZ stays near 5.1 V, current should fall from about 6.9 mA to 3.45 mA while the Zener remains above its 1 mA knee.'
           : `At R1 = ${zenerResistanceText} and V1 = ${zenerSupplyText}, the simple estimate is ${formatLessonCurrent(Math.max(0, zenerEstimatedCurrentMa))}. ngspice solved VZ = ${zenerSolvedVoltage !== undefined ? formatLessonVoltage(zenerSolvedVoltage) : '—'}; from the solved output, the series and Zener current is about ${zenerSolvedCurrentMa !== undefined ? formatLessonCurrent(zenerSolvedCurrentMa) : '—'}. ${zenerSolvedCurrentMa !== undefined && zenerSolvedCurrentMa < 1 ? 'This is below the model’s 1 mA knee, so the reference has fallen out of regulation.' : 'Increase R1 to 10 kΩ (about 0.69 mA by the estimate) to see when regulation starts to fail.'}`
             : 'Enter a valid supply above 5.1 V and positive series resistance, then rerun to compare regulation.'
+      : exampleLesson?.id === 'common-emitter' && simulationResult
+        ? commonEmitterMeasurement && commonEmitterCollectorResistance !== null
+          ? simulationResultStale
+            ? `The previous AC sweep measured VOUT/VIN = ${formatLessonDecibels(commonEmitterMeasurement.gainDb)} with a ${Number(commonEmitterMeasurement.phaseDifference.toPrecision(3))}° phase difference near ${formatLessonFrequency(commonEmitterMeasurement.frequency)}. RC is now ${formatLessonResistance(commonEmitterCollectorResistance)}; the old result is stale, so rerun to check the updated gain and phase.`
+            : `At ${formatLessonFrequency(commonEmitterMeasurement.frequency)}, ngspice measured VOUT/VIN = ${formatLessonDecibels(commonEmitterMeasurement.gainDb)} and a ${Number(commonEmitterMeasurement.phaseDifference.toPrecision(3))}° phase difference, confirming the inverted output. Increase RC from 2.2 kΩ to 4.7 kΩ and rerun to compare the gain; too much collector resistance can shift Q1's bias toward saturation. This is an AC small-signal result from an approximate teaching model.`
+          : 'Run the AC sweep with V(VIN) and V(VOUT) selected to inspect the amplifier gain and phase near 1 kHz.'
       : simulationResult && !simulationResultStale
         ? simulationResult.analysis === 'tran'
           ? 'Pause playback, then move the Time slider. Click the waveform to place the cursor and read each selected voltage or current at that moment.'

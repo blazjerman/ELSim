@@ -5408,8 +5408,10 @@ test('NPN common-emitter lesson shows amplified, inverted AC output', { tag: ['@
   await expect(page.locator('svg.schematic .wire-line')).toHaveCount(21)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 45_000 })
-  await expect(page.locator('.example-lesson-next-step')).toContainText('Click the plot to move the frequency cursor')
-  await expect(page.locator('.example-lesson-next-step')).toContainText('Compare input and output magnitudes')
+  const lessonNextStep = page.locator('.example-lesson-next-step')
+  await expect(lessonNextStep).toContainText('At 1 kHz, ngspice measured VOUT/VIN =')
+  await expect(lessonNextStep).toContainText(/\d+° phase difference/)
+  await expect(lessonNextStep).toContainText('Increase RC from 2.2 kΩ to 4.7 kΩ')
   await expectAvailableTrace(page, 'V(vout)')
   await expectAvailableTrace(page, 'V(vin)')
   const plotWindow = page.locator('.plot-window').last()
@@ -5428,6 +5430,10 @@ test('NPN common-emitter lesson shows amplified, inverted AC output', { tag: ['@
   const outputMagnitude = Number(magnitudeReadout.match(/V\(VOUT\) = ([+-]?[\d.]+) dB/i)?.[1])
   expect(Number.isFinite(inputMagnitude) && Number.isFinite(outputMagnitude)).toBe(true)
   expect(outputMagnitude).toBeGreaterThan(inputMagnitude + 3)
+  await page.locator('.circuit-part[data-part-id="common-emitter-rc"]').click()
+  await page.locator('[data-part-setting="common-emitter-rc:value"]').fill('4.7k')
+  await expect(lessonNextStep).toContainText('RC is now 4.7 kΩ')
+  await expect(lessonNextStep).toContainText('the old result is stale')
 })
 
 test('parallel RLC lesson peaks near the calculated tank resonance', { tag: '@ngspice' }, async ({ page }) => {
