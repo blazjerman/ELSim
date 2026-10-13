@@ -5198,6 +5198,36 @@ test('diode polarity lesson compares forward conduction with reverse blocking', 
   expect(reverseCurrentMa).toBeLessThan(forwardCurrentMa / 1000)
 })
 
+test('manual switch lesson updates lamp current when the circuit opens and closes', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Open and close a lamp circuit' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Manual switch and lamp')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  const lesson = page.locator('.example-lesson-next-step p')
+  await expect(lesson).toContainText('S1 is open')
+  const openCurrentMa = Number((await lesson.innerText()).match(/solved ([\d.e+-]+) mA through R1/i)?.[1])
+  expect(openCurrentMa).toBeGreaterThanOrEqual(0)
+  expect(openCurrentMa).toBeLessThan(0.001)
+
+  const switchPart = page.getByRole('button', { name: /^S1, Switch/ })
+  await switchPart.click()
+  await expect(switchPart).toHaveAttribute('aria-label', /switch on/)
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeDisabled()
+  await expect.poll(async () => Number((await lesson.innerText()).match(/solved ([\d.e+-]+) mA through R1/i)?.[1]), { timeout: 60_000 }).toBeGreaterThan(49)
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled({ timeout: 60_000 })
+
+  await switchPart.click()
+  await expect(switchPart).toHaveAttribute('aria-label', /switch off/)
+  await expect.poll(async () => Number((await lesson.innerText()).match(/solved ([\d.e+-]+) mA through R1/i)?.[1]), { timeout: 60_000 }).toBeLessThan(0.001)
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled({ timeout: 60_000 })
+})
+
 test('bridge rectifier example keeps capacitor voltage positive between AC peaks', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

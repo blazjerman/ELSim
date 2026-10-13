@@ -222,6 +222,13 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const diodePolaritySolvedVoltage = simulationResult?.analysis === 'op'
     ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(anode)' || trace.baseId?.toLowerCase() === 'v(anode)')?.values[0]
     : undefined
+  const isSwitchLampLesson = lessonId === 'switch-lamp'
+  const switchLampState = partsById.get('switch-lamp-s1')?.value.toLowerCase()
+  const switchLampPart = partsById.get('switch-lamp-r1')
+  const switchLampVector = switchLampPart ? componentCurrentVector(switchLampPart).toLowerCase() : ''
+  const switchLampSolvedCurrent = simulationResult?.analysis === 'op' && switchLampVector
+    ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === switchLampVector || trace.baseId?.toLowerCase() === switchLampVector)?.values[0]
+    : undefined
   const isSeriesResistorLesson = lessonId === 'series-resistors'
   const seriesResistorR1 = isSeriesResistorLesson ? componentMagnitude(partsById.get('divider-r1')?.value ?? '1 kΩ', 'resistor') : null
   const seriesResistorR2 = isSeriesResistorLesson ? componentMagnitude(partsById.get('divider-r2')?.value ?? '2 kΩ', 'resistor') : null
@@ -490,6 +497,12 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
             ? `With V1 = ${partsById.get('diode-polarity-v1')?.value}, D1 is forward biased. Ngspice solved V(ANODE) = ${diodePolaritySolvedVoltage !== undefined ? formatLessonVoltage(diodePolaritySolvedVoltage) : '—'} and ${diodePolaritySolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(diodePolaritySolvedCurrent) * 1000) : '—'} through D1. Change V1 to −5 V and rerun: the diode should block, leaving almost no current.`
             : `With V1 = ${partsById.get('diode-polarity-v1')?.value}, D1 is reverse biased. Ngspice solved V(ANODE) = ${diodePolaritySolvedVoltage !== undefined ? formatLessonVoltage(diodePolaritySolvedVoltage) : '—'} and ${diodePolaritySolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(diodePolaritySolvedCurrent) * 1000) : '—'} through D1. The current is near zero; change V1 back to +5 V and rerun to forward bias it.`
         : 'Set V1 to a valid DC voltage and rerun to compare forward and reverse bias.'
+    : isSwitchLampLesson && simulationResult
+      ? simulationResultStale
+        ? `S1 is now ${switchLampState ?? 'changed'}. The old operating point is stale; wait for the automatic rerun to see the new lamp current.`
+        : switchLampState === 'on'
+          ? `S1 is closed. Ngspice solved ${switchLampSolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(switchLampSolvedCurrent) * 1000) : '—'} through R1, so the circuit is complete and the lamp lights. Click S1 to open the path and stop the current.`
+          : `S1 is open. Ngspice solved ${switchLampSolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(switchLampSolvedCurrent) * 1000) : '—'} through R1. The open gap breaks the circuit, so the lamp stays dark. Click S1 to close the path.`
     : exampleLesson?.id === 'capacitor-discharge' && simulationResult
       ? capacitorDischargeResistance !== null && capacitorDischargeCapacitance !== null && capacitorDischargeInitialVoltage !== null && capacitorDischargeTimeConstant !== null
         ? simulationResultStale

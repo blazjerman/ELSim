@@ -802,6 +802,42 @@ export function createLampPowerExampleProject(): Project {
   return project
 }
 
+/** A beginner lesson showing a manual switch opening and closing a lamp circuit. */
+export function createSwitchLampExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'switch-lamp-v1', kind: 'source', ref: 'V1', value: '5 V', sourceMode: 'dc', x: 280, y: 400, rotation: 0 }
+  const manualSwitch: Part = { id: 'switch-lamp-s1', kind: 'switch', ref: 'S1', value: 'Off', x: 430, y: 300, rotation: 0 }
+  const lamp: Part = { id: 'switch-lamp-r1', kind: 'lamp', componentDefinitionId: 'elsim.lamp', ref: 'R1', value: '100 Ω', animationNominalPower: 0.25, x: 620, y: 300, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const parts = [source, manualSwitch, lamp]
+  const wires = [
+    { id: 'switch-lamp-source-rise', points: [[280, 350], [280, 260]] as [[number, number], [number, number]] },
+    { id: 'switch-lamp-supply-rail', points: [[280, 260], [380, 260]] as [[number, number], [number, number]] },
+    { id: 'switch-lamp-supply-drop', points: [[380, 260], [380, 300]] as [[number, number], [number, number]] },
+    { id: 'switch-lamp-switch-to-lamp', points: [[480, 300], [570, 300]] as [[number, number], [number, number]] },
+    { id: 'switch-lamp-return-rise', points: [[670, 300], [670, 450]] as [[number, number], [number, number]] },
+    { id: 'switch-lamp-return-rail', points: [[670, 450], [280, 450]] as [[number, number], [number, number]] },
+  ]
+  const netLabels = [
+    labelAt('switch-lamp-vin', 'VIN', source, 0),
+    labelAt('switch-lamp-ground', '0', source, 1),
+  ]
+  project.name = 'Manual switch and lamp'
+  project.parts = parts
+  project.wires = wires
+  project.junctions = []
+  project.netLabels = netLabels
+  project.sheets = [{ ...project.sheets[0], parts, wires, junctions: [], netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(R1)', 'I(R1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A one-resistor operating-point lesson for Ohm's law. */
 export function createOhmsLawExampleProject(): Project {
   const project = createStarterProject()
