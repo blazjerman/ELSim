@@ -27,6 +27,25 @@ test('native component pins and the RC starter share one 10-unit placement grid'
   assert.equal(snapToEditorGrid(374), 370)
 })
 
+test('connectivity handles long reverse-ordered global-label chains without deep recursion', () => {
+  const project = createStarterProject()
+  project.parts = []
+  project.wires = []
+  project.junctions = []
+  project.netLabels = Array.from({ length: 16_000 }, (_, index) => ({
+    id: `label-${String(16_000 - index).padStart(5, '0')}`,
+    name: 'SHARED',
+    x: index * 10,
+    y: 0,
+    visible: true,
+  }))
+
+  const connectivity = analyzeConnectivity(project)
+
+  assert.equal(connectivity.labelNets.size, project.netLabels.length)
+  assert.ok([...connectivity.labelNets.values()].every((net) => net === 'SHARED'))
+})
+
 test('reusable block direction markers point inward and outward on every side', () => {
   for (const [side, x, y] of [['left', -80, 0], ['right', 80, 0], ['top', 0, -60], ['bottom', 0, 60]]) {
     for (const direction of ['input', 'output', 'inout']) {
