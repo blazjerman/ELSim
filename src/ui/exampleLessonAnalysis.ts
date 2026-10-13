@@ -66,6 +66,14 @@ function nearestAxisIndex(axis: Float64Array, target: number): number {
 export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, parts: Project['parts'], initialConditions: Project['simulation']['initialConditions'], simulationResult: SimulationResult | null, simulationResultStale: boolean, rlcResonancePeak: ResonancePeak): string | null {
   const lessonId = exampleLesson.id
   const partsById = new Map(parts.map((part) => [part.id, part]))
+  const ohmsLawSupply = lessonId === 'ohms-law' ? componentMagnitude(partsById.get('ohms-law-v1')?.value ?? '5 V', 'source') : null
+  const ohmsLawResistance = lessonId === 'ohms-law' ? componentMagnitude(partsById.get('ohms-law-r1')?.value ?? '1 kΩ', 'resistor') : null
+  const ohmsLawPredictedCurrent = ohmsLawSupply !== null && ohmsLawResistance !== null && ohmsLawResistance > 0 ? ohmsLawSupply / ohmsLawResistance : null
+  const ohmsLawResistor = partsById.get('ohms-law-r1')
+  const ohmsLawCurrentVector = ohmsLawResistor ? componentCurrentVector(ohmsLawResistor).toLowerCase() : ''
+  const ohmsLawSolvedCurrent = simulationResult?.analysis === 'op' && ohmsLawCurrentVector
+    ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === ohmsLawCurrentVector || trace.baseId?.toLowerCase() === ohmsLawCurrentVector)?.values[0]
+    : undefined
   const isRlcResonanceLesson = exampleLesson.id === 'rlc-resonance'
   const rlcResonanceInductanceH = isRlcResonanceLesson ? componentMagnitude(partsById.get('resonance-l1')?.value ?? '10 mH', 'inductor') : null
   const rlcResonanceCapacitanceF = isRlcResonanceLesson ? componentMagnitude(partsById.get('resonance-c1')?.value ?? '1 µF', 'capacitor') : null
@@ -323,7 +331,13 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const voltageSwitchPredictedClosed = voltageSwitchThreshold !== null && voltageSwitchHysteresis !== null && voltageSwitchControlAt25Ms !== undefined
     ? voltageSwitchControlAt25Ms >= voltageSwitchThreshold + voltageSwitchHysteresis / 2
     : undefined
-  const lessonNextStep = exampleLesson?.id === 'transformer' && simulationResult
+  const lessonNextStep = lessonId === 'ohms-law' && simulationResult?.analysis === 'op'
+    ? ohmsLawPredictedCurrent !== null
+      ? simulationResultStale
+        ? `The previous run solved ${ohmsLawSolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(ohmsLawSolvedCurrent) * 1000) : 'a current'} through R1. With V1 = ${partsById.get('ohms-law-v1')?.value ?? 'changed'} and R1 = ${partsById.get('ohms-law-r1')?.value ?? 'changed'}, I = V/R predicts ${formatLessonCurrent(ohmsLawPredictedCurrent * 1000)}. Rerun to compare. A resistor twice as large should carry half the current at the same voltage.`
+        : `With V1 = ${partsById.get('ohms-law-v1')?.value ?? 'changed'} and R1 = ${partsById.get('ohms-law-r1')?.value ?? 'changed'}, I = V/R predicts ${formatLessonCurrent(ohmsLawPredictedCurrent * 1000)}${ohmsLawSolvedCurrent !== undefined ? `; ngspice solved ${formatLessonCurrent(Math.abs(ohmsLawSolvedCurrent) * 1000)}` : ''}. ${ohmsLawSupply === 5 && ohmsLawResistance === 1000 ? 'Change R1 to 2 kΩ and rerun: doubling resistance should halve current to 2.5 mA.' : 'At fixed supply voltage, doubling R1 should halve the current.'}`
+      : 'Enter a valid source voltage and positive R1, then rerun to compare I = V/R with the solved current.'
+    : exampleLesson?.id === 'transformer' && simulationResult
     ? transformerTurnsRatio !== null && Number.isFinite(transformerTurnsRatio) && transformerInputAt1kHz !== undefined
       ? simulationResultStale
         ? `The old AC run had V(VIN) = ${formatLessonVoltage(transformerInputAt1kHz)} near 1 kHz. With a ${transformerTurnsRatio}:1 secondary-to-primary turns ratio, the ideal transformer predicts V(VOUT) ≈ ${transformerPredictedOutputAt1kHz !== undefined ? formatLessonVoltage(transformerPredictedOutputAt1kHz) : 'not available'}. Rerun AC to compare.`

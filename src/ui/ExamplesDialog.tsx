@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Search, X } from 'lucide-react'
 
-export type ExampleId = 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'parallel-resistors' | 'resistor-power' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
+export type ExampleId = 'ohms-law' | 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'parallel-resistors' | 'resistor-power' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
 type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 
 const exampleCatalog: { id: ExampleId; title: string; description: string }[] = [
@@ -12,6 +12,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'rc', title: 'RC step response', description: 'Watch a capacitor charge through a resistor and explore the time constant.' },
   { id: 'pwl', title: 'PWL waveform response', description: 'Drive an RC circuit with a custom three-level source and see how the capacitor follows each change.' },
   { id: 'current-source', title: 'Current source and load', description: 'See a 1 mA source drive a 1 kΩ load and produce a 1 V operating point.' },
+  { id: 'ohms-law', title: "Ohm's law: voltage, current, resistance", description: 'Use I = V/R to predict 5 mA through 1 kΩ at 5 V, then double the resistance and compare.' },
   { id: 'potentiometer', title: 'Potentiometer voltage divider', description: 'Turn a wiper into a variable output from a 10 V supply.' },
   { id: 'voltage-divider', title: 'Voltage divider', description: 'Two equal resistors split a 10 V supply into a predictable 5 V midpoint.' },
   { id: 'loaded-voltage-divider', title: 'How a load changes a voltage divider', description: 'Connect a load to a 1 kΩ divider and watch VOUT fall from 5 V to about 3.33 V.' },
@@ -53,7 +54,7 @@ const exampleTopicOptions: { id: ExampleTopic; label: string }[] = [
 ]
 const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
   start: ['rc', 'voltage-divider', 'led-current-limiter', 'capacitor-discharge'],
-  basics: ['rc', 'capacitor-discharge', 'voltage-divider', 'loaded-voltage-divider', 'series-resistors', 'parallel-resistors', 'resistor-power', 'supply-droop', 'potentiometer', 'current-source', 'led-current-limiter'],
+  basics: ['ohms-law', 'rc', 'capacitor-discharge', 'voltage-divider', 'loaded-voltage-divider', 'series-resistors', 'parallel-resistors', 'resistor-power', 'supply-droop', 'potentiometer', 'current-source', 'led-current-limiter'],
   diodes: ['led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
   switching: ['voltage-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
