@@ -845,7 +845,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     }
     return index
   }, [simulationResult])
-  const resultValueAt = (id: string, sampleIndex: number | null): number | undefined => {
+  const resultValueAt = useCallback((id: string, sampleIndex: number | null): number | undefined => {
     const trace = tracesByVector.get(id.toLowerCase())
     if (!trace) return undefined
     const primaryAxis = simulationResult?.traces[0]?.axis
@@ -853,7 +853,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     const time = primaryAxis?.[activeSample] ?? trace.axis[activeSample] ?? 0
     const index = trace.axis === primaryAxis ? activeSample : nearestAxisIndex(trace.axis, time, 0, Math.max(0, trace.axis.length - 1))
     return trace.values[index]
-  }
+  }, [simulationResult, tracesByVector])
   const resultValue = (id: string): number | undefined => resultValueAt(id, getSimulationCursor())
   const voltageSwitchStateCache = useRef<{ result: SimulationResult | null; states: Map<string, Uint8Array> }>({ result: null, states: new Map() })
   const voltageSwitchStateAt = (part: Part): boolean | undefined => {
