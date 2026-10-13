@@ -6618,6 +6618,8 @@ test('AC waveform supports frequency cursor and horizontal wheel zoom without dr
   await chart.focus()
   await chart.press('ArrowRight')
   await expect.poll(() => cursorLabel.innerText()).not.toBe(clickedFrequency)
+  await expect(plotWindow.locator('.cursor-readout')).toContainText(/Frequency .* hertz/)
+  await expect(plotWindow.locator('.cursor-readout')).toContainText(/V\(R1\) = .* dB/)
 
   await page.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Zoom in' }).click()
   const plotContent = plotWindow.locator('.plot-window-content')
@@ -6717,6 +6719,8 @@ test('DC sweep waveform supports source cursor and horizontal wheel zoom without
   await chart.focus()
   await chart.press('ArrowRight')
   await expect.poll(() => cursorLabel.innerText()).not.toBe(clickedSweepValue)
+  await expect(plotWindow.locator('.cursor-readout')).toContainText(/Sweep value .* V/)
+  await expect(plotWindow.locator('.cursor-readout')).toContainText(/V\(R1\) = .* V/)
 
   const readSavedDcRange = () => page.evaluate(() => {
     const settings = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings
