@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
-import { createHierarchicalExampleProject } from '../../src/domain/examples'
+import { createCurrentSourceExampleProject, createHierarchicalExampleProject } from '../../src/domain/examples'
 import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
 import { componentPins } from '../../src/domain/geometry'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
@@ -297,6 +297,13 @@ test('editor remains usable when browser local storage access is denied', { tag:
   await page.goto('/')
   await expect(page.locator('svg.schematic')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Run simulation' })).toBeVisible()
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  const value = page.locator('[data-part-setting="p-r1:value"]')
+  await value.fill('2k')
+  await expect(page.locator('.app-status [role="status"]')).toHaveText('Saved in browser recovery storage')
+  await page.reload()
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  await expect(page.locator('[data-part-setting="p-r1:value"]')).toHaveValue('2k')
   expect(pageErrors).toEqual([])
 })
 
@@ -3096,6 +3103,14 @@ async function openComponentVoltagePlot(page: import('@playwright/test').Page, r
   const plotWindow = page.locator('.plot-window').last()
   if (!hadPlotWindow) await movePlotWindowLeft(page, plotWindow)
   return plotWindow
+}
+
+async function openComponentCurrentPlot(page: import('@playwright/test').Page, ref: string) {
+  await page.locator(`.circuit-part[aria-label^="${ref},"]`).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
+  const chooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
+  await chooser.getByRole('button', { name: /New waveform window/ }).click()
+  return page.locator('.plot-window').last()
 }
 
 test('floating waveform windows can be moved and resized from the keyboard', { tag: '@ngspice' }, async ({ page }) => {
@@ -7338,6 +7353,35 @@ test('PWL source point can be swept in the browser ngspice engine', { tag: '@ngs
   const labels = await page.locator('.trace-toggles button').allTextContents()
   expect(labels.some((label) => label.includes('V1.pwl.point.2=1 V'))).toBe(true)
   expect(labels.some((label) => label.includes('V1.pwl.point.2=3 V'))).toBe(true)
+})
+
+test('current-source PWL point can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createCurrentSourceExampleProject()
+  const source = project.parts.find((part) => part.ref === 'I1')!
+  source.sourceMode = 'pwl'
+  source.currentPwl = [{ time: '0', current: '0 A' }, { time: '1m', current: '1 mA' }, { time: '2m', current: '0 A' }]
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+  project.simulation = {
+    ...project.simulation,
+    analysis: 'tran',
+    stopTime: '3m',
+    maxStep: '100u',
+    parameterSweeps: [{ component: 'I1', sourceParameter: 'pwl.point.2', start: '1 mA', stop: '3 mA', points: 2 }],
+  }
+  await page.addInitScript((projectJson) => localStorage.setItem('elsim:project:v7', projectJson), JSON.stringify(project))
+  await page.goto('/')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('I1')
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 source parameter' })).toHaveValue('pwl.point.2')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openComponentCurrentPlot(page, 'I1')
+  await expect(plot.locator('.waveform-chart')).toBeVisible()
+  const labels = await plot.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('I1.pwl.point.2=0.001 A'))).toBe(true)
+  expect(labels.some((label) => label.includes('I1.pwl.point.2=0.003 A'))).toBe(true)
 })
 
 test('PWL shared value scale can be swept in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
