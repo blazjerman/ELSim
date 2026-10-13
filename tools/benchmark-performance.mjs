@@ -180,6 +180,37 @@ function makeImportedModelProject(createStarterProject, count, definitionCount) 
   return project
 }
 
+function makeImportedDeviceModelProject(createStarterProject, count, modelCount) {
+  const project = createStarterProject()
+  const modelName = `BENCH_DEVICE_${String(modelCount).padStart(3, '0')}`
+  const parts = Array.from({ length: count }, (_, index) => ({
+    id: `device-model-bench-m-${index + 1}`,
+    kind: 'nmos',
+    ref: `M${index + 1}`,
+    value: '0',
+    x: 160 + (index % 50) * 160,
+    y: 200 + Math.floor(index / 50) * 120,
+    rotation: 0,
+    deviceModel: modelName,
+  }))
+  const content = Array.from({ length: modelCount }, (_, index) => {
+    const name = `BENCH_DEVICE_${String(index + 1).padStart(3, '0')}`
+    return `.MODEL ${name} NMOS (LEVEL=1 VTO=2 KP=20u)`
+  }).join('\n')
+  project.name = `Benchmark imported device models (${count} parts, ${modelCount} models)`
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = []
+  project.modelAssets = [{ id: 'bench-device-models', filename: 'bench-device-models.lib', sha256: '0'.repeat(64), content, licenseStatus: 'unknown', importedAt: 'benchmark' }]
+  project.activeSheetId = project.rootSheetId
+  project.sheets = project.sheets.map((sheet) => sheet.id === project.rootSheetId
+    ? { ...sheet, parts, wires: [], junctions: [], netLabels: [] }
+    : sheet)
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  return project
+}
+
 function runWasm(moduleUrl, deck, options = {}) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(path.join(root, 'tests/wasm/ngspice-benchmark-worker.mjs'), { workerData: { moduleUrl, deck, ...options } })
@@ -305,6 +336,19 @@ try {
     netlistLines: importedModelArtifact.text.trimEnd().split('\n').length,
     netlistBytes: Buffer.byteLength(importedModelArtifact.text),
     netlisting: { medianMs: importedModelNetlist.medianMs, p95Ms: importedModelNetlist.p95Ms },
+  }
+  const importedDeviceProject = makeImportedDeviceModelProject(createStarterProject, 400, 600)
+  const importedDeviceNetlist = measure(() => createNetlistArtifact(importedDeviceProject))
+  const importedDeviceArtifact = importedDeviceNetlist.value
+  if (importedDeviceArtifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) throw new Error('Imported-device-model benchmark produced netlist errors.')
+  if (!/^M400\s.* BENCH_DEVICE_600$/m.test(importedDeviceArtifact.text)) throw new Error('Imported-device-model benchmark omitted the final instance or selected model.')
+  const importedDeviceResults = {
+    instances: importedDeviceProject.parts.length,
+    models: 600,
+    modelLibraryBytes: Buffer.byteLength(importedDeviceProject.modelAssets[0].content),
+    netlistLines: importedDeviceArtifact.text.trimEnd().split('\n').length,
+    netlistBytes: Buffer.byteLength(importedDeviceArtifact.text),
+    netlisting: { medianMs: importedDeviceNetlist.medianMs, p95Ms: importedDeviceNetlist.p95Ms },
   }
 
   const wireResults = []
@@ -545,6 +589,7 @@ try {
     wireResults,
     hierarchyResults,
     importedModelResults,
+    importedDeviceResults,
     plotResults,
     simulationResults: simulationResults ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations'),
     transientResults: transientResults ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to include large transient and process-memory observations'),

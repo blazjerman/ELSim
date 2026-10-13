@@ -162,6 +162,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const modelAssets = project.modelAssets ?? []
   const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections))
   const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models)
+  const importedDeviceModelsByName = new Map<string, typeof importedDeviceModels[number]>()
+  for (const model of importedDeviceModels) {
+    const key = model.name.toLowerCase()
+    if (!importedDeviceModelsByName.has(key)) importedDeviceModelsByName.set(key, model)
+  }
   const importedSubcircuits = parsedModelAssets.flatMap((library) => library.subcircuits)
   const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary).subcircuits : []
   const subcircuitsByName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()
@@ -480,7 +485,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       append(`${part.ref} ${elementPositive} ${negative} ${value}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led') {
-      const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
+      const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
       if (part.deviceModel && importedModel?.type.toLowerCase() !== 'd') {
         const message = `${part.ref} device model ${part.deviceModel} is missing or is not a diode model.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -498,7 +503,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const base = pinNet(connectivity, part, 1)
       const emitter = pinNet(connectivity, part, 2)
       const expectedModelType = part.kind === 'npn' ? 'npn' : 'pnp'
-      const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
+      const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
       if (part.deviceModel && importedModel?.type.toLowerCase() !== expectedModelType) {
         const message = `${part.ref} device model ${part.deviceModel} is missing or is not a ${part.kind.toUpperCase()} model.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -512,7 +517,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'njfet' || part.kind === 'pjfet') {
       const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2)
       const expectedModelType = part.kind === 'njfet' ? 'njf' : 'pjf'
-      const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
+      const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
       if (part.deviceModel && (!importedModel || importedModel.type.toLowerCase() !== expectedModelType)) {
         const message = `${part.ref} device model ${part.deviceModel} is missing or is not a ${expectedModelType.toUpperCase()} JFET model.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -526,7 +531,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'nmos' || part.kind === 'pmos') {
       const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2), bulk = pinNet(connectivity, part, 3)
       const expectedModelType = part.kind
-      const importedModel = part.deviceModel ? importedDeviceModels.find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
+      const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
       if (part.deviceModel && (!importedModel || importedModel.type.toLowerCase() !== expectedModelType)) {
         const message = `${part.ref} device model ${part.deviceModel} is missing or is not a ${part.kind.toUpperCase()} model.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
