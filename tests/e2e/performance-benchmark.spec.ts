@@ -320,12 +320,14 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
     const buttons = items.map((item) => item.querySelector<HTMLButtonElement>('.trace-visibility')).filter((button): button is HTMLButtonElement => button !== null)
     const waitFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     const waitTwoFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-    const singleToggleMs: number[] = []
+    const synchronousToggleMs: number[] = []
+    const toggleToTwoFramesMs: number[] = []
     for (let sample = 0; sample < 4; sample++) {
       const started = performance.now()
       buttons[0].click()
+      synchronousToggleMs.push(performance.now() - started)
       await waitTwoFrames()
-      singleToggleMs.push(performance.now() - started)
+      toggleToTwoFramesMs.push(performance.now() - started)
     }
     const started = performance.now()
     for (const button of buttons) {
@@ -336,7 +338,7 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
       if (button.getAttribute('aria-pressed') !== 'true') button.click()
       await waitFrame()
     }
-    return { elapsedMs: performance.now() - started, singleToggleMs, selectedCount: buttons.filter((button) => button.getAttribute('aria-pressed') === 'true').length }
+    return { elapsedMs: performance.now() - started, synchronousToggleMs, toggleToTwoFramesMs, selectedCount: buttons.filter((button) => button.getAttribute('aria-pressed') === 'true').length }
   })
   await expect(plot.locator('.waveform-chart polyline')).toHaveCount(selection.selectedCount)
   expect(selection.selectedCount).toBe(40)
@@ -344,7 +346,7 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
   const plottedPoints = await plot.locator('.waveform-chart polyline').evaluateAll((lines) => lines.map((line) => (line as SVGPolylineElement).points.numberOfItems))
   expect(plottedPoints.length).toBe(selection.selectedCount)
   expect(Math.max(...plottedPoints)).toBeLessThanOrEqual(902)
-  console.log(JSON.stringify({ benchmark: 'browser-24-section-40-trace-transient-v3', browser: browserName, sections: 24, solvedSamples, plottedTraces: selection.selectedCount, maxRenderedPointsPerTrace: Math.max(...plottedPoints), resultReadyMs: Number(resultReadyMs.toFixed(2)), singleVisibilityToggleToTwoFramesMs: selection.singleToggleMs.map((elapsed) => Number(elapsed.toFixed(2))), visibilityToggleAndRenderMs: Number(selection.elapsedMs.toFixed(2)) }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-24-section-40-trace-transient-v3', browser: browserName, sections: 24, solvedSamples, plottedTraces: selection.selectedCount, maxRenderedPointsPerTrace: Math.max(...plottedPoints), resultReadyMs: Number(resultReadyMs.toFixed(2)), synchronousVisibilityToggleMs: selection.synchronousToggleMs.map((elapsed) => Number(elapsed.toFixed(2))), visibilityToggleToTwoFramesMs: selection.toggleToTwoFramesMs.map((elapsed) => Number(elapsed.toFixed(2))), visibilityToggleAndRenderMs: Number(selection.elapsedMs.toFixed(2)) }, null, 2))
 })
 
 test('measure high-sample multi-trace rendering for a nonlinear diode circuit', async ({ page, browserName }) => {
