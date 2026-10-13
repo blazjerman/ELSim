@@ -292,20 +292,24 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
   const currentGlow = Math.min(1, Math.sqrt(Math.abs(current ?? 0) / 0.005) * 0.8)
   const secondaryCurrentGlow = Math.min(1, Math.sqrt(Math.abs(secondaryCurrent ?? 0) / 0.005) * 0.8)
-  const logicLow = componentMagnitude(part.logicLow ?? '0 V', 'source') ?? 0
-  const logicHigh = componentMagnitude(part.logicHigh ?? '5 V', 'source') ?? 5
+  const { logicLow, logicHigh, seriesResistance, componentValueMagnitude, componentDefinition } = useMemo(() => ({
+    logicLow: ['inverter', 'logicGate'].includes(part.kind) ? componentMagnitude(part.logicLow ?? '0 V', 'source') ?? 0 : 0,
+    logicHigh: ['inverter', 'logicGate'].includes(part.kind) ? componentMagnitude(part.logicHigh ?? '5 V', 'source') ?? 5 : 5,
+    seriesResistance: part.kind === 'capacitor' || part.kind === 'inductor' ? componentMagnitude(part.seriesResistance ?? '0 Ω', 'resistor') ?? Number.NaN : 0,
+    componentValueMagnitude: part.kind === 'capacitor' || part.kind === 'inductor' ? componentMagnitude(part.value, part.kind) ?? Number.NaN : 0,
+    componentDefinition: componentDefinitionFor(part.kind),
+  }), [part.kind, part.logicLow, part.logicHigh, part.seriesResistance, part.value])
   const logicState = logicOutput === undefined ? undefined : logicOutput >= (logicLow + logicHigh) / 2 ? 'high' : 'low'
   const logicGateShape = part.kind === 'logicGate' ? (part.logicOperation === 'and' || part.logicOperation === 'nand' ? 'and' : part.logicOperation === 'xor' || part.logicOperation === 'xnor' ? 'xor' : 'or') : undefined
   const logicOutputStroke = logicState === 'high' ? '#83e6ad' : '#78847c'
   const lampGlow = Math.min(0.9, Math.max(0, Math.abs((voltage ?? 0) * (current ?? 0)) / (part.animationNominalPower ?? 10)))
-  const seriesResistance = part.kind === 'capacitor' || part.kind === 'inductor' ? componentMagnitude(part.seriesResistance ?? '0 Ω', 'resistor') ?? Number.NaN : 0
   const capacitorVoltage = part.kind === 'capacitor' && voltage !== undefined ? voltage - (current ?? 0) * seriesResistance : undefined
   const capacitorCharge = part.kind === 'capacitor' && voltage !== undefined
-    ? (componentMagnitude(part.value, 'capacitor') ?? Number.NaN) * capacitorVoltage!
+    ? componentValueMagnitude * capacitorVoltage!
     : undefined
   const capacitorChargeLevel = Number.isFinite(capacitorCharge) ? Math.min(1, Math.sqrt(Math.abs(capacitorCharge!) / 1e-4)) : 0
   const inductorEnergy = part.kind === 'inductor' && current !== undefined
-    ? 0.5 * (componentMagnitude(part.value, 'inductor') ?? Number.NaN) * current * current
+    ? 0.5 * componentValueMagnitude * current * current
     : undefined
   const currentDescription = part.kind === 'npn' || part.kind === 'pnp' ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the collector terminal`
     : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'njfet' || part.kind === 'pjfet' ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the drain terminal`
@@ -313,7 +317,6 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const hasCurrentDirection = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
   const channelCurrentGlow = currentGlow
   const customOffsets = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout) : []
-  const componentDefinition = componentDefinitionFor(part.kind)
   const potentiometerPosition = Number(part.wiperPosition ?? '0.5')
   const potentiometerWiperY = -24 + potentiometerPosition * 48
   const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : part.kind === 'capacitor' && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet'].includes(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
