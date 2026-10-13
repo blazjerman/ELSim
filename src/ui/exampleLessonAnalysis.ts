@@ -25,6 +25,10 @@ function formatLessonCurrent(milliamps: number): string {
   return `${Number(milliamps.toPrecision(3))} mA`
 }
 
+function formatLessonResistance(ohms: number): string {
+  return ohms >= 1000 ? `${Number((ohms / 1000).toPrecision(3))} kΩ` : `${Number(ohms.toPrecision(3))} Ω`
+}
+
 function formatLessonCharge(coulombs: number): string {
   return `${Number((coulombs * 1e6).toPrecision(3))} µC`
 }
@@ -130,6 +134,27 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const dividerR2Text = partsById.get('divider-r2')?.value ?? 'changed'
   const dividerSupplyText = partsById.get('divider-v1')?.value ?? 'changed'
   const dividerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const isLoadedDividerLesson = lessonId === 'loaded-voltage-divider'
+  const loadedDividerR1 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r1')?.value ?? '1 kΩ', 'resistor') : null
+  const loadedDividerR2 = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-r2')?.value ?? '1 kΩ', 'resistor') : null
+  const loadedDividerLoad = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-rload')?.value ?? '1 kΩ', 'resistor') : null
+  const loadedDividerSupply = isLoadedDividerLesson ? componentMagnitude(partsById.get('loaded-divider-v1')?.value ?? '10 V', 'source') : null
+  const loadedDividerBottom = loadedDividerR2 !== null && loadedDividerLoad !== null && loadedDividerR2 > 0 && loadedDividerLoad > 0
+    ? loadedDividerR2 * loadedDividerLoad / (loadedDividerR2 + loadedDividerLoad)
+    : null
+  const loadedDividerPrediction = loadedDividerR1 !== null && loadedDividerR1 > 0 && loadedDividerBottom !== null && loadedDividerSupply !== null
+    ? loadedDividerSupply * loadedDividerBottom / (loadedDividerR1 + loadedDividerBottom)
+    : null
+  const loadedDividerR1Text = partsById.get('loaded-divider-r1')?.value ?? 'changed'
+  const loadedDividerR2Text = partsById.get('loaded-divider-r2')?.value ?? 'changed'
+  const loadedDividerLoadText = partsById.get('loaded-divider-rload')?.value ?? 'changed'
+  const loadedDividerSupplyText = partsById.get('loaded-divider-v1')?.value ?? 'changed'
+  const loadedDividerSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const loadedDividerLoadPart = partsById.get('loaded-divider-rload')
+  const loadedDividerLoadVector = loadedDividerLoadPart ? componentCurrentVector(loadedDividerLoadPart).toLowerCase() : ''
+  const loadedDividerSolvedCurrent = simulationResult?.analysis === 'op' && loadedDividerLoadVector
+    ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === loadedDividerLoadVector || trace.baseId?.toLowerCase() === loadedDividerLoadVector)?.values[0]
+    : undefined
   const isParallelResistorLesson = lessonId === 'parallel-resistors'
   const parallelResistorSupply = isParallelResistorLesson ? componentMagnitude(partsById.get('current-divider-v1')?.value ?? '10 V', 'source') : null
   const parallelResistorR1 = isParallelResistorLesson ? componentMagnitude(partsById.get('current-divider-r1')?.value ?? '1 kΩ', 'resistor') : null
@@ -394,6 +419,16 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
               ? 'Select R2, change its resistance from 1 kΩ to 2 kΩ, and run again. VOUT should rise from 5 V to about 6.67 V because the lower resistor takes a larger share of the supply.'
               : `For V1 = ${dividerSupplyText}, R1 = ${dividerR1Text}, and R2 = ${dividerR2Text}, the divider formula predicts VOUT = ${formatLessonVoltage(dividerPrediction)}${dividerSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(dividerSolvedOutput)}` : ''}. Make R1 and R2 equal to put VOUT halfway between VIN and ground.`
             : 'Enter a valid source voltage and positive resistor values, then rerun to compare the midpoint.'
+      : isLoadedDividerLesson && simulationResult
+        ? simulationResultStale
+          ? loadedDividerPrediction !== null && loadedDividerBottom !== null
+            ? `R1 is ${loadedDividerR1Text}, R2 is ${loadedDividerR2Text}, and RLOAD is ${loadedDividerLoadText}. R2 and RLOAD are in parallel, giving ${formatLessonResistance(loadedDividerBottom)} below VOUT; the loaded-divider formula predicts VOUT ≈ ${formatLessonVoltage(loadedDividerPrediction)} after rerunning.`
+            : 'Enter positive values for R1, R2, RLOAD, and V1, then rerun to compare the loaded output.'
+          : loadedDividerPrediction !== null && loadedDividerBottom !== null
+            ? loadedDividerR1 === 1000 && loadedDividerR2 === 1000 && loadedDividerLoad === 1000 && loadedDividerSupply === 10
+              ? `With RLOAD = 1 kΩ, the bottom leg is R2 ∥ RLOAD = ${formatLessonResistance(loadedDividerBottom)}, so VOUT falls from the unloaded 5 V prediction to ${loadedDividerSolvedOutput !== undefined ? formatLessonVoltage(loadedDividerSolvedOutput) : formatLessonVoltage(loadedDividerPrediction)}. Ngspice solved ${loadedDividerSolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(loadedDividerSolvedCurrent) * 1000) : formatLessonCurrent(loadedDividerPrediction / loadedDividerLoad! * 1000)} through RLOAD. Increase RLOAD to 10 kΩ and rerun; VOUT should rise toward 5 V.`
+              : `With R2 = ${loadedDividerR2Text} in parallel with RLOAD = ${loadedDividerLoadText}, the effective lower resistance is ${formatLessonResistance(loadedDividerBottom)}. For R1 = ${loadedDividerR1Text} and V1 = ${loadedDividerSupplyText}, the formula predicts VOUT = ${formatLessonVoltage(loadedDividerPrediction)}${loadedDividerSolvedOutput !== undefined ? `; ngspice solved ${formatLessonVoltage(loadedDividerSolvedOutput)}` : ''}${loadedDividerSolvedCurrent !== undefined ? ` and ${formatLessonCurrent(Math.abs(loadedDividerSolvedCurrent) * 1000)} through RLOAD` : ''}. Increase RLOAD to make the output approach the unloaded divider value.`
+            : 'Enter valid positive resistor and supply values, then rerun to compare the divider output.'
       : exampleLesson?.id === 'potentiometer' && simulationResult
         ? simulationResultStale
           ? potentiometerPrediction !== null

@@ -551,6 +551,51 @@ export function createVoltageDividerExampleProject(): Project {
   return project
 }
 
+/** A loaded voltage divider showing how a connected load pulls down its output. */
+export function createLoadedVoltageDividerExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'loaded-divider-v1', kind: 'source', ref: 'V1', value: '10 V', sourceMode: 'dc', x: 280, y: 400, rotation: 0 }
+  const upper: Part = { id: 'loaded-divider-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 520, y: 360, rotation: 90 }
+  const lower: Part = { id: 'loaded-divider-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', x: 760, y: 460, rotation: 90 }
+  const load: Part = { id: 'loaded-divider-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 1000, y: 460, rotation: 90 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const parts = [source, upper, lower, load]
+  project.name = 'Loaded voltage divider'
+  project.parts = parts
+  project.wires = [
+    { id: 'loaded-divider-source-rise', points: [[280, 350], [280, 260]] },
+    { id: 'loaded-divider-supply-bus', points: [[280, 260], [520, 260]] },
+    { id: 'loaded-divider-r1-supply', points: [[520, 260], [520, 310]] },
+    { id: 'loaded-divider-output-r2', points: [[520, 410], [760, 410]] },
+    { id: 'loaded-divider-output-load', points: [[760, 410], [1000, 410]] },
+    { id: 'loaded-divider-ground-r2-load', points: [[760, 510], [1000, 510]] },
+    { id: 'loaded-divider-r2-ground', points: [[760, 510], [760, 560]] },
+    { id: 'loaded-divider-load-ground', points: [[1000, 510], [1000, 560]] },
+    { id: 'loaded-divider-ground-bus', points: [[280, 560], [1000, 560]] },
+    { id: 'loaded-divider-source-return', points: [[280, 450], [280, 560]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    labelAt('loaded-divider-vin-source', 'VIN', source, 0),
+    labelAt('loaded-divider-vin-r1', 'VIN', upper, 0),
+    labelAt('loaded-divider-vout-r1', 'VOUT', upper, 1),
+    labelAt('loaded-divider-vout-r2', 'VOUT', lower, 0),
+    labelAt('loaded-divider-vout-load', 'VOUT', load, 0),
+    labelAt('loaded-divider-ground-source', '0', source, 1),
+    labelAt('loaded-divider-ground-r2', '0', lower, 1),
+    labelAt('loaded-divider-ground-load', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'I(RLOAD)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A grounded parallel-resistor network for learning how current divides by resistance. */
 export function createParallelResistorsExampleProject(): Project {
   const project = createStarterProject()
