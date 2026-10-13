@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 
 export type ExampleId = 'ohms-law' | 'potentiometer' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'parallel-resistors' | 'resistor-power' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'imported-opamp' | 'inverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
@@ -74,15 +74,25 @@ export function ExamplesDialog({ open, onClose, onOpen, onKeyDown }: {
   const [query, setQuery] = useState('')
   const [topic, setTopic] = useState<ExampleTopic>('all')
   const [pending, setPending] = useState<ExampleId | null>(null)
+  const [restoreExampleFocus, setRestoreExampleFocus] = useState<ExampleId | null>(null)
+  const dialogRef = useRef<HTMLElement>(null)
+  const cancelPendingRef = useRef<HTMLButtonElement>(null)
   const filtered = exampleCatalog.filter(({ id, title, description }) => (topic === 'all' || exampleTopicIds[topic].includes(id)) && `${title} ${description}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  useEffect(() => {
+    if (pending) cancelPendingRef.current?.focus()
+    else if (restoreExampleFocus) {
+      dialogRef.current?.querySelector<HTMLButtonElement>(`[data-example-id="${restoreExampleFocus}"] button`)?.focus()
+      setRestoreExampleFocus(null)
+    }
+  }, [pending, restoreExampleFocus])
   const close = () => { setPending(null); onClose() }
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') { event.stopPropagation(); close(); return }
     onKeyDown(event)
   }
   if (!open) return null
-  return <div className="tour-backdrop" onClick={close}><section className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="examples-title" onKeyDown={handleKeyDown} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">LEARN BY EXAMPLE</span><h2 id="examples-title">Open a working circuit</h2></div><button autoFocus className="subtle-icon" aria-label="Close examples" onClick={close}><X size={15}/></button></div><p className="tour-copy">Each example is a complete circuit you can inspect, edit, and simulate locally.</p>{pending ? <div className="example-confirm" role="alert"><strong>Replace the current circuit?</strong><p>{exampleTitle(pending)} will replace the circuit open in this tab. Save your current circuit first if you want to keep it.</p><div><button className="tour-secondary" onClick={() => setPending(null)}>Cancel</button><button className="primary-small" onClick={() => { const example = pending; setPending(null); onOpen(example) }}>Replace and open</button></div></div> : <>
+  return <div className="tour-backdrop" onClick={close}><section ref={dialogRef} className="tour-dialog examples-dialog" role="dialog" aria-modal="true" aria-labelledby="examples-title" onKeyDown={handleKeyDown} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">LEARN BY EXAMPLE</span><h2 id="examples-title">Open a working circuit</h2></div><button autoFocus className="subtle-icon" aria-label="Close examples" onClick={close}><X size={15}/></button></div><p className="tour-copy">Each example is a complete circuit you can inspect, edit, and simulate locally.</p>{pending ? <div className="example-confirm" role="alert"><strong>Replace the current circuit?</strong><p>{exampleTitle(pending)} will replace the circuit open in this tab. Save your current circuit first if you want to keep it.</p><div><button ref={cancelPendingRef} className="tour-secondary" onClick={() => { setRestoreExampleFocus(pending); setPending(null) }}>Cancel</button><button className="primary-small" onClick={() => { const example = pending; setRestoreExampleFocus(null); setPending(null); onOpen(example) }}>Replace and open</button></div></div> : <>
     <div className="example-topic-filters" role="group" aria-label="Filter examples by topic">{exampleTopicOptions.map((item) => <button type="button" key={item.id} aria-pressed={topic === item.id} onClick={() => setTopic(item.id)}>{item.label}</button>)}</div><label className="search-box example-search"><Search size={15}/><input aria-label="Find an example" placeholder="Find an example" value={query} onChange={(event) => setQuery(event.target.value)}/>{query && <button type="button" aria-label="Clear example search" onClick={() => setQuery('')}><X size={13}/></button>}</label>
-    {filtered.length ? <div className="example-list">{filtered.map(({ id, title, description }) => <article key={id}><div><strong>{title}</strong><p>{description}</p></div><button className="primary-small" onClick={() => setPending(id)}>Open example</button></article>)}</div> : <div className="component-empty" role="status">No examples found for “{query}”.</div>}
+    {filtered.length ? <div className="example-list">{filtered.map(({ id, title, description }) => <article key={id} data-example-id={id}><div><strong>{title}</strong><p>{description}</p></div><button className="primary-small" onClick={() => { setRestoreExampleFocus(null); setPending(id) }}>Open example</button></article>)}</div> : <div className="component-empty" role="status">No examples found for “{query}”.</div>}
   </>}</section></div>
 }

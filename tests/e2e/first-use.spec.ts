@@ -381,7 +381,12 @@ test('guided lesson analysis loads only when a lesson is opened', { tag: '@ui-sm
 
   await page.getByRole('button', { name: 'Examples' }).click()
   const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
-  await dialog.locator('.example-list article').filter({ hasText: 'RC step response' }).getByRole('button', { name: 'Open example' }).click()
+  const openExample = dialog.locator('.example-list article').filter({ hasText: 'RC step response' }).getByRole('button', { name: 'Open example' })
+  await openExample.click()
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(openExample).toBeFocused()
+  await openExample.click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.getByLabel('Guided example')).toBeVisible()
   await expect.poll(() => requested.some((url) => url.includes('exampleLessonAnalysis'))).toBe(true)
