@@ -44,7 +44,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'controlled', title: 'Voltage-controlled sources', description: 'Compare a gain-of-two VCVS with a 1 mS VCCS on the same 1 V input.' },
   { id: 'voltage-switch', title: 'Voltage-controlled switch', description: 'Use a pulse voltage to connect a 5 V supply to a load, then inspect the output switching.' },
   { id: 'current-controlled', title: 'Current-controlled sources', description: 'A 1 mA sense branch controls a gain-of-two CCCS and a 2 kΩ CCVS.' },
-  { id: 'transistor', title: 'NPN low-side switch', description: 'See base current turn on a transistor and pull a 1 kΩ collector load low.' },
+  { id: 'transistor', title: 'NPN low-side switch', description: 'Estimate base current from RBASE, compare it with the 1 kΩ load demand, then verify the transistor switch with ngspice.' },
   { id: 'pnp', title: 'PNP high-side switch', description: 'See an active-low base turn on a PNP that supplies a 1 kΩ load from 5 V.' },
   { id: 'mosfet', title: 'NMOS low-side switch', description: 'See gate voltage control drain current, with the bulk tied to ground and a 1 kΩ drain load.' },
   { id: 'pmos', title: 'PMOS high-side switch', description: 'See an active-low gate turn on a high-side PMOS, with its source and bulk tied to the 5 V supply.' },

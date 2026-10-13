@@ -6046,10 +6046,28 @@ test('transistor switch example demonstrates base drive and collector switching'
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expectAvailableTrace(page, 'V(base)')
   await expectAvailableTrace(page, 'V(collector)')
+  await expectAvailableTrace(page, 'I(rbase)')
+  await expectAvailableTrace(page, 'I(rload)')
   await expectAvailableTrace(page, 'I(q1)')
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
-  await timeSlider.fill(String(Math.floor(finalSample / 4)))
+  const timeReadout = page.getByRole('group', { name: 'Result playback' }).getByRole('status')
+  const selectSampleNearTime = async (targetSeconds: number) => {
+    let low = 0
+    let high = finalSample
+    for (let attempt = 0; attempt < 12 && low < high; attempt += 1) {
+      const middle = Math.floor((low + high) / 2)
+      await timeSlider.fill(String(middle))
+      const readout = await timeReadout.innerText()
+      const match = /([\d.e+-]+)\s*(s|ms|µs|us|ns)/i.exec(readout)
+      expect(match, `Could not read simulation time: ${readout}`).not.toBeNull()
+      const unitScale = match![2].toLowerCase() === 's' ? 1 : match![2].toLowerCase() === 'ms' ? 1e-3 : match![2].toLowerCase() === 'ns' ? 1e-9 : 1e-6
+      if (Number(match![1]) * unitScale < targetSeconds) low = middle + 1
+      else high = middle
+    }
+    await timeSlider.fill(String(low))
+  }
+  await selectSampleNearTime(0.025)
   const baseWire = page.locator('.wire-current-flow-layer [data-wire-id="switch-base-probe-wire"] .wire-current-flow')
   const collectorWire = page.locator('.wire-current-flow-layer [data-wire-id="switch-collector-probe-wire"] .wire-current-flow')
   const emitterWire = page.locator('.wire-current-flow-layer [data-wire-id="switch-emitter-probe-wire"] .wire-current-flow')
@@ -6069,7 +6087,7 @@ test('transistor switch example demonstrates base drive and collector switching'
   const currentArrow = transistor.locator('.transistor-current-indicator')
   await expect.poll(async () => Number(await currentArrow.getAttribute('opacity'))).toBeGreaterThan(0)
   expect((await currentArrow.getAttribute('d'))?.startsWith('M31 -46')).toBe(true)
-  await timeSlider.fill(String(Math.floor(finalSample * 3 / 4)))
+  await selectSampleNearTime(0.075)
   const cursorReadout = page.locator('.plot-window .cursor-readout')
   await expect.poll(async () => {
     const text = await cursorReadout.innerText()
@@ -6083,6 +6101,37 @@ test('transistor switch example demonstrates base drive and collector switching'
   expect(Number.isFinite(offStateCollector), offStateReadout).toBe(true)
   expect(Math.abs(offStateBase)).toBeLessThan(0.05)
   expect(offStateCollector).toBeGreaterThan(4.9)
+
+})
+
+test('NPN switch lesson estimates base drive and compares it with ngspice', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+
+  const lesson = page.locator('.example-lesson-next-step')
+  await expect(lesson).toContainText('base current')
+  await expect(lesson).toContainText('Ngspice solved')
+  await expect(lesson).toContainText('Increase RBASE to 150 kΩ')
+  await expectAvailableTrace(page, 'I(rbase)')
+  await expectAvailableTrace(page, 'I(rload)')
+
+  await page.locator('.circuit-part[data-part-id="switch-rbase"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="switch-rbase:value"]').fill('150 kΩ')
+  await expect(page.locator('.result-stale-warning')).toContainText('Results are from the previous circuit')
+  await expect(lesson).toContainText('150 kΩ')
+  await expect(lesson).toContainText('2.87 mA')
+  await lesson.getByRole('button', { name: 'Run this circuit again' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(lesson).toContainText('Ngspice solved')
+  await expect(lesson).toContainText('150 kΩ')
+  await expect(lesson).toContainText('V(COLLECTOR) = 2.')
+  await expect(lesson).toContainText('Lower RBASE to 10 kΩ')
 })
 
 test('PNP switch example demonstrates active-low base drive and high-side load switching', { tag: '@ngspice' }, async ({ page }) => {

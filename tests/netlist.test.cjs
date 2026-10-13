@@ -1024,7 +1024,7 @@ test('NPN switch example drives the base through a resistor and returns the coll
   assert.match(artifact.text, /^VCC VCC 0 DC 5$/m)
   assert.match(artifact.text, /^RLOAD VCC COLLECTOR 1k$/m)
   assert.match(artifact.text, /^Q1 COLLECTOR BASE 0 ELSIM_MODEL_Q1$/m)
-  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(BASE)', 'V(COLLECTOR)', 'I(Q1)'])
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(BASE)', 'V(COLLECTOR)', 'I(RBASE)', 'I(RLOAD)', 'I(Q1)'])
 })
 
 test('invalid educational transistor beta is diagnosed before generating a model card', () => {

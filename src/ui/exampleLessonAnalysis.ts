@@ -311,6 +311,46 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
     ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === supplyDroopLoadVector || trace.baseId?.toLowerCase() === supplyDroopLoadVector)?.values[0]
     : undefined
   const supplyDroopSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const isNpnSwitchLesson = lessonId === 'transistor'
+  const transistorBaseResistance = isNpnSwitchLesson ? componentMagnitude(partsById.get('switch-rbase')?.value ?? '10 kΩ', 'resistor') : null
+  const transistorLoadResistance = isNpnSwitchLesson ? componentMagnitude(partsById.get('switch-rload')?.value ?? '1 kΩ', 'resistor') : null
+  const transistorBaseResistanceText = partsById.get('switch-rbase')?.value ?? 'changed'
+  const transistorLoadResistanceText = partsById.get('switch-rload')?.value ?? '1 kΩ'
+  const transistorDriveVoltageText = partsById.get('switch-vdrive')?.value ?? '5 V'
+  const transistorLoadSupplyText = partsById.get('switch-vcc')?.value ?? '5 V'
+  const transistorSuggestedBaseResistance = transistorBaseResistance !== null && transistorBaseResistance >= 100000 ? '10 kΩ' : '150 kΩ'
+  const transistorDriveVoltage = isNpnSwitchLesson ? componentMagnitude(partsById.get('switch-vdrive')?.value ?? '5 V', 'source') : null
+  const transistorLoadSupply = isNpnSwitchLesson ? componentMagnitude(partsById.get('switch-vcc')?.value ?? '5 V', 'source') : null
+  const transistorBeta = isNpnSwitchLesson ? Number(partsById.get('switch-q1')?.value ?? '100') : null
+  const transistorEstimatedBaseCurrent = transistorBaseResistance !== null && transistorBaseResistance > 0 && transistorDriveVoltage !== null
+    ? Math.max(0, (transistorDriveVoltage - 0.7) / transistorBaseResistance)
+    : null
+  const transistorEstimatedLoadCurrent = transistorLoadResistance !== null && transistorLoadResistance > 0 && transistorLoadSupply !== null
+    ? Math.max(0, (transistorLoadSupply - 0.2) / transistorLoadResistance)
+    : null
+  const transistorEstimatedCollectorCurrent = transistorEstimatedBaseCurrent !== null && transistorBeta !== null && Number.isFinite(transistorBeta) && transistorBeta > 0
+    ? transistorEstimatedBaseCurrent * transistorBeta
+    : null
+  const transistorPredictedLoadCurrent = transistorEstimatedCollectorCurrent !== null && transistorEstimatedLoadCurrent !== null
+    ? Math.min(transistorEstimatedCollectorCurrent, transistorEstimatedLoadCurrent)
+    : null
+  const transistorPredictedCollectorVoltage = transistorPredictedLoadCurrent !== null && transistorLoadResistance !== null && transistorLoadSupply !== null
+    ? transistorLoadSupply - transistorPredictedLoadCurrent * transistorLoadResistance
+    : null
+  const transistorSampleAt25Ms = isNpnSwitchLesson && simulationResult?.analysis === 'tran' && simulationResult.traces[0]?.axis.length
+    ? nearestAxisIndex(simulationResult.traces[0].axis, 0.025)
+    : undefined
+  const transistorTraceAt25Ms = (vectorId: string): number | undefined => {
+    if (transistorSampleAt25Ms === undefined) return undefined
+    const normalized = vectorId.toLowerCase()
+    const trace = simulationResult?.traces.find((item) => item.id.toLowerCase() === normalized || item.baseId?.toLowerCase() === normalized)
+    return trace?.values[transistorSampleAt25Ms]
+  }
+  const transistorBaseCurrentTrace = partsById.get('switch-rbase')
+  const transistorLoadCurrentTrace = partsById.get('switch-rload')
+  const transistorSolvedBaseCurrent = transistorBaseCurrentTrace ? transistorTraceAt25Ms(componentCurrentVector(transistorBaseCurrentTrace)) : undefined
+  const transistorSolvedLoadCurrent = transistorLoadCurrentTrace ? transistorTraceAt25Ms(componentCurrentVector(transistorLoadCurrentTrace)) : undefined
+  const transistorSolvedCollectorVoltage = transistorTraceAt25Ms('v(collector)')
   const potentiometer = exampleLesson?.id === 'potentiometer' ? partsById.get('pot-p1') : undefined
   const potentiometerPosition = potentiometer ? Number(potentiometer.wiperPosition ?? '0.5') : null
   const potentiometerSupply = exampleLesson?.id === 'potentiometer' ? componentMagnitude(partsById.get('pot-v1')?.value ?? '10 V', 'source') : null
@@ -685,6 +725,14 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
           ? 'Increase R1 from 1 kΩ to 2 kΩ and rerun. Assuming VZ stays near 5.1 V, current should fall from about 6.9 mA to 3.45 mA while the Zener remains above its 1 mA knee.'
           : `At R1 = ${zenerResistanceText} and V1 = ${zenerSupplyText}, the simple estimate is ${formatLessonCurrent(Math.max(0, zenerEstimatedCurrentMa))}. ngspice solved VZ = ${zenerSolvedVoltage !== undefined ? formatLessonVoltage(zenerSolvedVoltage) : '—'}; from the solved output, the series and Zener current is about ${zenerSolvedCurrentMa !== undefined ? formatLessonCurrent(zenerSolvedCurrentMa) : '—'}. ${zenerSolvedCurrentMa !== undefined && zenerSolvedCurrentMa < 1 ? 'This is below the model’s 1 mA knee, so the reference has fallen out of regulation.' : 'Increase R1 to 10 kΩ (about 0.69 mA by the estimate) to see when regulation starts to fail.'}`
             : 'Enter a valid supply above 5.1 V and positive series resistance, then rerun to compare regulation.'
+      : isNpnSwitchLesson && simulationResult
+        ? transistorEstimatedBaseCurrent !== null && transistorEstimatedCollectorCurrent !== null && transistorEstimatedLoadCurrent !== null && transistorPredictedCollectorVoltage !== null
+          ? simulationResultStale
+            ? `The old transient is stale. With VDRIVE = ${transistorDriveVoltageText} and RBASE = ${transistorBaseResistanceText}, the rough estimate (VDRIVE − 0.7 V)/RBASE gives ${formatLessonCurrent(transistorEstimatedBaseCurrent * 1000)} base current; β × IB predicts up to ${formatLessonCurrent(transistorEstimatedCollectorCurrent * 1000)}, while VCC = ${transistorLoadSupplyText} and RLOAD = ${transistorLoadResistanceText} need about ${formatLessonCurrent(transistorEstimatedLoadCurrent * 1000)} to pull the collector near 0.2 V. The estimate predicts V(COLLECTOR) ≈ ${formatLessonVoltage(transistorPredictedCollectorVoltage)}. Rerun to compare these approximate values with ngspice.`
+            : transistorSolvedBaseCurrent !== undefined && transistorSolvedLoadCurrent !== undefined && transistorSolvedCollectorVoltage !== undefined
+              ? `At 25 ms with RBASE = ${transistorBaseResistanceText}, (VDRIVE − 0.7 V)/RBASE estimates ${formatLessonCurrent(transistorEstimatedBaseCurrent * 1000)} base current and β × IB estimates up to ${formatLessonCurrent(transistorEstimatedCollectorCurrent * 1000)} collector current. VCC = ${transistorLoadSupplyText} and RLOAD = ${transistorLoadResistanceText} need about ${formatLessonCurrent(transistorEstimatedLoadCurrent * 1000)} to pull low. Ngspice solved ${formatLessonCurrent(Math.abs(transistorSolvedBaseCurrent) * 1000)} through RBASE, ${formatLessonCurrent(Math.abs(transistorSolvedLoadCurrent) * 1000)} through RLOAD, and V(COLLECTOR) = ${formatLessonVoltage(transistorSolvedCollectorVoltage)}. ${transistorSuggestedBaseResistance === '150 kΩ' ? 'Increase' : 'Lower'} RBASE to ${transistorSuggestedBaseResistance} and rerun to see how base drive changes the collector voltage; beta and 0.7 V are rough teaching estimates, not guaranteed transistor values.`
+              : `At 25 ms, the rough estimate gives ${formatLessonCurrent(transistorEstimatedBaseCurrent * 1000)} base current and ${formatLessonCurrent(transistorEstimatedCollectorCurrent * 1000)} maximum collector current by β × IB. Run the transient to compare with the solved currents and collector voltage.`
+          : 'Enter positive source, resistor, and beta values, then rerun to compare the estimated base drive with the collector load.'
       : exampleLesson?.id === 'common-emitter' && simulationResult
         ? commonEmitterMeasurement && commonEmitterCollectorResistance !== null
           ? simulationResultStale

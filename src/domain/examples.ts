@@ -1456,7 +1456,7 @@ export function createTransistorSwitchExampleProject(): Project {
   ]
   project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
-  project.plotSettings = { selectedTraceIds: ['V(BASE)', 'V(COLLECTOR)', 'I(Q1)'], ranges: {} }
+  project.plotSettings = { selectedTraceIds: ['V(BASE)', 'V(COLLECTOR)', 'I(RBASE)', 'I(RLOAD)', 'I(Q1)'], ranges: {} }
   project.view = { zoom: 0.85, panX: -40, panY: 0 }
   project.sheets[0].view = project.view
   return project
