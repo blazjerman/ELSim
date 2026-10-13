@@ -17,7 +17,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'wheatstone-bridge', title: 'Wheatstone bridge sensor', description: 'Compare two resistor-divider midpoints, then balance the bridge by changing the sensor resistance.' },
   { id: 'voltage-divider', title: 'Voltage divider', description: 'Two equal resistors split a 10 V supply into a predictable 5 V midpoint.' },
   { id: 'loaded-voltage-divider', title: 'Loaded divider and Thevenin equivalent', description: 'Replace a 10 V resistor divider with its 5 V, 500 Ω Thevenin model and predict how different loads change VOUT.' },
-  { id: 'parallel-resistors', title: 'Parallel resistor current divider', description: 'Compare current through 1 kΩ and 2 kΩ branches across the same 10 V supply.' },
+  { id: 'parallel-resistors', title: 'Parallel resistor current divider', description: 'Compare current through 1 kΩ and 2 kΩ branches, then verify Kirchhoff’s current law: source current equals the branch-current sum.' },
   { id: 'resistor-power', title: 'Resistor power dissipation', description: 'Use P = V × I to compare 25 mW at 1 kΩ with 250 mW at 100 Ω.' },
   { id: 'lamp-power', title: 'Lamp brightness follows electrical power', description: 'Compare a lamp at its nominal animation power with one-quarter power; the glow is illustrative, not a filament-temperature model.' },
   { id: 'switch-lamp', title: 'Open and close a lamp circuit', description: 'Click a manual switch to break or complete the circuit and compare the lamp current and glow.' },

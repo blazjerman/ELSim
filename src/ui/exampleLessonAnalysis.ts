@@ -228,6 +228,14 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
     const vectorId = part ? componentCurrentVector(part).toLowerCase() : ''
     return simulationResult.traces.find((trace) => trace.id.toLowerCase() === vectorId || trace.baseId?.toLowerCase() === vectorId)?.values[0]
   }
+  const parallelResistorSourceCurrentMa = (() => {
+    if (!isParallelResistorLesson || simulationResult?.analysis !== 'op') return undefined
+    const source = partsById.get('current-divider-v1')
+    if (!source) return undefined
+    const vectorId = componentCurrentVector(source).toLowerCase()
+    const value = simulationResult.traces.find((trace) => trace.id.toLowerCase() === vectorId || trace.baseId?.toLowerCase() === vectorId)?.values[0]
+    return value === undefined ? undefined : Math.abs(value) * 1000
+  })()
   const parallelResistorR1SolvedMa = parallelResistorCurrentAtOp('current-divider-r1')
   const parallelResistorR2SolvedMa = parallelResistorCurrentAtOp('current-divider-r2')
   const isResistorPowerLesson = lessonId === 'resistor-power'
@@ -506,11 +514,11 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
     : exampleLesson?.id === 'parallel-resistors' && simulationResult
       ? parallelResistorPredictedR1Ma !== null && parallelResistorPredictedR2Ma !== null
         ? simulationResultStale
-          ? `The previous result is stale. With V1 = ${parallelResistorSupplyText}, R1 = ${parallelResistorR1Text}, and R2 = ${parallelResistorR2Text}, V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} in the R1 branch and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} in R2. Rerun to compare the solved currents.`
+          ? `The previous result is stale. With V1 = ${parallelResistorSupplyText}, R1 = ${parallelResistorR1Text}, and R2 = ${parallelResistorR2Text}, V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} in the R1 branch and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} in R2. Kirchhoff’s current law predicts the source supplies their sum, ${formatLessonCurrent(parallelResistorPredictedR1Ma + parallelResistorPredictedR2Ma)}. Rerun to compare all three solved currents.`
           : parallelResistorR1SolvedMa !== undefined && parallelResistorR2SolvedMa !== undefined
             ? Math.abs((Math.abs(parallelResistorR1SolvedMa) / Math.abs(parallelResistorR2SolvedMa)) - (parallelResistorR2 ?? 1) / (parallelResistorR1 ?? 1)) < 0.03
-              ? `Ngspice solved ${formatLessonCurrent(Math.abs(parallelResistorR1SolvedMa) * 1000)} through R1 and ${formatLessonCurrent(Math.abs(parallelResistorR2SolvedMa) * 1000)} through R2. The lower resistance carries more current: I = V/R. Change R2 to match R1 at ${parallelResistorR1Text} and rerun; both branches should carry ${formatLessonCurrent(parallelResistorPredictedR1Ma)}.`
-              : `For V1 = ${parallelResistorSupplyText}, R1 = ${parallelResistorR1Text}, and R2 = ${parallelResistorR2Text}, V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. Ngspice solved ${formatLessonCurrent(Math.abs(parallelResistorR1SolvedMa) * 1000)} and ${formatLessonCurrent(Math.abs(parallelResistorR2SolvedMa) * 1000)}. The total supply current is the sum of both branch currents.`
+              ? `Ngspice solved ${formatLessonCurrent(Math.abs(parallelResistorR1SolvedMa) * 1000)} through R1 and ${formatLessonCurrent(Math.abs(parallelResistorR2SolvedMa) * 1000)} through R2. The lower resistance carries more current: I = V/R. Kirchhoff’s current law says the source current equals the branch-current sum: ${parallelResistorSourceCurrentMa !== undefined ? `${formatLessonCurrent(parallelResistorSourceCurrentMa)} from V1 versus ${formatLessonCurrent((Math.abs(parallelResistorR1SolvedMa) + Math.abs(parallelResistorR2SolvedMa)) * 1000)} from R1 + R2` : `the predicted ${formatLessonCurrent(parallelResistorPredictedR1Ma + parallelResistorPredictedR2Ma)} total`}. Change R2 to match R1 at ${parallelResistorR1Text} and rerun; both branches should carry ${formatLessonCurrent(parallelResistorPredictedR1Ma)}.`
+              : `For V1 = ${parallelResistorSupplyText}, R1 = ${parallelResistorR1Text}, and R2 = ${parallelResistorR2Text}, V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. Ngspice solved ${formatLessonCurrent(Math.abs(parallelResistorR1SolvedMa) * 1000)} and ${formatLessonCurrent(Math.abs(parallelResistorR2SolvedMa) * 1000)}. Kirchhoff’s current law predicts a total of ${formatLessonCurrent(parallelResistorPredictedR1Ma + parallelResistorPredictedR2Ma)}; the measured source current is ${parallelResistorSourceCurrentMa !== undefined ? formatLessonCurrent(parallelResistorSourceCurrentMa) : 'not available'}.`
             : `With both branches across ${parallelResistorSupplyText}, I = V/R predicts ${formatLessonCurrent(parallelResistorPredictedR1Ma)} through R1 and ${formatLessonCurrent(parallelResistorPredictedR2Ma)} through R2. The branch with half the resistance carries twice the current.`
         : 'Enter a valid source voltage and positive resistor values, then rerun to compare the branch currents.'
     : isSupplyDroopLesson && simulationResult

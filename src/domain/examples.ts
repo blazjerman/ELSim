@@ -743,7 +743,7 @@ export function createParallelResistorsExampleProject(): Project {
   ]
   project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'op' }
-  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'I(R1)', 'I(R2)'], ranges: {} }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'I(V1)', 'I(R1)', 'I(R2)'], ranges: {} }
   project.view = { zoom: 0.85, panX: -5, panY: 0 }
   project.sheets[0].view = project.view
   return project

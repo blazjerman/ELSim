@@ -4619,6 +4619,8 @@ test('parallel-resistor lesson predicts, solves, and compares branch current div
   const lesson = page.locator('.example-lesson-next-step')
   await expect(lesson).toContainText('10 mA through R1')
   await expect(lesson).toContainText('5 mA through R2')
+  await expect(lesson).toContainText('15 mA from V1 versus 15 mA from R1 + R2')
+  await expectAvailableTrace(page, 'I(V1)')
   await expectAvailableTrace(page, 'I(R1)')
   await expectAvailableTrace(page, 'I(R2)')
   for (const wireId of ['current-divider-source-rise', 'current-divider-r1-supply', 'current-divider-r1-return', 'current-divider-source-return']) {
@@ -4634,6 +4636,7 @@ test('parallel-resistor lesson predicts, solves, and compares branch current div
   await lesson.getByRole('button', { name: 'Run this circuit again' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expect(lesson).toContainText('10 mA through R1 and 10 mA through R2')
+  await expect(lesson).toContainText('20 mA from V1 versus 20 mA from R1 + R2')
 })
 
 test('supply-droop lesson compares a light and heavy load using ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

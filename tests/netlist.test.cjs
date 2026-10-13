@@ -730,7 +730,7 @@ test('parallel-resistor beginner example creates two grounded branches with pred
   assert.match(artifact.text, /^R1 VIN 0 1k$/m)
   assert.match(artifact.text, /^R2 VIN 0 2k$/m)
   assert.equal(project.wires.length, 8)
-  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'I(R1)', 'I(R2)'])
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'I(V1)', 'I(R1)', 'I(R2)'])
 })
 
 test('resistor-power beginner example solves 25 mW at 5 V across 1 kΩ', () => {
