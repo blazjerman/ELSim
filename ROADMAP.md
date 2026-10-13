@@ -246,6 +246,8 @@ Included-asset retention (2026-10-12): The required-model set now follows resolv
 
 Model library file management (2026-10-12): Every imported library now has one remove control in its provenance card, including include-only files with no `.MODEL` or `.SUBCKT` cards. The control is disabled when a placed IC or another included library depends on the file; unused files can be removed directly. Firefox verifies both protected two-level include dependencies and deletion of an unrelated model file.
 
+Shared model-library solver verification (2026-10-13): The Firefox engine workflow for two imported project-local libraries now checks that an `.include` resolves to the selected shared library, `.PARAM`, `.FUNC`, and `.GLOBAL` records appear in the generated netlist, and ngspice completes the circuit run with those records loaded. The focused case passes against the existing local runtime; no WASM rebuild was needed.
+
 ### M3 — LTspice interoperability
 
 **M3.1 Compatibility matrix and fixtures.** Catalog supported `.asc`, `.asy`, directives, primitives, parameters, and model dialect features. Use original hand-written fixtures or files whose redistribution is permitted. Acceptance: every supported syntax item has a fixture; known unsupported items have a diagnostic.

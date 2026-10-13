@@ -1198,7 +1198,7 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
-test('project-local model includes resolve as imported assets and shared parameter records load', { tag: '@ui-smoke' }, async ({ page }) => {
+test('project-local model includes and shared parameter records load through browser ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
   const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
@@ -1227,6 +1227,10 @@ test('project-local model includes resolve as imported assets and shared paramet
   expect(netlist).toContain('.FUNC TWICE(x) {2*x}')
   expect(netlist).toContain('.SUBCKT CORE IN OUT')
   expect(netlist).not.toMatch(/^\.include/im)
+  await netlistDialog.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.plot-window')).toHaveCount(0)
 })
 
 test('batch-importing related model libraries resolves their includes immediately', { tag: '@ui-smoke' }, async ({ page }) => {
