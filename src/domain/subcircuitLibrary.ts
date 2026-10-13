@@ -543,24 +543,43 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       graph.set(from, edges)
     } else resolved.push({ assetId: asset.id, filename: asset.filename, ...dependency, targetAssetId })
   }
-  const recursiveChains: string[][] = [], found = new Set<string>(), visited = new Set<string>(), stack: string[] = []
-  const visit = (name: string) => {
-    const activeAt = stack.indexOf(name)
-    if (activeAt >= 0) {
-      const cycle = [...stack.slice(activeAt), name]
-      const ring = cycle.slice(0, -1)
-      const canonical = [...ring].sort((a, b) => a.localeCompare(b))[0]
-      const key = `${canonical}:${[...ring].sort().join(':')}`
-      if (!found.has(key)) { found.add(key); recursiveChains.push(cycle.map((part) => subcircuits.get(part) ?? part)) }
-      return
-    }
-    if (visited.has(name)) return
+  const recursiveChains: string[][] = [], found = new Set<string>(), visited = new Set<string>()
+  const stack: string[] = []
+  const activeIndex = new Map<string, number>()
+  const frames: { name: string; children: string[]; nextChild: number }[] = []
+  const enter = (name: string) => {
+    activeIndex.set(name, stack.length)
     stack.push(name)
-    for (const next of graph.get(name) ?? []) visit(next)
-    stack.pop()
-    visited.add(name)
+    frames.push({ name, children: [...(graph.get(name) ?? [])], nextChild: 0 })
   }
-  for (const name of subcircuits.keys()) visit(name)
+  const recordCycle = (activeAt: number, name: string) => {
+    const cycle = [...stack.slice(activeAt), name]
+    const ring = cycle.slice(0, -1)
+    const canonical = [...ring].sort((left, right) => left.localeCompare(right))[0]
+    const key = `${canonical}:${[...ring].sort().join(':')}`
+    if (!found.has(key)) {
+      found.add(key)
+      recursiveChains.push(cycle.map((part) => subcircuits.get(part) ?? part))
+    }
+  }
+  for (const root of subcircuits.keys()) {
+    if (visited.has(root)) continue
+    enter(root)
+    while (frames.length) {
+      const frame = frames[frames.length - 1]
+      if (frame.nextChild < frame.children.length) {
+        const child = frame.children[frame.nextChild++]
+        const activeAt = activeIndex.get(child)
+        if (activeAt !== undefined) recordCycle(activeAt, child)
+        else if (!visited.has(child)) enter(child)
+        continue
+      }
+      frames.pop()
+      stack.pop()
+      activeIndex.delete(frame.name)
+      visited.add(frame.name)
+    }
+  }
   const conflicts = [...definitionLocations.values()].filter((conflict) => conflict.definitions.length > 1)
   return { missing, missingIncludes, recursiveChains, resolved, resolvedIncludes, conflicts, subcircuitAssets, deviceModelAssets }
 }

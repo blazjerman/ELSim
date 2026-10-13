@@ -248,6 +248,8 @@ Model library file management (2026-10-12): Every imported library now has one r
 
 Shared model-library solver verification (2026-10-13): The Firefox engine workflow for two imported project-local libraries now checks that an `.include` resolves to the selected shared library, `.PARAM`, `.FUNC`, and `.GLOBAL` records appear in the generated netlist, and ngspice completes the circuit run with those records loaded. The focused case passes against the existing local runtime; no WASM rebuild was needed.
 
+Deep model-dependency traversal (2026-10-13): Recursive `.SUBCKT` cycle analysis now uses an explicit depth-first frame stack and an active-name index instead of JavaScript recursion and a linear search of the current path. A 12,000-definition cycle regression verifies stack safety and the reported cycle endpoints. All 30 unit groups and TypeScript pass; no WASM rebuild or browser-server test is needed for this domain-only change.
+
 ### M3 — LTspice interoperability
 
 **M3.1 Compatibility matrix and fixtures.** Catalog supported `.asc`, `.asy`, directives, primitives, parameters, and model dialect features. Use original hand-written fixtures or files whose redistribution is permitted. Acceptance: every supported syntax item has a fixture; known unsupported items have a diagnostic.

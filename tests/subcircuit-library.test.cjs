@@ -511,6 +511,21 @@ test('reports missing model dependencies and recursive subcircuit chains', () =>
   assert.deepEqual(report.recursiveChains, [['AMP', 'CORE', 'AMP']])
 })
 
+test('analyzes a deep recursive subcircuit chain without recursive traversal', () => {
+  const count = 12_000
+  const lines = []
+  for (let index = 0; index < count; index += 1) {
+    const name = `CELL${String(index).padStart(5, '0')}`
+    const next = `CELL${String((index + 1) % count).padStart(5, '0')}`
+    lines.push(`.SUBCKT ${name} N`, `XNEXT N ${next}`, `.ENDS ${name}`)
+  }
+  const report = analyzeModelDependencies([{ id: 'deep-cycle', filename: 'deep-cycle.lib', content: lines.join('\n') }])
+  assert.equal(report.recursiveChains.length, 1)
+  assert.equal(report.recursiveChains[0].length, count + 1)
+  assert.equal(report.recursiveChains[0][0], 'CELL00000')
+  assert.equal(report.recursiveChains[0].at(-1), 'CELL00000')
+})
+
 test('blocks replacements that newly break dependencies or make a used IC recursive', () => {
   const previous = [
     { id: 'amp', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\nD1 OUT 0 DFAST\n.ENDS AMP' },
