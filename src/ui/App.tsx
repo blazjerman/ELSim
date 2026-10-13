@@ -49,6 +49,14 @@ type HoveredSchematicObject = { kind: 'part' | 'wire' | 'label'; id: string } | 
 type ProbeRequest = { kind: 'node'; name: string; wireId?: string; labelId?: string } | { kind: 'part'; id: string; winding?: 'P' | 'S' }
 import type { ExampleId } from './ExamplesDialog'
 
+function readLocalPreference(key: string): string | null {
+  try { return localStorage.getItem(key) } catch { return null }
+}
+
+function writeLocalPreference(key: string, value: string): void {
+  try { localStorage.setItem(key, value) } catch { /* Preferences are optional; editor operation must not depend on storage access. */ }
+}
+
 const ParameterSweepEditor = lazy(() => import('./ParameterSweepEditor'))
 const TransientEditors = lazy(() => import('./TransientEditors'))
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
@@ -1876,21 +1884,21 @@ export default function App() {
   simulationResultRef.current = simulationResult
   const [playbackRunning, setPlaybackRunning] = useState(false)
   const [playbackRate, setPlaybackRate] = useState<number | 'realtime'>(() => {
-    const stored = localStorage.getItem('elsim:simulation-playback-rate')
+    const stored = readLocalPreference('elsim:simulation-playback-rate')
     if (stored === 'realtime') return stored
     const value = Number(stored)
     const supported = [0.1, ...Array.from({ length: 12 }, (_, index) => (index + 1) * 0.25), 4, 5, 10]
     if (supported.includes(value)) return value
     return 1
   })
-  useEffect(() => { localStorage.setItem('elsim:simulation-playback-rate', String(playbackRate)) }, [playbackRate])
-  const [currentDotSize, setCurrentDotSize] = useState(() => { const value = Number(localStorage.getItem('elsim:wire-current-dot-size')); return value >= 4 ? Math.min(16, value) : 4 })
-  const [currentDotSpacing, setCurrentDotSpacing] = useState(() => { const value = Number(localStorage.getItem('elsim:wire-current-dot-spacing')); return value >= 10 ? Math.min(30, value === 10.5 ? 20 : value) : 20 })
-  const [currentAnimationEnabled, setCurrentAnimationEnabled] = useState(() => localStorage.getItem('elsim:current-animation-enabled') !== 'false')
+  useEffect(() => { writeLocalPreference('elsim:simulation-playback-rate', String(playbackRate)) }, [playbackRate])
+  const [currentDotSize, setCurrentDotSize] = useState(() => { const value = Number(readLocalPreference('elsim:wire-current-dot-size')); return value >= 4 ? Math.min(16, value) : 4 })
+  const [currentDotSpacing, setCurrentDotSpacing] = useState(() => { const value = Number(readLocalPreference('elsim:wire-current-dot-spacing')); return value >= 10 ? Math.min(30, value === 10.5 ? 20 : value) : 20 })
+  const [currentAnimationEnabled, setCurrentAnimationEnabled] = useState(() => readLocalPreference('elsim:current-animation-enabled') !== 'false')
   const prefersReducedMotionRef = useRef(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
-  useEffect(() => { localStorage.setItem('elsim:wire-current-dot-size', String(currentDotSize)) }, [currentDotSize])
-  useEffect(() => { localStorage.setItem('elsim:wire-current-dot-spacing', String(currentDotSpacing)) }, [currentDotSpacing])
-  useEffect(() => { localStorage.setItem('elsim:current-animation-enabled', String(currentAnimationEnabled)) }, [currentAnimationEnabled])
+  useEffect(() => { writeLocalPreference('elsim:wire-current-dot-size', String(currentDotSize)) }, [currentDotSize])
+  useEffect(() => { writeLocalPreference('elsim:wire-current-dot-spacing', String(currentDotSpacing)) }, [currentDotSpacing])
+  useEffect(() => { writeLocalPreference('elsim:current-animation-enabled', String(currentAnimationEnabled)) }, [currentAnimationEnabled])
   const [electricalCheckOpen, setElectricalCheckOpen] = useState(false)
   const [electricalCheckResult, setElectricalCheckResult] = useState<{ project: Project; issues: ElectricalIssue[] } | null>(null)
   const [electricalCheckLoading, setElectricalCheckLoading] = useState(false)

@@ -285,6 +285,21 @@ test('project inspector reports the current project format version', { tag: '@ui
   await expect(page.getByText('ELSim JSON · v8')).toBeVisible()
 })
 
+test('editor remains usable when browser local storage access is denied', { tag: '@ui-smoke' }, async ({ page }) => {
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() { throw new DOMException('Access denied', 'SecurityError') },
+    })
+  })
+  await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeVisible()
+  expect(pageErrors).toEqual([])
+})
+
 test('autosave failure is shown instead of claiming the project is saved', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, 'indexedDB', { configurable: true, value: undefined })
