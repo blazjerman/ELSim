@@ -3805,6 +3805,34 @@ test('hovering between schematic objects keeps the latest unselected object as t
   await expect(page.locator('.circuit-part[data-part-id="p-c1"]')).toHaveCount(0)
 })
 
+test('schematic hover hit testing resolves ancestry once per event target', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.locator('svg.schematic').click({ position: { x: 20, y: 20 } })
+  await expect(page.locator('.circuit-part.selected, .wire-line.selected, .canvas-label.selected')).toHaveCount(0)
+  await page.evaluate(() => {
+    const win = window as Window & { __closestCalls?: number }
+    win.__closestCalls = 0
+    const closest = Element.prototype.closest
+    Element.prototype.closest = function <K extends keyof HTMLElementTagNameMap>(this: Element, selectors: K | string) {
+      win.__closestCalls = (win.__closestCalls ?? 0) + 1
+      return closest.call(this, selectors)
+    }
+  })
+  const moveTarget = async (id: string) => page.locator(`.circuit-part[data-part-id="${id}"]`).evaluate((element) => {
+    for (let index = 0; index < 40; index += 1) element.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1 }))
+  })
+  await moveTarget('p-r1')
+  const firstTargetLookups = await page.evaluate(() => (window as Window & { __closestCalls?: number }).__closestCalls ?? 0)
+  await moveTarget('p-c1')
+  const secondTargetLookups = await page.evaluate(() => (window as Window & { __closestCalls?: number }).__closestCalls ?? 0)
+  expect(firstTargetLookups).toBeGreaterThan(0)
+  expect(secondTargetLookups - firstTargetLookups).toBe(firstTargetLookups)
+  expect(secondTargetLookups).toBeLessThanOrEqual(4)
+  await page.getByRole('button', { name: 'Delete selected or hovered (Delete)' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="p-c1"]')).toHaveCount(0)
+  await expect(page.locator('.circuit-part[data-part-id="p-r1"]')).toHaveCount(1)
+})
+
 test('wire mode does not select or move an existing wire', async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
