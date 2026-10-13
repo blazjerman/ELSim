@@ -275,13 +275,26 @@ const componentHelpByKind: Readonly<Record<PartKind, string>> = {
   subcircuit: 'An imported or project-defined circuit block. Its pins follow the model’s declared order.',
 }
 
+function freezeSymbolPrimitives(primitives: readonly ComponentSymbolPrimitive[]) {
+  return Object.freeze(primitives.map((primitive) => Object.freeze({ ...primitive })))
+}
+
+function freezeSymbolAnimations(animations: ComponentDefinition['symbolAnimations']): ComponentDefinition['symbolAnimations'] {
+  if (!animations) return undefined
+  return Object.freeze(Object.fromEntries(Object.entries(animations).map(([channel, states]) => [
+    channel,
+    Object.freeze(Object.fromEntries(Object.entries(states).map(([state, primitives]) => [state, freezeSymbolPrimitives(primitives)]))),
+  ])))
+}
+
 export const componentDefinitions: readonly ComponentDefinition[] = Object.freeze(definitions.map((definition: BuiltInComponentDefinition) => Object.freeze({
   ...definition,
   help: componentHelpByKind[definition.kind],
   pins: Object.freeze(definition.pins.map((pin) => Object.freeze({ ...pin }))),
   pinOffsets: definition.pinOffsets ? Object.freeze(definition.pinOffsets.map((offset) => Object.freeze([...offset]) as unknown as [number, number])) : undefined,
-  symbolGeometry: definition.symbolGeometry ? Object.freeze(definition.symbolGeometry.map((primitive) => Object.freeze({ ...primitive }))) : undefined,
-  symbolVariants: definition.symbolVariants ? Object.freeze(Object.fromEntries(Object.entries(definition.symbolVariants).map(([key, primitives]) => [key, Object.freeze(primitives.map((primitive) => Object.freeze({ ...primitive })))]))) : undefined,
+  symbolGeometry: definition.symbolGeometry ? freezeSymbolPrimitives(definition.symbolGeometry) : undefined,
+  symbolVariants: definition.symbolVariants ? Object.freeze(Object.fromEntries(Object.entries(definition.symbolVariants).map(([key, primitives]) => [key, freezeSymbolPrimitives(primitives)]))) : undefined,
+  symbolAnimations: freezeSymbolAnimations(definition.symbolAnimations),
   properties: Object.freeze(definition.properties.map((property) => Object.freeze({ ...property }))),
   animationChannels: Object.freeze([...definition.animationChannels]),
 })))

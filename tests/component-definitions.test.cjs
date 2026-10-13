@@ -42,6 +42,16 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     assert.equal(schema.properties.help.maxLength, 512)
     assert.ok(schema.properties.electricalType.enum.includes(definition.electricalType))
     assert.ok(definition.pins.every((pin) => schema.properties.pins.items.properties.direction.enum.includes(pin.direction)))
+    if (definition.symbolAnimations) {
+      assert.ok(Object.isFrozen(definition.symbolAnimations), `${definition.kind} animation channels are immutable`)
+      for (const states of Object.values(definition.symbolAnimations)) {
+        assert.ok(Object.isFrozen(states), `${definition.kind} animation state map is immutable`)
+        for (const primitives of Object.values(states)) {
+          assert.ok(Object.isFrozen(primitives), `${definition.kind} animation geometry is immutable`)
+          assert.ok(primitives.every(Object.isFrozen), `${definition.kind} animation primitives are immutable`)
+        }
+      }
+    }
   }
   const project = createStarterProject()
   for (const definition of componentDefinitions) {
