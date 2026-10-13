@@ -453,6 +453,8 @@ Floating waveform render isolation (2026-10-13): plot windows and their result p
 
 Modal keyboard handling follow-up (2026-10-13): modal Tab trapping is shared by the app dialogs and keyboard-shortcut dialog instead of maintaining duplicate implementations. Closing the generated-netlist dialog with Escape or its close action now restores focus to the control that opened it; Firefox covers this alongside the Examples, Circuit Checks, and sheet-settings focus loops. All 52 Firefox UI smoke cases and all 7 Firefox browser performance benchmarks pass, including 5,000-part selection/navigation and large waveform workflows; no WASM rebuild was needed. Manual screen-reader review and broader focus-indicator review remain open under M4.1.
 
+Model-section dialog focus follow-up (2026-10-13): opening a multi-section model library records the actual picker trigger. Escape, Cancel, backdrop dismissal, and successful import return focus to that trigger. Firefox verifies cancellation restores focus and that a subsequent section selection still imports only the chosen model; all 53 Firefox UI smoke cases, 30 unit-test groups, TypeScript, and the production size-budget build pass. The build is 206.5 KiB initial JS+CSS gzip. No WASM rebuild was needed.
+
 ## 7. Primary references checked
 
 - ngspice source: https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/ (M0.3 spike pinned to `a80f6e3e95d51534905b1f23410a951802666656`)
