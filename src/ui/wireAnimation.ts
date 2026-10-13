@@ -10,10 +10,19 @@ let previousFrameTime: number | null = null
 
 const REFERENCE_FRAME_MS = 1000 / 60
 const MAX_FRAME_DELTA_MS = 50
+const DOT_PIXELS_PER_AMP_PER_FRAME = 50
 
 export function advanceWireAnimationPhase(phase: number, config: AnimationConfig, elapsedMs: number): number {
   const elapsedFrames = Math.min(MAX_FRAME_DELTA_MS, Math.max(0, elapsedMs)) / REFERENCE_FRAME_MS
-  const increment = (config.magnitude * elapsedFrames) % config.dotSpacing
+  const maximumSpeed = config.dotSpacing / 6
+  const linearLimit = maximumSpeed / 2
+  const rawSpeed = Math.max(0, config.magnitude) * DOT_PIXELS_PER_AMP_PER_FRAME
+  // Preserve exact current ratios in the low-current range, then smoothly cap
+  // high-current speed below a safe fraction of dot spacing per frame.
+  const speed = rawSpeed <= linearLimit
+    ? rawSpeed
+    : maximumSpeed - linearLimit * Math.exp(-(rawSpeed - linearLimit) / linearLimit)
+  const increment = speed * elapsedFrames
   const next = phase + increment * (config.forward ? 1 : -1)
   return ((next % config.dotSpacing) + config.dotSpacing) % config.dotSpacing
 }
@@ -71,7 +80,7 @@ function tick(timestamp: number) {
     const config = configurations.get(key)
     const element = elements.get(key)
     if (!element || !config) continue
-    // Advance dot position by solved current; the ratio between wire currents stays linear.
+    // Advance dot position by solved current with a bounded display calibration.
     // Round-capped zero-length dashes render as dots at the configured spacing.
     const phase = advanceWireAnimationPhase(phases.get(key) ?? 0, config, elapsedMs)
     phases.set(key, phase)

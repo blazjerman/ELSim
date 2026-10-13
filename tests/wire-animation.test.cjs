@@ -115,6 +115,15 @@ test('wire animation speed is directly proportional to solved current', () => {
   }
 })
 
+test('high-current animation is bounded and cannot alias to a stationary dash', () => {
+  const config = (magnitude) => ({ key: 'high-current-wire', magnitude, forward: true, dotSize: 2, dotSpacing: 20 })
+  const oneAmp = advanceWireAnimationPhase(0, config(1), 1000 / 60)
+  const twoAmps = advanceWireAnimationPhase(0, config(2), 1000 / 60)
+  assert.ok(oneAmp > 0 && twoAmps > 0, 'high currents still produce visible movement')
+  assert.ok(twoAmps > oneAmp, 'higher current still advances faster')
+  assert.ok(oneAmp <= 20 / 3 && twoAmps <= 20 / 3, 'per-frame movement stays below one third of the dot spacing')
+})
+
 test('wire playback schedules frames only while a visible wire carries current', () => {
   const previousWindow = global.window
   const previousRequest = global.requestAnimationFrame
