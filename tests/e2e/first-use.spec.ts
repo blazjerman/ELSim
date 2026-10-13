@@ -627,7 +627,7 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
 })
 
-test('keyboard focus remains visible in search, analysis, inspector, PWL, and context-menu controls', { tag: '@ui-smoke' }, async ({ page }) => {
+test('keyboard focus remains visible in search, analysis, inspector, expandable controls, and context-menu controls', { tag: '@ui-smoke' }, async ({ page }) => {
   const expectFocusRing = async (locator: import('@playwright/test').Locator) => {
     const outline = await locator.evaluate((element) => {
       const style = getComputedStyle(element)
@@ -671,6 +671,12 @@ test('keyboard focus remains visible in search, analysis, inspector, PWL, and co
 
   await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
   await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('pwl')
+  const importPwlTable = page.locator('.pwl-paste-panel > summary')
+  await importPwlTable.focus()
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Shift+Tab')
+  await expect(importPwlTable).toBeFocused()
+  await expectFocusRing(importPwlTable)
   const pointTime = page.getByLabel('PWL point 1 time')
   await pointTime.focus()
   await expectFocusRing(pointTime)
