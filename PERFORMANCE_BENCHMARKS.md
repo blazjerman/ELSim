@@ -325,6 +325,8 @@ Worker-produced traces all reference the same immutable axis array. Transient cu
 
 Scaled and real-time playback now build one sample lookup when playback starts instead of repeating the same full-axis binary search code in each animation mode. The lookup estimates an index from the run's first/last times, checks a small nearby bracket, and falls back to exact binary search when adaptive steps exceed the bracket. Unit tests compare it against a nearest-sample reference for uniform, cubic-adaptive, and strongly nonuniform axes. A synthetic one-million-sample uniform axis with 500,000 lookups measured 35.73 ms median for the previous full binary search and 16.40 ms median for the bracketed lookup across five runs. This is a local microbenchmark, not an end-to-end browser playback measurement. The focused Firefox playback workflow could not run because the configured Vite server was denied local port binding; no WASM rebuild was performed.
 
+Adding a ground-voltage probe to a swept result also now indexes the first trace per sweep case with a `Set`, avoiding the previous nested-prefix scan. It preserves one `V(0)` trace for each unique sweep index (including the unstepped case) and is linear in result-trace count; no end-to-end timing claim is made.
+
 
 ### Large-schematic zoom latency (2026-10-12)
 

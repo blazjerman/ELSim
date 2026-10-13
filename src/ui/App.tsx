@@ -2925,7 +2925,13 @@ export default function App() {
     if (!simulationResult) { setNotice('Run the circuit first, then add voltage and current probes.'); return }
     let availableTraces = simulationResult.traces
     if (traceId === 'v(0)' && !availableTraces.some((item) => item.id === traceId || item.baseId === traceId)) {
-      const references = availableTraces.filter((trace, index) => !availableTraces.slice(0, index).some((previous) => previous.sweep?.index === trace.sweep?.index))
+      const seenSweepIndexes = new Set<number | undefined>()
+      const references = availableTraces.filter((trace) => {
+        const sweepIndex = trace.sweep?.index
+        if (seenSweepIndexes.has(sweepIndex)) return false
+        seenSweepIndexes.add(sweepIndex)
+        return true
+      })
       const groundTraces = references.map(groundVoltageTrace)
       availableTraces = [...availableTraces, ...groundTraces]
       setSimulationResult({ ...simulationResult, traces: availableTraces })
