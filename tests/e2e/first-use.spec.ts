@@ -5535,7 +5535,13 @@ test('transistor switch example demonstrates base drive and collector switching'
   await expect.poll(async () => Number(await currentArrow.getAttribute('opacity'))).toBeGreaterThan(0)
   expect((await currentArrow.getAttribute('d'))?.startsWith('M31 -46')).toBe(true)
   await timeSlider.fill(String(Math.floor(finalSample * 3 / 4)))
-  const offStateReadout = await page.locator('.plot-window .cursor-readout').innerText()
+  const cursorReadout = page.locator('.plot-window .cursor-readout')
+  await expect.poll(async () => {
+    const text = await cursorReadout.innerText()
+    const match = /V\(base\)\s*=\s*(-?[\d.e+-]+)/i.exec(text)
+    return match ? Math.abs(Number(match[1])) : Number.POSITIVE_INFINITY
+  }).toBeLessThan(0.05)
+  const offStateReadout = await cursorReadout.innerText()
   const offStateBase = Number(/V\(base\)\s*=\s*(-?[\d.e+-]+)/i.exec(offStateReadout)?.[1])
   const offStateCollector = Number(/V\(collector\)\s*=\s*(-?[\d.e+-]+)/i.exec(offStateReadout)?.[1])
   expect(Number.isFinite(offStateBase), offStateReadout).toBe(true)

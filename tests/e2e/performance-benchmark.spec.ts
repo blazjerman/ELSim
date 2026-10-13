@@ -187,11 +187,13 @@ test('measure a million-sample transient through the browser ngspice worker and 
   await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(4)
   const before = await page.evaluate(() => {
     const perf = performance as Performance & { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }
-    const watch = { last: performance.now(), maxIntervalDelayMs: 0 }
+    const watch = { last: performance.now(), phase: 'simulation', maxIntervalDelayMs: 0, maxByPhase: {} as Record<string, number> }
     ;(window as Window & { __largeTransientWatch?: typeof watch }).__largeTransientWatch = watch
     const timer = window.setInterval(() => {
       const now = performance.now()
-      watch.maxIntervalDelayMs = Math.max(watch.maxIntervalDelayMs, now - watch.last - 16)
+      const delay = Math.max(0, now - watch.last - 16)
+      watch.maxIntervalDelayMs = Math.max(watch.maxIntervalDelayMs, delay)
+      watch.maxByPhase[watch.phase] = Math.max(watch.maxByPhase[watch.phase] ?? 0, delay)
       watch.last = now
     }, 16)
     ;(window as Window & { __largeTransientTimer?: number }).__largeTransientTimer = timer
@@ -200,6 +202,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
   const started = performance.now()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 90_000 })
+  await page.evaluate(() => { const watch = (window as Window & { __largeTransientWatch?: { phase: string } }).__largeTransientWatch; if (watch) watch.phase = 'plot-validation' })
   const completedMs = performance.now() - started
   const slider = page.getByRole('slider', { name: 'Simulation time' })
   await expect(slider).toBeVisible()
@@ -217,6 +220,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
   const renderedTraceCount = await page.locator('.plot-window .waveform-chart polyline').count()
   expect(selectedTraceCount).toBe(32)
   expect(renderedTraceCount).toBe(selectedTraceCount)
+  await page.evaluate(() => { const watch = (window as Window & { __largeTransientWatch?: { phase: string } }).__largeTransientWatch; if (watch) watch.phase = 'cursor-scrubbing' })
   const scrubTimes: number[] = []
   for (const key of ['End', 'Home', 'End']) {
     const scrubStarted = performance.now()
@@ -226,12 +230,13 @@ test('measure a million-sample transient through the browser ngspice worker and 
   }
   const after = await page.evaluate(() => {
     const perf = performance as Performance & { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }
-    const win = window as Window & { __largeTransientWatch?: { maxIntervalDelayMs: number }; __largeTransientTimer?: number }
+    const win = window as Window & { __largeTransientWatch?: { maxIntervalDelayMs: number; maxByPhase: Record<string, number> }; __largeTransientTimer?: number }
     window.clearInterval(win.__largeTransientTimer)
     return {
       usedHeapBytes: perf.memory?.usedJSHeapSize ?? null,
       totalHeapBytes: perf.memory?.totalJSHeapSize ?? null,
       maxIntervalDelayMs: win.__largeTransientWatch?.maxIntervalDelayMs ?? null,
+      maxIntervalDelayByPhaseMs: win.__largeTransientWatch?.maxByPhase ?? {},
       renderedTraceCount: document.querySelectorAll('.plot-window .waveform-chart polyline').length,
     }
   })

@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { extremaIndices, valueRange } = require(path.join(build, 'engine/plot.js'))
+const { extremaIndices, plotPolylinePoints, valueRange } = require(path.join(build, 'engine/plot.js'))
 
 test('extrema sampling remains bounded and preserves narrow peaks in large traces', () => {
   const values = new Float64Array(1_000_000).fill(0)
@@ -30,6 +30,32 @@ test('identical plot windows share bounded downsample indices for the same immut
   assert.strictEqual(extremaIndices(values, 0, values.length - 1, 900), first)
   assert.notStrictEqual(extremaIndices(values, 1, values.length - 1, 900), first)
   assert.ok(first.includes(50_001))
+})
+
+test('transformed AC vectors can cache shared extrema when the caller supplies a stable mode key', () => {
+  let reads = 0
+  const values = Object.defineProperties({ length: 4 }, Object.fromEntries([1, 4, 9, 16].map((value, index) => [index, { get() { reads += 1; return value } }])))
+  const first = extremaIndices(values, 0, 3, 2, (value) => Math.log10(value), 'ac:magnitude')
+  const readsAfterSampling = reads
+  assert.strictEqual(extremaIndices(values, 0, 3, 2, (value) => Math.log10(value), 'ac:magnitude'), first)
+  assert.equal(reads, readsAfterSampling, 'matching AC modes should share the sampled indices across windows')
+  assert.notStrictEqual(extremaIndices(values, 0, 3, 2, (value) => Math.log10(value), 'ac:phase'), first)
+})
+
+test('identical waveform windows reuse formatted SVG points for the same immutable trace geometry', () => {
+  let reads = 0
+  const vector = (items) => Object.defineProperties({ length: items.length }, Object.fromEntries(items.map((value, index) => [index, { get() { reads += 1; return value } }])))
+  const axis = vector([0, 1, 2])
+  const values = vector([0, 5, 10])
+  const indices = [0, 1, 2]
+  const xFor = (time) => time * 50
+  const yFor = (value) => 10 - value
+  const first = plotPolylinePoints(axis, values, indices, 'linear:0:2:100:10:0:10', xFor, yFor)
+  assert.equal(first, '0.00,10.00 50.00,5.00 100.00,0.00')
+  const readsAfterFormatting = reads
+  assert.equal(plotPolylinePoints(axis, values, indices, 'linear:0:2:100:10:0:10', xFor, yFor), first)
+  assert.equal(reads, readsAfterFormatting, 'a second plot window should reuse formatted points without reading samples again')
+  assert.notEqual(plotPolylinePoints(axis, values, indices, 'linear:0:2:100:10:-1:10', xFor, (value) => 10 - value * 10 / 11), first, 'different vertical scaling must build distinct coordinates')
 })
 
 test('value range handles transformed values without temporary arrays', () => {

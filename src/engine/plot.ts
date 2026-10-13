@@ -1,13 +1,46 @@
 const identity = (value: number) => value
 const sampledIndices = new WeakMap<object, Map<string, number[]>>()
 const sampledRanges = new WeakMap<object, Map<string, [number, number]>>()
+const formattedPolylinePoints = new WeakMap<object, WeakMap<object, WeakMap<object, Map<string, string>>>>()
+
+/** Format SVG polyline coordinates once when multiple windows show the same immutable trace view. */
+export function plotPolylinePoints(
+  axis: ArrayLike<number>, values: ArrayLike<number>, indices: readonly number[], coordinateKey: string,
+  xFor: (axisValue: number, index: number) => number, yFor: (value: number, index: number) => number,
+): string {
+  const cacheable = typeof axis === 'object' && axis !== null && typeof values === 'object' && values !== null && typeof indices === 'object' && indices !== null
+  const byValues = cacheable ? formattedPolylinePoints.get(values as object) : undefined
+  const byAxis = cacheable ? byValues?.get(axis as object) : undefined
+  const byIndices = cacheable ? byAxis?.get(indices as object) : undefined
+  const cached = byIndices?.get(coordinateKey)
+  if (cached !== undefined) return cached
+
+  const points: string[] = []
+  for (const index of indices) {
+    const x = xFor(axis[index], index)
+    const y = yFor(values[index], index)
+    points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
+  }
+  const result = points.join(' ')
+  if (cacheable) {
+    const valuesCache = byValues ?? new WeakMap<object, WeakMap<object, Map<string, string>>>()
+    const axisCache = byAxis ?? new WeakMap<object, Map<string, string>>()
+    const indicesCache = byIndices ?? new Map<string, string>()
+    if (indicesCache.size >= 16) indicesCache.clear()
+    indicesCache.set(coordinateKey, result)
+    if (!byIndices) axisCache.set(indices as object, indicesCache)
+    if (!byAxis) valuesCache.set(axis as object, axisCache)
+    if (!byValues) formattedPolylinePoints.set(values as object, valuesCache)
+  }
+  return result
+}
 
 /** Pick a bounded set of sample indices while retaining each bucket's extrema. */
-export function extremaIndices(values: ArrayLike<number>, start: number, end: number, maxPoints: number, map: (value: number, index: number) => number = identity): number[] {
+export function extremaIndices(values: ArrayLike<number>, start: number, end: number, maxPoints: number, map: (value: number, index: number) => number = identity, mapCacheKey?: string): number[] {
   const first = Math.max(0, Math.min(values.length, Math.floor(start)))
   const last = Math.max(first - 1, Math.min(values.length - 1, Math.floor(end)))
-  const key = `${first}:${last}:${maxPoints}`
-  const cacheable = map === identity && typeof values === 'object' && values !== null
+  const key = `${first}:${last}:${maxPoints}:${map === identity ? 'identity' : mapCacheKey ?? ''}`
+  const cacheable = (map === identity || mapCacheKey !== undefined) && typeof values === 'object' && values !== null
   const cache = cacheable ? sampledIndices.get(values) : undefined
   const cached = cache?.get(key)
   if (cached) return cached
@@ -49,12 +82,12 @@ function cacheIndices(values: ArrayLike<number>, cacheable: boolean, existing: M
 }
 
 /** Scan an immutable result-vector range without allocating a copy or spreading a large vector. */
-export function valueRange(values: ArrayLike<number>, start: number, end: number, map: (value: number, index: number) => number = identity): [number, number] | null {
+export function valueRange(values: ArrayLike<number>, start: number, end: number, map: (value: number, index: number) => number = identity, mapCacheKey?: string): [number, number] | null {
   const first = Math.max(0, Math.floor(start))
   const last = Math.min(values.length - 1, Math.floor(end))
   if (first > last) return null
-  const key = `${first}:${last}`
-  const cacheable = map === identity && typeof values === 'object' && values !== null
+  const key = `${first}:${last}:${map === identity ? 'identity' : mapCacheKey ?? ''}`
+  const cacheable = (map === identity || mapCacheKey !== undefined) && typeof values === 'object' && values !== null
   const cache = cacheable ? sampledRanges.get(values) : undefined
   const cached = cache?.get(key)
   if (cached) return cached

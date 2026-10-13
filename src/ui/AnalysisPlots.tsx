@@ -2,7 +2,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'rea
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange } from '../domain/project'
-import { extremaIndices, valueRange } from '../engine/plot'
+import { extremaIndices, plotPolylinePoints, valueRange } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation } from './simulationCursor'
 import { formatTime } from './formatTime'
@@ -342,14 +342,11 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
     const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
     const [minValue, maxValue] = scopeRange
-    const range = maxValue - minValue
-    const points: string[] = []
-    for (const index of indices) {
-      const x = left + ((trace.axis[index] - minTime) / (maxTime - minTime || 1)) * (right - left)
-      const y = bottom - ((trace.values[index] - minValue) / range) * (bottom - top)
-      points.push(`${x.toFixed(2)},${y.toFixed(2)}`)
-    }
-    return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points: points.join(' ') }
+    const coordinateKey = `linear:${minTime}:${maxTime}:${left}:${right}:${top}:${bottom}:${minValue}:${maxValue}`
+    const points = plotPolylinePoints(trace.axis, trace.values, indices, coordinateKey,
+      (time) => left + ((time - minTime) / (maxTime - minTime || 1)) * (right - left),
+      (value) => bottom - ((value - minValue) / (maxValue - minValue)) * (bottom - top))
+    return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points }
   }), [shown, minTime, maxTime, width, height, scopeRange[0], scopeRange[1], traceIndexById, colors])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
@@ -426,7 +423,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const [dataMin, dataMax] = useMemo(() => {
     let min = Infinity, max = -Infinity
     for (const trace of shown) {
-      const valueRangeForTrace = valueRange(trace.values, first, Math.min(last, trace.values.length - 1), (_value, index) => valueFor(trace, index))
+      const valueRangeForTrace = valueRange(trace.values, first, Math.min(last, trace.values.length - 1), (_value, index) => valueFor(trace, index), `ac:${trace.id}:${mode}`)
       if (valueRangeForTrace) { min = Math.min(min, valueRangeForTrace[0]); max = Math.max(max, valueRangeForTrace[1]) }
     }
     if (min === Infinity) { min = mode === 'magnitude' ? -60 : mode === 'phase' ? -180 : 0; max = mode === 'magnitude' ? 20 : mode === 'phase' ? 180 : 1 }
@@ -435,7 +432,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   }, [shown, first, last, mode])
   const sampledIndicesById = useMemo(() => new Map(shown.map((trace) => [
     trace.id,
-    extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, index) => valueFor(trace, index)),
+    extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, index) => valueFor(trace, index), `ac:${trace.id}:${mode}`),
   ])), [shown, first, last, mode])
   const valueAxis = useValueWindow([dataMin, dataMax])
   useEffect(() => valueAxis.reset(), [mode])
@@ -456,12 +453,10 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const yFor = (value: number) => bottom - (value - minValue) / (maxValue - minValue) * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
     const indices = sampledIndicesById.get(trace.id) ?? []
-    const points = indices.map((index) => {
-      const x = left + ((Math.log10(trace.axis[index]) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left)
-      const value = valueFor(trace, index)
-      const y = bottom - (value - minValue) / (maxValue - minValue) * (bottom - top)
-      return `${x.toFixed(2)},${y.toFixed(2)}`
-    }).join(' ')
+    const coordinateKey = `log:${trace.id}:${mode}:${minFrequency}:${maxFrequency}:${left}:${right}:${top}:${bottom}:${minValue}:${maxValue}`
+    const points = plotPolylinePoints(trace.axis, trace.values, indices, coordinateKey,
+      (frequency) => left + ((Math.log10(frequency) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left),
+      (_value, index) => bottom - (valueFor(trace, index) - minValue) / (maxValue - minValue) * (bottom - top))
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }
   }), [traces, shown, first, last, width, height, minFrequency, maxFrequency, minValue, maxValue, mode, colors, traceIndexById, sampledIndicesById])
   return <div className="waveform-view ac-view">
@@ -523,12 +518,11 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   const xFor = (value: number) => left + (value - x0) / (x1 - x0 || 1) * (right - left)
   const yFor = (value: number) => bottom - (value - min) / span * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
-    const points = extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900)
-      .map((index) => {
-        const x = left + (trace.axis[index] - x0) / (x1 - x0 || 1) * (right - left)
-        const y = bottom - (trace.values[index] - min) / span * (bottom - top)
-        return `${x.toFixed(2)},${y.toFixed(2)}`
-      }).join(' ')
+    const indices = extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900)
+    const coordinateKey = `linear:${x0}:${x1}:${left}:${right}:${top}:${bottom}:${min}:${max}`
+    const points = plotPolylinePoints(trace.axis, trace.values, indices, coordinateKey,
+      (value) => left + (value - x0) / (x1 - x0 || 1) * (right - left),
+      (value) => bottom - (value - min) / span * (bottom - top))
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }
   }), [traces, shown, first, last, width, height, x0, x1, min, span, colors, traceIndexById])
   return <div className="waveform-view">
