@@ -535,3 +535,7 @@ The UI's per-cursor wire-flow sampling now caches result-vector reads for the du
 ### Imported symbol render memoization (2026-10-13)
 
 Imported symbol artwork is now a memoized child of each circuit part. A cursor update can still refresh the part's result readout and animation, but static imported lines, arcs, text, and pin labels are not mapped into a new React element tree unless the parsed symbol or selection color changes. The Firefox imported-IC symbol workflow passes, along with all 30 unit groups and TypeScript. No dedicated timing comparison is available, so this records a reduction in redundant React work rather than a measured speedup. No WASM rebuild or Pages workflow ran.
+
+### Built-in symbol render memoization (2026-10-13)
+
+Built-in symbol geometry now renders in a memoized child. Static components reuse their SVG element tree across simulation cursor updates; components with solved-value animation still receive updated animation inputs and render normally. Firefox capacitor charge, transformer winding, and lamp glow regressions pass. All 30 unit groups, TypeScript, and the production build pass; the initial JS+CSS gzip budget is 207.1 KiB. No dedicated timing comparison is available, so this records a reduction in React element mapping for static components rather than a measured speedup. No WASM rebuild or Pages workflow ran.
