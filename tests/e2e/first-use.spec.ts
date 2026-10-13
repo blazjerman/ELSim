@@ -631,13 +631,33 @@ test('keyboard focus remains visible in search, analysis, inspector, PWL, and co
   const expectFocusRing = async (locator: import('@playwright/test').Locator) => {
     const outline = await locator.evaluate((element) => {
       const style = getComputedStyle(element)
-      return { style: style.outlineStyle, width: Number.parseFloat(style.outlineWidth) }
+      const luminance = (color: string) => {
+        const channels = color.match(/[\d.]+/g)?.slice(0, 3).map(Number)
+        if (!channels || channels.length !== 3) throw new Error(`Cannot parse focus indicator color ${color}`)
+        const linear = channels.map((channel) => {
+          const value = channel / 255
+          return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+        })
+        return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
+      }
+      let background = style.backgroundColor
+      for (let parent = element.parentElement; parent && (background === 'transparent' || background.endsWith(', 0)')); parent = parent.parentElement) {
+        background = getComputedStyle(parent).backgroundColor
+      }
+      const [light, dark] = [luminance(style.outlineColor), luminance(background)].sort((left, right) => right - left)
+      return { style: style.outlineStyle, width: Number.parseFloat(style.outlineWidth), color: style.outlineColor, contrast: (light + 0.05) / (dark + 0.05) }
     })
     expect(outline.style).toBe('solid')
     expect(outline.width).toBeGreaterThanOrEqual(2)
+    expect(outline.color).not.toBe('rgba(0, 0, 0, 0)')
+    expect(outline.contrast).toBeGreaterThanOrEqual(3)
   }
 
   await page.goto('/')
+  const componentCard = page.locator('.component-card').first()
+  await componentCard.focus()
+  await expectFocusRing(componentCard)
+
   const search = page.locator('.search-box input')
   await search.focus()
   await expectFocusRing(search.locator('..'))
@@ -661,6 +681,15 @@ test('keyboard focus remains visible in search, analysis, inspector, PWL, and co
   const firstMenuItem = page.getByRole('menu', { name: 'Options for R1' }).getByRole('menuitem').first()
   await expect(firstMenuItem).toBeFocused()
   await expectFocusRing(firstMenuItem)
+
+  await page.keyboard.press('Escape')
+  const examplesTrigger = page.getByRole('button', { name: 'Examples' })
+  await examplesTrigger.focus()
+  await page.keyboard.press('Enter')
+  const examplesDialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  const closeExamples = examplesDialog.getByRole('button', { name: 'Close examples' })
+  await expect(closeExamples).toBeFocused()
+  await expectFocusRing(closeExamples)
 })
 
 test('waveform window title, plot, and navigation retain visible keyboard focus', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

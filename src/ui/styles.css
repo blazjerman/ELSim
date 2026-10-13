@@ -166,3 +166,4 @@
 .search-box:focus-within,.analysis-select:focus-within{outline:2px solid #80d9a7;outline-offset:2px}
 .field-label input:focus-visible,.field-label select:focus-visible,.pwl-point-row input:focus-visible{outline:2px solid #80d9a7;outline-offset:2px}
 .schematic-context-menu button:focus{outline:2px solid #80d9a7;outline-offset:1px}
+.tour-dialog .modal-heading .subtle-icon:focus,.netlist-modal .modal-heading .subtle-icon:focus,.erc-modal .modal-heading .subtle-icon:focus{outline:2px solid #80d9a7;outline-offset:2px}
