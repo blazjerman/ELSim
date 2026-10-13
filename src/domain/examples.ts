@@ -1552,7 +1552,7 @@ export function createMosfetHighSideExampleProject(): Project {
   ]
   project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }]
   project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
-  project.plotSettings = { selectedTraceIds: ['V(GATE)', 'V(DRAIN)', 'I(M1)'], ranges: {} }
+  project.plotSettings = { selectedTraceIds: ['V(GATE)', 'V(DRAIN)', 'I(RGATE)', 'I(RLOAD)', 'I(M1)'], ranges: {} }
   project.view = { zoom: 0.8, panX: -70, panY: -20 }
   project.sheets[0].view = project.view
   return project

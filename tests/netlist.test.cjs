@@ -1072,7 +1072,7 @@ test('PMOS high-side example uses active-low gate drive and ties source and bulk
   assert.match(artifact.text, /^VCC VCC 0 DC 5$/m)
   assert.match(artifact.text, /^M1 DRAIN GATE VCC VCC ELSIM_MODEL_M1$/m)
   assert.match(artifact.text, /^RLOAD DRAIN 0 1k$/m)
-  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(GATE)', 'V(DRAIN)', 'I(M1)'])
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(GATE)', 'V(DRAIN)', 'I(RGATE)', 'I(RLOAD)', 'I(M1)'])
 })
 
 test('N-JFET switch example uses zero-bias conduction and negative gate cutoff', () => {
