@@ -490,7 +490,7 @@ function clampPlotPanelBounds(bounds: PlotPanel['bounds']): PlotPanel['bounds'] 
   return { x: Math.max(8 - width, Math.min(window.innerWidth - 48, bounds.x)), y: Math.max(8, Math.min(window.innerHeight - 48, bounds.y)), width, height }
 }
 
-function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onActivate, children }: { panel: PlotPanel; index: number; title: string; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onActivate: () => void; children: ReactNode }) {
+const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onActivate, children }: { panel: PlotPanel; index: number; title: string; onBoundsChange: (bounds: PlotPanel['bounds']) => void; onClose: () => void; onActivate: () => void; children: ReactNode }) {
   const ref = useRef<HTMLElement>(null)
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const draggedBounds = useRef<PlotPanel['bounds'] | null>(null)
@@ -560,7 +560,30 @@ function FloatingPlotPanel({ panel, index, title, onBoundsChange, onClose, onAct
     <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{keyboardAnnouncement}</span>
     <div className="plot-window-content">{children}</div>
   </section>
-}
+})
+
+const AdditionalPlotWindow = memo(function AdditionalPlotWindow({ panel, index, title, result, onUpdate, onClose, onActivate, onToggleTrace, onExport, onRangeChange }: {
+  panel: PlotPanel
+  index: number
+  title: string
+  result: SimulationResult | null
+  onUpdate: (panelId: string, update: (panel: PlotPanel) => PlotPanel) => void
+  onClose: (panelId: string) => void
+  onActivate: (panelId: string) => void
+  onToggleTrace: (panelId: string, traceId: string) => void
+  onExport: (traceIds: string[]) => void
+  onRangeChange: (panelId: string, analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void
+}) {
+  const onBoundsChange = useCallback((bounds: PlotPanel['bounds']) => onUpdate(panel.id, (current) => ({ ...current, bounds })), [onUpdate, panel.id])
+  const close = useCallback(() => onClose(panel.id), [onClose, panel.id])
+  const activate = useCallback(() => onActivate(panel.id), [onActivate, panel.id])
+  const toggleTrace = useCallback((traceId: string) => onToggleTrace(panel.id, traceId), [onToggleTrace, panel.id])
+  const exportTraces = useCallback(() => onExport(panel.selectedTraceIds), [onExport, panel.selectedTraceIds])
+  const changeRange = useCallback((analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => onRangeChange(panel.id, analysis, range), [onRangeChange, panel.id])
+  return <FloatingPlotPanel panel={panel} index={index} title={title} onBoundsChange={onBoundsChange} onClose={close} onActivate={activate}>
+    {result ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={result} selectedIds={panel.selectedTraceIds} traceColors={panel.traceColors} onToggle={toggleTrace} onExport={exportTraces} ranges={panel.ranges} onRangeChange={changeRange}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
+  </FloatingPlotPanel>
+})
 
 function TransientEditorLaunchers({ nodes, inductors, capacitors, skipOp, onAddMeasurement, onAddCondition, onAddInductorCurrent, onAddCapacitorVoltage, onSkipOpChange }: { nodes: string[]; inductors: string[]; capacitors: string[]; skipOp: boolean; onAddMeasurement: () => void; onAddCondition: () => void; onAddInductorCurrent: () => void; onAddCapacitorVoltage: () => void; onSkipOpChange: (value: boolean) => void }) {
   return <>
@@ -1671,6 +1694,8 @@ export default function App() {
   const [parameterDefaultDrafts, setParameterDefaultDrafts] = useState<Record<string, string>>({})
   const [parameterFormError, setParameterFormError] = useState('')
   const [additionalPlotPanels, setAdditionalPlotPanels] = useState<PlotPanel[]>(() => project.plotSettings?.panels ?? [])
+  const additionalPlotPanelsRef = useRef(additionalPlotPanels)
+  additionalPlotPanelsRef.current = additionalPlotPanels
   const [pendingWaveformTrace, setPendingWaveformTrace] = useState<{ traceIds: string[]; label: string; reference?: PlotTraceReference; componentVoltageProbe?: ComponentVoltageProbe } | null>(null)
   const waveformReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const closeWaveformDestination = () => {
@@ -1681,6 +1706,8 @@ export default function App() {
   const [runState, setRunState] = useState<'idle' | 'loading' | 'running' | 'error'>('idle')
   const [switchSolveQueued, setSwitchSolveQueued] = useState(false)
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
+  const simulationResultRef = useRef(simulationResult)
+  simulationResultRef.current = simulationResult
   const [playbackRunning, setPlaybackRunning] = useState(false)
   const [playbackRate, setPlaybackRate] = useState<number | 'realtime'>(() => {
     const stored = localStorage.getItem('elsim:simulation-playback-rate')
@@ -1709,6 +1736,8 @@ export default function App() {
   const [electricalCheckError, setElectricalCheckError] = useState<string | null>(null)
   const [spacePan, setSpacePan] = useState(false)
   const [selectedTraceIds, setSelectedTraceIds] = useState<string[]>(() => project.plotSettings?.selectedTraceIds ?? [])
+  const selectedTraceIdsRef = useRef(selectedTraceIds)
+  selectedTraceIdsRef.current = selectedTraceIds
   const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
   const [modelAssetsVerified, setModelAssetsVerified] = useState<boolean | null>(null)
   const [componentQuery, setComponentQuery] = useState('')
@@ -2060,6 +2089,7 @@ export default function App() {
     return { ...current, plotSettings: next }
   })
   const saveAdditionalPlotPanels = useCallback((panels: PlotPanel[]) => {
+    additionalPlotPanelsRef.current = panels
     setAdditionalPlotPanels(panels)
     setProjectState((current) => {
       const settings = current.plotSettings ?? { selectedTraceIds: [], ranges: {} }
@@ -2148,16 +2178,30 @@ export default function App() {
     }
     closeWaveformDestination()
   }
-  const waveformWindowTitle = (panel: PlotPanel, index: number) => {
+  const waveformWindowTitle = useCallback((panel: PlotPanel, index: number) => {
     const labels = panel.selectedTraceIds.flatMap((id) => {
       const trace = simulationResult?.traces.find((item) => item.id === id)
       return trace ? [trace.label] : []
     })
     return labels.length === 1 ? `${labels[0]} · Waveform ${index + 1}` : `Waveform ${index + 1}${labels.length ? ` · ${labels.length} traces` : ''}`
-  }
-  const updatePlotPanel = (panelId: string, update: (panel: PlotPanel) => PlotPanel) => saveAdditionalPlotPanels(additionalPlotPanels.map((panel) => panel.id === panelId ? update(panel) : panel))
-  const togglePlotPanelTrace = (panelId: string, traceId: string) => updatePlotPanel(panelId, (panel) => ({ ...panel, selectedTraceIds: panel.selectedTraceIds.includes(traceId) ? panel.selectedTraceIds.filter((id) => id !== traceId) : [...panel.selectedTraceIds, traceId] }))
-  const changePlotPanelRange = (panelId: string, analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => updatePlotPanel(panelId, (panel) => ({ ...panel, ranges: { ...panel.ranges, [analysis]: range } }))
+  }, [simulationResult])
+  const updatePlotPanel = useCallback((panelId: string, update: (panel: PlotPanel) => PlotPanel) => {
+    const current = additionalPlotPanelsRef.current
+    const index = current.findIndex((panel) => panel.id === panelId)
+    if (index < 0) return
+    const next = current.slice()
+    next[index] = update(current[index])
+    saveAdditionalPlotPanels(next)
+  }, [saveAdditionalPlotPanels])
+  const togglePlotPanelTrace = useCallback((panelId: string, traceId: string) => updatePlotPanel(panelId, (panel) => ({ ...panel, selectedTraceIds: panel.selectedTraceIds.includes(traceId) ? panel.selectedTraceIds.filter((id) => id !== traceId) : [...panel.selectedTraceIds, traceId] })), [updatePlotPanel])
+  const changePlotPanelRange = useCallback((panelId: string, analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => updatePlotPanel(panelId, (panel) => ({ ...panel, ranges: { ...panel.ranges, [analysis]: range } })), [updatePlotPanel])
+  const closePlotPanel = useCallback((panelId: string) => saveAdditionalPlotPanels(additionalPlotPanelsRef.current.filter((panel) => panel.id !== panelId)), [saveAdditionalPlotPanels])
+  const activatePlotPanel = useCallback((panelId: string) => {
+    const current = additionalPlotPanelsRef.current
+    const index = current.findIndex((panel) => panel.id === panelId)
+    if (index < 0 || index === current.length - 1) return
+    saveAdditionalPlotPanels([...current.filter((panel) => panel.id !== panelId), current[index]])
+  }, [saveAdditionalPlotPanels])
   const findSheetInstancePath = (targetSheetId: string, sheetId = projectRef.current.rootSheetId, path: string[] = [], visited = new Set<string>(), sourceProject = projectRef.current): string[] | null => {
     if (sheetId === targetSheetId) return path
     if (visited.has(sheetId)) return null
@@ -3148,9 +3192,11 @@ export default function App() {
     setPendingWaveformTrace({ traceIds: ids, label: `V(${ref})`, componentVoltageProbe, reference })
     setNotice(`Voltage is measured from pin ${positivePin + 1} (${pinName(positivePin)}) to ${negativePin < 0 ? 'ground' : `pin ${negativePin + 1} (${pinName(negativePin)})`}.`)
   }
-  const exportWaveformCsv = async (traceIds: string[] = selectedTraceIds) => {
-    if (!simulationResult) return
-    const traces = simulationResult.traces.filter((trace) => traceIds.includes(trace.id))
+  const exportWaveformCsv = useCallback(async (traceIds?: string[]) => {
+    const result = simulationResultRef.current
+    if (!result) return
+    const ids = traceIds ?? selectedTraceIdsRef.current
+    const traces = result.traces.filter((trace) => ids.includes(trace.id))
     let csv: string
     try {
       const { serializeWaveformCsv } = await import('../engine/csv')
@@ -3160,7 +3206,7 @@ export default function App() {
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a'); link.href = url; link.download = `${projectRef.current.name.replace(/[^A-Za-z0-9_-]+/g, '-')}-waveforms.csv`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     setNotice(`Exported ${traces.length} result vector${traces.length === 1 ? '' : 's'} to CSV.`)
-  }
+  }, [setNotice])
   const selectReportedComponent = (sourceId?: string): Part | undefined => {
     if (!sourceId) return undefined
     const current = projectRef.current
@@ -3837,9 +3883,7 @@ export default function App() {
         <Schematic project={project} symbolsById={symbolsById} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} commitView={commitView} recordViewDraft={recordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={addPart} onClearPendingComponent={() => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) }} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} currentMultiplier={currentMultiplier} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/>
       </main>
 
-      {additionalPlotPanels.map((panel, index) => <FloatingPlotPanel key={panel.id} panel={panel} index={index} title={waveformWindowTitle(panel, index)} onBoundsChange={(bounds) => updatePlotPanel(panel.id, (current) => ({ ...current, bounds }))} onClose={() => saveAdditionalPlotPanels(additionalPlotPanels.filter((item) => item.id !== panel.id))} onActivate={() => { if (index !== additionalPlotPanels.length - 1) saveAdditionalPlotPanels([...additionalPlotPanels.filter((item) => item.id !== panel.id), panel]) }}>
-        {simulationResult ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={simulationResult} selectedIds={panel.selectedTraceIds} traceColors={panel.traceColors} onToggle={(traceId) => togglePlotPanelTrace(panel.id, traceId)} onExport={() => exportWaveformCsv(panel.selectedTraceIds)} ranges={panel.ranges} onRangeChange={(analysis, range) => changePlotPanelRange(panel.id, analysis, range)}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
-      </FloatingPlotPanel>)}
+      {additionalPlotPanels.map((panel, index) => <AdditionalPlotWindow key={panel.id} panel={panel} index={index} title={waveformWindowTitle(panel, index)} result={simulationResult} onUpdate={updatePlotPanel} onClose={closePlotPanel} onActivate={activatePlotPanel} onToggleTrace={togglePlotPanelTrace} onExport={exportWaveformCsv} onRangeChange={changePlotPanelRange}/>)}
 
       <aside aria-label="Properties inspector" className={`inspector-panel${mobilePane === 'properties' ? ' mobile-active' : ''}`}>
         <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : 'Circuit settings'}</h2></div></div>

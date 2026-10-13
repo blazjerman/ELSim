@@ -441,6 +441,8 @@ Wire animation follow-up (2026-10-13): the requestAnimationFrame loop now iterat
 
 Connection-dot recomputation follow-up (2026-10-13): schematic pin locations are now reused by wire connection-dot generation instead of being recalculated on each edit. The 5,000-part benchmark still produces all 9,800 expected dots; paired measurements were 10.361 ms median / 29.885 ms p95 without pin reuse and 8.257 ms / 10.089 ms with it. Geometry regressions verify identical dot membership and coordinates. This removes duplicate pin-position work from the UI update path; it is not a frame-time claim. See [PERFORMANCE_BENCHMARKS.md](PERFORMANCE_BENCHMARKS.md). No WASM rebuild was needed.
 
+Floating waveform render isolation (2026-10-13): plot windows and their result plots are memoized behind stable per-window callbacks. Schematic selection/property updates no longer recreate each plot's React tree when its result, traces, range, and panel geometry are unchanged; editing one window still updates that window independently. Firefox verifies all 116 non-engine UI cases and the two solver-backed probe/window workflows for adding traces, preserving panel geometry/colors, resizing, and rerunning. Unit tests, typecheck, and production build pass. This is a render-boundary improvement; a before/after browser timing has not yet been measured. No WASM rebuild was needed.
+
 ## 7. Primary references checked
 
 - ngspice source: https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/ (M0.3 spike pinned to `a80f6e3e95d51534905b1f23410a951802666656`)

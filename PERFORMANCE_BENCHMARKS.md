@@ -122,6 +122,10 @@ The maximum-window Firefox profile opens eight waveform windows with four traces
 
 The schematic already memoizes component pin positions for nearby-pin interactions. Connection-dot generation had independently recalculated the same pin locations on every schematic edit. It now receives that cached array and retains the same exact dot coordinates. On the 5,000-resistor/4,900-wire fixture (9,800 dots), the domain benchmark measured 10.361 ms median / 29.885 ms p95 without the cached pins and 8.257 ms / 10.089 ms with them. This measures only the dot-generation call; pin locations are still computed once for the editor and the results are single-host observations, not a UI frame-time claim.
 
+### Floating plot render isolation (2026-10-13)
+
+Each detached waveform window and its `ResultPlot` now memoize against the result, panel, and stable per-window actions. Unrelated schematic/editor state changes keep those plot subtrees from rendering again; changing the plot's result, traces, range, or bounds still updates it. Firefox's 116-case non-engine suite and two focused solver-backed multi-window flows pass. This change has not yet been compared with a controlled before/after browser timing, so no numeric latency or frame-rate improvement is claimed.
+
 Cursor update isolation: transient plots no longer subscribe to the shared simulation cursor in the main `WaveformPlot` component. The moving marker, time label, and selected-value readout subscribe separately, so a scrub does not rerender the plot component and its static controls. One same-host post-change eight-window run measured result-ready at 19,049.07 ms and End/Home/End scrubs at 69.59 / 44.95 / 39.45 ms, versus 19,067.54 ms and 70.52 / 52.23 / 46.91 ms immediately before. These small differences from single runs are inconclusive; repeat runs are needed to assess any timing gain. The DOM still updates all eight cursor markers and readouts, as required for synchronized plots.
 
 ### Browser multi-trace transient
