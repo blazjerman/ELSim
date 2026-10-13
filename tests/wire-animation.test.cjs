@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { advanceWireAnimationPhase, registerWireAnimation, updateWireAnimation } = require(path.join(build, 'ui/wireAnimation.js'))
 
 test('wire motion advances by elapsed time so refresh rate does not change its speed', () => {
-  const config = { key: 'timed-wire', magnitude: 0.001, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 }
+  const config = { key: 'timed-wire', magnitude: 0.001, forward: true, dotSize: 2, dotSpacing: 6 }
   const simulate = (frameCount) => {
     const elapsedPerFrame = 1000 / frameCount
     let phase = 0
@@ -48,10 +48,10 @@ test('wire playback keeps dash phase while simulation samples update', () => {
 
   try {
     registerWireAnimation(key, element)
-    updateWireAnimation(key, { key, magnitude: 0.01, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(key, { key, magnitude: 0.01, forward: true, dotSize: 2, dotSpacing: 6 })
     advance(startTime)
     const firstOffset = offsets.at(-1)
-    updateWireAnimation(key, { key, magnitude: 0.04, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(key, { key, magnitude: 0.04, forward: true, dotSize: 2, dotSpacing: 6 })
     advance(startTime + 10)
     assert.notEqual(offsets.at(-1), firstOffset)
     assert.ok(offsets.at(-1) < firstOffset, 'the dash phase continues forward through a sample update')
@@ -73,7 +73,7 @@ test('wire playback keeps dash phase while simulation samples update', () => {
   }
 })
 
-test('wire animation follows current × Falstad current-speed multiplier', () => {
+test('wire animation speed is directly proportional to solved current', () => {
   const previousWindow = global.window
   const previousRequest = global.requestAnimationFrame
   const previousCancel = global.cancelAnimationFrame
@@ -94,25 +94,19 @@ test('wire animation follows current × Falstad current-speed multiplier', () =>
 
   try {
     registerWireAnimation(key, element)
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, dotSize: 2, dotSpacing: 6 })
     advance(startTime)
     const atOneMilliamp = offsets.at(-1)
     advance(startTime + 10)
     const oneMilliampDistance = Math.abs(offsets.at(-1) - atOneMilliamp)
 
-    updateWireAnimation(key, { key, magnitude: 0.002, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(key, { key, magnitude: 0.002, forward: true, dotSize: 2, dotSpacing: 6 })
     advance(startTime + 20)
     const atTwoMilliamps = offsets.at(-1)
     advance(startTime + 30)
     const twoMilliampDistance = Math.abs(offsets.at(-1) - atTwoMilliamps)
     assert.ok(Math.abs(twoMilliampDistance / oneMilliampDistance - 2) < 0.01,
       `2 mA should move twice as fast as 1 mA (got ${twoMilliampDistance / oneMilliampDistance}×)`)
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, currentMultiplier: 100, dotSize: 2, dotSpacing: 6 })
-    advance(startTime + 40)
-    const sensitiveRangeOffset = offsets.at(-1)
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, currentMultiplier: 25, dotSize: 2, dotSpacing: 6 })
-    advance(startTime + 50)
-    assert.notEqual(offsets.at(-1), sensitiveRangeOffset, 'Falstad-style current-speed slider changes animation speed')
   } finally {
     registerWireAnimation(key, null)
     global.window = previousWindow
@@ -139,19 +133,19 @@ test('wire playback schedules frames only while a visible wire carries current',
   try {
     registerWireAnimation(key, element)
     registerWireAnimation(secondKey, secondElement)
-    updateWireAnimation(key, { key, magnitude: 0, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
-    updateWireAnimation(secondKey, { key: secondKey, magnitude: 0.001, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(key, { key, magnitude: 0, forward: true, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(secondKey, { key: secondKey, magnitude: 0.001, forward: true, dotSize: 2, dotSpacing: 6 })
     assert.equal(callbacks.size, 1, 'an idle wire does not prevent another wire from animating')
 
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: true, dotSize: 2, dotSpacing: 6 })
     assert.equal(callbacks.size, 1, 'nonzero current starts animation')
-    updateWireAnimation(key, { key, magnitude: 0, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(key, { key, magnitude: 0, forward: true, dotSize: 2, dotSpacing: 6 })
     assert.equal(callbacks.size, 1, 'one zero-current wire does not stop another active wire')
 
-    updateWireAnimation(secondKey, { key: secondKey, magnitude: 0, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(secondKey, { key: secondKey, magnitude: 0, forward: true, dotSize: 2, dotSpacing: 6 })
     assert.equal(callbacks.size, 0, 'animation stops when all visible wires have zero current')
 
-    updateWireAnimation(key, { key, magnitude: 0.001, forward: false, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+    updateWireAnimation(key, { key, magnitude: 0.001, forward: false, dotSize: 2, dotSpacing: 6 })
     assert.equal(callbacks.size, 1, 'animation resumes when current flows again')
   } finally {
     registerWireAnimation(key, null)
@@ -175,7 +169,7 @@ test('animation frames update only wires carrying current', () => {
   const idleKey = 'idle-wire:0', movingKey = 'moving-wire:0'
   const idleElement = { setAttribute: (_name, value) => idleUpdates.push(value) }
   const movingElement = { setAttribute: (_name, value) => movingUpdates.push(value) }
-  const config = (key, magnitude) => ({ key, magnitude, forward: true, currentMultiplier: 50, dotSize: 2, dotSpacing: 6 })
+  const config = (key, magnitude) => ({ key, magnitude, forward: true, dotSize: 2, dotSpacing: 6 })
 
   try {
     registerWireAnimation(idleKey, idleElement)

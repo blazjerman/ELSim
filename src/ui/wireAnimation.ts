@@ -1,4 +1,4 @@
-type AnimationConfig = { key: string; magnitude: number; forward: boolean; currentMultiplier: number; dotSize: number; dotSpacing: number }
+type AnimationConfig = { key: string; magnitude: number; forward: boolean; dotSize: number; dotSpacing: number }
 
 const elements = new Map<string, SVGPolylineElement>()
 const configurations = new Map<string, AnimationConfig>()
@@ -13,7 +13,7 @@ const MAX_FRAME_DELTA_MS = 50
 
 export function advanceWireAnimationPhase(phase: number, config: AnimationConfig, elapsedMs: number): number {
   const elapsedFrames = Math.min(MAX_FRAME_DELTA_MS, Math.max(0, elapsedMs)) / REFERENCE_FRAME_MS
-  const increment = (config.magnitude * config.currentMultiplier * elapsedFrames) % config.dotSpacing
+  const increment = (config.magnitude * elapsedFrames) % config.dotSpacing
   const next = phase + increment * (config.forward ? 1 : -1)
   return ((next % config.dotSpacing) + config.dotSpacing) % config.dotSpacing
 }
@@ -71,7 +71,7 @@ function tick(timestamp: number) {
     const config = configurations.get(key)
     const element = elements.get(key)
     if (!element || !config) continue
-    // Match CircuitJS: advance dot position by current × current-speed setting.
+    // Advance dot position by solved current; the ratio between wire currents stays linear.
     // Round-capped zero-length dashes render as dots at the configured spacing.
     const phase = advanceWireAnimationPhase(phases.get(key) ?? 0, config, elapsedMs)
     phases.set(key, phase)
