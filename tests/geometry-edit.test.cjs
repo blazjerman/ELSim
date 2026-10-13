@@ -99,6 +99,20 @@ test('mixed selection movement shifts only selected scene objects from their dra
   assert.deepEqual(project, original, 'dragging keeps the saved scene snapshot immutable')
 })
 
+test('moving a full project selection shifts every part, wire, and label without mutating the snapshot', () => {
+  const project = createStarterProject()
+  const selected = { parts: project.parts, wires: project.wires, netLabels: project.netLabels }
+  const original = structuredClone(project)
+  const moved = moveSelectedSceneObjects(project, selected, 20, 30)
+  assert.equal(moved.parts.length, original.parts.length)
+  assert.equal(moved.wires.length, original.wires.length)
+  assert.equal(moved.netLabels.length, original.netLabels.length)
+  assert.deepEqual(moved.parts, original.parts.map((part) => ({ ...part, x: part.x + 20, y: part.y + 30 })))
+  assert.deepEqual(moved.wires, original.wires.map((wire) => ({ ...wire, points: wire.points.map(([x, y]) => [x + 20, y + 30]) })))
+  assert.deepEqual(moved.netLabels, original.netLabels.map((label) => ({ ...label, x: label.x + 20, y: label.y + 30 })))
+  assert.deepEqual(project, original, 'bulk dragging keeps the saved scene snapshot immutable')
+})
+
 test('wire animation viewport culling keeps intersecting segments and excludes distant wires', () => {
   const bounds = { left: 0, top: 0, right: 100, bottom: 100 }
   const wire = (points) => ({ id: 'wire', points })

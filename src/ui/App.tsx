@@ -1098,10 +1098,16 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
       : kind === 'part' ? [id] : []
     const wireIds = alreadySelected ? selectedWireIds : kind === 'wire' ? [id] : []
     const labelIds = alreadySelected ? selectedNetLabelIds : kind === 'label' ? [id] : []
+    // Project records are immutable. Keep their drag-start references rather
+    // than cloning every object and wire endpoint on pointer-down; edits made
+    // when the drag ends create new records from this stable snapshot.
+    const selectedAllParts = partIds.length === project.parts.length && partIds.every((partId, index) => project.parts[index]?.id === partId)
+    const selectedAllWires = wireIds.length === project.wires.length && wireIds.every((wireId, index) => project.wires[index]?.id === wireId)
+    const selectedAllLabels = labelIds.length === project.netLabels.length && labelIds.every((labelId, index) => project.netLabels[index]?.id === labelId)
     const group = {
-      parts: partIds.flatMap((partId) => { const item = partsById.get(partId); return item ? [{ ...item }] : [] }),
-      wires: wireIds.flatMap((wireId) => { const item = wiresById.get(wireId); return item ? [{ ...item, points: item.points.map(([x, y]) => [x, y] as [number, number]) as [[number, number], [number, number]] }] : [] }),
-      netLabels: labelIds.flatMap((labelId) => { const item = labelsById.get(labelId); return item ? [{ ...item }] : [] }),
+      parts: selectedAllParts ? project.parts : partIds.flatMap((partId) => { const item = partsById.get(partId); return item ? [item] : [] }),
+      wires: selectedAllWires ? project.wires : wireIds.flatMap((wireId) => { const item = wiresById.get(wireId); return item ? [item] : [] }),
+      netLabels: selectedAllLabels ? project.netLabels : labelIds.flatMap((labelId) => { const item = labelsById.get(labelId); return item ? [item] : [] }),
     }
     if (!alreadySelected) {
       setSelectedPartIds(partIds)
