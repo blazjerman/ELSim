@@ -539,3 +539,5 @@ Imported symbol artwork is now a memoized child of each circuit part. A cursor u
 ### Built-in symbol render memoization (2026-10-13)
 
 Built-in symbol geometry now renders in a memoized child. Static components reuse their SVG element tree across simulation cursor updates; components with solved-value animation still receive updated animation inputs and render normally. Firefox capacitor charge, transformer winding, and lamp glow regressions pass. All 30 unit groups, TypeScript, and the production build pass; the initial JS+CSS gzip budget is 207.1 KiB. No dedicated timing comparison is available, so this records a reduction in React element mapping for static components rather than a measured speedup. No WASM rebuild or Pages workflow ran.
+
+After this change, the focused 501-component/1,001-vector Firefox playback benchmark passed with a 26 ms scrub measurement. Earlier repeats ranged from 25.26 to 31.82 ms, so this single result is only a regression check and does not establish a measurable speedup.
