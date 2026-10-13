@@ -738,7 +738,9 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
+  const partsById = useMemo(() => new Map(project.parts.map((part) => [part.id, part])), [project.parts])
   const wiresById = useMemo(() => new Map(project.wires.map((wire) => [wire.id, wire])), [project.wires])
+  const labelsById = useMemo(() => new Map(project.netLabels.map((label) => [label.id, label])), [project.netLabels])
   useEffect(() => {
     if (!pendingComponent) { setComponentPreview(null); return }
     setComponentPreview((current) => current ? { ...current, kind: pendingComponent, componentDefinitionId: componentDefinitionFor(pendingComponent).id, rotation: pendingRotation, polarized: pendingPolarizedCapacitor } : current)
@@ -979,9 +981,9 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     if (pendingComponent) return
     if (event.button !== 0 || spacePan) return
     if (event.shiftKey || event.ctrlKey || event.metaKey) return
-    const part = kind === 'part' ? project.parts.find((item) => item.id === id) : undefined
-    const wire = kind === 'wire' ? project.wires.find((item) => item.id === id) : undefined
-    const label = kind === 'label' ? project.netLabels.find((item) => item.id === id) : undefined
+    const part = kind === 'part' ? partsById.get(id) : undefined
+    const wire = kind === 'wire' ? wiresById.get(id) : undefined
+    const label = kind === 'label' ? labelsById.get(id) : undefined
     if (!part && !wire && !label) return
     const point = pointFromEvent(event)
     // In Wire mode, component bodies may move unless the pointer is near a pin;
@@ -996,11 +998,10 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
       : kind === 'part' ? [id] : []
     const wireIds = alreadySelected ? selectedWireIds : kind === 'wire' ? [id] : []
     const labelIds = alreadySelected ? selectedNetLabelIds : kind === 'label' ? [id] : []
-    const partIdSet = new Set(partIds), wireIdSet = new Set(wireIds), labelIdSet = new Set(labelIds)
     const group = {
-      parts: project.parts.filter((item) => partIdSet.has(item.id)).map((item) => ({ ...item })),
-      wires: project.wires.filter((item) => wireIdSet.has(item.id)).map((item) => ({ ...item, points: item.points.map(([x, y]) => [x, y] as [number, number]) as [[number, number], [number, number]] })),
-      netLabels: project.netLabels.filter((item) => labelIdSet.has(item.id)).map((item) => ({ ...item })),
+      parts: partIds.flatMap((partId) => { const item = partsById.get(partId); return item ? [{ ...item }] : [] }),
+      wires: wireIds.flatMap((wireId) => { const item = wiresById.get(wireId); return item ? [{ ...item, points: item.points.map(([x, y]) => [x, y] as [number, number]) as [[number, number], [number, number]] }] : [] }),
+      netLabels: labelIds.flatMap((labelId) => { const item = labelsById.get(labelId); return item ? [{ ...item }] : [] }),
     }
     if (!alreadySelected) {
       setSelectedPartIds(partIds)
