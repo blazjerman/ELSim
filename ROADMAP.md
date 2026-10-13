@@ -431,6 +431,10 @@ Transformer follow-up (2026-10-12): The built-in coupled-inductor transformer no
 
 Potentiometer library slice (2026-10-12): Added a native three-pin linear potentiometer with named upper, wiper, and lower pins; total resistance and wiper position persist in project files and validate before netlisting. The ngspice adapter emits two series resistors, reports internal-name conflicts, and exposes upper-to-wiper current; wire animation receives both section currents. The palette and inspector explain the adjustable divider, and the guided lesson solves 5 V at 50% and 7.5 V at 25%. It clarifies that position is measured from the upper terminal, predicts the new output while the prior operating-point result is stale, offers a direct rerun, compares the prediction with ngspice, and suggests the complementary 75% position. LTspice export gives this component an explicit blocker while compatibility remains paused. Unit tests, typecheck, production build, and the focused browser simulation pass against the existing local WASM runtime.
 
+### UI interaction rendering follow-up (2026-10-13)
+
+Single-object component, wire-segment, and net-label dragging now uses an SVG transform preview and commits the scene change on pointer release, matching the existing group-drag approach. This avoids rebuilding the project and rerendering its panels on every pointer move. Wire-endpoint editing remains on its original geometry update path. Four Firefox drag regressions, all 29 unit groups, TypeScript, and the local production build pass; the build remains within its initial download budgets at 204.6 KiB combined JS+CSS gzip. This is a code-path optimization; no end-to-end latency gain is claimed from a before/after measurement. No WASM or Pages build was run.
+
 ## 7. Primary references checked
 
 - ngspice source: https://sourceforge.net/p/ngspice/ngspice/ci/master/tree/ (M0.3 spike pinned to `a80f6e3e95d51534905b1f23410a951802666656`)

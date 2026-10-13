@@ -1172,7 +1172,7 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
     const deltaX = Math.round((point.x - drag.current.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     const deltaY = Math.round((point.y - drag.current.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
     if (deltaX !== 0 || deltaY !== 0) suppressCanvasClick.current = true
-    const { id, kind, originX, originY, points, group, pointIndex } = drag.current
+    const { id, kind, points, group, pointIndex } = drag.current
     if (group) {
       if (deltaX === 0 && deltaY === 0) return
       if (!drag.current.previewInitialized) {
@@ -1216,15 +1216,23 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
       }
       return
     }
-    setProject((current) => {
-      if (kind === 'wire-point' && points && pointIndex !== undefined) return { ...current, wires: current.wires.map((wire) => wire.id === id ? { ...wire, points: points.map(([x, y], index) => index === pointIndex ? [x + deltaX, y + deltaY] as [number, number] : [x, y]) as [[number, number], [number, number]] } : wire) }
-      if (kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === id && points ? { ...wire, points: [[points[0][0] + deltaX, points[0][1] + deltaY], [points[1][0] + deltaX, points[1][1] + deltaY]] as [[number, number], [number, number]] } : wire) }
-      if (kind === 'label') return { ...current, netLabels: current.netLabels.map((label) => label.id === id ? { ...label, x: originX + deltaX, y: originY + deltaY } : label) }
-      const moving = current.parts.find((part) => part.id === id)
-      if (!moving) return current
-      const moved = { ...moving, x: originX + deltaX, y: originY + deltaY }
-      return { ...current, parts: current.parts.map((part) => part.id === id ? moved : part) }
-    })
+    if (kind === 'wire-point') {
+      if (!points || pointIndex === undefined) return
+      setProject((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === id ? { ...wire, points: points.map(([x, y], index) => index === pointIndex ? [x + deltaX, y + deltaY] as [number, number] : [x, y]) as [[number, number], [number, number]] } : wire) }))
+      return
+    }
+    if (!drag.current.previewInitialized) {
+      const selector = kind === 'part' ? `.circuit-part[data-part-id="${CSS.escape(id)}"]`
+        : kind === 'wire' ? `.wire-line[data-wire-id="${CSS.escape(id)}"]`
+          : `.canvas-label[data-net-label-id="${CSS.escape(id)}"]`
+      const element = svg.current?.querySelector<SVGGElement>(selector)
+      dragPreviewElements.current = element ? [{ element, transform: element.getAttribute('transform') }] : []
+      svg.current?.querySelectorAll('.wire-current-flow-layer, .wire-connection-dot, .wire-endpoint-handles').forEach((overlay) => overlay.setAttribute('visibility', 'hidden'))
+      drag.current.previewInitialized = true
+    }
+    for (const { element, transform } of dragPreviewElements.current) {
+      element.setAttribute('transform', `translate(${deltaX} ${deltaY})${transform ? ` ${transform}` : ''}`)
+    }
   }
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
     const endedDrag = drag.current
@@ -1243,6 +1251,28 @@ function Schematic({ project, symbolsById, connectivity, setSelection, setHovere
         svg.current?.querySelectorAll('.wire-current-flow-layer, .wire-connection-dot, .wire-endpoint-handles').forEach((element) => element.removeAttribute('visibility'))
       }
       if (deltaX !== 0 || deltaY !== 0) setProject((current) => moveSelectedSceneObjects(current, activeGroupDrag.group!, deltaX, deltaY))
+    }
+    const activeSingleDrag = endedDrag && !endedDrag.group && endedDrag.previewInitialized
+      && (endedDrag.kind === 'part' || endedDrag.kind === 'wire' || endedDrag.kind === 'label')
+      ? endedDrag
+      : null
+    if (activeSingleDrag) {
+      const point = pointFromEvent(event)
+      const deltaX = Math.round((point.x - activeSingleDrag.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      const deltaY = Math.round((point.y - activeSingleDrag.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      for (const { element, transform } of dragPreviewElements.current) {
+        if (transform === null) element.removeAttribute('transform')
+        else element.setAttribute('transform', transform)
+      }
+      dragPreviewElements.current = []
+      svg.current?.querySelectorAll('.wire-current-flow-layer, .wire-connection-dot, .wire-endpoint-handles').forEach((overlay) => overlay.removeAttribute('visibility'))
+      if (deltaX !== 0 || deltaY !== 0) {
+        setProject((current) => {
+          if (activeSingleDrag.kind === 'wire') return { ...current, wires: current.wires.map((wire) => wire.id === activeSingleDrag.id && activeSingleDrag.points ? { ...wire, points: [[activeSingleDrag.points[0][0] + deltaX, activeSingleDrag.points[0][1] + deltaY], [activeSingleDrag.points[1][0] + deltaX, activeSingleDrag.points[1][1] + deltaY]] as [[number, number], [number, number]] } : wire) }
+          if (activeSingleDrag.kind === 'label') return { ...current, netLabels: current.netLabels.map((label) => label.id === activeSingleDrag.id ? { ...label, x: activeSingleDrag.originX + deltaX, y: activeSingleDrag.originY + deltaY } : label) }
+          return { ...current, parts: current.parts.map((part) => part.id === activeSingleDrag.id ? { ...part, x: activeSingleDrag.originX + deltaX, y: activeSingleDrag.originY + deltaY } : part) }
+        })
+      }
     }
     if (drag.current?.kind === 'box-select') {
       const boxDrag = drag.current
