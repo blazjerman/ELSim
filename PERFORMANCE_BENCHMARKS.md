@@ -487,3 +487,7 @@ Dragging one part, wire segment, or net label previously called `setProject` for
 ### Frame-coalesced waveform cursor notifications (2026-10-13)
 
 Cursor state now changes synchronously, while both React subscriber groups are notified together at most once per animation frame. A focused unit test checks that multiple updates in one frame expose the newest exact sample and produce one notification. Firefox playback continues to animate current flow. This bounds React notification work during rapid scrubbing by display frames; no measured before/after frame-time comparison was run. No WASM or Pages build was run.
+
+### Copy/paste selection movement regression (2026-10-13)
+
+The Firefox full-circuit copy/paste regression now verifies the copied parts and wires form one movable selection after paste: dragging a copied part must move every copied part and wire by the same snapped offset and leave all originals unchanged. Five repeated pre-extension runs and the extended focused run pass. This is correctness coverage, not a performance measurement. No WASM build was run.

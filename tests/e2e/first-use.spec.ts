@@ -2390,6 +2390,37 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
   expect(selected.some((id) => original.wires.includes(id))).toBe(false)
   const selectedParts = await page.locator('.circuit-part.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-part-id')))
   expect(new Set(selectedParts)).toEqual(new Set(pasted.parts))
+
+  // Verify the pasted mixed selection is a coherent movable group. A stale
+  // selection containing original wires can look correct by count, then move
+  // the wrong circuit objects when the user drags a copied component.
+  const beforeMove = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  const movedPart = page.locator(`.circuit-part[data-part-id="${pasted.parts[0]}"]`)
+  const box = await movedPart.boundingBox()
+  expect(box).not.toBeNull()
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box!.x + box!.width / 2 + 48, box!.y + box!.height / 2 + 32, { steps: 3 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))).not.toEqual(beforeMove)
+  const afterMove = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  const originalPartIds = new Set(original.parts)
+  const originalWireIds = new Set(original.wires)
+  expect(afterMove.parts.filter((part: { id: string }) => originalPartIds.has(part.id))).toEqual(beforeMove.parts.filter((part: { id: string }) => originalPartIds.has(part.id)))
+  expect(afterMove.wires.filter((wire: { id: string }) => originalWireIds.has(wire.id))).toEqual(beforeMove.wires.filter((wire: { id: string }) => originalWireIds.has(wire.id)))
+  const dx = afterMove.parts.find((part: { id: string }) => part.id === pasted.parts[0]).x - beforeMove.parts.find((part: { id: string }) => part.id === pasted.parts[0]).x
+  const dy = afterMove.parts.find((part: { id: string }) => part.id === pasted.parts[0]).y - beforeMove.parts.find((part: { id: string }) => part.id === pasted.parts[0]).y
+  expect(dx).not.toBe(0)
+  for (const partId of pasted.parts) {
+    const before = beforeMove.parts.find((part: { id: string }) => part.id === partId)
+    const after = afterMove.parts.find((part: { id: string }) => part.id === partId)
+    expect([after.x - before.x, after.y - before.y]).toEqual([dx, dy])
+  }
+  for (const wireId of pasted.wires) {
+    const before = beforeMove.wires.find((wire: { id: string }) => wire.id === wireId)
+    const after = afterMove.wires.find((wire: { id: string }) => wire.id === wireId)
+    expect(after.points).toEqual(before.points.map(([x, y]: [number, number]) => [x + dx, y + dy]))
+  }
 })
 
 test('fit schematic view frames distant parts, wires, and labels', async ({ page }) => {
