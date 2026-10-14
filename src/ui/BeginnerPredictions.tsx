@@ -625,6 +625,26 @@ export function ResistorPowerPrediction({ supplyValue, resistanceValue }: { supp
   />
 }
 
+export function LampPowerPrediction({ supplyValue, resistanceValue }: { supplyValue: string; resistanceValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const resistance = componentMagnitude(resistanceValue, 'resistor')
+  const predictedPowerMw = supply !== null && resistance !== null && resistance > 0
+    ? supply * supply / resistance * 1000
+    : null
+  const explanation = predictedPowerMw === null || supply === null || resistance === null
+    ? ''
+    : `P = V²/R = ${formatValue(supply)}² V² / ${formatResistance(resistance)} = ${formatValue(predictedPowerMw)} mW. ELSim uses this electrical power to illustrate lamp glow; its fixed resistance does not model filament temperature or warm-up.`
+
+  return <NumericPrediction
+    id="lamp-power-prediction"
+    prompt="Before running, predict the electrical power in lamp R1"
+    unit="mW"
+    predictedValue={predictedPowerMw}
+    absoluteTolerance={0.1}
+    explanation={explanation}
+  />
+}
+
 export function WheatstoneBridgePrediction({ supplyValue, leftTopValue, leftBottomValue, rightTopValue, rightBottomValue }: { supplyValue: string; leftTopValue: string; leftBottomValue: string; rightTopValue: string; rightBottomValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const leftTop = componentMagnitude(leftTopValue, 'resistor')
@@ -691,7 +711,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors'
+  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'lamp-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -749,6 +769,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'sine-wave': return <SineWavePrediction offsetValue={props.offsetValue ?? ''} amplitudeValue={props.amplitudeValue ?? ''} frequencyValue={props.frequencyValue ?? ''}/>
     case 'rlc-resonance': return <RlcResonancePrediction inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'resistor-power': return <ResistorPowerPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
+    case 'lamp-power': return <LampPowerPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
     case 'series-resistors': return <SeriesVoltageDropPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'capacitor-discharge': return <CapacitorDischargePrediction initialVoltageValue={props.initialVoltageValue ?? ''} resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>

@@ -6249,6 +6249,33 @@ test('resistor-power lesson predicts dissipation from live supply and resistance
   await expect(page.getByRole('button', { name: 'Run this circuit' })).toBeEnabled()
 })
 
+test('lamp-power lesson predicts electrical power and recalculates its glow estimate after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Lamp brightness follows electrical power' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const prediction = lesson.locator('.example-prediction')
+  const answer = prediction.getByRole('textbox', { name: 'Before running, predict the electrical power in lamp R1' })
+  await answer.fill('250mW')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('fixed resistance does not model filament temperature')
+
+  await page.locator('.circuit-part[data-part-id="lamp-power-v1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="lamp-power-v1:value"]').fill('2.5 V')
+  await expect(answer).toHaveValue('')
+  await answer.fill('62.5mW')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('62.5 mW')
+  await expect(page.getByRole('button', { name: 'Run this circuit' })).toBeEnabled()
+})
+
 test('Wheatstone bridge lesson predicts and verifies a balanced sensor arm', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
