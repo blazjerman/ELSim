@@ -1,0 +1,13 @@
+ELSim imported library initial conditions
+.IC V(out)=4
+.NODESET V(in)=0
+V1 in 0 0
+R1 in out 1k
+C1 out 0 1u
+.control
+set filetype=ascii
+tran 0.1ms 1ms uic
+write /result.raw v(out)
+quit
+.endc
+.end

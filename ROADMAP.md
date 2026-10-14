@@ -296,6 +296,8 @@ Project-local ngspice `.LIB filename section` references (2026-10-14): Imported 
 
 Terminal `.END` in imported model libraries (2026-10-14): Native model files may end with the same `.END` deck terminator as standalone circuits. The importer now strips a final `.END` before combining model text into the project netlist, while rejecting content after it and occurrences inside `.SUBCKT` or `.LIB` blocks. A netlist regression verifies ELSim emits only its own final terminator; the Firefox/ngspice library-section workflow now imports and simulates a source file containing `.END`. All 34 unit-test groups and TypeScript pass. No WASM rebuild was needed.
 
+Native initial-condition cards in imported libraries (2026-10-14): Project-local model libraries now preserve ngspice `.IC` and `.NODESET` cards as top-level records. The importer explains that `.IC` changes transient initialization (with behavior dependent on UIC) and `.NODESET` supplies circuit-wide starting guesses, and rejects either directive inside a `.SUBCKT`. Parser tests cover preservation, warnings, and scope errors; Firefox verifies the warning and generated netlist; an existing-runtime WASM fixture confirms `.IC V(out)=4` starts the transient near 4 V. All 34 unit-test groups and TypeScript pass. No WASM rebuild or Pages workflow ran; M2.4 remains active for broader library-dialect coverage.
+
 ### M3 — LTspice interoperability
 
 **M3.1 Compatibility matrix and fixtures.** Catalog supported `.asc`, `.asy`, directives, primitives, parameters, and model dialect features. Use original hand-written fixtures or files whose redistribution is permitted. Acceptance: every supported syntax item has a fixture; known unsupported items have a diagnostic.

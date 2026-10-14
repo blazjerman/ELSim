@@ -134,6 +134,23 @@ test('preserves native ngspice global .TEMP cards and reports their project-wide
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE A B\n.TEMP 100\n.ENDS CORE'), /\.TEMP sets the global circuit temperature and cannot appear inside a \.SUBCKT/)
 })
 
+test('preserves native ngspice .IC and .NODESET cards with circuit-wide guidance', () => {
+  const source = '.IC V(out)=2.5\n.NODESET V(in)=1\n.MODEL DFAST D(Is=1n)'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine, text }) => ({ sourceLine, text })), [
+    { sourceLine: 1, text: '.IC V(out)=2.5' },
+    { sourceLine: 2, text: '.NODESET V(in)=1' },
+    { sourceLine: 3, text: '.MODEL DFAST D(Is=1n)' },
+  ])
+  assert.deepEqual(analyzeLtspiceModelDialect(source).map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [1, 'ngspice .IC sets circuit-wide transient initial conditions'],
+    [2, 'ngspice .NODESET changes circuit-wide initial voltage guesses'],
+  ])
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE A B\n.IC V(A)=1\n.ENDS CORE'), /\.IC applies to the whole circuit and cannot appear inside a \.SUBCKT/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE A B\n.NODESET V(A)=1\n.ENDS CORE'), /\.NODESET applies to the whole circuit and cannot appear inside a \.SUBCKT/)
+})
+
 test('preserves ngspice conditional model variants as one selectable device model', () => {
   const source = [
     'Conditional diode variants',
