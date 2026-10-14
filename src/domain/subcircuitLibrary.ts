@@ -19,6 +19,10 @@ export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInp
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 const pinName = /^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/
+/** Native SPICE model identifiers may contain slash (for example LF356/NS). */
+export function isValidSpiceModelName(value: string, allowLeadingDigit = false): boolean {
+  return (allowLeadingDigit ? /^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/ : /^[A-Za-z_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/).test(value)
+}
 const safeTopLevel = new Set(['.model', '.param', '.func', '.csparam', '.global', '.options', '.temp', '.ic', '.nodeset', '.save', '.probe', '.meas', '.measure'])
 const forbidden = new Set(['.control', '.endc', '.end', '.exec', '.shell', '.cm'])
 
@@ -172,7 +176,7 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     }
     if (directive === '.subckt') {
       const name = tokens[1]
-      if (!name || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
+      if (!name || !isValidSpiceModelName(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
       activeSubcircuits.push({ name, start: line.start })
     } else if (directive === '.ends') {
       const active = activeSubcircuits.at(-1)
@@ -314,8 +318,8 @@ export function modelFunctionSignaturesForLibraries<T extends Pick<ModelLibraryI
 }
 
 function parseModelCard(text: string, line: LogicalLine, scope?: string, functions: ReadonlyMap<string, number> = new Map()): SpiceModelDefinition {
-  const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+ako\s*:\s*\S+\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
-    ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+  const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*)\s+ako\s*:\s*\S+\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+    ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
   const name = modelHeader?.[1], type = modelHeader?.[2]
   if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
   const parameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/^\s*\(/, '').replace(/\)\s*$/, '')
@@ -415,7 +419,7 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
       || /^off$/i.test(token)
     ))
     const end = optionAt < 0 ? tokens.length : optionAt
-    const candidates = tokens.slice(4, end).filter((token) => /^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(token))
+    const candidates = tokens.slice(4, end).filter((token) => isValidSpiceModelName(token, true))
     index = end - 1
     const dependency = tokens[index] && index > 0
       ? { owner, reference, modelName: tokens[index], kind, sourceLine }
@@ -448,7 +452,7 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
     } else index = 3
   }
   const modelName = tokens[index]
-  if (index <= 0 || !modelName || !/^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(modelName)) return null
+  if (index <= 0 || !modelName || !isValidSpiceModelName(modelName, true)) return null
   return { owner, reference, modelName, kind, sourceLine }
 }
 
@@ -741,7 +745,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
 
     if (directive === '.subckt') {
       const name = tokens[1]
-      if (!name || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
+      if (!name || !isValidSpiceModelName(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
       const folded = name.toLowerCase()
       if (seenNames.has(folded)) throw new Error(`Line ${line.start}: model ${name} is declared more than once.`)
       seenNames.add(folded)

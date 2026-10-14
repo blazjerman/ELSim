@@ -2163,6 +2163,29 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
+test('native ngspice slash-named subcircuit imports and generates a valid instance', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Components', exact: true }).click()
+  const modelLibrary = '.SUBCKT LF356/NS IN OUT\nE1 OUT 0 IN 0 2\n.ENDS LF356/NS\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'lf356.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 0 device models from lf356\.lib/)).toBeVisible()
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'LF356/NS' })
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await page.getByRole('button', { name: 'Schematic', exact: true }).click()
+  const instance = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(instance).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelName)).toBe('LF356/NS')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* LF356\/NS/)
+})
+
 test('subcircuit parameter defaults can call functions from an imported include library', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const input = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')

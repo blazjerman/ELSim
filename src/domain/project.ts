@@ -1,6 +1,6 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
-import { isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, isValidSpiceModelName, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
@@ -428,7 +428,7 @@ export function validateProject(input: unknown): Project {
     }
     if (candidate.behavioralDialect !== undefined && candidate.kind !== 'behavioral') throw new Error(`${candidate.ref} has a behavioral dialect on a non-behavioral component.`)
     if ((candidate.kind === 'npn' || candidate.kind === 'pnp') && (!/^[1-9]\d{0,3}$/.test(candidate.value) || Number(candidate.value) > 1000)) throw new Error(`${candidate.ref} forward beta must be an integer from 1 to 1000.`)
-    if (candidate.kind === 'subcircuit' && (typeof candidate.modelName !== 'string' || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(candidate.modelName) || !Array.isArray(candidate.modelPins) || candidate.modelPins.length < 1 || candidate.modelPins.length > 64 || candidate.modelPins.some((pin) => typeof pin !== 'string' || !/^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(pin)))) throw new Error(`${candidate.ref} has malformed subcircuit model or ordered pins.`)
+    if (candidate.kind === 'subcircuit' && (typeof candidate.modelName !== 'string' || !isValidSpiceModelName(candidate.modelName) || !Array.isArray(candidate.modelPins) || candidate.modelPins.length < 1 || candidate.modelPins.length > 64 || candidate.modelPins.some((pin) => typeof pin !== 'string' || !/^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/.test(pin)))) throw new Error(`${candidate.ref} has malformed subcircuit model or ordered pins.`)
     if (candidate.sheetId !== undefined && (candidate.kind !== 'subcircuit' || typeof candidate.sheetId !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(candidate.sheetId))) throw new Error(`${candidate.ref} has a malformed sheet block reference.`)
     if (candidate.sheetPortLayout !== undefined && (candidate.kind !== 'subcircuit' || !candidate.sheetId || !Array.isArray(candidate.sheetPortLayout) || candidate.sheetPortLayout.length < 1 || candidate.sheetPortLayout.length > 64 || candidate.sheetPortLayout.some((entry) => !entry || !['auto', 'left', 'right', 'top', 'bottom'].includes(entry.side) || !['input', 'output', 'inout'].includes(entry.direction)))) throw new Error(`${candidate.ref} has a malformed sheet port layout.`)
     if (candidate.symbolAssetId !== undefined && (typeof candidate.symbolAssetId !== 'string' || !candidate.symbolAssetId)) throw new Error(`${candidate.ref} has a malformed imported symbol reference.`)
@@ -576,7 +576,7 @@ export function validateProject(input: unknown): Project {
       // Restrict the token syntax here to prevent malformed references from
       // becoming extra netlist records; the netlist validator checks presence
       // and device-family compatibility before emitting a device line.
-      if (!/^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(part.deviceModel)) throw new Error(`${part.ref} has an invalid imported device model name.`)
+      if (!isValidSpiceModelName(part.deviceModel, true)) throw new Error(`${part.ref} has an invalid imported device model name.`)
     }
   }
   const simulation = data.simulation as Project['simulation'] | undefined

@@ -1,5 +1,6 @@
 import { timeMagnitude } from '../domain/componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from '../domain/measurementSettings'
+import { isValidSpiceModelName } from '../domain/subcircuitLibrary'
 
 export type EngineState = 'not-integrated' | 'loading' | 'ready' | 'running' | 'error'
 
@@ -232,7 +233,7 @@ function isParameterSweepRun(value: unknown): boolean {
     const hasModelTarget = entry.parameter !== undefined || entry.model !== undefined
     if (entry.sourceParameter !== undefined && (!(['pulse.initial', 'pulse.high', 'pulse.delay', 'pulse.rise', 'pulse.fall', 'pulse.width', 'pulse.period', 'pwl.scale', 'sine.offset', 'sine.amplitude', 'sine.frequency', 'sine.delay', 'sine.damping', 'sine.phase', 'exp.initial', 'exp.pulsed', 'exp.riseDelay', 'exp.riseTau', 'exp.fallDelay', 'exp.fallTau', 'sffm.offset', 'sffm.amplitude', 'sffm.carrierFrequency', 'sffm.modulationIndex', 'sffm.signalFrequency'].includes(String(entry.sourceParameter)) || /^pwl\.point\.(?:[1-9]|[12]\d|3[0-2])$/.test(String(entry.sourceParameter))) || hasModelTarget || hasGlobalParameter)) return false
     if (hasModelTarget && (typeof entry.parameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter)
-      || typeof entry.model !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(entry.model))) return false
+      || typeof entry.model !== 'string' || !isValidSpiceModelName(entry.model, true))) return false
     if (entry.pulseHigh !== undefined && (typeof entry.pulseHigh !== 'boolean' || (entry.pulseHigh && (hasModelTarget || hasGlobalParameter)))) return false
     if (entry.pwlScale !== undefined && (typeof entry.pwlScale !== 'boolean' || (entry.pwlScale && (hasModelTarget || hasGlobalParameter)))) return false
     if (entry.waveformAmplitude !== undefined && (typeof entry.waveformAmplitude !== 'boolean' || (entry.waveformAmplitude && (hasModelTarget || hasGlobalParameter)))) return false

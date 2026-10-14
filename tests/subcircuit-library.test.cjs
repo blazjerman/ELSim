@@ -6,7 +6,8 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceModelName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
   for (const value of ['1k', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}']) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
@@ -364,6 +365,28 @@ test('parses ordered subcircuit pins, parameters, continuations, shared models, 
   assert.deepEqual(parsed.dependencies.map(({ owner, reference, modelName, kind }) => ({ owner, reference, modelName, kind })), [
     { owner: 'amp', reference: 'D1', modelName: 'DFAST', kind: 'device' },
   ])
+})
+
+test('accepts ngspice slash model identifiers and resolves them without relaxing pin names', () => {
+  assert.equal(isValidSpiceModelName('LF356/NS'), true)
+  assert.equal(isValidSpiceModelName('2N2222/A', true), true)
+  assert.equal(isValidSpiceModelName('2N2222/A'), false)
+  assert.equal(isValidSpiceModelName('BAD//NAME'), false)
+  const parsed = parseSubcircuitLibrary('.SUBCKT LF356/NS IN OUT\nR1 IN OUT 1k\n.ENDS LF356/NS\n.MODEL DIODE/FAST D(IS=1n)\n.SUBCKT WRAPPER IN OUT\nX1 IN OUT LF356/NS\nD1 OUT 0 DIODE/FAST\n.ENDS WRAPPER')
+  assert.equal(parsed.subcircuits[0].name, 'LF356/NS')
+  assert.equal(parsed.models[0].name, 'DIODE/FAST')
+  assert.deepEqual(parsed.dependencies.map(({ modelName, kind }) => [modelName, kind]), [['LF356/NS', 'subcircuit'], ['DIODE/FAST', 'device']])
+  const report = analyzeModelDependencies([
+    { id: 'wrapper', filename: 'wrapper.lib', content: '.SUBCKT WRAPPER IN OUT\nX1 IN OUT LF356/NS\nD1 OUT 0 DIODE/FAST\n.ENDS WRAPPER' },
+    { id: 'models', filename: 'models.lib', content: '.SUBCKT LF356/NS IN OUT\nR1 IN OUT 1k\n.ENDS LF356/NS\n.MODEL DIODE/FAST D(IS=1n)' },
+  ])
+  assert.deepEqual(report.missing, [])
+  assert.deepEqual(report.resolved.map(({ modelName, kind }) => [modelName, kind]), [['LF356/NS', 'subcircuit'], ['DIODE/FAST', 'device']])
+  const project = createStarterProject()
+  const content = '.SUBCKT LF356/NS IN OUT\nE1 OUT 0 IN 0 2\n.ENDS LF356/NS'
+  project.modelAssets = [{ id: 'lf356', filename: 'lf356.lib', content, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'lf356-instance', kind: 'subcircuit', ref: 'X1', value: '', x: 300, y: 200, rotation: 0, modelName: 'LF356/NS', modelPins: ['IN', 'OUT'] })
+  assert.equal(validateProject(project).parts.at(-1).modelName, 'LF356/NS')
 })
 
 test('parses native ngspice subcircuit defaults with and without PARAMS:', () => {
