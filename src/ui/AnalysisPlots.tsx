@@ -375,18 +375,18 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     return { indicesById, rangeByUnit }
   }, [shown, minTime, maxTime])
   const scopeDomain = useMemo<[number, number]>(() => {
-    const voltage = sampledTraceData.rangeByUnit.get('V') ?? null
-    const current = sampledTraceData.rangeByUnit.get('A') ?? null
-    const ranges = [voltage, current].filter((range): range is [number, number] => range !== null)
-    if (!ranges.length) return [-1, 1]
-    return [Math.min(0, ...ranges.map(([min]) => min)), Math.max(0, ...ranges.map(([, max]) => max))]
+    return sampledTraceData.rangeByUnit.get('V') ?? [-1, 1]
   }, [sampledTraceData])
-  const scopeAxis = useValueWindow(scopeDomain)
-  const scopeRange: [number, number] = [scopeAxis.range.min, scopeAxis.range.max]
   const hasVoltage = shown.some((trace) => trace.unit === 'V'), hasCurrent = shown.some((trace) => trace.unit === 'A')
-  const resetView = () => { navigation.reset(); scopeAxis.reset() }
-  const zoomValue = (factor: number) => scopeAxis.zoom(factor)
-  const panValue = (direction: -1 | 1) => scopeAxis.pan(direction)
+  const currentDomain = sampledTraceData.rangeByUnit.get('A') ?? [-1, 1]
+  const voltageAxis = useValueWindow(scopeDomain)
+  const currentAxis = useValueWindow(currentDomain)
+  const voltageRange: [number, number] = [voltageAxis.range.min, voltageAxis.range.max]
+  const currentRange: [number, number] = [currentAxis.range.min, currentAxis.range.max]
+  const rangeForUnit = (unit: string): [number, number] => unit === 'A' ? currentRange : voltageRange
+  const resetView = () => { navigation.reset(); voltageAxis.reset(); currentAxis.reset() }
+  const zoomValue = (factor: number) => { voltageAxis.zoom(factor); currentAxis.zoom(factor) }
+  const panValue = (direction: -1 | 1) => { voltageAxis.pan(direction); currentAxis.pan(direction) }
   const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta), navigation.getRange, navigation.restore)
   const wheelZoom = (event: ReactWheelEvent<SVGSVGElement>) => {
     event.preventDefault()
@@ -399,25 +399,31 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   }
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorFor = useCallback((index: number) => colors[index % colors.length], [colors])
-  const valueStep = niceTickStep(scopeRange[1] - scopeRange[0], Math.max(3, Math.floor((bottom - top) / 42)))
-  const valueTicks = ticksInRange(scopeRange[0], scopeRange[1], valueStep)
+  const gridRange = hasVoltage ? voltageRange : currentRange
+  const valueStep = niceTickStep(gridRange[1] - gridRange[0], Math.max(3, Math.floor((bottom - top) / 42)))
+  const valueTicks = ticksInRange(gridRange[0], gridRange[1], valueStep)
+  const currentStep = niceTickStep(currentRange[1] - currentRange[0], Math.max(3, Math.floor((bottom - top) / 42)))
+  const currentTicks = ticksInRange(currentRange[0], currentRange[1], currentStep)
   const minorValueStep = valueStep / 5
-  const minorValueTicks = ticksInRange(scopeRange[0], scopeRange[1], minorValueStep).filter((value) => Math.abs(value / valueStep - Math.round(value / valueStep)) > 1e-8)
+  const minorValueTicks = ticksInRange(gridRange[0], gridRange[1], minorValueStep).filter((value) => Math.abs(value / valueStep - Math.round(value / valueStep)) > 1e-8)
   const timeStep = niceTickStep(maxTime - minTime, Math.max(3, Math.floor((right - left) / 105)))
   const timeTicks = ticksInRange(minTime, maxTime, timeStep)
   const minorTimeStep = timeStep / 5
   const minorTimeTicks = ticksInRange(minTime, maxTime, minorTimeStep).filter((value) => Math.abs(value / timeStep - Math.round(value / timeStep)) > 1e-8)
   const xForTime = (time: number) => left + ((time - minTime) / (maxTime - minTime || 1)) * (right - left)
-  const yForValue = (value: number) => bottom - ((value - scopeRange[0]) / (scopeRange[1] - scopeRange[0])) * (bottom - top)
+  const yForValue = (value: number, unit: string) => {
+    const range = rangeForUnit(unit)
+    return bottom - ((value - range[0]) / (range[1] - range[0])) * (bottom - top)
+  }
   const plotPaths = useMemo(() => shown.map((trace) => {
     const indices = sampledTraceData.indicesById.get(trace.id) ?? []
-    const [minValue, maxValue] = scopeRange
+    const [minValue, maxValue] = rangeForUnit(trace.unit)
     const coordinateKey = `linear:${minTime}:${maxTime}:${left}:${right}:${top}:${bottom}:${minValue}:${maxValue}`
     const points = plotPolylinePoints(trace.axis, trace.values, indices, coordinateKey,
       (time) => left + ((time - minTime) / (maxTime - minTime || 1)) * (right - left),
       (value) => bottom - ((value - minValue) / (maxValue - minValue)) * (bottom - top))
     return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points, accessibleName: `${trace.label}, trace in ${trace.unit}` }
-  }), [shown, sampledTraceData, minTime, maxTime, right, bottom, scopeRange[0], scopeRange[1], traceIndexById, colors])
+  }), [shown, sampledTraceData, minTime, maxTime, right, bottom, voltageRange[0], voltageRange[1], currentRange[0], currentRange[1], traceIndexById, colors])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -439,11 +445,12 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   return <div className="waveform-view">
     <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${formatTime(minTime, axis?.[axis.length - 1] ?? maxTime)} to ${formatTime(maxTime, axis?.[axis.length - 1] ?? maxTime)}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
-      {minorValueTicks.map((value) => <line key={`y-minor-${value}`} x1={left} x2={right} y1={yForValue(value)} y2={yForValue(value)} className="plot-grid-minor"/>)}
-      {valueTicks.map((value) => <g key={`y-major-${value}`}><line x1={left} x2={right} y1={yForValue(value)} y2={yForValue(value)} className={Math.abs(value) <= valueStep * 1e-8 ? 'plot-grid-zero' : 'plot-grid'}/>{Math.abs(value) > valueStep * 1e-8 && hasVoltage && <text x={left - 5} y={yForValue(value) + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(value, 'V')}</text>}{Math.abs(value) > valueStep * 1e-8 && hasCurrent && <text x={right + 4} y={yForValue(value) + 3} className="plot-tick">{formatEngineeringTick(value, 'A')}</text>}</g>)}
+      {minorValueTicks.map((value) => <line key={`y-minor-${value}`} x1={left} x2={right} y1={yForValue(value, hasVoltage ? 'V' : 'A')} y2={yForValue(value, hasVoltage ? 'V' : 'A')} className="plot-grid-minor"/>)}
+      {valueTicks.map((value) => <g key={`y-major-${value}`}><line x1={left} x2={right} y1={yForValue(value, hasVoltage ? 'V' : 'A')} y2={yForValue(value, hasVoltage ? 'V' : 'A')} className={Math.abs(value) <= valueStep * 1e-8 ? 'plot-grid-zero' : 'plot-grid'}/>{Math.abs(value) > valueStep * 1e-8 && hasVoltage && <text data-value-unit="V" x={left - 5} y={yForValue(value, 'V') + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(value, 'V')}</text>}</g>)}
+      {hasCurrent && currentTicks.filter((value) => Math.abs(value) > currentStep * 1e-8).map((value) => <g key={`y-current-${value}`} className="plot-value-tick-current"><line x1={right - 3} x2={right} y1={yForValue(value, 'A')} y2={yForValue(value, 'A')} className="plot-axis"/><text data-value-unit="A" x={right + 4} y={yForValue(value, 'A') + 3} className="plot-tick">{formatEngineeringTick(value, 'A')}</text></g>)}
       {minorTimeTicks.map((time) => <line key={`x-minor-${time}`} x1={xForTime(time)} x2={xForTime(time)} y1={top} y2={bottom} className="plot-grid-minor"/>)}
       {timeTicks.map((time, index) => <g key={`x-major-${time}`}><line x1={xForTime(time)} x2={xForTime(time)} y1={top} y2={bottom} className="plot-grid"/><text x={xForTime(time)} y={height - 3} textAnchor={index === 0 ? 'start' : index === timeTicks.length - 1 ? 'end' : 'middle'} className="plot-tick">{formatTime(time, axis?.[axis.length - 1] ?? maxTime, 3)}</text></g>)}
-      {(hasVoltage || hasCurrent) && <g className="plot-zero-reference"><line x1={left} x2={right} y1={yForValue(0)} y2={yForValue(0)}/>{hasVoltage && <text x={left - 5} y={yForValue(0) + 3} textAnchor="end">0 V</text>}{hasCurrent && <text x={right + 4} y={yForValue(0) + 3}>0 A</text>}</g>}
+      {(hasVoltage || hasCurrent) && <g className="plot-zero-reference">{hasVoltage && <><line x1={left} x2={right} y1={yForValue(0, 'V')} y2={yForValue(0, 'V')}/><text x={left - 5} y={yForValue(0, 'V') + 3} textAnchor="end">0 V</text></>}{hasCurrent && <><line x1={left} x2={right} y1={yForValue(0, 'A')} y2={yForValue(0, 'A')}/><text x={right + 4} y={yForValue(0, 'A') + 3}>0 A</text></>}</g>}
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
       <TransientCursorMarker axis={axis} first={first} last={last} minTime={minTime} maxTime={maxTime} left={left} right={right} top={top} bottom={bottom}/>

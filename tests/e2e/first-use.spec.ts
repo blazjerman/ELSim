@@ -4938,6 +4938,15 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await expect(firstWindow.getByRole('button', { name: /Disable I\(R1\)/i })).toBeVisible()
   await expect(firstWindow.getByRole('button', { name: /Disable V\(C4\)/ })).toBeVisible()
   await expect(firstWindow.getByRole('button', { name: /Disable V\(C4\)/ }).locator('span')).toHaveAttribute('style', originalVoltageColor ?? '')
+  const voltagePoints = await firstWindow.locator('polyline[aria-label*="V(R1)" i]').getAttribute('points')
+  const currentPoints = await firstWindow.locator('polyline[aria-label*="I(R1)" i]').getAttribute('points')
+  const verticalSpan = (points: string | null) => {
+    const yValues = (points ?? '').trim().split(/\s+/).map((point) => Number(point.split(',')[1])).filter(Number.isFinite)
+    return Math.max(...yValues) - Math.min(...yValues)
+  }
+  expect(verticalSpan(currentPoints), 'milliamp traces should use their own readable scale beside volt-level traces').toBeGreaterThan(verticalSpan(voltagePoints) * 0.5)
+  expect(await firstWindow.locator('text[data-value-unit="V"]').count()).toBeGreaterThan(0)
+  expect(await firstWindow.locator('text[data-value-unit="A"]').count()).toBeGreaterThan(0)
   await page.locator('.plot-window').last().locator('svg.waveform-chart').click({ button: 'middle' })
   await expect(page.locator('.plot-window')).toHaveCount(1)
   await expect(firstWindow.locator('.plot-zero-reference').first()).toContainText('0 V')
