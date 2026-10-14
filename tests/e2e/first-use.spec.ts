@@ -4389,19 +4389,19 @@ test('imported ngspice .IC and .NODESET cards are preserved with circuit-wide gu
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'initial-conditions.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.IC V(out)=2.5\n.NODESET V(in)=1\n.MODEL DTEST D(IS=1n)\n'),
+    buffer: Buffer.from('.OPTIONS reltol=.005\n.IC V(out)=2.5\n.NODESET V(in)=1\n.MODEL DTEST D(IS=1n)\n'),
   })
   await expect(page.getByText(/Imported 0 subcircuits and 1 device model from initial-conditions\.lib/)).toBeVisible()
   const warnings = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice .OPTIONS changes circuit-wide solver settings')
   await expect(warnings).toContainText('ngspice .IC sets circuit-wide transient initial conditions')
   await expect(warnings).toContainText('ngspice .NODESET changes circuit-wide initial voltage guesses')
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  const netlistText = ((await page.locator('.netlist-modal pre').textContent()) ?? '').toLowerCase().replace(/\s+/g, ' ')
-  const initialConditionLine = netlistText.indexOf('.ic v(out)=2.5')
-  const nodeSetLine = netlistText.indexOf('.nodeset v(in)=1')
-  expect(initialConditionLine).toBeGreaterThanOrEqual(0)
-  expect(nodeSetLine).toBeGreaterThan(initialConditionLine)
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText(/\.OPTIONS\s+reltol=\.005/i)
+  await expect(netlist).toContainText(/\.IC\s+V\(out\)=2\.5/i)
+  await expect(netlist).toContainText(/\.NODESET\s+V\(in\)=1/i)
 })
 
 test('invalid global temperature focuses its setting before simulation', { tag: '@ui-smoke' }, async ({ page }) => {
