@@ -519,6 +519,19 @@ test('opening an example replaces stale multi-selection with its lesson componen
   await expect(page.locator('.canvas-label.selected')).toHaveCount(0)
 })
 
+test('opening another document closes its stale schematic context menu', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.locator('.circuit-part').first().click({ button: 'right' })
+  await expect(page.getByRole('menu', { name: /Options for/ })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('[data-example-id="ohms-law"]').getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.getByRole('menu', { name: /Options for/ })).toHaveCount(0)
+})
+
 test('RC lesson checks a time-constant prediction and recalculates it after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

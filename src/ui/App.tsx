@@ -829,7 +829,7 @@ function CurrentSourceWaveformEditor({ part, onChange, analysisSettingError, pwl
   </>
 }
 
-function Schematic({ project, symbolsById, deviceModels, connectivity, setSelection, setHoveredSchematicObject, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, currentDotSize, currentDotSpacing }: { project: Project; connectivity: Connectivity; setSelection: (selection: Selection) => void; setHoveredSchematicObject: (target: HoveredSchematicObject | ((current: HoveredSchematicObject) => HoveredSchematicObject)) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingRotation: Part['rotation']; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; currentDotSize: number; currentDotSpacing: number; symbolsById: Map<string, ImportedSymbol>; deviceModels: SpiceModelDefinition[] }) {
+function Schematic({ project, documentSessionId, symbolsById, deviceModels, connectivity, setSelection, setHoveredSchematicObject, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, currentAnimationEnabled, currentDotSize, currentDotSpacing }: { project: Project; documentSessionId: number; connectivity: Connectivity; setSelection: (selection: Selection) => void; setHoveredSchematicObject: (target: HoveredSchematicObject | ((current: HoveredSchematicObject) => HoveredSchematicObject)) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingRotation: Part['rotation']; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; currentAnimationEnabled: boolean; currentDotSize: number; currentDotSpacing: number; symbolsById: Map<string, ImportedSymbol>; deviceModels: SpiceModelDefinition[] }) {
   const selectedWireIdSet = useMemo(() => new Set(selectedWireIds), [selectedWireIds])
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const selectedNetLabelIdSet = useMemo(() => new Set(selectedNetLabelIds), [selectedNetLabelIds])
@@ -908,6 +908,35 @@ function Schematic({ project, symbolsById, deviceModels, connectivity, setSelect
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
+  const documentSessionRef = useRef(documentSessionId)
+  useEffect(() => {
+    if (documentSessionRef.current === documentSessionId) return
+    documentSessionRef.current = documentSessionId
+    if (viewCommitTimerRef.current !== null) {
+      window.clearTimeout(viewCommitTimerRef.current)
+      viewCommitTimerRef.current = null
+    }
+    viewRef.current = project.view
+    projectViewRef.current = project.view
+    activeSheetIdRef.current = project.activeSheetId
+    setViewState(project.view)
+    drag.current = null
+    dragPreviewElements.current = []
+    wirePointPreview.current = null
+    suppressCanvasClick.current = false
+    lastHoverPointerTargetRef.current = null
+    contextMenuReturnFocusRef.current = null
+    setWireStart(null)
+    setWirePreviewEnd(null)
+    setComponentPreview(null)
+    setSelectionBox(null)
+    setHoveredWireId(undefined)
+    setWireEndpointAnnouncement('')
+    setLabelDraft(null)
+    setContextMenu(null)
+    setContextPinPair({ positive: 0, negative: 1 })
+    setHoveredSchematicObject(null)
+  }, [documentSessionId, project.activeSheetId, project.view, setHoveredSchematicObject])
   const partsById = useMemo(() => new Map(project.parts.map((part) => [part.id, part])), [project.parts])
   const partNavigationIndex = useMemo(() => createPartNavigationIndex(project.parts), [project.parts])
   const wiresById = useMemo(() => new Map(project.wires.map((wire) => [wire.id, wire])), [project.wires])
@@ -1820,6 +1849,7 @@ export default function App() {
       return saved ? validateProject(JSON.parse(saved)) : createStarterProject()
     } catch { return createStarterProject() }
   })
+  const [projectSessionId, setProjectSessionId] = useState(0)
   const [initialSelectedPartId] = useState(() => (project.parts.find((part) => part.id === 'p-r1') ?? project.parts.find((part) => part.kind === 'resistor') ?? project.parts[0])?.id ?? null)
   const [selection, setSelection] = useState<Selection>(() => initialSelectedPartId ? { kind: 'part', id: initialSelectedPartId } : null)
   const hoveredSchematicObjectRef = useRef<HoveredSchematicObject>(null)
@@ -2011,6 +2041,7 @@ export default function App() {
           try {
             const recoveredProject = validateProject(JSON.parse(snapshot.json))
             setProjectState(recoveredProject)
+            resetDocumentInteractionState()
             const firstPart = recoveredProject.parts.find((part) => part.id === 'p-r1') ?? recoveredProject.parts.find((part) => part.kind === 'resistor') ?? recoveredProject.parts[0]
             setSelection(firstPart ? { kind: 'part', id: firstPart.id } : null)
             setSelectedPartIds(firstPart ? [firstPart.id] : [])
@@ -2043,10 +2074,17 @@ export default function App() {
   useEffect(() => {
     if (clipboardProjectRef.current !== project.rootSheetId) {
       copiedParts.current = null
+      pendingPasteSelection.current = null
       sheetSelectionState.current.clear()
     }
     clipboardProjectRef.current = project.rootSheetId
   }, [project.rootSheetId])
+  const resetDocumentInteractionState = () => {
+    setProjectSessionId((current) => current + 1)
+    pendingPasteSelection.current = null
+    sheetSelectionState.current.clear()
+    setHoveredSchematicObject(null)
+  }
   useEffect(() => {
     if (tourStep !== null) tourNextButtonRef.current?.focus()
     else {
@@ -2811,6 +2849,7 @@ export default function App() {
       setSheetInstancePath(findSheetInstancePath(parsed.activeSheetId, parsed.rootSheetId, [], new Set(), parsed) ?? [])
       pendingViewRef.current = null
       setProjectState(parsed)
+      resetDocumentInteractionState()
     setExampleLesson(null)
       setImportWarnings([])
       setCompatibilityDiagnostic(null)
@@ -3030,6 +3069,7 @@ export default function App() {
       const imported = parseLtspiceSchematic(source, ascFile.name, symbols, modelAssets, childSchematics, [], pwlFiles)
       pendingViewRef.current = null
       setProjectState(imported.project)
+      resetDocumentInteractionState()
     setExampleLesson(null)
       setImportWarnings(imported.warnings)
       setSelectedTraceIds([])
@@ -3966,6 +4006,7 @@ export default function App() {
     setSheetInstancePath([])
     pendingViewRef.current = null
     setProjectState(starter)
+    resetDocumentInteractionState()
     setExampleLesson(null)
     setImportWarnings([])
     setCompatibilityDiagnostic(null)
@@ -4022,7 +4063,7 @@ export default function App() {
     setSheetInstancePath([])
     pendingViewRef.current = null
     setProjectState(next)
-    sheetSelectionState.current.clear()
+    resetDocumentInteractionState()
     const lessons = {
       rc: { title: 'Watch the capacitor charge', guidance: 'Predict τ = R1 × C1 before running. One time constant marks when the capacitor reaches about 63% of its final voltage; then scrub the solved transient to compare.' },
       'ohms-law': { title: "Predict current with Ohm's law", guidance: 'Use the prediction check before you run the operating point. Then change R1 from 1 kΩ to 2 kΩ and rerun: the current should halve.' },
@@ -4222,7 +4263,7 @@ export default function App() {
             <button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button>
           </aside>
         )}
-        <Schematic project={project} symbolsById={symbolsById} deviceModels={importedDeviceModels} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} commitView={commitView} recordViewDraft={recordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={addPart} onClearPendingComponent={() => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) }} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/>
+        <Schematic project={project} documentSessionId={projectSessionId} symbolsById={symbolsById} deviceModels={importedDeviceModels} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} commitView={commitView} recordViewDraft={recordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={addPart} onClearPendingComponent={() => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) }} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/>
       </main>
 
       {additionalPlotPanels.map((panel, index) => <AdditionalPlotWindow key={panel.id} panel={panel} index={index} title={waveformWindowTitle(panel, index)} result={simulationResult} onUpdate={updatePlotPanel} onClose={closePlotPanel} onActivate={activatePlotPanel} onToggleTrace={togglePlotPanelTrace} onExport={exportWaveformCsv} onRangeChange={changePlotPanelRange}/>)}
