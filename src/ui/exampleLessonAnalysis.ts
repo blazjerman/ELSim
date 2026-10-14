@@ -250,6 +250,22 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
     ? superpositionSource1 / superpositionR1 / superpositionDenominator + superpositionSource2 / superpositionR2 / superpositionDenominator
     : null
   const superpositionSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
+  const isTheveninNortonLesson = lessonId === 'thevenin-norton'
+  const equivalentTheveninVoltage = isTheveninNortonLesson ? componentMagnitude(partsById.get('equivalent-vth')?.value ?? '5 V', 'source') : null
+  const equivalentTheveninResistance = isTheveninNortonLesson ? componentMagnitude(partsById.get('equivalent-rth')?.value ?? '500 Ω', 'resistor') : null
+  const equivalentTheveninLoad = isTheveninNortonLesson ? componentMagnitude(partsById.get('equivalent-rload-th')?.value ?? '1 kΩ', 'resistor') : null
+  const equivalentNortonCurrent = isTheveninNortonLesson ? componentMagnitude(partsById.get('equivalent-in')?.value ?? '10 mA', 'currentSource') : null
+  const equivalentNortonResistance = isTheveninNortonLesson ? componentMagnitude(partsById.get('equivalent-rn')?.value ?? '500 Ω', 'resistor') : null
+  const equivalentNortonLoad = isTheveninNortonLesson ? componentMagnitude(partsById.get('equivalent-rload-n')?.value ?? '1 kΩ', 'resistor') : null
+  const equivalentTheveninOutput = equivalentTheveninVoltage !== null && equivalentTheveninResistance !== null && equivalentTheveninLoad !== null && equivalentTheveninResistance + equivalentTheveninLoad > 0
+    ? equivalentTheveninVoltage * equivalentTheveninLoad / (equivalentTheveninResistance + equivalentTheveninLoad)
+    : null
+  const equivalentNortonOutput = equivalentNortonCurrent !== null && equivalentNortonResistance !== null && equivalentNortonLoad !== null && equivalentNortonResistance > 0 && equivalentNortonLoad > 0
+    ? equivalentNortonCurrent / (1 / equivalentNortonResistance + 1 / equivalentNortonLoad)
+    : null
+  const equivalentPredictedDifference = equivalentTheveninOutput !== null && equivalentNortonOutput !== null ? equivalentTheveninOutput - equivalentNortonOutput : null
+  const equivalentSolvedTheveninOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vthout)')?.values[0] : undefined
+  const equivalentSolvedNortonOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(nout)')?.values[0] : undefined
   const isResistorPowerLesson = lessonId === 'resistor-power'
   const resistorPowerResistance = isResistorPowerLesson ? componentMagnitude(partsById.get('resistor-power-r1')?.value ?? '1 kΩ', 'resistor') : null
   const resistorPowerSupply = isResistorPowerLesson ? componentMagnitude(partsById.get('resistor-power-v1')?.value ?? '5 V', 'source') : null
@@ -565,7 +581,13 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const voltageSwitchPredictedClosed = voltageSwitchThreshold !== null && voltageSwitchHysteresis !== null && voltageSwitchControlAt25Ms !== undefined
     ? voltageSwitchControlAt25Ms >= voltageSwitchThreshold + voltageSwitchHysteresis / 2
     : undefined
-  const lessonNextStep = lessonId === 'superposition' && simulationResult?.analysis === 'op'
+  const lessonNextStep = lessonId === 'thevenin-norton' && simulationResult?.analysis === 'op'
+    ? equivalentPredictedDifference !== null
+      ? simulationResultStale
+        ? `The previous solve measured VTHOUT = ${equivalentSolvedTheveninOutput !== undefined ? formatLessonVoltage(equivalentSolvedTheveninOutput) : 'not available'} and NOUT = ${equivalentSolvedNortonOutput !== undefined ? formatLessonVoltage(equivalentSolvedNortonOutput) : 'not available'}. The edited values predict VTHOUT − NOUT = ${formatLessonVoltage(equivalentPredictedDifference)}; rerun to compare the updated circuits.`
+        : `Ngspice solved VTHOUT = ${equivalentSolvedTheveninOutput !== undefined ? formatLessonVoltage(equivalentSolvedTheveninOutput) : 'not available'} and NOUT = ${equivalentSolvedNortonOutput !== undefined ? formatLessonVoltage(equivalentSolvedNortonOutput) : 'not available'}. The edited values predict a difference of ${formatLessonVoltage(equivalentPredictedDifference)}. Change IN from 10 mA to 8 mA and rerun; the Norton load voltage should fall while the Thevenin circuit stays the same.`
+      : 'Enter valid source and positive resistance values on both sides, then rerun to compare their output voltages.'
+    : lessonId === 'superposition' && simulationResult?.analysis === 'op'
     ? superpositionPrediction !== null
       ? simulationResultStale
         ? `The previous run measured VOUT = ${superpositionSolvedOutput !== undefined ? formatLessonVoltage(superpositionSolvedOutput) : 'not available'} with both sources active. The edited values predict ${formatLessonVoltage(superpositionPrediction)}; rerun to check. Set one voltage source to 0 V at a time and verify that the separate output voltages add to this total.`

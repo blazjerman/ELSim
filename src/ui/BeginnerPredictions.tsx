@@ -245,6 +245,24 @@ export function AcCutoffPrediction({ resistanceValue, capacitanceValue, filterTy
   />
 }
 
+export function TheveninNortonPrediction({ supplyValue, seriesResistanceValue, theveninLoadValue, currentValue, nortonResistanceValue, nortonLoadValue }: { supplyValue: string; seriesResistanceValue: string; theveninLoadValue: string; currentValue: string; nortonResistanceValue: string; nortonLoadValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const seriesResistance = componentMagnitude(seriesResistanceValue, 'resistor')
+  const theveninLoad = componentMagnitude(theveninLoadValue, 'resistor')
+  const current = componentMagnitude(currentValue, 'currentSource')
+  const nortonResistance = componentMagnitude(nortonResistanceValue, 'resistor')
+  const nortonLoad = componentMagnitude(nortonLoadValue, 'resistor')
+  const valid = supply !== null && seriesResistance !== null && theveninLoad !== null && current !== null && nortonResistance !== null && nortonLoad !== null
+    && seriesResistance > 0 && theveninLoad > 0 && nortonResistance > 0 && nortonLoad > 0
+  const theveninOutput = valid ? supply! * theveninLoad! / (seriesResistance! + theveninLoad!) : null
+  const nortonOutput = valid ? current! / (1 / nortonResistance! + 1 / nortonLoad!) : null
+  const difference = theveninOutput !== null && nortonOutput !== null ? theveninOutput - nortonOutput : null
+  const explanation = difference === null
+    ? ''
+    : `The Thevenin load voltage is ${formatValue(theveninOutput!)} V. The Norton output is I×(RN ∥ RL) = ${formatValue(nortonOutput!)} V. With VTH/RTH = ${supply !== null && seriesResistance !== null ? formatValue(supply / seriesResistance * 1000) : 'not available'} mA and RN = RTH, the models are equivalent. VTHOUT − NOUT = ${formatValue(difference)} V.`
+  return <NumericPrediction id="thevenin-norton-prediction" prompt="Predict the difference VTHOUT − NOUT" unit="V" predictedValue={difference} absoluteTolerance={0.02} explanation={explanation}/>
+}
+
 export function RlcResonancePrediction({ inductanceValue, capacitanceValue }: { inductanceValue: string; capacitanceValue: string }) {
   const inductance = componentMagnitude(inductanceValue, 'inductor')
   const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
@@ -351,7 +369,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'superposition' | 'wheatstone-bridge' | 'ac-cutoff' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'wheatstone-bridge' | 'ac-cutoff' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
@@ -369,6 +387,8 @@ type BeginnerPredictionProps = {
   initialVoltageValue?: string
   firstSourceValue?: string
   secondSourceValue?: string
+  currentValue?: string
+  seriesResistanceValue?: string
 }
 
 /** Keep lesson-only prediction logic out of the editor's initial download. */
@@ -380,6 +400,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'superposition': return <SuperpositionPrediction firstSourceValue={props.firstSourceValue ?? ''} secondSourceValue={props.secondSourceValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
+    case 'thevenin-norton': return <TheveninNortonPrediction supplyValue={props.supplyValue ?? ''} seriesResistanceValue={props.upperResistanceValue ?? ''} theveninLoadValue={props.lowerResistanceValue ?? ''} currentValue={props.currentValue ?? ''} nortonResistanceValue={props.seriesResistanceValue ?? ''} nortonLoadValue={props.loadResistanceValue ?? ''}/>
     case 'wheatstone-bridge': return <WheatstoneBridgePrediction supplyValue={props.supplyValue ?? ''} leftTopValue={props.leftTopValue ?? ''} leftBottomValue={props.leftBottomValue ?? ''} rightTopValue={props.rightTopValue ?? ''} rightBottomValue={props.rightBottomValue ?? ''}/>
     case 'ac-cutoff': return <AcCutoffPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''} filterType={props.filterType ?? 'low-pass'}/>
     case 'rlc-resonance': return <RlcResonancePrediction inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>

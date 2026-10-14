@@ -1,0 +1,10 @@
+ELSim Thevenin and Norton sources driving equal loads
+VTH vin 0 DC 5
+RTH vin vthout 500
+RLTH vthout 0 1k
+IN 0 nout DC 10m
+RN nout 0 500
+RLN nout 0 1k
+.op
+.print op v(vthout) v(nout)
+.end

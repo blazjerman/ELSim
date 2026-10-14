@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['bsource-basic-functions-op', 'behavioral-differential-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'rc-lowpass-ac', 'rc-highpass-ac', 'current-source-op', 'current-source-dc-sweep', 'two-source-dc-sweep', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'voltage-divider-op', 'superposition-op', 'rlc-ac', 'subckt-op', 'transformer-winding-loss-ac', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-param-arithmetic-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op']
+const fixtures = ['bsource-basic-functions-op', 'behavioral-differential-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'rc-lowpass-ac', 'rc-highpass-ac', 'current-source-op', 'current-source-dc-sweep', 'two-source-dc-sweep', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'voltage-divider-op', 'superposition-op', 'thevenin-norton-equivalent-op', 'rlc-ac', 'subckt-op', 'transformer-winding-loss-ac', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-param-arithmetic-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op']
 const hierarchyRepeatRaws = new Map()
 const hierarchyNestedRaws = new Map()
 
@@ -96,6 +96,10 @@ for (const fixture of fixtures) {
     assert.match(wasmResult.stdout, /vout\s+5\.000000e\+00/i, 'equal 1 kΩ resistors should divide 10 V to 5 V')
   }
   if (fixture === 'superposition-op') assert.match(wasmResult.stdout, /vout\s+4\.000000e\+00/i, '9 V and 3 V sources through equal 10 kΩ resistors should contribute 3 V and 1 V at the 10 kΩ load, summing to 4 V')
+  if (fixture === 'thevenin-norton-equivalent-op') {
+    assert.match(wasmResult.stdout, /vthout\s+3\.333333e\+00/i, '5 V with 500 Ω series resistance should produce 3.333 V across 1 kΩ')
+    assert.match(wasmResult.stdout, /nout\s+3\.333333e\+00/i, 'the equivalent 10 mA source with 500 Ω shunt resistance should produce the same 3.333 V')
+  }
   if (fixture === 'imported-subckt-param-arithmetic-op') {
     assert.match(wasmResult.stdout, /out_default\s+2\.000000e\+01/i, 'subcircuit parameter default should evaluate SCALE=2, GAIN={SCALE * 2}, and produce 20 V')
     assert.match(wasmResult.stdout, /out_override\s+3\.000000e\+01/i, 'per-instance SCALE=3 override should reevaluate dependent GAIN and produce 30 V')

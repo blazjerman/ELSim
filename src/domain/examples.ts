@@ -755,6 +755,65 @@ export function createSuperpositionExampleProject(): Project {
   return project
 }
 
+/** Side-by-side Thevenin and Norton models driving matching loads. */
+export function createTheveninNortonExampleProject(): Project {
+  const project = createStarterProject()
+  const theveninSource: Part = { id: 'equivalent-vth', kind: 'source', ref: 'VTH', value: '5 V', sourceMode: 'dc', x: 260, y: 400, rotation: 0 }
+  const theveninResistance: Part = { id: 'equivalent-rth', kind: 'resistor', ref: 'RTH', value: '500 Ω', x: 500, y: 400, rotation: 0 }
+  const theveninLoad: Part = { id: 'equivalent-rload-th', kind: 'resistor', ref: 'RLTH', value: '1 kΩ', x: 740, y: 400, rotation: 90 }
+  const nortonSource: Part = { id: 'equivalent-in', kind: 'currentSource', ref: 'IN', value: '10 mA', x: 1000, y: 400, rotation: 0 }
+  const nortonResistance: Part = { id: 'equivalent-rn', kind: 'resistor', ref: 'RN', value: '500 Ω', x: 1280, y: 360, rotation: 90 }
+  const nortonLoad: Part = { id: 'equivalent-rload-n', kind: 'resistor', ref: 'RLN', value: '1 kΩ', x: 1520, y: 360, rotation: 90 }
+  const [theveninPositive, theveninReturn] = componentPins(theveninSource)
+  const [theveninInput, theveninOutput] = componentPins(theveninResistance)
+  const [theveninLoadOutput, theveninLoadReturn] = componentPins(theveninLoad)
+  const [nortonReturn, nortonOutput] = componentPins(nortonSource)
+  const [nortonResistanceInput, nortonResistanceReturn] = componentPins(nortonResistance)
+  const [nortonLoadOutput, nortonLoadReturn] = componentPins(nortonLoad)
+  const point = (x: number, y: number): [number, number] => [x, y]
+  const route = (id: string, points: [number, number][]) => points.slice(0, -1).map((start, index) => ({
+    id: `${id}-${index + 1}`,
+    points: [start, points[index + 1]] as [[number, number], [number, number]],
+  }))
+  const wires = [
+    ...route('equivalent-thevenin-supply', [point(theveninPositive.x, theveninPositive.y), point(theveninPositive.x, 270), point(theveninInput.x, 270), point(theveninInput.x, theveninInput.y)]),
+    ...route('equivalent-thevenin-load', [point(theveninOutput.x, theveninOutput.y), point(620, theveninOutput.y), point(620, theveninLoadOutput.y), point(theveninLoadOutput.x, theveninLoadOutput.y)]),
+    ...route('equivalent-thevenin-ground-source', [point(theveninReturn.x, theveninReturn.y), point(theveninReturn.x, 520)]),
+    ...route('equivalent-thevenin-ground-load', [point(theveninLoadReturn.x, theveninLoadReturn.y), point(theveninLoadReturn.x, 520)]),
+    ...route('equivalent-thevenin-ground-bus', [point(theveninReturn.x, 520), point(theveninLoadReturn.x, 520)]),
+    ...route('equivalent-norton-source-output', [point(nortonOutput.x, nortonOutput.y), point(nortonOutput.x, 260)]),
+    ...route('equivalent-norton-output-bus', [point(nortonOutput.x, 260), point(nortonLoadOutput.x, 260)]),
+    ...route('equivalent-norton-resistor-top', [point(nortonResistanceInput.x, 260), point(nortonResistanceInput.x, nortonResistanceInput.y)]),
+    ...route('equivalent-norton-load-top', [point(nortonLoadOutput.x, 260), point(nortonLoadOutput.x, nortonLoadOutput.y)]),
+    ...route('equivalent-norton-ground-source', [point(nortonReturn.x, nortonReturn.y), point(nortonReturn.x, 520)]),
+    ...route('equivalent-norton-ground-rn', [point(nortonResistanceReturn.x, nortonResistanceReturn.y), point(nortonResistanceReturn.x, 520)]),
+    ...route('equivalent-norton-ground-load', [point(nortonLoadReturn.x, nortonLoadReturn.y), point(nortonLoadReturn.x, 520)]),
+    ...route('equivalent-norton-ground-bus', [point(nortonReturn.x, 520), point(nortonLoadReturn.x, 520)]),
+  ]
+  const junctions = [
+    { x: nortonResistanceInput.x, y: 260 }, { x: nortonLoadOutput.x, y: 260 },
+    { x: nortonResistanceReturn.x, y: 520 }, { x: nortonLoadReturn.x, y: 520 },
+  ]
+  const netLabels = [
+    { id: 'equivalent-thevenin-output-label', name: 'VTHOUT', x: theveninLoadOutput.x, y: theveninLoadOutput.y, visible: true },
+    { id: 'equivalent-norton-output-label', name: 'NOUT', x: nortonLoadOutput.x, y: nortonLoadOutput.y, visible: true },
+    { id: 'equivalent-thevenin-ground-label', name: '0', x: theveninReturn.x, y: 520, visible: true },
+    { id: 'equivalent-norton-ground-label', name: '0', x: nortonReturn.x, y: 520, visible: true },
+  ]
+  const parts = [theveninSource, theveninResistance, theveninLoad, nortonSource, nortonResistance, nortonLoad]
+  project.name = 'Thevenin and Norton equivalents'
+  project.parts = parts
+  project.wires = wires
+  project.junctions = junctions
+  project.netLabels = netLabels
+  project.sheets = [{ ...project.sheets[0], parts, wires, junctions, netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VTHOUT)', 'V(NOUT)'], ranges: {} }
+  project.view = { zoom: 0.8, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A grounded parallel-resistor network for learning how current divides by resistance. */
 export function createParallelResistorsExampleProject(): Project {
   const project = createStarterProject()
