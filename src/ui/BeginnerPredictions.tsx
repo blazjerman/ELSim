@@ -204,8 +204,25 @@ export function CurrentDividerPrediction({ supplyValue, firstResistanceValue, se
   />
 }
 
+export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const predictedSum = supply === null ? null : Math.abs(supply)
+  const explanation = predictedSum === null
+    ? ''
+    : `Kirchhoff’s voltage law: the drops around a closed loop add to the source, so V(R1) + V(R2) = ${formatValue(predictedSum)} V.`
+
+  return <NumericPrediction
+    id="series-voltage-drop-prediction"
+    prompt="Before running, predict the sum of voltage drops across R1 and R2"
+    unit="V"
+    predictedValue={predictedSum}
+    absoluteTolerance={0.01}
+    explanation={explanation}
+  />
+}
+
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
@@ -224,6 +241,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
     case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
+    case 'series-resistors': return <SeriesVoltageDropPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'capacitor-discharge': return <CapacitorDischargePrediction initialVoltageValue={props.initialVoltageValue ?? ''} resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'led-current-limiter': return <LedCurrentPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
   }

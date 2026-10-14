@@ -654,6 +654,36 @@ test('voltage-divider lesson checks the midpoint prediction and updates it when 
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
 })
 
+test('series-resistor lesson checks Kirchhoff voltage law before simulation', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Voltage drops in series resistors' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('spinbutton', { name: 'Before running, predict the sum of voltage drops across R1 and R2' })
+  await expect(lesson).toContainText('Kirchhoff’s voltage law says the drops around a closed loop add to the 10 V source')
+  await estimate.fill('8')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Not quite. Kirchhoff’s voltage law: the drops around a closed loop add to the source, so V(R1) + V(R2) = 10 V.')
+
+  await estimate.fill('10')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. Kirchhoff’s voltage law: the drops around a closed loop add to the source, so V(R1) + V(R2) = 10 V.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+
+  await page.locator('.circuit-part[data-part-id="divider-v1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="divider-v1:value"]').fill('12 V')
+  const updatedEstimate = page.getByRole('spinbutton', { name: 'Before running, predict the sum of voltage drops across R1 and R2' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('12')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. Kirchhoff’s voltage law: the drops around a closed loop add to the source, so V(R1) + V(R2) = 12 V.')
+})
+
 test('capacitor-discharge lesson checks the 10 ms voltage prediction and recalculates after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
