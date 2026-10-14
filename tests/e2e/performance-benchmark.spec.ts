@@ -3,6 +3,38 @@ import { performance } from 'node:perf_hooks'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
+async function startDomMutationCapture(page: import('@playwright/test').Page) {
+  await page.evaluate(() => {
+    type Capture = { records: number; componentIds: Set<string>; observer: MutationObserver }
+    const profileWindow = window as Window & { __elsimMutationCapture?: Capture }
+    const componentIds = new Set<string>()
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        const target = record.target instanceof Element ? record.target : record.target.parentElement
+        const part = target?.closest<SVGGElement>('.circuit-part')
+        if (part?.dataset.partId) componentIds.add(part.dataset.partId)
+      }
+      capture.records += records.length
+    })
+    const capture: Capture = { records: 0, componentIds, observer }
+    profileWindow.__elsimMutationCapture = capture
+    observer.observe(document.body, { attributes: true, childList: true, characterData: true, subtree: true })
+  })
+}
+
+async function stopDomMutationCapture(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    type Capture = { records: number; componentIds: Set<string>; observer: MutationObserver }
+    const profileWindow = window as Window & { __elsimMutationCapture?: Capture }
+    const capture = profileWindow.__elsimMutationCapture
+    if (!capture) return { mutationRecords: 0, changedComponentCount: 0 }
+    capture.records += capture.observer.takeRecords().length
+    capture.observer.disconnect()
+    delete profileWindow.__elsimMutationCapture
+    return { mutationRecords: capture.records, changedComponentCount: capture.componentIds.size }
+  })
+}
+
 test('measure result animation scrubbing for 500 components and 1,000 vectors', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
@@ -79,12 +111,14 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   await slider.press('Home')
   await expect(slider).toHaveValue('0')
   const initialReading = await visibleResistorTitle.textContent()
+  await startDomMutationCapture(page)
   const started = performance.now()
   await slider.press('End')
   await expect(slider).toHaveValue(await slider.getAttribute('max') ?? '')
   await expect(visibleResistorTitle).not.toHaveText(initialReading ?? '')
   await expect(offscreenResistorTitle).toHaveCount(0)
   const scrubMs = performance.now() - started
+  const viewportMutations = await stopDomMutationCapture(page)
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await page.locator('g.circuit-part[data-part-id="animation-bench-r-500"]').hover()
   await expect(offscreenResistorTitle).toContainText('R500')
@@ -93,12 +127,14 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   await page.locator('g.circuit-part[data-part-id="animation-bench-r-5"]').hover()
   await slider.press('Home')
   const fittedInitialReading = await visibleResistorTitle.textContent()
+  await startDomMutationCapture(page)
   const fullCanvasStarted = performance.now()
   await slider.press('End')
   await expect(visibleResistorTitle).not.toHaveText(fittedInitialReading ?? '')
   const fullCanvasScrubMs = performance.now() - fullCanvasStarted
+  const fullCanvasMutations = await stopDomMutationCapture(page)
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v4', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, sampledComponentsInInitialViewport: visibleAnimationCount, componentsAfterFit: fittedComponentCount, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, viewportScrubMs: Number(scrubMs.toFixed(2)), fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)) }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v5', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, sampledComponentsInInitialViewport: visibleAnimationCount, componentsAfterFit: fittedComponentCount, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations }, null, 2))
 })
 
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
