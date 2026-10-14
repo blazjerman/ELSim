@@ -6284,6 +6284,7 @@ test('flyback diode carries inductor current after the source pulse turns off', 
   await scrubToTime(slider, 0.015)
   const coil = page.locator('.circuit-part[data-part-id="flyback-l1"]')
   const diode = page.locator('.circuit-part[data-part-id="flyback-d1"]')
+  await diode.hover()
   await expect.poll(async () => (await coil.locator(':scope > title').textContent()) ?? '').toMatch(/-0\.\d+ V across pins/i)
   await expect(diode.locator(':scope > title')).toContainText(/A, flowing/)
   const diodeCurrent = Number((await diode.locator(':scope > title').textContent())?.match(/([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?) A, flowing/i)?.[1])

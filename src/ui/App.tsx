@@ -103,6 +103,10 @@ const FUTURE_COMPONENT_SHORTCUTS: Record<string, string> = {
   A: 'Alternate operational amplifier',
   I: 'Logic input', O: 'Logic output',
 }
+const RESULT_ANIMATED_PART_KINDS = new Set<PartKind>([
+  'capacitor', 'inductor', 'transformer', 'lamp', 'led', 'voltageSwitch', 'currentSwitch',
+  'inverter', 'logicGate', 'npn', 'pnp', 'nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet',
+])
 const EDITOR_SHORTCUTS = [
   ['m', 'Select and move'], ['w', 'Draw a wire by dragging'], [';', 'Place or edit a net label'], ['?', 'Probe a wire or component'], ['=', 'Toggle a wire-crossing junction'],
   ['Ctrl/⌘ + Enter', 'Run simulation'], ['Ctrl/⌘ + A', 'Select all components, wires, and labels'], ['Ctrl/⌘ + C / V', 'Copy and paste selected objects'], ['Ctrl/⌘ + Z', 'Undo'], ['Ctrl/⌘ + Shift + Z or Y', 'Redo'],
@@ -440,10 +444,12 @@ function defaultPlacementRotation(kind: PartKind): Part['rotation'] {
 
 const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, onNavigate, tool, onProbe, onSwitchToggle, componentSample, animate = false, symbol, detailed = true }: { part: Part; onSelect: (id: string, additive?: boolean) => void; onPointerDown: (event: PointerEvent<SVGGElement>, id: string) => void; onNavigate: (id: string, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') => void; tool: ToolMode; onProbe: (id: string) => void; onSwitchToggle: (id: string) => void; componentSample: (part: Part, sampleIndex: number | null) => ComponentSampleValues; animate?: boolean; symbol?: ImportedSymbol; detailed?: boolean }) {
   const uiState = usePartUiState(part.id)
-  const animationSample = useSimulationCursorWhen(animate)
-  const { voltage, current, secondaryCurrent, switchClosed, logicOutput } = useMemo(() => animate ? componentSample(part, animationSample) : {}, [animate, animationSample, componentSample, part])
   const selected = (uiState & 1) !== 0
   const focusable = (uiState & 2) !== 0
+  const [hovered, setHovered] = useState(false)
+  const sampleRequested = animate && (RESULT_ANIMATED_PART_KINDS.has(part.kind) || selected || hovered)
+  const animationSample = useSimulationCursorWhen(sampleRequested)
+  const { voltage, current, secondaryCurrent, switchClosed, logicOutput } = useMemo(() => sampleRequested ? componentSample(part, animationSample) : {}, [sampleRequested, animationSample, componentSample, part])
   const common = { stroke: selected ? '#86e3b7' : '#c6cec7', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
   const currentGlow = Math.min(1, Math.sqrt(Math.abs(current ?? 0) / 0.005) * 0.8)
   const secondaryCurrentGlow = Math.min(1, Math.sqrt(Math.abs(secondaryCurrent ?? 0) / 0.005) * 0.8)
@@ -559,7 +565,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     ? `${part.ref}, ${kindNames[part.kind]}, switch ${part.value.toLowerCase()}${selected ? ', selected' : ''}`
     : `${part.ref}, ${kindNames[part.kind]}, ${part.value || 'no value'}${part.kind === 'potentiometer' ? `, wiper at ${Math.round(Number(part.wiperPosition ?? '0.5') * 100)}% from upper terminal` : ''}${selected ? ', selected' : ''}`
   const showDetails = detailed || Boolean(symbol)
-  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} data-polarized={part.polarized ? 'true' : undefined} data-logic-state={logicState} data-gate-shape={logicGateShape} data-visual-detail={showDetails ? 'full' : 'compact'} role="button" tabIndex={focusable ? 0 : -1} aria-label={`${accessibilityLabel}${accessiblePortSummary ? `, pins: ${accessiblePortSummary}` : ''}${part.kind === 'capacitor' && part.polarized ? ', polarized, pin 1 positive' : ''}${logicState ? `, output ${logicState}` : ''}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space ContextMenu Shift+F10" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onKeyDown={(event) => {
+  return <g transform={`translate(${part.x} ${part.y}) rotate(${part.rotation})`} className={`circuit-part${selected ? ' selected' : ''}`} data-part-id={part.id} data-polarized={part.polarized ? 'true' : undefined} data-logic-state={logicState} data-gate-shape={logicGateShape} data-visual-detail={showDetails ? 'full' : 'compact'} role="button" tabIndex={focusable ? 0 : -1} aria-label={`${accessibilityLabel}${accessiblePortSummary ? `, pins: ${accessiblePortSummary}` : ''}${part.kind === 'capacitor' && part.polarized ? ', polarized, pin 1 positive' : ''}${logicState ? `, output ${logicState}` : ''}`} aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space ContextMenu Shift+F10" aria-pressed={isInteractiveSwitch ? part.value.toLowerCase() === 'on' : selected} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)} onKeyDown={(event) => {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); onNavigate(part.id, event.key); return }
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()

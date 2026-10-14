@@ -69,6 +69,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   const slider = page.getByRole('slider', { name: 'Simulation time' })
   await expect(slider).toBeVisible()
   expect(Number(await slider.getAttribute('max'))).toBeGreaterThan(1)
+  await page.locator('g.circuit-part[data-part-id="animation-bench-r-5"]').hover()
   const visibleResistorTitle = page.locator('g.circuit-part[data-part-id="animation-bench-r-5"] > title')
   await expect(visibleResistorTitle).toContainText('R5')
   const offscreenResistorTitle = page.locator('g.circuit-part[data-part-id="animation-bench-r-500"] > title')
@@ -85,11 +86,19 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   await expect(offscreenResistorTitle).toHaveCount(0)
   const scrubMs = performance.now() - started
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await page.locator('g.circuit-part[data-part-id="animation-bench-r-500"]').hover()
   await expect(offscreenResistorTitle).toContainText('R500')
-  const fittedAnimationCount = await page.locator('svg.schematic g.circuit-part > title').count()
-  expect(fittedAnimationCount).toBe(501)
+  const fittedComponentCount = await page.locator('svg.schematic g.circuit-part').count()
+  expect(fittedComponentCount).toBe(501)
+  await page.locator('g.circuit-part[data-part-id="animation-bench-r-5"]').hover()
+  await slider.press('Home')
+  const fittedInitialReading = await visibleResistorTitle.textContent()
+  const fullCanvasStarted = performance.now()
+  await slider.press('End')
+  await expect(visibleResistorTitle).not.toHaveText(fittedInitialReading ?? '')
+  const fullCanvasScrubMs = performance.now() - fullCanvasStarted
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v2', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, animatedComponentsInInitialViewport: visibleAnimationCount, animatedComponentsAfterFit: fittedAnimationCount, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, scrubMs: Number(scrubMs.toFixed(2)) }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v4', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, sampledComponentsInInitialViewport: visibleAnimationCount, componentsAfterFit: fittedComponentCount, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, viewportScrubMs: Number(scrubMs.toFixed(2)), fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)) }, null, 2))
 })
 
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
