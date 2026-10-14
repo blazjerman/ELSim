@@ -18,6 +18,9 @@ type FlowComponent = {
   order: string[]
 }
 
+const PIN_CURRENT_KINDS = new Set<Part['kind']>(['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'])
+const TWO_TERMINAL_CURRENT_KINDS = new Set<Part['kind']>(['source', 'currentSource', 'resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'switch', 'cccs', 'ccvs', 'behavioral'])
+
 export type WireCurrentSampler = (
   currentForPart: (part: Part) => number | undefined,
   currentForPin?: (part: Part, pinIndex: number) => number | undefined,
@@ -34,7 +37,7 @@ function graphNodeKey(net: string, point: { x: number; y: number }): string { re
 
 function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: Part) => number | undefined, currentForPin?: (part: Part, pinIndex: number) => number | undefined): Injection {
   if (part.kind === 'ground') return { ignored: true }
-  if (['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(part.kind)) {
+  if (PIN_CURRENT_KINDS.has(part.kind)) {
     const current = currentForPin?.(part, pinIndex)
     return current === undefined || !Number.isFinite(current) ? {} : { value: -current }
   }
@@ -56,8 +59,7 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
     const outputPin = part.kind === 'inverter' ? 1 : 2
     return pinIndex !== outputPin ? { value: 0 } : current === undefined || !Number.isFinite(current) ? {} : { value: -current }
   }
-  const twoTerminal = ['source', 'currentSource', 'resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'switch', 'cccs', 'ccvs', 'behavioral'].includes(part.kind)
-  if (!twoTerminal || pinIndex > 1) return {}
+  if (!TWO_TERMINAL_CURRENT_KINDS.has(part.kind) || pinIndex > 1) return {}
   const current = currentForPart(part)
   return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex === 0 ? -current : current }
 }
