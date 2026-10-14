@@ -830,9 +830,9 @@ const WireCurrentFlowLayer = memo(function WireCurrentFlowLayer({ sampleFlows, a
 }) {
   const sampleIndex = useSimulationCursor()
   const flows = useMemo(() => sampleFlows(sampleIndex), [sampleIndex, sampleFlows])
-  return <g className="wire-current-flow-layer" aria-hidden="true" pointerEvents="none">{Array.from(flows, ([wireId, segments]) => segments.map((segment, index) => (
-    <WireFlowPath key={`${wireId}:${index}`} wireId={wireId} index={index} segment={segment} enabled={animationEnabled} dotSize={dotSize} dotSpacing={dotSpacing}/>
-  )))}</g>
+  return <g className="wire-current-flow-layer" aria-hidden="true" pointerEvents="none">{Array.from(flows, ([wireId, segments]) => segments.length ? <g key={wireId} data-wire-id={wireId}>
+    {segments.map((segment, index) => <WireFlowPath key={`${wireId}:${index}`} wireId={wireId} index={index} segment={segment} enabled={animationEnabled} dotSize={dotSize} dotSpacing={dotSpacing}/>)
+  }</g> : null)}</g>
 })
 
 function sameFlowPathGeometry(left: readonly [number, number][], right: readonly [number, number][]): boolean {
