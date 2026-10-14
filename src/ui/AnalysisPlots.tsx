@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange } from '../domain/project'
 import { extremaIndices, plotPolylinePoints, valueRange, valueRangeAtIndices } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
-import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation } from './simulationCursor'
+import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { formatTime } from './formatTime'
 import { getAnalysisCursor, setAnalysisCursor, useAnalysisCursor } from './analysisCursor'
 
@@ -290,7 +290,7 @@ function TransientCursorReadout({ axis, shown, traceIndexById, colors, keyboardA
   colors: string[]
   keyboardAnnouncement: string
 }) {
-  const cursorIndex = useSimulationCursorAnimation()
+  const cursorIndex = useSimulationCursorWhen(shown.length > 0)
   return <><div className="cursor-readout">{cursorIndex !== null && shown.map((trace) => {
     const time = axis?.[cursorIndex] ?? 0
     const index = axis === trace.axis && cursorIndex >= 0 && cursorIndex < trace.axis.length

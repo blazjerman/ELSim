@@ -1795,7 +1795,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
   const contextPart = contextMenu?.kind === 'part' ? partsById.get(contextMenu.id) : undefined
   const contextPinNames = contextPart ? (contextPart.modelPins ?? componentDefinitionFor(contextPart.kind).pins.map((pin) => pin.name)).map((name, index) => name === 'pin1' || name === 'pin2' ? `terminal ${index + 1}` : name) : []
   const currentProbesUnavailable = simulationResult?.analysis === 'ac' || simulationResult?.analysis === 'noise'
-  const wireFlowSampler = useMemo(() => currentAnimationEnabled && resultIsCurrent && resultConnectivity
+  const wireFlowSampler = useMemo(() => currentAnimationEnabled && resultIsCurrent && resultConnectivity && project.wires.length > 0
     ? createWireCurrentFlowSampler(project, resultConnectivity)
     : undefined, [project.parts, project.wires, project.junctions, project.netLabels, resultConnectivity, resultIsCurrent, currentAnimationEnabled])
   const sampleWireFlows = useCallback((sampleIndex: number | null) => {
