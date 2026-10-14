@@ -374,12 +374,12 @@ export function isSafeSubcircuitParameterValue(value: string): boolean {
   const scalar = value.trim().replace(/^\{(.*)\}$/, '$1')
   if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i.test(scalar)) return true
 
-  // Accept only numeric arithmetic and parameter names inside an optional
-  // brace pair. This preserves SPICE expressions without evaluating code.
+  // Accept bounded arithmetic and deterministic ngspice math calls inside an
+  // optional brace pair. Expressions are validated, never evaluated in JS.
   const expression = value.trim().replace(/^\{([\s\S]*)\}$/, '$1')
   if (!expression || expression.length > 64) return false
   const tokens: string[] = []
-  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?|[A-Za-z_][A-Za-z0-9_]*|[()+*/^\-]/iy
+  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?|[A-Za-z_][A-Za-z0-9_]*|[(),+*/^\-]/iy
   let offset = 0
   while (offset < expression.length) {
     tokenPattern.lastIndex = offset
@@ -391,6 +391,17 @@ export function isSafeSubcircuitParameterValue(value: string): boolean {
   }
   let index = 0
   let depth = 0
+  const functionArity: Record<string, number> = {
+    sqrt: 1,
+    sin: 1, cos: 1, tan: 1,
+    sinh: 1, cosh: 1, tanh: 1,
+    asin: 1, acos: 1, atan: 1, arctan: 1,
+    asinh: 1, acosh: 1, atanh: 1,
+    exp: 1, ln: 1, log: 1, abs: 1,
+    nint: 1, int: 1, floor: 1, ceil: 1, sgn: 1,
+    pow: 2, pwr: 2, min: 2, max: 2,
+    ternary_fcn: 3,
+  }
   const primary = (): boolean => {
     const token = tokens[index]
     if (!token) return false
@@ -402,8 +413,27 @@ export function isSafeSubcircuitParameterValue(value: string): boolean {
       depth -= 1
       return valid
     }
-    if (token === ')' || /^[+*/^\-]$/.test(token)) return false
+    if (token === ')' || token === ',' || /^[+*/^\-]$/.test(token)) return false
     index += 1
+    if (/^[A-Za-z_]/.test(token) && tokens[index] === '(') {
+      const arity = functionArity[token.toLowerCase()]
+      if (arity === undefined) return false
+      if (++depth > 16) return false
+      index += 1
+      let argumentCount = 0
+      if (tokens[index] !== ')') {
+        while (true) {
+          if (!sum()) return false
+          argumentCount += 1
+          if (tokens[index] !== ',') break
+          index += 1
+        }
+      }
+      const valid = tokens[index] === ')' && argumentCount === arity
+      if (tokens[index] === ')') index += 1
+      depth -= 1
+      return valid
+    }
     return true
   }
   const power = (): boolean => primary() && (tokens[index] !== '^' || (index += 1, unary()))

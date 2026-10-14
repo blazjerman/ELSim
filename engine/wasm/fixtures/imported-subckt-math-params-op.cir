@@ -1,0 +1,10 @@
+ELSim imported subcircuit deterministic math parameter operating point
+V1 IN 0 5
+XDEFAULT IN OUT_DEFAULT AMP_MATH
+XOVERRIDE IN OUT_OVERRIDE AMP_MATH gain={sqrt(9)}
+.SUBCKT AMP_MATH IN OUT gain={max(sqrt(16), 2)}
+EGAIN OUT 0 IN 0 {gain}
+.ENDS AMP_MATH
+.op
+.print op v(out_default) v(out_override)
+.end
