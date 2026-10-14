@@ -313,7 +313,7 @@ export function modelFunctionSignaturesForLibraries<T extends Pick<ModelLibraryI
   return signatures
 }
 
-function parseModelCard(text: string, line: LogicalLine, scope?: string): SpiceModelDefinition {
+function parseModelCard(text: string, line: LogicalLine, scope?: string, functions: ReadonlyMap<string, number> = new Map()): SpiceModelDefinition {
   const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+ako\s*:\s*\S+\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
     ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
   const name = modelHeader?.[1], type = modelHeader?.[2]
@@ -325,7 +325,7 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string): SpiceM
   const parameters: SubcircuitParameter[] = []
   for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|[^\s,)]+)/g)) {
     const value = match[2].replace(/^\{(.*)\}$/, '$1')
-    if (isSafeSubcircuitParameterValue(value) && !parameters.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) parameters.push({ name: match[1], defaultValue: value })
+    if (isSafeSubcircuitParameterValue(match[2], functions) && !parameters.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) parameters.push({ name: match[1], defaultValue: value })
   }
   return { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
 }
@@ -780,7 +780,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (directive === '.temp') throw new Error(`Line ${line.start}: .TEMP sets the global circuit temperature and cannot appear inside a .SUBCKT.`)
       if (directive === '.ic' || directive === '.nodeset') throw new Error(`Line ${line.start}: ${tokens[0]} applies to the whole circuit and cannot appear inside a .SUBCKT.`)
       if (directive === '.model') {
-        const model = parseModelCard(text, line, activeSubcircuits.at(-1)!.name)
+        const model = parseModelCard(text, line, activeSubcircuits.at(-1)!.name, functionArities)
         registerModelCard(model, conditionalBlocks.map(({ id, branch }) => ({ id, branch })), seenModelNames, models)
         continue
       }
@@ -813,7 +813,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       }
       modelLines.push(line)
       if (directive === '.model') {
-        const model = parseModelCard(text, line)
+        const model = parseModelCard(text, line, undefined, functionArities)
         registerModelCard(model, conditionalBlocks.map(({ id, branch }) => ({ id, branch })), seenModelNames, models)
       }
       sawTopLevelRecord = true

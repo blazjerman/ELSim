@@ -294,6 +294,20 @@ test('imported subcircuit defaults and instance overrides can call included libr
   assert.throws(() => validateProject(missingInclude), /not available from its library include chain/)
 })
 
+test('imported .MODEL defaults can call functions only from their library include chain', () => {
+  const project = createBlockProject()
+  project.modelAssets = [
+    { id: 'device-models', filename: 'devices.lib', content: '.include helpers.lib\n.MODEL DFAST D(IS={SCALE(2)})', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'model-helpers', filename: 'helpers.lib', content: '.FUNC SCALE(x) {1n*x}\n', sha256: 'b'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+
+  assert.doesNotThrow(() => validateProject(project))
+
+  const missingInclude = structuredClone(project)
+  missingInclude.modelAssets[0].content = missingInclude.modelAssets[0].content.replace('.include helpers.lib\n', '')
+  assert.throws(() => validateProject(missingInclude), /\.MODEL DFAST parameter IS calls a function that is not available from its library include chain/)
+})
+
 test('nested sheet data generates inner definitions before outer reusable blocks', () => {
   const project = createBlockProject()
   const outer = project.sheets[1]

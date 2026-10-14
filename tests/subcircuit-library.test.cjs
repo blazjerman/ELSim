@@ -26,6 +26,12 @@ test('parses top-level .FUNC signatures for forward-referenced subcircuit defaul
   assert.throws(() => parseSubcircuitLibrary('.FUNC F(x) {x}\n.FUNC f(x, y) {x+y}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /conflicting argument counts/)
 })
 
+test('parses .MODEL parameters that call forward-declared library functions', () => {
+  const parsed = parseSubcircuitLibrary('.MODEL DFAST D(IS={SCALE(2)})\n.FUNC SCALE(x) {1n*x}\n')
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'SCALE(2)' }])
+  assert.deepEqual(parsed.functions.map(({ name, arity }) => ({ name, arity })), [{ name: 'SCALE', arity: 1 }])
+})
+
 test('imported functions are scoped to the model and its project-local include chain', () => {
   const assets = [
     { asset: { id: 'root', filename: 'root.lib', content: '.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT' }, parsed: parseSubcircuitLibrary('.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT') },

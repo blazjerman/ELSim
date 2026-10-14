@@ -521,6 +521,11 @@ export function validateProject(input: unknown): Project {
       if (!importedDefinitionByName.has(name)) importedDefinitionByName.set(name, { asset, definition, functions })
     }
     for (const model of parsed.models) {
+      for (const parameter of model.parameters) {
+        // .MODEL parsing stores the expression without its optional SPICE
+        // braces; restore them for the shared bounded-expression validator.
+        if (!isSafeSubcircuitParameterValue(`{${parameter.defaultValue}}`, functions)) throw new Error(`Line ${model.startLine}: .MODEL ${model.name} parameter ${parameter.name} calls a function that is not available from its library include chain.`)
+      }
       if (model.scope) continue
       const name = model.name.toLowerCase()
       if (!importedDeviceModelByName.has(name)) importedDeviceModelByName.set(name, model)

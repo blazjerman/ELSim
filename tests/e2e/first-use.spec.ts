@@ -9551,6 +9551,27 @@ test('conditional model parameter controls disclose defaults that vary by branch
   await expect(modelParameter).toContainText('IS · default 1e-14')
 })
 
+test('imported .MODEL defaults that call .FUNC helpers stay in the generated netlist', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const modelLibrary = '.MODEL USER_NPN NPN (IS=1e-14 BF={SCALE(5)} VAF=100)\n.FUNC SCALE(x) {2*x}\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'function-backed-model.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from function-backed-model\.lib/)).toBeVisible()
+  await page.locator('.circuit-part[aria-label^="Q1,"]').click()
+  await page.getByLabel('Device model for Q1').selectOption('USER_NPN')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')
+  await expect(netlist).toContainText('.FUNC SCALE(x) {2*x}')
+  await expect(netlist).toContainText('.MODEL USER_NPN NPN (IS=1e-14 BF={SCALE(5)} VAF=100)')
+})
+
 test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
