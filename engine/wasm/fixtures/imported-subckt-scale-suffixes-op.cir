@@ -1,0 +1,9 @@
+ELSim imported subcircuit ngspice scale suffix operating point
+V1 IN 0 5
+XAMP IN OUT AMP
+.SUBCKT AMP IN OUT PARAMS: RVAL=1mil TINY=1a UNIT=10kOhm MIXED={2mil + 3a}
+EGAIN OUT 0 IN 0 {RVAL/RVAL + TINY/TINY + UNIT/UNIT + MIXED/MIXED - 3}
+.ENDS AMP
+.op
+.print op v(out)
+.end

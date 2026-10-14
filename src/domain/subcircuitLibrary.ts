@@ -532,14 +532,18 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
 export function isSafeSubcircuitParameterValue(value: string, customFunctions: ReadonlyMap<string, number> = new Map()): boolean {
   if (typeof value !== 'string' || value.length > 64) return false
   const scalar = value.trim().replace(/^\{(.*)\}$/, '$1')
-  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i.test(scalar)) return true
+  // ngspice §2.1.4.2 scale factors include both the layout unit `mil`
+  // (25.4 µ) and atto (`a`), in addition to the familiar SI prefixes.
+  // ngspice ignores trailing alphabetic unit text after a numeric field,
+  // while recognizing the longest scale factor first (notably `meg` and `mil`).
+  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*$/i.test(scalar)) return true
 
   // Accept bounded arithmetic and deterministic ngspice math calls inside an
   // optional brace pair. Expressions are validated, never evaluated in JS.
   const expression = value.trim().replace(/^\{([\s\S]*)\}$/, '$1')
   if (!expression || expression.length > 64) return false
   const tokens: string[] = []
-  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?|[A-Za-z_][A-Za-z0-9_]*|[(),+*/^\-]/iy
+  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*|[A-Za-z_][A-Za-z0-9_]*|[(),+*/^\-]/iy
   let offset = 0
   while (offset < expression.length) {
     tokenPattern.lastIndex = offset
