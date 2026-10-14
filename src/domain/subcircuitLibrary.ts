@@ -12,7 +12,8 @@ export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: st
 export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number; section?: string }
 export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device' | 'measurement' | 'function'; analysis?: 'tran' | 'ac' | 'dc'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
 export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; section?: string; reason: 'missing' | 'ambiguous' | 'unsafe' | 'section' }
-export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
+export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string>; deviceModelBinAssets: Map<string, string[]> }
+export type NgspiceBsim3BinFamily<T extends SpiceModelDefinition = SpiceModelDefinition> = { name: string; displayName: string; type: string; binCount: number; models: T[] }
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
 export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInput> = { assets: { asset: T; parsed: ParsedSubcircuitLibrary }[]; dependencies: ModelDependencyAnalysis }
 
@@ -456,6 +457,34 @@ function ngspiceBsim3BinBase(model: SpiceModelDefinition): string | undefined {
   if (!['lmin', 'lmax', 'wmin', 'wmax'].every((name) => parameters.has(name))) return undefined
   const match = model.name.match(/^(.+)\.(\d+)$/)
   return match?.[1].toLowerCase()
+}
+
+/** Group native ngspice BSIM3 bin cards so a MOSFET can refer to their base name. */
+export function ngspiceBsim3BinFamilies<T extends SpiceModelDefinition>(models: T[]): NgspiceBsim3BinFamily<T>[] {
+  const allNames = new Set(models.filter((model) => !model.scope).map((model) => model.name.toLowerCase()))
+  const groups = new Map<string, T[]>()
+  for (const model of models) {
+    if (model.scope) continue
+    const base = ngspiceBsim3BinBase(model)
+    if (!base || allNames.has(base)) continue
+    const key = `${base}\0${model.type.toLowerCase()}`
+    const group = groups.get(key)
+    if (group) group.push(model)
+    else groups.set(key, [model])
+  }
+  const familyTypes = new Map<string, Set<string>>()
+  for (const key of groups.keys()) {
+    const [name, type] = key.split('\0')
+    const types = familyTypes.get(name) ?? new Set<string>()
+    types.add(type)
+    familyTypes.set(name, types)
+  }
+  return [...groups.entries()].flatMap(([key, familyModels]) => {
+    const [name, type] = key.split('\0')
+    return familyTypes.get(name)?.size === 1
+      ? [{ name, displayName: familyModels[0].name.replace(/\.\d+$/, ''), type, binCount: familyModels.length, models: familyModels }]
+      : []
+  })
 }
 
 const alternateBjtModelNames = new WeakMap<ModelDependency, string[]>()
@@ -1298,7 +1327,14 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     }
   }
   const conflicts = [...definitionLocations.values()].filter((conflict) => conflict.definitions.length > 1)
-  return { missing, missingIncludes, recursiveChains, resolved, resolvedIncludes, conflicts, subcircuitAssets, deviceModelAssets }
+  const deviceModelBinAssets = new Map<string, string[]>()
+  const allBsim3BinCards = [...globalBsim3Bins.values()].flat()
+  const deviceModelCandidates = [...globalDeviceModels.values(), ...allBsim3BinCards.map(({ model }) => model)]
+  for (const family of ngspiceBsim3BinFamilies(deviceModelCandidates)) {
+    const assetIds = [...new Set(allBsim3BinCards.filter(({ model }) => ngspiceBsim3BinBase(model) === family.name).map(({ assetId }) => assetId))]
+    if (assetIds.length) deviceModelBinAssets.set(family.name, assetIds)
+  }
+  return { missing, missingIncludes, recursiveChains, resolved, resolvedIncludes, conflicts, subcircuitAssets, deviceModelAssets, deviceModelBinAssets }
 }
 
 /** Resolve references between imported libraries and report missing cards and recursive .SUBCKT chains. */
@@ -1319,7 +1355,10 @@ export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: 
       const name = part.modelName.toLowerCase(), assetId = analysis.subcircuitAssets.get(name)
       if (assetId) { addAsset(assetId); pending.push(name) }
     } else if (part.deviceModel) {
-      addAsset(analysis.deviceModelAssets.get(part.deviceModel.toLowerCase()))
+      const modelName = part.deviceModel.toLowerCase()
+      const binAssets = analysis.deviceModelBinAssets.get(modelName)
+      if (binAssets?.length) for (const assetId of binAssets) addAsset(assetId)
+      else addAsset(analysis.deviceModelAssets.get(modelName))
     }
   }
   const visited = new Set<string>()

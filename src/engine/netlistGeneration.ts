@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
@@ -175,6 +175,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   for (const model of importedDeviceModels) {
     const key = model.name.toLowerCase()
     if (!importedDeviceModelsByName.has(key)) importedDeviceModelsByName.set(key, model)
+  }
+  for (const family of ngspiceBsim3BinFamilies(importedDeviceModels)) {
+    if (!importedDeviceModelsByName.has(family.name)) importedDeviceModelsByName.set(family.name, { ...family.models[0], name: family.displayName, parameters: [] })
   }
   const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary, undefined, projectModelFunctions, { allowGroundPins: true }).subcircuits : []
   const subcircuitsByName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()

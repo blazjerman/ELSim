@@ -1628,6 +1628,25 @@ test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin ord
   assert.match(createNetlistArtifact(project).diagnostics.map(({ message }) => message).join('\n'), /not a NMOS model/i)
 })
 
+test('standalone MOSFET can reference an imported unsuffixed BSIM3 bin family', () => {
+  const project = createStarterProject()
+  const mosfet = { id: 'm-binned', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'NCH', x: 700, y: 500, rotation: 0 }
+  project.parts.push(mosfet)
+  project.netLabels.push(...componentPins(mosfet).map((pin, index) => ({
+    id: `m-binned-net-${index}`, name: `m1pin${index}`, x: pin.x, y: pin.y, visible: false,
+  })))
+  project.modelAssets = [{
+    id: 'binned-models', filename: 'nch.lib', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+    content: '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7\n.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5',
+  }]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^M1 m1pin0 m1pin1 m1pin2 m1pin3 NCH$/m)
+  assert.match(artifact.text, /^\.MODEL NCH\.1 NMOS/m)
+  assert.match(artifact.text, /^\.MODEL NCH\.2 NMOS/m)
+  assert.doesNotMatch(artifact.text, /^\.MODEL NCH NMOS/m)
+})
+
 test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'vdmos-models', filename: 'power-mosfets.lib', content: '.MODEL NPOWER VDMOS(VTO=2)\n.MODEL PPOWER VDMOS Pchan VTO=-2', sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]

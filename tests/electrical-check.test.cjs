@@ -65,6 +65,21 @@ test('device-model preflight matches each built-in device family to its SPICE ca
   }
 })
 
+test('MOSFET preflight accepts the unsuffixed base name of imported native BSIM3 bins', () => {
+  const project = createStarterProject()
+  const mosfet = { id: 'binned-nmos', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'NCH', x: 800, y: 600, rotation: 0 }
+  project.parts = [mosfet]
+  project.wires = []
+  project.junctions = []
+  project.netLabels = []
+  project.modelAssets = [{
+    id: 'binned-models', filename: 'nch.lib', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+    content: '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7\n.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5',
+  }]
+  const issues = checkCircuit(project)
+  assert.equal(issues.some((issue) => issue.id === `missing-device-model:${mosfet.id}` || issue.id === `incompatible-device-model:${mosfet.id}`), false)
+})
+
 test('blank passive value is accepted only when its imported model declares the SPICE default', () => {
   const project = createStarterProject()
   const capacitor = project.parts.find((part) => part.kind === 'capacitor')

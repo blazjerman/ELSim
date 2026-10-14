@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
@@ -1196,6 +1196,24 @@ test('resolves native BSIM3 model-bin references and retains every bin asset for
   assert.deepEqual(analysis.missing, [])
   assert.deepEqual(analysis.resolved.filter(({ reference }) => reference === 'M1').map(({ targetAssetId }) => targetAssetId).sort(), ['long-bin', 'short-bin'])
   assert.deepEqual([...requiredModelAssetIds(analysis, [{ kind: 'subcircuit', modelName: 'BSW' }])].sort(), ['ic', 'long-bin', 'short-bin'])
+  assert.deepEqual(analysis.deviceModelBinAssets.get('nch'), ['short-bin', 'long-bin'])
+  assert.deepEqual([...requiredModelAssetIds(analysis, [{ kind: 'nmos', deviceModel: 'NCH' }])].sort(), ['long-bin', 'short-bin'])
+  const binCards = assets.slice(1).flatMap(({ content }) => parseSubcircuitLibrary(content).models)
+  assert.deepEqual(ngspiceBsim3BinFamilies(binCards).map(({ name, displayName, type, binCount }) => ({ name, displayName, type, binCount })), [{ name: 'nch', displayName: 'NCH', type: 'nmos', binCount: 2 }])
+})
+
+test('BSIM3 bin aliases are omitted when a standalone model already owns the base name', () => {
+  const models = parseSubcircuitLibrary([
+    '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7',
+    '.MODEL NCH NMOS LEVEL=1 VTO=2 KP=20u',
+  ].join('\n')).models
+  assert.deepEqual(ngspiceBsim3BinFamilies(models), [])
+  const analysis = analyzeModelDependencies([
+    { id: 'bin', filename: 'bins.lib', content: '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7' },
+    { id: 'base', filename: 'base.lib', content: '.MODEL NCH NMOS LEVEL=1 VTO=2 KP=20u' },
+  ])
+  assert.equal(analysis.deviceModelBinAssets.has('nch'), false)
+  assert.deepEqual([...requiredModelAssetIds(analysis, [{ kind: 'nmos', deviceModel: 'NCH' }])], ['base'])
 })
 
 test('reports missing model dependencies and recursive subcircuit chains', () => {

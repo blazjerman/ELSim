@@ -3,7 +3,7 @@ import type { Connectivity } from './connectivity'
 import { componentPins } from './geometry'
 import type { Part, Project } from './project'
 import { componentMagnitude } from './componentValue'
-import { analyzeModelDependencies, parseSubcircuitLibrary } from './subcircuitLibrary'
+import { analyzeModelDependencies, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionFor, compatibleDeviceModelType, deviceModelTypeMatches } from './componentDefinitions'
 
@@ -123,12 +123,19 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   }, connectivity)
 
   const importedDeviceModels = new Map<string, { type: string; channel?: 'n' | 'p'; parameters: { name: string; defaultValue: string }[] }>()
+  const importedDeviceModelCards = []
   for (const asset of project.modelAssets ?? []) {
     try {
-      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope || ['r', 'c', 'l'].includes(model.type.toLowerCase())) importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel: model.channel, parameters: model.parameters })
+      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope || ['r', 'c', 'l'].includes(model.type.toLowerCase())) {
+        importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel: model.channel, parameters: model.parameters })
+        if (!model.scope) importedDeviceModelCards.push(model)
+      }
     } catch {
       // Invalid library syntax has its own importer diagnostic.
     }
+  }
+  for (const family of ngspiceBsim3BinFamilies(importedDeviceModelCards)) {
+    if (!importedDeviceModels.has(family.name)) importedDeviceModels.set(family.name, { type: family.type, parameters: [] })
   }
   for (const { sheet, topLevelInstanceId } of reachableSheets) {
     const partsByReference = new Map<string, Project['parts']>()

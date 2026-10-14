@@ -1890,6 +1890,37 @@ test('standalone resistor capacitor and inductor can select imported native mode
   await expect(page.locator('.netlist-modal pre')).toContainText(/^L1 .* L_CUSTOM$/m)
 })
 
+test('standalone MOSFET can select an imported BSIM3 bin family by its base name', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createStarterProject()
+  const mosfet = { id: 'm-binned', kind: 'nmos' as const, ref: 'M1', value: '0', x: 700, y: 500, rotation: 0 as const }
+  project.parts.push(mosfet)
+  project.netLabels.push(...componentPins(mosfet).map((pin, index) => ({
+    id: `m-binned-net-${index}`, name: `m1pin${index}`, x: pin.x, y: pin.y, visible: false,
+  })))
+  const root = project.sheets.find((sheet) => sheet.id === project.rootSheetId)!
+  project.sheets[project.sheets.indexOf(root)] = { ...root, parts: project.parts, netLabels: project.netLabels }
+  const savedProject = validateProject(project)
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(savedProject))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'nch-bins.lib', mimeType: 'text/plain', buffer: Buffer.from([
+      '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7',
+      '.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5',
+    ].join('\n')),
+  })
+  await page.locator('.circuit-part[data-part-id="m-binned"]').click()
+  const modelPicker = page.getByLabel('Device model for M1')
+  await expect(modelPicker.locator('option', { hasText: 'NCH (NMOS · 2 BSIM3 bins)' })).toHaveCount(1)
+  await modelPicker.selectOption('NCH')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText(/^M1 m1pin0 m1pin1 m1pin2 m1pin3 NCH$/m)
+  await expect(netlist).toContainText(/^\.MODEL NCH\.1 NMOS/m)
+  await expect(netlist).toContainText(/^\.MODEL NCH\.2 NMOS/m)
+})
+
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
