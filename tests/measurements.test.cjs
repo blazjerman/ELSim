@@ -52,7 +52,7 @@ test('imported ngspice measurements return values with original library source l
     ],
     diagnostics: [],
   }
-  const parsed = parseImportedMeasurementOutput(artifact, 'output_peak = 5.00000e+00 at= 1.00000e-02\nsettle = 2.50000e-03 targ= 7.50000e-03 trig= 5.00000e-03')
+  const parsed = parseImportedMeasurementOutput(artifact, 'output_peak = 5.00000e+00 at= 1.00000e-02\nsettle = 2.50000e-03 targ= 7.50000e-03 trig= 5.00000e-03', 'tran')
   assert.deepEqual(parsed.diagnostics, [])
   assert.deepEqual(parsed.results.map(({ id, operation, value, sourceAssetId, sourceLine }) => ({ id, operation, value, sourceAssetId, sourceLine })), [
     { id: 'output_peak', operation: 'native', value: 5, sourceAssetId: 'asset-rc', sourceLine: 17 },
@@ -60,27 +60,34 @@ test('imported ngspice measurements return values with original library source l
   ])
   assert.equal(parsed.results[0].directive, '.MEAS TRAN output_peak MAX V(out)')
 
-  const swept = parseImportedMeasurementOutput(artifact, 'output_peak = 3\noutput_peak = 5\nsettle = 1m\nsettle = 2m', ['R1=1k', 'R1=2k'])
+  const swept = parseImportedMeasurementOutput(artifact, 'output_peak = 3\noutput_peak = 5\nsettle = 1m\nsettle = 2m', 'tran', ['R1=1k', 'R1=2k'])
   assert.deepEqual(swept.results.filter((result) => result.id === 'output_peak').map((result) => result.sweep), [
     { label: 'R1=1k', index: 0 }, { label: 'R1=2k', index: 1 },
   ])
 
-  const missing = parseImportedMeasurementOutput(artifact, '')
+  const missing = parseImportedMeasurementOutput(artifact, '', 'tran')
   assert.equal(missing.diagnostics.length, 2)
   assert.equal(missing.diagnostics[0].assetLine, 17)
 
-  const frequencyAndSweep = parseImportedMeasurementOutput({
+  const acArtifact = {
     text: '.MEASURE AC gain_at_1k FIND VM(out) AT=1k\n.MEAS DC output_at_5 FIND V(out) AT=5\n',
     sourceMap: [
       { line: 1, sourceId: 'model-file:asset-rc', role: 'model', assetId: 'asset-rc', assetLine: 31 },
       { line: 2, sourceId: 'model-file:asset-rc', role: 'model', assetId: 'asset-rc', assetLine: 32 },
     ],
     diagnostics: [],
-  }, 'gain_at_1k = 1.57000e-01\noutput_at_5 = 2.50000e+00')
-  assert.deepEqual(frequencyAndSweep.results.map(({ id, value, sourceLine }) => ({ id, value, sourceLine })), [
+  }
+  const acResult = parseImportedMeasurementOutput(acArtifact, 'gain_at_1k = 1.57000e-01\noutput_at_5 = 2.50000e+00', 'ac')
+  assert.deepEqual(acResult.results.map(({ id, value, sourceLine }) => ({ id, value, sourceLine })), [
     { id: 'gain_at_1k', value: 0.157, sourceLine: 31 },
+  ])
+  assert.deepEqual(acResult.diagnostics, [])
+  const dcResult = parseImportedMeasurementOutput(acArtifact, 'gain_at_1k = 1.57000e-01\noutput_at_5 = 2.50000e+00', 'dc')
+  assert.deepEqual(dcResult.results.map(({ id, value, sourceLine }) => ({ id, value, sourceLine })), [
     { id: 'output_at_5', value: 2.5, sourceLine: 32 },
   ])
+  assert.deepEqual(dcResult.diagnostics, [])
+  assert.deepEqual(parseImportedMeasurementOutput(acArtifact, '', null), { results: [], diagnostics: [] })
 })
 
 test('current-source measurements use the solved raw vector when ngspice has no scalar measurement', () => {

@@ -123,10 +123,10 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
 }
 
 /** Read results from user-imported ngspice .MEAS/.MEASURE cards without rewriting them. */
-export function parseImportedMeasurementOutput(artifact: NetlistArtifact, output: string, sweepLabels: string[] = []): { results: MeasurementResult[]; diagnostics: SimulationDiagnostic[] } {
+export function parseImportedMeasurementOutput(artifact: NetlistArtifact, output: string, analysis: 'tran' | 'ac' | 'dc' | null, sweepLabels: string[] = []): { results: MeasurementResult[]; diagnostics: SimulationDiagnostic[] } {
   const rows = artifact.text.split(/\r?\n/)
   const sourceByLine = new Map(artifact.sourceMap.map((source) => [source.line, source]))
-  const cards: { line: number; text: string; assetId: string; assetLine: number; id: string }[] = []
+  const cards: { line: number; text: string; assetId: string; assetLine: number; id: string; analysis: 'tran' | 'ac' | 'dc' }[] = []
   for (let index = 0; index < rows.length; index += 1) {
     const source = sourceByLine.get(index + 1)
     if (source?.role !== 'model' || !source.assetId || source.assetLine === undefined) continue
@@ -137,13 +137,14 @@ export function parseImportedMeasurementOutput(artifact: NetlistArtifact, output
       text += ` ${rows[index + 1].replace(/^\s*\+\s?/, '').trim()}`
       index += 1
     }
-    const match = text.match(/^\.(?:meas|measure)\s+(?:tran|ac|dc)\s+([A-Za-z_][A-Za-z0-9_$]*)\s+/i)
-    if (match) cards.push({ line: start, text, assetId: source.assetId, assetLine: source.assetLine, id: match[1] })
+    const match = text.match(/^\.(?:meas|measure)\s+(tran|ac|dc)\s+([A-Za-z_][A-Za-z0-9_$]*)\s+/i)
+    if (match) cards.push({ line: start, text, assetId: source.assetId, assetLine: source.assetLine, analysis: match[1].toLowerCase() as 'tran' | 'ac' | 'dc', id: match[2] })
   }
   const outputLines = output.split(/\r?\n/)
   const results: MeasurementResult[] = []
   const diagnostics: SimulationDiagnostic[] = []
   for (const card of cards) {
+    if (card.analysis !== analysis) continue
     const escapedName = card.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const expression = new RegExp(`^\\s*${escapedName}\\s*=\\s*([-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[-+]?\\d+)?)`, 'i')
     const matches = outputLines.flatMap((line) => {

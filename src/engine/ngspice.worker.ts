@@ -113,7 +113,10 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       ? parameterSweep.map((_, index) => traces.filter((trace) => trace.sweep?.index === index))
       : [traces]
     const measurementOutput = parseMeasurementOutput(output, measurements, parameterSweep?.map((sweep) => sweep.label) ?? [], measurementTraces)
-    const importedMeasurementOutput = parseImportedMeasurementOutput(artifact, output, parameterSweep?.map((sweep) => sweep.label) ?? [])
+    const importedMeasurementAnalysis = metadata.settings.analysis === 'tran' || metadata.settings.analysis === 'ac' || metadata.settings.analysis === 'dc'
+      ? metadata.settings.analysis
+      : null
+    const importedMeasurementOutput = parseImportedMeasurementOutput(artifact, output, importedMeasurementAnalysis, parameterSweep?.map((sweep) => sweep.label) ?? [])
     const result = {
       metadata: { ...metadata, completedAt: new Date().toISOString() },
       netlist: artifact.text,
