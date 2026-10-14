@@ -305,6 +305,21 @@ export function componentDefinitionFor(kind: PartKind): ComponentDefinition {
   return componentDefinitionByKind[kind]
 }
 
+/** Return the required imported SPICE `.MODEL` type for a built-in device. */
+export function compatibleDeviceModelType(kind: PartKind): string | undefined {
+  switch (kind) {
+    case 'diode': case 'zener': case 'led': return 'd'
+    case 'npn': return 'npn'
+    case 'pnp': return 'pnp'
+    case 'njfet': return 'njf'
+    case 'pjfet': return 'pjf'
+    case 'nmos': return 'nmos'
+    case 'pmos': return 'pmos'
+    case 'voltageSwitch': return 'sw'
+    default: return undefined
+  }
+}
+
 export function componentPropertyDefault(kind: PartKind, key: string): string | undefined {
   return componentDefinitionFor(kind).properties.find((property) => property.key === key)?.defaultValue
 }

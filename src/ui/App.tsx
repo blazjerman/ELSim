@@ -29,7 +29,7 @@ import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
 import type { ComponentPaletteCategory } from './ComponentPalette'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
-import { componentDefaultValue, componentDefinitionFor, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
+import { componentDefaultValue, componentDefinitionFor, componentPropertyDefault, compatibleDeviceModelType, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import type { ComponentSymbolPrimitive } from '../domain/componentDefinitions'
 import { componentMagnitude } from '../domain/componentValue'
 import { nextRef, referencePrefixForKind } from '../domain/referenceDesignator'
@@ -2207,8 +2207,8 @@ export default function App() {
   const importedSymbols = useMemo(() => (project.symbolAssets ?? []).map((asset) => ({ ...parseLtspiceSymbol(asset.content, asset.filename), assetId: asset.id, filename: asset.filename })), [project.symbolAssets])
   const symbolsById = useMemo(() => new Map<string, ImportedSymbol>(importedSymbols.map((symbol) => [symbol.assetId, symbol])), [importedSymbols])
   const compatibleDeviceModels = (kind: PartKind) => {
-    const type = kind === 'voltageSwitch' ? 'sw' : kind === 'diode' || kind === 'zener' || kind === 'led' ? 'd' : kind === 'npn' ? 'npn' : kind === 'pnp' ? 'pnp' : kind === 'nmos' ? 'nmos' : kind === 'pmos' ? 'pmos' : kind === 'njfet' ? 'njf' : kind === 'pjfet' ? 'pjf' : ''
-    return importedDeviceModels.filter((model) => model.type.toLowerCase() === type)
+    const type = compatibleDeviceModelType(kind)
+    return type ? importedDeviceModels.filter((model) => model.type.toLowerCase() === type) : []
   }
   const modelAssetInUse = (assetId: string) => {
     return requiredModelAssets.has(assetId)

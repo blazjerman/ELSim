@@ -5,7 +5,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { componentDefinitions, componentDefinitionFor, componentDefaultValue, componentPropertyDefault, importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
+const { componentDefinitions, componentDefinitionFor, componentDefaultValue, componentPropertyDefault, compatibleDeviceModelType, importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createStarterProject, kindNames, kindPrefix, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { parseSubcircuitLibrary } = require(path.join(build, 'domain/subcircuitLibrary.js'))
@@ -172,6 +172,18 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.ok(componentDefinitionFor('lamp').symbolGeometry.some((primitive) => primitive.kind === 'path' && primitive.className === 'lamp-filament'))
   assert.deepEqual(componentDefinitionFor('lamp').symbolAnimations['brightness.power'].active.filter((primitive) => primitive.className?.startsWith('lamp-glow-')).map(({ className, kind }) => [className, kind]), [['lamp-glow-fill', 'circle'], ['lamp-glow-outline', 'circle']])
   assert.ok(project.parts.every((part) => part.componentDefinitionId === componentDefinitionFor(part.kind).id))
+})
+
+test('imported device model compatibility has one canonical type per built-in device family', () => {
+  const expected = {
+    diode: 'd', zener: 'd', led: 'd',
+    npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmos: 'nmos', pmos: 'pmos',
+    voltageSwitch: 'sw',
+  }
+  for (const [kind, type] of Object.entries(expected)) assert.equal(compatibleDeviceModelType(kind), type, kind)
+  for (const definition of componentDefinitions) {
+    if (!(definition.kind in expected)) assert.equal(compatibleDeviceModelType(definition.kind), undefined, definition.kind)
+  }
 })
 
 test('legacy projects backfill component definition IDs and reject mismatched references', () => {

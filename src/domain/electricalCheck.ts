@@ -5,7 +5,7 @@ import type { Part, Project } from './project'
 import { componentMagnitude } from './componentValue'
 import { analyzeModelDependencies, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
-import { componentDefinitionFor } from './componentDefinitions'
+import { componentDefinitionFor, compatibleDeviceModelType } from './componentDefinitions'
 
 export type ElectricalIssue = {
   id: string
@@ -18,14 +18,8 @@ export type ElectricalIssue = {
 
 type ReachableSimulationSheet = { sheet: Project['sheets'][number]; topLevelInstanceId?: string }
 
-const expectedDeviceModelTypes: Partial<Record<Part['kind'], string>> = {
-  diode: 'd', zener: 'd', led: 'd',
-  npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmos: 'nmos', pmos: 'pmos',
-  voltageSwitch: 'sw',
-}
-
 function importedDeviceModelIssue(part: Part, modelTypes: Map<string, string>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
-  const expectedType = expectedDeviceModelTypes[part.kind]
+  const expectedType = compatibleDeviceModelType(part.kind)
   if (!expectedType || !part.deviceModel) return null
   const modelType = modelTypes.get(part.deviceModel.toLowerCase())
   const location = sheetName ? ` in ${sheetName}` : ''
