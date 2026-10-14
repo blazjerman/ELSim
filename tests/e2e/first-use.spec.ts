@@ -5595,7 +5595,7 @@ test('multi-file model import lets users choose sections before resolving librar
   ])
 })
 
-test('dependency report can repair a missing section in an imported library', { tag: '@ui-smoke' }, async ({ page }) => {
+test('dependency report can repair a missing section in an imported library', { tag: ['@ui-smoke', '@engine-smoke'] }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   const libraries = [
@@ -5622,6 +5622,8 @@ test('dependency report can repair a missing section in an imported library', { 
     ['amplifier.lib', [], '.LIB devices.lib fast\n.SUBCKT AMP IN OUT\nD1 IN OUT D_FAST\n.ENDS AMP'],
     ['devices.lib', ['fast'], '.LIB fast\n.MODEL D_FAST D(IS=1n)\n.ENDL fast\n.LIB slow\n.MODEL D_SLOW D(IS=2n)\n.ENDL slow'],
   ])
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
 })
 
 test('model section picker preserves ngspice numeric and punctuated names', { tag: '@ui-smoke' }, async ({ page }) => {
