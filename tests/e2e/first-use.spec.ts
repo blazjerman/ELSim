@@ -1662,7 +1662,8 @@ test('large imported-model dependency reports are navigable regions, not live st
     const key = 'elsim:project:v7'
     const project = JSON.parse(localStorage.getItem(key) ?? 'null') ?? JSON.parse(fallbackProjectJson)
     const missingCores = Array.from({ length: 25 }, (_, index) => `XCORE${index + 1} IN OUT CORE${index + 1}`).join('\n')
-    const content = `.SUBCKT AMP IN OUT\n${missingCores}\n.ENDS AMP\n`
+    const recursiveCores = Array.from({ length: 25 }, (_, index) => `.SUBCKT LOOP${index + 1} IN OUT\nXLOOP IN OUT LOOP${index + 1}\n.ENDS LOOP${index + 1}`).join('\n')
+    const content = `.SUBCKT AMP IN OUT\n${missingCores}\n.ENDS AMP\n${recursiveCores}\n`
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
     const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
     project.modelAssets = [{ id: 'amp-library', filename: 'amp.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
@@ -1684,6 +1685,10 @@ test('large imported-model dependency reports are navigable regions, not live st
   await expect(missingModels.getByRole('listitem')).toHaveCount(20)
   await report.getByRole('button', { name: 'Show 5 more missing model references' }).click()
   await expect(missingModels.getByRole('listitem')).toHaveCount(25)
+  const recursiveChains = report.getByRole('list', { name: 'Recursive model dependency chains' })
+  await expect(recursiveChains.getByRole('listitem')).toHaveCount(20)
+  await report.getByRole('button', { name: 'Show 5 more recursive chains' }).click()
+  await expect(recursiveChains.getByRole('listitem')).toHaveCount(25)
   const chooserPromise = page.waitForEvent('filechooser')
   await report.getByRole('button', { name: 'Import model library' }).click()
   const chooser = await chooserPromise

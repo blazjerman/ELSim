@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { MouseEvent } from 'react'
 import type { ModelDependencyAnalysis } from '../domain/subcircuitLibrary'
 
@@ -10,10 +10,13 @@ export function ModelDependencyReport({ analysis, onImport }: {
 }) {
   const [visibleIncludeCount, setVisibleIncludeCount] = useState(PAGE_SIZE)
   const [visibleMissingCount, setVisibleMissingCount] = useState(PAGE_SIZE)
+  const [visibleRecursiveCount, setVisibleRecursiveCount] = useState(PAGE_SIZE)
+  const hasImportableIncludes = useMemo(() => analysis.missingIncludes.some((include) => include.reason === 'missing' || include.reason === 'section'), [analysis.missingIncludes])
 
   useEffect(() => {
     setVisibleIncludeCount(PAGE_SIZE)
     setVisibleMissingCount(PAGE_SIZE)
+    setVisibleRecursiveCount(PAGE_SIZE)
   }, [analysis])
 
   if (!analysis.missing.length && !analysis.missingIncludes.length && !analysis.recursiveChains.length) return null
@@ -25,7 +28,7 @@ export function ModelDependencyReport({ analysis, onImport }: {
       <ul aria-label="Missing referenced model files">{analysis.missingIncludes.slice(0, visibleIncludeCount).map((include, index) => <li key={`${include.assetId}:${include.sourceLine}:${index}`}>
         <code>{include.reference || '(empty include)'}</code>{include.section && <> · section <code>{include.section}</code></>} · {include.assetFilename}:{include.sourceLine} — {include.reason === 'missing' ? 'file not imported' : include.reason === 'ambiguous' ? 'matches multiple imported filenames' : include.reason === 'section' ? 'section is missing or was not selected when the file was imported' : 'path is unsupported; use a project-local relative path'}
       </li>)}</ul>
-      {analysis.missingIncludes.some((include) => include.reason === 'missing' || include.reason === 'section') && <button className="place-model" onClick={onImport}>Import referenced model files or sections</button>}
+      {hasImportableIncludes && <button className="place-model" onClick={onImport}>Import referenced model files or sections</button>}
       {analysis.missingIncludes.length > visibleIncludeCount && <button className="place-model" onClick={() => setVisibleIncludeCount((count) => Math.min(count + PAGE_SIZE, analysis.missingIncludes.length))}>
         Show {Math.min(PAGE_SIZE, analysis.missingIncludes.length - visibleIncludeCount)} more referenced file{analysis.missingIncludes.length - visibleIncludeCount === 1 ? '' : 's'}
       </button>}
@@ -42,7 +45,10 @@ export function ModelDependencyReport({ analysis, onImport }: {
     </>}
     {analysis.recursiveChains.length > 0 && <>
       <p>A circuit that instantiates one of these recursive call chains will fail in ngspice.</p>
-      <ul aria-label="Recursive model dependency chains">{analysis.recursiveChains.map((chain) => <li key={chain.join(':')}>{chain.join(' → ')}</li>)}</ul>
+      <ul aria-label="Recursive model dependency chains">{analysis.recursiveChains.slice(0, visibleRecursiveCount).map((chain) => <li key={chain.join(':')}>{chain.join(' → ')}</li>)}</ul>
+      {analysis.recursiveChains.length > visibleRecursiveCount && <button className="place-model" onClick={() => setVisibleRecursiveCount((count) => Math.min(count + PAGE_SIZE, analysis.recursiveChains.length))}>
+        Show {Math.min(PAGE_SIZE, analysis.recursiveChains.length - visibleRecursiveCount)} more recursive chain{analysis.recursiveChains.length - visibleRecursiveCount === 1 ? '' : 's'}
+      </button>}
     </>}
   </div>
 }
