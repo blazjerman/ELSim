@@ -1820,7 +1820,8 @@ export default function App() {
       return saved ? validateProject(JSON.parse(saved)) : createStarterProject()
     } catch { return createStarterProject() }
   })
-  const [selection, setSelection] = useState<Selection>({ kind: 'part', id: 'p-r1' })
+  const [initialSelectedPartId] = useState(() => (project.parts.find((part) => part.id === 'p-r1') ?? project.parts.find((part) => part.kind === 'resistor') ?? project.parts[0])?.id ?? null)
+  const [selection, setSelection] = useState<Selection>(() => initialSelectedPartId ? { kind: 'part', id: initialSelectedPartId } : null)
   const hoveredSchematicObjectRef = useRef<HoveredSchematicObject>(null)
   const [hasHoveredSchematicObject, setHasHoveredSchematicObject] = useState(false)
   const setHoveredSchematicObject = useCallback((target: HoveredSchematicObject | ((current: HoveredSchematicObject) => HoveredSchematicObject)) => {
@@ -1834,7 +1835,7 @@ export default function App() {
   const selectedWireId = selectedWireIds.at(-1) ?? null
   const setSelectedWireId = (id: string | null) => setSelectedWireIds(id ? [id] : [])
   const pendingPasteSelection = useRef<{ partIds: string[]; wireIds: string[]; labelIds: string[]; selection: Selection } | null>(null)
-  const [selectedPartIds, setSelectedPartIds] = useState<string[]>(['p-r1'])
+  const [selectedPartIds, setSelectedPartIds] = useState<string[]>(() => initialSelectedPartId ? [initialSelectedPartId] : [])
   const sheetSelectionState = useRef(new Map<string, SheetSelectionState>())
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const [selectedNetLabelIds, setSelectedNetLabelIds] = useState<string[]>([])
@@ -2008,7 +2009,14 @@ export default function App() {
         if (!active) return
         if (snapshot && snapshot.savedAt >= localSavedAt && snapshot.savedAt > 0) {
           try {
-            setProjectState(validateProject(JSON.parse(snapshot.json)))
+            const recoveredProject = validateProject(JSON.parse(snapshot.json))
+            setProjectState(recoveredProject)
+            const firstPart = recoveredProject.parts.find((part) => part.id === 'p-r1') ?? recoveredProject.parts.find((part) => part.kind === 'resistor') ?? recoveredProject.parts[0]
+            setSelection(firstPart ? { kind: 'part', id: firstPart.id } : null)
+            setSelectedPartIds(firstPart ? [firstPart.id] : [])
+            setSelectedWireIds([])
+            setSelectedNetLabelIds([])
+            sheetSelectionState.current.clear()
             autosaveTimestampRef.current = snapshot.savedAt
             setAutosaveStatus('recovered')
           } catch {
@@ -2454,7 +2462,9 @@ export default function App() {
     recordUndoSnapshot(projectRef.current)
     setProjectState((current) => ({ ...current, sheets: [...current.sheets, sheet], activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, updatedAt: new Date().toISOString() }))
     setSelection(null)
+    setSelectedPartIds([])
     setSelectedWireId(null)
+    setSelectedNetLabelIds([])
     setSimulationResult(null)
     setSimulationCursor(null)
     setNotice(`Created ${name} inside ${parent?.name ?? 'the project'}.`)
@@ -2806,7 +2816,10 @@ export default function App() {
       setSelectedTraceIds(parsed.plotSettings?.selectedTraceIds ?? [])
       history.current = { past: [], future: [] }
       setSelection(null)
+      setSelectedPartIds([])
       setSelectedWireId(null)
+      setSelectedNetLabelIds([])
+      sheetSelectionState.current.clear()
       setNotice(`Opened ${parsed.name}`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not open this project') }
     event.target.value = ''
@@ -3023,7 +3036,10 @@ export default function App() {
       setSimulationCursor(null)
       history.current = { past: [], future: [] }
       setSelection(null)
+      setSelectedPartIds([])
       setSelectedWireId(null)
+      setSelectedNetLabelIds([])
+      sheetSelectionState.current.clear()
       const modelSummary = newModels.length ? ` and ${newModels.length} model librar${newModels.length === 1 ? 'y' : 'ies'}` : ''
       setNotice(imported.warnings.length ? `Imported ${imported.project.name} with ${imported.project.parts.length} parts, ${imported.project.wires.length} wires${modelSummary}. ${imported.warnings.length} item(s) need attention: ${imported.warnings.slice(0, 3).join(' ')}` : `Imported ${imported.project.name} with ${imported.project.parts.length} parts, ${imported.project.wires.length} wires${modelSummary}.`)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this LTspice schematic.') }
@@ -3955,7 +3971,10 @@ export default function App() {
     setSelectedTraceIds(starter.plotSettings?.selectedTraceIds ?? [])
     history.current = { past: [], future: [] }
     setSelection(null)
+    setSelectedPartIds([])
     setSelectedWireId(null)
+    setSelectedNetLabelIds([])
+    sheetSelectionState.current.clear()
     setHierarchyWalkthroughStep(null)
   }
   const loadExample = async (example: ExampleId) => {
@@ -4002,6 +4021,7 @@ export default function App() {
     setSheetInstancePath([])
     pendingViewRef.current = null
     setProjectState(next)
+    sheetSelectionState.current.clear()
     const lessons = {
       rc: { title: 'Watch the capacitor charge', guidance: 'Predict τ = R1 × C1 before running. One time constant marks when the capacitor reaches about 63% of its final voltage; then scrub the solved transient to compare.' },
       'ohms-law': { title: "Predict current with Ohm's law", guidance: 'Use the prediction check before you run the operating point. Then change R1 from 1 kΩ to 2 kΩ and rerun: the current should halve.' },
@@ -4056,7 +4076,11 @@ export default function App() {
     setImportWarnings([])
     setCompatibilityDiagnostic(null)
     history.current = { past: [], future: [] }
-    setSelection({ kind: 'part', id: exampleSelection[example] })
+    const lessonSelectionId = next.parts.some((part) => part.id === exampleSelection[example]) ? exampleSelection[example] : next.parts[0]?.id
+    setSelectedPartIds(lessonSelectionId ? [lessonSelectionId] : [])
+    setSelectedWireIds([])
+    setSelectedNetLabelIds([])
+    setSelection(lessonSelectionId ? { kind: 'part', id: lessonSelectionId } : null)
     setHierarchyWalkthroughStep(example === 'hierarchy' ? 0 : null)
     setExamplesOpen(false)
     setNotice(example === 'hierarchy' ? 'Opened a two-level reusable block example. Run it, open X2’s sheet definition, then open XCORE and probe RCORE.' : `Opened ${next.name}. Press Run simulation to see the results.`)

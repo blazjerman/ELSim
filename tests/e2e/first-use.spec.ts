@@ -504,6 +504,20 @@ test('example picker offers a short beginner path before the full catalog', { ta
   await expect(cards).toHaveCount(allExampleCount)
 })
 
+test('opening an example replaces stale multi-selection with its lesson component', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.keyboard.press('Control+a')
+  expect(await page.locator('.circuit-part.selected').count()).toBeGreaterThan(1)
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('[data-example-id="ohms-law"]').getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(1)
+  await expect(page.locator('.circuit-part[data-part-id="ohms-law-r1"]')).toHaveClass(/selected/)
+  await expect(page.locator('.wire-line.selected')).toHaveCount(0)
+  await expect(page.locator('.canvas-label.selected')).toHaveCount(0)
+})
+
 test('RC lesson checks a time-constant prediction and recalculates it after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
