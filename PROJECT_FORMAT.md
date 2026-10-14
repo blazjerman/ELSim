@@ -1,6 +1,6 @@
 # ELSim project files
 
-The native project extension is `.elsim`. Version 1 is a ZIP archive using ZIP's **stored** (uncompressed) method so it can be generated and opened in browsers without a native helper or third-party ZIP code.
+The native project extension is `.elsim`. The writer emits archive manifest version 2. It stores `manifest.json` and uses ZIP **DEFLATE** (method 8) for `project.json` when compression makes the file smaller; it falls back to stored entries when raw-DEFLATE streaming is unavailable or would not reduce the file. The browser reader remains compatible with version 1 archives, which use stored entries only. Project schemas are independent of archive versions.
 
 ## Layout
 
@@ -10,7 +10,7 @@ project.json
 assets/                 # reserved; currently no project assets are supported
 ```
 
-`manifest.json` follows [`schemas/archive-v1.schema.json`](schemas/archive-v1.schema.json). It identifies the archive version, the `project.json` byte length and CRC-32, and a table of asset paths, byte lengths, media types, CRC-32 values, and optional SHA-256 digests. Version 1 currently requires an empty `assets` array. User-imported model libraries are stored as text in the optional `project.json` `modelAssets` field; they are not repository assets and keep an unknown redistribution status until reviewed by the user.
+`manifest.json` follows [`schemas/archive-v2.schema.json`](schemas/archive-v2.schema.json) for newly written files. It identifies the archive version, the uncompressed `project.json` byte length and CRC-32, and a table of asset paths, byte lengths, media types, CRC-32 values, and optional SHA-256 digests. Version 2 currently requires an empty `assets` array. The reader also accepts version 1 manifests, validated by [`schemas/archive-v1.schema.json`](schemas/archive-v1.schema.json), and requires all version 1 entries to be stored. User-imported model libraries are stored as text in the optional `project.json` `modelAssets` field; they are not repository assets and keep an unknown redistribution status until reviewed by the user.
 
 `project.json` is the versioned document described by [`schemas/project-v8.schema.json`](schemas/project-v8.schema.json). The archive wraps the project without changing its document version. Existing standalone `.elsim.json` files remain readable.
 
@@ -55,6 +55,6 @@ The **Export LTspice** action generates a separate ZIP from the current edited p
 
 ## Reader limits
 
-The browser reader accepts only ZIP stored entries with UTF-8 names, a single disk, no encryption, and no ZIP64. It rejects absolute paths, drive paths, backslashes, `.`/`..` path segments, duplicate names, mismatched local/central headers, overlapping entries, CRC failures, and unknown archive contents. Archives are limited to 50 MiB total, 49 MiB per entry, and 64 entries. The project entry may use the larger limit because v1 stores imported model, symbol, and original schematic text inside `project.json`; the total archive limit still applies before project JSON is parsed. The writer uses fixed ZIP timestamps and stable entry ordering for deterministic output.
+The browser reader accepts ZIP stored and raw-DEFLATE entries with UTF-8 names, a single disk, no encryption, and no ZIP64. Version 1 archives must use stored entries; version 2 allows stored or raw-DEFLATE entries. It rejects unsupported flags/methods, absolute paths, drive paths, backslashes, `.`/`..` path segments, duplicate names, mismatched local/central headers, overlapping entries, CRC failures, and unknown archive contents. Archives are limited to 50 MiB compressed and uncompressed total, 49 MiB uncompressed per entry, and 64 entries. Only `manifest.json` and `project.json` are currently accepted. Inflate is streamed and stops as soon as output exceeds the declared size or total/entry limit, then checks the exact size and CRC before parsing project JSON. The project entry may use the larger limit because imported model, symbol, and original schematic text are inline in `project.json`; the total archive limit still applies before project JSON is parsed. The writer uses fixed ZIP timestamps and stable entry ordering. Canonical project JSON is stable across runs; DEFLATE byte-for-byte output is not guaranteed to match across browser implementations.
 
 CRC-32 detects accidental corruption; it is not an authenticity or security signature. Future embedded assets must have recorded provenance and licenses. A user having a model file does not imply permission to redistribute it.

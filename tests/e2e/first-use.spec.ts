@@ -3379,6 +3379,11 @@ test('reorientation preserves connected pins and wire topology survives a projec
   const archivePath = await download.path()
   expect(archivePath).not.toBeNull()
   const archive = readFileSync(archivePath!)
+  const manifestNameLength = archive.readUInt16LE(26)
+  const manifestExtraLength = archive.readUInt16LE(28)
+  const manifestCompressedSize = archive.readUInt32LE(18)
+  const projectHeaderOffset = 30 + manifestNameLength + manifestExtraLength + manifestCompressedSize
+  expect(archive.readUInt16LE(projectHeaderOffset + 8)).toBe(8)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.name = 'Temporary project before archive reopen'

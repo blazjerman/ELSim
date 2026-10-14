@@ -10,7 +10,7 @@ const PROJECT_PATH = 'project.json'
 
 export type ProjectArchiveManifest = {
   format: 'elsim-archive'
-  version: 1
+  version: 1 | 2
   project: { path: 'project.json'; crc32: number; size: number }
   assets: { path: string; crc32: number; size: number; mediaType: string; sha256?: string }[]
 }
@@ -31,7 +31,7 @@ export function crc32(bytes: Uint8Array): number {
   return (crc ^ 0xffffffff) >>> 0
 }
 
-type ZipEntry = { path: string; bytes: Uint8Array; crc: number; offset: number }
+type ZipEntry = { path: string; bytes: Uint8Array; compressedBytes: Uint8Array; method: 0 | 8; crc: number; offset: number }
 
 function validatePath(path: string): void {
   if (!path || path.startsWith('/') || path.includes('\\') || path.includes('\0') || /^[A-Za-z]:/.test(path) || path.split('/').some((segment) => !segment || segment === '.' || segment === '..')) {
@@ -47,8 +47,8 @@ function localHeader(entry: ZipEntry): Uint8Array {
   const bytes = new Uint8Array(30 + name.length)
   const view = new DataView(bytes.buffer)
   put32(view, 0, 0x04034b50); put16(view, 4, 20); put16(view, 6, 0x0800)
-  put16(view, 8, 0); put16(view, 10, 0); put16(view, 12, 0x0021)
-  put32(view, 14, entry.crc); put32(view, 18, entry.bytes.length); put32(view, 22, entry.bytes.length)
+  put16(view, 8, entry.method); put16(view, 10, 0); put16(view, 12, 0x0021)
+  put32(view, 14, entry.crc); put32(view, 18, entry.compressedBytes.length); put32(view, 22, entry.bytes.length)
   put16(view, 26, name.length); put16(view, 28, 0); bytes.set(name, 30)
   return bytes
 }
@@ -58,8 +58,8 @@ function centralHeader(entry: ZipEntry): Uint8Array {
   const bytes = new Uint8Array(46 + name.length)
   const view = new DataView(bytes.buffer)
   put32(view, 0, 0x02014b50); put16(view, 4, 0x0314); put16(view, 6, 20)
-  put16(view, 8, 0x0800); put16(view, 10, 0); put16(view, 12, 0); put16(view, 14, 0x0021)
-  put32(view, 16, entry.crc); put32(view, 20, entry.bytes.length); put32(view, 24, entry.bytes.length)
+  put16(view, 8, 0x0800); put16(view, 10, entry.method); put16(view, 12, 0); put16(view, 14, 0x0021)
+  put32(view, 16, entry.crc); put32(view, 20, entry.compressedBytes.length); put32(view, 24, entry.bytes.length)
   put16(view, 28, name.length); put16(view, 30, 0); put16(view, 32, 0)
   put16(view, 34, 0); put16(view, 36, 0); put32(view, 38, 0); put32(view, 42, entry.offset)
   bytes.set(name, 46)
@@ -86,17 +86,16 @@ function canonicalizeJson(value: unknown): unknown {
   return value
 }
 
-function zipStored(files: { path: string; bytes: Uint8Array }[], maxEntries = MAX_ENTRIES, maxBytes = MAX_ARCHIVE_BYTES): Uint8Array {
-  if (files.length > maxEntries) throw new Error('Archive contains too many files.')
+function zipEntries(entries: ZipEntry[], maxEntries = MAX_ENTRIES, maxBytes = MAX_ARCHIVE_BYTES): Uint8Array {
+  if (entries.length > maxEntries) throw new Error('Archive contains too many files.')
   let offset = 0
-  const entries: ZipEntry[] = files.map(({ path, bytes }) => {
-    validatePath(path)
-    if (bytes.length > MAX_ENTRY_BYTES) throw new Error(`Project archive entry ${path} exceeds the size limit.`)
-    const entry = { path, bytes, crc: crc32(bytes), offset }
-    offset += 30 + encoder.encode(path).length + bytes.length
-    return entry
-  })
-  const locals = entries.flatMap((entry) => [localHeader(entry), entry.bytes])
+  for (const entry of entries) {
+    validatePath(entry.path)
+    if (entry.bytes.length > MAX_ENTRY_BYTES) throw new Error(`Project archive entry ${entry.path} exceeds the size limit.`)
+    entry.offset = offset
+    offset += 30 + encoder.encode(entry.path).length + entry.compressedBytes.length
+  }
+  const locals = entries.flatMap((entry) => [localHeader(entry), entry.compressedBytes])
   const directoryOffset = offset
   const directory = entries.map(centralHeader)
   const directorySize = directory.reduce((sum, entry) => sum + entry.length, 0)
@@ -110,26 +109,67 @@ function zipStored(files: { path: string; bytes: Uint8Array }[], maxEntries = MA
   return result
 }
 
+function zipStored(files: { path: string; bytes: Uint8Array }[], maxEntries = MAX_ENTRIES, maxBytes = MAX_ARCHIVE_BYTES): Uint8Array {
+  if (files.length > maxEntries) throw new Error('Archive contains too many files.')
+  const entries = files.map(({ path, bytes }) => ({ path, bytes, compressedBytes: bytes, method: 0 as const, crc: crc32(bytes), offset: 0 }))
+  return zipEntries(entries, maxEntries, maxBytes)
+}
+
 /** Create a bounded, deterministic, uncompressed ZIP for generated portable file trees. */
 export function createFilesZip(files: { path: string; content: string }[]): Uint8Array {
   if (!Array.isArray(files) || files.length > 256) throw new Error('Export archive contains too many files.')
   return zipStored(files.map(({ path, content }) => ({ path, bytes: encoder.encode(content) })), 256, 100 * 1024 * 1024)
 }
 
-export function createProjectArchive(project: Project): Uint8Array {
+async function transformRaw(bytes: Uint8Array, direction: 'compress' | 'decompress', expectedSize?: number): Promise<Uint8Array | undefined> {
+  if (direction === 'compress' && typeof CompressionStream === 'undefined') return undefined
+  if (direction === 'decompress' && typeof DecompressionStream === 'undefined') return undefined
+  try {
+    const input = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(bytes); controller.close() } })
+    const format = 'deflate-raw' as CompressionFormat
+    const transformed = direction === 'compress'
+      ? input.pipeThrough(new CompressionStream(format))
+      : input.pipeThrough(new DecompressionStream(format))
+    const reader = transformed.getReader()
+    const chunks: Uint8Array[] = []
+    let size = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.length
+      if (size > (expectedSize ?? MAX_ENTRY_BYTES)) {
+        await reader.cancel()
+        throw new Error('Compressed project data expands beyond the declared size limit.')
+      }
+      chunks.push(value)
+    }
+    if (expectedSize !== undefined && size !== expectedSize) throw new Error('Compressed project data does not match its declared size.')
+    return concat(chunks)
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('expands beyond')) throw error
+    if (direction === 'compress') return undefined
+    throw new Error('Project archive contains invalid DEFLATE-compressed data.')
+  }
+}
+
+export async function createProjectArchive(project: Project): Promise<Uint8Array> {
   const projectBytes = encoder.encode(JSON.stringify(canonicalizeJson(project), null, 2))
+  if (projectBytes.length > MAX_ENTRY_BYTES) throw new Error(`Project archive entry ${PROJECT_PATH} exceeds the size limit.`)
+  const compressedBytes = await transformRaw(projectBytes, 'compress')
+  const useCompression = compressedBytes !== undefined && compressedBytes.length < projectBytes.length
   const manifest: ProjectArchiveManifest = {
-    format: 'elsim-archive', version: 1,
+    format: 'elsim-archive', version: 2,
     project: { path: PROJECT_PATH, crc32: crc32(projectBytes), size: projectBytes.length },
     assets: [],
   }
-  return zipStored([
-    { path: MANIFEST_PATH, bytes: encoder.encode(`${JSON.stringify(manifest, null, 2)}\n`) },
-    { path: PROJECT_PATH, bytes: projectBytes },
+  const manifestBytes = encoder.encode(`${JSON.stringify(manifest, null, 2)}\n`)
+  return zipEntries([
+    { path: MANIFEST_PATH, bytes: manifestBytes, compressedBytes: manifestBytes, method: 0, crc: crc32(manifestBytes), offset: 0 },
+    { path: PROJECT_PATH, bytes: projectBytes, compressedBytes: useCompression ? compressedBytes : projectBytes, method: useCompression ? 8 : 0, crc: crc32(projectBytes), offset: 0 },
   ])
 }
 
-function readEntries(bytes: Uint8Array): Map<string, Uint8Array> {
+async function readEntries(bytes: Uint8Array): Promise<{ entries: Map<string, Uint8Array>; methods: Map<string, number> }> {
   if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error('Project archive exceeds the total size limit.')
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const minimum = Math.max(0, bytes.length - 22 - 0xffff)
@@ -145,8 +185,10 @@ function readEntries(bytes: Uint8Array): Map<string, Uint8Array> {
   const commentLength = view.getUint16(endOffset + 20, true)
   if (disk !== 0 || directoryDisk !== 0 || diskEntries !== entryCount || entryCount > MAX_ENTRIES || directoryOffset + directorySize !== endOffset || endOffset + 22 + commentLength !== bytes.length) throw new Error('Project archive uses unsupported ZIP features or has an invalid directory.')
   const entries = new Map<string, Uint8Array>()
+  const methods = new Map<string, number>()
   const dataRanges: { start: number; end: number; path: string }[] = []
   let offset = directoryOffset
+  let totalUncompressedSize = 0
   for (let index = 0; index < entryCount; index++) {
     if (offset + 46 > bytes.length || view.getUint32(offset, true) !== 0x02014b50) throw new Error('Project archive has a malformed central directory.')
     const flags = view.getUint16(offset + 8, true)
@@ -162,9 +204,12 @@ function readEntries(bytes: Uint8Array): Map<string, Uint8Array> {
     if (end > bytes.length) throw new Error('Project archive has a truncated central directory entry.')
     const path = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength))
     validatePath(path)
+    if (path !== MANIFEST_PATH && path !== PROJECT_PATH) throw new Error(`Project archive contains an unsupported file: ${path}.`)
     if (entries.has(path)) throw new Error(`Project archive contains a duplicate path: ${path}.`)
-    if (flags & 1 || method !== 0 || compressedSize !== size) throw new Error(`Project archive entry ${path} uses unsupported compression or encryption.`)
-    if (size > MAX_ENTRY_BYTES) throw new Error(`Project archive entry ${path} exceeds the size limit.`)
+    if ((flags & ~0x0800) !== 0 || ![0, 8].includes(method) || (method === 0 && compressedSize !== size)) throw new Error(`Project archive entry ${path} uses unsupported compression or encryption.`)
+    if (size > MAX_ENTRY_BYTES || compressedSize > MAX_ARCHIVE_BYTES) throw new Error(`Project archive entry ${path} exceeds the size limit.`)
+    totalUncompressedSize += size
+    if (totalUncompressedSize > MAX_ARCHIVE_BYTES) throw new Error('Project archive exceeds the total uncompressed size limit.')
     if (localOffset + 30 > directoryOffset || view.getUint32(localOffset, true) !== 0x04034b50) throw new Error(`Project archive entry ${path} has an invalid local header.`)
     const localNameLength = view.getUint16(localOffset + 26, true)
     const localExtraLength = view.getUint16(localOffset + 28, true)
@@ -174,30 +219,34 @@ function readEntries(bytes: Uint8Array): Map<string, Uint8Array> {
     const localCompressedSize = view.getUint32(localOffset + 18, true)
     const localSize = view.getUint32(localOffset + 22, true)
     const dataOffset = localOffset + 30 + localNameLength + localExtraLength
-    if (dataOffset + size > directoryOffset) throw new Error(`Project archive entry ${path} is truncated or overlaps the directory.`)
+    if (dataOffset + compressedSize > directoryOffset) throw new Error(`Project archive entry ${path} is truncated or overlaps the directory.`)
     const localPath = decoder.decode(bytes.subarray(localOffset + 30, localOffset + 30 + localNameLength))
     if (localPath !== path || localFlags !== flags || localMethod !== method || localCrc !== expectedCrc || localCompressedSize !== compressedSize || localSize !== size) throw new Error(`Project archive entry ${path} has mismatched local and central headers.`)
-    if (dataRanges.some((range) => localOffset < range.end && dataOffset + size > range.start)) throw new Error(`Project archive entry ${path} overlaps another entry.`)
-    dataRanges.push({ start: localOffset, end: dataOffset + size, path })
+    if (dataRanges.some((range) => localOffset < range.end && dataOffset + compressedSize > range.start)) throw new Error(`Project archive entry ${path} overlaps another entry.`)
+    dataRanges.push({ start: localOffset, end: dataOffset + compressedSize, path })
     // Keep entry data as views into the already-bounded archive buffer. Copying
     // each file here can double peak memory while opening large project files.
-    const data = bytes.subarray(dataOffset, dataOffset + size)
+    const compressedData = bytes.subarray(dataOffset, dataOffset + compressedSize)
+    const data = method === 0 ? compressedData : await transformRaw(compressedData, 'decompress', size)
+    if (!data) throw new Error('This browser cannot open DEFLATE-compressed ELSim archives. Update to a modern Firefox or Chromium browser.')
     if (crc32(data) !== expectedCrc) throw new Error(`Project archive entry ${path} failed its CRC integrity check.`)
     entries.set(path, data)
+    methods.set(path, method)
     offset = end
   }
   if (offset !== directoryOffset + directorySize) throw new Error('Project archive central directory size does not match its entries.')
-  return entries
+  return { entries, methods }
 }
 
-export function readProjectArchive(bytes: Uint8Array): Project {
-  const entries = readEntries(bytes)
+export async function readProjectArchive(bytes: Uint8Array): Promise<Project> {
+  const { entries, methods } = await readEntries(bytes)
   const manifestBytes = entries.get(MANIFEST_PATH)
   if (!manifestBytes) throw new Error('Project archive is missing manifest.json.')
   let manifest: ProjectArchiveManifest
   try { manifest = JSON.parse(decoder.decode(manifestBytes)) as ProjectArchiveManifest }
   catch { throw new Error('Project archive manifest is not valid UTF-8 JSON.') }
-  if (!manifest || manifest.format !== 'elsim-archive' || manifest.version !== 1 || manifest.project?.path !== PROJECT_PATH || !Array.isArray(manifest.assets)) throw new Error('Project archive manifest has an unsupported format or version.')
+  if (!manifest || manifest.format !== 'elsim-archive' || ![1, 2].includes(manifest.version) || manifest.project?.path !== PROJECT_PATH || !Array.isArray(manifest.assets)) throw new Error('Project archive manifest has an unsupported format or version.')
+  if (manifest.version === 1 && [...methods.values()].some((method) => method !== 0)) throw new Error('Version 1 project archives must use stored ZIP entries.')
   if (!Number.isSafeInteger(manifest.project.size) || manifest.project.size < 1 || manifest.project.size > MAX_ENTRY_BYTES || !Number.isSafeInteger(manifest.project.crc32) || manifest.project.crc32 < 0 || manifest.project.crc32 > 0xffffffff || Object.keys(manifest).some((key) => !['format', 'version', 'project', 'assets'].includes(key))) throw new Error('Project archive manifest contains invalid project metadata.')
   const projectBytes = entries.get(PROJECT_PATH)
   if (!projectBytes || projectBytes.length !== manifest.project.size || crc32(projectBytes) !== manifest.project.crc32) throw new Error('Project archive project.json is missing or does not match its manifest.')

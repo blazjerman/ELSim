@@ -93,7 +93,7 @@ test('default ELSim symbols reject empty, duplicate, or oversized pin lists', ()
   assert.throws(() => createDefaultElsimSymbol(' '.repeat(81), ['IN']), /symbol name/)
 })
 
-test('native symbol assets validate and persist on a placed imported subcircuit', () => {
+test('native symbol assets validate and persist on a placed imported subcircuit', async () => {
   const modelText = '.SUBCKT AMP INP INM VCC VEE OUT\nEOUT OUT 0 INP INM 100k\n.ENDS AMP\n'
   const modelHash = createHash('sha256').update(modelText).digest('hex')
   const symbolText = JSON.stringify(symbolDocument)
@@ -111,7 +111,7 @@ test('native symbol assets validate and persist on a placed imported subcircuit'
   project.sheets[0].parts = project.parts
   project.modelAssets = [{ id: 'model-amp', filename: 'amp.lib', content: modelText, sha256: modelHash, licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
   project.symbolAssets = [{ id: 'symbol-amp', filename: 'amp.elsym', content: symbolText, sha256: symbolHash, licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
-  const restored = validateProject(readProjectArchive(createProjectArchive(project)))
+  const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
   assert.equal(restored.parts.at(-1).symbolAssetId, 'symbol-amp')
   assert.deepEqual(restored.parts.at(-1).symbolPinOffsets, symbol.pins.map(({ x, y }) => [x, y]))
   assert.equal(restored.symbolAssets[0].content, symbolText)

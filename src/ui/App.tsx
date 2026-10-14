@@ -2826,7 +2826,7 @@ export default function App() {
   const downloadProjectArchive = async () => {
     try {
       const { createProjectArchive } = await import('../domain/projectArchive')
-      const bytes = createProjectArchive(projectRef.current)
+      const bytes = await createProjectArchive(projectRef.current)
       const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/vnd.elsim.project+zip' })
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
@@ -2887,7 +2887,7 @@ export default function App() {
       if (file.size > 50 * 1024 * 1024) throw new Error('Project file exceeds the 50 MiB size limit.')
       const bytes = new Uint8Array(await file.arrayBuffer())
       const { isProjectArchive, readProjectArchive } = await import('../domain/projectArchive')
-      const projectData = isProjectArchive(bytes) ? readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
+      const projectData = isProjectArchive(bytes) ? await readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
       const parsed = validateProject(projectData)
       await verifyModelAssetHashes([...(parsed.modelAssets ?? []), ...(parsed.symbolAssets ?? [])])
       if (!window.confirm(`Open “${parsed.name}”? This will replace the circuit in this tab. Save your current circuit first if you want to keep it.`)) { event.target.value = ''; return }

@@ -15,7 +15,7 @@
       "properties": {
         "path": { "const": "project.json" },
         "crc32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
-        "size": { "type": "integer", "minimum": 1, "maximum": 20971520 }
+        "size": { "type": "integer", "minimum": 1, "maximum": 51380224 }
       }
     },
     "assets": {
