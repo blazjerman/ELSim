@@ -709,6 +709,39 @@ export function createLoadedVoltageDividerExampleProject(): Project {
   return project
 }
 
+/** Two independent sources drive a resistive node to demonstrate linear superposition. */
+export function createSuperpositionExampleProject(): Project {
+  const project = createStarterProject()
+  const source1: Part = { id: 'superposition-v1', kind: 'source', ref: 'V1', value: '9 V', sourceMode: 'dc', x: 280, y: 340, rotation: 0 }
+  const source2: Part = { id: 'superposition-v2', kind: 'source', ref: 'V2', value: '3 V', sourceMode: 'dc', x: 280, y: 620, rotation: 0 }
+  const branch1: Part = { id: 'superposition-r1', kind: 'resistor', ref: 'R1', value: '10 kΩ', x: 560, y: 340, rotation: 0 }
+  const branch2: Part = { id: 'superposition-r2', kind: 'resistor', ref: 'R2', value: '10 kΩ', x: 560, y: 620, rotation: 0 }
+  const load: Part = { id: 'superposition-rload', kind: 'resistor', ref: 'RL', value: '10 kΩ', x: 880, y: 480, rotation: 90 }
+  const parts = [source1, source2, branch1, branch2, load]
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  const netLabels = [
+    labelAt('superposition-v1-positive', 'V1SRC', source1, 0), labelAt('superposition-v1-return', '0', source1, 1),
+    labelAt('superposition-v2-positive', 'V2SRC', source2, 0), labelAt('superposition-v2-return', '0', source2, 1),
+    labelAt('superposition-r1-input', 'V1SRC', branch1, 0), labelAt('superposition-r1-output', 'VOUT', branch1, 1),
+    labelAt('superposition-r2-input', 'V2SRC', branch2, 0), labelAt('superposition-r2-output', 'VOUT', branch2, 1),
+    labelAt('superposition-load-output', 'VOUT', load, 0), labelAt('superposition-load-return', '0', load, 1),
+  ]
+  project.name = 'Superposition in a two-source circuit'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(V1SRC)', 'V(V2SRC)', 'V(VOUT)'], ranges: {} }
+  project.view = { zoom: 0.82, panX: 0, panY: -20 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A grounded parallel-resistor network for learning how current divides by resistance. */
 export function createParallelResistorsExampleProject(): Project {
   const project = createStarterProject()

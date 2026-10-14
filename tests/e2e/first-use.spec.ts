@@ -5025,6 +5025,32 @@ test('loaded divider prediction explains the load effect and resets after edits'
   await expect(prediction.getByRole('status')).toContainText('R2 ∥ RLOAD = 909.1 Ω')
 })
 
+test('superposition lesson predicts and verifies the sum of two source contributions', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Use the existing local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Predict an output made by two independent sources' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Superposition in a two-source circuit')
+  await expect(page.getByLabel('Guided example')).toContainText('set V2 to 0 V')
+  const prediction = page.locator('.example-prediction')
+  await prediction.locator('input').fill('4 V')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('V1 alone gives 3 V and V2 alone gives 1 V')
+
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator('.example-lesson-next-step')).toContainText('predicted VOUT is 4 V')
+  await expect(page.locator('.example-lesson-next-step')).toContainText('ngspice solved 4 V')
+  await expectAvailableTrace(page, 'V(VOUT)')
+  await expect(page.locator('.plot-window').last().getByRole('row', { name: /V\(vout\)/i })).toContainText('4.000000')
+})
+
 test('loaded voltage-divider lesson predicts and verifies how RLOAD pulls down VOUT', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])

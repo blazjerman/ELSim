@@ -207,6 +207,24 @@ export function LoadedVoltageDividerPrediction({ supplyValue, upperResistanceVal
   />
 }
 
+export function SuperpositionPrediction({ firstSourceValue, secondSourceValue, firstResistanceValue, secondResistanceValue, loadResistanceValue }: { firstSourceValue: string; secondSourceValue: string; firstResistanceValue: string; secondResistanceValue: string; loadResistanceValue: string }) {
+  const firstSource = componentMagnitude(firstSourceValue, 'source')
+  const secondSource = componentMagnitude(secondSourceValue, 'source')
+  const firstResistance = componentMagnitude(firstResistanceValue, 'resistor')
+  const secondResistance = componentMagnitude(secondResistanceValue, 'resistor')
+  const loadResistance = componentMagnitude(loadResistanceValue, 'resistor')
+  const valid = firstSource !== null && secondSource !== null && firstResistance !== null && secondResistance !== null && loadResistance !== null
+    && firstResistance > 0 && secondResistance > 0 && loadResistance > 0
+  const denominator = valid ? 1 / firstResistance! + 1 / secondResistance! + 1 / loadResistance! : 0
+  const firstContribution = valid && denominator > 0 ? firstSource! / firstResistance! / denominator : null
+  const secondContribution = valid && denominator > 0 ? secondSource! / secondResistance! / denominator : null
+  const predictedOutput = firstContribution !== null && secondContribution !== null ? firstContribution + secondContribution : null
+  const explanation = predictedOutput === null
+    ? ''
+    : `Linearity says the two source contributions add: V1 alone gives ${formatValue(firstContribution!)} V and V2 alone gives ${formatValue(secondContribution!)} V, for ${formatValue(predictedOutput)} V total. To verify in the simulator, set V2 to 0 V and run, then set V1 to 0 V and run; an ideal voltage source at 0 V acts as a short. Restore both values afterward.`
+  return <NumericPrediction id="superposition-prediction" prompt="Before running, predict the combined output voltage VOUT" unit="V" predictedValue={predictedOutput} absoluteTolerance={0.02} explanation={explanation}/>
+}
+
 export function AcCutoffPrediction({ resistanceValue, capacitanceValue, filterType }: { resistanceValue: string; capacitanceValue: string; filterType: 'low-pass' | 'high-pass' }) {
   const resistance = componentMagnitude(resistanceValue, 'resistor')
   const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
@@ -333,7 +351,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'wheatstone-bridge' | 'ac-cutoff' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'superposition' | 'wheatstone-bridge' | 'ac-cutoff' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
@@ -349,6 +367,8 @@ type BeginnerPredictionProps = {
   firstResistanceValue?: string
   secondResistanceValue?: string
   initialVoltageValue?: string
+  firstSourceValue?: string
+  secondSourceValue?: string
 }
 
 /** Keep lesson-only prediction logic out of the editor's initial download. */
@@ -359,6 +379,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
+    case 'superposition': return <SuperpositionPrediction firstSourceValue={props.firstSourceValue ?? ''} secondSourceValue={props.secondSourceValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'wheatstone-bridge': return <WheatstoneBridgePrediction supplyValue={props.supplyValue ?? ''} leftTopValue={props.leftTopValue ?? ''} leftBottomValue={props.leftBottomValue ?? ''} rightTopValue={props.rightTopValue ?? ''} rightBottomValue={props.rightBottomValue ?? ''}/>
     case 'ac-cutoff': return <AcCutoffPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''} filterType={props.filterType ?? 'low-pass'}/>
     case 'rlc-resonance': return <RlcResonancePrediction inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>

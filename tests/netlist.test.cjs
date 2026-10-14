@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createNonInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPnpSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createNonInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPnpSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSuperpositionExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -718,6 +718,20 @@ test('loaded voltage-divider example models RLOAD in parallel with the lower leg
   assert.match(artifact.text, /^RLOAD VOUT 0 1k$/m)
   assert.equal(project.wires.length, 10)
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VIN)', 'V(VOUT)', 'I(RLOAD)'])
+})
+
+test('superposition lesson creates two independent source branches that sum at VOUT', () => {
+  const project = validateProject(createSuperpositionExampleProject())
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'Superposition in a two-source circuit')
+  assert.equal(project.simulation.analysis, 'op')
+  assert.match(artifact.text, /^V1 V1SRC 0 DC 9$/m)
+  assert.match(artifact.text, /^V2 V2SRC 0 DC 3$/m)
+  assert.match(artifact.text, /^R1 V1SRC VOUT 10k$/m)
+  assert.match(artifact.text, /^R2 V2SRC VOUT 10k$/m)
+  assert.match(artifact.text, /^RL VOUT 0 10k$/m)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(V1SRC)', 'V(V2SRC)', 'V(VOUT)'])
 })
 
 test('parallel-resistor beginner example creates two grounded branches with predicted 10 mA and 5 mA currents', () => {

@@ -237,6 +237,19 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   })()
   const parallelResistorR1SolvedMa = parallelResistorCurrentAtOp('current-divider-r1')
   const parallelResistorR2SolvedMa = parallelResistorCurrentAtOp('current-divider-r2')
+  const isSuperpositionLesson = lessonId === 'superposition'
+  const superpositionSource1 = isSuperpositionLesson ? componentMagnitude(partsById.get('superposition-v1')?.value ?? '9 V', 'source') : null
+  const superpositionSource2 = isSuperpositionLesson ? componentMagnitude(partsById.get('superposition-v2')?.value ?? '3 V', 'source') : null
+  const superpositionR1 = isSuperpositionLesson ? componentMagnitude(partsById.get('superposition-r1')?.value ?? '10 kΩ', 'resistor') : null
+  const superpositionR2 = isSuperpositionLesson ? componentMagnitude(partsById.get('superposition-r2')?.value ?? '10 kΩ', 'resistor') : null
+  const superpositionLoad = isSuperpositionLesson ? componentMagnitude(partsById.get('superposition-rload')?.value ?? '10 kΩ', 'resistor') : null
+  const superpositionDenominator = superpositionR1 !== null && superpositionR2 !== null && superpositionLoad !== null && superpositionR1 > 0 && superpositionR2 > 0 && superpositionLoad > 0
+    ? 1 / superpositionR1 + 1 / superpositionR2 + 1 / superpositionLoad
+    : null
+  const superpositionPrediction = superpositionDenominator !== null && superpositionSource1 !== null && superpositionSource2 !== null && superpositionR1 !== null && superpositionR2 !== null
+    ? superpositionSource1 / superpositionR1 / superpositionDenominator + superpositionSource2 / superpositionR2 / superpositionDenominator
+    : null
+  const superpositionSolvedOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')?.values[0] : undefined
   const isResistorPowerLesson = lessonId === 'resistor-power'
   const resistorPowerResistance = isResistorPowerLesson ? componentMagnitude(partsById.get('resistor-power-r1')?.value ?? '1 kΩ', 'resistor') : null
   const resistorPowerSupply = isResistorPowerLesson ? componentMagnitude(partsById.get('resistor-power-v1')?.value ?? '5 V', 'source') : null
@@ -552,7 +565,13 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const voltageSwitchPredictedClosed = voltageSwitchThreshold !== null && voltageSwitchHysteresis !== null && voltageSwitchControlAt25Ms !== undefined
     ? voltageSwitchControlAt25Ms >= voltageSwitchThreshold + voltageSwitchHysteresis / 2
     : undefined
-  const lessonNextStep = lessonId === 'ohms-law' && simulationResult?.analysis === 'op'
+  const lessonNextStep = lessonId === 'superposition' && simulationResult?.analysis === 'op'
+    ? superpositionPrediction !== null
+      ? simulationResultStale
+        ? `The previous run measured VOUT = ${superpositionSolvedOutput !== undefined ? formatLessonVoltage(superpositionSolvedOutput) : 'not available'} with both sources active. The edited values predict ${formatLessonVoltage(superpositionPrediction)}; rerun to check. Set one voltage source to 0 V at a time and verify that the separate output voltages add to this total.`
+        : `With both sources active, the predicted VOUT is ${formatLessonVoltage(superpositionPrediction)}${superpositionSolvedOutput !== undefined ? ` and ngspice solved ${formatLessonVoltage(superpositionSolvedOutput)}` : ''}. Set V2 to 0 V and run, then set V1 to 0 V and run: those two outputs should add to the combined result. Restore both sources afterward.`
+      : 'Enter valid source voltages and positive resistor values, then rerun the operating point to compare the source contributions.'
+    : lessonId === 'ohms-law' && simulationResult?.analysis === 'op'
     ? ohmsLawPredictedCurrent !== null
       ? simulationResultStale
         ? `The previous run solved ${ohmsLawSolvedCurrent !== undefined ? formatLessonCurrent(Math.abs(ohmsLawSolvedCurrent) * 1000) : 'a current'} through R1. With V1 = ${partsById.get('ohms-law-v1')?.value ?? 'changed'} and R1 = ${partsById.get('ohms-law-r1')?.value ?? 'changed'}, I = V/R predicts ${formatLessonCurrent(ohmsLawPredictedCurrent * 1000)}. Rerun to compare. A resistor twice as large should carry half the current at the same voltage.`
