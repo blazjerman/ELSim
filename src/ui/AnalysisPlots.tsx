@@ -182,6 +182,13 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
 
 function useTraceVisibility(selectedIds: string[], onRemove: (id: string) => void) {
   const [disabledIds, setDisabledIds] = useState<string[]>([])
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  useEffect(() => {
+    setDisabledIds((current) => {
+      const retained = current.filter((id) => selectedIdSet.has(id))
+      return retained.length === current.length ? current : retained
+    })
+  }, [selectedIdSet])
   const disabledIdSet = useMemo(() => new Set(disabledIds), [disabledIds])
   const toggleVisibility = useCallback((id: string) => setDisabledIds((current) => current.includes(id) ? current.filter((candidate) => candidate !== id) : [...current, id]), [])
   const remove = useCallback((id: string) => {
