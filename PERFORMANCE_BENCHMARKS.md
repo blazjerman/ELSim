@@ -702,3 +702,7 @@ A fresh `npm run benchmark:performance:quick` run (benchmark version 10, two war
 | Two-level repeated hierarchy | 5,000 root instances | 88.72 | 135.58 | 111.55 |
 
 One-million-sample cold plot reduction was 1.04 ms p95 with the 902-point cap. Compared with the previous quick repeat, results remain within same-host variance and do not point to a new domain bottleneck. This does not measure UI rendering, ngspice runtime, or cross-machine behavior.
+
+### Firefox UI audit and large-schematic recheck (2026-10-14)
+
+The complete 172-workflow engine-independent Firefox suite passed. The focused 5,000-part/4,900-wire benchmark mounted 64 parts and 551 wires; initial render was 808 ms, selection median/p95 10/31 ms, select-all-to-frame 41 ms, zoom-to-two-frames median/max 40/57 ms, and arrow-navigation median/max 26/29 ms. These single-run values remain consistent with prior same-host results and do not establish a regression or speedup. An additional UI optimization caches imported symbol drawing bounds across repeated IC instances; its bounds and cache reuse are covered by a unit regression, but the browser benchmark does not isolate that path. No WASM rebuild or Pages workflow ran.
