@@ -710,3 +710,7 @@ The complete 172-workflow engine-independent Firefox suite passed. The focused 5
 ### Imported-library dependency indexing (2026-10-14)
 
 The quick domain benchmark now includes 501 imported model libraries and 500 project-local `.LIB filename section` references to a shared library. The analysis resolved all 500 references with a median of **9.33 ms** and p95 of **9.67 ms** on the documented i7-12700F host. Dependency analysis indexes asset basenames once and caches each target library's section list, avoiding a full imported-asset scan and repeat section parse for each reference. This synthetic fixture is a scaling check, not a user-facing latency budget; it does not include browser rendering or ngspice solving.
+
+### Repeated result-animation scrub baseline (2026-10-14)
+
+The focused `browser-500-component-animation-scrub-v2` test was run three times in fresh contexts per browser with the existing local ngspice runtime. The fixture has 501 parts, 1,001 vectors, and 119 transient samples; it animates 19 visible parts initially and all 501 after Fit all. End-keyboard scrub-to-readout times were 33.32, 37.07, and 34.06 ms in Chromium (median 34.06 ms), and 47.57, 50.59, and 49.89 ms in Firefox (median 49.89 ms). These include Playwright keyboard interaction and assertion time, not pure frame time. The earlier same-host Firefox pair measured 49.10 and 55.98 ms (median 52.54 ms); the overlap does not demonstrate a rendering gain. A controlled before/after comparison remains open. No WASM build or Pages workflow ran.
