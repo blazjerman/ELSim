@@ -1,6 +1,6 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
-import { isSafeSubcircuitParameterValue, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
@@ -459,16 +459,18 @@ export function validateProject(input: unknown): Project {
     if (!Array.isArray(data.modelAssets) || data.modelAssets.length > 16) throw new Error('A project can store up to 16 imported model libraries.')
     const assetIds = new Set<string>()
     let totalBytes = 0
-    for (const candidate of data.modelAssets as ModelLibraryAsset[]) {
+    const modelAssets = data.modelAssets as ModelLibraryAsset[]
+    for (const candidate of modelAssets) {
       if (!candidate || typeof candidate.id !== 'string' || !candidate.id || assetIds.has(candidate.id) || typeof candidate.filename !== 'string' || !candidate.filename.trim() || /[\\/\u0000-\u001f]/.test(candidate.filename) || typeof candidate.content !== 'string' || !/^[a-f\d]{64}$/i.test(candidate.sha256) || candidate.licenseStatus !== 'unknown' || typeof candidate.importedAt !== 'string' || !Number.isFinite(Date.parse(candidate.importedAt)) || !validAssetProvenance(candidate)) throw new Error('Project contains a malformed imported model library.')
       const size = new TextEncoder().encode(candidate.content).length
       if (size > 4 * 1024 * 1024) throw new Error(`${candidate.filename} exceeds the 4 MiB model library limit.`)
       totalBytes += size
       if (totalBytes > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
       if (candidate.selectedSections !== undefined && (!Array.isArray(candidate.selectedSections) || candidate.selectedSections.length > 32 || candidate.selectedSections.some((section) => typeof section !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) || new Set(candidate.selectedSections.map((section) => section.toLowerCase())).size !== candidate.selectedSections.length)) throw new Error(`${candidate.filename} has invalid selected .LIB sections.`)
-      parsedModelAssets.set(candidate.id, parseSubcircuitLibrary(candidate.content, candidate.selectedSections))
       assetIds.add(candidate.id)
     }
+    const availableFunctions = modelFunctionSignaturesForLibraries(modelAssets)
+    for (const candidate of modelAssets) parsedModelAssets.set(candidate.id, parseSubcircuitLibrary(candidate.content, candidate.selectedSections, availableFunctions))
   }
   if (data.symbolAssets !== undefined) {
     if (!Array.isArray(data.symbolAssets) || data.symbolAssets.length > 32) throw new Error('A project can store up to 32 imported symbols.')
@@ -512,6 +514,9 @@ export function validateProject(input: unknown): Project {
     if (!parsed) throw new Error(`${asset.filename} could not be parsed as a model library.`)
     const functions = modelFunctionsForAsset(parsedModelLibraryEntries, asset.id)
     for (const definition of parsed.subcircuits) {
+      for (const parameter of definition.parameters) {
+        if (!isSafeSubcircuitParameterValue(parameter.defaultValue, functions)) throw new Error(`Line ${definition.startLine}: .SUBCKT ${definition.name} parameter ${parameter.name} calls a function that is not available from its library include chain.`)
+      }
       const name = definition.name.toLowerCase()
       if (!importedDefinitionByName.has(name)) importedDefinitionByName.set(name, { asset, definition, functions })
     }

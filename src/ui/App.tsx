@@ -13,7 +13,7 @@ import { fitEditorView } from '../domain/editorView'
 import { moveSelectedSceneObjects } from '../domain/sceneEdit'
 import type { ElectricalIssue } from '../domain/electricalCheck'
 import { trapDialogTab } from './dialogKeyboard'
-import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
+import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import type { SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { parseSymbolAsset } from '../domain/symbolAsset'
@@ -3056,10 +3056,11 @@ export default function App() {
   const schematicSourceProvenanceEditor = (source: NonNullable<Project['importedSchematicSource']>, sourceIndex: number) => <details className="asset-provenance"><summary>Record source and license notes</summary><label className="field-label">Source URL<input aria-label={`Source URL for ${source.filename}`} maxLength={2048} value={source.sourceUrl ?? ''} placeholder="https://…" onChange={(event) => updateSchematicSourceProvenance(sourceIndex, 'sourceUrl', event.target.value)}/></label><label className="field-label">License reference<input aria-label={`License reference for ${source.filename}`} maxLength={128} value={source.licenseReference ?? ''} placeholder="For example, MIT or supplier terms" onChange={(event) => updateSchematicSourceProvenance(sourceIndex, 'licenseReference', event.target.value)}/></label><label className="field-label">Rights review notes<textarea aria-label={`Rights review notes for ${source.filename}`} maxLength={1000} value={source.rightsNotes ?? ''} placeholder="Record who supplied it and what you verified." onChange={(event) => updateSchematicSourceProvenance(sourceIndex, 'rightsNotes', event.target.value)}/></label><small>These are your notes only. ELSim cannot verify the source, license, or redistribution permission; status remains unknown.</small></details>
   const commitModelLibraryImport = async (filename: string, content: string, replaceId: string | null, selectedSections?: string[]) => {
     try {
-      const parsed = parseSubcircuitLibrary(content, selectedSections)
       const currentAssets = projectRef.current.modelAssets ?? []
       if (replaceId && !currentAssets.some((asset) => asset.id === replaceId)) throw new Error('The model library selected for replacement is no longer in this project.')
       const otherAssets = currentAssets.filter((asset) => asset.id !== replaceId)
+      const availableFunctions = modelFunctionSignaturesForLibraries([...otherAssets, { content, selectedSections }])
+      const parsed = parseSubcircuitLibrary(content, selectedSections, availableFunctions)
       if (otherAssets.length >= 16) throw new Error('A project can store up to 16 imported model libraries.')
       const fileSize = new TextEncoder().encode(content).length
       const currentModelBytes = otherAssets.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0)
@@ -3093,7 +3094,8 @@ export default function App() {
       const incomingBytes = imports.reduce((sum, item) => sum + new TextEncoder().encode(item.content).length, 0)
       const currentBytes = currentAssets.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0)
       if (currentBytes + incomingBytes > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
-      const parsed = imports.map((item) => parseSubcircuitLibrary(item.content, item.selectedSections))
+      const availableFunctions = modelFunctionSignaturesForLibraries([...currentAssets, ...imports])
+      const parsed = imports.map((item) => parseSubcircuitLibrary(item.content, item.selectedSections, availableFunctions))
       const addedAssets = await Promise.all(imports.map(async (item) => ({
         id: `model-${crypto.randomUUID()}`,
         filename: item.filename,

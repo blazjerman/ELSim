@@ -277,6 +277,42 @@ function parseLibraryFunctions(lines: readonly LogicalLine[]): ModelFunction[] {
   return [...functions.values()]
 }
 
+/**
+ * Read the signatures declared by one library without requiring its subcircuit
+ * parameter defaults to be valid yet. This lets a project resolve forward
+ * references to functions declared in another imported library.
+ */
+export function parseModelFunctionSignatures(source: string, selectedSections?: string[]): Map<string, number> {
+  if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
+  if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
+  const inspected = inspectLibrarySections(source)
+  let selected = selectedSections
+  if (inspected.sections.length > 1 && !selected) throw new Error('This model library contains multiple .LIB sections. Select the section or sections referenced by your schematic before importing it.')
+  if (inspected.sections.length === 1 && !selected) selected = inspected.sections
+  if (inspected.sections.length === 0 && selected?.length) throw new Error('This model library has no .LIB sections to select.')
+  if (selected && (!selected.length || selected.length > inspected.sections.length || new Set(selected.map((section) => section.toLowerCase())).size !== selected.length || selected.some((section) => !inspected.sections.some((available) => available.toLowerCase() === section.toLowerCase())))) throw new Error('Choose one or more section names that exist in this model library.')
+  const selectedNames = new Set(selected?.map((section) => section.toLowerCase()) ?? [])
+  const lines = inspected.sections.length
+    ? inspected.lines.filter(({ section }) => section === null || section !== null && selectedNames.has(section.toLowerCase())).map(({ line }) => line)
+    : inspected.lines.map(({ line }) => line)
+  return new Map(parseLibraryFunctions(lines).map(({ name, arity }) => [name.toLowerCase(), arity]))
+}
+
+/** Collect unambiguous function signatures across project libraries for parsing. */
+export function modelFunctionSignaturesForLibraries<T extends Pick<ModelLibraryInput, 'content' | 'selectedSections'>>(assets: readonly T[]): Map<string, number> {
+  const signatures = new Map<string, number>()
+  const ambiguous = new Set<string>()
+  for (const asset of assets) for (const [name, arity] of parseModelFunctionSignatures(asset.content, asset.selectedSections)) {
+    if (ambiguous.has(name)) continue
+    const previous = signatures.get(name)
+    if (previous !== undefined && previous !== arity) {
+      signatures.delete(name)
+      ambiguous.add(name)
+    } else signatures.set(name, arity)
+  }
+  return signatures
+}
+
 function parseModelCard(text: string, line: LogicalLine, scope?: string): SpiceModelDefinition {
   const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+ako\s*:\s*\S+\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
     ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
@@ -863,7 +899,11 @@ export function modelFunctionsForProject<T extends ModelLibraryInput>(assets: re
 
 /** Parse each library once, then share its definitions with dependency checks and the UI. */
 export function analyzeModelLibraries<T extends ModelLibraryInput>(assets: T[]): AnalyzedModelLibraries<T> {
-  const parsedAssets = assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections) }))
+  // First collect declarations so PARAMS defaults can refer to a .FUNC in
+  // another project library. Later project validation still checks that each
+  // placed model can actually reach that function through its include chain.
+  const availableFunctions = modelFunctionSignaturesForLibraries(assets)
+  const parsedAssets = assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content, asset.selectedSections, availableFunctions) }))
   return { assets: parsedAssets, dependencies: analyzeParsedModelDependencies(parsedAssets) }
 }
 

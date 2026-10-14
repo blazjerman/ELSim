@@ -40,6 +40,19 @@ test('imported functions are scoped to the model and its project-local include c
   assert.equal(block.subcircuits[0].parameters[0].defaultValue, '{DOUBLE(2)}')
 })
 
+test('library analysis accepts subcircuit defaults using functions from included libraries', () => {
+  const analysis = analyzeModelLibraries([
+    { id: 'amplifier', filename: 'amplifier.lib', content: '.include helpers.lib\n.SUBCKT AMP IN OUT PARAMS: RLOAD={SCALE(2)}\nR1 IN OUT {RLOAD}\n.ENDS AMP' },
+    { id: 'helpers', filename: 'helpers.lib', content: '.FUNC SCALE(x) {2k*x}\n' },
+    { id: 'unrelated', filename: 'unrelated.lib', content: '.FUNC SECRET(x) {x}\n' },
+  ])
+  const amplifier = analysis.assets.find(({ asset }) => asset.id === 'amplifier')
+  assert.ok(amplifier)
+  assert.deepEqual(amplifier.parsed.subcircuits[0].parameters, [{ name: 'RLOAD', defaultValue: '{SCALE(2)}' }])
+  assert.deepEqual([...modelFunctionsForAsset(analysis.assets, 'amplifier')], [['scale', 1]])
+  assert.deepEqual(analysis.dependencies.missingIncludes, [])
+})
+
 test('combined model-library analysis shares parsed cards with dependency resolution', () => {
   const assets = [
     { id: 'child', filename: 'child.lib', content: '.SUBCKT CHILD IN OUT\nR1 IN OUT 1k\n.ENDS CHILD\n.MODEL DFAST D(IS=2n)' },

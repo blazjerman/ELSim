@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { isSafeSubcircuitParameterValue, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
@@ -158,7 +158,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const jfetModels: { part: Part; name: string }[] = []
   const mosfetModels: { part: Part; name: string }[] = []
   const modelAssets = project.modelAssets ?? []
-  const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections))
+  const availableModelFunctions = modelFunctionSignaturesForLibraries(modelAssets)
+  const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections, availableModelFunctions))
   const parsedModelLibraryEntries = modelAssets.map((asset, index) => ({ asset, parsed: parsedModelAssets[index] }))
   const projectModelFunctions = modelFunctionsForProject(parsedModelLibraryEntries)
   const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models.filter((model) => !model.scope))

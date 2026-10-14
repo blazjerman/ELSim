@@ -272,6 +272,28 @@ test('sheet block parameter defaults and overrides can call imported project fun
   assert.throws(() => validateProject(invalid), /unsupported block parameter override/)
 })
 
+test('imported subcircuit defaults and instance overrides can call included library functions', () => {
+  const project = createBlockProject()
+  project.modelAssets = [
+    { id: 'amp-library', filename: 'amp.lib', content: '.include helpers.lib\n.SUBCKT AMP IN OUT PARAMS: RLOAD={SCALE(2)}\nR1 IN OUT {RLOAD}\n.ENDS AMP', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'helper-library', filename: 'helpers.lib', content: '.FUNC SCALE(x) {2k*x}\n', sha256: 'b'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const imported = { id: 'root-amp', kind: 'subcircuit', ref: 'XAMP', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], modelParameters: { RLOAD: '{SCALE(3)}' }, x: 500, y: 400, rotation: 0 }
+  project.parts.push(imported)
+  project.sheets[0].parts = project.parts
+
+  const validated = validateProject(project)
+  const netlist = createNetlistArtifact(validated)
+  assert.deepEqual(netlist.diagnostics.filter(({ severity }) => severity === 'error'), [])
+  assert.match(netlist.text, /^\.FUNC SCALE\(x\) \{2k\*x\}$/mi)
+  assert.match(netlist.text, /^\.SUBCKT AMP IN OUT PARAMS: RLOAD=\{SCALE\(2\)\}$/mi)
+  assert.match(netlist.text, /^XAMP\s+\S+\s+\S+\s+AMP PARAMS: RLOAD=\{SCALE\(3\)\}$/mi)
+
+  const missingInclude = structuredClone(project)
+  missingInclude.modelAssets[0].content = missingInclude.modelAssets[0].content.replace('.include helpers.lib\n', '')
+  assert.throws(() => validateProject(missingInclude), /not available from its library include chain/)
+})
+
 test('nested sheet data generates inner definitions before outer reusable blocks', () => {
   const project = createBlockProject()
   const outer = project.sheets[1]

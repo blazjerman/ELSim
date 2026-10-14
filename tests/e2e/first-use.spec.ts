@@ -2137,6 +2137,41 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
+test('subcircuit parameter defaults can call functions from an imported include library', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const input = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await input.setInputFiles({ name: 'helpers.lib', mimeType: 'text/plain', buffer: Buffer.from('.FUNC SCALE(x) {2k*x}\n') })
+  await expect(page.getByText(/Imported 0 subcircuits and 0 device models from helpers\.lib/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await input.setInputFiles({
+    name: 'amplifier.lib', mimeType: 'text/plain',
+    buffer: Buffer.from('.include helpers.lib\n.SUBCKT AMP IN OUT PARAMS: RLOAD={SCALE(2)}\nR1 IN OUT {RLOAD}\n.ENDS AMP'),
+  })
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'AMP' })
+  await expect(importedModel).toContainText('Parameters: RLOAD={SCALE(2)}')
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/^\.FUNC SCALE\(x\) \{2k\*x\}$/m)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/^\.SUBCKT AMP IN OUT PARAMS: RLOAD=\{SCALE\(2\)\}$/m)
+})
+
+test('batch-imported model libraries resolve included functions regardless of file order', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles([
+    { name: 'amplifier.lib', mimeType: 'text/plain', buffer: Buffer.from('.include helpers.lib\n.SUBCKT AMP IN OUT PARAMS: RLOAD={SCALE(2)}\nR1 IN OUT {RLOAD}\n.ENDS AMP') },
+    { name: 'helpers.lib', mimeType: 'text/plain', buffer: Buffer.from('.FUNC SCALE(x) {2k*x}\n') },
+  ])
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'AMP' })
+  await expect(importedModel).toContainText('Parameters: RLOAD={SCALE(2)}')
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/^\.FUNC SCALE\(x\) \{2k\*x\}$/m)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/^\.SUBCKT AMP IN OUT PARAMS: RLOAD=\{SCALE\(2\)\}$/m)
+})
+
 test('native VDMOS power MOSFET imports, selects, and runs its ngspice model', { tag: '@ngspice' }, async ({ page }) => {
   const project = createStarterProject()
   const modelContent = '.model NPOWER VDMOS Nchan VTO=2 KP=1\n'
