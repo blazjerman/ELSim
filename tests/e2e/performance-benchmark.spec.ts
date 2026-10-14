@@ -22,7 +22,10 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
     const source = {
       ...sourceTemplate,
       id: 'animation-bench-v1', ref: 'V1', value: '5 V', sourceMode: 'pulse',
-      pulse: { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '2m', period: '5m' }, x: 120, y: 400,
+      // Put the edge inside the simulated time range so Home and End expose
+      // different component readings; a pulse that starts at t=0 is already
+      // settled for nearly every saved sample and makes this check flaky.
+      pulse: { initial: '0', delay: '0.5m', rise: '1u', fall: '1u', width: '2m', period: '5m' }, x: 120, y: 400,
     }
     const resistors = Array.from({ length: sections }, (_, index) => ({
       ...resistorTemplate,
@@ -73,9 +76,11 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   const visibleAnimationCount = await page.locator('svg.schematic g.circuit-part > title').count()
   expect(visibleAnimationCount).toBeLessThan(50)
   await slider.press('Home')
+  await expect(slider).toHaveValue('0')
   const initialReading = await visibleResistorTitle.textContent()
   const started = performance.now()
   await slider.press('End')
+  await expect(slider).toHaveValue(await slider.getAttribute('max') ?? '')
   await expect(visibleResistorTitle).not.toHaveText(initialReading ?? '')
   await expect(offscreenResistorTitle).toHaveCount(0)
   const scrubMs = performance.now() - started
