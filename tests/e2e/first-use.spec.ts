@@ -2859,6 +2859,32 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return project.parts.find((item: { ref: string }) => item.ref === 'X1')?.symbolPinOffsets
   })).toEqual([[-60, -20], [-60, 20], [0, -60], [0, 60], [60, 0]])
+
+  await page.getByRole('button', { name: 'Create simple symbol & place' }).click()
+  const generatedPart = page.locator('.circuit-part[aria-label^="X2,"]')
+  await expect(generatedPart).toBeVisible()
+  await expect(generatedPart.locator('.imported-symbol-art rect')).toHaveCount(1)
+  await expect(generatedPart.locator('.imported-symbol-art circle')).toHaveCount(5)
+  await expect(generatedPart.locator('.imported-symbol-art text')).toContainText(['USER_AMP', 'INP', 'INM', 'VCC', 'VEE', 'OUT'])
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return project.symbolAssets.some((item: { filename: string }) => item.filename === 'USER_AMP-symbol.elsym')
+  })).toBe(true)
+  const generated = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return {
+      asset: project.symbolAssets.find((item: { filename: string }) => item.filename === 'USER_AMP-symbol.elsym'),
+      pins: project.parts.find((item: { ref: string }) => item.ref === 'X2')?.symbolPinOffsets,
+    }
+  })
+  expect(generated.asset.licenseStatus).toBe('unknown')
+  expect(generated.asset.content).toContain('"format": "elsim-symbol"')
+  expect(createHash('sha256').update(generated.asset.content).digest('hex')).toBe(generated.asset.sha256)
+  expect(generated.pins).toEqual([[-70, -20], [-70, 0], [-70, 20], [70, -10], [70, 10]])
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download USER_AMP-symbol.elsym' }).click()
+  expect((await downloadPromise).suggestedFilename()).toBe('USER_AMP-symbol.elsym')
 })
 
 test('copying a user IC into a new project carries transitive libraries and its custom symbol', async ({ page }) => {

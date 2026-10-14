@@ -6,7 +6,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { parseElsimSymbol } = require(path.join(build, 'domain/elsimSymbol.js'))
+const { createDefaultElsimSymbol, parseElsimSymbol } = require(path.join(build, 'domain/elsimSymbol.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createProjectArchive, readProjectArchive } = require(path.join(build, 'domain/projectArchive.js'))
@@ -46,6 +46,25 @@ test('native symbol parser rejects unsafe or ambiguous symbol data', () => {
   assert.throws(() => parse({ primitives: [{ kind: 'path', d: 'M0 0', href: 'https://example.invalid/a.svg' }] }), /unsupported field href/)
   assert.throws(() => parse({ primitives: [{ kind: 'image', href: 'https://example.invalid/a.svg' }] }), /unsupported kind/)
   assert.throws(() => parseElsimSymbol(' '.repeat(1024 * 1024 + 1), 'large.elsym'), /1 MiB/)
+})
+
+test('default ELSim symbols retain model pin order and create left/right leads', () => {
+  const content = createDefaultElsimSymbol(' USER_AMP ', ['INP', 'INM', 'VPOS', 'VNEG', 'OUT'])
+  const symbol = parseElsimSymbol(content, 'USER_AMP-symbol.elsym')
+  assert.equal(symbol.name, 'USER_AMP')
+  assert.deepEqual(symbol.pins.map(({ name, spiceOrder }) => [name, spiceOrder]), [
+    ['INP', 1], ['INM', 2], ['VPOS', 3], ['VNEG', 4], ['OUT', 5],
+  ])
+  assert.deepEqual(symbol.pins.map(({ x }) => x), [-70, -70, -70, 70, 70])
+  assert.deepEqual(symbol.primitives[0], { kind: 'rectangle', x1: -50, y1: -30, x2: 50, y2: 30 })
+  assert.equal(symbol.primitives.filter(({ kind }) => kind === 'line').length, 5)
+})
+
+test('default ELSim symbols reject empty, duplicate, or oversized pin lists', () => {
+  assert.throws(() => createDefaultElsimSymbol('IC', []), /needs 1–64 ordered pins/)
+  assert.throws(() => createDefaultElsimSymbol('IC', ['IN', 'in']), /unique names/)
+  assert.throws(() => createDefaultElsimSymbol('IC', Array.from({ length: 65 }, (_, index) => `P${index + 1}`)), /needs 1–64 ordered pins/)
+  assert.throws(() => createDefaultElsimSymbol(' '.repeat(81), ['IN']), /symbol name/)
 })
 
 test('native symbol assets validate and persist on a placed imported subcircuit', () => {

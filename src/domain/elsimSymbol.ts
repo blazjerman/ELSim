@@ -94,3 +94,36 @@ export function parseElsimSymbol(source: string, filename = 'Custom symbol.elsym
   const primitives = document.primitives.map((primitive, index) => parsePrimitive(primitive, filename, index))
   return { name, attributes: {}, primitives, pins, warnings: [] }
 }
+
+/** Create a simple, readable left/right-pin symbol for a user model. */
+export function createDefaultElsimSymbol(name: string, pinNames: readonly string[]): string {
+  const symbolName = name.trim()
+  if (!symbolName || symbolName.length > 80 || /[\u0000-\u001f]/.test(symbolName)) throw new Error('A symbol name must contain 1–80 printable characters.')
+  if (!pinNames.length || pinNames.length > MAX_PINS) throw new Error(`A symbol needs 1–${MAX_PINS} ordered pins.`)
+  const normalizedPins = pinNames.map((pin) => pin.trim())
+  if (normalizedPins.some((pin) => !pin || pin.length > 64) || new Set(normalizedPins.map((pin) => pin.toLowerCase())).size !== normalizedPins.length) throw new Error('Model pins must have unique names of 1–64 characters.')
+  const leftCount = Math.ceil(normalizedPins.length / 2)
+  const rightCount = normalizedPins.length - leftCount
+  const rows = Math.max(leftCount, rightCount, 1)
+  const halfHeight = Math.max(30, (rows - 1) * 10 + 10)
+  const pins = normalizedPins.map((pin, index) => {
+    const left = index < leftCount
+    const sideIndex = left ? index : index - leftCount
+    const count = left ? leftCount : rightCount
+    return {
+      name: pin,
+      spiceOrder: index + 1,
+      x: left ? -70 : 70,
+      y: (sideIndex - (count - 1) / 2) * 20,
+      orientation: left ? 'R' : 'L',
+    }
+  })
+  const primitives = [
+    { kind: 'rectangle', x1: -50, y1: -halfHeight, x2: 50, y2: halfHeight },
+    { kind: 'text', x: 0, y: 4, alignment: 'Center', size: 2.5, text: symbolName },
+    ...pins.map((pin) => ({ kind: 'line', x1: pin.x < 0 ? pin.x : 50, y1: pin.y, x2: pin.x < 0 ? -50 : pin.x, y2: pin.y })),
+  ]
+  const source = JSON.stringify({ format: 'elsim-symbol', version: 1, name: symbolName, pins, primitives }, null, 2)
+  parseElsimSymbol(source, `${symbolName}.elsym`)
+  return source
+}
