@@ -4440,6 +4440,7 @@ export default function App() {
               <p>{exampleLesson.guidance}</p>
               {!lessonNextStep && <Suspense fallback={null}>
                 {exampleLesson.id === 'rc' && <BeginnerPrediction kind="rc" key={`${partsById.get('p-r1')?.value ?? ''}:${partsById.get('p-c1')?.value ?? ''}`} resistanceValue={partsById.get('p-r1')?.value ?? ''} capacitanceValue={partsById.get('p-c1')?.value ?? ''}/>}
+                {exampleLesson.id === 'rl-step' && <BeginnerPrediction kind="rl-time-constant" key={`${partsById.get('rl-step-r1')?.value ?? ''}:${partsById.get('rl-step-l1')?.value ?? ''}`} resistanceValue={partsById.get('rl-step-r1')?.value ?? ''} inductanceValue={partsById.get('rl-step-l1')?.value ?? ''}/>}
                 {exampleLesson.id === 'switch-lamp' && <BeginnerPrediction kind="switch-lamp"/>}
                 {exampleLesson.id === 'ohms-law' && <BeginnerPrediction kind="ohms-law" key={`${partsById.get('ohms-law-v1')?.value ?? ''}:${partsById.get('ohms-law-r1')?.value ?? ''}`} supplyValue={partsById.get('ohms-law-v1')?.value ?? ''} resistanceValue={partsById.get('ohms-law-r1')?.value ?? ''}/>}
                 {exampleLesson.id === 'current-source' && <BeginnerPrediction kind="current-source" key={`${partsById.get('isource-i1')?.value ?? ''}:${partsById.get('isource-r1')?.value ?? ''}`} currentValue={partsById.get('isource-i1')?.value ?? ''} resistanceValue={partsById.get('isource-r1')?.value ?? ''}/>}

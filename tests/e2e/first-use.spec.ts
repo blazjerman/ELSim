@@ -639,6 +639,34 @@ test('RC lesson checks a time-constant prediction and recalculates it after an e
   expect(await page.locator('html').evaluate((element) => element.scrollWidth)).toBe(390)
 })
 
+test('inductor-ramp lesson predicts L/R and recalculates the time constant after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Inductor current ramp' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = lesson.getByRole('textbox', { name: 'Before running, predict the inductor time constant τ' })
+  await expect(lesson).toContainText('L/R = 1 ms')
+  await estimate.fill('0.5')
+  await estimate.press('Enter')
+  await expect(lesson.getByRole('status')).toHaveText('Not quite. τ = L1 ÷ R1 = 100 mH ÷ 100 Ω = 1 ms. For a step input, inductor current reaches about 63% of its final value after one time constant.')
+  await estimate.fill('1 ms')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. τ = L1 ÷ R1 = 100 mH ÷ 100 Ω = 1 ms. For a step input, inductor current reaches about 63% of its final value after one time constant.')
+
+  await page.locator('.circuit-part[data-part-id="rl-step-r1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="rl-step-r1:value"]').fill('200 Ω')
+  const updatedEstimate = lesson.getByRole('textbox', { name: 'Before running, predict the inductor time constant τ' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('0.5ms')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. τ = L1 ÷ R1 = 100 mH ÷ 200 Ω = 0.5 ms. For a step input, inductor current reaches about 63% of its final value after one time constant.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+})
+
 test('switch-and-lamp lesson predicts the open-circuit current path before running', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

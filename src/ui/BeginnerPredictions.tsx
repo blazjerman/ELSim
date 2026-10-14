@@ -304,6 +304,26 @@ export function RcTimeConstantPrediction({ resistanceValue, capacitanceValue }: 
   />
 }
 
+export function RlTimeConstantPrediction({ resistanceValue, inductanceValue }: { resistanceValue: string; inductanceValue: string }) {
+  const resistance = componentMagnitude(resistanceValue, 'resistor')
+  const inductance = componentMagnitude(inductanceValue, 'inductor')
+  const predictedMilliseconds = resistance !== null && inductance !== null && resistance > 0 && inductance > 0
+    ? inductance / resistance * 1000
+    : null
+  const explanation = predictedMilliseconds === null
+    ? ''
+    : `τ = L1 ÷ R1 = ${inductanceValue} ÷ ${formatResistance(resistance!)} = ${formatValue(predictedMilliseconds)} ms. For a step input, inductor current reaches about 63% of its final value after one time constant.`
+
+  return <NumericPrediction
+    id="rl-time-constant-prediction"
+    prompt="Before running, predict the inductor time constant τ"
+    unit="ms"
+    predictedValue={predictedMilliseconds}
+    absoluteTolerance={0.01}
+    explanation={explanation}
+  />
+}
+
 export function CapacitorDischargePrediction({ initialVoltageValue, resistanceValue, capacitanceValue }: { initialVoltageValue: string; resistanceValue: string; capacitanceValue: string }) {
   const initialVoltage = componentMagnitude(initialVoltageValue, 'source')
   const resistance = componentMagnitude(resistanceValue, 'resistor')
@@ -606,7 +626,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'rl-time-constant' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -640,6 +660,7 @@ type BeginnerPredictionProps = {
 export function BeginnerPrediction(props: BeginnerPredictionProps) {
   switch (props.kind) {
     case 'rc': return <RcTimeConstantPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
+    case 'rl-time-constant': return <RlTimeConstantPrediction resistanceValue={props.resistanceValue ?? ''} inductanceValue={props.inductanceValue ?? ''}/>
     case 'switch-lamp': return <SwitchPathPrediction/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
