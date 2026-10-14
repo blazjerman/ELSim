@@ -9558,12 +9558,20 @@ test('imported .MODEL defaults that call .FUNC helpers stay in the generated net
   await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
 
-  const modelLibrary = '.MODEL USER_NPN NPN (IS=1e-14 BF={SCALE(5)} VAF=100)\n.FUNC SCALE(x) {2*x}\n'
+  const modelLibrary = '.include helpers.lib\n.MODEL USER_NPN NPN (IS=1e-14 BF={SCALE(5)} VAF=100)\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
-  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+  const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await modelInput.setInputFiles({
     name: 'function-backed-model.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
   })
   await expect(page.getByText(/Imported 0 subcircuits and 1 device model from function-backed-model\.lib/)).toBeVisible()
+  const dependencyReport = page.getByRole('region', { name: 'Model dependency report' })
+  await expect(dependencyReport).toContainText('helpers.lib')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await modelInput.setInputFiles({
+    name: 'helpers.lib', mimeType: 'text/plain', buffer: Buffer.from('.FUNC SCALE(x) {2*x}\n'),
+  })
+  await expect(dependencyReport).toHaveCount(0)
   await page.locator('.circuit-part[aria-label^="Q1,"]').click()
   await page.getByLabel('Device model for Q1').selectOption('USER_NPN')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
