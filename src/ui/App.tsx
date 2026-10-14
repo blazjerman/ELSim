@@ -41,7 +41,7 @@ import type { LtspiceExportResult } from '../domain/ltspiceExport'
 import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type PlotTraceReference, type Project, type SymbolAsset, type TransientMeasurement, type Wire } from '../domain/project'
 import { validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlistValidation'
 import { partUiState, subscribePartUiState, updatePartUiState } from './partUiState'
-import { clearProjectAutosave, readProjectAutosave, shouldRestoreProjectAutosave, writeProjectAutosave } from '../domain/projectAutosave'
+import { clearProjectAutosave, loadStoredProjectCandidates, readProjectAutosave, shouldRestoreProjectAutosave, writeProjectAutosave } from '../domain/projectAutosave'
 import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
@@ -1854,6 +1854,11 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
   </div>
 }
 
+// The schematic owns the expensive SVG scene. Memoizing it keeps unrelated
+// inspector/dialog state updates from rebuilding that scene. App action props
+// are forwarded through a ref so the memoized view always invokes current logic.
+const MemoizedSchematic = memo(Schematic)
+
 export default function App() {
   const examplesTriggerRef = useRef<HTMLButtonElement>(null)
   const shortcutsTriggerRef = useRef<HTMLButtonElement>(null)
@@ -1879,11 +1884,14 @@ export default function App() {
   const [mobilePane, setMobilePane] = useState<'components' | 'schematic' | 'properties'>('schematic')
   const [initialProjectLoad] = useState(() => {
     try {
-      const saved = localStorage.getItem('elsim:project:v7') ?? localStorage.getItem('elsim:project:v6') ?? localStorage.getItem('elsim:project:v5') ?? localStorage.getItem('elsim:project:v4') ?? localStorage.getItem('elsim:project:v3') ?? localStorage.getItem('elsim:project:v2') ?? localStorage.getItem('elsim:project:v1')
-      return saved ? { project: validateProject(JSON.parse(saved)), fromLocalStorage: true } : { project: createStarterProject(), fromLocalStorage: false }
-    } catch { return { project: createStarterProject(), fromLocalStorage: false } }
+      return loadStoredProjectCandidates(['v7', 'v6', 'v5', 'v4', 'v3', 'v2', 'v1'].map((version) => ({
+        key: `elsim:project:${version}`,
+        json: localStorage.getItem(`elsim:project:${version}`),
+      })))
+    } catch { return { project: createStarterProject(), sourceKey: null, corruptCopies: [] } }
   })
   const [project, setProjectState] = useState(initialProjectLoad.project)
+  const [corruptLocalProjectCopies, setCorruptLocalProjectCopies] = useState(initialProjectLoad.corruptCopies)
   const [projectSessionId, setProjectSessionId] = useState(0)
   const [initialSelectedPartId] = useState(() => (project.parts.find((part) => part.id === 'p-r1') ?? project.parts.find((part) => part.kind === 'resistor') ?? project.parts[0])?.id ?? null)
   const [selection, setSelection] = useState<Selection>(() => initialSelectedPartId ? { kind: 'part', id: initialSelectedPartId } : null)
@@ -1898,7 +1906,7 @@ export default function App() {
   }, [])
   const [selectedWireIds, setSelectedWireIds] = useState<string[]>([])
   const selectedWireId = selectedWireIds.at(-1) ?? null
-  const setSelectedWireId = (id: string | null) => setSelectedWireIds(id ? [id] : [])
+  const setSelectedWireId = useCallback((id: string | null) => setSelectedWireIds(id ? [id] : []), [])
   const pendingPasteSelection = useRef<{ partIds: string[]; wireIds: string[]; labelIds: string[]; selection: Selection } | null>(null)
   const [selectedPartIds, setSelectedPartIds] = useState<string[]>(() => initialSelectedPartId ? [initialSelectedPartId] : [])
   const sheetSelectionState = useRef(new Map<string, SheetSelectionState>())
@@ -2078,7 +2086,7 @@ export default function App() {
           try {
             const recoveredProject = validateProject(JSON.parse(snapshot.json))
             if (shouldRestoreProjectAutosave(
-              initialProjectLoad.fromLocalStorage ? { updatedAt: initialProjectLoad.project.updatedAt, savedAt: localSavedAt } : null,
+              initialProjectLoad.sourceKey === 'elsim:project:v7' ? { updatedAt: initialProjectLoad.project.updatedAt, savedAt: localSavedAt } : initialProjectLoad.sourceKey ? { updatedAt: initialProjectLoad.project.updatedAt, savedAt: 0 } : null,
               { updatedAt: recoveredProject.updatedAt, savedAt: snapshot.savedAt },
             )) {
               setProjectState(recoveredProject)
@@ -2303,7 +2311,7 @@ export default function App() {
     return requiredModelAssets.has(assetId)
   }
   useEffect(() => {
-    if (!projectRecoveryReady) return
+    if (!projectRecoveryReady || corruptLocalProjectCopies.length > 0) return
     setAutosaveStatus('saving')
     if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
     autosaveTimerRef.current = window.setTimeout(() => {
@@ -2314,7 +2322,7 @@ export default function App() {
       if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
       autosaveTimerRef.current = null
     }
-  }, [project, projectRecoveryReady])
+  }, [project, projectRecoveryReady, corruptLocalProjectCopies.length])
   useEffect(() => {
     let active = true
     const assets = [...(project.modelAssets ?? []), ...(project.symbolAssets ?? [])]
@@ -2851,6 +2859,14 @@ export default function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     setNotice(`Downloaded ${asset.filename}.`)
   }
+  const downloadCorruptLocalProject = (copy: { key: string; json: string }) => {
+    const url = URL.createObjectURL(new Blob([copy.json], { type: 'application/json;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${copy.key.replace(/[^a-z0-9-]+/gi, '-')}-recovery.json`
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
   const exportProvenanceFiles = () => [
     ...(projectRef.current.modelAssets ?? []).map((asset) => ({ filename: asset.filename, type: 'SPICE model library', sourceUrl: asset.sourceUrl, licenseReference: asset.licenseReference, rightsNotes: asset.rightsNotes })),
     ...(projectRef.current.symbolAssets ?? []).map((asset) => ({ filename: asset.filename, type: 'symbol file', sourceUrl: asset.sourceUrl, licenseReference: asset.licenseReference, rightsNotes: asset.rightsNotes })),
@@ -3338,7 +3354,7 @@ export default function App() {
       if (event.code !== 'Space') return
       const target = event.target
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady
+      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady || corruptLocalProjectCopies.length > 0
       if (editingText || modalOpen) return
       event.preventDefault()
       setSpacePan(true)
@@ -3358,7 +3374,7 @@ export default function App() {
       if (event.key === 'Escape' && ltspiceExport) { closeLtspiceExport(); return }
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
       if (event.key === 'Escape' && saveWarningOpen) { closeSaveWarning(); return }
-      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady
+      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady || corruptLocalProjectCopies.length > 0
       if (event.key === '/' && !modalOpen && !editingText) { event.preventDefault(); componentSearchRef.current?.focus(); return }
       if (editingText) return
       if (modalOpen) return
@@ -4239,6 +4255,24 @@ export default function App() {
     focusSchematicObjectAfterUpdate('wire', id)
   }
 
+  const schematicActionsRef = useRef({
+    setProject, recordViewDraft, beginEdit, endEdit, addPart, addProbe, addComponentVoltageProbe, requestSwitchSolve,
+    clearPending: () => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) },
+  })
+  schematicActionsRef.current = {
+    setProject, recordViewDraft, beginEdit, endEdit, addPart, addProbe, addComponentVoltageProbe, requestSwitchSolve,
+    clearPending: () => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) },
+  }
+  const schematicSetProject = useCallback((fn: (current: Project) => Project) => schematicActionsRef.current.setProject(fn), [])
+  const schematicRecordViewDraft = useCallback((sheetId: string, view: Project['view']) => schematicActionsRef.current.recordViewDraft(sheetId, view), [])
+  const schematicBeginEdit = useCallback(() => schematicActionsRef.current.beginEdit(), [])
+  const schematicEndEdit = useCallback(() => schematicActionsRef.current.endEdit(), [])
+  const schematicPlaceComponent = useCallback((kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => schematicActionsRef.current.addPart(kind, x, y, rotation, polarized, logicOperation), [])
+  const schematicClearPending = useCallback(() => schematicActionsRef.current.clearPending(), [])
+  const schematicProbe = useCallback((target: ProbeRequest) => schematicActionsRef.current.addProbe(target), [])
+  const schematicProbeVoltage = useCallback((id: string, positivePin?: number, negativePin?: number) => schematicActionsRef.current.addComponentVoltageProbe(id, positivePin, negativePin), [])
+  const schematicSwitchChanged = useCallback(() => schematicActionsRef.current.requestSwitchSolve(), [])
+
   return <div className="app-shell" onPointerDownCapture={(event) => {
     const target = event.target instanceof Element ? event.target : null
     if (!target?.closest('.sheet-tab-menu')) setSheetTabMenu(null)
@@ -4365,7 +4399,7 @@ export default function App() {
             <button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button>
           </aside>
         )}
-        <Schematic project={project} documentSessionId={projectSessionId} symbolsById={symbolsById} deviceModels={importedDeviceModels} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} commitView={commitView} recordViewDraft={recordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={addPart} onClearPendingComponent={() => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) }} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/>
+        <MemoizedSchematic project={project} documentSessionId={projectSessionId} symbolsById={symbolsById} deviceModels={importedDeviceModels} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={schematicSetProject} commitView={commitView} recordViewDraft={schematicRecordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={schematicPlaceComponent} onClearPendingComponent={schematicClearPending} setNotice={setNotice} beginEdit={schematicBeginEdit} endEdit={schematicEndEdit} onProbe={schematicProbe} onProbeVoltage={schematicProbeVoltage} onSwitchChanged={schematicSwitchChanged} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/>
       </main>
 
       {additionalPlotPanels.map((panel, index) => <AdditionalPlotWindow key={panel.id} panel={panel} index={index} title={waveformWindowTitle(panel, index)} result={simulationResult} onUpdate={updatePlotPanel} onClose={closePlotPanel} onActivate={activatePlotPanel} onToggleTrace={togglePlotPanelTrace} onExport={exportWaveformCsv} onRangeChange={changePlotPanelRange}/>)}
@@ -4480,6 +4514,7 @@ export default function App() {
       'After a run, right-click a wire or component and choose a voltage or current waveform. Use the time controls in the top toolbar to inspect solved values. Schematic animations follow those same results. The Netlist tab is optional; you do not need to edit SPICE text.',
       'Use Save to download an .elsim project file containing your circuit and its project data. Later, choose Open and select that file to continue. Imported symbols and model libraries remain project assets, so review the rights notice before sharing files that contain them.',
     ][tourStep]}</p>{tourStep === 1 && <button className="tour-run-action" onClick={editTourComponentValue}>Edit resistor value</button>}{tourStep === 2 && <button className="tour-run-action" onClick={() => { setTourStep(null); void startSimulation() }}><Play size={13} fill="currentColor"/> Run this circuit now</button>}<div className="tour-progress" role="progressbar" aria-label="Quick tour progress" aria-valuemin={1} aria-valuemax={5} aria-valuenow={tourStep + 1} aria-valuetext={`Step ${tourStep + 1} of 5`}>{[0, 1, 2, 3, 4].map((step) => <span key={step} className={step <= tourStep ? 'current' : ''} aria-hidden="true"/> )}</div><div className="tour-actions"><button className="tour-skip" onClick={() => setTourStep(null)}>Skip tour</button><span/>{tourStep > 0 && <button className="tour-secondary" onClick={() => setTourPage(tourStep - 1)}>Back</button>}<button ref={tourNextButtonRef} className="primary-small" onClick={() => tourStep === 4 ? setTourStep(null) : setTourPage(tourStep + 1)}>{tourStep === 4 ? 'Finish' : 'Next'} <ArrowUp size={13}/></button></div></section></div>}
+    {projectRecoveryReady && corruptLocalProjectCopies.length > 0 && <div className="tour-backdrop"><section className="tour-dialog" role="alertdialog" aria-modal="true" aria-labelledby="corrupt-project-title" aria-describedby="corrupt-project-description" onKeyDown={trapDialogTab}><div className="modal-heading"><div><span className="eyebrow">PROJECT RECOVERY</span><h2 id="corrupt-project-title">A saved project copy could not be opened</h2></div></div><p className="tour-copy" id="corrupt-project-description">ELSim kept the unreadable saved data and opened the latest valid project copy it could find. Download the unreadable data if you want to keep it for repair. Continuing will let ELSim replace the unreadable local save with the project currently open.</p><div className="example-list">{corruptLocalProjectCopies.map((copy, index) => <article key={copy.key}><div><strong>Unreadable local copy {index + 1}</strong><p>{copy.key}</p></div><button className="tour-secondary" aria-label={`Download unreadable local copy ${index + 1}`} onClick={() => downloadCorruptLocalProject(copy)}><Download size={13}/> Download data</button></article>)}</div><div className="modal-footer"><span>{initialProjectLoad.sourceKey ? `Valid copy loaded from ${initialProjectLoad.sourceKey}` : autosaveStatus === 'recovered' ? 'Recovered from browser storage' : 'A new starter circuit is open'}</span><button autoFocus className="primary-small" onClick={() => setCorruptLocalProjectCopies([])}>Continue with open project</button></div></section></div>}
     {!projectRecoveryReady && <div className="project-recovery-overlay" role="status" aria-live="polite"><span className="status-dot saving"/>Restoring your local project…</div>}
     <footer className="app-status" aria-live="polite">
       <div className="app-status-left">

@@ -1,4 +1,25 @@
+import { createStarterProject, validateProject, type Project } from './project'
+
 export type ProjectAutosaveSnapshot = { json: string; savedAt: number }
+export type StoredProjectCandidate = { key: string; json: string | null }
+export type CorruptStoredProject = { key: string; json: string }
+export type StoredProjectLoad = { project: Project; sourceKey: string | null; corruptCopies: CorruptStoredProject[] }
+
+/** Load the newest valid local format while retaining raw invalid copies for
+ * an explicit recovery/download flow. Never silently replace corrupt data with
+ * the starter project during startup. */
+export function loadStoredProjectCandidates(candidates: readonly StoredProjectCandidate[]): StoredProjectLoad {
+  const corruptCopies: CorruptStoredProject[] = []
+  for (const candidate of candidates) {
+    if (candidate.json === null) continue
+    try {
+      return { project: validateProject(JSON.parse(candidate.json)), sourceKey: candidate.key, corruptCopies }
+    } catch {
+      corruptCopies.push({ key: candidate.key, json: candidate.json })
+    }
+  }
+  return { project: createStarterProject(), sourceKey: null, corruptCopies }
+}
 
 /** Decide whether a valid IndexedDB snapshot is newer than the local project.
  * The project JSON and its localStorage timestamp are separate writes, so a

@@ -348,6 +348,31 @@ test('autosave falls back to IndexedDB and restores the latest project after rel
   await expect(page.locator('.project-title')).toHaveText('Recovered from IndexedDB')
 })
 
+test('malformed local project data is downloaded before the recovered copy replaces it', { tag: '@ui-smoke' }, async ({ page }) => {
+  const olderValidProject = createStarterProject()
+  olderValidProject.name = 'Recovered legacy project'
+  const malformedData = '{broken local project data'
+  await page.addInitScript(({ legacyJson, malformed }) => {
+    localStorage.setItem('elsim:project:v7', malformed)
+    localStorage.setItem('elsim:project:v6', legacyJson)
+  }, { legacyJson: JSON.stringify(olderValidProject), malformed: malformedData })
+  await page.goto('/')
+  await expect(page.locator('.project-title')).toHaveText('Recovered legacy project')
+  const recoveryDialog = page.getByRole('alertdialog', { name: 'A saved project copy could not be opened' })
+  await expect(recoveryDialog).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('elsim:project:v7'))).toBe(malformedData)
+
+  const downloadPromise = page.waitForEvent('download')
+  await recoveryDialog.getByRole('button', { name: 'Download unreadable local copy 1' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('elsim-project-v7-recovery.json')
+  expect(readFileSync(await download.path()!, 'utf8')).toBe(malformedData)
+
+  await recoveryDialog.getByRole('button', { name: 'Continue with open project' }).click()
+  await expect(recoveryDialog).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).name)).toBe('Recovered legacy project')
+})
+
 test('a newer local project survives a crash between its JSON and timestamp writes', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.app-status [role="status"]')).toHaveText('All changes saved locally')
