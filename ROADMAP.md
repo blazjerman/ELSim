@@ -398,6 +398,8 @@ Schematic playback render follow-up (2026-10-14): SVG symbol primitives are now 
 
 Firefox UI audit (2026-10-14): The current 107-workflow engine-independent `@ui-smoke` suite passes in Firefox after the schematic playback render change. It covers project recovery, lessons, keyboard/focus behavior, selected-wire copy/paste and mixed movement, model controls, hierarchy, responsive guidance, lazy UI modules, and accessibility names. The focused capacitor-animation and waveform rerun/zoom workflows also pass against the existing local runtime. No WASM compilation or Pages workflow ran.
 
+Imported device-model picker indexing (2026-10-14): Imported `.MODEL` cards are grouped once by device type and VDMOS channel for the inspector, so each App render no longer filters the full imported-library model list to build one selected component’s dropdown. Firefox verifies native R/C/L model selection and an N-channel VDMOS import, selection, and solve; TypeScript passes. No WASM compilation or Pages workflow ran.
+
 ## 4. Legal and open-source release policy
 
 > **Owner decision (2026-10-12): out of scope.** The owner will build the ngspice WASM locally and is not preparing a public app/runtime release. Do not spend feature-work time simplifying, auditing, or changing license handling, and do not make these checks a gate for roadmap work. Keep existing notices and checks untouched unless the owner explicitly reopens distribution work.

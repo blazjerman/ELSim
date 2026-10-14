@@ -33,7 +33,7 @@ import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componen
 import type { ComponentPaletteCategory } from './ComponentPalette'
 import { ModelDependencyReport } from './ModelDependencyReport'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
-import { componentDefaultValue, componentDefinitionFor, componentPropertyDefault, deviceModelTypeMatches, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
+import { compatibleDeviceModelType, componentDefaultValue, componentDefinitionFor, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import type { ComponentSymbolPrimitive } from '../domain/componentDefinitions'
 import { componentMagnitude } from '../domain/componentValue'
 import { nextRef, referencePrefixForKind } from '../domain/referenceDesignator'
@@ -2409,6 +2409,19 @@ export default function App() {
   }, [filteredImportedModels])
   const visibleImportedModels = filteredImportedModels.slice(0, visibleImportedSubcircuits)
   const importedDeviceModels = useMemo(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => parsed.models.filter((model) => !model.scope || ['r', 'c', 'l'].includes(model.type.toLowerCase())).map((model) => ({ ...model, assetId: asset.id, filename: asset.filename }))), [modelLibraryAnalysis])
+  const importedDeviceModelsByType = useMemo(() => {
+    const byType = new Map<string, typeof importedDeviceModels>()
+    for (const model of importedDeviceModels) {
+      const type = model.type.toLowerCase()
+      const keys = type === 'vdmos' ? [`vdmos:${model.channel ?? 'n'}`] : [type]
+      for (const key of keys) {
+        const group = byType.get(key)
+        if (group) group.push(model)
+        else byType.set(key, [model])
+      }
+    }
+    return byType
+  }, [importedDeviceModels])
   const filteredImportedDeviceModels = useMemo(() => {
     const query = importedDeviceModelQuery.trim().toLowerCase()
     if (!query) return importedDeviceModels
@@ -2455,7 +2468,11 @@ export default function App() {
     return used
   }, [project.sheets])
   const compatibleDeviceModels = (kind: PartKind) => {
-    return importedDeviceModels.filter((model) => deviceModelTypeMatches(kind, model))
+    const type = compatibleDeviceModelType(kind)
+      ?? (kind === 'resistor' ? 'r' : kind === 'capacitor' ? 'c' : kind === 'inductor' ? 'l' : undefined)
+    if (!type) return []
+    const key = type === 'vdmos' ? `vdmos:${kind === 'pvdmos' ? 'p' : 'n'}` : type
+    return importedDeviceModelsByType.get(key) ?? []
   }
   const modelAssetInUse = (assetId: string) => {
     return requiredModelAssets.has(assetId)
