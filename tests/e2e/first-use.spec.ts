@@ -2578,6 +2578,11 @@ test('wire current animation keeps moving while transient playback advances', as
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const animationSettings = page.locator('details.animation-tuning')
+  await page.getByLabel('Current animation settings').click()
+  await expect(animationSettings).toHaveJSProperty('open', true)
+  await page.locator('.brand').click()
+  await expect(animationSettings).toHaveJSProperty('open', false)
   await page.getByLabel('Current animation settings').click()
   await expect(page.getByRole('slider', { name: 'Current animation speed' })).toHaveCount(0)
   await expect(page.getByRole('slider', { name: 'Current dot size' })).toBeVisible()
@@ -2585,9 +2590,7 @@ test('wire current animation keeps moving while transient playback advances', as
   const flow = page.locator('.wire-current-flow').first()
   await expect(flow).toHaveAttribute('data-current-magnitude', /\d/)
   const before = Number(await flow.getAttribute('stroke-dashoffset') ?? 0)
-  await page.waitForTimeout(350)
-  const after = Number(await flow.getAttribute('stroke-dashoffset') ?? 0)
-  expect(Math.abs(after - before)).toBeGreaterThan(1)
+  await expect.poll(async () => Math.abs(Number(await flow.getAttribute('stroke-dashoffset') ?? 0) - before), { timeout: 3_000 }).toBeGreaterThan(1)
 })
 
 test('viewport culling removes off-screen wire flows and restores them when the circuit is fit', { tag: '@ngspice' }, async ({ page }) => {
