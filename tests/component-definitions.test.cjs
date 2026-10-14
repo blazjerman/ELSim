@@ -101,7 +101,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     ['resistor', 'R', 'r', 'basics'], ['potentiometer', 'POT', 'h', 'basics'], ['lamp', 'R', 'e', 'basics'], ['capacitor', 'C', 'c', 'basics'], ['inductor', 'L', 'L', 'basics'], ['transformer', 'T', 'T', 'basics'],
     ['source', 'V', 'v', 'basics'], ['currentSource', 'I', 'i', 'basics'], ['diode', 'D', 'd', 'semiconductors'], ['zener', 'DZ', 'z', 'semiconductors'], ['led', 'D', 'l', 'semiconductors'], ['switch', 's', 's', 'basics'],
     ['voltageSwitch', 'S', 'S', 'controlled'], ['vcvs', 'E', 'E', 'controlled'], ['vccs', 'G', 'G', 'controlled'], ['cccs', 'F', 'F', 'controlled'], ['ccvs', 'H', 'H', 'controlled'], ['behavioral', 'B', 'b', 'controlled'],
-    ['inverter', 'NOT', '1', 'basics'], ['logicGate', 'AND', '2', 'basics'], ['npn', 'Q', 'n', 'semiconductors'], ['pnp', 'Q', 'p', 'semiconductors'], ['njfet', 'J', 'j', 'semiconductors'], ['pjfet', 'J', 'J', 'semiconductors'],
+    ['inverter', 'NOT', '1', 'basics'], ['logicGate', 'AND', '2', 'basics'], ['npn', 'Q', 'n', 'semiconductors'], ['pnp', 'Q', 'p', 'semiconductors'], ['njfet', 'J', 'j', 'semiconductors'], ['pjfet', 'J', 'J', 'semiconductors'], ['nmesfet', 'Z', '8', 'semiconductors'], ['pmesfet', 'Z', '9', 'semiconductors'],
     ['nmos', 'M', 'N', 'semiconductors'], ['pmos', 'M', 'P', 'semiconductors'], ['nvdmos', 'M3', '6', 'semiconductors'], ['pvdmos', 'M3', '7', 'semiconductors'], ['ground', 'GND', 'g', 'basics'],
   ]
   for (const [kind, subtitle, shortcut, category] of paletteMetadata) {
@@ -110,7 +110,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     assert.equal(componentDefinitionFor(kind).paletteCategory, category, `${kind} palette category`)
   }
   assert.deepEqual(componentDefinitionFor('pnp').pins.map(({ name }) => name), ['collector', 'base', 'emitter'])
-  for (const kind of ['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'vcvs', 'vccs', 'cccs', 'ccvs']) {
+  for (const kind of ['npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'vcvs', 'vccs', 'cccs', 'ccvs']) {
     assert.ok(componentDefinitionFor(kind).connectionHint, `${kind} has registry-owned terminal guidance`)
   }
   assert.ok(componentDefinitionFor('capacitor').animationChannels.includes('charge.voltage'))
@@ -154,7 +154,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.deepEqual(componentDefinitionFor('inductor').symbolVariants.reverseCurrent.filter((primitive) => primitive.className === 'inductor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '+'], [2, '−']])
   assert.deepEqual(componentDefinitionFor('capacitor').symbolVariants.forwardCurrent.filter((primitive) => primitive.className === 'capacitor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '−'], [2, '+']])
   assert.deepEqual(componentDefinitionFor('capacitor').symbolVariants.reverseCurrent.filter((primitive) => primitive.className === 'capacitor-current-polarity').map(({ pin, text }) => [pin, text]), [[1, '+'], [2, '−']])
-  for (const kind of ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet']) {
+  for (const kind of ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet']) {
     const variants = componentDefinitionFor(kind).symbolVariants
     for (const state of ['forwardCurrent', 'reverseCurrent']) {
       assert.ok(variants[state].some((primitive) => primitive.className === 'transistor-current-indicator'), `${kind} ${state} arrow is definition geometry`)
@@ -178,7 +178,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
 test('imported device model compatibility has one canonical type per built-in device family', () => {
   const expected = {
     diode: 'd', zener: 'd', led: 'd',
-    npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmos: 'nmos', pmos: 'pmos', nvdmos: 'vdmos', pvdmos: 'vdmos',
+    npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmesfet: 'nmf', pmesfet: 'pmf', nmos: 'nmos', pmos: 'pmos', nvdmos: 'vdmos', pvdmos: 'vdmos',
     voltageSwitch: 'sw',
   }
   for (const [kind, type] of Object.entries(expected)) assert.equal(compatibleDeviceModelType(kind), type, kind)

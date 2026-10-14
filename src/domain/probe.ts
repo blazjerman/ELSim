@@ -10,11 +10,16 @@ export function transformerWindingCurrentVector(ref: string, winding: 'P' | 'S')
   return `i(@L${ref}_${winding}[i])`
 }
 
+export function mesfetDrainCurrentSenseReference(ref: string): string {
+  return `V__ELSIM_${ref}_D`
+}
+
 export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref'>): string {
   if (part.kind === 'source') return `i(${part.ref})`
   if (part.kind === 'opamp') return `i(@r.x${part.ref}.rout[i])`
   if (part.kind === 'currentSource') return `i(@${part.ref}[current])`
   if (part.kind === 'transformer') return transformerWindingCurrentVector(part.ref, 'P')
+  if (part.kind === 'nmesfet' || part.kind === 'pmesfet') return `i(${mesfetDrainCurrentSenseReference(part.ref)})`
   if (part.kind === 'potentiometer') return `i(@R${part.ref}_A[i])`
   if (part.kind === 'voltageSwitch') return `i(@${part.ref}[i])`
   const currentName = part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'id' : 'i'

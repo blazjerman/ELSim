@@ -1,0 +1,21 @@
+ELSim browser N-channel MESFET operating point and drain-current probe fixture
+VDD vdd 0 DC 5
+RLOAD vdd drain 1k
+V__ELSIM_Z1_D drain __ELSIM_Z1_D 0
+Z1 __ELSIM_Z1_D 0 0 NMTEST
+VSS vss 0 DC -5
+RLOADP 0 pdrain 1k
+V__ELSIM_Z2_D pdrain __ELSIM_Z2_D 0
+Z2 __ELSIM_Z2_D vss vss PMTEST
+.MODEL NMTEST NMF(VTO=-2 BETA=1m)
+.MODEL PMTEST PMF(VTO=2 BETA=1m)
+.op
+.print op v(drain) v(pdrain)
+.save all i(V__ELSIM_Z1_D) i(V__ELSIM_Z2_D) @Z1[is] @Z2[is]
+.control
+set filetype=ascii
+op
+write /result.raw all
+quit
+.endc
+.end

@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
-import { importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
-import { createCurrentSourceExampleProject, createHierarchicalExampleProject } from '../../src/domain/examples'
+import { componentDefinitionFor, importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
+import { createCurrentSourceExampleProject, createHierarchicalExampleProject, createJfetSwitchExampleProject } from '../../src/domain/examples'
 import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
 import { componentPins } from '../../src/domain/geometry'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
@@ -2136,7 +2136,7 @@ test('component categories filter the library and search crosses categories', as
   await expect(page.getByText('Built for curious minds')).toHaveCount(0)
   await expect(categories.getByRole('button', { name: 'Basics' })).toHaveAttribute('aria-pressed', 'true')
   await categories.getByRole('button', { name: 'Semiconductors' }).click()
-  await expect(cards).toHaveCount(11)
+  await expect(cards).toHaveCount(13)
   await expect(cards.filter({ hasText: 'LED' })).toBeVisible()
   await expect(cards.filter({ hasText: 'Zener diode' })).toBeVisible()
   await expect(cards.filter({ hasText: 'Resistor' })).toHaveCount(0)
@@ -2144,7 +2144,7 @@ test('component categories filter the library and search crosses categories', as
   await expect(cards).toHaveCount(1)
   await expect(cards.first()).toContainText('Resistor')
   await page.getByRole('button', { name: 'Clear component search' }).click()
-  await expect(cards).toHaveCount(11)
+  await expect(cards).toHaveCount(13)
   await categories.getByRole('button', { name: 'Controlled sources' }).click()
   await expect(cards).toHaveCount(7)
   await expect(cards.filter({ hasText: 'VCVS' })).toBeVisible()
@@ -8512,6 +8512,36 @@ test('import a user NJF model and LTspice symbol, then simulate it in the browse
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(gate\) = (?:0\.0+|[0-9.]+e-\d+)/)
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(drain\) = 4\.[0-9]+/)
   await expect(jfet).toHaveCount(1)
+})
+
+test('NMF MESFET imports, simulates, and exposes a correctly referenced drain-current waveform', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createJfetSwitchExampleProject()
+  const mesfet = project.parts.find((part) => part.id === 'jfet-switch-j1')!
+  mesfet.kind = 'nmesfet'
+  mesfet.ref = 'Z1'
+  mesfet.componentDefinitionId = componentDefinitionFor('nmesfet').id
+  mesfet.deviceModel = 'USER_NMF'
+  const modelContent = '.MODEL USER_NMF NMF(VTO=-2 BETA=1m)\n'
+  project.modelAssets = [{ id: 'user-nmf', filename: 'user-nmf.lib', sha256: createHash('sha256').update(modelContent).digest('hex'), content: modelContent, licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+  await page.addInitScript((projectJson) => {
+    localStorage.setItem('elsim:project:v7', projectJson)
+    localStorage.setItem('elsim:project:v7:savedAt', '1')
+  }, JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const device = page.locator('.circuit-part[aria-label^="Z1,"]')
+  await expect(device).toHaveCount(1)
+  await device.focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
+  const chooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
+  await chooser.getByRole('button', { name: /New waveform window/ }).click()
+  await expect(page.locator('.plot-window').last().locator('.trace-toggles button', { hasText: 'I(v__elsim_z1_d)' })).toHaveCount(1)
 })
 
 test('one LTspice import loads its schematic, symbol, and user IC model together', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {

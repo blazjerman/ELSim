@@ -467,14 +467,14 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     ? 0.5 * componentValueMagnitude * current * current
     : undefined
   const currentDescription = part.kind === 'npn' || part.kind === 'pnp' ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the collector terminal`
-    : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' || part.kind === 'njfet' || part.kind === 'pjfet' ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the drain terminal`
+    : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmesfet' || part.kind === 'pmesfet' ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the drain terminal`
       : `flowing ${current !== undefined && current < 0 ? 'from pin 2 toward pin 1' : 'from pin 1 toward pin 2'}`
   const hasCurrentDirection = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
   const channelCurrentGlow = currentGlow
   const customOffsets = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout) : []
   const potentiometerPosition = Number(part.wiperPosition ?? '0.5')
   const potentiometerWiperY = -24 + potentiometerPosition * 48
-  const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : (part.kind === 'capacitor' || part.kind === 'inductor') && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : ['npn', 'pnp', 'nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet'].includes(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
+  const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : (part.kind === 'capacitor' || part.kind === 'inductor') && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : ['npn', 'pnp', 'nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet'].includes(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
   const capacitorChargeGeometry = part.kind === 'capacitor' && voltage !== undefined ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? EMPTY_SYMBOL_GEOMETRY
   const lampPowerGeometry = lampGlow > 0 ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
@@ -1773,6 +1773,12 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     return wireFlowSampler(
       (part) => valueAt(componentCurrentVector(part)) ?? valueAt(`i(${part.ref})`),
       (part, pinIndex) => {
+        if (part.kind === 'nmesfet' || part.kind === 'pmesfet') {
+          const drain = valueAt(componentCurrentVector(part))
+          const source = valueAt(`i(@${part.ref}[is])`)
+          if (drain === undefined || source === undefined) return undefined
+          return pinIndex === 0 ? drain : pinIndex === 1 ? -(drain + source) : source
+        }
         const pinVector = part.kind === 'npn' || part.kind === 'pnp'
           ? ['ic', 'ib', 'ie'][pinIndex]
           : part.kind === 'njfet' || part.kind === 'pjfet'

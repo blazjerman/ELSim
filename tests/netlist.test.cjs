@@ -1694,6 +1694,29 @@ test('imported diode, BJT, and MOSFET .MODEL cards connect to compatible devices
   assert.throws(() => validateProject({ ...validated, parts: validated.parts.map((part) => part.id === 'p-q1' ? { ...part, deviceModel: '1N4148\n.end' } : part) }), /invalid imported device model name/)
 })
 
+test('imported NMF and PMF MESFET models emit native Z devices in drain-gate-source order', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'mesfet-models', filename: 'mesfets.lib', content: '.MODEL NMESH NMF(BETA=1m VTO=-1)\n.MODEL PMESH PMF(BETA=1m VTO=1)\n', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.parts.push(
+    { id: 'p-z1', kind: 'nmesfet', ref: 'Z1', value: '', deviceModel: 'NMESH', x: 700, y: 300, rotation: 0 },
+    { id: 'p-z2', kind: 'pmesfet', ref: 'Z2', value: '', deviceModel: 'PMESH', x: 820, y: 300, rotation: 0 },
+  )
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^V__ELSIM_Z1_D n\d+ __ELSIM_p_z1_D 0$/m)
+  assert.match(artifact.text, /^Z1 __ELSIM_p_z1_D n\d+ n\d+ NMESH$/m)
+  assert.match(artifact.text, /^V__ELSIM_Z2_D n\d+ __ELSIM_p_z2_D 0$/m)
+  assert.match(artifact.text, /^Z2 __ELSIM_p_z2_D n\d+ n\d+ PMESH$/m)
+  assert.match(artifact.text, /^\.MODEL NMESH NMF\(BETA=1m VTO=-1\)$/m)
+  assert.match(artifact.text, /^\.MODEL PMESH PMF\(BETA=1m VTO=1\)$/m)
+
+  const wrongFamily = validateProject({ ...project, parts: project.parts.map((part) => part.id === 'p-z1' ? { ...part, deviceModel: 'PMESH' } : part) })
+  const invalid = createNetlistArtifact(wrongFamily)
+  assert.match(invalid.diagnostics.map(({ message }) => message).join('\n'), /requires an imported NMF MESFET model.*not a NMF model/i)
+  assert.doesNotMatch(invalid.text, /^Z1 /m)
+})
+
 
 
 test('SFFM source order converts LTspice fields to ngspice fields for voltage and current', () => {

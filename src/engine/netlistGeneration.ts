@@ -4,6 +4,7 @@ import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunct
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
+import { mesfetDrainCurrentSenseReference } from '../domain/probe'
 import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import type { NetlistArtifact, NetlistSource } from './contract'
 import {
@@ -117,7 +118,7 @@ function hierarchicalSaveVectors(project: Project): string[] {
     }
     if (path.length) for (const part of sheet.parts) {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? 'b' : 'g'
+      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmesfet' || part.kind === 'pmesfet' ? 'z' : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
       if (part.kind === 'transformer') {
         saves.add(`.save i(l.${device}_p)`)
@@ -128,10 +129,12 @@ function hierarchicalSaveVectors(project: Project): string[] {
         saves.add(`.save @r.${[...path, `${part.ref.toLowerCase()}_a`].join('.')}[i]`)
         saves.add(`.save @r.${[...path, `${part.ref.toLowerCase()}_b`].join('.')}[i]`)
       } else if (part.kind === 'source') saves.add(`.save i(${type}.${device})`)
+      else if (part.kind === 'nmesfet' || part.kind === 'pmesfet') saves.add(`.save i(v.${[...path, mesfetDrainCurrentSenseReference(part.ref).toLowerCase()].join('.')})`)
       else {
         const current = part.kind === 'currentSource' ? 'current' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
         saves.add(`.save @${type}.${device}[${current}]`)
       }
+      if (part.kind === 'nmesfet' || part.kind === 'pmesfet') saves.add(`.save @z.${device}[is]`)
     }
     for (const part of sheet.parts) if (part.sheetId) visit(part.sheetId, [...path, part.ref], nextAncestry)
   }
@@ -217,7 +220,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const passiveDefaultParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
     const passiveModelSuppliesValue = Boolean(passiveModelType && passiveModel?.type.toLowerCase() === passiveModelType && passiveDefaultParameter && passiveModel.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
     const valueCanBeModelDefault = value === null && part.value.trim() === '' && passiveModelSuppliesValue
-    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && value === null && !valueCanBeModelDefault) {
+    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && value === null && !valueCanBeModelDefault) {
       const message = `${part.ref} has an invalid numeric value${passiveDefaultParameter && part.value.trim() === '' ? ` (no compatible model with ${passiveDefaultParameter.toUpperCase()} default)` : ''}.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -558,6 +561,29 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       append(`${part.ref} ${positive} ${gate} ${source} ${model}`, part.id, 'component')
       if (!part.deviceModel) jfetModels.push({ part, name: model })
     }
+    else if (part.kind === 'nmesfet' || part.kind === 'pmesfet') {
+      const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2)
+      const expectedModelType = part.kind === 'nmesfet' ? 'nmf' : 'pmf'
+      const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
+      if (!importedModel || importedModel.type.toLowerCase() !== expectedModelType) {
+        const polarity = part.kind === 'nmesfet' ? 'NMF' : 'PMF'
+        const message = `${part.ref} requires an imported ${polarity} MESFET model${part.deviceModel ? `, but ${part.deviceModel} is missing or is not a ${polarity} model` : ''}.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const senseReference = mesfetDrainCurrentSenseReference(part.ref)
+      if (usedReferences.has(senseReference.toLowerCase())) {
+        const message = `${part.ref} needs the reserved current-sense reference ${senseReference}, which is already used by another component.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      usedReferences.add(senseReference.toLowerCase())
+      const drainNode = reserveUniqueName(`__ELSIM_${part.id.slice(0, 24).replace(/[^A-Za-z0-9_]/g, '_')}_D`, usedNodes)
+      append(`${senseReference} ${positive} ${drainNode} 0`, part.id, 'generated')
+      append(`${part.ref} ${drainNode} ${gate} ${source} ${importedModel.name}`, part.id, 'component')
+    }
     else if (part.kind === 'nmos' || part.kind === 'pmos') {
       const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2), bulk = pinNet(connectivity, part, 3)
       const expectedModelType = part.kind
@@ -861,7 +887,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 

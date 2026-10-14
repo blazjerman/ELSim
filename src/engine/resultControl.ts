@@ -98,11 +98,11 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     if (/^\s*\.subckt\b/i.test(line)) { insideSubcircuit = true; return [] }
     if (/^\s*\.ends\b/i.test(line)) { insideSubcircuit = false; return [] }
     if (insideSubcircuit) return []
-    const ref = line.match(/^\s*([RCLDSEGFHQBJIM][A-Za-z0-9_]+)\s+/i)?.[1]
+    const ref = line.match(/^\s*([RCLDSEGFHQBJIMZ][A-Za-z0-9_]+)\s+/i)?.[1]
     if (!ref) return []
     if ((analysisType === 'ac' || analysisType === 'noise') && /^[CL]/i.test(ref)) return []
     const kind = ref[0].toUpperCase()
-    const current = kind === 'D' || kind === 'J' || kind === 'M' ? 'id' : kind === 'Q' ? 'ic' : kind === 'I' ? 'current' : 'i'
+    const current = kind === 'D' || kind === 'J' || kind === 'M' ? 'id' : kind === 'Q' ? 'ic' : kind === 'Z' ? 'is' : kind === 'I' ? 'current' : 'i'
     const modelName = kind === 'M' ? line.match(/^\s*M\S+\s+\S+\s+\S+\s+\S+\s+(\S+)/i)?.[1]?.toLowerCase() : undefined
     const isThreeTerminalVdmos = Boolean(modelName && vdmosModels.has(modelName))
     const terminalCurrents = kind === 'Q' ? ['ib', 'ie'] : kind === 'M' && !isThreeTerminalVdmos ? ['ig', 'is', 'ib'] : kind === 'J' ? ['ig', 'is'] : []

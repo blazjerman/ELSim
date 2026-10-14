@@ -34,7 +34,7 @@ test('voltage-controlled switch checks imported SW model presence and type', () 
 test('device-model preflight matches each built-in device family to its SPICE card type', () => {
   const cases = [
     ['resistor', 'R'], ['capacitor', 'C'], ['inductor', 'L'], ['diode', 'D'], ['zener', 'D'], ['led', 'D'],
-    ['npn', 'NPN'], ['pnp', 'PNP'], ['njfet', 'NJF'], ['pjfet', 'PJF'],
+    ['npn', 'NPN'], ['pnp', 'PNP'], ['njfet', 'NJF'], ['pjfet', 'PJF'], ['nmesfet', 'NMF'], ['pmesfet', 'PMF'],
     ['nmos', 'NMOS'], ['pmos', 'PMOS'], ['voltageSwitch', 'SW'],
   ]
   for (const [kind, expectedType] of cases) {

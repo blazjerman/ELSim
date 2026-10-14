@@ -40,6 +40,8 @@ test('component current vectors use ngspice device-specific names', () => {
   assert.equal(componentCurrentVector({ kind: 'vccs', ref: 'G1' }), 'i(@G1[i])')
   assert.equal(componentCurrentVector({ kind: 'npn', ref: 'Q1' }), 'i(@Q1[ic])')
   assert.equal(componentCurrentVector({ kind: 'pnp', ref: 'Q2' }), 'i(@Q2[ic])')
+  assert.equal(componentCurrentVector({ kind: 'nmesfet', ref: 'Z1' }), 'i(V__ELSIM_Z1_D)')
+  assert.equal(componentCurrentVector({ kind: 'pmesfet', ref: 'Z2' }), 'i(V__ELSIM_Z2_D)')
 })
 
 test('component voltage traces are signed pin-to-pin differences, including ground and sweep cases', () => {

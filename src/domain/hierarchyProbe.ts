@@ -1,5 +1,6 @@
 import { analyzeConnectivity, pinNet } from './connectivity'
 import type { Part, Project, ProjectSheet } from './project'
+import { mesfetDrainCurrentSenseReference } from './probe'
 
 /** Resolve a sheet-local labeled node to the ngspice vector for one instantiated hierarchy path. */
 export function hierarchyNodeVector(project: Project, sheetId: string, instancePath: string[], nodeName: string, scopeSheetId = project.rootSheetId): string | null {
@@ -66,6 +67,10 @@ export function hierarchyComponentCurrentVector(project: Project, sheetId: strin
   if (part.kind === 'potentiometer') {
     const device = [...refs, `${part.ref.toLowerCase()}_a`].join('.')
     return `i(@r.${device}[i])`
+  }
+  if (part.kind === 'nmesfet' || part.kind === 'pmesfet') {
+    const sensor = [...refs, mesfetDrainCurrentSenseReference(part.ref).toLowerCase()].join('.')
+    return `i(v.${sensor})`
   }
   const currentName = part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
   if (!refs.length) return `i(@${part.ref.toLowerCase()}[${currentName}])`

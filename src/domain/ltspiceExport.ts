@@ -24,10 +24,10 @@ export type LtspiceExportResult = {
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
   source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'R', voltageSwitch: 'S',
-  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'X', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
+  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'X', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', zener: 'D', led: 'D', switch: 'R', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'X', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', zener: 'D', led: 'D', switch: 'R', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'X', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -138,7 +138,7 @@ function pinDirection([x, y]: [number, number]): 'R' | 'L' | 'U' | 'D' {
 
 function generatedPinOffsets(part: Part): [number, number][] {
   if (part.kind === 'nmos' || part.kind === 'pmos') return [[0, -50], [-50, 0], [0, 50], [50, 0]]
-  if (part.kind === 'njfet' || part.kind === 'pjfet') return [[0, -50], [-50, 0], [0, 50]]
+  if (part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmesfet' || part.kind === 'pmesfet') return [[0, -50], [-50, 0], [0, 50]]
   return localPinOffsets(part)
 }
 
@@ -821,7 +821,7 @@ function generatedPartSymbol(part: Part): { name: string; content: string } {
   const name = `ELSIM_${key.toUpperCase()}`
   const offsets = generatedPinOffsets(part)
   const labels = part.kind === 'npn' || part.kind === 'pnp' ? ['C', 'B', 'E']
-    : part.kind === 'njfet' || part.kind === 'pjfet' ? ['D', 'G', 'S']
+    : part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmesfet' || part.kind === 'pmesfet' ? ['D', 'G', 'S']
     : part.kind === 'nmos' || part.kind === 'pmos' ? ['D', 'G', 'S', 'B']
     : part.kind === 'vcvs' || part.kind === 'vccs' ? ['OUT+', 'OUT-', 'IN+', 'IN-']
       : part.kind === 'subcircuit' ? (part.modelPins ?? offsets.map((_, index) => `P${index + 1}`))
