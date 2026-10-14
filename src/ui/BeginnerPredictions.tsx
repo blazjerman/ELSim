@@ -226,6 +226,26 @@ export function AcCutoffPrediction({ resistanceValue, capacitanceValue, filterTy
   />
 }
 
+export function RlcResonancePrediction({ inductanceValue, capacitanceValue }: { inductanceValue: string; capacitanceValue: string }) {
+  const inductance = componentMagnitude(inductanceValue, 'inductor')
+  const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
+  const predictedFrequencyKhz = inductance !== null && capacitance !== null && inductance > 0 && capacitance > 0
+    ? 1 / (2 * Math.PI * Math.sqrt(inductance * capacitance)) / 1000
+    : null
+  const explanation = predictedFrequencyKhz === null || inductance === null || capacitance === null
+    ? ''
+    : `f₀ = 1/(2π√(L1C1)) = 1/(2π√(${inductanceValue} × ${capacitanceValue})) = ${formatValue(predictedFrequencyKhz)} kHz. Increasing either L or C lowers the resonance frequency.`
+
+  return <NumericPrediction
+    id="rlc-resonance-prediction"
+    prompt="Before running, predict the LC resonance frequency"
+    unit="kHz"
+    predictedValue={predictedFrequencyKhz}
+    absoluteTolerance={0.02}
+    explanation={explanation}
+  />
+}
+
 export function WheatstoneBridgePrediction({ supplyValue, leftTopValue, leftBottomValue, rightTopValue, rightBottomValue }: { supplyValue: string; leftTopValue: string; leftBottomValue: string; rightTopValue: string; rightBottomValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const leftTop = componentMagnitude(leftTopValue, 'resistor')
@@ -292,7 +312,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'wheatstone-bridge' | 'ac-cutoff' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'wheatstone-bridge' | 'ac-cutoff' | 'rlc-resonance' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
@@ -304,6 +324,7 @@ type BeginnerPredictionProps = {
   rightTopValue?: string
   rightBottomValue?: string
   filterType?: 'low-pass' | 'high-pass'
+  inductanceValue?: string
   firstResistanceValue?: string
   secondResistanceValue?: string
   initialVoltageValue?: string
@@ -319,6 +340,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'wheatstone-bridge': return <WheatstoneBridgePrediction supplyValue={props.supplyValue ?? ''} leftTopValue={props.leftTopValue ?? ''} leftBottomValue={props.leftBottomValue ?? ''} rightTopValue={props.rightTopValue ?? ''} rightBottomValue={props.rightBottomValue ?? ''}/>
     case 'ac-cutoff': return <AcCutoffPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''} filterType={props.filterType ?? 'low-pass'}/>
+    case 'rlc-resonance': return <RlcResonancePrediction inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
     case 'series-resistors': return <SeriesVoltageDropPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'capacitor-discharge': return <CapacitorDischargePrediction initialVoltageValue={props.initialVoltageValue ?? ''} resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>

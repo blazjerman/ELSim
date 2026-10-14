@@ -5618,6 +5618,41 @@ test('RC filter lessons predict live cutoff frequency before an AC run', { tag: 
   }
 })
 
+test('parallel RLC lesson predicts resonance from live L and C values', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'AC & reactive' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Parallel RLC resonance' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const prediction = page.locator('.example-prediction')
+  const answer = prediction.getByRole('spinbutton', { name: 'Before running, predict the LC resonance frequency' })
+  await answer.fill('1.59')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('1.592 kHz')
+
+  await page.locator('.circuit-part[data-part-id="resonance-c1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="resonance-c1:value"]').fill('2 µF')
+  await expect(answer).toHaveValue('')
+  await answer.fill('1.125')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('1.125 kHz')
+
+  await page.locator('.circuit-part[data-part-id="resonance-l1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="resonance-l1:value"]').fill('20 mH')
+  await expect(answer).toHaveValue('')
+  await answer.fill('0.7958')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('0.7958 kHz')
+  await expect(page.getByRole('button', { name: 'Run this circuit' })).toBeEnabled()
+})
+
 test('Wheatstone bridge lesson predicts and verifies a balanced sensor arm', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
