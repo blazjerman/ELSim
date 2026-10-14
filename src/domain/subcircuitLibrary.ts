@@ -1,7 +1,7 @@
 export type SubcircuitParameter = { name: string; defaultValue: string }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; parameters: SubcircuitParameter[]; scope?: string; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; parameters: SubcircuitParameter[]; scope?: string; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
@@ -205,12 +205,15 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string): SpiceM
   const name = modelHeader?.[1], type = modelHeader?.[2]
   if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
   const parameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/^\s*\(/, '').replace(/\)\s*$/, '')
+  const vdmosChannel = type.toLowerCase() === 'vdmos'
+    ? /\bpchan\b/i.test(parameterSource) ? 'p' as const : 'n' as const
+    : undefined
   const parameters: SubcircuitParameter[] = []
   for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|[^\s,)]+)/g)) {
     const value = match[2].replace(/^\{(.*)\}$/, '$1')
     if (isSafeSubcircuitParameterValue(value) && !parameters.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) parameters.push({ name: match[1], defaultValue: value })
   }
-  return { name, type, parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
+  return { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
 }
 
 const alternateBjtModelNames = new WeakMap<ModelDependency, string[]>()

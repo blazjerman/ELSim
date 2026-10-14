@@ -24,10 +24,10 @@ export type LtspiceExportResult = {
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
   source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'R', voltageSwitch: 'S',
-  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
+  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', zener: 'D', led: 'D', switch: 'R', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', zener: 'D', led: 'D', switch: 'R', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {

@@ -157,6 +157,13 @@ test('imports .MODEL-only libraries, including numeric-leading model names and c
   assert.match(parsed.modelText, /\+ Rs=1/)
 })
 
+test('parses native ngspice VDMOS channel polarity with N-channel as the default', () => {
+  const parsed = parseSubcircuitLibrary('.MODEL NPOWER VDMOS(VTO=2)\n.MODEL PPOWER VDMOS Pchan VTO=-2')
+  assert.deepEqual(parsed.models.map(({ name, type, channel }) => [name, type, channel]), [
+    ['NPOWER', 'VDMOS', 'n'], ['PPOWER', 'VDMOS', 'p'],
+  ])
+})
+
 test('preserves unsupported AKO inheritance and MOSFET bins with source-line diagnostics', () => {
   const source = [
     '.MODEL child AKO:base NMOS W=1u',

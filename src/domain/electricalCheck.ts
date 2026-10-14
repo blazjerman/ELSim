@@ -5,7 +5,7 @@ import type { Part, Project } from './project'
 import { componentMagnitude } from './componentValue'
 import { analyzeModelDependencies, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
-import { componentDefinitionFor, compatibleDeviceModelType } from './componentDefinitions'
+import { componentDefinitionFor, compatibleDeviceModelType, deviceModelTypeMatches } from './componentDefinitions'
 
 export type ElectricalIssue = {
   id: string
@@ -18,7 +18,7 @@ export type ElectricalIssue = {
 
 type ReachableSimulationSheet = { sheet: Project['sheets'][number]; topLevelInstanceId?: string }
 
-function importedDeviceModelIssue(part: Part, modelTypes: Map<string, string>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
+function importedDeviceModelIssue(part: Part, modelTypes: Map<string, { type: string; channel?: 'n' | 'p' }>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
   const expectedType = compatibleDeviceModelType(part.kind)
   if (!expectedType || !part.deviceModel) return null
   const modelType = modelTypes.get(part.deviceModel.toLowerCase())
@@ -30,12 +30,13 @@ function importedDeviceModelIssue(part: Part, modelTypes: Map<string, string>, i
     detail: 'This model is not in the imported project libraries. Import the library that defines it or select a compatible model before running.',
     partId: selectedPartId,
   }
-  if (modelType === expectedType) return null
+  if (deviceModelTypeMatches(part.kind, modelType)) return null
+  const expectedChannel = part.kind === 'nvdmos' ? 'N-channel ' : part.kind === 'pvdmos' ? 'P-channel ' : ''
   return {
     id: `incompatible-device-model:${id}`,
     severity: 'warning',
-    title: `${part.ref} uses an incompatible ${modelType.toUpperCase()} model${location}`,
-    detail: `${part.ref} requires a ${expectedType.toUpperCase()} model, but ${part.deviceModel} is a ${modelType.toUpperCase()} card. Select an imported model of the required type before running.`,
+    title: `${part.ref} uses an incompatible ${modelType.type.toUpperCase()} model${location}`,
+    detail: `${part.ref} requires a ${expectedChannel}${expectedType.toUpperCase()} model, but ${part.deviceModel} is a ${modelType.type.toUpperCase()} card${modelType.type.toLowerCase() === 'vdmos' ? ` with ${modelType.channel === 'p' ? 'P-channel' : 'N-channel'} polarity` : ''}. Select an imported model of the required ${expectedChannel ? 'type and polarity' : 'type'} before running.`,
     partId: selectedPartId,
   }
 }
@@ -109,10 +110,10 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     view: project.view,
   }, connectivity)
 
-  const importedDeviceModels = new Map<string, string>()
+  const importedDeviceModels = new Map<string, { type: string; channel?: 'n' | 'p' }>()
   for (const asset of project.modelAssets ?? []) {
     try {
-      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope) importedDeviceModels.set(model.name.toLowerCase(), model.type.toLowerCase())
+      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope) importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel: model.channel })
     } catch {
       // Invalid library syntax has its own importer diagnostic.
     }

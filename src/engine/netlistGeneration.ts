@@ -117,7 +117,7 @@ function hierarchicalSaveVectors(project: Project): string[] {
     }
     if (path.length) for (const part of sheet.parts) {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmos' || part.kind === 'pmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? 'b' : 'g'
+      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
       if (part.kind === 'transformer') {
         saves.add(`.save i(l.${device}_p)`)
@@ -127,7 +127,7 @@ function hierarchicalSaveVectors(project: Project): string[] {
         saves.add(`.save @r.${[...path, `${part.ref.toLowerCase()}_b`].join('.')}[i]`)
       } else if (part.kind === 'source') saves.add(`.save i(${type}.${device})`)
       else {
-        const current = part.kind === 'currentSource' ? 'current' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
+        const current = part.kind === 'currentSource' ? 'current' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : 'i'
         saves.add(`.save @${type}.${device}[${current}]`)
       }
     }
@@ -542,6 +542,20 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       append(`${part.ref} ${positive} ${gate} ${source} ${bulk} ${model}`, part.id, 'component')
       if (!part.deviceModel) mosfetModels.push({ part, name: model })
     }
+    else if (part.kind === 'nvdmos' || part.kind === 'pvdmos') {
+      const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2)
+      const expectedChannel = part.kind === 'nvdmos' ? 'n' : 'p'
+      const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
+      if (!importedModel || importedModel.type.toLowerCase() !== 'vdmos' || (importedModel.channel ?? 'n') !== expectedChannel) {
+        const expectedPolarity = expectedChannel === 'n' ? 'N-channel' : 'P-channel'
+        const actualPolarity = importedModel?.type.toLowerCase() === 'vdmos' ? ` ${importedModel.channel === 'p' ? 'P-channel' : 'N-channel'}` : ''
+        const message = `${part.ref} requires an imported ${expectedPolarity} VDMOS model${part.deviceModel ? `, but ${part.deviceModel} is missing or is not a${actualPolarity} VDMOS model` : ''}.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      append(`${part.ref} ${positive} ${gate} ${source} ${importedModel.name}`, part.id, 'component')
+    }
     else if (part.kind === 'subcircuit') {
       const definition = subcircuitsByName.get(part.modelName?.toLowerCase() ?? '')
       if (!definition || !part.modelPins || definition.pins.length !== part.modelPins.length || definition.pins.some((pin, index) => pin.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) {
@@ -795,7 +809,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 

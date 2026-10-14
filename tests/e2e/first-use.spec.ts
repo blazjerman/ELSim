@@ -2279,7 +2279,7 @@ test('component shortcuts are case-sensitive and logic-gate keys select their ma
     ['i', 'Current source'], ['Shift+S', 'Voltage-controlled switch'], ['d', 'Diode'], ['z', 'Zener diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
     ['Shift+G', 'VCCS'], ['Shift+F', 'CCCS'], ['Shift+H', 'CCVS'], ['b', 'Behavioral source'], ['n', 'NPN transistor'],
     ['p', 'PNP transistor'], ['j', 'N-channel JFET'], ['Shift+J', 'P-channel JFET'], ['N', 'N-channel MOSFET'],
-    ['P', 'P-channel MOSFET'], ['g', 'Ground'],
+    ['P', 'P-channel MOSFET'], ['6', 'N-channel power MOSFET'], ['7', 'P-channel power MOSFET'], ['g', 'Ground'],
   ]
   for (const [shortcut, label] of shortcuts) {
     const card = page.locator('.component-card').filter({ has: page.locator('.component-label').getByText(label, { exact: true }) })

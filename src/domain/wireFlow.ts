@@ -18,7 +18,7 @@ type FlowComponent = {
   order: string[]
 }
 
-const PIN_CURRENT_KINDS = new Set<Part['kind']>(['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'])
+const PIN_CURRENT_KINDS = new Set<Part['kind']>(['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos'])
 const TWO_TERMINAL_CURRENT_KINDS = new Set<Part['kind']>(['source', 'currentSource', 'resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'switch', 'cccs', 'ccvs', 'behavioral'])
 
 export type WireCurrentSampler = (

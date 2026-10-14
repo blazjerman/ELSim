@@ -102,7 +102,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
     ['source', 'V', 'v', 'basics'], ['currentSource', 'I', 'i', 'basics'], ['diode', 'D', 'd', 'semiconductors'], ['zener', 'DZ', 'z', 'semiconductors'], ['led', 'D', 'l', 'semiconductors'], ['switch', 's', 's', 'basics'],
     ['voltageSwitch', 'S', 'S', 'controlled'], ['vcvs', 'E', 'E', 'controlled'], ['vccs', 'G', 'G', 'controlled'], ['cccs', 'F', 'F', 'controlled'], ['ccvs', 'H', 'H', 'controlled'], ['behavioral', 'B', 'b', 'controlled'],
     ['inverter', 'NOT', '1', 'basics'], ['logicGate', 'AND', '2', 'basics'], ['npn', 'Q', 'n', 'semiconductors'], ['pnp', 'Q', 'p', 'semiconductors'], ['njfet', 'J', 'j', 'semiconductors'], ['pjfet', 'J', 'J', 'semiconductors'],
-    ['nmos', 'M', 'N', 'semiconductors'], ['pmos', 'M', 'P', 'semiconductors'], ['ground', 'GND', 'g', 'basics'],
+    ['nmos', 'M', 'N', 'semiconductors'], ['pmos', 'M', 'P', 'semiconductors'], ['nvdmos', 'M3', '6', 'semiconductors'], ['pvdmos', 'M3', '7', 'semiconductors'], ['ground', 'GND', 'g', 'basics'],
   ]
   for (const [kind, subtitle, shortcut, category] of paletteMetadata) {
     assert.equal(componentDefinitionFor(kind).paletteSubtitle, subtitle, `${kind} palette subtitle`)
@@ -178,7 +178,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
 test('imported device model compatibility has one canonical type per built-in device family', () => {
   const expected = {
     diode: 'd', zener: 'd', led: 'd',
-    npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmos: 'nmos', pmos: 'pmos',
+    npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmos: 'nmos', pmos: 'pmos', nvdmos: 'vdmos', pvdmos: 'vdmos',
     voltageSwitch: 'sw',
   }
   for (const [kind, type] of Object.entries(expected)) assert.equal(compatibleDeviceModelType(kind), type, kind)

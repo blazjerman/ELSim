@@ -62,9 +62,11 @@ const nmosSymbol = [
   { kind: 'line', x1: 0, y1: 20, x2: 18, y2: 20 }, { kind: 'line', x1: 18, y1: 0, x2: 50, y2: 0 },
   { kind: 'path', d: 'M10 -5L17 0L10 5' },
 ] as const satisfies readonly ComponentSymbolPrimitive[]
+const nvdmosSymbol = [...nmosSymbol.slice(0, 9), nmosSymbol[10]] as const satisfies readonly ComponentSymbolPrimitive[]
 const pmosSymbol = [
   ...nmosSymbol.slice(0, -1), { kind: 'path', d: 'M17 -5L10 0L17 5' },
 ] as const satisfies readonly ComponentSymbolPrimitive[]
+const pvdmosSymbol = [...pmosSymbol.slice(0, 9), pmosSymbol[10]] as const satisfies readonly ComponentSymbolPrimitive[]
 const njfetSymbol = [
   { kind: 'line', x1: 0, y1: -50, x2: 0, y2: -22 }, { kind: 'line', x1: 0, y1: -22, x2: 0, y2: 22 },
   { kind: 'line', x1: 0, y1: 22, x2: 0, y2: 50 }, { kind: 'line', x1: -50, y1: 0, x2: -14, y2: 0 },
@@ -245,6 +247,8 @@ const definitions = [
   { id: 'elsim.pjfet', version: 1, kind: 'pjfet', name: 'P-channel JFET', paletteSubtitle: 'J', shortcut: 'J', paletteCategory: 'semiconductors', electricalType: 'J', symbolGeometry: pjfetSymbol, symbolVariants: currentDirectionVariants(pjfetSymbol, 'transistor-current-indicator', jfetCurrentPaths.forward, jfetCurrentPaths.reverse), pins: [{ name: 'drain', displayName: 'Drain', direction: 'passive', spiceOrder: 1 }, { name: 'gate', displayName: 'Gate', direction: 'input', spiceOrder: 2 }, { name: 'source', displayName: 'Source', direction: 'passive', spiceOrder: 3 }], pinOffsets: [[0, -50], [-50, 0], [0, 50]], properties: [{ key: 'value', label: 'Model', unit: '', defaultValue: '' }, { key: 'deviceModel', label: 'Model', unit: '' }], connectionHint: 'SPICE terminal order is Drain, Gate, Source. The arrow indicates channel polarity; drain current is positive into the drain.', animationChannels: ['current.drain'] },
   { id: 'elsim.nmos', version: 1, kind: 'nmos', name: 'N-channel MOSFET', paletteSubtitle: 'M', shortcut: 'N', paletteCategory: 'semiconductors', electricalType: 'M', symbolGeometry: nmosSymbol, symbolVariants: mosfetCurrentVariants, pins: [{ name: 'drain', displayName: 'Drain', direction: 'passive', spiceOrder: 1 }, { name: 'gate', displayName: 'Gate', direction: 'input', spiceOrder: 2 }, { name: 'source', displayName: 'Source', direction: 'passive', spiceOrder: 3 }, { name: 'bulk', displayName: 'Bulk', direction: 'passive', spiceOrder: 4 }], pinOffsets: [[0, -50], [-50, 0], [0, 50], [50, 0]], properties: [{ key: 'value', label: 'Model', unit: '', defaultValue: '0' }, { key: 'deviceModel', label: 'Model', unit: '' }], connectionHint: 'SPICE terminal order is Drain, Gate, Source, Bulk. Drain current is positive into the drain terminal.', animationChannels: ['current.drain'] },
   { id: 'elsim.pmos', version: 1, kind: 'pmos', name: 'P-channel MOSFET', paletteSubtitle: 'M', shortcut: 'P', paletteCategory: 'semiconductors', electricalType: 'M', symbolGeometry: pmosSymbol, symbolVariants: currentDirectionVariants(pmosSymbol, 'transistor-current-indicator', mosfetCurrentPaths.forward, mosfetCurrentPaths.reverse), pins: [{ name: 'drain', displayName: 'Drain', direction: 'passive', spiceOrder: 1 }, { name: 'gate', displayName: 'Gate', direction: 'input', spiceOrder: 2 }, { name: 'source', displayName: 'Source', direction: 'passive', spiceOrder: 3 }, { name: 'bulk', displayName: 'Bulk', direction: 'passive', spiceOrder: 4 }], pinOffsets: [[0, -50], [-50, 0], [0, 50], [50, 0]], properties: [{ key: 'value', label: 'Model', unit: '', defaultValue: '0' }, { key: 'deviceModel', label: 'Model', unit: '' }], connectionHint: 'SPICE terminal order is Drain, Gate, Source, Bulk. Drain current is positive into the drain terminal.', animationChannels: ['current.drain'] },
+  { id: 'elsim.nvdmos', version: 1, kind: 'nvdmos', name: 'N-channel power MOSFET', paletteSubtitle: 'M3', shortcut: '6', paletteCategory: 'semiconductors', electricalType: 'M', symbolGeometry: nvdmosSymbol, symbolVariants: mosfetCurrentVariants, pins: [{ name: 'drain', displayName: 'Drain', direction: 'passive', spiceOrder: 1 }, { name: 'gate', displayName: 'Gate', direction: 'input', spiceOrder: 2 }, { name: 'source', displayName: 'Source', direction: 'passive', spiceOrder: 3 }], pinOffsets: [[0, -50], [-50, 0], [0, 50]], properties: [{ key: 'value', label: 'Model', unit: '', defaultValue: '' }, { key: 'deviceModel', label: 'Power MOSFET model', unit: '', required: true }], connectionHint: 'Three-terminal ngspice VDMOS device. Select an imported N-channel VDMOS model; its model includes the body diode.', animationChannels: ['current.drain'] },
+  { id: 'elsim.pvdmos', version: 1, kind: 'pvdmos', name: 'P-channel power MOSFET', paletteSubtitle: 'M3', shortcut: '7', paletteCategory: 'semiconductors', electricalType: 'M', symbolGeometry: pvdmosSymbol, symbolVariants: currentDirectionVariants(pvdmosSymbol, 'transistor-current-indicator', mosfetCurrentPaths.forward, mosfetCurrentPaths.reverse), pins: [{ name: 'drain', displayName: 'Drain', direction: 'passive', spiceOrder: 1 }, { name: 'gate', displayName: 'Gate', direction: 'input', spiceOrder: 2 }, { name: 'source', displayName: 'Source', direction: 'passive', spiceOrder: 3 }], pinOffsets: [[0, -50], [-50, 0], [0, 50]], properties: [{ key: 'value', label: 'Model', unit: '', defaultValue: '' }, { key: 'deviceModel', label: 'Power MOSFET model', unit: '', required: true }], connectionHint: 'Three-terminal ngspice VDMOS device. Select an imported P-channel VDMOS model; its model includes the body diode.', animationChannels: ['current.drain'] },
   { id: 'elsim.subcircuit', version: 1, kind: 'subcircuit', name: 'Imported subcircuit', electricalType: 'X', pins: [], properties: [{ key: 'modelName', label: 'Model', unit: '', required: true }], animationChannels: [] },
 ] as const satisfies readonly BuiltInComponentDefinition[]
 
@@ -276,6 +280,8 @@ const componentHelpByKind: Readonly<Record<PartKind, string>> = {
   pjfet: 'A junction-gate field-effect transistor with polarity opposite to an N-channel JFET.',
   nmos: 'A voltage on the gate controls current from drain to source. The built-in Level 1 model is educational; choose a user-supplied model for device-specific results.',
   pmos: 'A voltage on the gate controls current from source to drain. The built-in Level 1 model is educational; choose a user-supplied model for device-specific results.',
+  nvdmos: 'A three-terminal power MOSFET. Import an N-channel VDMOS model to simulate its device-specific body diode and switching behavior.',
+  pvdmos: 'A three-terminal P-channel power MOSFET. Import a P-channel VDMOS model to simulate its device-specific body diode and switching behavior.',
   subcircuit: 'An imported or project-defined circuit block. Its pins follow the model’s declared order.',
 }
 
@@ -319,9 +325,18 @@ export function compatibleDeviceModelType(kind: PartKind): string | undefined {
     case 'pjfet': return 'pjf'
     case 'nmos': return 'nmos'
     case 'pmos': return 'pmos'
+    case 'nvdmos': case 'pvdmos': return 'vdmos'
     case 'voltageSwitch': return 'sw'
     default: return undefined
   }
+}
+
+export function deviceModelTypeMatches(kind: PartKind, model: { type: string; channel?: 'n' | 'p' }): boolean {
+  const expectedType = compatibleDeviceModelType(kind)
+  if (!expectedType || model.type.toLowerCase() !== expectedType) return false
+  if (kind === 'nvdmos') return (model.channel ?? 'n') === 'n'
+  if (kind === 'pvdmos') return model.channel === 'p'
+  return true
 }
 
 export function componentPropertyDefault(kind: PartKind, key: string): string | undefined {

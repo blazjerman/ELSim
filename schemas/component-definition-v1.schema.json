@@ -54,7 +54,9 @@
         "nmos",
         "pmos",
         "njfet",
-        "pjfet"
+        "pjfet",
+        "nvdmos",
+        "pvdmos"
       ]
     },
     "name": {

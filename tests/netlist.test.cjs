@@ -1492,6 +1492,29 @@ test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin ord
   assert.match(createNetlistArtifact(project).diagnostics.map(({ message }) => message).join('\n'), /not a NMOS model/i)
 })
 
+test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'vdmos-models', filename: 'power-mosfets.lib', content: '.MODEL NPOWER VDMOS(VTO=2)\n.MODEL PPOWER VDMOS Pchan VTO=-2', sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push(
+    { id: 'n-power', kind: 'nvdmos', ref: 'M1', value: '', deviceModel: 'NPOWER', x: 700, y: 300, rotation: 0 },
+    { id: 'p-power', kind: 'pvdmos', ref: 'M2', value: '', deviceModel: 'PPOWER', x: 850, y: 300, rotation: 0 },
+  )
+  project.netLabels.push(
+    { id: 'n-d', name: 'nd', x: 700, y: 250, visible: false },
+    { id: 'n-g', name: 'ng', x: 650, y: 300, visible: false },
+    { id: 'n-s', name: 'ns', x: 700, y: 350, visible: false },
+    { id: 'p-d', name: 'pd', x: 850, y: 250, visible: false },
+    { id: 'p-g', name: 'pg', x: 800, y: 300, visible: false },
+    { id: 'p-s', name: 'ps', x: 850, y: 350, visible: false },
+  )
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^M1 nd ng ns NPOWER$/m)
+  assert.match(artifact.text, /^M2 pd pg ps PPOWER$/m)
+  project.parts.find((part) => part.ref === 'M1').deviceModel = 'PPOWER'
+  assert.match(createNetlistArtifact(project).diagnostics.map(({ message }) => message).join('\n'), /requires an imported N-channel VDMOS model.*not a P-channel VDMOS model/i)
+})
+
 test('N- and P-channel JFETs generate J devices in D-G-S order and matching teaching models', () => {
   const project = createStarterProject()
   project.parts.push(

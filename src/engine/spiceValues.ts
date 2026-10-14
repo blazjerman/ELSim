@@ -11,7 +11,7 @@ export function spiceScalar(value: string, unit: string): string | null {
 }
 
 export function spiceNumber(value: string, kind: PartKind): string | null {
-  if (kind === 'nmos' || kind === 'pmos') return '0'
+  if (kind === 'nmos' || kind === 'pmos' || kind === 'nvdmos' || kind === 'pvdmos') return '0'
   const unit = kind === 'source' || kind === 'voltageSwitch' ? 'v' : kind === 'currentSource' ? 'a' : kind === 'capacitor' ? 'f' : kind === 'inductor' || kind === 'transformer' ? 'h' : ''
   return spiceScalar(value, unit)
 }

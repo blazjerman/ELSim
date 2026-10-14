@@ -16,7 +16,7 @@ export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref'>): string
   if (part.kind === 'transformer') return transformerWindingCurrentVector(part.ref, 'P')
   if (part.kind === 'potentiometer') return `i(@R${part.ref}_A[i])`
   if (part.kind === 'voltageSwitch') return `i(@${part.ref}[i])`
-  const currentName = part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' ? 'id' : 'i'
+  const currentName = part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'id' : part.kind === 'npn' || part.kind === 'pnp' ? 'ic' : part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'id' : 'i'
   return `i(@${part.ref}[${currentName}])`
 }
 
