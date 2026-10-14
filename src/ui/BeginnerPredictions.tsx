@@ -102,13 +102,17 @@ export function DiodePolarityPrediction({ supplyValue }: { supplyValue: string }
   />
 }
 
-export function NpnSwitchPrediction({ driveValue, baseResistanceValue, betaValue, supplyValue, loadResistanceValue }: {
+type BjtSwitchPredictionProps = {
   driveValue: string
   baseResistanceValue: string
   betaValue: string
   supplyValue: string
   loadResistanceValue: string
-}) {
+  transistorType: 'npn' | 'pnp'
+}
+
+function BjtSwitchPrediction({ driveValue, baseResistanceValue, betaValue, supplyValue, loadResistanceValue, transistorType }: BjtSwitchPredictionProps) {
+  const isNpn = transistorType === 'npn'
   const drive = componentMagnitude(driveValue, 'source')
   const baseResistance = componentMagnitude(baseResistanceValue, 'resistor')
   const supply = componentMagnitude(supplyValue, 'source')
@@ -117,22 +121,33 @@ export function NpnSwitchPrediction({ driveValue, baseResistanceValue, betaValue
   const valid = drive !== null && baseResistance !== null && baseResistance > 0
     && supply !== null && supply > 0 && loadResistance !== null && loadResistance > 0
     && Number.isFinite(beta) && beta > 0
-  const baseCurrent = valid ? Math.max(0, (drive! - 0.7) / baseResistance!) : null
+  const baseVoltage = valid ? isNpn ? drive! : supply! - drive! : null
+  const baseCurrent = baseVoltage !== null ? Math.max(0, (baseVoltage - 0.7) / baseResistance!) : null
   const loadCurrent = valid ? (supply! - 0.2) / loadResistance! : null
   const collectorCapacity = baseCurrent !== null ? baseCurrent * beta : null
-  const canPullLow = valid && drive! > 0.7 && collectorCapacity! >= loadCurrent! * 0.95
-  const expected = valid ? canPullLow ? 'yes' : 'no' : null
+  const canSwitchLoad = valid && baseVoltage! > 0.7 && collectorCapacity! >= loadCurrent! * 0.95
+  const expected = valid ? canSwitchLoad ? 'yes' : 'no' : null
+  const outputAction = isNpn ? 'pull COLLECTOR close to ground' : 'raise COLLECTOR close to VCC'
+  const driveAction = isNpn ? 'increase VDRIVE' : 'pull VDRIVE lower'
   const explanation = !valid
     ? 'Enter valid positive values for VDRIVE, VCC, RBASE, RLOAD, and Q1 beta before checking.'
-    : canPullLow
-      ? 'The rough estimate beta × base current gives about ' + formatValue(collectorCapacity! * 1000) + ' mA, enough for the roughly ' + formatValue(loadCurrent! * 1000) + ' mA load. Q1 should pull COLLECTOR close to ground; ngspice gives the actual result.'
-      : 'The rough estimate beta × base current gives about ' + formatValue(collectorCapacity! * 1000) + ' mA, below the roughly ' + formatValue(loadCurrent! * 1000) + ' mA load demand. Q1 cannot pull COLLECTOR close to ground; lower RBASE or increase VDRIVE. The built-in transistor model is an approximation.'
+    : canSwitchLoad
+      ? 'The rough estimate beta × base current gives about ' + formatValue(collectorCapacity! * 1000) + ' mA, enough for the roughly ' + formatValue(loadCurrent! * 1000) + ' mA load. Q1 should ' + outputAction + '; ngspice gives the actual result.'
+      : 'The rough estimate beta × base current gives about ' + formatValue(collectorCapacity! * 1000) + ' mA, below the roughly ' + formatValue(loadCurrent! * 1000) + ' mA load demand. Q1 cannot ' + outputAction + '; lower RBASE or ' + driveAction + '. The built-in transistor model is an approximation.'
   return <BinaryChoicePrediction
-    id="npn-switch-prediction"
-    prompt={'Before running, can Q1 pull COLLECTOR low with VDRIVE = ' + (drive === null ? 'an invalid voltage' : formatValue(drive) + ' V') + '?'}
+    id={transistorType + '-switch-prediction'}
+    prompt={'Before running, can Q1 ' + (isNpn ? 'pull COLLECTOR low' : 'raise COLLECTOR high') + ' with VDRIVE = ' + (drive === null ? 'an invalid voltage' : formatValue(drive) + ' V') + '?'}
     expected={expected}
     explanation={explanation}
   />
+}
+
+export function NpnSwitchPrediction(props: Omit<BjtSwitchPredictionProps, 'transistorType'>) {
+  return <BjtSwitchPrediction {...props} transistorType="npn"/>
+}
+
+export function PnpSwitchPrediction(props: Omit<BjtSwitchPredictionProps, 'transistorType'>) {
+  return <BjtSwitchPrediction {...props} transistorType="pnp"/>
 }
 
 function formatValue(value: number): string {
@@ -505,7 +520,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'npn-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'npn-switch' | 'pnp-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -542,6 +557,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'diode-polarity': return <DiodePolarityPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'npn-switch': return <NpnSwitchPrediction driveValue={props.driveValue ?? ''} baseResistanceValue={props.resistanceValue ?? ''} betaValue={props.betaValue ?? ''} supplyValue={props.supplyValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
+    case 'pnp-switch': return <PnpSwitchPrediction driveValue={props.driveValue ?? ''} baseResistanceValue={props.resistanceValue ?? ''} betaValue={props.betaValue ?? ''} supplyValue={props.supplyValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
     case 'potentiometer': return <PotentiometerPrediction supplyValue={props.supplyValue ?? ''} wiperPosition={props.wiperPosition ?? ''}/>
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>

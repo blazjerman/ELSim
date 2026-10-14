@@ -715,6 +715,35 @@ test('NPN switch lesson predicts collector drive and recalculates with base resi
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
 })
 
+test('PNP switch lesson predicts active-low collector drive and recalculates with base resistance', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Switching' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'PNP high-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  await expect(lesson).toContainText('can Q1 raise COLLECTOR high with VDRIVE = 0 V?')
+  await lesson.getByRole('radio', { name: 'No' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Not quite. The rough estimate beta × base current gives about 43 mA')
+  await lesson.getByRole('radio', { name: 'Yes' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. The rough estimate beta × base current gives about 43 mA')
+
+  await page.locator('.circuit-part[data-part-id="pnp-switch-rbase"]').click()
+  await page.locator('[data-part-setting="pnp-switch-rbase:value"]').fill('150 kΩ')
+  await expect(lesson.getByRole('radio', { name: 'Yes' })).not.toBeChecked()
+  await lesson.getByRole('radio', { name: 'Yes' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Not quite. The rough estimate beta × base current gives about 2.867 mA')
+  await lesson.getByRole('radio', { name: 'No' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. The rough estimate beta × base current gives about 2.867 mA')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+})
+
 test("Ohm's law lesson checks a beginner's current prediction before simulation", { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
