@@ -694,6 +694,33 @@ test('supply-droop lesson predicts load voltage and updates it with load resista
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
 })
 
+test('Zener lesson predicts series current and recalculates after a resistor edit', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Zener voltage reference' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = lesson.getByRole('textbox', { name: 'Before running, estimate current through the series resistor' })
+  await estimate.fill('8 mA')
+  await estimate.press('Enter')
+  await expect(lesson.getByRole('status')).toHaveText('Not quite. Assuming DZ1 clamps near 5.1 V, I(R1) ≈ (V1 − 5.1 V) / R1 = (12 V − 5.1 V) / 1 kΩ = 6.9 mA. This first-order estimate ignores the small current in the output reference resistor; ngspice uses the nonlinear Zener model.')
+  await estimate.fill('6.9mA')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. Assuming DZ1 clamps near 5.1 V, I(R1) ≈ (V1 − 5.1 V) / R1 = (12 V − 5.1 V) / 1 kΩ = 6.9 mA. This first-order estimate ignores the small current in the output reference resistor; ngspice uses the nonlinear Zener model.')
+
+  await page.locator('.circuit-part[data-part-id="zener-r1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="zener-r1:value"]').fill('2 kΩ')
+  const updatedEstimate = lesson.getByRole('textbox', { name: 'Before running, estimate current through the series resistor' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('3.45')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. Assuming DZ1 clamps near 5.1 V, I(R1) ≈ (V1 − 5.1 V) / R1 = (12 V − 5.1 V) / 2 kΩ = 3.45 mA. This first-order estimate ignores the small current in the output reference resistor; ngspice uses the nonlinear Zener model.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+})
+
 test('switch-and-lamp lesson predicts the open-circuit current path before running', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

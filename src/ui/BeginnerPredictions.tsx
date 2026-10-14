@@ -345,6 +345,26 @@ export function SupplyDroopPrediction({ supplyValue, sourceResistanceValue, load
   />
 }
 
+export function ZenerCurrentPrediction({ supplyValue, resistanceValue }: { supplyValue: string; resistanceValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const resistance = componentMagnitude(resistanceValue, 'resistor')
+  const predictedMilliamps = supply !== null && supply > 5.1 && resistance !== null && resistance > 0
+    ? (supply - 5.1) / resistance * 1000
+    : null
+  const explanation = predictedMilliamps === null || supply === null || resistance === null
+    ? ''
+    : `Assuming DZ1 clamps near 5.1 V, I(R1) ≈ (V1 − 5.1 V) / R1 = (${formatValue(supply)} V − 5.1 V) / ${formatResistance(resistance)} = ${formatValue(predictedMilliamps)} mA. This first-order estimate ignores the small current in the output reference resistor; ngspice uses the nonlinear Zener model.`
+
+  return <NumericPrediction
+    id="zener-current-prediction"
+    prompt="Before running, estimate current through the series resistor"
+    unit="mA"
+    predictedValue={predictedMilliamps}
+    absoluteTolerance={0.05}
+    explanation={explanation}
+  />
+}
+
 export function CapacitorDischargePrediction({ initialVoltageValue, resistanceValue, capacitanceValue }: { initialVoltageValue: string; resistanceValue: string; capacitanceValue: string }) {
   const initialVoltage = componentMagnitude(initialVoltageValue, 'source')
   const resistance = componentMagnitude(resistanceValue, 'resistor')
@@ -647,7 +667,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -683,6 +703,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'rc': return <RcTimeConstantPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'rl-time-constant': return <RlTimeConstantPrediction resistanceValue={props.resistanceValue ?? ''} inductanceValue={props.inductanceValue ?? ''}/>
     case 'supply-droop': return <SupplyDroopPrediction supplyValue={props.supplyValue ?? ''} sourceResistanceValue={props.seriesResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
+    case 'zener-current': return <ZenerCurrentPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'switch-lamp': return <SwitchPathPrediction/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
