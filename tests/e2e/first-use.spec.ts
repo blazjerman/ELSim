@@ -4566,6 +4566,36 @@ test('imported ngspice .MEAS results appear in the waveform window with source l
   expect(value).toBeLessThanOrEqual(5.0001)
 })
 
+test('imported AC and DC measurements appear only for the matching analysis', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'analysis-measurements.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.MEAS AC gain_at_1k FIND VM(vout) AT=1k\n.MEASURE DC output_at_2_5 FIND V(vout) AT=2.5\n.MODEL DTEST D(IS=1n)\n'),
+  })
+
+  await page.getByLabel('Analysis type', { exact: true }).selectOption('ac')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  let plot = await openComponentVoltagePlot(page)
+  let measurements = plot.locator('.measurement-results tbody tr')
+  await expect(measurements).toHaveCount(1)
+  await expect(measurements.first()).toContainText('gain_at_1k')
+  await expect(measurements.first()).toContainText('library line 1')
+  await plot.getByRole('button', { name: /Close/ }).click()
+
+  await page.getByLabel('Analysis type', { exact: true }).selectOption('dc')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  plot = await openComponentVoltagePlot(page)
+  measurements = plot.locator('.measurement-results tbody tr')
+  await expect(measurements).toHaveCount(1)
+  await expect(measurements.first()).toContainText('output_at_2_5')
+  await expect(measurements.first()).toContainText('library line 2')
+})
+
 test('invalid global temperature focuses its setting before simulation', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.setViewportSize({ width: 1280, height: 900 })
