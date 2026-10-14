@@ -1825,6 +1825,7 @@ export default function App() {
   const [selectedWireIds, setSelectedWireIds] = useState<string[]>([])
   const selectedWireId = selectedWireIds.at(-1) ?? null
   const setSelectedWireId = (id: string | null) => setSelectedWireIds(id ? [id] : [])
+  const pendingPasteSelection = useRef<{ partIds: string[]; wireIds: string[]; labelIds: string[]; selection: Selection } | null>(null)
   const [selectedPartIds, setSelectedPartIds] = useState<string[]>(['p-r1'])
   const sheetSelectionState = useRef(new Map<string, SheetSelectionState>())
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
@@ -2647,6 +2648,19 @@ export default function App() {
     if (validIds.length !== selectedWireIds.length) setSelectedWireIds(validIds)
   }, [projectWireIds, selectedWireIds])
   useLayoutEffect(() => {
+    const pending = pendingPasteSelection.current
+    if (!pending) return
+    const partIds = new Set(project.parts.map((part) => part.id))
+    const wireIds = new Set(project.wires.map((wire) => wire.id))
+    const labelIds = new Set(project.netLabels.map((label) => label.id))
+    if (pending.partIds.some((id) => !partIds.has(id)) || pending.wireIds.some((id) => !wireIds.has(id)) || pending.labelIds.some((id) => !labelIds.has(id))) return
+    pendingPasteSelection.current = null
+    setSelectedPartIds(pending.partIds)
+    setSelectedWireIds(pending.wireIds)
+    setSelectedNetLabelIds(pending.labelIds)
+    setSelection(pending.selection)
+  }, [project.parts, project.wires, project.netLabels])
+  useLayoutEffect(() => {
     const selectedIds = activeSelected && !selectedPartIdSet.has(activeSelected.id) ? [activeSelected.id] : selectedPartIds
     updatePartUiState(selectedIds, activeSelected?.id ?? project.parts[0]?.id)
   }, [selectedPartIds, selectedWireIds, activeSelected, project.parts])
@@ -3123,17 +3137,22 @@ export default function App() {
     })
     const lastPartId = pastedIds.at(-1)
     const lastLabel = pastedLabels.at(-1)
-    setSelectedPartIds(pastedIds)
-    setSelectedWireIds(pastedWires.map((wire) => wire.id))
-    setSelectedNetLabelIds(pastedLabels.map((label) => label.id))
+    const pastedWireIds = pastedWires.map((wire) => wire.id)
+    const pastedLabelIds = pastedLabels.map((label) => label.id)
+    const nextSelection: Selection = pastedIds.at(-1)
+      ? { kind: 'part', id: pastedIds.at(-1)! }
+      : pastedLabels.at(-1)
+        ? { kind: 'label', id: pastedLabels.at(-1)!.id }
+        : null
+    // Reconcile selection only after the copied records are in the project.
+    // This avoids the wire-validity effect pruning newly generated IDs if a
+    // large paste causes the selection and project updates to render separately.
+    pendingPasteSelection.current = { partIds: pastedIds, wireIds: pastedWireIds, labelIds: pastedLabelIds, selection: nextSelection }
     if (lastPartId) {
-      setSelection({ kind: 'part', id: lastPartId })
       setNotice(`Pasted ${sources.length} ${sources.length === 1 ? kindNames[sources[0].kind].toLowerCase() : 'components'} and ${pastedWires.length} attached wire segments. Ends at unselected parts stay open; net labels are not copied.`)
     } else if (lastLabel) {
-      setSelection({ kind: 'label', id: lastLabel.id })
       setNotice(`Pasted net label ${lastLabel.name}. Same-name labels on this sheet connect to the same electrical node.`)
     } else if (pastedWires.length) {
-      setSelection(null)
       setNotice(`Pasted ${pastedWires.length} wire segment${pastedWires.length === 1 ? '' : 's'}. Open endpoints stay unconnected until they touch another pin or wire.`)
     }
   }
