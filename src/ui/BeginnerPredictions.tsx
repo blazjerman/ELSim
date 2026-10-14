@@ -409,6 +409,30 @@ export function LedCurrentPrediction({ supplyValue, resistanceValue }: { supplyV
   />
 }
 
+export function ParallelLedCurrentPrediction({ supplyValue, upperResistanceValue, lowerResistanceValue }: { supplyValue: string; upperResistanceValue: string; lowerResistanceValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const upperResistance = componentMagnitude(upperResistanceValue, 'resistor')
+  const lowerResistance = componentMagnitude(lowerResistanceValue, 'resistor')
+  const upperCurrentMa = supply !== null && upperResistance !== null && upperResistance > 0 && supply > 2
+    ? (supply - 2) / upperResistance * 1000
+    : null
+  const lowerCurrentMa = supply !== null && lowerResistance !== null && lowerResistance > 0 && supply > 2
+    ? (supply - 2) / lowerResistance * 1000
+    : null
+  const explanation = upperCurrentMa === null || lowerCurrentMa === null || upperResistance === null || lowerResistance === null
+    ? 'Use a positive supply and positive resistor values to estimate the branch currents.'
+    : `Using a rough 2 V drop for each LED, R2 predicts I(D2) ≈ (Vsource − VLED)/R2 = (${formatValue(supply!)} V − 2 V)/${formatResistance(lowerResistance)} = ${formatValue(lowerCurrentMa)} mA. The matching R1 branch predicts ${formatValue(upperCurrentMa)} mA. Each resistor sets its own branch current; the real LED model is nonlinear, so ngspice may differ.`
+
+  return <NumericPrediction
+    id="parallel-led-current-prediction"
+    prompt="Before running, estimate current through the lower LED D2"
+    unit="mA"
+    predictedValue={lowerCurrentMa}
+    absoluteTolerance={0.5}
+    explanation={explanation}
+  />
+}
+
 export function VoltageDividerPrediction({ supplyValue, upperResistanceValue, lowerResistanceValue }: { supplyValue: string; upperResistanceValue: string; lowerResistanceValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const upper = componentMagnitude(upperResistanceValue, 'resistor')
@@ -667,7 +691,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -729,5 +753,6 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'series-resistors': return <SeriesVoltageDropPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'capacitor-discharge': return <CapacitorDischargePrediction initialVoltageValue={props.initialVoltageValue ?? ''} resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'led-current-limiter': return <LedCurrentPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
+    case 'parallel-led-current': return <ParallelLedCurrentPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
   }
 }

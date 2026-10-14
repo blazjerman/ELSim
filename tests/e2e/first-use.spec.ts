@@ -1172,6 +1172,33 @@ test('LED current-limiter lesson checks an approximate current prediction and re
   await expect(lesson.getByRole('status')).toContainText('3 mA')
 })
 
+test('parallel LED lesson predicts one branch and updates its estimate when that branch resistor changes', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Diodes' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Parallel LEDs with separate resistors' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('textbox', { name: 'Before running, estimate current through the lower LED D2' })
+  await expect(lesson).toContainText('Each branch has its own resistor')
+  await estimate.fill('9.091')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct.')
+  await expect(lesson.getByRole('status')).toContainText('Each resistor sets its own branch current')
+  await expect(lesson.getByRole('status')).toContainText('R1 branch predicts 9.091 mA')
+
+  await page.locator('.circuit-part[data-part-id="parallel-led-r2"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="parallel-led-r2:value"]').fill('680 Ω')
+  await expect(estimate).toHaveValue('')
+  await estimate.fill('4.412')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct.')
+  await expect(lesson.getByRole('status')).toContainText('R1 branch predicts 9.091 mA')
+})
+
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
