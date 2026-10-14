@@ -1761,7 +1761,7 @@ test('model importer reports a ground pin in an imported subcircuit header', { t
     mimeType: 'text/plain',
     buffer: Buffer.from('.SUBCKT INVALID 0 OUT\nR1 0 OUT 1k\n.ENDS INVALID'),
   })
-  await expect(page.locator('.toast[role="status"]')).toContainText('Line 1: .SUBCKT INVALID cannot use ground node 0 as an external pin.')
+  await expect(page.locator('.toast[role="status"]')).toContainText('Line 1: .SUBCKT INVALID uses node 0 or GND as an external pin, but ngspice treats both as global ground rather than a connectable IC pin. Keep ground inside the model or rename the pin if it represents a separate signal.')
   await expect(page.getByRole('button', { name: 'Remove library file invalid-ground-pin.lib' })).toHaveCount(0)
 })
 
