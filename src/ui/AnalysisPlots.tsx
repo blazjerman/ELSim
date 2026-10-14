@@ -36,25 +36,50 @@ type PlotWindow = { start: number; end: number }
 function usePlotWindow(savedRange: PlotRange | undefined, onRangeChange: (range: PlotRange) => void) {
   const [window, setWindow] = useState<PlotWindow>(savedRange ?? { start: 0, end: 1 })
   const windowRef = useRef(window)
+  const onRangeChangeRef = useRef(onRangeChange)
+  const pendingRangeRef = useRef<PlotRange | null>(null)
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   windowRef.current = window
+  onRangeChangeRef.current = onRangeChange
   // Trace arrays are recreated for every simulation result. Sync only the
   // persisted viewport so rerunning an unchanged circuit keeps the user's zoom.
   useEffect(() => { const next = savedRange ?? { start: 0, end: 1 }; windowRef.current = next; setWindow(next) }, [savedRange])
-  const update = (next: PlotRange) => { windowRef.current = next; setWindow(next); onRangeChange(next) }
+  const flushPendingRange = () => {
+    if (persistTimerRef.current !== null) clearTimeout(persistTimerRef.current)
+    persistTimerRef.current = null
+    const pending = pendingRangeRef.current
+    pendingRangeRef.current = null
+    if (pending) onRangeChangeRef.current(pending)
+  }
+  useEffect(() => () => flushPendingRange(), [])
+  const update = (next: PlotRange, deferPersistence = false) => {
+    windowRef.current = next
+    setWindow(next)
+    if (!deferPersistence) {
+      if (persistTimerRef.current !== null) clearTimeout(persistTimerRef.current)
+      persistTimerRef.current = null
+      pendingRangeRef.current = null
+      onRangeChangeRef.current(next)
+      return
+    }
+    pendingRangeRef.current = next
+    if (persistTimerRef.current !== null) clearTimeout(persistTimerRef.current)
+    persistTimerRef.current = setTimeout(flushPendingRange, 120)
+  }
   const panBy = (delta: number) => {
     const current = windowRef.current
     const span = current.end - current.start
     const start = Math.max(0, Math.min(1 - span, current.start + delta))
-    update({ start, end: start + span })
+    update({ start, end: start + span }, true)
   }
-  const zoomAt = (factor: number, anchor: number) => {
+  const zoomAt = (factor: number, anchor: number, deferPersistence = false) => {
     const current = windowRef.current
     const span = current.end - current.start
     const next = Math.min(1, Math.max(0.03, span * factor))
     const fraction = Math.max(0, Math.min(1, (anchor - current.start) / (span || 1)))
     const start = Math.max(0, Math.min(1 - next, anchor - fraction * next))
     const range = { start, end: start + next }
-    update(range)
+    update(range, deferPersistence)
   }
   const zoom = (factor: number) => { const current = windowRef.current; zoomAt(factor, (current.start + current.end) / 2) }
   const reset = () => update({ start: 0, end: 1 })
@@ -370,7 +395,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     const fraction = Math.max(0, Math.min(1, (x - left) / (right - left)))
     const timeAtPointer = minTime + fraction * (maxTime - minTime)
     const anchorIndex = nearestAxisIndex(axis ?? Float64Array.of(0), timeAtPointer, first, Math.min(last, (axis?.length ?? 1) - 1))
-    navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchorIndex / Math.max(1, (axis?.length ?? 1) - 1))
+    navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchorIndex / Math.max(1, (axis?.length ?? 1) - 1), true)
   }
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorFor = useCallback((index: number) => colors[index % colors.length], [colors])
@@ -542,7 +567,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     const fraction = Math.max(0, Math.min(1, (x - left) / (right - left)))
     const logAnchor = Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))
     const anchor = nearestAxisIndex(frequencies, 10 ** logAnchor, first, Math.min(last, frequencies.length - 1))
-    navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchor / Math.max(1, frequencies.length - 1))
+    navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchor / Math.max(1, frequencies.length - 1), true)
   }
   const yFor = (value: number) => bottom - (value - minValue) / (maxValue - minValue) * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
@@ -647,7 +672,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
     const x = (event.clientX - rect.left) / Math.max(rect.width, 1) * width
     const fraction = Math.max(0, Math.min(1, (x - left) / (right - left)))
     const anchor = nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1))
-    navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchor / Math.max(1, axis.length - 1))
+    navigation.zoomAt(Math.exp(event.deltaY * 0.001), anchor / Math.max(1, axis.length - 1), true)
   }
   const span = max - min || 1
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
