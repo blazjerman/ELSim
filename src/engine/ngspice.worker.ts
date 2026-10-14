@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { isTraceVariable, parseRawFile, rawTraceUnit } from './raw'
 import { addResultControl } from './resultControl'
-import { parseMeasurementOutput } from './measurements'
+import { parseImportedMeasurementOutput, parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice, firstNgspiceError } from './diagnostics'
 import { isEngineRequest, transferableTraceBuffers, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
 import type { TransientMeasurement } from '../domain/project'
@@ -113,14 +113,15 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       ? parameterSweep.map((_, index) => traces.filter((trace) => trace.sweep?.index === index))
       : [traces]
     const measurementOutput = parseMeasurementOutput(output, measurements, parameterSweep?.map((sweep) => sweep.label) ?? [], measurementTraces)
+    const importedMeasurementOutput = parseImportedMeasurementOutput(artifact, output, parameterSweep?.map((sweep) => sweep.label) ?? [])
     const result = {
       metadata: { ...metadata, completedAt: new Date().toISOString() },
       netlist: artifact.text,
       sourceMap: artifact.sourceMap,
       traces,
-      diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics],
+      diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics, ...importedMeasurementOutput.diagnostics],
       analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise',
-      measurements: measurementOutput.results,
+      measurements: [...measurementOutput.results, ...importedMeasurementOutput.results],
     }
     if (profileWorker) {
       resultProcessingMs = performance.now() - resultProcessingStarted

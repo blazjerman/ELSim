@@ -53,6 +53,7 @@ export type Trace = {
 }
 
 export type MeasurementResult = { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ' | 'delay'; vector: string; targetVector?: string; from?: string; to?: string; value: number; unit: 'V' | 'A' | 'C' | 'V·s' | 's'; sweep?: { label: string; index: number } }
+  | { id: string; operation: 'native'; vector: string; directive: string; value: number; unit: ''; sourceAssetId: string; sourceLine: number; sweep?: { label: string; index: number } }
 
 export type SimulationResult = {
   metadata: RunMetadata
@@ -173,6 +174,13 @@ function isTrace(value: unknown, validatedVectors?: WeakSet<Float64Array>): valu
 
 function isMeasurementResult(value: unknown): value is MeasurementResult {
   if (!isRecord(value)) return false
+  if (value.operation === 'native') return typeof value.id === 'string' && value.id.length > 0 && value.id.length <= 64
+    && typeof value.vector === 'string' && value.vector.length <= 512
+    && typeof value.directive === 'string' && value.directive.length <= 1024
+    && typeof value.value === 'number' && Number.isFinite(value.value) && value.unit === ''
+    && typeof value.sourceAssetId === 'string' && value.sourceAssetId.length > 0
+    && Number.isInteger(value.sourceLine) && Number(value.sourceLine) >= 1
+    && (value.sweep === undefined || (isRecord(value.sweep) && typeof value.sweep.label === 'string' && Number.isInteger(value.sweep.index) && Number(value.sweep.index) >= 0))
   const from = value.from === undefined ? null : typeof value.from === 'string' ? timeMagnitude(value.from) ?? Number.NaN : Number.NaN
   const to = value.to === undefined ? null : typeof value.to === 'string' ? timeMagnitude(value.to) ?? Number.NaN : Number.NaN
   const validRange = !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)

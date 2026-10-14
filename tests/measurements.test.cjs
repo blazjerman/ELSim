@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { parseMeasurementOutput } = require(path.join(build, 'engine/measurements.js'))
+const { parseImportedMeasurementOutput, parseMeasurementOutput } = require(path.join(build, 'engine/measurements.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { addResultControl } = require(path.join(build, 'engine/resultControl.js'))
@@ -41,6 +41,33 @@ test('transient measurements parse units and separate sweep cases', () => {
     { id: 'RmsCurrent', value: 0.0009, unit: 'A', case: 1 },
     { id: 'SourceCurrent', value: -0.002, unit: 'A', case: 1 },
   ])
+})
+
+test('imported ngspice measurements return values with original library source locations', () => {
+  const artifact = {
+    text: '* RC response\n.MEAS TRAN output_peak MAX V(out)\n.MEASURE TRAN settle TRIG V(out) VAL=4 RISE=1 TARG V(out) VAL=4.9 RISE=1\n.end\n',
+    sourceMap: [
+      { line: 2, sourceId: 'model-file:asset-rc', role: 'model', assetId: 'asset-rc', assetLine: 17 },
+      { line: 3, sourceId: 'model-file:asset-rc', role: 'model', assetId: 'asset-rc', assetLine: 18 },
+    ],
+    diagnostics: [],
+  }
+  const parsed = parseImportedMeasurementOutput(artifact, 'output_peak = 5.00000e+00 at= 1.00000e-02\nsettle = 2.50000e-03 targ= 7.50000e-03 trig= 5.00000e-03')
+  assert.deepEqual(parsed.diagnostics, [])
+  assert.deepEqual(parsed.results.map(({ id, operation, value, sourceAssetId, sourceLine }) => ({ id, operation, value, sourceAssetId, sourceLine })), [
+    { id: 'output_peak', operation: 'native', value: 5, sourceAssetId: 'asset-rc', sourceLine: 17 },
+    { id: 'settle', operation: 'native', value: 0.0025, sourceAssetId: 'asset-rc', sourceLine: 18 },
+  ])
+  assert.equal(parsed.results[0].directive, '.MEAS TRAN output_peak MAX V(out)')
+
+  const swept = parseImportedMeasurementOutput(artifact, 'output_peak = 3\noutput_peak = 5\nsettle = 1m\nsettle = 2m', ['R1=1k', 'R1=2k'])
+  assert.deepEqual(swept.results.filter((result) => result.id === 'output_peak').map((result) => result.sweep), [
+    { label: 'R1=1k', index: 0 }, { label: 'R1=2k', index: 1 },
+  ])
+
+  const missing = parseImportedMeasurementOutput(artifact, '')
+  assert.equal(missing.diagnostics.length, 2)
+  assert.equal(missing.diagnostics[0].assetLine, 17)
 })
 
 test('current-source measurements use the solved raw vector when ngspice has no scalar measurement', () => {

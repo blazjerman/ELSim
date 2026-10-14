@@ -1,5 +1,5 @@
 import type { TransientMeasurement } from '../domain/project'
-import type { MeasurementResult, SimulationDiagnostic } from './contract'
+import type { MeasurementResult, NetlistArtifact, SimulationDiagnostic } from './contract'
 import type { Trace } from './contract'
 import { timeMagnitude } from '../domain/componentValue'
 import { measurementThresholdMagnitude } from '../domain/measurementSettings'
@@ -118,6 +118,56 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
       const unit = measurement.operation === 'delay' ? 's' : measurement.operation === 'integ' ? isCurrent ? 'C' : 'V·s' : isCurrent ? 'A' : 'V'
       results.push({ id: measurement.id, operation: measurement.operation, vector: measurement.vector, ...(measurement.operation === 'delay' ? { targetVector: measurement.targetVector } : { ...(measurement.from ? { from: measurement.from } : {}), ...(measurement.to ? { to: measurement.to } : {}) }), value, unit, ...(caseCount ? { sweep: { label: sweepLabels[index], index: index } } : {}) })
     }
+  }
+  return { results, diagnostics }
+}
+
+/** Read results from user-imported ngspice .MEAS/.MEASURE cards without rewriting them. */
+export function parseImportedMeasurementOutput(artifact: NetlistArtifact, output: string, sweepLabels: string[] = []): { results: MeasurementResult[]; diagnostics: SimulationDiagnostic[] } {
+  const rows = artifact.text.split(/\r?\n/)
+  const sourceByLine = new Map(artifact.sourceMap.map((source) => [source.line, source]))
+  const cards: { line: number; text: string; assetId: string; assetLine: number; id: string }[] = []
+  for (let index = 0; index < rows.length; index += 1) {
+    const source = sourceByLine.get(index + 1)
+    if (source?.role !== 'model' || !source.assetId || source.assetLine === undefined) continue
+    if (!/^\s*\.(?:meas|measure)\s+/i.test(rows[index])) continue
+    const start = index + 1
+    let text = rows[index].trim()
+    while (index + 1 < rows.length && /^\s*\+/.test(rows[index + 1])) {
+      text += ` ${rows[index + 1].replace(/^\s*\+\s?/, '').trim()}`
+      index += 1
+    }
+    const match = text.match(/^\.(?:meas|measure)\s+(?:tran|ac|dc)\s+([A-Za-z_][A-Za-z0-9_$]*)\s+/i)
+    if (match) cards.push({ line: start, text, assetId: source.assetId, assetLine: source.assetLine, id: match[1] })
+  }
+  const outputLines = output.split(/\r?\n/)
+  const results: MeasurementResult[] = []
+  const diagnostics: SimulationDiagnostic[] = []
+  for (const card of cards) {
+    const escapedName = card.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const expression = new RegExp(`^\\s*${escapedName}\\s*=\\s*([-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[-+]?\\d+)?)`, 'i')
+    const matches = outputLines.flatMap((line) => {
+      const match = expression.exec(line)
+      return match ? [Number(match[1])] : []
+    })
+    if (!matches.length) {
+      diagnostics.push({ severity: 'warning', message: `ngspice did not return imported measurement ${card.id}. Check its analysis type and referenced vectors.`, sourceId: `model-file:${card.assetId}`, assetId: card.assetId, assetLine: card.assetLine })
+      continue
+    }
+    matches.slice(0, Math.max(1, sweepLabels.length)).forEach((value, index) => {
+      if (!Number.isFinite(value)) return
+      results.push({
+        id: card.id,
+        operation: 'native',
+        vector: card.text,
+        directive: card.text,
+        value,
+        unit: '',
+        sourceAssetId: card.assetId,
+        sourceLine: card.assetLine,
+        ...(sweepLabels.length > 1 && index < sweepLabels.length ? { sweep: { label: sweepLabels[index], index } } : {}),
+      })
+    })
   }
   return { results, diagnostics }
 }

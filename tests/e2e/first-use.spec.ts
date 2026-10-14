@@ -4545,6 +4545,27 @@ test('imported ngspice .PROBE instruments a top-level component and preserves it
   await expect(netlist).toContainText('.PROBE I(R1)')
 })
 
+test('imported ngspice .MEAS results appear in the waveform window with source location', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'measurements.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.MEASURE TRAN imported_peak MAX V(vout)\n.MODEL DTEST D(IS=1n)\n'),
+  })
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice .MEAS runs a circuit-wide measurement')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete .* result vectors/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openWireVoltagePlot(page, 430, 290)
+  const result = plot.locator('.measurement-results tbody tr').filter({ hasText: 'imported_peak' })
+  await expect(result).toContainText('.MEASURE TRAN imported_peak MAX V(vout)')
+  await expect(result).toContainText('library line 1')
+  const value = Number((await result.locator('td').nth(2).textContent())?.trim())
+  expect(value).toBeGreaterThan(4.9)
+  expect(value).toBeLessThanOrEqual(5.0001)
+})
+
 test('invalid global temperature focuses its setting before simulation', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.setViewportSize({ width: 1280, height: 900 })

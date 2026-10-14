@@ -203,6 +203,21 @@ test('preserves ngspice .PROBE cards and reports circuit-wide instrumentation', 
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE IN OUT\n.PROBE I(Q1)\n.ENDS CORE'), /\.PROBE can instrument only top-level circuit devices/)
 })
 
+test('preserves native ngspice .MEAS cards and rejects circuit-wide measurements inside a subcircuit', () => {
+  const source = '.MEAS TRAN output_peak MAX V(out) FROM=0 TO=10m\n.MODEL DFAST D(Is=1n)'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine, text }) => ({ sourceLine, text })), [
+    { sourceLine: 1, text: '.MEAS TRAN output_peak MAX V(out) FROM=0 TO=10m' },
+    { sourceLine: 2, text: '.MODEL DFAST D(Is=1n)' },
+  ])
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.equal(warning.sourceLine, 1)
+  assert.equal(warning.feature, 'ngspice .MEAS runs a circuit-wide measurement')
+  assert.match(warning.impact, /complete circuit/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE A B\n.MEASURE TRAN peak MAX V(A)\n.ENDS CORE'), /\.MEASURE evaluates circuit-wide analysis results and cannot appear inside a \.SUBCKT/)
+})
+
 test('preserves top-level ngspice .CSPARAM constants and rejects subcircuit scope', () => {
   const source = '.PARAM GAIN=3\n.CSPARAM gain_vector={GAIN}\n.MODEL DFAST D(Is=1n)'
   const parsed = parseSubcircuitLibrary(source)
