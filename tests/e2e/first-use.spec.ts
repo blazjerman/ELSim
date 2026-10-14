@@ -2189,6 +2189,22 @@ test('native ngspice slash-named subcircuit imports and generates a valid instan
   await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* LF356\/NS/)
 })
 
+test('native ngspice ignores mismatched optional names on nested .ENDS cards', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Components', exact: true }).click()
+  const modelLibrary = '.SUBCKT TOP IN OUT\nXCORE IN OUT CORE\n.SUBCKT CORE A B\nR1 A B 1k\n.ENDS TOP\n.ENDS CORE\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'nested.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 2 subcircuits and 0 device models from nested\.lib/)).toBeVisible()
+  await expect(page.locator('.imported-model').filter({ hasText: 'TOP' })).toBeVisible()
+  await expect(page.locator('.imported-model').filter({ hasText: 'CORE' })).toBeVisible()
+})
+
 test('subcircuit parameter defaults can call functions from an imported include library', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const input = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')

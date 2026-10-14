@@ -808,7 +808,7 @@ test('rejects malformed pin declarations, block endings, duplicate definitions, 
   for (const source of [
     '.SUBCKT x\n.ENDS',
     '.SUBCKT x A A\n.ENDS',
-    '.SUBCKT x A\n.ENDS y',
+    '.SUBCKT x A\n.ENDS x extra',
     '.ENDS x',
     '.SUBCKT x A\nR1 A 0 1k',
     '.SUBCKT x A\n.ENDS x\n.subckt X B\n.ends X',
@@ -819,7 +819,11 @@ test('rejects malformed pin declarations, block endings, duplicate definitions, 
     '.MODEL broken',
     '.MODEL D1 D(Is=1)\n.MODEL d1 D(Is=2)',
   ]) assert.throws(() => parseSubcircuitLibrary(source))
-  assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS outer\n.ENDS inner'), /does not match/)
+  const mismatchedEndsNames = parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS outer\n.ENDS inner')
+  assert.deepEqual(mismatchedEndsNames.subcircuits.map(({ name, startLine, endLine }) => ({ name, startLine, endLine })), [
+    { name: 'outer', startLine: 1, endLine: 4 },
+    { name: 'inner', startLine: 2, endLine: 3 },
+  ])
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS inner'), /no matching \.ENDS/)
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT outer B\n.ENDS outer\n.ENDS outer'), /declared more than once/)
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.MODEL DLOCAL D(Is=1n)\n.MODEL dlocal D(Is=2n)\n.ENDS outer'), /declared more than once in \.SUBCKT outer/)

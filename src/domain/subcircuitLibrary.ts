@@ -181,8 +181,7 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     } else if (directive === '.ends') {
       const active = activeSubcircuits.at(-1)
       if (!active) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
-      const closingName = tokens[1]
-      if (closingName && closingName.toLowerCase() !== active.name.toLowerCase()) throw new Error(`Line ${line.start}: .ENDS ${closingName} does not match .SUBCKT ${active.name}.`)
+      if (tokens.length > 2) throw new Error(`Line ${line.start}: .ENDS accepts at most one optional subcircuit name.`)
       activeSubcircuits.pop()
     }
     lines.push({ line, section: activeSection })
@@ -775,8 +774,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     if (directive === '.ends') {
       const active = activeSubcircuits.at(-1)
       if (!active) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
-      const closingName = tokens[1]
-      if (closingName && closingName.toLowerCase() !== active.name.toLowerCase()) throw new Error(`Line ${line.start}: .ENDS ${closingName} does not match .SUBCKT ${active.name}.`)
+      if (tokens.length > 2) throw new Error(`Line ${line.start}: .ENDS accepts at most one optional subcircuit name.`)
       subcircuits.push({ name: active.name, pins: active.pins, parameters: active.parameters, dependencies: active.dependencies, ...(active.parentName ? { parentName: active.parentName } : {}), startLine: active.start, endLine: line.end })
       activeSubcircuits.pop()
       continue

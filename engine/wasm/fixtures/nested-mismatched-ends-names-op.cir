@@ -1,0 +1,13 @@
+Nested subcircuit definitions with advisory ENDS names
+V1 IN 0 10
+XTOP IN OUT TOP
+RLOAD OUT 0 1k
+.SUBCKT TOP A B
+XCORE A B CORE
+.SUBCKT CORE X Y
+RCORE X Y 1k
+.ENDS TOP
+.ENDS CORE
+.op
+.print op v(out)
+.end
