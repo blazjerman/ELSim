@@ -530,6 +530,9 @@ test('opening another document closes its stale schematic context menu', { tag: 
   await dialog.locator('[data-example-id="ohms-law"]').getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.getByRole('menu', { name: /Options for/ })).toHaveCount(0)
+  const initialViewWidth = await page.locator('svg.schematic').evaluate((element) => (element as SVGSVGElement).viewBox.baseVal.width)
+  await page.setViewportSize({ width: 1200, height: 900 })
+  await expect.poll(() => page.locator('svg.schematic').evaluate((element) => (element as SVGSVGElement).viewBox.baseVal.width)).not.toBe(initialViewWidth)
 })
 
 test('RC lesson checks a time-constant prediction and recalculates it after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
