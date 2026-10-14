@@ -607,14 +607,21 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   viewportBottom: number
 }) {
   const focusedPartId = document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId
+  const marginForPart = (part: Part) => {
+    const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
+    const bounds = symbol ? importedSymbolBounds(symbol) : null
+    const symbolMargin = bounds ? Math.max(Math.abs(bounds.minX), Math.abs(bounds.minY), Math.abs(bounds.maxX), Math.abs(bounds.maxY)) + 40 : 100
+    const blockMargin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
+    return Math.max(symbolMargin, blockMargin)
+  }
   const partViewportIndex = useMemo(() => createViewportIndex(parts, (part) => {
-    const margin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
+    const margin = marginForPart(part)
     return { left: part.x - margin, top: part.y - margin, right: part.x + margin, bottom: part.y + margin }
-  }), [parts])
+  }), [parts, symbolsById])
   const visibleParts = partViewportIndex({ left: viewportLeft, top: viewportTop, right: viewportRight, bottom: viewportBottom }, focusedPartId)
   return <>{visibleParts.map((part) => {
     const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
-    const margin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
+    const margin = marginForPart(part)
     const detailed = part.x >= viewportLeft - margin && part.x <= viewportRight + margin && part.y >= viewportTop - margin && part.y <= viewportBottom + margin
     const animate = animationEnabled && part.kind !== 'subcircuit' && part.x >= viewportLeft - 100 && part.x <= viewportRight + 100 && part.y >= viewportTop - 100 && part.y <= viewportBottom + 100
     if (!detailed && part.id !== focusedPartId) return null

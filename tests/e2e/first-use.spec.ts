@@ -3940,7 +3940,7 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
       { name: 'VEE', spiceOrder: 4, x: 0, y: 60, orientation: 'U' },
       { name: 'OUT', spiceOrder: 5, x: 60, y: 0, orientation: 'L' },
     ],
-    primitives: [{ kind: 'path', d: 'M-30 -40L35 0L-30 40Z' }, { kind: 'text', x: -5, y: 5, text: 'A' }],
+    primitives: [{ kind: 'path', d: 'M200 0l100 100l100 100' }, { kind: 'text', x: -5, y: 5, text: 'A' }],
   })
   const symbol = parseElsimSymbol(symbolSource, 'native-amp.elsym')
   await page.goto('/')
@@ -3958,7 +3958,7 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
   await page.getByRole('button', { name: 'Place USER_AMP with this symbol' }).click()
   const part = page.locator('.circuit-part[aria-label^="X1,"]')
   await expect(part).toBeVisible()
-  await expect(part.locator('.imported-symbol-art path')).toHaveAttribute('d', 'M-30 -40L35 0L-30 40Z')
+  await expect(part.locator('.imported-symbol-art path')).toHaveAttribute('d', 'M200 0l100 100l100 100')
   await expect(part.locator('.imported-symbol-art circle')).toHaveCount(5)
   await expect.poll(() => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
@@ -4010,6 +4010,19 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Download USER_AMP-symbol.elsym' }).click()
   expect((await downloadPromise).suggestedFilename()).toBe('USER_AMP-symbol.elsym')
+
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const importedPart = project.parts.find((item: { ref: string }) => item.ref === 'X1')
+    importedPart.x = -200
+    importedPart.y = 0
+    project.view = { zoom: 1, panX: 0, panY: 0 }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const pannedSymbol = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(pannedSymbol).toBeVisible()
+  await expect(pannedSymbol.locator('.imported-symbol-art path')).toHaveAttribute('d', 'M200 0l100 100l100 100')
 })
 
 test('copying a user IC into a new project carries transitive libraries and its custom symbol', async ({ page }) => {

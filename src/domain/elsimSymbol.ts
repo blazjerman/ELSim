@@ -1,4 +1,5 @@
 import type { ImportedSymbol, SymbolPin, SymbolPrimitive } from './ltspiceSymbol'
+import { svgPathBounds } from './svgPathBounds'
 
 const MAX_TEXT = 1024 * 1024
 const MAX_PRIMITIVES = 2000
@@ -56,6 +57,9 @@ function parsePrimitive(value: unknown, filename: string, index: number): Symbol
     case 'path': {
       const d = text(item.d, filename, `primitive ${index + 1} path`, 4096)
       if (!d.trim() || !ALLOWED_PATH.test(d)) throw new Error(`${filename}: primitive ${index + 1} path contains unsupported SVG path characters.`)
+      try { svgPathBounds(d, MAX_COORDINATE) } catch (error) {
+        throw new Error(`${filename}: primitive ${index + 1} path is invalid: ${error instanceof Error ? error.message : String(error)}`)
+      }
       return { kind: 'path', d }
     }
     default: throw new Error(`${filename}: primitive ${index + 1} has unsupported kind ${String(item.kind)}.`)

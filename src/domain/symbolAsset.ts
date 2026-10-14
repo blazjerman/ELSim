@@ -1,5 +1,6 @@
 import { parseElsimSymbol } from './elsimSymbol'
 import { parseLtspiceSymbol, type ImportedSymbol } from './ltspiceSymbol'
+import { svgPathBounds } from './svgPathBounds'
 
 export type ImportedSymbolBounds = { minX: number; minY: number; maxX: number; maxY: number }
 
@@ -23,12 +24,9 @@ export function importedSymbolBounds(symbol: ImportedSymbol): ImportedSymbolBoun
     } else if (primitive.kind === 'text') {
       include(primitive.x, primitive.y)
     } else if (primitive.kind === 'path') {
-      // Symbol paths are bounded by the parser. Treat each numeric token as a
-      // possible coordinate to avoid clipping supported SVG path commands.
-      for (const match of primitive.d.matchAll(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g)) {
-        const value = Number(match[0])
-        include(value, value)
-      }
+      const pathBounds = svgPathBounds(primitive.d)
+      include(pathBounds.minX, pathBounds.minY)
+      include(pathBounds.maxX, pathBounds.maxY)
     } else {
       include(primitive.x1, primitive.y1)
       include(primitive.x2, primitive.y2)

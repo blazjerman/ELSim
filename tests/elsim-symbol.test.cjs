@@ -8,6 +8,7 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { createDefaultElsimSymbol, defaultElsimPinSides, parseElsimSymbol } = require(path.join(build, 'domain/elsimSymbol.js'))
 const { importedSymbolBounds } = require(path.join(build, 'domain/symbolAsset.js'))
+const { svgPathBounds } = require(path.join(build, 'domain/svgPathBounds.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createProjectArchive, readProjectArchive } = require(path.join(build, 'domain/projectArchive.js'))
@@ -42,6 +43,24 @@ test('reused imported symbols share one cached drawing-bounds result', () => {
   const bounds = importedSymbolBounds(symbol)
   assert.deepEqual(bounds, { minX: -60, minY: -60, maxX: 60, maxY: 60 })
   assert.strictEqual(importedSymbolBounds(symbol), bounds)
+})
+
+test('symbol path bounds account for relative segments and curve control points', () => {
+  assert.deepEqual(svgPathBounds('M100 100l100 100l100 100'), { minX: 100, minY: 100, maxX: 300, maxY: 300 })
+  assert.deepEqual(svgPathBounds('M0 0c50 100 100 100 150 0'), { minX: 0, minY: 0, maxX: 150, maxY: 100 })
+  assert.deepEqual(svgPathBounds('M0 0Q10 20 20 0T40 0'), { minX: 0, minY: -20, maxX: 40, maxY: 20 })
+  const arc = svgPathBounds('M0 0A100000 100000 0 0 1 100000 0')
+  assert.ok(arc.minY <= -100000 && arc.maxY >= 100000)
+  const curved = parseElsimSymbol(JSON.stringify({
+    ...symbolDocument,
+    primitives: [{ kind: 'path', d: 'M100 100l100 100l100 100' }],
+  }))
+  assert.deepEqual(importedSymbolBounds(curved), { minX: -60, minY: -60, maxX: 300, maxY: 300 })
+})
+
+test('symbol path parser rejects incomplete commands and cumulative coordinates outside the symbol limit', () => {
+  assert.throws(() => svgPathBounds('M0'), /incomplete parameters/)
+  assert.throws(() => svgPathBounds('M0 0l60000 0l60000 0'), /coordinates must stay within/)
 })
 
 test('native symbol parser rejects unsafe or ambiguous symbol data', () => {
