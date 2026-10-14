@@ -5,8 +5,23 @@ const ARITY: Record<string, number> = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4
 
 /** Conservative bounds for the SVG path subset used by imported symbols. */
 export function svgPathBounds(source: string, coordinateLimit = 100_000): SvgPathBounds {
-  const tokens = source.match(TOKEN) ?? []
-  if (source.replace(TOKEN, '').replace(/[\s,]/g, '')) throw new Error('SVG path contains an invalid token.')
+  const matches = [...source.matchAll(TOKEN)]
+  const tokens = matches.map((match) => match[0])
+  let previousTokenKind: 'command' | 'number' | undefined
+  let sourceOffset = 0
+  for (const match of matches) {
+    const gap = source.slice(sourceOffset, match.index)
+    if (gap.replace(/[\s,]/g, '')) throw new Error('SVG path contains an invalid token.')
+    const commaCount = (gap.match(/,/g) ?? []).length
+    const tokenKind = /^[A-Za-z]$/.test(match[0]) ? 'command' : 'number'
+    if (commaCount && (commaCount !== 1 || previousTokenKind !== 'number' || tokenKind !== 'number')) {
+      throw new Error('SVG path commas must separate numeric parameters.')
+    }
+    previousTokenKind = tokenKind
+    sourceOffset = (match.index ?? 0) + match[0].length
+  }
+  const trailing = source.slice(sourceOffset)
+  if (trailing.replace(/[\s]/g, '')) throw new Error('SVG path cannot end with a separator or invalid token.')
   if (!tokens.length) throw new Error('SVG path is empty.')
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -15,6 +30,7 @@ export function svgPathBounds(source: string, coordinateLimit = 100_000): SvgPat
   let previousControlX = 0, previousControlY = 0
   let command = ''
   let index = 0
+  let hasMoveTo = false
 
   const include = (pointX: number, pointY: number) => {
     if (!Number.isFinite(pointX) || !Number.isFinite(pointY)) throw new Error('SVG path bounds must be finite.')
@@ -38,6 +54,7 @@ export function svgPathBounds(source: string, coordinateLimit = 100_000): SvgPat
     if (/^[A-Za-z]$/.test(tokens[index])) {
       command = tokens[index++]
       if (!/[MmLlHhVvCcSsQqTtAaZz]/.test(command)) throw new Error(`SVG path command ${command} is unsupported.`)
+      if (!hasMoveTo && command.toLowerCase() !== 'm') throw new Error('SVG path must begin with a move-to command.')
       if (command.toLowerCase() === 'z') {
         include(startX, startY)
         x = startX; y = startY
@@ -69,6 +86,7 @@ export function svgPathBounds(source: string, coordinateLimit = 100_000): SvgPat
       x = next.x; y = next.y
       include(x, y)
       if (upper === 'M') {
+        hasMoveTo = true
         startX = x; startY = y
         command = relative ? 'l' : 'L'
       }
@@ -101,18 +119,35 @@ export function svgPathBounds(source: string, coordinateLimit = 100_000): SvgPat
       x = endpoint.x; y = endpoint.y
       include(x, y)
     } else if (upper === 'A') {
-      const rx = number(), ry = number()
-      number() // x-axis rotation
-      number() // large-arc flag
-      number() // sweep flag
+      let rx = Math.abs(number()), ry = Math.abs(number())
+      const rotation = number() * Math.PI / 180
+      const largeArcFlag = number(), sweepFlag = number()
+      if ((largeArcFlag !== 0 && largeArcFlag !== 1) || (sweepFlag !== 0 && sweepFlag !== 1)) throw new Error('SVG arc flags must be 0 or 1.')
       const endpoint = point(number(), number())
-      // The arc lies inside a radius-bounded region around its endpoints.
-      // This intentionally overestimates rotated/partial arcs to avoid culling
-      // visible artwork without requiring browser-specific path measurement.
-      const radius = 2 * Math.max(Math.abs(rx), Math.abs(ry), Math.hypot(endpoint.x - x, endpoint.y - y) / 2)
-      include(x - radius, y - radius); include(x + radius, y + radius)
+      const dx = (x - endpoint.x) / 2, dy = (y - endpoint.y) / 2
+      if (rx === 0 || ry === 0 || dx === 0 && dy === 0) {
+        include(x, y)
+        include(endpoint.x, endpoint.y)
+      } else {
+        const cosine = Math.cos(rotation), sine = Math.sin(rotation)
+        const xPrime = cosine * dx + sine * dy
+        const yPrime = -sine * dx + cosine * dy
+        const scale = Math.sqrt(xPrime * xPrime / (rx * rx) + yPrime * yPrime / (ry * ry))
+        if (scale > 1) { rx *= scale; ry *= scale }
+        const numerator = Math.max(0, rx * rx * ry * ry - rx * rx * yPrime * yPrime - ry * ry * xPrime * xPrime)
+        const denominator = rx * rx * yPrime * yPrime + ry * ry * xPrime * xPrime
+        const sign = largeArcFlag === sweepFlag ? -1 : 1
+        const factor = denominator === 0 ? 0 : sign * Math.sqrt(numerator / denominator)
+        const centerPrimeX = factor * rx * yPrime / ry
+        const centerPrimeY = factor * -ry * xPrime / rx
+        const centerX = cosine * centerPrimeX - sine * centerPrimeY + (x + endpoint.x) / 2
+        const centerY = sine * centerPrimeX + cosine * centerPrimeY + (y + endpoint.y) / 2
+        const extentX = Math.hypot(rx * cosine, ry * sine)
+        const extentY = Math.hypot(rx * sine, ry * cosine)
+        include(centerX - extentX, centerY - extentY)
+        include(centerX + extentX, centerY + extentY)
+      }
       x = endpoint.x; y = endpoint.y
-      include(x - radius, y - radius); include(x + radius, y + radius)
     }
 
     previousCommand = upper === 'M' ? (relative ? 'm' : 'M') : command

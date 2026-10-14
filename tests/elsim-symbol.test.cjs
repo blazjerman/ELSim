@@ -49,8 +49,8 @@ test('symbol path bounds account for relative segments and curve control points'
   assert.deepEqual(svgPathBounds('M100 100l100 100l100 100'), { minX: 100, minY: 100, maxX: 300, maxY: 300 })
   assert.deepEqual(svgPathBounds('M0 0c50 100 100 100 150 0'), { minX: 0, minY: 0, maxX: 150, maxY: 100 })
   assert.deepEqual(svgPathBounds('M0 0Q10 20 20 0T40 0'), { minX: 0, minY: -20, maxX: 40, maxY: 20 })
-  const arc = svgPathBounds('M0 0A100000 100000 0 0 1 100000 0')
-  assert.ok(arc.minY <= -100000 && arc.maxY >= 100000)
+  const arc = svgPathBounds('M0 0A1000 1 45 0 1 1000 1000')
+  assert.ok(Math.abs(arc.minY) > 1000 || Math.abs(arc.maxY) > 1000)
   const curved = parseElsimSymbol(JSON.stringify({
     ...symbolDocument,
     primitives: [{ kind: 'path', d: 'M100 100l100 100l100 100' }],
@@ -60,6 +60,9 @@ test('symbol path bounds account for relative segments and curve control points'
 
 test('symbol path parser rejects incomplete commands and cumulative coordinates outside the symbol limit', () => {
   assert.throws(() => svgPathBounds('M0'), /incomplete parameters/)
+  assert.throws(() => svgPathBounds('L0 0'), /begin with a move-to/)
+  assert.throws(() => svgPathBounds('M,,0 0'), /commas must separate/)
+  assert.throws(() => svgPathBounds('M0 0A1 1 0 2 0 3 4'), /arc flags must be 0 or 1/)
   assert.throws(() => svgPathBounds('M0 0l60000 0l60000 0'), /coordinates must stay within/)
 })
 
