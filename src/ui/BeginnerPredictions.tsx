@@ -245,13 +245,17 @@ export function AcCutoffPrediction({ resistanceValue, capacitanceValue, filterTy
   />
 }
 
-export function SineWavePrediction({ amplitudeValue, frequencyValue }: { amplitudeValue: string; frequencyValue: string }) {
+export function SineWavePrediction({ offsetValue, amplitudeValue, frequencyValue }: { offsetValue: string; amplitudeValue: string; frequencyValue: string }) {
   const amplitude = componentMagnitude(amplitudeValue, 'source')
+  const offset = componentMagnitude(offsetValue, 'source')
   const frequencyKhz = parsePredictionValue(frequencyValue, 'kHz')
   const periodMs = frequencyKhz !== null && frequencyKhz > 0 ? 1 / frequencyKhz : null
-  const amplitudeExplanation = amplitude === null
+  const peak = amplitude === null ? null : Math.abs(amplitude)
+  const minimum = offset !== null && peak !== null ? offset - peak : null
+  const maximum = offset !== null && peak !== null ? offset + peak : null
+  const amplitudeExplanation = peak === null
     ? ''
-    : `A is the peak amplitude: ${formatValue(amplitude)} V. With zero offset, the source swings from −${formatValue(Math.abs(amplitude))} V to +${formatValue(Math.abs(amplitude))} V (${formatValue(2 * Math.abs(amplitude))} V peak-to-peak).`
+    : `A is the peak amplitude: ${formatValue(peak)} V, and peak-to-peak is 2A = ${formatValue(2 * peak)} V. With offset ${offset === null ? offsetValue : `${formatValue(offset)} V`}, the ideal source range is ${minimum === null ? 'unknown' : `${formatValue(minimum)} V`} to ${maximum === null ? 'unknown' : `${formatValue(maximum)} V`}.`
   const periodExplanation = periodMs === null
     ? ''
     : `T = 1/f = 1/${frequencyValue} = ${formatValue(periodMs)} ms. Increasing frequency shortens the period.`
@@ -419,6 +423,7 @@ type BeginnerPredictionProps = {
   secondSourceValue?: string
   currentValue?: string
   seriesResistanceValue?: string
+  offsetValue?: string
   amplitudeValue?: string
   frequencyValue?: string
 }
@@ -436,7 +441,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'lc-energy': return <LcEnergyPrediction initialVoltageValue={props.initialVoltageValue ?? ''} inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'wheatstone-bridge': return <WheatstoneBridgePrediction supplyValue={props.supplyValue ?? ''} leftTopValue={props.leftTopValue ?? ''} leftBottomValue={props.leftBottomValue ?? ''} rightTopValue={props.rightTopValue ?? ''} rightBottomValue={props.rightBottomValue ?? ''}/>
     case 'ac-cutoff': return <AcCutoffPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''} filterType={props.filterType ?? 'low-pass'}/>
-    case 'sine-wave': return <SineWavePrediction amplitudeValue={props.amplitudeValue ?? ''} frequencyValue={props.frequencyValue ?? ''}/>
+    case 'sine-wave': return <SineWavePrediction offsetValue={props.offsetValue ?? ''} amplitudeValue={props.amplitudeValue ?? ''} frequencyValue={props.frequencyValue ?? ''}/>
     case 'rlc-resonance': return <RlcResonancePrediction inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'resistor-power': return <ResistorPowerPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
