@@ -501,6 +501,38 @@ test('example picker offers a short beginner path before the full catalog', { ta
   await expect(cards).toHaveCount(allExampleCount)
 })
 
+test('RC lesson checks a time-constant prediction and recalculates it after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'RC step response' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('spinbutton', { name: 'Before running, predict the time constant τ' })
+  await expect(lesson).toContainText('One time constant marks when the capacitor reaches about 63%')
+  await estimate.fill('5')
+  await estimate.press('Enter')
+  await expect(lesson.getByRole('status')).toHaveText('Not quite. τ = R1 × C1 = 1 kΩ × 10 µF = 10 ms. At τ, an ideal step response reaches about 63% of its final voltage.')
+  await estimate.fill('10')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. τ = R1 × C1 = 1 kΩ × 10 µF = 10 ms. At τ, an ideal step response reaches about 63% of its final voltage.')
+
+  await page.locator('.circuit-part[data-part-id="p-r1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="p-r1:value"]').fill('2 kΩ')
+  const updatedEstimate = page.getByRole('spinbutton', { name: 'Before running, predict the time constant τ' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('20')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. τ = R1 × C1 = 2 kΩ × 10 µF = 20 ms. At τ, an ideal step response reaches about 63% of its final voltage.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.locator('html').evaluate((element) => element.scrollWidth)).toBe(390)
+})
+
 test("Ohm's law lesson checks a beginner's current prediction before simulation", { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

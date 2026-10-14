@@ -23,7 +23,7 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
-import { OhmsLawPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
+import { OhmsLawPrediction, RcTimeConstantPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
@@ -3969,7 +3969,7 @@ export default function App() {
     pendingViewRef.current = null
     setProjectState(next)
     const lessons = {
-      rc: { title: 'Watch the capacitor charge', guidance: 'Run the transient, then scrub time. Change R1 or C1 and compare how the charging time changes.' },
+      rc: { title: 'Watch the capacitor charge', guidance: 'Predict τ = R1 × C1 before running. One time constant marks when the capacitor reaches about 63% of its final voltage; then scrub the solved transient to compare.' },
       'ohms-law': { title: "Predict current with Ohm's law", guidance: 'Use the prediction check before you run the operating point. Then change R1 from 1 kΩ to 2 kΩ and rerun: the current should halve.' },
       'wheatstone-bridge': { title: 'Balance a Wheatstone bridge', guidance: 'Run the operating point and compare V(VLEFT) with V(VOUT). The unequal right-hand resistor ratio creates a midpoint difference. Change the sensor resistor R4 from 2 kΩ to 1 kΩ and rerun; matching arm ratios should bring both midpoints to 5 V.' },
       'ac-lowpass': { title: 'Find the RC cutoff frequency', guidance: 'Run the AC sweep and compare V(VIN) with V(VOUT). Near 1 kHz, the capacitor output should be about 0.707 V, or 3 dB below the 1 V input.' },
@@ -4140,6 +4140,11 @@ export default function App() {
             <div>
               <span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span>
               <p>{exampleLesson.guidance}</p>
+              {exampleLesson.id === 'rc' && !lessonNextStep && <RcTimeConstantPrediction
+                key={`${partsById.get('p-r1')?.value ?? ''}:${partsById.get('p-c1')?.value ?? ''}`}
+                resistanceValue={partsById.get('p-r1')?.value ?? ''}
+                capacitanceValue={partsById.get('p-c1')?.value ?? ''}
+              />}
               {exampleLesson.id === 'ohms-law' && !lessonNextStep && <OhmsLawPrediction
                 key={`${partsById.get('ohms-law-v1')?.value ?? ''}:${partsById.get('ohms-law-r1')?.value ?? ''}`}
                 supplyValue={partsById.get('ohms-law-v1')?.value ?? ''}

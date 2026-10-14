@@ -72,6 +72,26 @@ export function OhmsLawPrediction({ supplyValue, resistanceValue }: { supplyValu
   />
 }
 
+export function RcTimeConstantPrediction({ resistanceValue, capacitanceValue }: { resistanceValue: string; capacitanceValue: string }) {
+  const resistance = componentMagnitude(resistanceValue, 'resistor')
+  const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
+  const predictedMilliseconds = resistance !== null && capacitance !== null && resistance > 0 && capacitance > 0
+    ? resistance * capacitance * 1000
+    : null
+  const explanation = predictedMilliseconds === null
+    ? ''
+    : `τ = R1 × C1 = ${formatResistance(resistance!)} × ${capacitanceValue} = ${formatValue(predictedMilliseconds)} ms. At τ, an ideal step response reaches about 63% of its final voltage.`
+
+  return <NumericPrediction
+    id="rc-time-constant-prediction"
+    prompt="Before running, predict the time constant τ"
+    unit="ms"
+    predictedValue={predictedMilliseconds}
+    absoluteTolerance={0.01}
+    explanation={explanation}
+  />
+}
+
 export function VoltageDividerPrediction({ supplyValue, upperResistanceValue, lowerResistanceValue }: { supplyValue: string; upperResistanceValue: string; lowerResistanceValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const upper = componentMagnitude(upperResistanceValue, 'resistor')
