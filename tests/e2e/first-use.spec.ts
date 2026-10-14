@@ -2522,6 +2522,8 @@ test('reused sheet interface edits update block pins and attached wires', async 
   await expect(reusableBlock.locator('[data-port-direction="input"]')).toHaveAttribute('data-port-side', 'left')
   await page.locator('.sheet-tab').filter({ hasText: 'Reusable load' }).click()
   await page.getByRole('button', { name: 'Sheet ports and block settings' }).click()
+  const inputPort = page.getByRole('dialog', { name: 'Reusable load ports and parameters' }).locator('.example-list article').filter({ hasText: 'Pin 1 · IN' })
+  await expect(inputPort.getByRole('button', { name: 'Remove', exact: true })).toBeDisabled()
   await page.getByLabel('Pin 1 placement').selectOption('top')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets.find((sheet: { id: string }) => sheet.id === 'sheet-main').parts.find((part: { id: string }) => part.id === 'root-load').sheetPortLayout[0].side)).toBe('top')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets.find((sheet: { id: string }) => sheet.id === 'sheet-main').wires.find((wire: { id: string }) => wire.id === 'wire-to-load').points[0])).toEqual([700, 440])
