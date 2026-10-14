@@ -576,6 +576,7 @@ test('voltage-divider lesson checks the midpoint prediction and updates it when 
   await dialog.getByRole('button', { name: 'Basics' }).click()
   await dialog.locator('.example-list article').filter({ hasText: 'Two equal resistors split a 10 V supply' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
 
   const lesson = page.getByLabel('Guided example')
   const estimate = page.getByRole('spinbutton', { name: 'Before running, predict the midpoint voltage VOUT' })
@@ -598,6 +599,36 @@ test('voltage-divider lesson checks the midpoint prediction and updates it when 
   await lesson.getByRole('button', { name: 'Check prediction' }).click()
   await expect(lesson.getByRole('status')).toHaveText('Correct. VOUT = VIN × R2/(R1 + R2) = 10 V × 2 kΩ/(1 kΩ + 2 kΩ) = 6.667 V.')
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+})
+
+test('capacitor-discharge lesson checks the 10 ms voltage prediction and recalculates after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Capacitor discharge' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('spinbutton', { name: 'Before running, predict VOUT after 10 ms' })
+  await expect(lesson).toContainText('Predict VOUT after 10 ms using the RC exponential')
+  await estimate.fill('4')
+  await estimate.press('Enter')
+  await expect(lesson.getByRole('status')).toHaveText('Not quite. τ = R1 × C1 = 1 kΩ × 10 µF = 10 ms. V(10 ms) = V0 × e^(−10 ms/τ) = 5 V × e^(−10 ms/10 ms) = 1.839 V.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+
+  await estimate.fill('1.839')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct.')
+
+  await page.locator('.circuit-part[data-part-id="cap-discharge-r1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="cap-discharge-r1:value"]').fill('2 kΩ')
+  const updatedEstimate = page.getByRole('spinbutton', { name: 'Before running, predict VOUT after 10 ms' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('3.033')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. τ = R1 × C1 = 2 kΩ × 10 µF = 20 ms.')
 })
 
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -3779,7 +3810,7 @@ test('capacitor discharge lesson compares solved RC decay before and after a res
   await dialog.locator('.example-list article').filter({ hasText: 'Capacitor discharge' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Capacitor discharge')
-  await expect(page.getByLabel('Guided example')).toContainText('C1 starts at 5 V')
+  await expect(page.getByLabel('Guided example')).toContainText('Predict VOUT after 10 ms using the RC exponential')
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await expect(page.locator('svg.schematic .wire-line')).toHaveCount(2)
   await page.getByRole('button', { name: 'Run this circuit' }).click()

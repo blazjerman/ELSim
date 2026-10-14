@@ -23,7 +23,7 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
-import { OhmsLawPrediction, RcTimeConstantPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
+import { CapacitorDischargePrediction, OhmsLawPrediction, RcTimeConstantPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
@@ -2591,6 +2591,10 @@ export default function App() {
   }
   const endEdit = () => { editGroup.current = false }
   const partsById = useMemo(() => new Map(project.parts.map((part) => [part.id, part])), [project.parts])
+  const capacitorInitialCondition = project.simulation.initialConditions?.find((condition) =>
+    'element' in condition && 'voltage' in condition && condition.element.toLowerCase() === 'c1',
+  )
+  const capacitorDischargeInitialVoltage = capacitorInitialCondition && 'voltage' in capacitorInitialCondition ? capacitorInitialCondition.voltage : ''
   const projectWireIds = useMemo(() => new Set(project.wires.map((wire) => wire.id)), [project.wires])
   const voltageSources = useMemo(() => project.parts.filter((part) => part.kind === 'source'), [project.parts])
   const dcSweepSources = useMemo(() => project.parts.filter((part) => part.kind === 'source' || part.kind === 'currentSource'), [project.parts])
@@ -3979,7 +3983,7 @@ export default function App() {
       led: { title: 'Current makes the LED glow', guidance: 'Run the pulse response and scrub between on and off. The glow follows solved LED current; it is not a thermal model.' },
       'led-current-limiter': { title: 'Limit current to protect an LED', guidance: 'Run the operating point and compare V(OUT) with I(D1). R1 limits current from the 5 V supply; increase R1 to reduce the LED current.' },
       'led-parallel': { title: 'Give every parallel LED its own resistor', guidance: 'Run the operating point and compare I(D1) with I(D2). Each branch has its own 330 Ω resistor. Change R2 to 680 Ω and rerun: only the second branch current should drop.' },
-      'capacitor-discharge': { title: 'Watch stored charge leave a capacitor', guidance: 'C1 starts at 5 V and discharges through R1 with no source connected. Run the transient, then compare V(OUT) and I(R1). The starting voltage is an initial condition, and the discharge time depends on R1 × C1.' },
+      'capacitor-discharge': { title: 'Watch stored charge leave a capacitor', guidance: 'C1 starts charged and discharges through R1 with no source connected. Predict VOUT after 10 ms using the RC exponential, then run the transient and compare capacitor voltage with resistor current.' },
       rlc: { title: 'See energy move between L and C', guidance: 'Run the transient and compare capacitor voltage with inductor current as the circuit rings and loses energy in R1.' },
       'lc-energy': { title: 'Watch electrical energy become magnetic energy', guidance: 'C1 starts charged to 5 V. Run the transient and compare V(VC) with I(L1): as capacitor voltage falls, inductor current rises; then the energy returns to C1. The 1 Ω resistor slowly dissipates energy, so each swing gets smaller. L1 and C1 set a period of about 6.3 ms.' },
       'rl-step': { title: 'An inductor resists a sudden current change', guidance: 'Run the transient and compare V(V_RL) with I(L1). Current rises gradually while the pulse is on, then continues briefly and decays after the source switches off. Here L/R = 1 ms, so the current changes most over a few milliseconds.' },
@@ -4155,6 +4159,12 @@ export default function App() {
                 supplyValue={partsById.get('divider-v1')?.value ?? ''}
                 upperResistanceValue={partsById.get('divider-r1')?.value ?? ''}
                 lowerResistanceValue={partsById.get('divider-r2')?.value ?? ''}
+              />}
+              {exampleLesson.id === 'capacitor-discharge' && !lessonNextStep && <CapacitorDischargePrediction
+                key={`${capacitorDischargeInitialVoltage}:${partsById.get('cap-discharge-r1')?.value ?? ''}:${partsById.get('cap-discharge-c1')?.value ?? ''}`}
+                initialVoltageValue={capacitorDischargeInitialVoltage}
+                resistanceValue={partsById.get('cap-discharge-r1')?.value ?? ''}
+                capacitanceValue={partsById.get('cap-discharge-c1')?.value ?? ''}
               />}
               {lessonNextStep ? <div className="example-lesson-next-step">
                 <span className="eyebrow">TRY THIS NEXT</span>

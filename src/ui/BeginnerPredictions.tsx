@@ -92,6 +92,30 @@ export function RcTimeConstantPrediction({ resistanceValue, capacitanceValue }: 
   />
 }
 
+export function CapacitorDischargePrediction({ initialVoltageValue, resistanceValue, capacitanceValue }: { initialVoltageValue: string; resistanceValue: string; capacitanceValue: string }) {
+  const initialVoltage = componentMagnitude(initialVoltageValue, 'source')
+  const resistance = componentMagnitude(resistanceValue, 'resistor')
+  const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
+  const timeConstant = resistance !== null && capacitance !== null && resistance > 0 && capacitance > 0
+    ? resistance * capacitance
+    : null
+  const predictedVoltage = initialVoltage !== null && timeConstant !== null
+    ? initialVoltage * Math.exp(-0.01 / timeConstant)
+    : null
+  const explanation = predictedVoltage === null || initialVoltage === null || timeConstant === null || resistance === null
+    ? ''
+    : `τ = R1 × C1 = ${formatResistance(resistance)} × ${capacitanceValue} = ${formatValue(timeConstant * 1000)} ms. V(10 ms) = V0 × e^(−10 ms/τ) = ${formatValue(initialVoltage)} V × e^(−10 ms/${formatValue(timeConstant * 1000)} ms) = ${formatValue(predictedVoltage)} V.`
+
+  return <NumericPrediction
+    id="capacitor-discharge-prediction"
+    prompt="Before running, predict VOUT after 10 ms"
+    unit="V"
+    predictedValue={predictedVoltage}
+    absoluteTolerance={0.01}
+    explanation={explanation}
+  />
+}
+
 export function VoltageDividerPrediction({ supplyValue, upperResistanceValue, lowerResistanceValue }: { supplyValue: string; upperResistanceValue: string; lowerResistanceValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const upper = componentMagnitude(upperResistanceValue, 'resistor')
