@@ -448,6 +448,16 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
   return { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
 }
 
+function ngspiceBsim3BinBase(model: SpiceModelDefinition): string | undefined {
+  if (!['nmos', 'pmos'].includes(model.type.toLowerCase())) return undefined
+  const level = Number(model.parameters.find(({ name }) => name.toLowerCase() === 'level')?.defaultValue)
+  if (level !== 8 && level !== 49) return undefined
+  const parameters = new Set(model.parameters.map(({ name }) => name.toLowerCase()))
+  if (!['lmin', 'lmax', 'wmin', 'wmax'].every((name) => parameters.has(name))) return undefined
+  const match = model.name.match(/^(.+)\.(\d+)$/)
+  return match?.[1].toLowerCase()
+}
+
 const alternateBjtModelNames = new WeakMap<ModelDependency, string[]>()
 
 type ModelConditionPath = { id: number; branch: number }[]
@@ -670,7 +680,7 @@ export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[
     { pattern: /^\s*\.probe\b/i, name: 'ngspice .PROBE instruments circuit-wide device terminals', impact: 'This imported card can add current-sense branches or save differential voltages for the whole circuit. The added vectors and instrumentation can increase memory use and may affect solver behavior.', suggestion: 'Check that each referenced device is a top-level circuit device and that the requested terminal measurements are needed. Avoid broad .PROBE ALL requests on large circuits.' },
     { pattern: /^\s*\.meas(?:ure)?\s+(?:tran|ac|dc)\s+\S+/i, name: 'ngspice .MEAS runs a circuit-wide measurement', impact: 'This imported measurement runs against the selected analysis for the complete circuit and its result is shown with the waveform results. A measurement name must be unique across imported libraries and project measurements.', suggestion: 'Check the analysis type, referenced vectors, and result name. Remove or rename a conflicting measurement if ngspice reports a duplicate.' },
     { pattern: /^\s*\.model\s+\S+\s+ako\s*:\s*\S+\s+\S+\b/i, name: 'LTspice AKO model inheritance (unsupported by browser ngspice)', impact: 'The pinned browser ngspice rejects this model card with a model-type mismatch and cannot resolve the inherited model name.', suggestion: 'Provide a tested ngspice-compatible standalone model definition or subcircuit after checking the inherited parameters with the model author. ELSim preserves the original model and does not expand AKO inheritance.' },
-    { pattern: /^\s*\.model\s+[A-Za-z_][A-Za-z0-9_$-]*\.[A-Za-z0-9_$-]+\s+(?:nmos|pmos)\b.*\b(?:lmin|lmax|wmin|wmax)\s*=/i, name: 'LTspice MOSFET model binning (automatic selection unsupported)', impact: 'LTspice selects suffixed MOSFET model cards by the instance L/W ranges. ELSim’s current browser import and ngspice path does not select a model bin by an unsuffixed base name; the pinned engine reports that the base model cannot be found.', suggestion: 'Use a device-specific model or subcircuit verified for ngspice, or explicitly select and validate a compatible model card for the instance dimensions. ELSim preserves the bins and does not choose one automatically.' },
+    { pattern: /^\s*\.model\s+[A-Za-z_][A-Za-z0-9_$-]*\.[A-Za-z0-9_$-]+\s+(?:nmos|pmos)\b(?!(?=.*\blevel\s*=\s*(?:8|49)\b)(?=.*\blmin\s*=)(?=.*\blmax\s*=)(?=.*\bwmin\s*=)(?=.*\bwmax\s*=)).*\b(?:lmin|lmax|wmin|wmax)\s*=/i, name: 'LTspice MOSFET model binning (automatic selection unsupported)', impact: 'Suffixed MOSFET model cards without complete ngspice BSIM3 bin ranges are not selected by the unsuffixed base name in this browser build.', suggestion: 'Use a device-specific model or subcircuit verified for ngspice, or explicitly select and validate a compatible model card for the instance dimensions. ELSim preserves the bins and does not choose one automatically.' },
     { pattern: /\b(?:uplim|dnlim|uplim_tanh|dnlim_tanh)\s*\(/i, name: 'LTspice limit function (ngspice lta mode)', impact: 'ngspice translates this documented subset only when ELSim enables whole-deck lta compatibility. Other LTspice syntax is not covered by that mode.', suggestion: 'If simulation fails, check the mapped model line and simplify or replace the expression with a tested ngspice-compatible form.' },
     { pattern: /\blimit\s*\(/i, name: 'LTspice limit() in imported model library', impact: 'ELSim translates limit() on native schematic B sources to min(max(x, low), high), which provides the expected clamp for ordered bounds. Raw imported model-library text is not rewritten; the pinned browser ngspice engine returns 0 instead of 3 for limit(4,0,3), including in lta mode.', suggestion: 'For ordered bounds, replace limit(x, low, high) in the library with min(max(x, low), high) after checking the model author’s intended behavior. ELSim preserves imported model source unchanged.' },
     { pattern: /^\s*b\S+\s+\S+\s+\S+\s+[vi]\s*=.*\^/i, name: 'LTspice B-source ^ operator semantics', impact: 'LTspice uses ^ for boolean XOR in B-source expressions, while the pinned ngspice engine interprets it as exponentiation. For example, with V(IN)=3, V(IN)^2 evaluates to 9 in ngspice but LTspice treats the operands as true and returns false (0).', suggestion: 'Review every caret in the expression. For exponentiation, use pow(a,b), which is supported by both tested dialects; rewrite intended boolean XOR explicitly for the target simulator. ELSim preserves the original expression.' },
@@ -1103,8 +1113,10 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   const subcircuitAssets = new Map<string, string>()
   const deviceModelAssets = new Map<string, string>()
   const globalDeviceModels = new Map<string, SpiceModelDefinition>()
+  const globalBsim3Bins = new Map<string, { assetId: string; model: SpiceModelDefinition }[]>()
   const scopedDeviceModelAssets = new Map<string, string>()
   const scopedDeviceModels = new Map<string, SpiceModelDefinition>()
+  const scopedBsim3Bins = new Map<string, { assetId: string; model: SpiceModelDefinition }[]>()
   const subcircuitParents = new Map<string, string | undefined>()
   const definitionLocations = new Map<string, ModelDefinitionConflict>()
   for (const { asset, parsed } of parsedAssets) {
@@ -1122,6 +1134,13 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       if (model.scope && !passiveModel) {
         scopedDeviceModelAssets.set(`${asset.id}:${model.scope.toLowerCase()}:${model.name.toLowerCase()}`, asset.id)
         scopedDeviceModels.set(`${asset.id}:${model.scope.toLowerCase()}:${model.name.toLowerCase()}`, model)
+        const binBase = ngspiceBsim3BinBase(model)
+        if (binBase) {
+          const key = `${asset.id}:${model.scope.toLowerCase()}:${binBase}`
+          const bins = scopedBsim3Bins.get(key) ?? []
+          bins.push({ assetId: asset.id, model })
+          scopedBsim3Bins.set(key, bins)
+        }
         continue
       }
       const key = `device:${model.name.toLowerCase()}`
@@ -1130,6 +1149,12 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       definitionLocations.set(key, conflict)
       deviceModelAssets.set(model.name.toLowerCase(), asset.id)
       globalDeviceModels.set(model.name.toLowerCase(), model)
+      const binBase = ngspiceBsim3BinBase(model)
+      if (binBase) {
+        const bins = globalBsim3Bins.get(binBase) ?? []
+        bins.push({ assetId: asset.id, model })
+        globalBsim3Bins.set(binBase, bins)
+      }
     }
     let conditionalDepth = 0
     let subcircuitDepth = 0
@@ -1189,52 +1214,51 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   for (const { asset, parsed } of parsedAssets) for (const dependency of parsed.dependencies) {
     const modelCandidates = dependency.kind === 'device' ? alternateBjtModelNames.get(dependency) : undefined
     let resolvedDependency = dependency
-    let targetAssetId: string | undefined
-    let targetModelType: string | undefined
-    const findDeviceModel = (modelName: string) => {
+    const findDeviceModels = (modelName: string) => {
       let scope: string | undefined = dependency.owner.toLowerCase()
       while (scope) {
         const key = `${asset.id}:${scope}:${modelName.toLowerCase()}`
         const scopedAssetId = scopedDeviceModelAssets.get(key)
-        if (scopedAssetId) return { assetId: scopedAssetId, model: scopedDeviceModels.get(key)! }
+        if (scopedAssetId) return [{ assetId: scopedAssetId, model: scopedDeviceModels.get(key)! }]
+        const scopedBins = scopedBsim3Bins.get(`${asset.id}:${scope}:${modelName.toLowerCase()}`)
+        if (scopedBins?.length) return scopedBins
         scope = subcircuitParents.get(`${asset.id}:${scope}`)
       }
       const foldedName = modelName.toLowerCase()
       const globalAssetId = deviceModelAssets.get(foldedName)
-      return globalAssetId ? { assetId: globalAssetId, model: globalDeviceModels.get(foldedName)! } : undefined
+      if (globalAssetId) return [{ assetId: globalAssetId, model: globalDeviceModels.get(foldedName)! }]
+      return globalBsim3Bins.get(foldedName) ?? []
     }
-    if (dependency.kind === 'subcircuit') targetAssetId = subcircuitAssets.get(dependency.modelName.toLowerCase())
-    else if (modelCandidates) {
+    if (dependency.kind === 'subcircuit') {
+      const targetAssetId = subcircuitAssets.get(dependency.modelName.toLowerCase())
+      if (!targetAssetId) missing.push({ assetId: asset.id, filename: asset.filename, ...dependency })
+      else {
+        resolved.push({ assetId: asset.id, filename: asset.filename, ...resolvedDependency, targetAssetId })
+        const from = dependency.owner.toLowerCase()
+        const edges = graph.get(from) ?? new Set<string>()
+        edges.add(dependency.modelName.toLowerCase())
+        graph.set(from, edges)
+      }
+      continue
+    }
+
+    let targetModels: { assetId: string; model: SpiceModelDefinition }[] = []
+    if (modelCandidates) {
       // Prefer the rightmost candidate that resolves to a declared card: it
       // is the model token after any optional BJT substrate/temperature nodes.
       for (let index = modelCandidates.length - 1; index >= 0; index -= 1) {
-        const found = findDeviceModel(modelCandidates[index])
-        targetAssetId = found?.assetId
-        if (found) {
-          targetModelType = found.model.type
+        targetModels = findDeviceModels(modelCandidates[index])
+        if (targetModels.length) {
           resolvedDependency = { ...dependency, modelName: modelCandidates[index] }
           break
         }
       }
-      if (!targetAssetId) {
-        const found = findDeviceModel(dependency.modelName)
-        targetAssetId = found?.assetId
-        targetModelType = found?.model.type
-      }
+      if (!targetModels.length) targetModels = findDeviceModels(dependency.modelName)
     } else {
-      const found = findDeviceModel(dependency.modelName)
-      targetAssetId = found?.assetId
-      targetModelType = found?.model.type
+      targetModels = findDeviceModels(dependency.modelName)
     }
-    const key = resolvedDependency.modelName.toLowerCase()
-    if (!targetAssetId) missing.push({ assetId: asset.id, filename: asset.filename, ...dependency })
-    else if (dependency.kind === 'subcircuit') {
-      resolved.push({ assetId: asset.id, filename: asset.filename, ...resolvedDependency, targetAssetId })
-      const from = dependency.owner.toLowerCase()
-      const edges = graph.get(from) ?? new Set<string>()
-      edges.add(key)
-      graph.set(from, edges)
-    } else resolved.push({ assetId: asset.id, filename: asset.filename, ...resolvedDependency, targetAssetId, ...(targetModelType ? { targetModelType } : {}) })
+    if (!targetModels.length) missing.push({ assetId: asset.id, filename: asset.filename, ...dependency })
+    else for (const target of targetModels) resolved.push({ assetId: asset.id, filename: asset.filename, ...resolvedDependency, targetAssetId: target.assetId, targetModelType: target.model.type })
   }
   const recursiveChains: string[][] = [], found = new Set<string>(), visited = new Set<string>()
   const stack: string[] = []

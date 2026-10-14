@@ -635,16 +635,20 @@ test('parses native ngspice VDMOS channel polarity with N-channel as the default
   ])
 })
 
-test('preserves unsupported AKO inheritance and MOSFET bins with source-line diagnostics', () => {
+test('distinguishes unsupported MOSFET bins from native ngspice BSIM3 bins', () => {
   const source = [
     '.MODEL child AKO:base NMOS W=1u',
     '.MODEL N1.1 NMOS LEVEL=1',
     '+ LMIN=1u LMAX=4u WMIN=1u WMAX=4u',
+    '.MODEL N2.1 NMOS LEVEL=8 VERSION=3.3.0',
+    '+ LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u',
+    '.MODEL N3.1 PMOS LEVEL=49',
+    '+ LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u',
     '.MODEL exact NMOS LEVEL=1',
   ].join('\n')
   const parsed = parseSubcircuitLibrary(source)
   assert.deepEqual(parsed.models.map(({ name, type }) => [name, type]), [
-    ['child', 'NMOS'], ['N1.1', 'NMOS'], ['exact', 'NMOS'],
+    ['child', 'NMOS'], ['N1.1', 'NMOS'], ['N2.1', 'NMOS'], ['N3.1', 'PMOS'], ['exact', 'NMOS'],
   ])
   assert.equal(parsed.modelText, source)
   const warnings = analyzeLtspiceModelDialect(source)
@@ -654,8 +658,9 @@ test('preserves unsupported AKO inheritance and MOSFET bins with source-line dia
   ])
   assert.match(warnings[0].impact, /model-type mismatch/)
   assert.match(warnings[0].suggestion, /does not expand AKO inheritance/)
-  assert.match(warnings[1].impact, /base model cannot be found/)
+  assert.match(warnings[1].impact, /not selected by the unsuffixed base name/)
   assert.match(warnings[1].suggestion, /does not choose one automatically/)
+  assert.equal(warnings.some(({ excerpt }) => /N2\.1|N3\.1/i.test(excerpt)), false, 'ngspice-native BSIM3 bins must not be reported as unsupported LTspice bins')
 })
 
 test('accepts a SPICE title line and CRLF source', () => {
@@ -1179,6 +1184,18 @@ test('resolves ngspice BJT model names after optional substrate and junction-tem
     ['QVBIC', 'QVBIC'],
     ['QMISSING', 'QUNKNOWN'],
   ])
+})
+
+test('resolves native BSIM3 model-bin references and retains every bin asset for an IC', () => {
+  const assets = [
+    { id: 'ic', filename: 'binned-ic.lib', content: '.SUBCKT BSW D G S\nM1 D G S S NCH L=1u W=10u\n.ENDS BSW' },
+    { id: 'short-bin', filename: 'nch-short.lib', content: '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7' },
+    { id: 'long-bin', filename: 'nch-long.lib', content: '.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5' },
+  ]
+  const analysis = analyzeModelDependencies(assets)
+  assert.deepEqual(analysis.missing, [])
+  assert.deepEqual(analysis.resolved.filter(({ reference }) => reference === 'M1').map(({ targetAssetId }) => targetAssetId).sort(), ['long-bin', 'short-bin'])
+  assert.deepEqual([...requiredModelAssetIds(analysis, [{ kind: 'subcircuit', modelName: 'BSW' }])].sort(), ['ic', 'long-bin', 'short-bin'])
 })
 
 test('reports missing model dependencies and recursive subcircuit chains', () => {

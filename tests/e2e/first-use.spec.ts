@@ -5498,6 +5498,23 @@ test('show source-line guidance for imported AKO models and MOSFET bins', { tag:
   await expect(warnings).toContainText('does not choose one automatically')
 })
 
+test('native ngspice BSIM3 model bins are not reported as unsupported LTspice bins', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'native-bsim3.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from([
+      '.MODEL NCH.1 NMOS LEVEL=8 VERSION=3.3.0',
+      '+ LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7',
+      '.MODEL NCH.2 NMOS LEVEL=8 VERSION=3.3.0',
+      '+ LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5',
+    ].join('\n')),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 2 device models from native-bsim3\.lib/)).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Imported model compatibility warnings' })).toHaveCount(0)
+})
+
 test('show schematic compatibility diagnostics for unresolved LTspice directives', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const source = [
