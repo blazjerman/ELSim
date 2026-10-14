@@ -1,4 +1,4 @@
-export type SubcircuitParameter = { name: string; defaultValue: string }
+export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; startLine: number; endLine: number }
 export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; parameters: SubcircuitParameter[]; scope?: string; startLine: number; endLine: number }
@@ -269,7 +269,17 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   // A model used in mutually exclusive branches is still one selectable card.
   // Only expose parameters that exist in every variant so parameter stepping
   // cannot offer a setting absent from the active ngspice model.
-  previous.model.parameters = previous.model.parameters.filter((parameter) => model.parameters.some((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase()))
+  previous.model.parameters = previous.model.parameters.filter((parameter) => {
+    const candidate = model.parameters.find((entry) => entry.name.toLowerCase() === parameter.name.toLowerCase())
+    if (!candidate) return false
+    const priorValue = compatibilityScalar(parameter.defaultValue)
+    const nextValue = compatibilityScalar(candidate.defaultValue)
+    const sameDefault = priorValue !== null && nextValue !== null
+      ? priorValue === nextValue
+      : parameter.defaultValue.trim().toLowerCase() === candidate.defaultValue.trim().toLowerCase()
+    if (!sameDefault) parameter.defaultVariesByCondition = true
+    return true
+  })
 }
 
 function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): ModelDependency | null {

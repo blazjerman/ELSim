@@ -80,16 +80,19 @@ test('preserves ngspice conditional model variants as one selectable device mode
     '.IF (variant == 0)',
     '.MODEL DSELECT D(Is=1n N=1)',
     '.ELSEIF (variant == 1)',
-    '.MODEL dselect D(Is=10n N=1)',
+    '.MODEL dselect D(Is=10n N=1.0)',
     '.ELSE',
-    '.MODEL DSELECT D(Is=100n)',
+    '.MODEL DSELECT D(Is=100n N=1)',
     '.ENDIF',
   ].join('\n')
   const parsed = parseSubcircuitLibrary(source)
   assert.equal(parsed.modelText, source.split('\n').slice(1).join('\n'))
   assert.equal(parsed.models.length, 1)
   assert.deepEqual(parsed.models[0], {
-    name: 'DSELECT', type: 'D', parameters: [{ name: 'Is', defaultValue: '1n' }], startLine: 4, endLine: 4,
+    name: 'DSELECT', type: 'D', parameters: [
+      { name: 'Is', defaultValue: '1n', defaultVariesByCondition: true },
+      { name: 'N', defaultValue: '1' },
+    ], startLine: 4, endLine: 4,
   })
   const analyzed = analyzeModelLibraries([{ id: 'conditional', filename: 'conditional.lib', content: source }])
   assert.deepEqual(analyzed.dependencies.conflicts, [])

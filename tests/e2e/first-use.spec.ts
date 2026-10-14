@@ -9329,6 +9329,39 @@ test('imported device model parameters can be stepped through the browser ngspic
   expect(labels.some((label) => label.includes('Q1.BF=200'))).toBe(true)
 })
 
+test('conditional model parameter controls disclose defaults that vary by branch', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const modelLibrary = [
+    '.PARAM variant=0',
+    '.IF (variant == 0)',
+    '.MODEL USER_NPN NPN (IS=1e-14 BF=10 VAF=100)',
+    '.ELSE',
+    '.MODEL USER_NPN NPN (IS=1e-14 BF=100 VAF=100)',
+    '.ENDIF',
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'conditional-npn.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from conditional-npn\.lib/)).toBeVisible()
+  await page.locator('.circuit-part[aria-label^="Q1,"]').click()
+  await page.getByLabel('Device model for Q1').selectOption('USER_NPN')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+
+  const component = page.getByRole('combobox', { name: 'Parameter 1 component' })
+  await expect(component).toHaveValue('Q1')
+  const modelParameter = page.getByRole('combobox', { name: 'Parameter 1 model parameter' })
+  await modelParameter.selectOption('BF')
+  await expect(modelParameter.locator('option:checked')).toHaveText('BF · branch defaults vary (first: 10)')
+  await expect(modelParameter).toContainText('IS · default 1e-14')
+})
+
 test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
