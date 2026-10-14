@@ -537,7 +537,7 @@ test('examples can be browsed by topic and combined with search', { tag: '@ui-sm
   await expect(cards.first()).toContainText('Parallel LEDs with separate resistors')
   await dialog.getByRole('textbox', { name: 'Find an example' }).fill('')
   await topicFilters.getByRole('button', { name: 'AC & reactive' }).click()
-  await expect(cards).toHaveCount(8)
+  await expect(cards).toHaveCount(9)
   await topicFilters.getByRole('button', { name: 'All' }).click()
   await expect(cards).toHaveCount(allExampleCount)
 })
