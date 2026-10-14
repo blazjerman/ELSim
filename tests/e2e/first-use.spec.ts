@@ -2395,9 +2395,9 @@ test('duplicate imported measurement names show both source lines and omit ambig
   await page.goto('/')
   const picker = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
-  await picker.setInputFiles({ name: 'measure-a.lib', mimeType: 'text/plain', buffer: Buffer.from('.MEAS TRAN shared_peak MAX V(out)\n') })
+  await picker.setInputFiles({ name: 'measure-a.lib', mimeType: 'text/plain', buffer: Buffer.from('.MEAS TRAN shared_peak MAX V(vout)\n') })
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
-  await picker.setInputFiles({ name: 'measure-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.MEASURE TRAN SHARED_PEAK MIN V(out)\n') })
+  await picker.setInputFiles({ name: 'measure-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.MEASURE TRAN SHARED_PEAK MIN V(vout)\n') })
 
   const conflicts = page.getByRole('region', { name: 'Conflicting model definitions' })
   const measurement = conflicts.locator(':scope > ul > li').filter({ hasText: '.MEAS TRAN shared_peak' })
@@ -2405,7 +2405,7 @@ test('duplicate imported measurement names show both source lines and omit ambig
   await expect(measurement).toContainText('measure-a.lib:1')
   await expect(measurement).toContainText('measure-b.lib:1')
   await measurement.getByRole('button', { name: 'Review definition' }).nth(1).click()
-  await expect(page.locator('.model-source-viewer').filter({ has: page.locator('.active-source-line') })).toContainText('.MEASURE TRAN SHARED_PEAK MIN V(out)')
+  await expect(page.locator('.model-source-viewer').filter({ has: page.locator('.active-source-line') })).toContainText('.MEASURE TRAN SHARED_PEAK MIN V(vout)')
 
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('.toast')).toContainText('Imported measurement shared_peak is declared more than once for this analysis')
