@@ -91,6 +91,17 @@ test('rejects ground node zero as an imported subcircuit external pin', () => {
   assert.deepEqual(parseSubcircuitLibrary('.SUBCKT VALID IN OUT\nR1 IN OUT 1k\n.ENDS VALID').subcircuits[0].pins, ['IN', 'OUT'])
 })
 
+test('accepts ngspice polarity characters in imported subcircuit pin names', () => {
+  const content = '.SUBCKT OPA IN+ IN- VCC VEE OUT\nE1 OUT 0 IN+ IN- 100k\n.ENDS OPA'
+  const parsed = parseSubcircuitLibrary(content)
+  assert.deepEqual(parsed.subcircuits[0].pins, ['IN+', 'IN-', 'VCC', 'VEE', 'OUT'])
+
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'opa', filename: 'opa.lib', content, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'opa-instance', kind: 'subcircuit', ref: 'X1', value: 'OPA', x: 300, y: 200, rotation: 0, modelName: 'OPA', modelPins: parsed.subcircuits[0].pins })
+  assert.deepEqual(validateProject(project).parts.at(-1).modelPins, ['IN+', 'IN-', 'VCC', 'VEE', 'OUT'])
+})
+
 test('imported functions are scoped to the model and its project-local include chain', () => {
   const assets = [
     { asset: { id: 'root', filename: 'root.lib', content: '.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT' }, parsed: parseSubcircuitLibrary('.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT') },

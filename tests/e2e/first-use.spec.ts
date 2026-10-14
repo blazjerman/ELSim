@@ -1765,6 +1765,29 @@ test('model importer reports a ground pin in an imported subcircuit header', { t
   await expect(page.getByRole('button', { name: 'Remove library file invalid-ground-pin.lib' })).toHaveCount(0)
 })
 
+test('model importer preserves polarity markers in IC pin names', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Components', exact: true }).click()
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'opamp.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.SUBCKT OPA IN+ IN- VCC VEE OUT\nE1 OUT 0 IN+ IN- 100k\n.ENDS OPA'),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 0 device models from opamp\.lib/)).toBeVisible()
+
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'OPA' })
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await page.getByRole('button', { name: 'Schematic', exact: true }).click()
+  const instance = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(instance).toHaveAttribute('aria-label', /pins: 1 IN\+, 2 IN-, 3 VCC, 4 VEE, 5 OUT/)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN+', 'IN-', 'VCC', 'VEE', 'OUT'])
+  await page.reload()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toHaveAttribute('aria-label', /pins: 1 IN\+, 2 IN-, 3 VCC, 4 VEE, 5 OUT/)
+})
+
 test('native passive and transmission-line model references resolve across imported files', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
