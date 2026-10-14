@@ -4595,6 +4595,21 @@ test('new current-controlled switches expose their controller and CSW settings @
   await expect(page.getByLabel('Current switch on resistance')).toHaveValue('1 Ω')
 })
 
+test('current-controlled switch example teaches and exposes its sensing circuit @ui-smoke', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  const card = dialog.locator('.example-list article').filter({ hasText: 'Current-controlled switch' })
+  await expect(card).toContainText('0 V sensing source')
+  await card.getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Current-controlled switch')
+  await expect(page.locator('.example-lesson')).toContainText('VSENSE is a 0 V ammeter')
+  await expect(page.locator('.circuit-part[data-part-id="cswitch-w1"]')).toBeVisible()
+  await expect(page.locator('.circuit-part[data-part-id="cswitch-vsense"]')).toBeVisible()
+  await expect(page.locator('.circuit-part[data-part-id="cswitch-rsense"]')).toBeVisible()
+})
+
 async function openComponentVoltagePlot(page: import('@playwright/test').Page, ref = 'R1') {
   const hadPlotWindow = (await page.locator('.plot-window').count()) > 0
   await page.locator(`.circuit-part[aria-label^="${ref},"]`).click({ button: 'right' })
@@ -8124,6 +8139,35 @@ test('voltage-controlled switch example toggles the load with its control pulse'
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect(page.locator('.example-lesson-next-step')).toContainText('ngspice solved VOUT = 0.000005 V')
   await expect(switchSymbol).toHaveAttribute('data-state', 'open')
+})
+
+test('current-controlled switch example follows the sensed branch current', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Use the existing ngspice WASM runtime for the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Current-controlled switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(VIN)')
+  await expectAvailableTrace(page, 'V(SENSE)')
+  await expectAvailableTrace(page, 'V(VOUT)')
+  await expectAvailableTrace(page, 'I(VSENSE)')
+  await expectAvailableTrace(page, 'I(W1)')
+  const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  const switchSymbol = page.locator('.circuit-part[data-part-id="cswitch-w1"] .current-switch-symbol')
+  const finalSample = Number(await timeSlider.getAttribute('max'))
+  await timeSlider.fill(String(Math.floor(finalSample * 0.25)))
+  await expect(switchSymbol).toHaveAttribute('data-state', 'closed')
+  await expect(page.locator('.plot-window .cursor-readout')).toContainText(/I\(vsense\) = 0\.0050000 A/i)
+  await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 4\.[0-9]+/i)
+  await timeSlider.fill(String(Math.floor(finalSample * 0.75)))
+  await expect(switchSymbol).toHaveAttribute('data-state', 'open')
+  await expect(page.locator('.plot-window .cursor-readout')).toContainText(/I\(vsense\) = 0\.0000 A/i)
+  await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 0\.00+/i)
 })
 
 test('an imported SW model controls a voltage switch and its displayed state', { tag: '@ngspice' }, async ({ page }) => {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 
-export type ExampleId = 'ohms-law' | 'potentiometer' | 'wheatstone-bridge' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'sine-wave' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'diode-polarity' | 'parallel-resistors' | 'resistor-power' | 'lamp-power' | 'switch-lamp' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'educational-opamp' | 'imported-opamp' | 'inverting-opamp' | 'noninverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
+export type ExampleId = 'ohms-law' | 'potentiometer' | 'wheatstone-bridge' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'sine-wave' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'diode-polarity' | 'parallel-resistors' | 'resistor-power' | 'lamp-power' | 'switch-lamp' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'current-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'educational-opamp' | 'imported-opamp' | 'inverting-opamp' | 'noninverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
 type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
 
 const exampleCatalog: { id: ExampleId; title: string; description: string }[] = [
@@ -47,6 +47,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'rlc', title: 'RLC ringing', description: 'See how resistance, inductance, and capacitance shape a damped transient response.' },
   { id: 'controlled', title: 'Voltage-controlled sources', description: 'Compare a gain-of-two VCVS with a 1 mS VCCS on the same 1 V input.' },
   { id: 'voltage-switch', title: 'Voltage-controlled switch', description: 'Use a pulse voltage to connect a 5 V supply to a load, then inspect the output switching.' },
+  { id: 'current-switch', title: 'Current-controlled switch', description: 'Pass a pulse through a resistor and 0 V sensing source; its measured current switches a separate 5 V load.' },
   { id: 'current-controlled', title: 'Current-controlled sources', description: 'A 1 mA sense branch controls a gain-of-two CCCS and a 2 kΩ CCVS.' },
   { id: 'transistor', title: 'NPN low-side switch', description: 'Estimate base current from RBASE, compare it with the 1 kΩ load demand, then verify the transistor switch with ngspice.' },
   { id: 'pnp', title: 'PNP high-side switch', description: 'Estimate base current from RBASE, compare it with the current needed to raise the collector output, then verify the active-low PNP switch with ngspice.' },
@@ -66,7 +67,7 @@ const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
   basics: ['ohms-law', 'rc', 'capacitor-discharge', 'voltage-divider', 'loaded-voltage-divider', 'superposition', 'thevenin-norton', 'series-resistors', 'parallel-resistors', 'resistor-power', 'lamp-power', 'switch-lamp', 'supply-droop', 'potentiometer', 'wheatstone-bridge', 'current-source', 'led-current-limiter'],
   diodes: ['diode-polarity', 'led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'sine-wave', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
-  switching: ['voltage-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
+  switching: ['voltage-switch', 'current-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
   advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'educational-opamp', 'imported-opamp', 'inverting-opamp', 'noninverting-opamp', 'common-emitter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier'],
 }
 const startOrder = new Map(exampleTopicIds.start.map((id, index) => [id, index]))

@@ -1624,6 +1624,48 @@ export function createVoltageSwitchExampleProject(): Project {
   return project
 }
 
+/** A pulsed load current controls a CSW through a dedicated 0 V sensing source. */
+export function createCurrentSwitchExampleProject(): Project {
+  const project = createStarterProject()
+  const drive: Part = { id: 'cswitch-vdrive', kind: 'source', ref: 'VDRIVE', value: '5 V', sourceMode: 'pulse', pulse: { initial: '0 V', delay: '0', rise: '1m', fall: '1m', width: '50m', period: '100m' }, x: 220, y: 620, rotation: 0 }
+  const senseResistor: Part = { id: 'cswitch-rsense', kind: 'resistor', ref: 'RSENSE', value: '1 kΩ', x: 320, y: 570, rotation: 0 }
+  const senseSource: Part = { id: 'cswitch-vsense', kind: 'source', ref: 'VSENSE', value: '0 V', sourceMode: 'dc', x: 420, y: 620, rotation: 0 }
+  const supply: Part = { id: 'cswitch-vcc', kind: 'source', ref: 'VCC', value: '5 V', sourceMode: 'dc', x: 280, y: 280, rotation: 0 }
+  const device: Part = { id: 'cswitch-w1', kind: 'currentSwitch', ref: 'W1', value: '2 mA', controlSource: 'VSENSE', currentSwitch: { onResistance: '1 Ω', offResistance: '1 GΩ', hysteresis: '0.2 mA' }, x: 540, y: 400, rotation: 0 }
+  const load: Part = { id: 'cswitch-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 700, y: 400, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Current-controlled switch'
+  project.parts = [drive, senseResistor, senseSource, supply, device, load]
+  project.wires = [
+    { id: 'cswitch-drive-to-sense-resistor', points: [[220, 570], [270, 570]] },
+    { id: 'cswitch-sense-resistor-to-meter', points: [[370, 570], [420, 570]] },
+    { id: 'cswitch-sense-return', points: [[220, 670], [420, 670]] },
+    { id: 'cswitch-supply-feed', points: [[280, 230], [490, 400]] },
+    { id: 'cswitch-load-feed', points: [[590, 400], [650, 400]] },
+    { id: 'cswitch-load-return-vertical', points: [[750, 400], [750, 520]] },
+    { id: 'cswitch-load-return-horizontal', points: [[750, 520], [280, 520]] },
+    { id: 'cswitch-supply-return', points: [[280, 520], [280, 330]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    labelAt('cswitch-drive-input', 'VIN', drive, 0),
+    labelAt('cswitch-sense-node', 'SENSE', senseSource, 0),
+    labelAt('cswitch-control-ground', '0', drive, 1), labelAt('cswitch-sense-ground', '0', senseSource, 1),
+    labelAt('cswitch-supply', 'VCC', supply, 0), labelAt('cswitch-input', 'VCC', device, 0),
+    labelAt('cswitch-output', 'VOUT', device, 1), labelAt('cswitch-load', 'VOUT', load, 0),
+    labelAt('cswitch-ground', '0', supply, 1), labelAt('cswitch-load-ground', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '100 ms', maxStep: '100 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(SENSE)', 'V(VOUT)', 'I(VSENSE)', 'I(W1)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -20, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A low-side NPN switch driven through a base resistor and feeding a resistive load. */
 export function createTransistorSwitchExampleProject(): Project {
   const project = createStarterProject()
