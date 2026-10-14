@@ -4,7 +4,7 @@ import { componentPins } from './geometry'
 export type EditorView = Project['view']
 
 /** Calculate a bounded zoom/pan that brings the active sheet content into view. */
-export function fitEditorView(project: Project, viewport = { width: 760, height: 600 }, padding = 100): EditorView {
+export function fitEditorView(project: Pick<Project, 'parts' | 'wires' | 'netLabels' | 'view'>, viewport = { width: 760, height: 600 }, padding = 100): EditorView {
   let minX = Number.POSITIVE_INFINITY, maxX = Number.NEGATIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY, maxY = Number.NEGATIVE_INFINITY
   const include = (x: number, y: number) => {

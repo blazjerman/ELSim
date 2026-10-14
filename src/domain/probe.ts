@@ -81,10 +81,12 @@ export function groundVoltageTrace(reference: Trace): Trace {
   }
 }
 
-export function resolveProbeTarget(project: Project, point: Point, tolerance = 12, connectivity?: Connectivity, wireCandidates?: readonly Wire[]): ProbeTarget | null {
+export function resolveProbeTarget(project: Project, point: Point, tolerance?: number, connectivity?: Connectivity, wireCandidates?: readonly Wire[]): ProbeTarget | null
+export function resolveProbeTarget(project: Pick<Project, 'parts' | 'wires'>, point: Point, tolerance: number, connectivity: Connectivity, wireCandidates?: readonly Wire[]): ProbeTarget | null
+export function resolveProbeTarget(project: Pick<Project, 'parts' | 'wires'>, point: Point, tolerance = 12, connectivity?: Connectivity, wireCandidates?: readonly Wire[]): ProbeTarget | null {
   const wire = wireNetAt(project, point, tolerance, wireCandidates ?? project.wires)
   if (wire) {
-    const name = (connectivity ?? analyzeConnectivity(project)).wireNets.get(wire.wireId)
+    const name = (connectivity ?? analyzeConnectivity(project as Project)).wireNets.get(wire.wireId)
     return name ? { kind: 'node', name, wireId: wire.wireId } : null
   }
   const part = project.parts.find((candidate) => {

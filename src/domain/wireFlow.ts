@@ -72,7 +72,7 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
  * still animated because their current is unambiguous.
  */
 export function createWireCurrentFlowSampler(
-  project: Project,
+  project: Pick<Project, 'parts' | 'wires' | 'junctions' | 'netLabels'>,
   connectivity: Connectivity,
 ): WireCurrentSampler {
   const pins = project.parts.flatMap((part) => componentPins(part).map((pin) => ({ part, pin })))

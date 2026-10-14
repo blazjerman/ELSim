@@ -437,7 +437,7 @@ export function closestPoint(point: Point, a: Point, b: Point): Point & { distan
   return { x, y, t, distance: Math.hypot(point.x - x, point.y - y) }
 }
 
-export function wireNetAt(project: Project, point: Point, tolerance = 8, candidates: readonly Wire[] = project.wires): { point: Point; wireId: string; distance: number } | null {
+export function wireNetAt(project: Pick<Project, 'wires'>, point: Point, tolerance = 8, candidates: readonly Wire[] = project.wires): { point: Point; wireId: string; distance: number } | null {
   let best: { point: Point; wireId: string; distance: number } | null = null
   for (const wire of candidates) {
     const [a, b] = wire.points
@@ -459,7 +459,7 @@ export function pointOnSegment(point: Point, a: Point, b: Point, tolerance = 1e-
 
 /** Find the nearest proper crossing between different wire objects. Crossings
  * that touch a segment endpoint are already electrical connections. */
-export function wireCrossingAt(project: Project, point: Point, tolerance = 12): Point | null {
+export function wireCrossingAt(project: Pick<Project, 'wires'>, point: Point, tolerance = 12): Point | null {
   let nearest: Point | null = null
   let bestDistance = tolerance
   for (let leftWire = 0; leftWire < project.wires.length; leftWire += 1) {
