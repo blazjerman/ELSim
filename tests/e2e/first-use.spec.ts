@@ -4142,6 +4142,11 @@ test('floating waveform windows can be moved and resized from the keyboard', { t
   await expect.poll(async () => (await plotWindow.boundingBox())?.x).toBe(initial!.x + 10)
   await expect(plotWindow.getByRole('status')).toContainText(/V\(R1\).*moved to .* pixels from the left/)
   const waveform = plotWindow.locator('.waveform-chart')
+  const initialWaveformGeometry = await waveform.evaluate((element) => ({
+    height: element.viewBox.baseVal.height,
+    tracePoints: element.querySelector<SVGPolylineElement>('polyline[role="img"]')?.getAttribute('points'),
+  }))
+  expect(initialWaveformGeometry.tracePoints).toBeTruthy()
   for (let step = 0; step < 20 && !(await waveform.evaluate((element) => element === document.activeElement)); step += 1) {
     await page.keyboard.press('Tab')
   }
@@ -4153,6 +4158,8 @@ test('floating waveform windows can be moved and resized from the keyboard', { t
   await moveHandle.focus()
   await page.keyboard.press('Shift+ArrowDown')
   await expect.poll(async () => (await plotWindow.boundingBox())?.height).toBe(moved!.height + 20)
+  await expect.poll(() => waveform.evaluate((element) => element.viewBox.baseVal.height)).toBeGreaterThan(initialWaveformGeometry.height)
+  await expect.poll(() => waveform.locator('polyline[role="img"]').getAttribute('points')).not.toBe(initialWaveformGeometry.tracePoints)
   await expect(plotWindow.getByRole('status')).toContainText(/V\(R1\).*resized to .* pixels/)
   await page.setViewportSize({ width: 390, height: 844 })
   const titleBounds = await moveHandle.boundingBox()
