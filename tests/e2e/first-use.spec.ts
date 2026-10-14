@@ -6435,6 +6435,10 @@ test('inverting op-amp lesson demonstrates negative feedback gain', { tag: '@ngs
   await dialog.locator('article[data-example-id="inverting-opamp"]').getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Inverting op-amp amplifier')
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return { amplifier: project.parts.find((part: { ref: string }) => part.ref === 'U1')?.kind, modelAssets: project.modelAssets, symbolAssets: project.symbolAssets }
+  })).toEqual({ amplifier: 'opamp', modelAssets: [], symbolAssets: [] })
   await expect(page.getByLabel('Guided example')).toContainText('gain is −RF/RIN = −2')
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await expect(page.locator('svg.schematic .wire-line')).toHaveCount(15)
@@ -6464,6 +6468,10 @@ test('non-inverting op-amp lesson predicts and verifies feedback gain changes', 
   await dialog.locator('.example-list article').filter({ hasText: 'Non-inverting op-amp amplifier' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Non-inverting op-amp amplifier')
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return { amplifier: project.parts.find((part: { ref: string }) => part.ref === 'U1')?.kind, modelAssets: project.modelAssets, symbolAssets: project.symbolAssets }
+  })).toEqual({ amplifier: 'opamp', modelAssets: [], symbolAssets: [] })
   await expect(page.getByLabel('Guided example')).toContainText('gain = 1 + RF/RG = 3')
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await expect(page.locator('svg.schematic .wire-line')).toHaveCount(15)

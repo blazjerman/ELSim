@@ -741,8 +741,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     append('.subckt ELSIM_EDUCATIONAL_OPAMP INP INM VPOS VNEG OUT', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
     append('RINP INP VNEG 1T', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
     append('RINM INM VNEG 1T', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
-    append('BGAIN NDRIVE 0 V={max(min(1e6*(V(INP)-V(INM)),V(VPOS)),V(VNEG))}', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    append('EGAIN NDRIVE 0 INP INM 100000', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
     append('ROUT NDRIVE OUT 50', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    append('DHI OUT VPOS ELSIM_EDUCATIONAL_OPAMP_D', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    append('DLO VNEG OUT ELSIM_EDUCATIONAL_OPAMP_D', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    append('.model ELSIM_EDUCATIONAL_OPAMP_D D(Is=1e-14 N=1)', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
     append('.ends ELSIM_EDUCATIONAL_OPAMP', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
     for (const part of project.parts.filter((candidate) => candidate.kind === 'opamp')) append(`.save @r.x${part.ref.toLowerCase()}.rout[i]`, part.id, 'generated')
   }

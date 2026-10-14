@@ -65,10 +65,25 @@ export function createImportedOpampExampleProject(): Project {
   return project
 }
 
-/** A beginner inverting-amplifier lesson using the same ordered five-pin user IC. */
+function replaceExampleWithBuiltinOpamp(project: Project): Part {
+  const index = project.parts.findIndex((part) => part.ref === 'XU1')
+  if (index < 0) throw new Error('The op-amp lesson is missing its amplifier.')
+  const imported = project.parts[index]
+  const amplifier: Part = {
+    id: 'example-opamp-u1', kind: 'opamp', componentDefinitionId: 'elsim.educational-opamp',
+    ref: 'U1', value: '', x: imported.x, y: imported.y, rotation: imported.rotation,
+  }
+  project.parts[index] = amplifier
+  project.modelAssets = []
+  project.symbolAssets = []
+  project.sheets = project.sheets.map((sheet) => sheet.id === project.activeSheetId ? { ...sheet, parts: project.parts } : sheet)
+  return amplifier
+}
+
+/** A beginner inverting-amplifier lesson using ELSim's built-in five-pin teaching part. */
 export function createInvertingOpampExampleProject(): Project {
   const project = createImportedOpampExampleProject()
-  const amplifier = project.parts.find((part) => part.ref === 'XU1')!
+  const amplifier = replaceExampleWithBuiltinOpamp(project)
   const input = project.parts.find((part) => part.ref === 'VIN')!
   const feedback = project.parts.find((part) => part.ref === 'RF')!
   const inputResistor = project.parts.find((part) => part.ref === 'RG')!
@@ -125,10 +140,10 @@ export function createInvertingOpampExampleProject(): Project {
   return project
 }
 
-/** A beginner non-inverting amplifier lesson using the original ELSim op-amp model. */
+/** A beginner non-inverting amplifier lesson using ELSim's built-in five-pin teaching part. */
 export function createNonInvertingOpampExampleProject(): Project {
   const project = createInvertingOpampExampleProject()
-  const amplifier = project.parts.find((part) => part.ref === 'XU1')!
+  const amplifier = project.parts.find((part) => part.ref === 'U1')!
   const input = project.parts.find((part) => part.ref === 'VIN')!
   const feedback = project.parts.find((part) => part.ref === 'RF')!
   const load = project.parts.find((part) => part.ref === 'RLOAD')!
