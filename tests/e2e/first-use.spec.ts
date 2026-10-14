@@ -2887,6 +2887,21 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
   expect(createHash('sha256').update(generated.asset.content).digest('hex')).toBe(generated.asset.sha256)
   expect(generated.pins).toEqual([[-70, -10], [-70, 10], [0, -50], [0, 50], [70, 0]])
 
+  const layoutEditor = page.locator('details.generated-symbol-layout').first()
+  await layoutEditor.locator('summary').click()
+  await layoutEditor.getByLabel('user-amp.lib USER_AMP pin 1 INP side').selectOption('right')
+  await layoutEditor.getByLabel('user-amp.lib USER_AMP pin 5 OUT side').selectOption('left')
+  await layoutEditor.getByRole('button', { name: 'Create custom symbol & place' }).click()
+  const customGeneratedPart = page.locator('.circuit-part[aria-label^="X3,"]')
+  await expect(customGeneratedPart).toBeVisible()
+  await expect(customGeneratedPart.locator('.imported-symbol-art circle[cx="70"][cy="0"]')).toHaveCount(1)
+  await expect(customGeneratedPart.locator('.imported-symbol-art circle[cx="-70"][cy="10"]')).toHaveCount(1)
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const part = project.parts.find((item: { ref: string }) => item.ref === 'X3')
+    return part?.symbolPinOffsets
+  })).toEqual([[70, 0], [-70, -10], [0, -50], [0, 50], [-70, 10]])
+
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Download USER_AMP-symbol.elsym' }).click()
   expect((await downloadPromise).suggestedFilename()).toBe('USER_AMP-symbol.elsym')

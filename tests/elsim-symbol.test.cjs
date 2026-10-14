@@ -6,7 +6,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { createDefaultElsimSymbol, parseElsimSymbol } = require(path.join(build, 'domain/elsimSymbol.js'))
+const { createDefaultElsimSymbol, defaultElsimPinSides, parseElsimSymbol } = require(path.join(build, 'domain/elsimSymbol.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createProjectArchive, readProjectArchive } = require(path.join(build, 'domain/projectArchive.js'))
@@ -70,6 +70,20 @@ test('default ELSim symbols keep balanced sides when pin names have no recognize
 test('default ELSim symbols balance the sides when every pin is named as an output', () => {
   const symbol = parseElsimSymbol(createDefaultElsimSymbol('MULTI_OUT', ['OUT1', 'OUT2']))
   assert.deepEqual(symbol.pins.map(({ x, orientation }) => [x, orientation]), [[-70, 'R'], [70, 'L']])
+})
+
+test('custom generated symbol pin sides override name guesses without changing SPICE order', () => {
+  const pinNames = ['INP', 'INM', 'VCC', 'VEE', 'OUT']
+  assert.deepEqual(defaultElsimPinSides(pinNames), ['left', 'left', 'top', 'bottom', 'right'])
+  const symbol = parseElsimSymbol(createDefaultElsimSymbol('AMP', pinNames, ['right', 'left', 'top', 'bottom', 'left']))
+  assert.deepEqual(symbol.pins.map(({ name, spiceOrder, x, y }) => [name, spiceOrder, x, y]), [
+    ['INP', 1, 70, 0], ['INM', 2, -70, -10], ['VCC', 3, 0, -50], ['VEE', 4, 0, 50], ['OUT', 5, -70, 10],
+  ])
+})
+
+test('generated symbol pin-side overrides require one supported side per pin', () => {
+  assert.throws(() => createDefaultElsimSymbol('AMP', ['IN', 'OUT'], ['left']), /Choose a side for every model pin/)
+  assert.throws(() => createDefaultElsimSymbol('AMP', ['IN', 'OUT'], ['left', 'diagonal']), /Choose a side for every model pin/)
 })
 
 test('default ELSim symbols reject empty, duplicate, or oversized pin lists', () => {

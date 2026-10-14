@@ -4,6 +4,7 @@ const MAX_TEXT = 1024 * 1024
 const MAX_PRIMITIVES = 2000
 const MAX_PINS = 64
 const MAX_COORDINATE = 100_000
+export type ElsimPinSide = 'left' | 'right' | 'top' | 'bottom'
 const ALLOWED_PATH = /^[MmLlHhVvCcSsQqTtAaZz0-9eE+.,\s-]+$/
 const PRIMITIVE_FIELDS: Record<string, string[]> = {
   line: ['kind', 'x1', 'y1', 'x2', 'y2'], polyline: ['kind', 'points'], rectangle: ['kind', 'x1', 'y1', 'x2', 'y2'],
@@ -95,26 +96,36 @@ export function parseElsimSymbol(source: string, filename = 'Custom symbol.elsym
   return { name, attributes: {}, primitives, pins, warnings: [] }
 }
 
-/** Create a simple, readable symbol for a user model, preserving SPICE pin order. */
-export function createDefaultElsimSymbol(name: string, pinNames: readonly string[]): string {
-  const symbolName = name.trim()
-  if (!symbolName || symbolName.length > 80 || /[\u0000-\u001f]/.test(symbolName)) throw new Error('A symbol name must contain 1–80 printable characters.')
-  if (!pinNames.length || pinNames.length > MAX_PINS) throw new Error(`A symbol needs 1–${MAX_PINS} ordered pins.`)
+/** Infer readable default sides without reordering the model's SPICE pins. */
+export function defaultElsimPinSides(pinNames: readonly string[]): ElsimPinSide[] {
   const normalizedPins = pinNames.map((pin) => pin.trim())
-  if (normalizedPins.some((pin) => !pin || pin.length > 64) || new Set(normalizedPins.map((pin) => pin.toLowerCase())).size !== normalizedPins.length) throw new Error('Model pins must have unique names of 1–64 characters.')
   // Use common pin names to make generated symbols easier to read without
   // changing their electrical order. Unknown pins remain on the input side.
   const outputPinNames = /^(?:OUT|OUTPUT|VOUT|VO|QOUT)(?:[+-]|[PN])?\d*$/i
   const positiveSupplyNames = /^(?:VPOS|VCC|VDD|VPLUS|VP|AVDD|DVDD|SUPPLYPLUS|POSITIVE)$/i
   const negativeSupplyNames = /^(?:VNEG|VEE|VSS|VMINUS|VM|AVSS|DVSS|GND|GROUND|NEGATIVE)$/i
   const hasRecognizedLayout = normalizedPins.some((pin) => outputPinNames.test(pin) || positiveSupplyNames.test(pin) || negativeSupplyNames.test(pin))
-  let sides = normalizedPins.map((pin) => outputPinNames.test(pin) ? 'right'
+  let sides: ElsimPinSide[] = normalizedPins.map((pin) => outputPinNames.test(pin) ? 'right'
     : positiveSupplyNames.test(pin) ? 'top'
       : negativeSupplyNames.test(pin) ? 'bottom'
         : 'left')
   if (!hasRecognizedLayout || sides.every((side) => side === 'right')) {
     const leftCount = Math.ceil(normalizedPins.length / 2)
     sides = sides.map((_, index) => index < leftCount ? 'left' : 'right')
+  }
+  return sides
+}
+
+/** Create a simple, readable symbol for a user model, preserving SPICE pin order. */
+export function createDefaultElsimSymbol(name: string, pinNames: readonly string[], pinSides?: readonly ElsimPinSide[]): string {
+  const symbolName = name.trim()
+  if (!symbolName || symbolName.length > 80 || /[\u0000-\u001f]/.test(symbolName)) throw new Error('A symbol name must contain 1–80 printable characters.')
+  if (!pinNames.length || pinNames.length > MAX_PINS) throw new Error(`A symbol needs 1–${MAX_PINS} ordered pins.`)
+  const normalizedPins = pinNames.map((pin) => pin.trim())
+  if (normalizedPins.some((pin) => !pin || pin.length > 64) || new Set(normalizedPins.map((pin) => pin.toLowerCase())).size !== normalizedPins.length) throw new Error('Model pins must have unique names of 1–64 characters.')
+  const sides = pinSides ? [...pinSides] : defaultElsimPinSides(normalizedPins)
+  if (sides.length !== normalizedPins.length || sides.some((side) => !['left', 'right', 'top', 'bottom'].includes(side))) {
+    throw new Error('Choose a side for every model pin: left, right, top, or bottom.')
   }
   const sideIndexes = (side: string) => normalizedPins.flatMap((_, index) => sides[index] === side ? [index] : [])
   const leftPinIndexes = sideIndexes('left'), rightPinIndexes = sideIndexes('right')

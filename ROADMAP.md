@@ -280,6 +280,8 @@ Shared model-library solver verification (2026-10-13): The Firefox engine workfl
 
 Deep model-dependency traversal (2026-10-13): Recursive `.SUBCKT` cycle analysis now uses an explicit depth-first frame stack and an active-name index instead of JavaScript recursion and a linear search of the current path. A 12,000-definition cycle regression verifies stack safety and the reported cycle endpoints. All 30 unit groups and TypeScript pass; no WASM rebuild or browser-server test is needed for this domain-only change.
 
+Generated IC symbol pin layout (2026-10-14): Users can expand a model’s “Customize generated symbol pins” editor and choose left, right, top, or bottom for each ordered pin before creating a symbol. The generator retains SPICE pin order and validates that every pin receives one supported side; the generated `.elsym` becomes a project asset and the placed instance stores those exact pin offsets. The layout controls are mounted only when expanded and live in a lazy-loaded module. Unit tests cover default inference, custom coordinates/order, and invalid overrides; the focused Firefox importer workflow verifies a custom op-amp layout. All 31 unit groups, TypeScript, production build, and the focused Firefox test pass. The build stays within the initial gzip download budget (215.0/245 KiB); Vite’s advisory main-chunk warning remains by 0.26 kB. No WASM or Pages build was run.
+
 ### M3 — LTspice interoperability
 
 **M3.1 Compatibility matrix and fixtures.** Catalog supported `.asc`, `.asy`, directives, primitives, parameters, and model dialect features. Use original hand-written fixtures or files whose redistribution is permitted. Acceptance: every supported syntax item has a fixture; known unsupported items have a diagnostic.

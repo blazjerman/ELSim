@@ -148,6 +148,14 @@
 .project-recovery-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;gap:9px;background:#101412f5;color:#c5d0c7;font-size:12px}
 .library-import-hint{display:block;margin:-3px 0 7px;color:var(--muted);font-size:10px;line-height:1.45}
 
+.generated-symbol-layout{width:100%;margin-top:3px;padding-top:4px;border-top:1px solid #303a33}
+.generated-symbol-layout>summary{color:#a7c5ad;font-size:9px;cursor:pointer}
+.generated-symbol-pin-list{display:grid;gap:5px;margin-top:6px}
+.generated-symbol-pin-list p{margin:0;color:#89978c;font-size:9px;line-height:1.4}
+.generated-symbol-pin-list label{display:grid;grid-template-columns:minmax(0,1fr) 82px;align-items:center;gap:6px;color:#b8c6bb;font-size:9px}
+.generated-symbol-pin-list select{min-width:0;width:100%;padding:4px;border:1px solid #39463d;border-radius:4px;background:#111713;color:#d5e0d7;font-size:9px}
+.generated-symbol-pin-list>.place-model{width:100%;margin:2px 0 0;text-align:center}
+
 /* Focused fixes for plot readability, drag behavior, and component-library overflow. */
 .library-panel{width:100%;min-width:0;overflow-x:hidden}.library-panel .library-categories,.library-panel .component-grid{width:100%;min-width:0}.library-panel .component-card{min-width:0}
 .plot-window-title,.plot-window-title *{user-select:none}.plot-window-title{font-size:13px}.plot-window-title>span:first-child{gap:8px}.plot-window-title button{flex:0 0 40px}
