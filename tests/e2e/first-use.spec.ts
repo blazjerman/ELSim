@@ -506,6 +506,7 @@ test('example picker offers a short beginner path before the full catalog', { ta
 
 test('opening an example replaces stale multi-selection with its lesson component', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.keyboard.press('Control+a')
   expect(await page.locator('.circuit-part.selected').count()).toBeGreaterThan(1)
   await page.getByRole('button', { name: 'Examples' }).click()
