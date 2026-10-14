@@ -73,11 +73,13 @@ function fetThresholdValue(part: Part | undefined, models: SpiceModelDefinition[
 function modelConflictLabel(conflict: ModelDefinitionConflict): string {
   if (conflict.kind === 'subcircuit') return `.SUBCKT ${conflict.name}`
   if (conflict.kind === 'measurement') return `.MEAS ${conflict.analysis?.toUpperCase() ?? ''} ${conflict.name}`.trim()
+  if (conflict.kind === 'function') return `.FUNC ${conflict.name}`
   return `.MODEL ${conflict.name}`
 }
 
 function modelConflictDescription(conflict: ModelDefinitionConflict): string {
   if (conflict.kind === 'measurement') return `More than one imported library defines the ${conflict.analysis?.toUpperCase() ?? ''} measurement name ${conflict.name}. ngspice prints multiple values with this same name, so ELSim omits the ambiguous result. Rename one card before relying on it.`
+  if (conflict.kind === 'function') return `The imported sources define the function ${conflict.name} more than once. The function bodies may differ, and ngspice resolution can depend on library order. Review the source definitions and rename or remove an unintended duplicate.`
   return `More than one imported library defines ${conflict.name}. ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.`
 }
 
@@ -810,7 +812,7 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
       return
     }
     onBeginDrag(event, wire.id)
-  }} onPointerUp={() => { if (additiveClick.current) window.setTimeout(() => { additiveClick.current = false }, 0) }} onPointerCancel={() => { additiveClick.current = false }} onClick={(event) => { if (additiveClick.current) { additiveClick.current = false; event.stopPropagation(); return } if (tool === 'select') { event.stopPropagation(); onSelect(wire.id, event.shiftKey || event.ctrlKey || event.metaKey) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
+  }} onPointerUp={() => { if (additiveClick.current) window.requestAnimationFrame(() => { additiveClick.current = false }) }} onPointerCancel={() => { additiveClick.current = false }} onClick={(event) => { if (additiveClick.current) { additiveClick.current = false; event.stopPropagation(); return } if (tool === 'select') { event.stopPropagation(); onSelect(wire.id, event.shiftKey || event.ctrlKey || event.metaKey) } else if (tool === 'wire' || tool === 'probe') event.stopPropagation() }}>
     <rect x={Math.min(x1, x2) - 7} y={Math.min(y1, y2) - 7} width={Math.max(14, Math.abs(x2 - x1) + 14)} height={Math.max(14, Math.abs(y2 - y1) + 14)} fill="transparent"/>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="14" strokeLinecap="round"/>
     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={selected ? '#a1e8ba' : '#7f9b88'} strokeWidth="2" strokeLinecap="round"/>
@@ -4546,7 +4548,7 @@ export default function App() {
         <ModelDependencyReport analysis={modelDependencyAnalysis} onImport={openModelLibraryPicker}/>
         {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions">
           <strong>CONFLICTING IMPORTED NAMES</strong>
-          <p>More than one imported file defines the same model or measurement name. ELSim preserves both files and identifies each original source line so you can resolve the conflict deliberately.</p>
+          <p>Imported libraries contain duplicate model, function, or measurement names. ELSim preserves the source and identifies each original line so you can resolve conflicts deliberately.</p>
           <ul>{visibleModelConflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.analysis ?? ''}:${conflict.name}`}>
             <code>{modelConflictLabel(conflict)}</code>
             <p>{modelConflictDescription(conflict)}</p>

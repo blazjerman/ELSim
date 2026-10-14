@@ -852,6 +852,19 @@ test('reports duplicate imported measurement names only when they share an analy
   ])
 })
 
+test('reports duplicate top-level function names but ignores mutually exclusive conditional definitions', () => {
+  const report = analyzeModelDependencies([
+    { id: 'function-a', filename: 'function-a.lib', content: '.FUNC gain(x) {x * 2}\n.IF (MODE=1)\n.FUNC branch_gain(x) {x * 2}\n.ELSE\n.FUNC branch_gain(x) {x * 3}\n.ENDIF' },
+    { id: 'function-b', filename: 'function-b.lib', content: '.FUNC GAIN(value) {value * 3}' },
+  ])
+  assert.deepEqual(report.conflicts, [
+    { name: 'gain', kind: 'function', definitions: [
+      { assetId: 'function-a', filename: 'function-a.lib', sourceLine: 1 },
+      { assetId: 'function-b', filename: 'function-b.lib', sourceLine: 1 },
+    ] },
+  ])
+})
+
 test('tracks ordered model references for common diode, transistor, JFET, MOSFET, and switch cards', () => {
   const parsed = parseSubcircuitLibrary(`.SUBCKT DEVICES A B C D
 D1 A B DFAST

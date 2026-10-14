@@ -10,7 +10,7 @@ export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt
 export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string; targetModelType?: string }
 export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number; section?: string }
-export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device' | 'measurement'; analysis?: 'tran' | 'ac' | 'dc'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
+export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device' | 'measurement' | 'function'; analysis?: 'tran' | 'ac' | 'dc'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
 export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; section?: string; reason: 'missing' | 'ambiguous' | 'unsafe' | 'section' }
 export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
@@ -947,11 +947,22 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       globalDeviceModels.set(model.name.toLowerCase(), model)
     }
     let conditionalDepth = 0
+    let subcircuitDepth = 0
     for (const record of parsed.modelRecords) {
       const directive = record.text.trim().split(/\s+/, 1)[0]?.toLowerCase()
       if (directive === '.if') { conditionalDepth += 1; continue }
       if (directive === '.endif') { conditionalDepth = Math.max(0, conditionalDepth - 1); continue }
-      if (conditionalDepth > 0) continue
+      if (directive === '.subckt') { subcircuitDepth += 1; continue }
+      if (directive === '.ends') { subcircuitDepth = Math.max(0, subcircuitDepth - 1); continue }
+      if (conditionalDepth > 0 || subcircuitDepth > 0) continue
+      if (/^\s*\.func\s+/i.test(record.text)) {
+        const definition = parseFunctionDefinition(record.text.trim(), record.sourceLine)
+        const key = `function:${definition.name.toLowerCase()}`
+        const conflict = definitionLocations.get(key) ?? { name: definition.name, kind: 'function' as const, definitions: [] }
+        conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: record.sourceLine })
+        definitionLocations.set(key, conflict)
+        continue
+      }
       const measurement = record.text.match(/^\s*\.(?:meas|measure)\s+(tran|ac|dc)\s+([A-Za-z_][A-Za-z0-9_$]*)\s+/i)
       if (!measurement) continue
       const analysis = measurement[1].toLowerCase() as 'tran' | 'ac' | 'dc'

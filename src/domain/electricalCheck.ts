@@ -509,7 +509,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         issues.push({ id: `recursive-model:${chain.map((name) => name.toLowerCase()).join(':')}`, severity: 'warning', title: 'A used subcircuit has a recursive model chain', detail: `${chain.join(' → ')}. ngspice cannot instantiate a recursive subcircuit chain.`, partId: affected.id })
       }
       for (const conflict of dependencies.conflicts) {
-        if (conflict.kind === 'measurement') continue
+        if (conflict.kind === 'measurement' || conflict.kind === 'function') continue
         const name = conflict.name.toLowerCase()
         const affectedIds = conflict.kind === 'subcircuit'
           ? instancesByDefinition.get(name) ?? new Set<string>()

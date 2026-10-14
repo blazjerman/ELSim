@@ -2414,6 +2414,23 @@ test('duplicate imported measurement names show both source lines and omit ambig
   await expect(plot.locator('.measurement-results')).toHaveCount(0)
 })
 
+test('duplicate imported .FUNC names show both source lines and allow review', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const picker = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await picker.setInputFiles({ name: 'functions-a.lib', mimeType: 'text/plain', buffer: Buffer.from('.FUNC gain(x) {x * 2}\n') })
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await picker.setInputFiles({ name: 'functions-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.FUNC GAIN(value) {value * 3}\n') })
+
+  const conflicts = page.getByRole('region', { name: 'Conflicting model definitions' })
+  const conflict = conflicts.locator(':scope > ul > li').filter({ hasText: '.FUNC gain' })
+  await expect(conflict).toContainText('function bodies may differ')
+  await expect(conflict).toContainText('functions-a.lib:1')
+  await expect(conflict).toContainText('functions-b.lib:1')
+  await conflict.getByRole('button', { name: 'Review definition' }).nth(1).click()
+  await expect(page.locator('.model-source-viewer').filter({ has: page.locator('.active-source-line') })).toContainText('.FUNC GAIN(value) {value * 3}')
+})
+
 test('LTspice schematic import preserves and reports duplicate model library files', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const schematic = ['Version 4', 'SHEET 1 640 240', 'TEXT 0 40 Left 2 !.include amp-a.lib', 'TEXT 0 60 Left 2 !.include amp-b.lib'].join('\n')
