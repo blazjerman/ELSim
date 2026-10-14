@@ -4,7 +4,16 @@ const test = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('ELSIM_TEST_BUILD is required; run this test through tests/run-netlist-tests.cjs')
-const { parsePredictionValue } = require(path.join(build, 'domain/componentValue.js'))
+const { parsePredictionValue, spiceDimensionMagnitude } = require(path.join(build, 'domain/componentValue.js'))
+
+test('ngspice dimensions use milli for m/M and mega only for meg', () => {
+  assert.equal(spiceDimensionMagnitude('1m'), 1e-3)
+  assert.equal(spiceDimensionMagnitude('1M'), 1e-3)
+  assert.equal(spiceDimensionMagnitude('1meg'), 1e6)
+  assert.equal(spiceDimensionMagnitude('1MEG'), 1e6)
+  assert.equal(spiceDimensionMagnitude('1µ'), 1e-6)
+  assert.equal(spiceDimensionMagnitude('-1u'), null)
+})
 
 test('prediction values accept bare numbers in the displayed unit', () => {
   assert.equal(parsePredictionValue('25', 'mW'), 25)

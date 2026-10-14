@@ -78,6 +78,12 @@ test('MOSFET preflight accepts the unsuffixed base name of imported native BSIM3
   }]
   const issues = checkCircuit(project)
   assert.equal(issues.some((issue) => issue.id === `missing-device-model:${mosfet.id}` || issue.id === `incompatible-device-model:${mosfet.id}`), false)
+  mosfet.mosfetGeometry = { length: '1u', width: '10u' }
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `mosfet-bin-range:${mosfet.id}`), false)
+  mosfet.mosfetGeometry = { length: '20u', width: '10u' }
+  const outOfRange = checkCircuit(project).find((issue) => issue.id === `mosfet-bin-range:${mosfet.id}`)
+  assert.match(outOfRange.title, /outside the imported BSIM3 bins/)
+  assert.match(outOfRange.detail, /NCH\.1.*L.*W.*NCH\.2/)
 })
 
 test('blank passive value is accepted only when its imported model declares the SPICE default', () => {

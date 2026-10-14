@@ -64,6 +64,17 @@ export function componentMagnitude(value: string, kind: PartKind): number | null
   return Number.isFinite(result) ? result : null
 }
 
+/** Parse an SI dimension using ngspice suffix semantics (`m` is milli; `meg` is mega). */
+export function spiceDimensionMagnitude(value: string): number | null {
+  const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u')
+  const match = normalized.match(/^([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)
+  if (!match) return null
+  const suffix = match[2]?.toLowerCase() ?? ''
+  const scale = suffix === 'meg' ? 1e6 : ({ t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[suffix] ?? 1
+  const result = Number(match[1]) * scale
+  return Number.isFinite(result) && result > 0 ? result : null
+}
+
 /** Parse a SPICE time scalar such as `2m`, `5 us`, or `10ms` into seconds. */
 export function timeMagnitude(value: string): number | null {
   const normalized = spiceScalar(value, 's')

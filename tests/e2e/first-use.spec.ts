@@ -1923,6 +1923,12 @@ test('standalone MOSFET can select an imported BSIM3 bin family by its base name
   await expect(netlist).toContainText(/^M1 m1pin0 m1pin1 m1pin2 m1pin3 NCH L=1u W=10u$/m)
   await expect(netlist).toContainText(/^\.MODEL NCH\.1 NMOS/m)
   await expect(netlist).toContainText(/^\.MODEL NCH\.2 NMOS/m)
+  await page.keyboard.press('Escape')
+  await page.getByLabel('Channel length L for M1').fill('20u')
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const checks = page.getByRole('dialog', { name: 'Circuit checks' })
+  await expect(checks).toContainText('M1 dimensions are outside the imported BSIM3 bins')
+  await expect(checks).toContainText('do not fall within any complete L/W range')
 })
 
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {

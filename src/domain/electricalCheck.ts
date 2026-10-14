@@ -2,7 +2,7 @@ import { analyzeConnectivity } from './connectivity'
 import type { Connectivity } from './connectivity'
 import { componentPins } from './geometry'
 import type { Part, Project } from './project'
-import { componentMagnitude } from './componentValue'
+import { componentMagnitude, spiceDimensionMagnitude } from './componentValue'
 import { analyzeModelDependencies, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionFor, compatibleDeviceModelType, deviceModelTypeMatches } from './componentDefinitions'
@@ -17,6 +17,8 @@ export type ElectricalIssue = {
 }
 
 type ReachableSimulationSheet = { sheet: Project['sheets'][number]; topLevelInstanceId?: string }
+type Bsim3BinRange = { name: string; minLength: number; maxLength: number; minWidth: number; maxWidth: number }
+type ImportedDeviceModel = { type: string; channel?: 'n' | 'p'; parameters: { name: string; defaultValue: string }[]; bsim3Bins?: Bsim3BinRange[] }
 
 // Device prefixes and accepted .MODEL families from the ngspice device-line
 // grammar. Some prefixes intentionally accept multiple polarities/families.
@@ -30,7 +32,7 @@ function expectedModelTypeLabel(types: readonly string[]): string {
   return types.map((type) => type.toUpperCase()).join(' or ')
 }
 
-function importedDeviceModelIssue(part: Part, modelTypes: Map<string, { type: string; channel?: 'n' | 'p' }>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
+function importedDeviceModelIssue(part: Part, modelTypes: Map<string, ImportedDeviceModel>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
   const expectedType = compatibleDeviceModelType(part.kind) ?? (part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined)
   if (!expectedType || !part.deviceModel) return null
   const modelType = modelTypes.get(part.deviceModel.toLowerCase())
@@ -42,7 +44,23 @@ function importedDeviceModelIssue(part: Part, modelTypes: Map<string, { type: st
     detail: 'This model is not in the imported project libraries. Import the library that defines it or select a compatible model before running.',
     partId: selectedPartId,
   }
-  if (deviceModelTypeMatches(part.kind, modelType)) return null
+  if (deviceModelTypeMatches(part.kind, modelType)) {
+    if ((part.kind === 'nmos' || part.kind === 'pmos') && modelType.bsim3Bins?.length && part.mosfetGeometry?.length && part.mosfetGeometry.width) {
+      const length = spiceDimensionMagnitude(part.mosfetGeometry.length)
+      const width = spiceDimensionMagnitude(part.mosfetGeometry.width)
+      if (length !== null && width !== null && !modelType.bsim3Bins.some((bin) => length >= bin.minLength && length <= bin.maxLength && width >= bin.minWidth && width <= bin.maxWidth)) {
+        const availableRanges = modelType.bsim3Bins.map((bin) => `${bin.name}: L ${bin.minLength}–${bin.maxLength} m, W ${bin.minWidth}–${bin.maxWidth} m`).join('; ')
+        return {
+          id: `mosfet-bin-range:${id}`,
+          severity: 'warning',
+          title: `${part.ref} dimensions are outside the imported BSIM3 bins${location}`,
+          detail: `L=${part.mosfetGeometry.length} and W=${part.mosfetGeometry.width} do not fall within any complete L/W range in model family ${part.deviceModel}. ngspice may not find the intended bin. Check the model's dimensions: ${availableRanges}.`,
+          partId: selectedPartId,
+        }
+      }
+    }
+    return null
+  }
   const expectedChannel = part.kind === 'nvdmos' ? 'N-channel ' : part.kind === 'pvdmos' ? 'P-channel ' : ''
   return {
     id: `incompatible-device-model:${id}`,
@@ -122,7 +140,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     view: project.view,
   }, connectivity)
 
-  const importedDeviceModels = new Map<string, { type: string; channel?: 'n' | 'p'; parameters: { name: string; defaultValue: string }[] }>()
+  const importedDeviceModels = new Map<string, ImportedDeviceModel>()
   const importedDeviceModelCards = []
   for (const asset of project.modelAssets ?? []) {
     try {
@@ -135,7 +153,16 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
   }
   for (const family of ngspiceBsim3BinFamilies(importedDeviceModelCards)) {
-    if (!importedDeviceModels.has(family.name)) importedDeviceModels.set(family.name, { type: family.type, parameters: [] })
+    if (!importedDeviceModels.has(family.name)) {
+      const bins = family.models.map((model): Bsim3BinRange | null => {
+        const value = (name: string) => spiceDimensionMagnitude(model.parameters.find((parameter) => parameter.name.toLowerCase() === name)?.defaultValue ?? '')
+        const minLength = value('lmin'), maxLength = value('lmax'), minWidth = value('wmin'), maxWidth = value('wmax')
+        return minLength !== null && maxLength !== null && minWidth !== null && maxWidth !== null && minLength <= maxLength && minWidth <= maxWidth
+          ? { name: model.name, minLength, maxLength, minWidth, maxWidth }
+          : null
+      })
+      importedDeviceModels.set(family.name, { type: family.type, parameters: [], ...(bins.every((bin): bin is Bsim3BinRange => bin !== null) ? { bsim3Bins: bins } : {}) })
+    }
   }
   for (const { sheet, topLevelInstanceId } of reachableSheets) {
     const partsByReference = new Map<string, Project['parts']>()
