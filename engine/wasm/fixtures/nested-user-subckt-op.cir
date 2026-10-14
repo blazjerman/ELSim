@@ -1,0 +1,13 @@
+Nested user-library subcircuit operating point
+V1 IN 0 5
+XAMP IN OUT AMP
+RLOAD OUT 0 1k
+.SUBCKT AMP IN OUT
+XCORE IN OUT CORE
+.SUBCKT CORE A B
+RCORE A B 1k
+.ENDS CORE
+.ENDS AMP
+.op
+.print op v(out)
+.end

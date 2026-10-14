@@ -2124,7 +2124,7 @@ test('project-local model includes and shared parameter records load through bro
   await modelInput.setInputFiles({
     name: 'shared.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.LIB fast\n.OPTIONS reltol=.005 trtol=8\n.PARAM RBASE=1k\n.FUNC TWICE(x) {2*x}\n.GLOBAL 0\n.SUBCKT CORE IN OUT\nR1 IN OUT {RBASE}\n.ENDS CORE\n.ENDL fast\n.LIB unused\n.MODEL UNUSED D(Is=10n)\n.ENDL unused\n'),
+    buffer: Buffer.from('.LIB fast\n.OPTIONS reltol=.005 trtol=8\n.PARAM RBASE=1k\n.FUNC TWICE(x) {2*x}\n.GLOBAL 0\n.SUBCKT CORE IN OUT\nXLEAF IN OUT LEAF\n.SUBCKT LEAF A B\nR1 A B {RBASE}\n.ENDS LEAF\n.ENDS CORE\n.ENDL fast\n.LIB unused\n.MODEL UNUSED D(Is=10n)\n.ENDL unused\n'),
   })
   const sectionDialog = page.getByRole('dialog', { name: 'Choose model sections' })
   await sectionDialog.getByRole('checkbox', { name: 'Include section fast' }).check()
@@ -2138,6 +2138,8 @@ test('project-local model includes and shared parameter records load through bro
   expect(netlist).toContain('.OPTIONS reltol=.005 trtol=8')
   expect(netlist).toContain('.FUNC TWICE(x) {2*x}')
   expect(netlist).toContain('.SUBCKT CORE IN OUT')
+  expect(netlist).toContain('.SUBCKT LEAF A B')
+  expect(netlist).toContain('.ENDS LEAF')
   expect(netlist).not.toContain('.MODEL UNUSED')
   expect(netlist).not.toMatch(/^\.LIB /im)
   expect(netlist.match(/^\.END$/gim)).toHaveLength(1)

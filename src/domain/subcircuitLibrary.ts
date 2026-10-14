@@ -104,7 +104,7 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
   const sections: string[] = []
   const lines: { line: LogicalLine; section: string | null }[] = []
   let activeSection: string | null = null
-  let activeSubcircuit = false
+  const activeSubcircuits: { name: string; start: number }[] = []
   let sawEnd = false
   for (const line of sourceLines) {
     const text = withoutInlineComment(line.text)
@@ -116,14 +116,14 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     if (!text || text.startsWith('*')) { lines.push({ line, section: activeSection }); continue }
     const tokens = text.split(/\s+/), directive = tokens[0].toLowerCase()
     if (directive === '.end') {
-      if (activeSubcircuit) throw new Error(`Line ${line.start}: .END is not allowed inside a .SUBCKT.`)
+      if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .END is not allowed inside a .SUBCKT.`)
       if (activeSection) throw new Error(`Line ${line.start}: .END cannot appear inside a .LIB section.`)
       if (tokens.length !== 1) throw new Error(`Line ${line.start}: .END does not accept arguments in an imported model library.`)
       sawEnd = true
       continue
     }
     if (directive === '.lib') {
-      if (activeSubcircuit) throw new Error(`Line ${line.start}: .LIB directives are not allowed inside a .SUBCKT.`)
+      if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .LIB directives are not allowed inside a .SUBCKT.`)
       const external = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z_][A-Za-z0-9_-]*)$/i)
       if (external) { lines.push({ line, section: activeSection }); continue }
       if (activeSection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
@@ -136,20 +136,28 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     }
     if (directive === '.endl') {
       const closingSection = tokens[1]
-      if (activeSubcircuit) throw new Error(`Line ${line.start}: .ENDL directives are not allowed inside a .SUBCKT.`)
+      if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .ENDL directives are not allowed inside a .SUBCKT.`)
       if (!activeSection) throw new Error(`Line ${line.start}: .ENDL has no matching .LIB section.`)
       if (closingSection && closingSection.toLowerCase() !== activeSection.toLowerCase()) throw new Error(`Line ${line.start}: .ENDL ${closingSection} does not match .LIB ${activeSection}.`)
       activeSection = null
       continue
     }
     if (directive === '.subckt') {
-      if (activeSubcircuit) throw new Error(`Line ${line.start}: nested .SUBCKT definitions are not supported.`)
-      activeSubcircuit = true
+      const name = tokens[1]
+      if (!name || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
+      activeSubcircuits.push({ name, start: line.start })
     } else if (directive === '.ends') {
-      if (!activeSubcircuit) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
-      activeSubcircuit = false
+      const active = activeSubcircuits.at(-1)
+      if (!active) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
+      const closingName = tokens[1]
+      if (closingName && closingName.toLowerCase() !== active.name.toLowerCase()) throw new Error(`Line ${line.start}: .ENDS ${closingName} does not match .SUBCKT ${active.name}.`)
+      activeSubcircuits.pop()
     }
     lines.push({ line, section: activeSection })
+  }
+  if (activeSubcircuits.length) {
+    const active = activeSubcircuits.at(-1)!
+    throw new Error(`.SUBCKT ${active.name} opened on line ${active.start} has no matching .ENDS.`)
   }
   if (activeSection) throw new Error(`.LIB ${activeSection} has no matching .ENDL.`)
   return { sections, lines, logical: sourceLines }
@@ -401,7 +409,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   const seenNames = new Set<string>()
   const seenModelNames = new Set<string>()
   const modelLines: LogicalLine[] = []
-  let active: { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; start: number } | null = null
+  const activeSubcircuits: { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; start: number }[] = []
   let sawTopLevelRecord = false
   let activeLibrarySection: string | null = null
 
@@ -411,7 +419,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     const tokens = text.split(/\s+/)
     const directive = tokens[0].toLowerCase()
     if (directive === '.include' || directive === '.inc') {
-      if (active) throw new Error(`Line ${line.start}: .INCLUDE must be a top-level library reference, outside a .SUBCKT.`)
+      if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .INCLUDE must be a top-level library reference, outside a .SUBCKT.`)
       const argument = text.slice(tokens[0].length).trim()
       const match = argument.match(/^(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))$/)
       const reference = match?.[1] ?? match?.[2] ?? match?.[3] ?? argument
@@ -419,7 +427,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       continue
     }
     if (directive === '.lib') {
-      if (active) throw new Error(`Line ${line.start}: .LIB file references must be outside a .SUBCKT.`)
+      if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .LIB file references must be outside a .SUBCKT.`)
       const match = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z_][A-Za-z0-9_-]*)$/i)
       if (!match) {
         const tokens = text.split(/\s+/)
@@ -435,22 +443,44 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     }
     if (forbidden.has(directive)) throw new Error(`Line ${line.start}: ${tokens[0]} is not allowed in an imported model library.`)
 
-    if (active) {
+    if (directive === '.subckt') {
+      const name = tokens[1]
+      if (!name || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
+      const folded = name.toLowerCase()
+      if (seenNames.has(folded)) throw new Error(`Line ${line.start}: model ${name} is declared more than once.`)
+      seenNames.add(folded)
+      const header = tokens.slice(2)
+      const paramsAt = header.findIndex((token) => /^params?:$/i.test(token))
+      const pins = (paramsAt < 0 ? header : header.slice(0, paramsAt)).filter(Boolean)
+      const parameterSource = paramsAt < 0 ? '' : text.slice(text.toLowerCase().indexOf(header[paramsAt].toLowerCase()) + header[paramsAt].length).trim()
+      if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !pinName.test(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
+        throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
+      }
+      activeSubcircuits.push({ name, pins, parameters: paramsAt < 0 ? [] : parseParameterDefaults(parameterSource, line.start), dependencies: [], start: line.start })
+      modelLines.push(line)
+      continue
+    }
+
+    if (directive === '.ends') {
+      const active = activeSubcircuits.at(-1)
+      if (!active) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
+      const closingName = tokens[1]
+      if (closingName && closingName.toLowerCase() !== active.name.toLowerCase()) throw new Error(`Line ${line.start}: .ENDS ${closingName} does not match .SUBCKT ${active.name}.`)
+      subcircuits.push({ name: active.name, pins: active.pins, parameters: active.parameters, dependencies: active.dependencies, startLine: active.start, endLine: line.end })
+      activeSubcircuits.pop()
+      continue
+    }
+
+    if (activeSubcircuits.length) {
       if (directive === '.lib' || directive === '.endl') throw new Error(`Line ${line.start}: .LIB/.ENDL section wrappers cannot appear inside a .SUBCKT.`)
-      if (directive === '.subckt') throw new Error(`Line ${line.start}: nested .SUBCKT definitions are not supported.`)
-      if (directive === '.ends') {
-        const closingName = tokens[1]
-        if (closingName && closingName.toLowerCase() !== active.name.toLowerCase()) throw new Error(`Line ${line.start}: .ENDS ${closingName} does not match .SUBCKT ${active.name}.`)
-        subcircuits.push({ name: active.name, pins: active.pins, parameters: active.parameters, dependencies: active.dependencies, startLine: active.start, endLine: line.end })
-        active = null
-      } else if (!directive.startsWith('.')) {
+      if (!directive.startsWith('.')) {
+        const active = activeSubcircuits.at(-1)!
         const dependency = dependencyOnLine(tokens, active.name, line.start)
         if (dependency) active.dependencies.push(dependency)
       }
       continue
     }
 
-    if (directive === '.ends') throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
     if (directive === '.lib') {
       const section = tokens[1]
       if (activeLibrarySection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
@@ -465,24 +495,6 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       activeLibrarySection = null
       continue
     }
-    if (directive === '.subckt') {
-      const name = tokens[1]
-      if (!name || !/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
-      const folded = name.toLowerCase()
-      if (seenNames.has(folded)) throw new Error(`Line ${line.start}: model ${name} is declared more than once.`)
-      seenNames.add(folded)
-      const header = tokens.slice(2)
-      const paramsAt = header.findIndex((token) => /^params?:$/i.test(token))
-      const pins = (paramsAt < 0 ? header : header.slice(0, paramsAt)).filter(Boolean)
-      const parameterSource = paramsAt < 0 ? '' : text.slice(text.toLowerCase().indexOf(header[paramsAt].toLowerCase()) + header[paramsAt].length).trim()
-      if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !pinName.test(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
-        throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
-      }
-      active = { name, pins, parameters: paramsAt < 0 ? [] : parseParameterDefaults(parameterSource, line.start), dependencies: [], start: line.start }
-      modelLines.push(line)
-      continue
-    }
-
     if (directive.startsWith('.')) {
       if (!safeTopLevel.has(directive)) throw new Error(`Line ${line.start}: top-level directive ${tokens[0]} is unsupported in imported model libraries.`)
       modelLines.push(line)
@@ -507,9 +519,13 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     if (!sawTopLevelRecord && line.start === 1) continue // Optional SPICE title line.
     throw new Error(`Line ${line.start}: top-level circuit element found outside a .SUBCKT definition.`)
   }
-  if (active) throw new Error(`.SUBCKT ${active.name} opened on line ${active.start} has no matching .ENDS.`)
+  if (activeSubcircuits.length) {
+    const active = activeSubcircuits.at(-1)!
+    throw new Error(`.SUBCKT ${active.name} opened on line ${active.start} has no matching .ENDS.`)
+  }
   if (activeLibrarySection) throw new Error(`.LIB ${activeLibrarySection} has no matching .ENDL.`)
   if (!subcircuits.length && !models.length && !sawTopLevelRecord && !includes.length) throw new Error('No .SUBCKT definitions, .MODEL cards, shared model records, or project-local includes were found in this file.')
+  subcircuits.sort((left, right) => left.startLine - right.startLine)
   for (const subcircuit of subcircuits) dependencies.push(...subcircuit.dependencies)
 
   // Include full physical lines for retained directives and model blocks.

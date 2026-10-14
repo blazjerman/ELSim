@@ -459,13 +459,39 @@ test('rejects nested includes, external .LIB references, executable, and whole-c
   }
 })
 
+test('parses nested subcircuits in source order and assigns dependencies to their owning block', () => {
+  const source = [
+    '.SUBCKT AMP IN OUT',
+    'XCORE IN MID CORE',
+    '.SUBCKT CORE A B',
+    'XLEAF A B LEAF',
+    '.ENDS CORE',
+    '.ENDS AMP',
+    '.SUBCKT LEAF A B',
+    'R1 A B 1k',
+    '.ENDS LEAF',
+  ].join('\n')
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.subcircuits.map(({ name, startLine, endLine }) => ({ name, startLine, endLine })), [
+    { name: 'AMP', startLine: 1, endLine: 6 },
+    { name: 'CORE', startLine: 3, endLine: 5 },
+    { name: 'LEAF', startLine: 7, endLine: 9 },
+  ])
+  assert.deepEqual(parsed.subcircuits.map(({ name, dependencies }) => ({ name, dependencies: dependencies.map(({ owner, modelName }) => ({ owner, modelName })) })), [
+    { name: 'AMP', dependencies: [{ owner: 'AMP', modelName: 'CORE' }] },
+    { name: 'CORE', dependencies: [{ owner: 'CORE', modelName: 'LEAF' }] },
+    { name: 'LEAF', dependencies: [] },
+  ])
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(analyzeModelLibraries([{ id: 'nested', filename: 'nested.lib', content: source }]).dependencies.missing, [])
+})
+
 test('rejects malformed pin declarations, block endings, duplicate definitions, and top-level elements', () => {
   for (const source of [
     '.SUBCKT x\n.ENDS',
     '.SUBCKT x A A\n.ENDS',
     '.SUBCKT x A\n.ENDS y',
     '.ENDS x',
-    '.SUBCKT x A\n.SUBCKT y B\n.ENDS y\n.ENDS x',
     '.SUBCKT x A\nR1 A 0 1k',
     '.SUBCKT x A\n.ENDS x\n.subckt X B\n.ends X',
     '.SUBCKT x A PARAMS: GAIN',
@@ -475,6 +501,9 @@ test('rejects malformed pin declarations, block endings, duplicate definitions, 
     '.MODEL broken',
     '.MODEL D1 D(Is=1)\n.MODEL d1 D(Is=2)',
   ]) assert.throws(() => parseSubcircuitLibrary(source))
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS outer\n.ENDS inner'), /does not match/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS inner'), /no matching \.ENDS/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT outer B\n.ENDS outer\n.ENDS outer'), /declared more than once/)
 })
 
 test('checks SHA-256 and rejects edited model content', async () => {
