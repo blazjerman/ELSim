@@ -2658,6 +2658,62 @@ test('copying the whole schematic selects and moves only the pasted wires with p
   }
 })
 
+test('copying a full-circuit marquee selection selects only the cloned wire IDs', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const canvas = page.locator('svg.schematic')
+  await expect(canvas).toBeVisible()
+  // Exercise the pointer-hover reorder path before marquee selection. This
+  // used to leave React's keyed SVG order out of sync with the live DOM.
+  await page.locator('.wire-line').first().hover()
+  await page.getByTitle('Fit all circuit content in view').click()
+  const bounds = await page.evaluate(() => {
+    const canvas = document.querySelector<SVGSVGElement>('svg.schematic')!.getBoundingClientRect()
+    const objects = [...document.querySelectorAll<SVGGraphicsElement>('.circuit-part, .wire-line, .canvas-label')]
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0)
+    return {
+      canvas: { left: canvas.left, top: canvas.top, right: canvas.right, bottom: canvas.bottom },
+      left: Math.min(...objects.map((rect) => rect.left)),
+      top: Math.min(...objects.map((rect) => rect.top)),
+      right: Math.max(...objects.map((rect) => rect.right)),
+      bottom: Math.max(...objects.map((rect) => rect.bottom)),
+    }
+  })
+  const start = { x: Math.max(bounds.canvas.left + 2, bounds.left - 8), y: Math.max(bounds.canvas.top + 2, bounds.top - 8) }
+  const end = { x: Math.min(bounds.canvas.right - 2, bounds.right + 8), y: Math.min(bounds.canvas.bottom - 2, bounds.bottom + 8) }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 4 })
+  await page.mouse.up()
+  await waitForProjectAutosave(page)
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(before.parts.length)
+  await expect(page.locator('.wire-line.selected')).toHaveCount(before.wires.length)
+  await page.keyboard.press('Control+c')
+  await page.keyboard.press('Control+v')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.length)).toBe(before.wires.length * 2)
+  const selectedWireIds = await page.locator('.wire-line.selected').evaluateAll((elements) => elements.map((element) => (element as SVGGElement).dataset.wireId))
+  const originalWireIds = new Set(before.wires.map((wire: { id: string }) => wire.id))
+  expect(selectedWireIds).toHaveLength(before.wires.length)
+  expect(selectedWireIds.some((id) => originalWireIds.has(id))).toBe(false)
+  const pastedWireIds = new Set(selectedWireIds)
+  const beforeMove = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  const pastedPart = page.locator('.circuit-part.selected').first()
+  const partBounds = await pastedPart.boundingBox()
+  expect(partBounds).not.toBeNull()
+  await page.mouse.move(partBounds!.x + partBounds!.width / 2, partBounds!.y + partBounds!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(partBounds!.x + partBounds!.width / 2 + 40, partBounds!.y + partBounds!.height / 2 + 20, { steps: 3 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))).not.toEqual(beforeMove)
+  const afterMove = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  expect(afterMove.wires.filter((wire: { id: string }) => originalWireIds.has(wire.id))).toEqual(before.wires)
+  for (const wire of afterMove.wires.filter((candidate: { id: string }) => pastedWireIds.has(candidate.id))) {
+    const original = beforeMove.wires.find((candidate: { id: string }) => candidate.id === wire.id)
+    expect(wire.points).not.toEqual(original.points)
+  }
+})
+
 test('immediately dragging a pasted full-circuit selection moves its copied wires as one group', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
