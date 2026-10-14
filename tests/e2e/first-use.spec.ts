@@ -667,6 +667,33 @@ test('inductor-ramp lesson predicts L/R and recalculates the time constant after
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
 })
 
+test('supply-droop lesson predicts load voltage and updates it with load resistance', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Why a supply voltage sags under load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = lesson.getByRole('textbox', { name: 'Before running, predict VOUT under this load' })
+  await estimate.fill('5 V')
+  await estimate.press('Enter')
+  await expect(lesson.getByRole('status')).toHaveText('Not quite. VOUT = V1 × RLOAD / (RSOURCE + RLOAD) = 5 V × 1 kΩ / (100 Ω + 1 kΩ) = 4.545 V. A smaller load resistance draws more current and increases the voltage lost across RSOURCE.')
+  await estimate.fill('4.55 V')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. VOUT = V1 × RLOAD / (RSOURCE + RLOAD) = 5 V × 1 kΩ / (100 Ω + 1 kΩ) = 4.545 V. A smaller load resistance draws more current and increases the voltage lost across RSOURCE.')
+
+  await page.locator('.circuit-part[data-part-id="supply-droop-rload"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="supply-droop-rload:value"]').fill('100 Ω')
+  const updatedEstimate = lesson.getByRole('textbox', { name: 'Before running, predict VOUT under this load' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('2.5')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. VOUT = V1 × RLOAD / (RSOURCE + RLOAD) = 5 V × 100 Ω / (100 Ω + 100 Ω) = 2.5 V. A smaller load resistance draws more current and increases the voltage lost across RSOURCE.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+})
+
 test('switch-and-lamp lesson predicts the open-circuit current path before running', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

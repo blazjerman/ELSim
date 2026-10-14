@@ -324,6 +324,27 @@ export function RlTimeConstantPrediction({ resistanceValue, inductanceValue }: {
   />
 }
 
+export function SupplyDroopPrediction({ supplyValue, sourceResistanceValue, loadResistanceValue }: { supplyValue: string; sourceResistanceValue: string; loadResistanceValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const sourceResistance = componentMagnitude(sourceResistanceValue, 'resistor')
+  const loadResistance = componentMagnitude(loadResistanceValue, 'resistor')
+  const predictedOutput = supply !== null && sourceResistance !== null && loadResistance !== null && sourceResistance >= 0 && loadResistance > 0
+    ? supply * loadResistance / (sourceResistance + loadResistance)
+    : null
+  const explanation = predictedOutput === null
+    ? ''
+    : `VOUT = V1 × RLOAD / (RSOURCE + RLOAD) = ${formatValue(supply!)} V × ${formatResistance(loadResistance!)} / (${formatResistance(sourceResistance!)} + ${formatResistance(loadResistance!)}) = ${formatValue(predictedOutput)} V. A smaller load resistance draws more current and increases the voltage lost across RSOURCE.`
+
+  return <NumericPrediction
+    id="supply-droop-prediction"
+    prompt="Before running, predict VOUT under this load"
+    unit="V"
+    predictedValue={predictedOutput}
+    absoluteTolerance={0.02}
+    explanation={explanation}
+  />
+}
+
 export function CapacitorDischargePrediction({ initialVoltageValue, resistanceValue, capacitanceValue }: { initialVoltageValue: string; resistanceValue: string; capacitanceValue: string }) {
   const initialVoltage = componentMagnitude(initialVoltageValue, 'source')
   const resistance = componentMagnitude(resistanceValue, 'resistor')
@@ -626,7 +647,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'rl-time-constant' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -661,6 +682,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
   switch (props.kind) {
     case 'rc': return <RcTimeConstantPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'rl-time-constant': return <RlTimeConstantPrediction resistanceValue={props.resistanceValue ?? ''} inductanceValue={props.inductanceValue ?? ''}/>
+    case 'supply-droop': return <SupplyDroopPrediction supplyValue={props.supplyValue ?? ''} sourceResistanceValue={props.seriesResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'switch-lamp': return <SwitchPathPrediction/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
