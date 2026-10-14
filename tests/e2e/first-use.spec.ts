@@ -5083,7 +5083,7 @@ test('Thevenin-Norton lesson checks output equivalence and recalculates after ed
   await answer.fill('0.667 V')
   await prediction.getByRole('button', { name: 'Check prediction' }).click()
   await expect(prediction.getByRole('status')).toContainText('Correct.')
-  await expect(prediction.getByRole('status')).toContainText('VTHOUT − NOUT = 0.667 V')
+  await expect(prediction.getByRole('status')).toContainText('VTHOUT − NOUT = 0.6667 V')
 })
 
 test('Thevenin-Norton example solves to matching load voltages in ngspice', { tag: '@ngspice' }, async ({ page }) => {
