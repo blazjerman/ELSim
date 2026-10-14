@@ -100,7 +100,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   const paletteMetadata = [
     ['resistor', 'R', 'r', 'basics'], ['potentiometer', 'POT', 'h', 'basics'], ['lamp', 'R', 'e', 'basics'], ['capacitor', 'C', 'c', 'basics'], ['inductor', 'L', 'L', 'basics'], ['transformer', 'T', 'T', 'basics'],
     ['source', 'V', 'v', 'basics'], ['currentSource', 'I', 'i', 'basics'], ['diode', 'D', 'd', 'semiconductors'], ['zener', 'DZ', 'z', 'semiconductors'], ['led', 'D', 'l', 'semiconductors'], ['switch', 's', 's', 'basics'],
-    ['voltageSwitch', 'S', 'S', 'controlled'], ['currentSwitch', 'W', 'w', 'controlled'], ['vcvs', 'E', 'E', 'controlled'], ['vccs', 'G', 'G', 'controlled'], ['cccs', 'F', 'F', 'controlled'], ['ccvs', 'H', 'H', 'controlled'], ['behavioral', 'B', 'b', 'controlled'],
+    ['voltageSwitch', 'S', 'S', 'controlled'], ['currentSwitch', 'W', 'W', 'controlled'], ['vcvs', 'E', 'E', 'controlled'], ['vccs', 'G', 'G', 'controlled'], ['cccs', 'F', 'F', 'controlled'], ['ccvs', 'H', 'H', 'controlled'], ['behavioral', 'B', 'b', 'controlled'],
     ['inverter', 'NOT', '1', 'basics'], ['logicGate', 'AND', '2', 'basics'], ['npn', 'Q', 'n', 'semiconductors'], ['pnp', 'Q', 'p', 'semiconductors'], ['njfet', 'J', 'j', 'semiconductors'], ['pjfet', 'J', 'J', 'semiconductors'], ['nmesfet', 'Z', '8', 'semiconductors'], ['pmesfet', 'Z', '9', 'semiconductors'],
     ['nmos', 'M', 'N', 'semiconductors'], ['pmos', 'M', 'P', 'semiconductors'], ['nvdmos', 'M3', '6', 'semiconductors'], ['pvdmos', 'M3', '7', 'semiconductors'], ['ground', 'GND', 'g', 'basics'],
   ]

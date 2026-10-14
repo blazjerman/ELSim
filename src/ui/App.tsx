@@ -3405,6 +3405,7 @@ export default function App() {
     const defaultProperty = (key: string, fallback: string) => componentPropertyDefault(kind, key) ?? fallback
     const gateOperation = logicOperation ?? pendingLogicOperation ?? defaultProperty('logicOperation', 'and') as NonNullable<Part['logicOperation']>
     const defaultValue = componentDefaultValue(kind) || (kind === 'behavioral' ? 'V(vin) * 2' : kind === 'inverter' ? 'NOT' : kind === 'logicGate' ? gateOperation.toUpperCase() : kind === 'ground' || kind === 'subcircuit' ? '' : '1')
+    const currentSwitchControllers = kind === 'currentSwitch' ? project.parts.filter((part) => part.kind === 'source') : []
     const part: Part = {
       id,
       kind,
@@ -3418,7 +3419,7 @@ export default function App() {
       ...(kind === 'potentiometer' ? { wiperPosition: defaultProperty('wiperPosition', '0.5') } : {}),
       ...(kind === 'transformer' ? { turnsRatio: defaultProperty('turnsRatio', '2'), coupling: defaultProperty('coupling', '1') } : {}),
       ...(kind === 'voltageSwitch' ? { voltageSwitch: { onResistance: defaultProperty('onResistance', '1 Ω'), offResistance: defaultProperty('offResistance', '1 GΩ'), hysteresis: defaultProperty('hysteresis', '0 V') } } : {}),
-      ...(kind === 'currentSwitch' ? { currentSwitch: { onResistance: defaultProperty('onResistance', '1 Ω'), offResistance: defaultProperty('offResistance', '1 GΩ'), hysteresis: defaultProperty('hysteresis', '0 A') } } : {}),
+      ...(kind === 'currentSwitch' ? { ...(currentSwitchControllers.length === 1 ? { controlSource: currentSwitchControllers[0].ref } : {}), currentSwitch: { onResistance: defaultProperty('onResistance', '1 Ω'), offResistance: defaultProperty('offResistance', '1 GΩ'), hysteresis: defaultProperty('hysteresis', '0 A') } } : {}),
       ...(kind === 'behavioral' ? { behavioralOutput: defaultProperty('behavioralOutput', 'voltage') as NonNullable<Part['behavioralOutput']> } : {}),
       ...(kind === 'logicGate' ? { logicOperation: gateOperation } : {}),
       ...(['logicGate', 'inverter'].includes(kind) ? { logicLow: defaultProperty('logicLow', '0 V'), logicHigh: defaultProperty('logicHigh', '5 V'), logicThreshold: defaultProperty('logicThreshold', '2.5 V') } : {}),

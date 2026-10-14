@@ -2643,7 +2643,7 @@ test('component shortcuts are case-sensitive and logic-gate keys select their ma
   await page.keyboard.press('Escape')
   const shortcuts: [string, string][] = [
     ['r', 'Resistor'], ['e', 'Lamp'], ['c', 'Capacitor'], ['Shift+L', 'Inductor'], ['v', 'Voltage source'],
-    ['i', 'Current source'], ['Shift+S', 'Voltage-controlled switch'], ['w', 'Current-controlled switch'], ['d', 'Diode'], ['z', 'Zener diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
+    ['i', 'Current source'], ['Shift+S', 'Voltage-controlled switch'], ['Shift+W', 'Current-controlled switch'], ['d', 'Diode'], ['z', 'Zener diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
     ['Shift+G', 'VCCS'], ['Shift+F', 'CCCS'], ['Shift+H', 'CCVS'], ['b', 'Behavioral source'], ['n', 'NPN transistor'],
     ['p', 'PNP transistor'], ['j', 'N-channel JFET'], ['Shift+J', 'P-channel JFET'], ['N', 'N-channel MOSFET'],
     ['P', 'P-channel MOSFET'], ['6', 'N-channel power MOSFET'], ['7', 'P-channel power MOSFET'], ['g', 'Ground'], ['a', 'Idealized op-amp'],
