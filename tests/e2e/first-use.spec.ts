@@ -4460,6 +4460,29 @@ test('capacitor initial voltage editor starts the transient at the requested vol
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 2(?:\.0+)? V/)
 })
 
+test('schematic tool guidance stays readable without overflowing at desktop and phone widths', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const status = page.locator('.canvas-status')
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport)
+    await expect(status).toBeVisible()
+    const layout = await status.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      height: element.getBoundingClientRect().height,
+      instruction: element.querySelector('.canvas-status-copy')?.textContent,
+    }))
+    expect(layout.scrollWidth, `Canvas guidance overflows at ${viewport.width}px`).toBeLessThanOrEqual(layout.clientWidth)
+    expect(layout.height, `Canvas guidance expands the toolbar at ${viewport.width}px`).toBeLessThan(32)
+    expect(layout.instruction).toContain('Blank drag: L→R contains, R→L touches')
+  }
+  await expect(status).toHaveAttribute('title', /L→R to contain-select, R→L to touch-select/)
+  await page.getByRole('button', { name: 'Draw wire (W)' }).click()
+  await expect(status.locator('.canvas-status-copy')).toHaveText('Drag anywhere to place a wire')
+  const wireLayout = await status.evaluate((element) => ({ width: element.clientWidth, scroll: element.scrollWidth }))
+  expect(wireLayout.scroll).toBeLessThanOrEqual(wireLayout.width)
+})
+
 test('capacitor plate animation expands with charge from the solved waveform', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
