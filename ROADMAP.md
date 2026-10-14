@@ -163,6 +163,8 @@ LC energy exchange lesson (2026-10-12): Added a charged series RLC-free LC trans
 
 Example discovery (2026-10-12; updated 2026-10-14): the example picker has a six-circuit “Start here” path ordered from an interactive switch-and-lamp circuit through Ohm’s law, RC charging, a voltage divider, LED current limiting, and capacitor discharge. This puts a direct voltage/current/resistance experiment before the time-dependent lessons. Topic filters follow their declared order rather than catalog order. A Firefox regression checks the path order and confirms the full catalog remains reachable.
 
+Beginner-first example catalog (2026-10-14): The six “Start here” circuits now appear first even when the full catalog is selected; the dialog explains both ways to browse. All examples remain searchable and available under “All.” Firefox verifies the ordered six, topic filtering, combined search, and full catalog. This keeps novice guidance visible without hiding advanced circuits.
+
 Example confirmation follow-up (2026-10-12): the replace-circuit prompt now reads the selected example's title from the same catalog used by the picker, removing the duplicated per-example title conditional and keeping the confirmation text aligned as examples are added or renamed. TypeScript checking passes.
 
 Top-bar cleanup (2026-10-12): removed the inactive Share placeholder and decorative “B” avatar button, which looked interactive but had no behavior. The mobile toolbar no longer hides the Quick tour control based on the old Share button's position. Typecheck and the focused Firefox 390 px workspace/simulation workflow pass.
