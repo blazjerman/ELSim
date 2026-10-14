@@ -5549,6 +5549,33 @@ test('model section import restores keyboard focus when cancelled', { tag: '@ui-
   await expect(page.getByText('D_TYP', { exact: true })).toHaveCount(0)
 })
 
+test('multi-file model import lets users choose sections before resolving library dependencies', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const libraries = [
+    { name: 'amplifier.lib', mimeType: 'text/plain', buffer: Buffer.from('.include devices.lib\n.SUBCKT AMP IN OUT\nD1 IN OUT D_FAST\n.ENDS AMP') },
+    { name: 'devices.lib', mimeType: 'text/plain', buffer: Buffer.from('.LIB fast\n.MODEL D_FAST D(IS=1n)\n.ENDL fast\n.LIB slow\n.MODEL D_SLOW D(IS=2n)\n.ENDL slow') },
+  ]
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles(libraries)
+  const dialog = page.getByRole('dialog', { name: 'Choose model sections' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText('amplifier.lib')).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'devices.lib' })).toBeVisible()
+  const fast = dialog.getByRole('checkbox', { name: 'Include devices.lib section fast' })
+  const slow = dialog.getByRole('checkbox', { name: 'Include devices.lib section slow' })
+  await expect(fast).not.toBeChecked()
+  await expect(dialog.getByRole('button', { name: 'Import selected libraries' })).toBeDisabled()
+  await fast.check()
+  await dialog.getByRole('button', { name: 'Import selected libraries' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText(/Imported 2 model libraries with 1 subcircuit and 1 device model/)).toBeVisible()
+  await expect(slow).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null')?.modelAssets?.map((asset: { filename: string; selectedSections?: string[] }) => [asset.filename, asset.selectedSections ?? []]))).toEqual([['amplifier.lib', []], ['devices.lib', ['fast']]])
+  await expect(page.getByText('AMP', { exact: true })).toBeVisible()
+  await expect(page.getByText('D_FAST', { exact: true })).toBeVisible()
+  await expect(page.getByText('D_SLOW', { exact: true })).toHaveCount(0)
+})
+
 test('model section picker preserves ngspice numeric and punctuated names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
