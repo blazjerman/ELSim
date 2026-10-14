@@ -2361,6 +2361,15 @@ export default function App() {
     if (!query) return importedModels
     return importedModels.filter((model) => `${model.name} ${model.filename} ${model.definition.pins.map((pin) => pin.name).join(' ')} ${model.definition.modelParameters?.map((parameter) => parameter.name).join(' ') ?? ''}`.toLowerCase().includes(query))
   }, [importedModels, importedSubcircuitQuery])
+  const importedModelsByPinCount = useMemo(() => {
+    const groups = new Map<number, typeof filteredImportedModels>()
+    for (const model of filteredImportedModels) {
+      const group = groups.get(model.pins.length)
+      if (group) group.push(model)
+      else groups.set(model.pins.length, [model])
+    }
+    return groups
+  }, [filteredImportedModels])
   const visibleImportedModels = filteredImportedModels.slice(0, visibleImportedSubcircuits)
   const importedDeviceModels = useMemo(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => parsed.models.filter((model) => !model.scope).map((model) => ({ ...model, assetId: asset.id, filename: asset.filename }))), [modelLibraryAnalysis])
   const filteredImportedDeviceModels = useMemo(() => {
@@ -2392,6 +2401,12 @@ export default function App() {
   const requiredModelAssets = useMemo(() => requiredModelAssetIds(modelDependencyAnalysis, project.sheets.flatMap((sheet) => sheet.parts)), [modelDependencyAnalysis, project.sheets])
   const importedSymbols = useMemo(() => (project.symbolAssets ?? []).map((asset) => ({ ...parseSymbolAsset(asset.content, asset.filename), assetId: asset.id, filename: asset.filename })), [project.symbolAssets])
   const symbolsById = useMemo(() => new Map<string, ImportedSymbol>(importedSymbols.map((symbol) => [symbol.assetId, symbol])), [importedSymbols])
+  const symbolAssetsById = useMemo(() => new Map((project.symbolAssets ?? []).map((asset) => [asset.id, asset])), [project.symbolAssets])
+  const symbolsInUse = useMemo(() => {
+    const used = new Set<string>()
+    for (const sheet of project.sheets) for (const part of sheet.parts) if (part.symbolAssetId) used.add(part.symbolAssetId)
+    return used
+  }, [project.sheets])
   const compatibleDeviceModels = (kind: PartKind) => {
     return importedDeviceModels.filter((model) => deviceModelTypeMatches(kind, model))
   }
@@ -4491,7 +4506,35 @@ export default function App() {
         </div>}
         {(project.importedSchematicSource || project.importedChildSchematicSources?.length) ? <div className="imported-models"><div className="component-list-label">ORIGINAL SCHEMATIC SOURCES</div>{[...(project.importedSchematicSource ? [project.importedSchematicSource] : []), ...(project.importedChildSchematicSources ?? [])].map((source, index) => <div className="asset-provenance-card" key={`${source.filename}:${index}`}><strong>{source.filename}</strong><small>Original LTspice source · redistribution rights unknown</small>{schematicSourceProvenanceEditor(source, index)}</div>)}</div> : null}
         {(project.modelAssets?.length ?? 0) > 0 && <div className="imported-models"><div className="component-list-label">MODEL LIBRARY PROVENANCE</div>{project.modelAssets?.map((asset) => { const required = modelAssetInUse(asset.id); return <div className="asset-provenance-card" key={asset.id}><strong>{asset.filename}</strong>{asset.selectedSections?.length && <small>Loaded sections: {asset.selectedSections.join(', ')}</small>}<details className="model-source-viewer" open={modelSourceReview?.assetId === asset.id} onToggle={(event) => { if (event.currentTarget.open) setModelSourceReview((current) => current?.assetId === asset.id ? current : { assetId: asset.id, line: 1 }); else if (modelSourceReview?.assetId === asset.id) setModelSourceReview(null) }}><summary>View original library source</summary>{modelSourceReview?.assetId === asset.id && <ol>{asset.content.split(/\r?\n/).map((line, index) => <li key={index} id={`model-source-${asset.id}-line-${index + 1}`} tabIndex={0} className={modelSourceReview.line === index + 1 ? 'active-source-line' : undefined}><code>{line || ' '}</code></li>)}</ol>}</details>{assetProvenanceEditor('modelAssets', asset)}{required && <small>This file is required by a placed IC or another included library.</small>}<button className="place-model" aria-label={`Remove library file ${asset.filename}`} title={required ? 'A placed IC or imported library depends on this file' : 'Remove this imported library file'} disabled={required} onClick={() => setProject((current) => ({ ...current, modelAssets: (current.modelAssets ?? []).filter((candidate) => candidate.id !== asset.id) }))}>Remove library file</button></div>})}</div>}
-        {importedSymbols.length > 0 && <div className="imported-models"><div className="component-list-label">IMPORTED SYMBOLS</div>{importedSymbols.map((symbol) => { const used = project.sheets.some((sheet) => sheet.parts.some((part) => part.symbolAssetId === symbol.assetId)); const asset = project.symbolAssets?.find((candidate) => candidate.id === symbol.assetId); const allCompatible = filteredImportedModels.filter((model) => model.pins.length === symbol.pins.length); const compatible = allCompatible.slice(0, 50); return <div className="imported-model" key={symbol.assetId}><div><strong>{symbol.name}</strong><span>{symbol.pins.length} ordered pins · {symbol.pins.map((pin) => pin.name).join(', ')}</span><small>{symbol.filename} · redistribution unknown</small>{used && <small>This symbol is used by a placed IC. Remove the instance before deleting this symbol.</small>}{symbol.warnings.length > 0 && <details className="field-hint"><summary>{symbol.warnings.length} unsupported drawing records</summary><ul>{symbol.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}{compatible.map((model) => { const mismatches = model.pins.filter((pin, index) => pin.toLowerCase() !== symbol.pins[index].name.toLowerCase()); return <div className="imported-symbol-match" key={`${symbol.assetId}:${model.assetId}:${model.name}`}><button className="place-model" onClick={() => addSubcircuit(model, symbol)}>Place {model.name} with this symbol</button>{mismatches.length > 0 && <small>Pin mapping by SpiceOrder: {model.pins.map((pin, index) => `${pin} → ${symbol.pins[index].name}`).join(', ')}</small>}</div>})}{allCompatible.length > compatible.length && <small>Showing the first 50 matches. Search imported ICs by model name to narrow this list.</small>}{asset && <button className="place-model" onClick={() => downloadSymbolAsset(asset)}>Download {symbol.filename}</button>}{asset && assetProvenanceEditor('symbolAssets', asset)}</div><button aria-label={`Remove symbol ${symbol.filename}`} title={used ? 'Remove instances using this symbol first' : 'Remove imported symbol'} disabled={used} onClick={() => setProject((current) => ({ ...current, symbolAssets: (current.symbolAssets ?? []).filter((candidate) => candidate.id !== symbol.assetId) }))}><X size={13}/></button></div>})}</div>}
+        {importedSymbols.length > 0 && <div className="imported-models">
+          <div className="component-list-label">IMPORTED SYMBOLS</div>
+          {importedSymbols.map((symbol) => {
+            const used = symbolsInUse.has(symbol.assetId)
+            const asset = symbolAssetsById.get(symbol.assetId)
+            const allCompatible = importedModelsByPinCount.get(symbol.pins.length) ?? []
+            const compatible = allCompatible.slice(0, 50)
+            return <div className="imported-model" key={symbol.assetId}>
+              <div>
+                <strong>{symbol.name}</strong>
+                <span>{symbol.pins.length} ordered pins · {symbol.pins.map((pin) => pin.name).join(', ')}</span>
+                <small>{symbol.filename} · redistribution unknown</small>
+                {used && <small>This symbol is used by a placed IC. Remove the instance before deleting this symbol.</small>}
+                {symbol.warnings.length > 0 && <details className="field-hint"><summary>{symbol.warnings.length} unsupported drawing records</summary><ul>{symbol.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}
+                {compatible.map((model) => {
+                  const mismatches = model.pins.filter((pin, index) => pin.toLowerCase() !== symbol.pins[index].name.toLowerCase())
+                  return <div className="imported-symbol-match" key={`${symbol.assetId}:${model.assetId}:${model.name}`}>
+                    <button className="place-model" onClick={() => addSubcircuit(model, symbol)}>Place {model.name} with this symbol</button>
+                    {mismatches.length > 0 && <small>Pin mapping by SpiceOrder: {model.pins.map((pin, index) => `${pin} → ${symbol.pins[index].name}`).join(', ')}</small>}
+                  </div>
+                })}
+                {allCompatible.length > compatible.length && <small>Showing the first 50 matches. Search imported ICs by model name to narrow this list.</small>}
+                {asset && <button className="place-model" onClick={() => downloadSymbolAsset(asset)}>Download {symbol.filename}</button>}
+                {asset && assetProvenanceEditor('symbolAssets', asset)}
+              </div>
+              <button aria-label={`Remove symbol ${symbol.filename}`} title={used ? 'Remove instances using this symbol first' : 'Remove imported symbol'} disabled={used} onClick={() => setProject((current) => ({ ...current, symbolAssets: (current.symbolAssets ?? []).filter((candidate) => candidate.id !== symbol.assetId) }))}><X size={13}/></button>
+            </div>
+          })}
+        </div>}
         <input ref={modelFileInput} type="file" accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain" multiple hidden onChange={importModelLibrary}/>
         <input ref={symbolFileInput} type="file" accept=".elsym,.asy,application/json,text/plain" hidden onChange={importSymbol}/>
         <button className="library-import" onClick={openModelLibraryPicker}><Plus size={15}/> Import SPICE model library</button><small className="library-import-hint">Select multiple related files together to resolve model dependencies.</small>
