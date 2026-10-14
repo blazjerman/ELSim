@@ -102,6 +102,25 @@ test('accepts ngspice polarity characters in imported subcircuit pin names', () 
   assert.deepEqual(validateProject(project).parts.at(-1).modelPins, ['IN+', 'IN-', 'VCC', 'VEE', 'OUT'])
 })
 
+test('strips documented ngspice end-of-line comments without truncating dollar identifiers', () => {
+  const source = [
+    '.MODEL D$FAST D(Is=1n) $ model note',
+    '.SUBCKT AMP IN$P OUT$P // interface note',
+    'R$1 IN$P OUT$P 1k ; internal resistor',
+    '.ENDS AMP',
+  ].join('\n')
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.models[0].name, 'D$FAST')
+  assert.deepEqual(parsed.subcircuits[0].pins, ['IN$P', 'OUT$P'])
+  assert.deepEqual(parsed.subcircuits[0].dependencies, [])
+  assert.match(parsed.modelText, /\.MODEL D\$FAST D\(Is=1n\) \$ model note/)
+  const quoted = parseSubcircuitLibrary('.include "child$one;notes.lib" // include comment\n')
+  assert.equal(quoted.includes[0].reference, 'child$one;notes.lib')
+
+  assert.deepEqual(analyzeLtspiceModelDialect('.MODEL DFAST D() ; .MODEL D2 AKO: DFAST D\n'), [])
+  assert.deepEqual(analyzeLtspiceModelDialect('.MODEL DFAST D() // .MODEL D2 AKO: DFAST D\n'), [])
+})
+
 test('imported functions are scoped to the model and its project-local include chain', () => {
   const assets = [
     { asset: { id: 'root', filename: 'root.lib', content: '.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT' }, parsed: parseSubcircuitLibrary('.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT') },

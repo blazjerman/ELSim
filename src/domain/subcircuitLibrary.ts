@@ -214,7 +214,14 @@ function withoutInlineComment(line: string): string {
     if (quote) {
       if (char === quote) quote = ''
     } else if (char === '"' || char === "'") quote = char
-    else if (char === '$') return line.slice(0, index).trim()
+    else {
+      // ngspice end-of-line comments use `$`, `;`, or `//` after whitespace.
+      // `$` is also legal inside node and model identifiers, so it cannot be
+      // treated as an unconditional delimiter.
+      const startsComment = (index === 0 || /\s/.test(line[index - 1]))
+        && (char === '$' || char === ';' || line.startsWith('//', index))
+      if (startsComment) return line.slice(0, index).trim()
+    }
   }
   return line.trim()
 }

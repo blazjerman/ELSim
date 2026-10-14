@@ -1788,6 +1788,31 @@ test('model importer preserves polarity markers in IC pin names', { tag: '@ui-sm
   await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toHaveAttribute('aria-label', /pins: 1 IN\+, 2 IN-, 3 VCC, 4 VEE, 5 OUT/)
 })
 
+test('model importer preserves dollar identifiers and strips ngspice end-of-line comments', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Components', exact: true }).click()
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'dollar-identifiers.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from([
+      '.MODEL D$FAST D(Is=1n) $ model comment',
+      '.SUBCKT OPA$1 IN$+ IN$- VCC VEE OUT // pin comment',
+      'E1 OUT 0 IN$+ IN$- 10k ; gain comment',
+      '.ENDS OPA$1',
+    ].join('\n')),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 1 device model from dollar-identifiers\.lib/)).toBeVisible()
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'OPA$1' })
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await page.getByRole('button', { name: 'Schematic', exact: true }).click()
+  const instance = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(instance).toHaveAttribute('aria-label', /pins: 1 IN\$\+, 2 IN\$-, 3 VCC, 4 VEE, 5 OUT/)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelName)).toBe('OPA$1')
+})
+
 test('native passive and transmission-line model references resolve across imported files', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
