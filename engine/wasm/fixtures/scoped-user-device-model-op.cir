@@ -1,0 +1,14 @@
+Nested user-library local device model operating point
+V1 IN 0 5
+XAMP IN OUT AMP
+RLOAD OUT 0 10k
+.SUBCKT AMP IN OUT
+.MODEL DFAST D(Is=1e-15)
+XCORE IN OUT CORE
+.SUBCKT CORE A B
+D1 A B DFAST
+.ENDS CORE
+.ENDS AMP
+.op
+.print op v(out)
+.end

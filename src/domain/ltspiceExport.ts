@@ -396,7 +396,7 @@ function generatedSweepModelNames(project: Project): Map<string, string> {
     if (!sweep.parameter || sweep.globalParameter || sweep.sourceParameter) continue
     const part = parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
     if (!part?.deviceModel) continue
-    const model = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models).find((candidate) => candidate.name.toLowerCase() === part.deviceModel!.toLowerCase())
+    const model = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models.filter((candidate) => !candidate.scope)).find((candidate) => candidate.name.toLowerCase() === part.deviceModel!.toLowerCase())
     const parameter = model?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
     if (!parameter) continue
     const base = `ELSIM_MODEL_${spiceIdentifier(part.ref).toUpperCase()}_${spiceIdentifier(part.deviceModel).toUpperCase()}_${spiceIdentifier(parameter.name).toUpperCase()}`
@@ -435,9 +435,9 @@ function modelAssetContent(project: Project, assetId: string, blockers: LtspiceE
     if (!sweep.parameter || sweep.globalParameter || sweep.sourceParameter) continue
     const part = project.sheets.flatMap((sheet) => sheet.parts).find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
     if (!part?.deviceModel) continue
-    const selectedAsset = project.modelAssets?.find((candidate) => candidate.id === assetId && parseSubcircuitLibrary(candidate.content, candidate.selectedSections).models.some((model) => model.name.toLowerCase() === part.deviceModel!.toLowerCase()))
+    const selectedAsset = project.modelAssets?.find((candidate) => candidate.id === assetId && parseSubcircuitLibrary(candidate.content, candidate.selectedSections).models.some((model) => !model.scope && model.name.toLowerCase() === part.deviceModel!.toLowerCase()))
     if (!selectedAsset) continue
-    const definition = parseSubcircuitLibrary(selectedAsset.content, selectedAsset.selectedSections).models.find((model) => model.name.toLowerCase() === part.deviceModel!.toLowerCase())
+    const definition = parseSubcircuitLibrary(selectedAsset.content, selectedAsset.selectedSections).models.find((model) => !model.scope && model.name.toLowerCase() === part.deviceModel!.toLowerCase())
     const parameter = definition?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
     if (!definition || !parameter) continue
     const parameterName = parameterNames.get(part.id)
@@ -504,7 +504,7 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       if (project.simulation.analysis === 'dc' && (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() !== project.simulation.dcSweep?.source.toLowerCase()) continue
       if (sweep.parameter) {
         const supportedDevice = ['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(part.kind)
-        const model = part.deviceModel ? (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models.map((definition) => ({ asset, definition }))).find(({ definition }) => definition.name.toLowerCase() === part.deviceModel!.toLowerCase()) : undefined
+        const model = part.deviceModel ? (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models.filter((definition) => !definition.scope).map((definition) => ({ asset, definition }))).find(({ definition }) => definition.name.toLowerCase() === part.deviceModel!.toLowerCase()) : undefined
         const modelParameter = model?.definition.parameters.find((entry) => entry.name.toLowerCase() === sweep.parameter!.toLowerCase())
         if (!supportedDevice || !model || !modelParameter) continue
         const nominal = scalar(modelParameter.defaultValue)

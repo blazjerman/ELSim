@@ -161,7 +161,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const mosfetModels: { part: Part; name: string }[] = []
   const modelAssets = project.modelAssets ?? []
   const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections))
-  const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models)
+  const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models.filter((model) => !model.scope))
   const importedDeviceModelsByName = new Map<string, typeof importedDeviceModels[number]>()
   for (const model of importedDeviceModels) {
     const key = model.name.toLowerCase()

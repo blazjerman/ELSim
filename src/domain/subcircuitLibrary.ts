@@ -1,7 +1,7 @@
 export type SubcircuitParameter = { name: string; defaultValue: string }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
-export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; parameters: SubcircuitParameter[]; startLine: number; endLine: number }
+export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; parameters: SubcircuitParameter[]; scope?: string; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
@@ -197,6 +197,20 @@ function parseParameterDefaults(source: string, line: number): SubcircuitParamet
   }
   if (result.length > 32) throw new Error(`Line ${line}: a subcircuit may declare at most 32 parameters.`)
   return result
+}
+
+function parseModelCard(text: string, line: LogicalLine, scope?: string): SpiceModelDefinition {
+  const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+ako\s*:\s*\S+\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+    ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+  const name = modelHeader?.[1], type = modelHeader?.[2]
+  if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
+  const parameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/^\s*\(/, '').replace(/\)\s*$/, '')
+  const parameters: SubcircuitParameter[] = []
+  for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|[^\s,)]+)/g)) {
+    const value = match[2].replace(/^\{(.*)\}$/, '$1')
+    if (isSafeSubcircuitParameterValue(value) && !parameters.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) parameters.push({ name: match[1], defaultValue: value })
+  }
+  return { name, type, parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
 }
 
 function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): ModelDependency | null {
@@ -409,7 +423,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   const seenNames = new Set<string>()
   const seenModelNames = new Set<string>()
   const modelLines: LogicalLine[] = []
-  const activeSubcircuits: { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; start: number }[] = []
+  const activeSubcircuits: { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; start: number }[] = []
   let sawTopLevelRecord = false
   let activeLibrarySection: string | null = null
 
@@ -456,7 +470,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !pinName.test(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
         throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
       }
-      activeSubcircuits.push({ name, pins, parameters: paramsAt < 0 ? [] : parseParameterDefaults(parameterSource, line.start), dependencies: [], start: line.start })
+      activeSubcircuits.push({ name, pins, parameters: paramsAt < 0 ? [] : parseParameterDefaults(parameterSource, line.start), dependencies: [], ...(activeSubcircuits.at(-1) ? { parentName: activeSubcircuits.at(-1)!.name } : {}), start: line.start })
       modelLines.push(line)
       continue
     }
@@ -466,13 +480,21 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (!active) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
       const closingName = tokens[1]
       if (closingName && closingName.toLowerCase() !== active.name.toLowerCase()) throw new Error(`Line ${line.start}: .ENDS ${closingName} does not match .SUBCKT ${active.name}.`)
-      subcircuits.push({ name: active.name, pins: active.pins, parameters: active.parameters, dependencies: active.dependencies, startLine: active.start, endLine: line.end })
+      subcircuits.push({ name: active.name, pins: active.pins, parameters: active.parameters, dependencies: active.dependencies, ...(active.parentName ? { parentName: active.parentName } : {}), startLine: active.start, endLine: line.end })
       activeSubcircuits.pop()
       continue
     }
 
     if (activeSubcircuits.length) {
       if (directive === '.lib' || directive === '.endl') throw new Error(`Line ${line.start}: .LIB/.ENDL section wrappers cannot appear inside a .SUBCKT.`)
+      if (directive === '.model') {
+        const model = parseModelCard(text, line, activeSubcircuits.at(-1)!.name)
+        const key = `${model.scope!.toLowerCase()}:${model.name.toLowerCase()}`
+        if (seenModelNames.has(key)) throw new Error(`Line ${line.start}: model card ${model.name} is declared more than once in .SUBCKT ${model.scope}.`)
+        seenModelNames.add(key)
+        models.push(model)
+        continue
+      }
       if (!directive.startsWith('.')) {
         const active = activeSubcircuits.at(-1)!
         const dependency = dependencyOnLine(tokens, active.name, line.start)
@@ -499,19 +521,11 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (!safeTopLevel.has(directive)) throw new Error(`Line ${line.start}: top-level directive ${tokens[0]} is unsupported in imported model libraries.`)
       modelLines.push(line)
       if (directive === '.model') {
-        const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+ako\s*:\s*\S+\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
-          ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
-        const name = modelHeader?.[1], type = modelHeader?.[2]
-        if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
-        if (seenModelNames.has(name.toLowerCase())) throw new Error(`Line ${line.start}: model card ${name} is declared more than once.`)
-        seenModelNames.add(name.toLowerCase())
-        const parameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/^\s*\(/, '').replace(/\)\s*$/, '')
-        const parameters: SubcircuitParameter[] = []
-        for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|[^\s,)]+)/g)) {
-          const value = match[2].replace(/^\{(.*)\}$/, '$1')
-          if (isSafeSubcircuitParameterValue(value) && !parameters.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) parameters.push({ name: match[1], defaultValue: value })
-        }
-        models.push({ name, type, parameters, startLine: line.start, endLine: line.end })
+        const model = parseModelCard(text, line)
+        const key = model.name.toLowerCase()
+        if (seenModelNames.has(key)) throw new Error(`Line ${line.start}: model card ${model.name} is declared more than once.`)
+        seenModelNames.add(key)
+        models.push(model)
       }
       sawTopLevelRecord = true
       continue
@@ -549,6 +563,8 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   const subcircuits = new Map<string, string>()
   const subcircuitAssets = new Map<string, string>()
   const deviceModelAssets = new Map<string, string>()
+  const scopedDeviceModelAssets = new Map<string, string>()
+  const subcircuitParents = new Map<string, string | undefined>()
   const definitionLocations = new Map<string, ModelDefinitionConflict>()
   for (const { asset, parsed } of parsedAssets) {
     for (const model of parsed.subcircuits) {
@@ -558,8 +574,13 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       definitionLocations.set(key, conflict)
       subcircuits.set(model.name.toLowerCase(), model.name)
       subcircuitAssets.set(model.name.toLowerCase(), asset.id)
+      subcircuitParents.set(`${asset.id}:${model.name.toLowerCase()}`, model.parentName?.toLowerCase())
     }
     for (const model of parsed.models) {
+      if (model.scope) {
+        scopedDeviceModelAssets.set(`${asset.id}:${model.scope.toLowerCase()}:${model.name.toLowerCase()}`, asset.id)
+        continue
+      }
       const key = `device:${model.name.toLowerCase()}`
       const conflict = definitionLocations.get(key) ?? { name: model.name, kind: 'device' as const, definitions: [] }
       conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: model.startLine })
@@ -593,7 +614,17 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   const graph = new Map<string, Set<string>>()
   for (const { asset, parsed } of parsedAssets) for (const dependency of parsed.dependencies) {
     const key = dependency.modelName.toLowerCase()
-    const targetAssetId = dependency.kind === 'subcircuit' ? subcircuitAssets.get(key) : deviceModelAssets.get(key)
+    let targetAssetId: string | undefined
+    if (dependency.kind === 'subcircuit') targetAssetId = subcircuitAssets.get(key)
+    else {
+      let scope: string | undefined = dependency.owner.toLowerCase()
+      while (scope) {
+        targetAssetId = scopedDeviceModelAssets.get(`${asset.id}:${scope}:${key}`)
+        if (targetAssetId) break
+        scope = subcircuitParents.get(`${asset.id}:${scope}`)
+      }
+      targetAssetId ??= deviceModelAssets.get(key)
+    }
     if (!targetAssetId) missing.push({ assetId: asset.id, filename: asset.filename, ...dependency })
     else if (dependency.kind === 'subcircuit') {
       resolved.push({ assetId: asset.id, filename: asset.filename, ...dependency, targetAssetId })

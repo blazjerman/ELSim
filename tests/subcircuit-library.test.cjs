@@ -486,6 +486,29 @@ test('parses nested subcircuits in source order and assigns dependencies to thei
   assert.deepEqual(analyzeModelLibraries([{ id: 'nested', filename: 'nested.lib', content: source }]).dependencies.missing, [])
 })
 
+test('resolves device models through nested subcircuit scope without exposing them as global cards', () => {
+  const amplifier = {
+    id: 'amp', filename: 'amp.lib', content: [
+      '.SUBCKT AMP IN OUT',
+      '.MODEL DFAST D(Is=1n)',
+      'XCORE IN OUT CORE',
+      '.SUBCKT CORE A B',
+      'D1 A B DFAST',
+      '.ENDS CORE',
+      '.ENDS AMP',
+    ].join('\n'),
+  }
+  const shared = { id: 'shared', filename: 'shared.lib', content: '.MODEL DFAST D(Is=2n)' }
+  const analysis = analyzeModelLibraries([amplifier, shared])
+  assert.deepEqual(analysis.dependencies.missing, [])
+  const localModelUse = analysis.dependencies.resolved.find(({ kind }) => kind === 'device')
+  assert.equal(localModelUse?.owner, 'CORE')
+  assert.equal(localModelUse?.targetAssetId, 'amp')
+  assert.equal(analysis.dependencies.deviceModelAssets.get('dfast'), 'shared')
+  assert.deepEqual(analysis.dependencies.conflicts, [])
+  assert.deepEqual(analysis.assets[0].parsed.models.map(({ name, scope }) => ({ name, scope })), [{ name: 'DFAST', scope: 'AMP' }])
+})
+
 test('rejects malformed pin declarations, block endings, duplicate definitions, and top-level elements', () => {
   for (const source of [
     '.SUBCKT x\n.ENDS',
@@ -504,6 +527,7 @@ test('rejects malformed pin declarations, block endings, duplicate definitions, 
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS outer\n.ENDS inner'), /does not match/)
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT inner B\n.ENDS inner'), /no matching \.ENDS/)
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.SUBCKT outer B\n.ENDS outer\n.ENDS outer'), /declared more than once/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT outer A\n.MODEL DLOCAL D(Is=1n)\n.MODEL dlocal D(Is=2n)\n.ENDS outer'), /declared more than once in \.SUBCKT outer/)
 })
 
 test('checks SHA-256 and rejects edited model content', async () => {

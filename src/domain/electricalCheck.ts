@@ -112,7 +112,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   const importedDeviceModels = new Map<string, string>()
   for (const asset of project.modelAssets ?? []) {
     try {
-      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) importedDeviceModels.set(model.name.toLowerCase(), model.type.toLowerCase())
+      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope) importedDeviceModels.set(model.name.toLowerCase(), model.type.toLowerCase())
     } catch {
       // Invalid library syntax has its own importer diagnostic.
     }

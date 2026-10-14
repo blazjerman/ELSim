@@ -510,6 +510,7 @@ export function validateProject(input: unknown): Project {
       if (!importedDefinitionByName.has(name)) importedDefinitionByName.set(name, { asset, definition })
     }
     for (const model of parsed.models) {
+      if (model.scope) continue
       const name = model.name.toLowerCase()
       if (!importedDeviceModelByName.has(name)) importedDeviceModelByName.set(name, model)
     }

@@ -678,7 +678,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     knownLibraries.add(baseName(asset.filename))
     const parsed = parseSubcircuitLibrary(asset.content, asset.selectedSections)
     parsed.subcircuits.forEach((item) => { subcircuits.set(item.name.toLowerCase(), item.pins); subcircuitDefinitions.set(item.name.toLowerCase(), item) })
-    parsed.models.forEach((item) => deviceModels.set(item.name.toLowerCase(), item.type.toLowerCase()))
+    parsed.models.forEach((item) => { if (!item.scope) deviceModels.set(item.name.toLowerCase(), item.type.toLowerCase()) })
   }
 
   const project = createStarterProject()
@@ -973,7 +973,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const parameterName = sweep.globalParameter.toLowerCase()
     const candidates = project.parts.flatMap((part) => {
       if (!part.deviceModel) return []
-      const model = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models).find((entry) => entry.name.toLowerCase() === part.deviceModel!.toLowerCase())
+    const model = (project.modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).models.filter((entry) => !entry.scope)).find((entry) => entry.name.toLowerCase() === part.deviceModel!.toLowerCase())
       const parameter = model?.parameters.find((entry) => entry.defaultValue.trim().replace(/^\{(.*)\}$/, '$1').toLowerCase() === parameterName)
       return parameter ? [{ part, parameter }] : []
     })

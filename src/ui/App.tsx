@@ -2322,7 +2322,7 @@ export default function App() {
     return importedModels.filter((model) => `${model.name} ${model.filename} ${model.definition.pins.map((pin) => pin.name).join(' ')} ${model.definition.modelParameters?.map((parameter) => parameter.name).join(' ') ?? ''}`.toLowerCase().includes(query))
   }, [importedModels, importedSubcircuitQuery])
   const visibleImportedModels = filteredImportedModels.slice(0, visibleImportedSubcircuits)
-  const importedDeviceModels = useMemo(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => parsed.models.map((model) => ({ ...model, assetId: asset.id, filename: asset.filename }))), [modelLibraryAnalysis])
+  const importedDeviceModels = useMemo(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => parsed.models.filter((model) => !model.scope).map((model) => ({ ...model, assetId: asset.id, filename: asset.filename }))), [modelLibraryAnalysis])
   const filteredImportedDeviceModels = useMemo(() => {
     const query = importedDeviceModelQuery.trim().toLowerCase()
     if (!query) return importedDeviceModels
