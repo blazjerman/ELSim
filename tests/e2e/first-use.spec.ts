@@ -11,7 +11,9 @@ import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
 
 async function waitForProjectAutosave(page: Page) {
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
-  await expect(page.getByText('All changes saved locally')).toBeVisible()
+  // The status footer is intentionally hidden on narrow screens. Verify the
+  // actual persistence marker instead of requiring desktop-only status text.
+  await expect.poll(() => page.evaluate(() => Number(localStorage.getItem('elsim:project:v7:savedAt')) || 0)).toBeGreaterThan(0)
 }
 
 async function expectVisibleKeyboardControlsNamed(page: Page) {
