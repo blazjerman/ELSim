@@ -23,6 +23,7 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
+import { OhmsLawPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
@@ -89,55 +90,6 @@ const exampleSelection: Record<ExampleId, string> = {
 }
 function IconButton({ title, children, onClick, active, disabled = false }: { title: string; children: ReactNode; onClick?: () => void; active?: boolean; disabled?: boolean }) {
   return <button className={`icon-button${active ? ' active' : ''}`} title={title} aria-label={title} aria-pressed={active} onClick={onClick} disabled={disabled}>{children}</button>
-}
-
-function OhmsLawPrediction({ supplyValue, resistanceValue }: { supplyValue: string; resistanceValue: string }) {
-  const [answer, setAnswer] = useState('')
-  const [feedback, setFeedback] = useState<{ correct: boolean; text: string } | null>(null)
-  const supply = componentMagnitude(supplyValue, 'source')
-  const resistance = componentMagnitude(resistanceValue, 'resistor')
-  const predictedCurrentMa = supply !== null && resistance !== null && resistance > 0
-    ? Math.abs(supply / resistance) * 1000
-    : null
-
-  const checkPrediction = () => {
-    if (!answer.trim()) {
-      setFeedback({ correct: false, text: 'Enter your current estimate in milliamps.' })
-      return
-    }
-    const value = Number(answer)
-    if (!Number.isFinite(value) || value < 0) {
-      setFeedback({ correct: false, text: 'Enter a non-negative current in milliamps.' })
-      return
-    }
-    if (predictedCurrentMa === null || !Number.isFinite(predictedCurrentMa)) {
-      setFeedback({ correct: false, text: 'Use a numeric supply voltage and a positive resistor value first.' })
-      return
-    }
-    const tolerance = Math.max(predictedCurrentMa * 0.05, 0.001)
-    const correct = Math.abs(value - predictedCurrentMa) <= tolerance
-    const expected = Number(predictedCurrentMa.toPrecision(4))
-    const supplyText = Number(Math.abs(supply!).toPrecision(4))
-    const resistanceText = resistance! >= 1000
-      ? `${Number((resistance! / 1000).toPrecision(4))} kΩ`
-      : `${Number(resistance!.toPrecision(4))} Ω`
-    setFeedback({
-      correct,
-      text: correct
-        ? `Correct. I = V/R = ${supplyText} V / ${resistanceText} = ${expected} mA.`
-        : `Ohm’s law gives I = V/R = ${supplyText} V / ${resistanceText} = ${expected} mA.`,
-    })
-  }
-
-  return <div className="example-prediction">
-    <label htmlFor="ohms-law-prediction">Before running, predict current through R1</label>
-    <div className="example-prediction-input">
-      <input id="ohms-law-prediction" type="number" min="0" step="any" inputMode="decimal" value={answer} onChange={(event) => { setAnswer(event.target.value); setFeedback(null) }}/>
-      <span>mA</span>
-      <button type="button" onClick={checkPrediction}>Check prediction</button>
-    </div>
-    {feedback && <p className={`example-prediction-feedback${feedback.correct ? ' correct' : ''}`} role="status">{feedback.text}</p>}
-  </div>
 }
 
 const CanvasConnectionDotLayer = memo(function CanvasConnectionDotLayer({ dots, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
@@ -4045,7 +3997,7 @@ export default function App() {
       pwl: { title: 'Shape the source with PWL points', guidance: 'Run the transient and inspect V(IN) and V(OUT). Edit a point in the source properties to change the response.' },
       'current-source': { title: 'A current source sets load current', guidance: 'Run the operating point. The 1 mA through 1 kΩ produces 1 V; probe the load to confirm.' },
       potentiometer: { title: 'The wiper adjusts the output', guidance: 'Run the operating point and inspect V(VOUT). The wiper percentage is measured from the upper terminal: 50% gives about 5 V from the 10 V supply, while a smaller percentage moves the output closer to VIN.' },
-      'voltage-divider': { title: 'Two resistors split a voltage', guidance: 'Run the operating point and probe V(VOUT). Equal 1 kΩ resistors share the 10 V supply evenly, so the midpoint is 5 V. Change either resistor and see how the ratio changes.' },
+      'voltage-divider': { title: 'Two resistors split a voltage', guidance: 'Use the prediction check before running. Equal resistors split the supply evenly; change either resistor afterward and compare how the output ratio changes.' },
       'loaded-voltage-divider': { title: 'Replace a divider with its Thevenin equivalent', guidance: 'Run the operating point. With RLOAD removed, the 10 V divider is equivalent to a 5 V source with 500 Ω output resistance (R1 ∥ R2). Reconnect the 1 kΩ load and compare the predicted 3.33 V output with ngspice. Increase RLOAD to 10 kΩ and rerun; VOUT should move closer to 5 V.' },
       'parallel-resistors': { title: 'Compare branch currents and check Kirchhoff’s current law', guidance: 'Run the operating point and compare I(V1) with I(R1) + I(R2). Both resistors have the same 10 V across them, so the 1 kΩ branch carries twice the current of the 2 kΩ branch, and the source current equals the sum entering both branches. Change R2 to 1 kΩ and rerun: the branch currents should match and the source current should equal their new sum.' },
       'resistor-power': { title: 'See how current and voltage set resistor power', guidance: 'Run the operating point and compare the selected resistor voltage and current. Power is P = V × I = V²/R: 5 V across 1 kΩ is 25 mW. Change R1 to 100 Ω and rerun; power rises to 250 mW. This circuit calculates electrical power; it does not model resistor temperature.' },
@@ -4192,6 +4144,12 @@ export default function App() {
                 key={`${partsById.get('ohms-law-v1')?.value ?? ''}:${partsById.get('ohms-law-r1')?.value ?? ''}`}
                 supplyValue={partsById.get('ohms-law-v1')?.value ?? ''}
                 resistanceValue={partsById.get('ohms-law-r1')?.value ?? ''}
+              />}
+              {exampleLesson.id === 'voltage-divider' && !lessonNextStep && <VoltageDividerPrediction
+                key={`${partsById.get('divider-v1')?.value ?? ''}:${partsById.get('divider-r1')?.value ?? ''}:${partsById.get('divider-r2')?.value ?? ''}`}
+                supplyValue={partsById.get('divider-v1')?.value ?? ''}
+                upperResistanceValue={partsById.get('divider-r1')?.value ?? ''}
+                lowerResistanceValue={partsById.get('divider-r2')?.value ?? ''}
               />}
               {lessonNextStep ? <div className="example-lesson-next-step">
                 <span className="eyebrow">TRY THIS NEXT</span>

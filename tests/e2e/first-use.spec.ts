@@ -513,8 +513,8 @@ test("Ohm's law lesson checks a beginner's current prediction before simulation"
   const estimate = page.getByRole('spinbutton', { name: 'Before running, predict current through R1' })
   await expect(lesson).toContainText('Use the prediction check before you run')
   await estimate.fill('2.5')
-  await lesson.getByRole('button', { name: 'Check prediction' }).click()
-  await expect(lesson.getByRole('status')).toHaveText('Ohm’s law gives I = V/R = 5 V / 1 kΩ = 5 mA.')
+  await estimate.press('Enter')
+  await expect(lesson.getByRole('status')).toHaveText('Not quite. I = V/R = 5 V / 1 kΩ = 5 mA.')
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
 
   await estimate.fill('5')
@@ -535,6 +535,37 @@ test("Ohm's law lesson checks a beginner's current prediction before simulation"
   await expect(updatedEstimate).toBeVisible()
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
   expect(await page.locator('html').evaluate((element) => element.scrollWidth)).toBe(390)
+})
+
+test('voltage-divider lesson checks the midpoint prediction and updates it when a resistor changes', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Two equal resistors split a 10 V supply' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('spinbutton', { name: 'Before running, predict the midpoint voltage VOUT' })
+  await expect(lesson).toContainText('Use the prediction check before running')
+  await estimate.fill('3')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Not quite. VOUT = VIN × R2/(R1 + R2) = 10 V × 1 kΩ/(1 kΩ + 1 kΩ) = 5 V.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+
+  await estimate.fill('5')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. VOUT = VIN × R2/(R1 + R2) = 10 V × 1 kΩ/(1 kΩ + 1 kΩ) = 5 V.')
+
+  await page.locator('.circuit-part[data-part-id="divider-r2"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="divider-r2:value"]').fill('2 kΩ')
+  const updatedEstimate = page.getByRole('spinbutton', { name: 'Before running, predict the midpoint voltage VOUT' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('6.667')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. VOUT = VIN × R2/(R1 + R2) = 10 V × 2 kΩ/(1 kΩ + 2 kΩ) = 6.667 V.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
 })
 
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -4577,7 +4608,7 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await dialog.locator('.example-list article').filter({ hasText: 'Two equal resistors split a 10 V supply' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Voltage divider')
-  await expect(page.getByLabel('Guided example')).toContainText('Equal 1 kΩ resistors share the 10 V supply evenly')
+  await expect(page.getByLabel('Guided example')).toContainText('Use the prediction check before running')
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await expect(page.locator('svg.schematic .wire-line')).toHaveCount(8)
   await page.getByRole('button', { name: 'Run this circuit' }).click()
