@@ -8164,6 +8164,15 @@ test('current-controlled switch example follows the sensed branch current', { ta
   await expect(switchSymbol).toHaveAttribute('data-state', 'closed')
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/I\(vsense\) = 0\.0050000 A/i)
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 4\.[0-9]+/i)
+  for (const [wireId, direction] of [
+    ['cswitch-drive-to-sense-resistor', 'first-to-last'], ['cswitch-sense-resistor-to-meter', 'first-to-last'], ['cswitch-sense-return', 'last-to-first'],
+    ['cswitch-supply-feed', 'first-to-last'], ['cswitch-load-feed', 'first-to-last'], ['cswitch-load-return-vertical', 'first-to-last'],
+    ['cswitch-load-return-horizontal', 'first-to-last'], ['cswitch-supply-return', 'first-to-last'],
+  ] as const) {
+    const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
+    await expectWireFlow(flow, direction)
+    expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.004)
+  }
   await timeSlider.fill(String(Math.floor(finalSample * 0.75)))
   await expect(switchSymbol).toHaveAttribute('data-state', 'open')
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/I\(vsense\) = 0\.0000 A/i)
