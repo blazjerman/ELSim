@@ -331,6 +331,7 @@ function isDynamicComponentSymbolPrimitive(primitive: ComponentSymbolPrimitive):
   const name = 'className' in primitive ? primitive.className ?? '' : ''
   return name.includes('capacitor-charge-glow')
     || name === 'capacitor-current-polarity'
+    || name === 'inductor-current-polarity'
     || name === 'logic-output-lead'
     || name.includes('potentiometer-wiper')
     || name.startsWith('lamp-glow-')
@@ -340,6 +341,10 @@ function isDynamicComponentSymbolPrimitive(primitive: ComponentSymbolPrimitive):
     || name === 'transistor-current-indicator'
     || name.includes('inductor-current-glow')
     || name.includes('transformer-current-glow')
+}
+
+function isCurrentPolarityPrimitive(primitive: ComponentSymbolPrimitive): boolean {
+  return primitive.kind === 'text' && (primitive.className === 'capacitor-current-polarity' || primitive.className === 'inductor-current-polarity')
 }
 
 const ComponentSymbolGeometry = memo(function ComponentSymbolGeometry({ geometry, stroke, animation }: {
@@ -356,7 +361,7 @@ const ComponentSymbolGeometry = memo(function ComponentSymbolGeometry({ geometry
       : primitive.kind === 'circle'
         ? <circle key={index} className={primitive.className} cx={primitive.cx} cy={primitive.cy} r={primitive.r} fill={primitive.className === 'lamp-glow-fill' ? '#ffd36d' : primitive.className === 'led-glow' ? '#ff766d' : primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={primitive.className === 'lamp-glow-fill' || primitive.className === 'led-glow' ? 'none' : common.stroke} strokeWidth={common.strokeWidth} opacity={primitive.className === 'lamp-glow-fill' ? sample.lampGlow * .82 : primitive.className === 'led-glow' ? Math.min(.3, sample.ledBrightness * .3) : undefined} pointerEvents={primitive.className === 'lamp-glow-fill' || primitive.className === 'lamp-glow-outline' || primitive.className === 'led-glow' ? 'none' : undefined} style={primitive.className === 'lamp-glow-outline' ? { filter: `drop-shadow(0 0 ${sample.lampGlow * 15}px #ffd36d)` } : undefined}/>
       : primitive.kind === 'text'
-        ? <text key={index} className={primitive.className} x={primitive.x} y={primitive.y} data-pin={primitive.pin} data-polarity={primitive.className === 'capacitor-current-polarity' ? primitive.text : undefined} fill={common.stroke} stroke="none" pointerEvents="none">{primitive.text}{primitive.className === 'capacitor-current-polarity' && primitive.pin !== undefined && <title>{`Pin ${primitive.pin}: conventional current ${primitive.text === '+' ? 'flows out' : 'flows in'}`}</title>}</text>
+        ? <text key={index} className={primitive.className} x={primitive.x} y={primitive.y} data-pin={primitive.pin} data-polarity={isCurrentPolarityPrimitive(primitive) ? primitive.text : undefined} fill={common.stroke} stroke="none" pointerEvents="none">{primitive.text}{isCurrentPolarityPrimitive(primitive) && primitive.pin !== undefined && <title>{`Pin ${primitive.pin}: conventional current ${primitive.text === '+' ? 'flows out' : 'flows in'}`}</title>}</text>
         : <path key={index} className={primitive.className} d={primitive.d} transform={primitive.className === 'potentiometer-wiper-arrow' ? `translate(0 ${sample.potentiometerWiperY})` : undefined} fill={primitive.fill === 'stroke' ? common.stroke : 'none'} stroke={primitive.className === 'transistor-current-indicator' ? '#79d9a4' : primitive.className === 'led-light-rays' ? '#ff766d' : common.stroke} strokeWidth={primitive.className === 'lamp-filament' || primitive.className === 'led-light-rays' ? 2 : primitive.className === 'transistor-current-indicator' ? 2.5 : common.strokeWidth} strokeLinecap={common.strokeLinecap} strokeLinejoin={common.strokeLinejoin} opacity={primitive.className === 'transistor-current-indicator' ? sample.channelCurrentGlow : primitive.className === 'led-light-rays' ? sample.ledBrightness : undefined} pointerEvents={primitive.className === 'transistor-current-indicator' || primitive.className === 'led-light-rays' || primitive.className === 'inductor-current-glow' || primitive.className?.includes('transformer-current-glow') ? 'none' : undefined} aria-hidden={primitive.className === 'transistor-current-indicator' || primitive.className === 'led-light-rays' || primitive.className === 'inductor-current-glow' || primitive.className?.includes('transformer-current-glow') ? true : undefined} style={primitive.className === 'lamp-filament' ? { stroke: sample.lampGlow > .05 ? '#ffe6a8' : common.stroke } : primitive.className === 'inductor-current-glow' || primitive.className?.includes('transformer-primary-current-glow') ? { filter: `drop-shadow(0 0 ${sample.currentGlow * 7}px #e9bc70)` } : primitive.className?.includes('transformer-secondary-current-glow') ? { filter: `drop-shadow(0 0 ${sample.secondaryCurrentGlow * 7}px #e9bc70)` } : undefined}/>)}
   </>
 })
@@ -411,7 +416,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const customOffsets = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout) : []
   const potentiometerPosition = Number(part.wiperPosition ?? '0.5')
   const potentiometerWiperY = -24 + potentiometerPosition * 48
-  const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : part.kind === 'capacitor' && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet'].includes(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
+  const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : (part.kind === 'capacitor' || part.kind === 'inductor') && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : ['npn', 'pnp', 'nmos', 'pmos', 'njfet', 'pjfet'].includes(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
   const capacitorChargeGeometry = part.kind === 'capacitor' && voltage !== undefined ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? EMPTY_SYMBOL_GEOMETRY
   const lampPowerGeometry = lampGlow > 0 ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY

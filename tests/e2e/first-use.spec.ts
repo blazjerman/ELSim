@@ -4673,11 +4673,14 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
     const title = (await inductorTitle.textContent()) ?? ''
     const match = title.match(/([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?) A,/i)
     expect(match).not.toBeNull()
-    return Math.abs(Number(match![1]))
+    return Number(match![1])
   }
   const risingCurrent = await currentAt(0.4)
   expect(risingCurrent).toBeGreaterThan(0.04)
   expect(risingCurrent).toBeLessThan(0.06)
+  const currentMarks = inductor.locator('.inductor-current-polarity')
+  await expect(currentMarks).toHaveCount(2)
+  expect(await currentMarks.evaluateAll((nodes) => nodes.map((node) => [Number(node.getAttribute('data-pin')), node.getAttribute('data-polarity')]).sort((left, right) => Number(left[0]) - Number(right[0])))).toEqual([[1, '−'], [2, '+']])
   for (const wireId of ['rl-step-feed-top', 'rl-step-resistor-inductor', 'rl-step-return-bottom']) {
     const flow = page.locator(`.wire-current-flow-layer [data-wire-id="${wireId}"] .wire-current-flow`).first()
     expect(Number(await flow.getAttribute('data-current-magnitude'))).toBeGreaterThan(0.04)
