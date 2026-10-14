@@ -217,9 +217,13 @@ test('imported subcircuits become content-addressed component definitions with o
   assert.deepEqual(definition.provenance, provenance)
   assert.throws(() => importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'bad' }), /SHA-256/)
   assert.notEqual(importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'b'.repeat(64) }).id, definition.id)
+  const punctuationModels = parseSubcircuitLibrary('.SUBCKT LF356/NS IN OUT\nR1 IN OUT 1k\n.ENDS LF356/NS\n.SUBCKT LF356.NS IN OUT\nR1 IN OUT 2k\n.ENDS LF356.NS').subcircuits
+  const siblingModelNames = punctuationModels.map((model) => model.name)
+  const punctuationIds = punctuationModels.map((model) => importedSubcircuitComponentDefinition(model, { ...provenance, siblingModelNames }).id)
+  assert.equal(new Set(punctuationIds).size, 2)
   const project = createStarterProject()
   project.modelAssets = [{ id: provenance.assetId, filename: provenance.filename, sha256: provenance.sha256, content: library, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'amp', modelName: 'amp', modelPins: ['1', 'OUT'], x: 800, y: 500, rotation: 0 })
+  project.parts.push({ id: 'p-x1', kind: 'subcircuit', componentDefinitionId: `user.${provenance.sha256}.amp`, ref: 'X1', value: 'amp', modelName: 'amp', modelPins: ['1', 'OUT'], x: 800, y: 500, rotation: 0 })
   project.sheets[0].parts = project.parts
   const restored = validateProject(project)
   assert.equal(restored.parts.at(-1).componentDefinitionId, definition.id)

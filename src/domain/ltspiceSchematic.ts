@@ -846,10 +846,14 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
     const omittedAttributes = unmappedAttributes.length - Math.min(unmappedAttributes.length, 16) + unmappedAttributes.slice(0, 16).filter(([, attribute]) => attribute.length > 512).length
     if (omittedAttributes > 0) warnings.push(`Line ${symbol.line}: ${omittedAttributes} imported SYMATTR record(s) on ${identity} exceed ELSim's extension limit; the original .asc source is retained.`)
     const importedModel = kind === 'subcircuit' && !childSheet
-      ? (modelAssets ?? []).flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).subcircuits.map((model) => ({ asset, model }))).find(({ model }) => model.name.toLowerCase() === mapped.modelName?.toLowerCase())
+      ? (modelAssets ?? []).flatMap((asset) => {
+          const models = parseSubcircuitLibrary(asset.content, asset.selectedSections).subcircuits
+          const siblingModelNames = models.map((model) => model.name)
+          return models.map((model) => ({ asset, model, siblingModelNames }))
+        }).find(({ model }) => model.name.toLowerCase() === mapped.modelName?.toLowerCase())
       : undefined
     const componentDefinitionId = importedModel
-      ? importedSubcircuitComponentDefinition(importedModel.model, { assetId: importedModel.asset.id, filename: importedModel.asset.filename, sha256: importedModel.asset.sha256 }).id
+      ? importedSubcircuitComponentDefinition(importedModel.model, { assetId: importedModel.asset.id, filename: importedModel.asset.filename, sha256: importedModel.asset.sha256, siblingModelNames: importedModel.siblingModelNames }).id
       : componentDefinitionByKind[kind].id
     const part: Part = {
       id: `asc-part-${project.parts.length + 1}`, kind, componentDefinitionId, ref: identity, value: isCurrentControlled ? coefficient : defaultValue,

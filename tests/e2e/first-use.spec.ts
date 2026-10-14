@@ -2168,14 +2168,17 @@ test('native ngspice slash-named subcircuit imports and generates a valid instan
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Components', exact: true }).click()
-  const modelLibrary = '.SUBCKT LF356/NS IN OUT\nE1 OUT 0 IN 0 2\n.ENDS LF356/NS\n'
+  const modelLibrary = '.SUBCKT LF356/NS IN OUT\nE1 OUT 0 IN 0 2\n.ENDS LF356/NS\n.SUBCKT LF356.NS IN OUT\nE1 OUT 0 IN 0 3\n.ENDS LF356.NS\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'lf356.lib',
     mimeType: 'text/plain',
     buffer: Buffer.from(modelLibrary),
   })
-  await expect(page.getByText(/Imported 1 subcircuit and 0 device models from lf356\.lib/)).toBeVisible()
+  await expect(page.getByText(/Imported 2 subcircuits and 0 device models from lf356\.lib/)).toBeVisible()
+  const modelIds = await page.locator('.imported-models .place-model[data-component-definition-id]').evaluateAll((buttons) => buttons.map((button) => button.getAttribute('data-component-definition-id')))
+  expect(modelIds).toHaveLength(2)
+  expect(new Set(modelIds).size).toBe(2)
   const importedModel = page.locator('.imported-model').filter({ hasText: 'LF356/NS' })
   await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
   await page.getByRole('button', { name: 'Schematic', exact: true }).click()

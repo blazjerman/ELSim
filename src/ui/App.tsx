@@ -2391,7 +2391,8 @@ export default function App() {
   const projectModelFunctions = useMemo(() => modelFunctionsForProject(modelLibraryAnalysis.assets), [modelLibraryAnalysis])
   const importedModels = useMemo(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => {
     const functions = modelFunctionsForAsset(modelLibraryAnalysis.assets, asset.id)
-    return parsed.subcircuits.map((subcircuit) => ({ ...subcircuit, assetId: asset.id, filename: asset.filename, functions, definition: importedSubcircuitComponentDefinition(subcircuit, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256 }) }))
+    const siblingModelNames = parsed.subcircuits.map((subcircuit) => subcircuit.name)
+    return parsed.subcircuits.map((subcircuit) => ({ ...subcircuit, assetId: asset.id, filename: asset.filename, functions, definition: importedSubcircuitComponentDefinition(subcircuit, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256, siblingModelNames }) }))
   }), [modelLibraryAnalysis])
   const filteredImportedModels = useMemo(() => {
     const query = importedSubcircuitQuery.trim().toLowerCase()

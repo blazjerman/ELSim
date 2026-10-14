@@ -3,7 +3,7 @@ import { analyzeConnectivity } from './connectivity'
 import { isSafeSubcircuitParameterValue, isValidSpiceModelName, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
-import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
+import { componentDefinitionByKind, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId } from './componentDefinitions'
 import { componentMagnitude, timeMagnitude } from './componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from './measurementSettings'
 
@@ -507,18 +507,19 @@ export function validateProject(input: unknown): Project {
     return parsed ? [{ asset, parsed }] : []
   })
   const projectModelFunctions = modelFunctionsForProject(parsedModelLibraryEntries)
-  const importedDefinitionByName = new Map<string, { asset: ModelLibraryAsset; definition: SubcircuitDefinition; functions: ReadonlyMap<string, number> }>()
+  const importedDefinitionByName = new Map<string, { asset: ModelLibraryAsset; definition: SubcircuitDefinition; functions: ReadonlyMap<string, number>; siblingModelNames: string[] }>()
   const importedDeviceModelByName = new Map<string, SpiceModelDefinition>()
   for (const asset of (data.modelAssets as ModelLibraryAsset[] | undefined) ?? []) {
     const parsed = parsedModelAssets.get(asset.id)
     if (!parsed) throw new Error(`${asset.filename} could not be parsed as a model library.`)
     const functions = modelFunctionsForAsset(parsedModelLibraryEntries, asset.id)
+    const siblingModelNames = parsed.subcircuits.map((definition) => definition.name)
     for (const definition of parsed.subcircuits) {
       for (const parameter of definition.parameters) {
         if (!isSafeSubcircuitParameterValue(parameter.defaultValue, functions)) throw new Error(`Line ${definition.startLine}: .SUBCKT ${definition.name} parameter ${parameter.name} calls a function that is not available from its library include chain.`)
       }
       const name = definition.name.toLowerCase()
-      if (!importedDefinitionByName.has(name)) importedDefinitionByName.set(name, { asset, definition, functions })
+      if (!importedDefinitionByName.has(name)) importedDefinitionByName.set(name, { asset, definition, functions, siblingModelNames })
     }
     for (const model of parsed.models) {
       for (const parameter of model.parameters) {
@@ -536,10 +537,13 @@ export function validateProject(input: unknown): Project {
       ? componentDefinitionByKind[part.kind].id
       : (() => {
           const entry = part.modelName ? importedDefinitionByName.get(part.modelName.toLowerCase()) : undefined
-          return entry ? importedSubcircuitComponentDefinition(entry.definition, { assetId: entry.asset.id, filename: entry.asset.filename, sha256: entry.asset.sha256 }).id : undefined
+          return entry ? importedSubcircuitComponentDefinition(entry.definition, { assetId: entry.asset.id, filename: entry.asset.filename, sha256: entry.asset.sha256, siblingModelNames: entry.siblingModelNames }).id : undefined
         })()
     if (!expectedDefinitionId) throw new Error(`${part.ref} has no matching component definition.`)
-    if (part.componentDefinitionId !== undefined && part.componentDefinitionId !== expectedDefinitionId) throw new Error(`${part.ref} component definition does not match its model.`)
+    const legacyDefinitionId = part.kind === 'subcircuit' && !part.sheetId && part.modelName
+      ? (() => { const entry = importedDefinitionByName.get(part.modelName!.toLowerCase()); return entry && part.componentDefinitionId && isLegacyImportedSubcircuitDefinitionId(part.componentDefinitionId, entry.definition, { sha256: entry.asset.sha256, siblingModelNames: entry.siblingModelNames }) })()
+      : false
+    if (part.componentDefinitionId !== undefined && part.componentDefinitionId !== expectedDefinitionId && !legacyDefinitionId) throw new Error(`${part.ref} component definition does not match its model.`)
     part.componentDefinitionId = expectedDefinitionId
     if (part.symbolAssetId) {
       const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
@@ -807,10 +811,13 @@ export function validateProject(input: unknown): Project {
         ? componentDefinitionByKind[part.kind].id
         : (() => {
             const entry = part.modelName ? importedDefinitionByName.get(part.modelName.toLowerCase()) : undefined
-            return entry ? importedSubcircuitComponentDefinition(entry.definition, { assetId: entry.asset.id, filename: entry.asset.filename, sha256: entry.asset.sha256 }).id : undefined
+            return entry ? importedSubcircuitComponentDefinition(entry.definition, { assetId: entry.asset.id, filename: entry.asset.filename, sha256: entry.asset.sha256, siblingModelNames: entry.siblingModelNames }).id : undefined
           })()
       if (!expectedDefinitionId) throw new Error(`${part.ref} has no matching component definition.`)
-      if (part.componentDefinitionId !== undefined && part.componentDefinitionId !== expectedDefinitionId) throw new Error(`${part.ref} component definition does not match its model.`)
+      const legacyDefinitionId = part.kind === 'subcircuit' && !part.sheetId && part.modelName
+        ? (() => { const entry = importedDefinitionByName.get(part.modelName!.toLowerCase()); return entry && part.componentDefinitionId && isLegacyImportedSubcircuitDefinitionId(part.componentDefinitionId, entry.definition, { sha256: entry.asset.sha256, siblingModelNames: entry.siblingModelNames }) })()
+        : false
+      if (part.componentDefinitionId !== undefined && part.componentDefinitionId !== expectedDefinitionId && !legacyDefinitionId) throw new Error(`${part.ref} component definition does not match its model.`)
       part.componentDefinitionId = expectedDefinitionId
     }
   }

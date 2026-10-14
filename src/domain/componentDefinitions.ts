@@ -353,14 +353,27 @@ function definitionSlug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'model'
 }
 
+/** Preserve project files written before imported definition IDs included the full model name. */
+export function isLegacyImportedSubcircuitDefinitionId(
+  id: string,
+  subcircuit: SubcircuitDefinition,
+  provenance: { sha256: string; siblingModelNames?: readonly string[] },
+): boolean {
+  const collides = provenance.siblingModelNames?.some((name) => name.toLowerCase() !== subcircuit.name.toLowerCase() && definitionSlug(name) === definitionSlug(subcircuit.name)) ?? false
+  return collides && id === `user.${provenance.sha256.toLowerCase()}.${definitionSlug(subcircuit.name)}`
+}
+
 export function importedSubcircuitComponentDefinition(
   subcircuit: SubcircuitDefinition,
-  provenance: { assetId: string; filename: string; sha256: string },
+  provenance: { assetId: string; filename: string; sha256: string; siblingModelNames?: readonly string[] },
 ): ComponentDefinition {
   if (!/^[0-9a-f]{64}$/i.test(provenance.sha256)) throw new Error('Imported component definition needs a valid model-library SHA-256.')
   if (!subcircuit.name || subcircuit.name.length > 128 || subcircuit.pins.length < 1 || subcircuit.pins.length > 64) throw new Error('Imported component definition has an invalid model name or pin count.')
   return Object.freeze({
-    id: `user.${provenance.sha256.toLowerCase()}.${definitionSlug(subcircuit.name)}`,
+    // Keep existing IDs stable unless this library contains a colliding slug.
+    // When it does, append an escaped name so each imported definition remains
+    // unique in picker and renderer maps.
+    id: `user.${provenance.sha256.toLowerCase()}.${definitionSlug(subcircuit.name)}${provenance.siblingModelNames?.some((name) => name.toLowerCase() !== subcircuit.name.toLowerCase() && definitionSlug(name) === definitionSlug(subcircuit.name)) ? `.${encodeURIComponent(subcircuit.name.toLowerCase())}` : ''}`,
     version: 1,
     kind: 'subcircuit',
     name: subcircuit.name,
