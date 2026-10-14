@@ -5574,6 +5574,25 @@ test('multi-file model import lets users choose sections before resolving librar
   await expect(page.getByText('AMP', { exact: true })).toBeVisible()
   await expect(page.getByText('D_FAST', { exact: true })).toBeVisible()
   await expect(page.getByText('D_SLOW', { exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  const rightsReview = page.getByRole('alertdialog', { name: 'Review imported files' })
+  await expect(rightsReview).toContainText('amplifier.lib')
+  await expect(rightsReview).toContainText('devices.lib')
+  const downloadPromise = page.waitForEvent('download')
+  await rightsReview.getByRole('button', { name: 'Save project file', exact: true }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/\.elsim$/)
+  const archivePath = await download.path()
+  expect(archivePath).not.toBeNull()
+
+  page.once('dialog', (nativeDialog) => nativeDialog.accept())
+  await page.locator('input[accept^=".elsim,.json"]').setInputFiles(archivePath!)
+  await expect(page.getByText(/Opened RC step response/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null')?.modelAssets?.map((asset: { filename: string; selectedSections?: string[]; content: string }) => [asset.filename, asset.selectedSections ?? [], asset.content]))).toEqual([
+    ['amplifier.lib', [], '.include devices.lib\n.SUBCKT AMP IN OUT\nD1 IN OUT D_FAST\n.ENDS AMP'],
+    ['devices.lib', ['fast'], '.LIB fast\n.MODEL D_FAST D(IS=1n)\n.ENDL fast\n.LIB slow\n.MODEL D_SLOW D(IS=2n)\n.ENDL slow'],
+  ])
 })
 
 test('model section picker preserves ngspice numeric and punctuated names', { tag: '@ui-smoke' }, async ({ page }) => {
