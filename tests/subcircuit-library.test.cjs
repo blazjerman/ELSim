@@ -97,8 +97,10 @@ test('parses .MODEL parameters that call forward-declared library functions', ()
 })
 
 test('rejects ground node zero as an imported subcircuit external pin', () => {
-  assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID 0 OUT\nR1 0 OUT 1k\n.ENDS INVALID'), /Line 1: \.SUBCKT INVALID cannot use ground node 0 or its gnd alias as an external pin/)
-  assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID GND OUT\nR1 GND OUT 1k\n.ENDS INVALID'), /cannot use ground node 0 or its gnd alias/)
+  const guidance = /ngspice treats both as global ground rather than a connectable IC pin\. Keep ground inside the model or rename the pin if it represents a separate signal\./
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID 0 OUT\nR1 0 OUT 1k\n.ENDS INVALID'), guidance)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID GND OUT\nR1 GND OUT 1k\n.ENDS INVALID'), guidance)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID gNd OUT\nR1 gNd OUT 1k\n.ENDS INVALID'), guidance)
   assert.deepEqual(parseSubcircuitLibrary('.SUBCKT VALID IN OUT\nR1 IN OUT 1k\n.ENDS VALID').subcircuits[0].pins, ['IN', 'OUT'])
 })
 

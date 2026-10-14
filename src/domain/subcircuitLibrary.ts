@@ -883,7 +883,12 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       const parameterSource = parameterToken
         ? text.slice((parameterToken.index ?? 0) + (paramsMarkerAt === paramsAt ? parameterToken[0].length : 0)).trim()
         : ''
-      if (!options.allowGroundPins && pins.some((pin) => pin === '0' || /^gnd$/i.test(pin))) throw new Error(`Line ${line.start}: .SUBCKT ${name} cannot use ground node 0 or its gnd alias as an external pin.`)
+      // ngspice treats both spellings as the global ground node, not as
+      // independently connectable formal terminals. Keep them internal to
+      // avoid showing users an IC pin that silently ignores its wire.
+      if (!options.allowGroundPins && pins.some((pin) => pin === '0' || /^gnd$/i.test(pin))) {
+        throw new Error(`Line ${line.start}: .SUBCKT ${name} uses node 0 or GND as an external pin, but ngspice treats both as global ground rather than a connectable IC pin. Keep ground inside the model or rename the pin if it represents a separate signal.`)
+      }
       const validPin = options.allowGroundPins ? isValidSpiceNodeName : isValidSpiceSubcircuitPinName
       if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !validPin(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
         throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
