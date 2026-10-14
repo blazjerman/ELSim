@@ -879,8 +879,8 @@ test('imports and flattens an unambiguous single-section model library', () => {
   assert.doesNotMatch(parsed.modelText, /\.LIB|\.ENDL/i)
 })
 
-test('accepts ngspice .LIB section tokens with numeric, dot, slash, dollar, and plus names', () => {
-  const names = ['1.8V', 'fast.typ', 'fast/typ', 'FAST$LOW', 'gain+']
+test('accepts native ngspice .LIB section names as single tokens', () => {
+  const names = ['1.8V', 'fast.typ', 'fast/typ', 'FAST$LOW', 'gain+', '.leading', '-dash', '+plus', '$cash', '#hash', '?question', '/slash', 'A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\\R']
   assert.deepEqual(names.map((name) => isValidSpiceLibrarySectionName(name)), names.map(() => true))
   for (const name of names) {
     const source = `.LIB ${name}\n.MODEL D_${name.replace(/[^A-Za-z0-9]/g, '_')} D(IS=1n)\n.ENDL ${name}`
@@ -888,10 +888,12 @@ test('accepts ngspice .LIB section tokens with numeric, dot, slash, dollar, and 
     const parsed = parseSubcircuitLibrary(source, [name])
     assert.equal(parsed.models.length, 1, name)
   }
-  for (const name of ['', 'white space', '.leading', 'bad;comment', 'bad\nname']) assert.equal(isValidSpiceLibrarySectionName(name), false, name)
-  assert.deepEqual(parseSubcircuitLibrary('.LIB models.lib 1.8V').includes, [
-    { reference: 'models.lib', filename: 'models.lib', section: '1.8V', sourceLine: 1 },
+  for (const name of ['', 'white space', ';comment', '//comment', 'bad\nname', 'quoted"name']) assert.equal(isValidSpiceLibrarySectionName(name), false, name)
+  assert.deepEqual(parseSubcircuitLibrary('.LIB models.lib $cash\n.LIB models.lib A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\\R').includes, [
+    { reference: 'models.lib', filename: 'models.lib', section: '$cash', sourceLine: 1 },
+    { reference: 'models.lib', filename: 'models.lib', section: 'A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\\R', sourceLine: 2 },
   ])
+  assert.deepEqual(listModelLibrarySections('.LIB $cash $ trailing comment\n.MODEL D1 D\n.ENDL $cash'), ['$cash'])
 })
 
 test('selects one or more named sections while excluding unselected model definitions', () => {

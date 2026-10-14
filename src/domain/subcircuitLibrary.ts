@@ -18,9 +18,10 @@ export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInp
 
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
-// A .LIB section is a single ngspice token, not a C-style identifier. Keep
-// selection names aligned with the native runtime's model-name punctuation.
-const librarySectionName = /^[A-Za-z0-9_][A-Za-z0-9_.$+/-]*$/
+// A .LIB section is a single ngspice token, not a C-style identifier. Quotes,
+// whitespace, and control characters cannot be part of the token. Leading
+// semicolon and // are comment markers in the accepted library text dialect.
+const librarySectionName = /^(?!;|\/\/)[^\s"'`\x00-\x1f]+$/
 export function isValidSpiceLibrarySectionName(value: string): boolean {
   return librarySectionName.test(value)
 }
@@ -192,7 +193,7 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     }
     if (directive === '.lib') {
       if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .LIB directives are not allowed inside a .SUBCKT.`)
-      const external = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z0-9_][A-Za-z0-9_.$+/-]*)$/i)
+      const external = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([^\s"'`\x00-\x1f]+)$/i)
       if (external) { lines.push({ line, section: activeSection }); continue }
       if (activeSection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
       const section = tokens[1]
@@ -252,12 +253,40 @@ function withoutInlineComment(line: string): string {
       // ngspice end-of-line comments use `$`, `;`, or `//` after whitespace.
       // `$` is also legal inside node and model identifiers, so it cannot be
       // treated as an unconditional delimiter.
-      const startsComment = (index === 0 || /\s/.test(line[index - 1]))
-        && (char === '$' || char === ';' || line.startsWith('//', index))
+      const tokenBoundary = index === 0 || /\s/.test(line[index - 1])
+      const startsComment = tokenBoundary
+        && (char === '$' && !isLibrarySectionDollar(line, index) || char === ';' || line.startsWith('//', index))
       if (startsComment) return line.slice(0, index).trim()
     }
   }
   return line.trim()
+}
+
+/** `$` is both an ngspice inline-comment marker and a valid .LIB token prefix. */
+function isLibrarySectionDollar(line: string, dollarIndex: number): boolean {
+  if (line[dollarIndex + 1] === undefined || /\s/.test(line[dollarIndex + 1])) return false
+  const directive = /^\s*\.lib\b/i.exec(line)
+  if (!directive || directive[0].length > dollarIndex) return false
+  const argumentsBeforeDollar = line.slice(directive[0].length, dollarIndex)
+  let count = 0
+  let quote = ''
+  let inToken = false
+  for (const character of argumentsBeforeDollar) {
+    if (quote) {
+      if (character === quote) quote = ''
+      continue
+    }
+    if (character === '"' || character === "'") {
+      if (!inToken) count += 1
+      inToken = true
+      quote = character
+    } else if (/\s/.test(character)) inToken = false
+    else if (!inToken) {
+      count += 1
+      inToken = true
+    }
+  }
+  return count < 2
 }
 
 function parseParameterDefaults(source: string, line: number, functions: ReadonlyMap<string, number>): SubcircuitParameter[] {
@@ -812,7 +841,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     }
     if (directive === '.lib') {
       if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .LIB file references must be outside a .SUBCKT.`)
-      const match = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z0-9_][A-Za-z0-9_.$+/-]*)$/i)
+      const match = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([^\s"'`\x00-\x1f]+)$/i)
       if (!match) {
         const tokens = text.split(/\s+/)
         if (tokens.length !== 2 || !isValidSpiceLibrarySectionName(tokens[1] ?? '')) throw new Error(`Line ${line.start}: malformed .LIB section or file reference.`)

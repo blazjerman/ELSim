@@ -1,0 +1,8 @@
+Ngspice .LIB arbitrary section-token compatibility: lib-section-leading-dollar-op
+V1 IN 0 10
+R1 IN OUT 1k
+.LIB lib-section-leading-dollar-op.lib $cash
+X1 OUT 0 TEST
+.op
+.print op v(out)
+.end

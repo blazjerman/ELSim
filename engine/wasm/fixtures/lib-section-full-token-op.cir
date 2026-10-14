@@ -1,0 +1,8 @@
+Ngspice .LIB arbitrary section-token compatibility: lib-section-full-token-op
+V1 IN 0 10
+R1 IN OUT 1k
+.LIB lib-section-full-token-op.lib A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\R
+X1 OUT 0 TEST
+.op
+.print op v(out)
+.end

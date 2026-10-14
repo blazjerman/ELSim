@@ -1,0 +1,5 @@
+.LIB A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\R
+.SUBCKT TEST A B
+R2 A B 1k
+.ENDS TEST
+.ENDL A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\R

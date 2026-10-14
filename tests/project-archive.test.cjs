@@ -190,10 +190,10 @@ test('user model libraries round-trip inside project data with digest and licens
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], licenseReference: 42 }] }), /malformed imported model library/)
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], selectedSections: ['missing'] }] }), /section names that exist/)
 
-  const extendedSectionName = '.LIB 1.8V\n.MODEL DFAST D(IS=1n)\n.ENDL 1.8V'
+  const extendedSectionName = '.LIB $cash\n.MODEL DFAST D(IS=1n)\n.ENDL $cash'
   const extendedDigest = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(extendedSectionName)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-  const extendedSectionProject = validateProject({ ...createStarterProject(), modelAssets: [{ id: 'numeric-section', filename: 'numeric-section.lib', sha256: extendedDigest, content: extendedSectionName, selectedSections: ['1.8V'], licenseStatus: 'unknown', importedAt: new Date().toISOString() }] })
-  assert.deepEqual(extendedSectionProject.modelAssets[0].selectedSections, ['1.8V'])
+  const extendedSectionProject = validateProject({ ...createStarterProject(), modelAssets: [{ id: 'punctuated-section', filename: 'punctuated-section.lib', sha256: extendedDigest, content: extendedSectionName, selectedSections: ['$cash'], licenseStatus: 'unknown', importedAt: new Date().toISOString() }] })
+  assert.deepEqual(extendedSectionProject.modelAssets[0].selectedSections, ['$cash'])
 })
 
 test('large imported model libraries validate many placed IC instances', async () => {
@@ -279,6 +279,12 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   mismatch.parts.at(-1).symbolPinOffsets[0] = [0, 0]
   assert.throws(() => validateProject(mismatch), /symbol pin order or coordinates do not match/)
   const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v8.schema.json'), 'utf8'))
+  const sectionPattern = new RegExp(schema.$defs.modelAsset.properties.selectedSections.items.pattern)
+  assert.equal(sectionPattern.test('$cash'), true)
+  assert.equal(sectionPattern.test('A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\\R'), true)
+  assert.equal(sectionPattern.test('white space'), false)
+  const legacySchema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v7.schema.json'), 'utf8'))
+  assert.equal(legacySchema.$defs.modelAsset.properties.selectedSections.items.pattern, schema.$defs.modelAsset.properties.selectedSections.items.pattern)
   assert.equal(schema.properties.symbolAssets.maxItems, 32)
   assert.equal(schema.properties.importedSchematicSource.$ref, '#/$defs/ltspiceSchematicSource')
   assert.equal(schema.properties.importedChildSchematicSources.maxItems, 63)

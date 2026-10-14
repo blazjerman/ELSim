@@ -5454,17 +5454,22 @@ test('model section picker preserves ngspice numeric and punctuated names', { ta
     '.LIB 1.8V', '.MODEL D_NUMERIC D(IS=1n)', '.ENDL 1.8V',
     '.LIB fast/typ', '.MODEL D_SLASH D(IS=2n)', '.ENDL fast/typ',
     '.LIB FAST$LOW', '.MODEL D_DOLLAR D(IS=3n)', '.ENDL FAST$LOW',
+    '.LIB $cash', '.MODEL D_LEADING_DOLLAR D(IS=4n)', '.ENDL $cash',
+    '.LIB A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\\R', '.MODEL D_SYMBOLS D(IS=5n)', '.ENDL A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\\R',
   ].join('\n')
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'punctuated-sections.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
   const dialog = page.getByRole('dialog', { name: 'Choose model sections' })
   await expect(dialog.getByRole('checkbox', { name: 'Include section 1.8V' })).toBeVisible()
   await expect(dialog.getByRole('checkbox', { name: 'Include section fast/typ' })).toBeVisible()
   await expect(dialog.getByRole('checkbox', { name: 'Include section FAST$LOW' })).toBeVisible()
-  await dialog.getByRole('checkbox', { name: 'Include section 1.8V' }).check()
+  await expect(dialog.getByRole('checkbox', { name: 'Include section $cash' })).toBeVisible()
+  await expect(dialog.getByRole('checkbox', { name: 'Include section A#B!C%D&E^F?G@H~I=J,K(L)M<N>O;P//Q\\R' })).toBeVisible()
+  await dialog.getByRole('checkbox', { name: 'Include section $cash' }).check()
   await dialog.getByRole('button', { name: 'Import selected sections' }).click()
-  await expect(page.getByText('D_NUMERIC', { exact: true })).toBeVisible()
+  await expect(page.getByText('D_LEADING_DOLLAR', { exact: true })).toBeVisible()
+  await expect(page.getByText('D_NUMERIC', { exact: true })).toHaveCount(0)
   await expect(page.getByText('D_SLASH', { exact: true })).toHaveCount(0)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null')?.modelAssets?.[0]?.selectedSections ?? null)).toEqual(['1.8V'])
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null')?.modelAssets?.[0]?.selectedSections ?? null)).toEqual(['$cash'])
 })
 
 test('junction tool toggles a crossing connection in the schematic', async ({ page }) => {

@@ -592,7 +592,7 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$+/-]*$"
+            "pattern": "^(?!;|//)[^\\s\"'`\\x00-\\x1f]+$"
           }
         },
         "licenseStatus": {
