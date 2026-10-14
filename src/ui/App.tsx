@@ -4128,6 +4128,11 @@ export default function App() {
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
     </div>
 
+    {(simulationResultStale || engineAssetAvailable === false) && <div className="mobile-app-notices" aria-live="polite">
+      {simulationResultStale && <span className="mobile-result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</span>}
+      {engineAssetAvailable === false && <div className="mobile-engine-missing-notice" role="status"><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={() => setNotice('To enable simulation, follow engine/wasm/README.md and run tools/build-ngspice-wasm.sh.')}>Setup</button></div>}
+    </div>}
+
     <div className={`workspace mobile-pane-${mobilePane}`}>
       <nav className="mobile-workspace-tabs" aria-label="Workspace panels">
         <button className={mobilePane === 'components' ? 'active' : ''} aria-pressed={mobilePane === 'components'} onClick={() => setMobilePane('components')}>Components</button>
