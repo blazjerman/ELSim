@@ -7,7 +7,7 @@ export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; mod
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
 export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
 export type SchematicCompatibilityWarning = ModelDialectWarning
-export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string }
+export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string; targetModelType?: string }
 export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number; section?: string }
 export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
 export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; section?: string; reason: 'missing' | 'ambiguous' | 'unsafe' | 'section' }
@@ -725,7 +725,9 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   const subcircuits = new Map<string, string>()
   const subcircuitAssets = new Map<string, string>()
   const deviceModelAssets = new Map<string, string>()
+  const globalDeviceModels = new Map<string, SpiceModelDefinition>()
   const scopedDeviceModelAssets = new Map<string, string>()
+  const scopedDeviceModels = new Map<string, SpiceModelDefinition>()
   const subcircuitParents = new Map<string, string | undefined>()
   const definitionLocations = new Map<string, ModelDefinitionConflict>()
   for (const { asset, parsed } of parsedAssets) {
@@ -741,6 +743,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     for (const model of parsed.models) {
       if (model.scope) {
         scopedDeviceModelAssets.set(`${asset.id}:${model.scope.toLowerCase()}:${model.name.toLowerCase()}`, asset.id)
+        scopedDeviceModels.set(`${asset.id}:${model.scope.toLowerCase()}:${model.name.toLowerCase()}`, model)
         continue
       }
       const key = `device:${model.name.toLowerCase()}`
@@ -748,6 +751,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: model.startLine })
       definitionLocations.set(key, conflict)
       deviceModelAssets.set(model.name.toLowerCase(), asset.id)
+      globalDeviceModels.set(model.name.toLowerCase(), model)
     }
   }
   const missing: ModelDependencyIssue[] = [], resolved: ResolvedModelDependency[] = []
@@ -778,28 +782,42 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     const modelCandidates = dependency.kind === 'device' ? alternateBjtModelNames.get(dependency) : undefined
     let resolvedDependency = dependency
     let targetAssetId: string | undefined
+    let targetModelType: string | undefined
     const findDeviceModel = (modelName: string) => {
       let scope: string | undefined = dependency.owner.toLowerCase()
       while (scope) {
-        const scopedAssetId = scopedDeviceModelAssets.get(`${asset.id}:${scope}:${modelName.toLowerCase()}`)
-        if (scopedAssetId) return scopedAssetId
+        const key = `${asset.id}:${scope}:${modelName.toLowerCase()}`
+        const scopedAssetId = scopedDeviceModelAssets.get(key)
+        if (scopedAssetId) return { assetId: scopedAssetId, model: scopedDeviceModels.get(key)! }
         scope = subcircuitParents.get(`${asset.id}:${scope}`)
       }
-      return deviceModelAssets.get(modelName.toLowerCase())
+      const foldedName = modelName.toLowerCase()
+      const globalAssetId = deviceModelAssets.get(foldedName)
+      return globalAssetId ? { assetId: globalAssetId, model: globalDeviceModels.get(foldedName)! } : undefined
     }
     if (dependency.kind === 'subcircuit') targetAssetId = subcircuitAssets.get(dependency.modelName.toLowerCase())
     else if (modelCandidates) {
       // Prefer the rightmost candidate that resolves to a declared card: it
       // is the model token after any optional BJT substrate/temperature nodes.
       for (let index = modelCandidates.length - 1; index >= 0; index -= 1) {
-        targetAssetId = findDeviceModel(modelCandidates[index])
-        if (targetAssetId) {
+        const found = findDeviceModel(modelCandidates[index])
+        targetAssetId = found?.assetId
+        if (found) {
+          targetModelType = found.model.type
           resolvedDependency = { ...dependency, modelName: modelCandidates[index] }
           break
         }
       }
-      targetAssetId ??= findDeviceModel(dependency.modelName)
-    } else targetAssetId = findDeviceModel(dependency.modelName)
+      if (!targetAssetId) {
+        const found = findDeviceModel(dependency.modelName)
+        targetAssetId = found?.assetId
+        targetModelType = found?.model.type
+      }
+    } else {
+      const found = findDeviceModel(dependency.modelName)
+      targetAssetId = found?.assetId
+      targetModelType = found?.model.type
+    }
     const key = resolvedDependency.modelName.toLowerCase()
     if (!targetAssetId) missing.push({ assetId: asset.id, filename: asset.filename, ...dependency })
     else if (dependency.kind === 'subcircuit') {
@@ -808,7 +826,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       const edges = graph.get(from) ?? new Set<string>()
       edges.add(key)
       graph.set(from, edges)
-    } else resolved.push({ assetId: asset.id, filename: asset.filename, ...resolvedDependency, targetAssetId })
+    } else resolved.push({ assetId: asset.id, filename: asset.filename, ...resolvedDependency, targetAssetId, ...(targetModelType ? { targetModelType } : {}) })
   }
   const recursiveChains: string[][] = [], found = new Set<string>(), visited = new Set<string>()
   const stack: string[] = []

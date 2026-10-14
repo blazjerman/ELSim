@@ -8223,6 +8223,29 @@ test('circuit checks explain missing transitive model dependencies and select th
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('XAMP1 · AMP')
 })
 
+test('circuit checks identify an incompatible native passive model inside an imported IC', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate(async () => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const content = '.SUBCKT AMP IN OUT\nR1 IN OUT R_BAD\n.ENDS AMP\n.MODEL R_BAD C(CAP=1p)\n'
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
+    const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    project.modelAssets = [{ id: 'wrong-passive-family', filename: 'amp.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+    project.parts.push({ id: 'incompatible-passive-instance', kind: 'subcircuit', ref: 'XAMP1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  const issue = report.getByRole('listitem').filter({ hasText: 'R1 uses R_BAD type C, expected R' })
+  await expect(issue).toContainText('amp.lib:2')
+  await issue.getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="incompatible-passive-instance"].selected')).toHaveCount(1)
+})
+
 test('circuit checks select the component with an ambiguous imported model name', async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()

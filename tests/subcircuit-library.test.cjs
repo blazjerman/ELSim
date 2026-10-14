@@ -63,6 +63,7 @@ test('resolves native ngspice passive and transmission-line model references', (
     ['L1', 'LMOD', 'models'], ['L2', 'LMOD', 'models'], ['L3', 'LMOD', 'models'],
     ['O1', 'LTRAMOD', 'models'], ['U1', 'URCMOD', 'models'],
   ])
+  assert.deepEqual(analysis.dependencies.resolved.map(({ targetModelType }) => targetModelType), ['R', 'R', 'R', 'C', 'C', 'C', 'L', 'L', 'L', 'LTRA', 'URC'])
   assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'NETWORK' }])].sort(), ['devices', 'models'])
 
   const unresolved = analyzeModelDependencies([{ id: 'broken', filename: 'broken.lib', content: '.SUBCKT BROKEN IN OUT\nR1 IN OUT MISSING\n.ENDS BROKEN' }])

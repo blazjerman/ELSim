@@ -462,6 +462,21 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
           partId,
         })
       }
+      const nativeModelTypeByDevice = { r: 'r', c: 'c', l: 'l', o: 'ltra', u: 'urc' } as const
+      for (const dependency of dependencies.resolved) {
+        if (dependency.kind !== 'device' || !dependency.targetModelType) continue
+        const expectedType = nativeModelTypeByDevice[dependency.reference[0]?.toLowerCase() as keyof typeof nativeModelTypeByDevice]
+        const actualType = dependency.targetModelType.toLowerCase()
+        if (!expectedType || actualType === expectedType) continue
+        const affectedModels = modelParts.filter((part) => reaches(part.modelName, dependency.owner.toLowerCase()))
+        for (const part of affectedModels) issues.push({
+          id: `incompatible-model-dependency:${dependency.assetId}:${dependency.sourceLine}:${dependency.reference.toLowerCase()}:${part.id}`,
+          severity: 'warning',
+          title: `${dependency.reference} uses ${dependency.modelName} type ${actualType.toUpperCase()}, expected ${expectedType.toUpperCase()}`,
+          detail: `${dependency.reference} is an ${dependency.reference[0].toUpperCase()} device in ${dependency.filename}:${dependency.sourceLine}, but ${dependency.modelName} is a ${actualType.toUpperCase()} model. This ngspice device requires a ${expectedType.toUpperCase()} model. Review the imported model assignment before running.`,
+          partId: part.id,
+        })
+      }
       for (const chain of dependencies.recursiveChains) {
         const chainNames = new Set(chain.map((name) => name.toLowerCase()))
         const affected = modelParts.find((part) => [...chainNames].some((name) => reaches(part.modelName, name)))

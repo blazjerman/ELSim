@@ -506,6 +506,29 @@ test('reports missing transitive dependencies of an instantiated model', () => {
   assert.ok(checkCircuit(project).some((item) => item.id.startsWith('missing-model-dependency:') && /MISSING_CORE/.test(item.title)))
 })
 
+test('reports passive device references with an incompatible imported model family', () => {
+  const project = createStarterProject()
+  project.modelAssets = [
+    { id: 'amp-lib', filename: 'amp.lib', sha256: '0'.repeat(64), content: '.SUBCKT AMP IN OUT\nR1 IN OUT R_BAD\nL1 IN OUT L_BAD\n.MODEL R_BAD C(CAP=1p)\n.ENDS AMP\n', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'passive-lib', filename: 'passives.lib', sha256: '1'.repeat(64), content: '.MODEL L_BAD R(RSH=100)\n', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+  ]
+  const instance = { id: 'amp-instance', kind: 'subcircuit', ref: 'X1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 }
+  project.parts.push(instance)
+  project.sheets[0].parts = project.parts
+
+  const issues = checkCircuit(project).filter((item) => item.id.startsWith('incompatible-model-dependency:'))
+  assert.deepEqual(issues.map(({ title }) => title).sort(), [
+    'L1 uses L_BAD type R, expected L',
+    'R1 uses R_BAD type C, expected R',
+  ])
+  assert.ok(issues.every((issue) => issue.severity === 'warning' && issue.partId === instance.id))
+  assert.ok(issues.some((issue) => /amp\.lib:2/.test(issue.detail)))
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.SUBCKT AMP IN OUT\nR1 IN OUT R_GOOD\nL1 IN OUT L_GOOD\n.MODEL R_GOOD R(RSH=100)\n.ENDS AMP\n' }
+  project.modelAssets[1] = { ...project.modelAssets[1], content: '.MODEL L_GOOD L(IND=1u)\n' }
+  assert.equal(checkCircuit(project).some((item) => item.id.startsWith('incompatible-model-dependency:')), false)
+})
+
 test('reports placed external ICs with no matching imported subcircuit definition', () => {
   const project = createHierarchicalExampleProject()
   const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
