@@ -120,6 +120,42 @@ export function RectifierPeakPrediction({ offsetValue, amplitudeValue }: { offse
   />
 }
 
+export function BridgeRipplePrediction({ offsetValue, amplitudeValue, frequencyValue, capacitanceValue, loadResistanceValue, referenceResistanceValue }: {
+  offsetValue: string
+  amplitudeValue: string
+  frequencyValue: string
+  capacitanceValue: string
+  loadResistanceValue: string
+  referenceResistanceValue: string
+}) {
+  const offset = componentMagnitude(offsetValue, 'source')
+  const amplitude = componentMagnitude(amplitudeValue, 'source')
+  const frequencyKhz = parsePredictionValue(frequencyValue, 'kHz')
+  const frequency = frequencyKhz === null ? null : frequencyKhz * 1000
+  const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
+  const load = componentMagnitude(loadResistanceValue, 'resistor')
+  const reference = componentMagnitude(referenceResistanceValue, 'resistor')
+  const equivalentResistance = load !== null && reference !== null && load > 0 && reference > 0
+    ? load * reference / (load + reference)
+    : null
+  const peak = offset !== null && amplitude !== null ? Math.max(0, Math.abs(offset) + Math.abs(amplitude) - 1.4) : null
+  const predictedRipple = peak !== null && peak > 0 && frequency !== null && frequency > 0
+    && capacitance !== null && capacitance > 0 && equivalentResistance !== null
+    ? peak * (1 - Math.exp(-1 / (2 * frequency * equivalentResistance * capacitance)))
+    : null
+  const explanation = predictedRipple === null || equivalentResistance === null || frequency === null || capacitance === null || peak === null
+    ? 'Use numeric source, frequency, capacitor, and load values to estimate the ripple.'
+    : `Two bridge diodes drop about 1.4 V, leaving an estimated ${formatValue(peak)} V capacitor peak. The ripple interval is 1/(2f) = ${formatValue(1000 / (2 * frequency))} ms. With RLOAD ∥ RREF = ${formatResistance(equivalentResistance)} and C1 = ${capacitanceValue}, an RC discharge estimate gives ${formatValue(predictedRipple)} V peak-to-peak ripple. This assumes the capacitor recharges briefly at each peak and uses a constant diode drop; the actual ngspice waveform is nonlinear.`
+  return <NumericPrediction
+    id="bridge-ripple-prediction"
+    prompt="Before running, estimate VOUT ripple between adjacent peaks"
+    unit="V"
+    predictedValue={predictedRipple}
+    absoluteTolerance={0.02}
+    explanation={explanation}
+  />
+}
+
 type BjtSwitchPredictionProps = {
   driveValue: string
   baseResistanceValue: string
@@ -570,7 +606,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -597,6 +633,7 @@ type BeginnerPredictionProps = {
   offsetValue?: string
   amplitudeValue?: string
   frequencyValue?: string
+  referenceResistanceValue?: string
 }
 
 /** Keep lesson-only prediction logic out of the editor's initial download. */
@@ -608,6 +645,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'diode-polarity': return <DiodePolarityPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'rectifier-peak': return <RectifierPeakPrediction offsetValue={props.offsetValue ?? ''} amplitudeValue={props.amplitudeValue ?? ''}/>
+    case 'bridge-ripple': return <BridgeRipplePrediction offsetValue={props.offsetValue ?? ''} amplitudeValue={props.amplitudeValue ?? ''} frequencyValue={props.frequencyValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''} referenceResistanceValue={props.referenceResistanceValue ?? ''}/>
     case 'npn-switch': return <NpnSwitchPrediction driveValue={props.driveValue ?? ''} baseResistanceValue={props.resistanceValue ?? ''} betaValue={props.betaValue ?? ''} supplyValue={props.supplyValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'pnp-switch': return <PnpSwitchPrediction driveValue={props.driveValue ?? ''} baseResistanceValue={props.resistanceValue ?? ''} betaValue={props.betaValue ?? ''} supplyValue={props.supplyValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'nmos-switch': return <FetSwitchPrediction channelType="n" driveValue={props.driveValue ?? ''} supplyValue={props.supplyValue ?? ''} thresholdValue={props.thresholdValue ?? ''}/>

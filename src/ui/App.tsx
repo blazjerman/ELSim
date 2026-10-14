@@ -1911,14 +1911,32 @@ export default function App() {
     hoveredSchematicObjectRef.current = next
     setHasHoveredSchematicObject((hasHovered) => hasHovered === Boolean(next) ? hasHovered : Boolean(next))
   }, [])
-  const [selectedWireIds, setSelectedWireIds] = useState<string[]>([])
+  const [selectedWireIds, setSelectedWireIdsState] = useState<string[]>([])
+  const selectedWireIdsRef = useRef(selectedWireIds)
+  const setSelectedWireIds = useCallback((next: string[] | ((current: string[]) => string[])) => {
+    const resolved = typeof next === 'function' ? next(selectedWireIdsRef.current) : next
+    selectedWireIdsRef.current = resolved
+    setSelectedWireIdsState(resolved)
+  }, [])
   const selectedWireId = selectedWireIds.at(-1) ?? null
   const setSelectedWireId = useCallback((id: string | null) => setSelectedWireIds(id ? [id] : []), [])
   const pendingPasteSelection = useRef<{ partIds: string[]; wireIds: string[]; labelIds: string[]; selection: Selection } | null>(null)
-  const [selectedPartIds, setSelectedPartIds] = useState<string[]>(() => initialSelectedPartId ? [initialSelectedPartId] : [])
+  const [selectedPartIds, setSelectedPartIdsState] = useState<string[]>(() => initialSelectedPartId ? [initialSelectedPartId] : [])
+  const selectedPartIdsRef = useRef(selectedPartIds)
+  const setSelectedPartIds = useCallback((next: string[] | ((current: string[]) => string[])) => {
+    const resolved = typeof next === 'function' ? next(selectedPartIdsRef.current) : next
+    selectedPartIdsRef.current = resolved
+    setSelectedPartIdsState(resolved)
+  }, [])
   const sheetSelectionState = useRef(new Map<string, SheetSelectionState>())
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
-  const [selectedNetLabelIds, setSelectedNetLabelIds] = useState<string[]>([])
+  const [selectedNetLabelIds, setSelectedNetLabelIdsState] = useState<string[]>([])
+  const selectedNetLabelIdsRef = useRef(selectedNetLabelIds)
+  const setSelectedNetLabelIds = useCallback((next: string[] | ((current: string[]) => string[])) => {
+    const resolved = typeof next === 'function' ? next(selectedNetLabelIdsRef.current) : next
+    selectedNetLabelIdsRef.current = resolved
+    setSelectedNetLabelIdsState(resolved)
+  }, [])
   const [tool, setTool] = useState<ToolMode>('select')
   const [pendingComponentKind, setPendingComponentKind] = useState<PartKind | null>(null)
   const [pendingComponentRotation, setPendingComponentRotation] = useState<Part['rotation']>(0)
@@ -3411,12 +3429,18 @@ export default function App() {
         return
       }
       if ((event.ctrlKey || event.metaKey) && key === 'enter') { event.preventDefault(); startSimulation(); return }
-      if ((event.ctrlKey || event.metaKey) && key === 'c' && (selectedParts.length || selectedWireIds.length || selectedNetLabelIds.length || selectedLabel)) {
+      if ((event.ctrlKey || event.metaKey) && key === 'c' && (selectedPartIdsRef.current.length || selectedWireIdsRef.current.length || selectedNetLabelIdsRef.current.length)) {
         event.preventDefault()
-        const partIds = selectedParts.map((part) => part.id)
-        const labelIds = selectedNetLabelIds.length ? selectedNetLabelIds : selectedLabel ? [selectedLabel.id] : []
-        copiedParts.current = createPartClipboard(project, partIds, labelIds, selectedWireIds)
-        if (!partIds.length && !selectedWireIds.length && copiedParts.current.netLabels.length) {
+        // Selection is updated urgently in the canvas while the inspector uses
+        // a transition. Read the synchronous refs so a fast Ctrl+C cannot copy
+        // the previous render's selection.
+        const currentProject = projectRef.current
+        const currentPartIds = new Set(currentProject.parts.map((part) => part.id))
+        const partIds = selectedPartIdsRef.current.filter((id) => currentPartIds.has(id))
+        const labelIds = selectedNetLabelIdsRef.current
+        const wireIds = selectedWireIdsRef.current
+        copiedParts.current = createPartClipboard(currentProject, partIds, labelIds, wireIds)
+        if (!partIds.length && !wireIds.length && copiedParts.current.netLabels.length) {
           const labels = copiedParts.current.netLabels
           setNotice(labels.length === 1
             ? `Copied net label ${labels[0].name}. Pasting it keeps the same name; same-name labels on this sheet connect.`
@@ -3424,7 +3448,7 @@ export default function App() {
           return
         }
         const copiedDescription = partIds.length
-          ? `${partIds.length === 1 ? selectedParts[0].ref : `${partIds.length} components`} and ${copiedParts.current.wires.length} wire segments`
+          ? `${partIds.length === 1 ? currentProject.parts.find((part) => part.id === partIds[0])?.ref ?? '1 component' : `${partIds.length} components`} and ${copiedParts.current.wires.length} wire segments`
           : `${copiedParts.current.wires.length} wire segment${copiedParts.current.wires.length === 1 ? '' : 's'}`
         const copiedLabels = copiedParts.current.netLabels.length
           ? ` and ${copiedParts.current.netLabels.length} net label${copiedParts.current.netLabels.length === 1 ? '' : 's'}`
@@ -4193,7 +4217,7 @@ export default function App() {
       'ac-highpass': { title: 'See the RC high-pass cutoff', guidance: 'Predict the cutoff from R1 and C1, then run the AC sweep and compare V(VIN) with V(VOUT). Below cutoff the output is reduced; at cutoff it is about 0.707 V, or 3 dB below the 1 V input.' },
       'sine-wave': { title: 'Read a sine-wave source', guidance: 'Run the transient and compare V(VIN) with I(R1). The offset moves the waveform up or down. Amplitude is the nominal peak distance from the offset; a complete undamped cycle has twice that peak-to-peak voltage. Damping changes later peaks, while delay and phase shift the waveform in time. The cycle period is 1/f seconds. Change the source settings and use the predictions below to compare before rerunning.' },
       rectifier: { title: 'A diode passes one half of an AC wave', guidance: 'Before running, estimate the positive output peak after the diode using its approximate 0.7 V forward drop. Then compare V(VIN) with V(VOUT): the diode conducts on positive half-cycles and blocks negative ones. Inspect I(D1) to see when it conducts; the selected diode model gives the actual nonlinear result.' },
-      'bridge-rectifier': { title: 'Rectify both halves and smooth the output', guidance: 'Run the transient, then right-click C1 and choose Plot voltage across pin 1 → pin 2. The bridge keeps this capacitor voltage positive on both input half-cycles; C1 charges near each peak and discharges through RLOAD between peaks. Change C1 or RLOAD to compare the ripple.' },
+      'bridge-rectifier': { title: 'Rectify both halves and smooth the output', guidance: 'Before running, estimate the voltage ripple between peaks using the full-wave interval 1/(2f), C1, and the effective load RLOAD ∥ RREF. Then run the transient, right-click C1, and choose Plot voltage across pin 1 → pin 2. Compare your first-order RC estimate with the nonlinear ngspice waveform; increasing C1 or the load resistance should reduce ripple.' },
       led: { title: 'Current makes the LED glow', guidance: 'Run the pulse response and scrub between on and off. The glow follows solved LED current; it is not a thermal model.' },
       'led-current-limiter': { title: 'Limit current to protect an LED', guidance: 'Before running, estimate the LED current using a rough 2 V LED drop. R1 limits current from the 5 V supply; increase R1 to reduce the LED current, then compare your estimate with ngspice.' },
       'led-parallel': { title: 'Give every parallel LED its own resistor', guidance: 'Run the operating point and compare I(D1) with I(D2). Each branch has its own 330 Ω resistor. Change R2 to 680 Ω and rerun: only the second branch current should drop.' },
@@ -4418,6 +4442,7 @@ export default function App() {
                 {exampleLesson.id === 'current-source' && <BeginnerPrediction kind="current-source" key={`${partsById.get('isource-i1')?.value ?? ''}:${partsById.get('isource-r1')?.value ?? ''}`} currentValue={partsById.get('isource-i1')?.value ?? ''} resistanceValue={partsById.get('isource-r1')?.value ?? ''}/>}
                 {exampleLesson.id === 'diode-polarity' && <BeginnerPrediction kind="diode-polarity" key={partsById.get('diode-polarity-v1')?.value ?? ''} supplyValue={partsById.get('diode-polarity-v1')?.value ?? ''}/>}
                 {exampleLesson.id === 'rectifier' && <BeginnerPrediction kind="rectifier-peak" key={`${partsById.get('rectifier-v1')?.sine?.offset ?? ''}:${partsById.get('rectifier-v1')?.sine?.amplitude ?? ''}`} offsetValue={partsById.get('rectifier-v1')?.sine?.offset ?? ''} amplitudeValue={partsById.get('rectifier-v1')?.sine?.amplitude ?? ''}/>}
+                {exampleLesson.id === 'bridge-rectifier' && <BeginnerPrediction kind="bridge-ripple" key={['bridge-v1', 'bridge-c1', 'bridge-rload', 'bridge-rref'].map((id) => { const part = partsById.get(id); return `${part?.value ?? ''}:${part?.sine?.offset ?? ''}:${part?.sine?.amplitude ?? ''}:${part?.sine?.frequency ?? ''}` }).join('|')} offsetValue={partsById.get('bridge-v1')?.sine?.offset ?? ''} amplitudeValue={partsById.get('bridge-v1')?.sine?.amplitude ?? ''} frequencyValue={partsById.get('bridge-v1')?.sine?.frequency ?? ''} capacitanceValue={partsById.get('bridge-c1')?.value ?? ''} loadResistanceValue={partsById.get('bridge-rload')?.value ?? ''} referenceResistanceValue={partsById.get('bridge-rref')?.value ?? ''}/>}
                 {exampleLesson.id === 'transistor' && <BeginnerPrediction kind="npn-switch" key={['switch-vdrive', 'switch-rbase', 'switch-q1', 'switch-vcc', 'switch-rload'].map((id) => partsById.get(id)?.value ?? '').join(':')} driveValue={partsById.get('switch-vdrive')?.value ?? ''} resistanceValue={partsById.get('switch-rbase')?.value ?? ''} betaValue={partsById.get('switch-q1')?.value ?? ''} supplyValue={partsById.get('switch-vcc')?.value ?? ''} loadResistanceValue={partsById.get('switch-rload')?.value ?? ''}/>}
                 {exampleLesson.id === 'pnp' && <BeginnerPrediction kind="pnp-switch" key={['pnp-switch-vdrive', 'pnp-switch-rbase', 'pnp-switch-q1', 'pnp-switch-vcc', 'pnp-switch-rload'].map((id) => partsById.get(id)?.value ?? '').join(':')} driveValue={partsById.get('pnp-switch-vdrive')?.value ?? ''} resistanceValue={partsById.get('pnp-switch-rbase')?.value ?? ''} betaValue={partsById.get('pnp-switch-q1')?.value ?? ''} supplyValue={partsById.get('pnp-switch-vcc')?.value ?? ''} loadResistanceValue={partsById.get('pnp-switch-rload')?.value ?? ''}/>}
                 {exampleLesson.id === 'mosfet' && <BeginnerPrediction kind="nmos-switch" key={['mos-switch-vdrive', 'mos-switch-m1'].map((id) => partsById.get(id)?.value ?? '').concat(fetThresholdValue(partsById.get('mos-switch-m1'), importedDeviceModels, '2 V')).join(':')} driveValue={partsById.get('mos-switch-vdrive')?.value ?? ''} supplyValue={partsById.get('mos-switch-vcc')?.value ?? ''} thresholdValue={fetThresholdValue(partsById.get('mos-switch-m1'), importedDeviceModels, '2 V')}/>}

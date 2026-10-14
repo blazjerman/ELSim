@@ -15,6 +15,12 @@ async function waitForProjectAutosave(page: Page) {
   // The status footer is intentionally hidden on narrow screens. Verify the
   // actual persistence marker instead of requiring desktop-only status text.
   await expect.poll(() => page.evaluate(() => Number(localStorage.getItem('elsim:project:v7:savedAt')) || 0)).toBeGreaterThan(0)
+  // A storage marker can belong to a previous session. Wait for startup
+  // recovery and this session's first save before tests replace localStorage.
+  await expect.poll(() => page.evaluate(() => {
+    const status = document.querySelector('.app-status [role="status"]')?.textContent ?? ''
+    return status.includes('All changes saved locally') || status.includes('Saved in browser recovery storage')
+  })).toBe(true)
 }
 
 async function expectVisibleKeyboardControlsNamed(page: Page) {
@@ -709,6 +715,39 @@ test('half-wave rectifier predicts its output peak from the live sine source', {
   await lesson.getByRole('button', { name: 'Check prediction' }).click()
   await expect(lesson.getByRole('status')).toContainText('Correct. The positive input peak is 8 V')
   await expect(lesson.getByRole('status')).toContainText('estimated output peak is 7.3 V')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+})
+
+test('bridge-rectifier lesson predicts ripple and updates with the smoothing capacitor', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Diodes & LEDs' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Bridge rectifier and smoothing capacitor' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('textbox', { name: 'Before running, estimate VOUT ripple between adjacent peaks' })
+  await expect(lesson).toContainText('full-wave interval 1/(2f)')
+  await estimate.fill('0.3')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Not quite. Two bridge diodes drop about 1.4 V')
+  await expect(lesson.getByRole('status')).toContainText('an RC discharge estimate gives 0.1615 V peak-to-peak ripple')
+
+  await page.locator('.circuit-part[data-part-id="bridge-c1"]').click()
+  await page.locator('[data-part-setting="bridge-c1:value"]').fill('470 µF')
+  await expect(estimate).toHaveValue('')
+  await estimate.fill('0.08 V')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. Two bridge diodes drop about 1.4 V')
+  await expect(lesson.getByRole('status')).toContainText('an RC discharge estimate gives 0.07654 V peak-to-peak ripple')
+
+  await page.locator('.circuit-part[data-part-id="bridge-v1"]').click()
+  await page.locator('[data-part-setting="bridge-v1:sine.offset"]').fill('-5 V')
+  await expect(estimate).toHaveValue('')
+  await estimate.fill('0.18 V')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('estimated 8.6 V capacitor peak')
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
 })
 
@@ -6384,7 +6423,7 @@ test('bridge rectifier example keeps capacitor voltage positive between AC peaks
   await dialog.locator('.example-list article').filter({ hasText: 'Bridge rectifier and smoothing capacitor' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('Bridge rectifier and smoothing capacitor')
-  await expect(page.getByLabel('Guided example')).toContainText('both input half-cycles')
+  await expect(page.getByLabel('Guided example')).toContainText('full-wave interval 1/(2f)')
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await expect(page.locator('svg.schematic .wire-line')).toHaveCount(28)
   await page.getByRole('button', { name: 'Run simulation' }).click()
@@ -8160,13 +8199,9 @@ test('transient measurements expose peak-to-peak and preserve it in the netlist'
 test('transient measurement time windows persist and appear in the netlist', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
-  await page.evaluate(() => {
-    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    project.simulation.transientMeasurements = [{ id: 'WindowPeak', operation: 'max', vector: 'V(vout)' }]
-    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
-  })
-  await page.reload()
-  await page.keyboard.press('Escape')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add measurement', exact: true }).click()
+  await page.locator('.measurement-card').first().getByLabel('Name').fill('WindowPeak')
   await page.getByLabel('Measurement 1 from time').fill('4m')
   await page.getByLabel('Measurement 1 to time').fill('2m')
   await expect(page.getByLabel('Measurement 1 from time')).toHaveAttribute('aria-invalid', 'true')
@@ -8175,6 +8210,10 @@ test('transient measurement time windows persist and appear in the netlist', asy
   await expect(page.getByLabel('Measurement 1 from time')).toHaveAttribute('aria-invalid', 'false')
   await page.getByLabel('Measurement 1 from time').fill('2m')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.transientMeasurements[0])).toMatchObject({ id: 'WindowPeak', from: '2m', to: '8m' })
+  await page.reload()
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await expect(page.getByLabel('Measurement 1 from time')).toHaveValue('2m')
+  await expect(page.getByLabel('Measurement 1 to time')).toHaveValue('8m')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('.meas tran ELSIM_WindowPeak max V(vout) FROM=2m TO=8m')
 })
