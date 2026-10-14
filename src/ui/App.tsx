@@ -3565,8 +3565,11 @@ export default function App() {
       }
       const response = event.data
       if (response.type === 'progress') {
-        setRunState(response.fraction < 0.2 ? 'loading' : 'running')
-        if (response.message) setNotice(response.message)
+        if (response.message?.startsWith('[ELSim worker profile] ')) console.info(response.message)
+        else {
+          setRunState(response.fraction < 0.2 ? 'loading' : 'running')
+          if (response.message) setNotice(response.message)
+        }
       } else if (response.type === 'result') {
         setCompatibilityDiagnostic(null)
         if (response.result.analysis === 'tran' || response.result.analysis === 'ac' || response.result.analysis === 'dc' || response.result.analysis === 'noise') {

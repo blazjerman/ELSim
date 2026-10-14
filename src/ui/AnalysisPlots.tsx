@@ -104,7 +104,15 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
   const pendingPan = useRef(0)
   const panFrame = useRef<number | null>(null)
   const onHorizontalPanRef = useRef(onHorizontalPan)
+  const listeners = useRef<{ move: (event: globalThis.PointerEvent) => void; end: (event: globalThis.PointerEvent) => void; cancel: (event: globalThis.PointerEvent) => void } | null>(null)
   onHorizontalPanRef.current = onHorizontalPan
+  const removeWindowListeners = () => {
+    if (!listeners.current) return
+    window.removeEventListener('pointermove', listeners.current.move)
+    window.removeEventListener('pointerup', listeners.current.end)
+    window.removeEventListener('pointercancel', listeners.current.cancel)
+    listeners.current = null
+  }
   const flushPan = () => {
     if (panFrame.current !== null) cancelAnimationFrame(panFrame.current)
     panFrame.current = null
@@ -114,53 +122,61 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
   }
   useEffect(() => () => {
     if (panFrame.current !== null) cancelAnimationFrame(panFrame.current)
+    removeWindowListeners()
   }, [])
   const start = (event: PointerEvent<SVGSVGElement>) => {
     if (event.button !== 0) return
+    removeWindowListeners()
     pendingPan.current = 0
     // Measure once when the gesture starts. Reading layout on every pointermove
     // can force synchronous layout while the browser is processing the drag.
     const width = event.currentTarget.getBoundingClientRect().width
     drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, width, moved: false }
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-  const move = (event: PointerEvent<SVGSVGElement>) => {
-    const active = drag.current
-    if (!active || active.pointerId !== event.pointerId) return
-    const dx = event.clientX - active.x, dy = event.clientY - active.y
-    if (Math.abs(dx) + Math.abs(dy) < 2) return
-    active.moved = true
-    active.x = event.clientX
-    active.y = event.clientY
-    if (Math.abs(dx) >= 1) {
-      pendingPan.current -= dx / Math.max(active.width, 1)
-      if (panFrame.current === null) {
-        panFrame.current = requestAnimationFrame(() => {
-          panFrame.current = null
-          const delta = pendingPan.current
-          pendingPan.current = 0
-          if (delta) onHorizontalPanRef.current(delta)
-        })
+    const move = (pointerEvent: globalThis.PointerEvent) => {
+      const active = drag.current
+      if (!active || active.pointerId !== pointerEvent.pointerId) return
+      const dx = pointerEvent.clientX - active.x, dy = pointerEvent.clientY - active.y
+      if (Math.abs(dx) + Math.abs(dy) < 2) return
+      active.moved = true
+      active.x = pointerEvent.clientX
+      active.y = pointerEvent.clientY
+      if (Math.abs(dx) >= 1) {
+        pendingPan.current -= dx / Math.max(active.width, 1)
+        if (panFrame.current === null) {
+          panFrame.current = requestAnimationFrame(() => {
+            panFrame.current = null
+            const delta = pendingPan.current
+            pendingPan.current = 0
+            if (delta) onHorizontalPanRef.current(delta)
+          })
+        }
       }
     }
-  }
-  const end = (event: PointerEvent<SVGSVGElement>) => {
-    if (drag.current?.pointerId === event.pointerId) {
+    const end = (pointerEvent: globalThis.PointerEvent) => {
+      if (drag.current?.pointerId !== pointerEvent.pointerId) return
       flushPan()
       suppressClick.current = drag.current.moved
       drag.current = null
+      removeWindowListeners()
     }
-  }
-  const cancel = (event: PointerEvent<SVGSVGElement>) => {
-    if (drag.current?.pointerId === event.pointerId) { flushPan(); drag.current = null }
-    suppressClick.current = false
+    const cancel = (pointerEvent: globalThis.PointerEvent) => {
+      if (drag.current?.pointerId !== pointerEvent.pointerId) return
+      flushPan()
+      drag.current = null
+      suppressClick.current = false
+      removeWindowListeners()
+    }
+    listeners.current = { move, end, cancel }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', cancel)
   }
   const shouldSuppressClick = () => {
     const shouldSuppress = suppressClick.current
     suppressClick.current = false
     return shouldSuppress
   }
-  return { start, move, end, cancel, shouldSuppressClick }
+  return { start, shouldSuppressClick }
 }
 
 
@@ -373,7 +389,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   }
   return <div className="waveform-view">
     <div className="waveform-title"><strong>Transient results</strong><span>{traces[0]?.axis.length.toLocaleString()} points · {traces.length} vectors</span><TransientCursorTime axis={axis}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={zoomValue} valuePan={panValue} disabled={(axis?.length ?? 0) < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${formatTime(minTime, axis?.[axis.length - 1] ?? maxTime)} to ${formatTime(maxTime, axis?.[axis.length - 1] ?? maxTime)}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
+    <svg ref={plotSize.ref} className="waveform-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`Transient waveforms from ${formatTime(minTime, axis?.[axis.length - 1] ?? maxTime)} to ${formatTime(maxTime, axis?.[axis.length - 1] ?? maxTime)}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handlePlotKeyDown} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } handleCursor(event) }}>
       {minorValueTicks.map((value) => <line key={`y-minor-${value}`} x1={left} x2={right} y1={yForValue(value)} y2={yForValue(value)} className="plot-grid-minor"/>)}
       {valueTicks.map((value) => <g key={`y-major-${value}`}><line x1={left} x2={right} y1={yForValue(value)} y2={yForValue(value)} className={Math.abs(value) <= valueStep * 1e-8 ? 'plot-grid-zero' : 'plot-grid'}/>{Math.abs(value) > valueStep * 1e-8 && hasVoltage && <text x={left - 5} y={yForValue(value) + 3} textAnchor="end" className="plot-tick">{formatEngineeringTick(value, 'V')}</text>}{Math.abs(value) > valueStep * 1e-8 && hasCurrent && <text x={right + 4} y={yForValue(value) + 3} className="plot-tick">{formatEngineeringTick(value, 'A')}</text>}</g>)}
       {minorTimeTicks.map((time) => <line key={`x-minor-${time}`} x1={xForTime(time)} x2={xForTime(time)} y1={top} y2={bottom} className="plot-grid-minor"/>)}
@@ -510,7 +526,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   return <div className="waveform-view ac-view">
     <div className="waveform-title"><strong>{isNoise ? 'Noise spectral density' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><AcCursorTime result={result} frequencies={frequencies}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <div className="ac-mode">{isNoise ? <span>Noise density · {noiseAxisUnit}</span> : <><button className={mode === 'magnitude' ? 'active' : ''} onClick={() => setMode('magnitude')}>Magnitude (dB)</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setMode('phase')}>Phase (°)</button></>}</div>
-    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`${isNoise ? 'Noise density' : `AC ${mode}`} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => { const cursorValue = getAnalysisCursor(result); const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1); handleCursorKeyDown(event, cursorIndex, first, Math.min(last, frequencies.length - 1), (index) => setAnalysisCursor(result, frequencies[index])) }} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); const index = nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1)); setAnalysisCursor(result, frequencies[index]) }}>
+    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`${isNoise ? 'Noise density' : `AC ${mode}`} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => { const cursorValue = getAnalysisCursor(result); const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1); handleCursorKeyDown(event, cursorIndex, first, Math.min(last, frequencies.length - 1), (index) => setAnalysisCursor(result, frequencies[index])) }} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const value = 10 ** (Math.log10(minFrequency) + fraction * (Math.log10(maxFrequency) - Math.log10(minFrequency))); const index = nearestAxisIndex(frequencies, value, first, Math.min(last, frequencies.length - 1)); setAnalysisCursor(result, frequencies[index]) }}>
       {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)} {mode === 'magnitude' ? 'dB' : mode === 'phase' ? '°' : isNoise && visibleNoiseUnits.length > 1 ? '' : isNoise ? noiseAxisUnit : ''}</text></g> })}
       <g className="plot-zero-reference"><line x1={left} x2={right} y1={yFor(0)} y2={yFor(0)}/><text x={left - 6} y={yFor(0) + 3} textAnchor="end">0 {mode === 'magnitude' ? 'dB' : mode === 'phase' ? '°' : noiseAxisUnit}</text></g>
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
@@ -614,7 +630,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   }), [traces, shown, first, last, width, height, x0, x1, min, span, colors, traceIndexById])
   return <div className="waveform-view">
     <div className="waveform-title"><strong>DC sweep results</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><DcCursorTime result={result} axis={axis} axisUnit={traces[0]?.axisUnit}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
-    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => { const cursorValue = getAnalysisCursor(result); const cursorIndex = cursorValue === null || axis.length === 0 ? null : nearestAxisIndex(axis, cursorValue, 0, axis.length - 1); handleCursorKeyDown(event, cursorIndex, first, Math.min(last, axis.length - 1), (index) => setAnalysisCursor(result, axis[index])) }} onWheel={wheelZoom} onPointerDown={plotDrag.start} onPointerMove={(event) => plotDrag.move(event)} onPointerUp={plotDrag.end} onPointerCancel={plotDrag.cancel} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const index = nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1)); setAnalysisCursor(result, axis[index]) }}>
+    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => { const cursorValue = getAnalysisCursor(result); const cursorIndex = cursorValue === null || axis.length === 0 ? null : nearestAxisIndex(axis, cursorValue, first, Math.min(last, axis.length - 1)); handleCursorKeyDown(event, cursorIndex, first, Math.min(last, axis.length - 1), (index) => setAnalysisCursor(result, axis[index])) }} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const index = nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1)); setAnalysisCursor(result, axis[index]) }}>
       {[0, 1, 2, 3].map((line) => { const value = max - line / 3 * span; return <g key={line}><line x1={left} x2={right} y1={yFor(value)} y2={yFor(value)} className="plot-grid"/><text x={left - 6} y={yFor(value) + 3} textAnchor="end" className="plot-tick">{value.toPrecision(3)}</text></g> })}
       <g className="plot-zero-reference"><line x1={left} x2={right} y1={yFor(0)} y2={yFor(0)}/><text x={left - 6} y={yFor(0) + 3} textAnchor="end">0 {traces[0]?.unit ?? ''}</text></g>
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>

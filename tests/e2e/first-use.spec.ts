@@ -11,6 +11,7 @@ import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
 
 async function waitForProjectAutosave(page: Page) {
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await expect(page.getByText('All changes saved locally')).toBeVisible()
 }
 
 async function expectVisibleKeyboardControlsNamed(page: Page) {
@@ -2154,7 +2155,7 @@ test('wire current animation keeps moving while transient playback advances', as
   await expect(page.getByRole('slider', { name: 'Current dot size' })).toBeVisible()
   await expect(page.getByRole('slider', { name: 'Current dot spacing' })).toBeVisible()
   const flow = page.locator('.wire-current-flow').first()
-  await expect(flow).toBeVisible()
+  await expect(flow).toHaveAttribute('data-current-magnitude', /\d/)
   const before = Number(await flow.getAttribute('stroke-dashoffset') ?? 0)
   await page.waitForTimeout(350)
   const after = Number(await flow.getAttribute('stroke-dashoffset') ?? 0)
@@ -2970,6 +2971,7 @@ test('fit schematic view frames distant parts, wires, and labels', async ({ page
 
 test('schematic grid fills the zoomed and panned view and has no fixed placeholder labels', async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await expect(page.getByText('INPUT', { exact: true })).toHaveCount(0)
   await expect(page.getByText('OUTPUT', { exact: true })).toHaveCount(0)
   const svg = page.locator('svg.schematic')
@@ -3024,7 +3026,10 @@ test('schematic grid fills the zoomed and panned view and has no fixed placehold
   await page.mouse.move(resizedBox!.x + resizedBox!.width / 2 + 90, resizedBox!.y + resizedBox!.height / 2 + 45, { steps: 4 })
   await page.mouse.up({ button: 'middle' })
   await expect.poll(gridFits).toBe(true)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view.panX)).not.toBe(0)
+  await expect.poll(() => page.evaluate(() => {
+    const saved = localStorage.getItem('elsim:project:v7')
+    return saved ? JSON.parse(saved).view?.panX ?? 0 : 0
+  })).not.toBe(0)
   const savedView = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view)
   await page.reload()
   await expect.poll(() => page.locator('button.zoom-label').innerText()).toBe(`${Math.round(savedView.zoom * 100)}%`)
@@ -3559,12 +3564,12 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await page.mouse.move(chartBounds.x + chartBounds.width / 2, chartBounds.y + chartBounds.height / 2 - 50, { steps: 4 })
   await page.mouse.up()
   await expect.poll(axisLabels).toEqual(beforeVerticalDrag)
-  const beforeHorizontalDrag = await axisLabels()
+  const beforeHorizontalDrag = await chart.getAttribute('aria-label')
   await page.mouse.move(chartBounds.x + chartBounds.width / 2, chartBounds.y + chartBounds.height / 2)
   await page.mouse.down()
   await page.mouse.move(chartBounds.x + chartBounds.width / 2 - 70, chartBounds.y + chartBounds.height / 2, { steps: 4 })
   await page.mouse.up()
-  await expect.poll(axisLabels).not.toEqual(beforeHorizontalDrag)
+  await expect.poll(() => chart.getAttribute('aria-label')).not.toBe(beforeHorizontalDrag)
   await chart.click({ button: 'middle' })
   await expect(page.locator('.plot-window')).toHaveCount(0)
 })
@@ -4117,7 +4122,7 @@ test('offscreen junction markers are culled and return when fitting the schemati
 
 test('Ctrl+A selects multiple wires and dragging one moves the selected wire group', async ({ page }) => {
   await page.goto('/')
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.parts = []
@@ -4131,6 +4136,8 @@ test('Ctrl+A selects multiple wires and dragging one moves the selected wire gro
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  await page.locator('svg.schematic').focus()
   await page.keyboard.press('Control+a')
   await expect(page.locator('.wire-line.selected')).toHaveCount(2)
   const wire = page.locator('.wire-line[data-wire-id="group-wire-a"]')
@@ -7300,13 +7307,14 @@ test('voltage source inspector edits DC, pulse, and validated PWL transient beha
 
 test('transient measurements offer labeled nodes and common component currents', async ({ page }) => {
   await page.goto('/')
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.simulation.transientMeasurements = [{ id: 'SignalDelay', operation: 'delay', vector: 'V(vin)', threshold: '2.5', edge: 'rise', targetVector: 'V(vout)', targetThreshold: '2.5', targetEdge: 'rise' }]
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
+  await expect(page.locator('svg.schematic')).toBeVisible()
   await page.keyboard.press('Escape')
 
   const vector = page.getByRole('combobox', { name: 'Choose vector for measurement 1' })

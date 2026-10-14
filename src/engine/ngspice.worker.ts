@@ -124,7 +124,11 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     }
     if (profileWorker) {
       resultProcessingMs = performance.now() - resultProcessingStarted
-      console.info('[ELSim worker profile]', JSON.stringify({ analysis: metadata.settings.analysis, moduleLoadMs, solverMs, resultProcessingMs, totalMs: performance.now() - profileStarted, traceCount: traces.length, wasmLinearMemoryBytes: wasmMemory?.buffer.byteLength ?? null }))
+      const profile = JSON.stringify({ analysis: metadata.settings.analysis, moduleLoadMs, solverMs, resultProcessingMs, totalMs: performance.now() - profileStarted, traceCount: traces.length, wasmLinearMemoryBytes: wasmMemory?.buffer.byteLength ?? null })
+      // Browser automation and devtools do not consistently surface worker
+      // console messages. Forward this dev-only record through the established
+      // progress channel so the main thread can log it for profiling tools.
+      worker.postMessage({ type: 'progress', requestId, runId: metadata.runId, fraction: 1, message: `[ELSim worker profile] ${profile}` } satisfies EngineResponse)
     }
     worker.postMessage({ type: 'result', requestId, result } satisfies EngineResponse, transferableTraceBuffers(traces))
   } catch (error) {
