@@ -262,6 +262,7 @@ try {
 
   const build = createRequire(import.meta.url)
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
+  const { analyzeModelLibraries } = build(path.join(output, 'domain/subcircuitLibrary.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
   const { componentPins, createPointViewportIndex, createViewportIndex, createWireViewportIndex, projectPinLocations, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
   const { moveSelectedSceneObjects } = build(path.join(output, 'domain/sceneEdit.js'))
@@ -336,6 +337,25 @@ try {
     netlistLines: importedModelArtifact.text.trimEnd().split('\n').length,
     netlistBytes: Buffer.byteLength(importedModelArtifact.text),
     netlisting: { medianMs: importedModelNetlist.medianMs, p95Ms: importedModelNetlist.p95Ms },
+  }
+  const sharedLibrary = {
+    id: 'shared-model-library',
+    filename: 'shared-models.lib',
+    content: '.LIB typical\n.PARAM RLOAD=1k\n.ENDL typical',
+    selectedSections: ['typical'],
+  }
+  const includeLibraries = Array.from({ length: 500 }, (_, index) => ({
+    id: `include-model-${index}`,
+    filename: `model-${index}.lib`,
+    content: `.LIB "shared-models.lib" typical\n.SUBCKT BENCH_INCLUDE_${index} IN OUT\nR1 IN OUT {RLOAD}\n.ENDS BENCH_INCLUDE_${index}`,
+  }))
+  const modelLibraryAnalysis = measure(() => analyzeModelLibraries([...includeLibraries, sharedLibrary]))
+  if (modelLibraryAnalysis.value.dependencies.resolvedIncludes.length !== includeLibraries.length) throw new Error('Imported-library include benchmark did not resolve every shared section reference.')
+  const importedLibraryAnalysisResults = {
+    libraries: includeLibraries.length + 1,
+    includeReferences: includeLibraries.length,
+    resolvedIncludes: modelLibraryAnalysis.value.dependencies.resolvedIncludes.length,
+    analysis: { medianMs: modelLibraryAnalysis.medianMs, p95Ms: modelLibraryAnalysis.p95Ms },
   }
   const importedDeviceProject = makeImportedDeviceModelProject(createStarterProject, 400, 600)
   const importedDeviceNetlist = measure(() => createNetlistArtifact(importedDeviceProject))
@@ -586,13 +606,14 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 10,
+    benchmarkVersion: 11,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
     wireResults,
     hierarchyResults,
     importedModelResults,
+    importedLibraryAnalysisResults,
     importedDeviceResults,
     plotResults,
     simulationResults: simulationResults ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations'),

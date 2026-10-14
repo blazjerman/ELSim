@@ -706,3 +706,7 @@ One-million-sample cold plot reduction was 1.04 ms p95 with the 902-point cap. C
 ### Firefox UI audit and large-schematic recheck (2026-10-14)
 
 The complete 172-workflow engine-independent Firefox suite passed. The focused 5,000-part/4,900-wire benchmark mounted 64 parts and 551 wires; initial render was 808 ms, selection median/p95 10/31 ms, select-all-to-frame 41 ms, zoom-to-two-frames median/max 40/57 ms, and arrow-navigation median/max 26/29 ms. These single-run values remain consistent with prior same-host results and do not establish a regression or speedup. An additional UI optimization caches imported symbol drawing bounds across repeated IC instances; its bounds and cache reuse are covered by a unit regression, but the browser benchmark does not isolate that path. No WASM rebuild or Pages workflow ran.
+
+### Imported-library dependency indexing (2026-10-14)
+
+The quick domain benchmark now includes 501 imported model libraries and 500 project-local `.LIB filename section` references to a shared library. The analysis resolved all 500 references with a median of **9.33 ms** and p95 of **9.67 ms** on the documented i7-12700F host. Dependency analysis indexes asset basenames once and caches each target library's section list, avoiding a full imported-asset scan and repeat section parse for each reference. This synthetic fixture is a scaling check, not a user-facing latency budget; it does not include browser rendering or ngspice solving.

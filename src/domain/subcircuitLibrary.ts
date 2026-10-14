@@ -997,6 +997,15 @@ export function analyzeModelLibraries<T extends ModelLibraryInput>(assets: T[]):
 
 /** Resolve references between parsed libraries and report missing cards and recursive .SUBCKT chains. */
 function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['assets']): ModelDependencyAnalysis {
+  const assetsByBasename = new Map<string, AnalyzedModelLibraries['assets']>()
+  for (const entry of parsedAssets) {
+    const basename = entry.asset.filename.split(/[\\/]/).at(-1)?.toLowerCase()
+    if (!basename) continue
+    const matches = assetsByBasename.get(basename)
+    if (matches) matches.push(entry)
+    else assetsByBasename.set(basename, [entry])
+  }
+  const sectionCache = new Map<string, string[]>()
   const subcircuits = new Map<string, string>()
   const subcircuitAssets = new Map<string, string>()
   const deviceModelAssets = new Map<string, string>()
@@ -1063,14 +1072,18 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: 'unsafe' })
       continue
     }
-    const matches = parsedAssets.filter(({ asset: candidate }) => candidate.filename.split(/[\\/]/).at(-1)?.toLowerCase() === include.filename!.toLowerCase())
+    const matches = assetsByBasename.get(include.filename.toLowerCase()) ?? []
     if (matches.length !== 1) {
       missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: matches.length ? 'ambiguous' : 'missing' })
       continue
     }
     const target = matches[0].asset
     if (include.section) {
-      const availableSections = listModelLibrarySections(target.content)
+      let availableSections = sectionCache.get(target.id)
+      if (!availableSections) {
+        availableSections = listModelLibrarySections(target.content)
+        sectionCache.set(target.id, availableSections)
+      }
       const selectedSections = target.selectedSections ?? (availableSections.length === 1 ? availableSections : [])
       if (!availableSections.some((section) => section.toLowerCase() === include.section!.toLowerCase()) || !selectedSections.some((section) => section.toLowerCase() === include.section!.toLowerCase())) {
         missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: 'section' })

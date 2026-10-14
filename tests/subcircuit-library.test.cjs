@@ -203,17 +203,31 @@ test('project-local includes resolve against imported assets without filesystem 
 })
 
 test('project-local .LIB references select named sections and retain their transitive assets', () => {
-  const wrapper = { id: 'wrapper', filename: 'wrapper.lib', content: '.LIB "devices.lib" fast\n.SUBCKT AMP IN OUT\nX1 IN OUT FAST\n.ENDS AMP' }
+  const wrapper = { id: 'wrapper', filename: 'wrapper.lib', content: '.LIB "vendor/devices.lib" fast\n.LIB "devices.lib" fast\n.SUBCKT AMP IN OUT\nX1 IN OUT FAST\n.ENDS AMP' }
   const devices = { id: 'devices', filename: 'devices.lib', content: '.LIB fast\n.SUBCKT FAST A B\nR1 A B 1k\n.ENDS FAST\n.ENDL fast\n.LIB slow\n.SUBCKT SLOW A B\nR1 A B 10k\n.ENDS SLOW\n.ENDL slow', selectedSections: ['fast'] }
   const analysis = analyzeModelLibraries([wrapper, devices])
-  assert.deepEqual(analysis.assets[0].parsed.includes, [{ reference: 'devices.lib', filename: 'devices.lib', section: 'fast', sourceLine: 1 }])
+  assert.deepEqual(analysis.assets[0].parsed.includes, [
+    { reference: 'vendor/devices.lib', filename: 'devices.lib', section: 'fast', sourceLine: 1 },
+    { reference: 'devices.lib', filename: 'devices.lib', section: 'fast', sourceLine: 2 },
+  ])
   assert.doesNotMatch(analysis.assets[0].parsed.modelText, /^\.LIB/im)
   assert.deepEqual(analysis.dependencies.missingIncludes, [])
-  assert.deepEqual(analysis.dependencies.resolvedIncludes, [{ assetId: 'wrapper', targetAssetId: 'devices', reference: 'devices.lib', section: 'fast', sourceLine: 1 }])
+  assert.deepEqual(analysis.dependencies.resolvedIncludes, [
+    { assetId: 'wrapper', targetAssetId: 'devices', reference: 'vendor/devices.lib', section: 'fast', sourceLine: 1 },
+    { assetId: 'wrapper', targetAssetId: 'devices', reference: 'devices.lib', section: 'fast', sourceLine: 2 },
+  ])
   assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'AMP' }])].sort(), ['devices', 'wrapper'])
 
   const unselected = analyzeModelDependencies([wrapper, { ...devices, selectedSections: ['slow'] }])
-  assert.deepEqual(unselected.missingIncludes.map(({ reference, section, reason }) => ({ reference, section, reason })), [{ reference: 'devices.lib', section: 'fast', reason: 'section' }])
+  assert.deepEqual(unselected.missingIncludes.map(({ reference, section, reason }) => ({ reference, section, reason })), [
+    { reference: 'vendor/devices.lib', section: 'fast', reason: 'section' },
+    { reference: 'devices.lib', section: 'fast', reason: 'section' },
+  ])
+  const ambiguous = analyzeModelDependencies([wrapper, devices, { ...devices, id: 'duplicate-devices', filename: 'vendor/devices.lib' }])
+  assert.deepEqual(ambiguous.missingIncludes.map(({ reference, reason }) => ({ reference, reason })), [
+    { reference: 'vendor/devices.lib', reason: 'ambiguous' },
+    { reference: 'devices.lib', reason: 'ambiguous' },
+  ])
   const unsafe = analyzeModelDependencies([{ ...wrapper, content: '.LIB ../outside.lib fast' }])
   assert.equal(unsafe.missingIncludes[0].reason, 'unsafe')
 })
