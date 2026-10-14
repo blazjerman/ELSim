@@ -4599,6 +4599,7 @@ export default function App() {
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit {electricalIssues && <span>{electricalIssues.length}</span>}</button>
       <button className="run-button" onClick={startSimulation} disabled={engineAssetAvailable === null || runState === 'loading' || runState === 'running'} title={engineAssetAvailable === null ? 'Checking for the local ngspice runtime' : undefined}><Play size={15} fill="currentColor"/> Run simulation</button>
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
+      {simulationResultStale && <span className="result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</span>}
     </div>
 
     {(simulationResultStale || engineAssetAvailable === false) && <div className="mobile-app-notices" aria-live="polite">
@@ -4891,7 +4892,6 @@ export default function App() {
     <footer className="app-status" aria-live="polite">
       <div className="app-status-left">
         <span role="status"><span className={`status-dot ${autosaveStatus}`}/>{autosaveStatus === 'saving' ? 'Saving changes locally…' : autosaveStatus === 'recovered' ? 'Saved in browser recovery storage' : autosaveStatus === 'error' ? 'Local save failed. Use Save to download a copy.' : 'All changes saved locally'}</span>
-        {simulationResultStale && <span className="result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</span>}
         {engineAssetAvailable === false && <div className="engine-missing-notice" role="status"><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={() => setNotice('To enable simulation, follow engine/wasm/README.md and run tools/build-ngspice-wasm.sh.')}>Setup</button></div>}
       </div>
       <span className="app-status-brand">Original ELSim component symbols</span>
