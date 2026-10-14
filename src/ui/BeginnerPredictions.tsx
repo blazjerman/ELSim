@@ -206,6 +206,33 @@ export function LoadedVoltageDividerPrediction({ supplyValue, upperResistanceVal
   />
 }
 
+export function WheatstoneBridgePrediction({ supplyValue, leftTopValue, leftBottomValue, rightTopValue, rightBottomValue }: { supplyValue: string; leftTopValue: string; leftBottomValue: string; rightTopValue: string; rightBottomValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const leftTop = componentMagnitude(leftTopValue, 'resistor')
+  const leftBottom = componentMagnitude(leftBottomValue, 'resistor')
+  const rightTop = componentMagnitude(rightTopValue, 'resistor')
+  const rightBottom = componentMagnitude(rightBottomValue, 'resistor')
+  const leftMidpoint = supply !== null && leftTop !== null && leftBottom !== null && leftTop + leftBottom > 0
+    ? supply * leftBottom / (leftTop + leftBottom)
+    : null
+  const rightMidpoint = supply !== null && rightTop !== null && rightBottom !== null && rightTop + rightBottom > 0
+    ? supply * rightBottom / (rightTop + rightBottom)
+    : null
+  const imbalance = leftMidpoint !== null && rightMidpoint !== null ? rightMidpoint - leftMidpoint : null
+  const explanation = imbalance === null || leftMidpoint === null || rightMidpoint === null
+    ? ''
+    : `VLEFT = VIN × R2/(R1 + R2) = ${formatValue(leftMidpoint)} V. VOUT = VIN × R4/(R3 + R4) = ${formatValue(rightMidpoint)} V. So VOUT − VLEFT = ${formatValue(imbalance)} V. A balanced bridge has equal arm ratios R1/R2 = R3/R4 and zero difference.`
+
+  return <NumericPrediction
+    id="wheatstone-bridge-prediction"
+    prompt="Before running, predict how far VOUT is above VLEFT"
+    unit="V"
+    predictedValue={imbalance}
+    absoluteTolerance={0.02}
+    explanation={explanation}
+  />
+}
+
 export function CurrentDividerPrediction({ supplyValue, firstResistanceValue, secondResistanceValue }: { supplyValue: string; firstResistanceValue: string; secondResistanceValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const firstResistance = componentMagnitude(firstResistanceValue, 'resistor')
@@ -245,13 +272,17 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'wheatstone-bridge' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
   upperResistanceValue?: string
   lowerResistanceValue?: string
   loadResistanceValue?: string
+  leftTopValue?: string
+  leftBottomValue?: string
+  rightTopValue?: string
+  rightBottomValue?: string
   firstResistanceValue?: string
   secondResistanceValue?: string
   initialVoltageValue?: string
@@ -265,6 +296,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
+    case 'wheatstone-bridge': return <WheatstoneBridgePrediction supplyValue={props.supplyValue ?? ''} leftTopValue={props.leftTopValue ?? ''} leftBottomValue={props.leftBottomValue ?? ''} rightTopValue={props.rightTopValue ?? ''} rightBottomValue={props.rightBottomValue ?? ''}/>
     case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
     case 'series-resistors': return <SeriesVoltageDropPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'capacitor-discharge': return <CapacitorDischargePrediction initialVoltageValue={props.initialVoltageValue ?? ''} resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>

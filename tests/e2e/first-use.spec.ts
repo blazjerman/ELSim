@@ -5558,6 +5558,34 @@ test('potentiometer example adjusts the simulated output with its wiper', { tag:
   await expect(page.locator('.example-lesson-next-step')).toContainText('divider predicts VOUT = 7.5 V; ngspice solved 7.5 V')
 })
 
+test('Wheatstone bridge prediction calculates imbalance and resets at balance', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Wheatstone bridge sensor' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+
+  const prediction = page.locator('.example-prediction')
+  const answer = prediction.locator('input')
+  await expect(prediction).toContainText('predict how far VOUT is above VLEFT')
+  await answer.fill('1.667')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('R2/(R1 + R2) = 5 V')
+  await expect(prediction.getByRole('status')).toContainText('R4/(R3 + R4) = 6.667 V')
+
+  await page.locator('.circuit-part[data-part-id="bridge-r4"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="bridge-r4:value"]').fill('1 kΩ')
+  await expect(answer).toHaveValue('')
+  await expect(page.getByRole('button', { name: 'Run this circuit' })).toBeEnabled()
+  await answer.fill('0')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('VOUT − VLEFT = 0 V')
+})
+
 test('Wheatstone bridge lesson predicts and verifies a balanced sensor arm', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
