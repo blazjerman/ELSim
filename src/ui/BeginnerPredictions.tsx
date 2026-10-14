@@ -150,6 +150,38 @@ export function PnpSwitchPrediction(props: Omit<BjtSwitchPredictionProps, 'trans
   return <BjtSwitchPrediction {...props} transistorType="pnp"/>
 }
 
+export function FetSwitchPrediction({ channelType, driveValue, supplyValue, thresholdValue }: {
+  channelType: 'n' | 'p'
+  driveValue: string
+  supplyValue: string
+  thresholdValue: string
+}) {
+  const drive = componentMagnitude(driveValue, 'source')
+  const supply = componentMagnitude(supplyValue, 'source')
+  const thresholdValueMagnitude = componentMagnitude(thresholdValue, 'source')
+  const threshold = thresholdValueMagnitude === null ? null : Math.abs(thresholdValueMagnitude)
+  const gateToSource = drive !== null && supply !== null
+    ? channelType === 'n' ? drive : supply - drive
+    : null
+  const valid = gateToSource !== null && threshold !== null && threshold > 0
+  const channelOn = valid && gateToSource! > threshold!
+  const expected = valid ? channelOn ? 'yes' : 'no' : null
+  const explanation = !valid
+    ? 'A numeric VTO threshold and valid drive/supply voltages are needed for this estimate. Check the model parameters.'
+    : channelOn
+      ? (channelType === 'n' ? 'VGS = ' + formatValue(gateToSource!) + ' V' : 'VSG = ' + formatValue(gateToSource!) + ' V')
+        + ' exceeds the model threshold of ' + formatValue(threshold!) + ' V, so the channel should conduct. Threshold alone does not predict how strongly it drives RLOAD; compare the solved current after running.'
+      : (channelType === 'n' ? 'VGS = ' + formatValue(gateToSource!) + ' V' : 'VSG = ' + formatValue(gateToSource!) + ' V')
+        + ' is below the model threshold of ' + formatValue(threshold!) + ' V, so the channel should be off. The drain/output then stays near the supply through RLOAD.'
+  const driveDescription = channelType === 'n' ? 'VDRIVE' : 'active-low VDRIVE'
+  return <BinaryChoicePrediction
+    id={channelType + 'mos-channel-prediction'}
+    prompt={'Before running, will the ' + (channelType === 'n' ? 'NMOS' : 'PMOS') + ' channel conduct at ' + driveDescription + ' = ' + (drive === null ? 'an invalid voltage' : formatValue(drive) + ' V') + '?'}
+    expected={expected}
+    explanation={explanation}
+  />
+}
+
 function formatValue(value: number): string {
   return String(Number(value.toPrecision(4)))
 }
@@ -520,11 +552,12 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'npn-switch' | 'pnp-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
   loadResistanceValue?: string
+  thresholdValue?: string
   capacitanceValue?: string
   supplyValue?: string
   wiperPosition?: string
@@ -558,6 +591,8 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'diode-polarity': return <DiodePolarityPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'npn-switch': return <NpnSwitchPrediction driveValue={props.driveValue ?? ''} baseResistanceValue={props.resistanceValue ?? ''} betaValue={props.betaValue ?? ''} supplyValue={props.supplyValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'pnp-switch': return <PnpSwitchPrediction driveValue={props.driveValue ?? ''} baseResistanceValue={props.resistanceValue ?? ''} betaValue={props.betaValue ?? ''} supplyValue={props.supplyValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
+    case 'nmos-switch': return <FetSwitchPrediction channelType="n" driveValue={props.driveValue ?? ''} supplyValue={props.supplyValue ?? ''} thresholdValue={props.thresholdValue ?? ''}/>
+    case 'pmos-switch': return <FetSwitchPrediction channelType="p" driveValue={props.driveValue ?? ''} supplyValue={props.supplyValue ?? ''} thresholdValue={props.thresholdValue ?? ''}/>
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
     case 'potentiometer': return <PotentiometerPrediction supplyValue={props.supplyValue ?? ''} wiperPosition={props.wiperPosition ?? ''}/>
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>

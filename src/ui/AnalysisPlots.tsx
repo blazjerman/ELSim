@@ -113,6 +113,11 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
     window.removeEventListener('pointercancel', listeners.current.cancel)
     listeners.current = null
   }
+  const cancelPendingPan = () => {
+    if (panFrame.current !== null) cancelAnimationFrame(panFrame.current)
+    panFrame.current = null
+    pendingPan.current = 0
+  }
   const flushPan = () => {
     if (panFrame.current !== null) cancelAnimationFrame(panFrame.current)
     panFrame.current = null
@@ -121,7 +126,7 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
     if (delta) onHorizontalPanRef.current(delta)
   }
   useEffect(() => () => {
-    if (panFrame.current !== null) cancelAnimationFrame(panFrame.current)
+    cancelPendingPan()
     removeWindowListeners()
   }, [])
   const start = (event: PointerEvent<SVGSVGElement>) => {
@@ -161,7 +166,9 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
     }
     const cancel = (pointerEvent: globalThis.PointerEvent) => {
       if (drag.current?.pointerId !== pointerEvent.pointerId) return
-      flushPan()
+      // Pointer cancellation should abort the gesture completely; committing a
+      // partial pan here makes touch interruption and lost capture surprising.
+      cancelPendingPan()
       drag.current = null
       suppressClick.current = false
       removeWindowListeners()
