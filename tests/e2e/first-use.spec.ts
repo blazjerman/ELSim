@@ -1843,6 +1843,7 @@ test('native passive and transmission-line model references resolve across impor
 
 test('standalone resistor capacitor and inductor can select imported native models', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   const library = ['.MODEL R_CUSTOM R(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n')
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'passives.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
@@ -1857,8 +1858,36 @@ test('standalone resistor capacitor and inductor can select imported native mode
   await expect(page.getByLabel('Device model for C1').locator('option', { hasText: 'C_CUSTOM (C)' })).toHaveCount(1)
   await page.getByLabel('Device model for C1').selectOption('C_CUSTOM')
   await expect(page.locator('[data-part-setting="p-c1:value"]')).toHaveAttribute('placeholder', 'Leave blank to use model default')
+
+  const existingInductorIds = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.filter((part: { kind: string }) => part.kind === 'inductor').map((part: { id: string }) => part.id))
+  const schematic = page.locator('svg.schematic')
+  const inductorPoint = await schematic.evaluate((element) => {
+    const svg = element as SVGSVGElement
+    const target = svg.createSVGPoint(); target.x = 580; target.y = 520
+    const screen = target.matrixTransform(svg.getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
+  await page.locator('.component-card').filter({ hasText: 'Inductor' }).click()
+  await page.mouse.move(inductorPoint.x, inductorPoint.y)
+  await page.mouse.click(inductorPoint.x, inductorPoint.y)
+  await expect.poll(() => page.evaluate((previousIds: string[]) => {
+    const saved = localStorage.getItem('elsim:project:v7')
+    return saved ? JSON.parse(saved).parts.some((part: { kind: string; id: string }) => part.kind === 'inductor' && !previousIds.includes(part.id)) : false
+  }, existingInductorIds)).toBe(true)
+  const placedInductor = await page.evaluate((previousIds: string[]) => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string; id: string }) => part.kind === 'inductor' && !previousIds.includes(part.id)), existingInductorIds)
+  const inductorId = placedInductor.id as string
+  const inductorRef = placedInductor.ref as string
+  const schematicInductor = page.locator(`.circuit-part[aria-label^="${inductorRef},"]`)
+  await schematicInductor.focus()
+  await page.keyboard.press('Enter')
+  await expect(schematicInductor).toHaveClass(/selected/)
+  const inductorModel = page.getByLabel(`Device model for ${inductorRef}`)
+  await expect(inductorModel.locator('option', { hasText: 'L_CUSTOM (L)' })).toHaveCount(1)
+  await inductorModel.selectOption('L_CUSTOM')
+  await expect(page.locator(`[data-part-setting="${inductorId}:value"]`)).toHaveAttribute('placeholder', 'Leave blank to use model default')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
     await expect(page.locator('.netlist-modal pre')).toContainText(/^C1 .* C_CUSTOM$/m)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/^L1 .* L_CUSTOM$/m)
 })
 
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
