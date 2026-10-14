@@ -203,3 +203,28 @@ export function CurrentDividerPrediction({ supplyValue, firstResistanceValue, se
     explanation={explanation}
   />
 }
+
+type BeginnerPredictionProps = {
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter'
+  resistanceValue?: string
+  capacitanceValue?: string
+  supplyValue?: string
+  upperResistanceValue?: string
+  lowerResistanceValue?: string
+  firstResistanceValue?: string
+  secondResistanceValue?: string
+  initialVoltageValue?: string
+}
+
+/** Keep lesson-only prediction logic out of the editor's initial download. */
+export function BeginnerPrediction(props: BeginnerPredictionProps) {
+  switch (props.kind) {
+    case 'rc': return <RcTimeConstantPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
+    case 'switch-lamp': return <SwitchPathPrediction/>
+    case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
+    case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
+    case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
+    case 'capacitor-discharge': return <CapacitorDischargePrediction initialVoltageValue={props.initialVoltageValue ?? ''} resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
+    case 'led-current-limiter': return <LedCurrentPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
+  }
+}

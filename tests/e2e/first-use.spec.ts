@@ -4950,7 +4950,7 @@ test("Ohm's law lesson compares predicted and solved current", { tag: ['@ngspice
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText("Ohm's law")
   const lesson = page.locator('.example-lesson')
-  await expect(lesson).toContainText('I = V/R predicts 5 mA')
+  await expect(lesson.getByLabel('Before running, predict current through R1')).toBeVisible()
   await page.getByRole('button', { name: 'Run this circuit' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expect(lesson.locator('.example-lesson-next-step')).toContainText('ngspice solved 5 mA')

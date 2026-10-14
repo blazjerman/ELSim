@@ -6,12 +6,29 @@ const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { checkCircuit } = require(path.join(build, 'domain/electricalCheck.js'))
 const { createStarterProject, sheetModelName } = require(path.join(build, 'domain/project.js'))
-const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createHierarchicalExampleProject, createVoltageSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 
 test('starter project passes the common wiring checks', () => {
   assert.deepEqual(checkCircuit(createStarterProject()), [])
+})
+
+test('voltage-controlled switch checks imported SW model presence and type', () => {
+  const project = createVoltageSwitchExampleProject()
+  const sw = project.parts.find((part) => part.kind === 'voltageSwitch')
+  sw.deviceModel = 'USER_SW'
+  let issue = checkCircuit(project).find((item) => item.id === `missing-device-model:${sw.id}`)
+  assert.match(issue.detail, /not in the imported project libraries/)
+
+  project.modelAssets = [{ id: 'wrong-type-model', filename: 'device.lib', sha256: 'a'.repeat(64), content: '.model USER_SW D(Is=1n)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  issue = checkCircuit(project).find((item) => item.id === `incompatible-device-model:${sw.id}`)
+  assert.match(issue.title, /incompatible D model/)
+  assert.match(issue.detail, /requires a SW model/)
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.model USER_SW SW(Ron=10 Roff=1Meg Vt=2.5 Vh=1)\n' }
+  const issues = checkCircuit(project)
+  assert.equal(issues.some((item) => item.id === `missing-device-model:${sw.id}` || item.id === `incompatible-device-model:${sw.id}`), false)
 })
 
 test('current sources accept signed SI-prefix currents and flag malformed values', () => {

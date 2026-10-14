@@ -24,7 +24,6 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
-import { CapacitorDischargePrediction, CurrentDividerPrediction, LedCurrentPrediction, OhmsLawPrediction, RcTimeConstantPrediction, SwitchPathPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
@@ -66,6 +65,7 @@ const AdvancedSourceWaveformEditor = lazy(() => import('./AdvancedSourceWaveform
 const ResultPlot = lazy(() => import('./AnalysisPlots').then((module) => ({ default: module.ResultPlot })))
 const KeyboardShortcuts = lazy(() => import('./KeyboardShortcuts'))
 const ExamplesDialog = lazy(() => import('./ExamplesDialog').then((module) => ({ default: module.ExamplesDialog })))
+const BeginnerPrediction = lazy(() => import('./BeginnerPredictions').then((module) => ({ default: module.BeginnerPrediction })))
 const LOGIC_GATE_SHORTCUTS: Record<string, NonNullable<Part['logicOperation']>> = { '2': 'and', '3': 'or', '4': 'xor', '5': 'xnor', '@': 'nand', '#': 'nor' }
 // Keep Falstad-style keys reserved before their matching component types exist.
 // `event.key` is case-sensitive, so e.g. n and N remain different shortcuts.
@@ -4171,40 +4171,15 @@ export default function App() {
             <div>
               <span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span>
               <p>{exampleLesson.guidance}</p>
-              {exampleLesson.id === 'rc' && !lessonNextStep && <RcTimeConstantPrediction
-                key={`${partsById.get('p-r1')?.value ?? ''}:${partsById.get('p-c1')?.value ?? ''}`}
-                resistanceValue={partsById.get('p-r1')?.value ?? ''}
-                capacitanceValue={partsById.get('p-c1')?.value ?? ''}
-              />}
-              {exampleLesson.id === 'switch-lamp' && !lessonNextStep && <SwitchPathPrediction/>}
-              {exampleLesson.id === 'ohms-law' && !lessonNextStep && <OhmsLawPrediction
-                key={`${partsById.get('ohms-law-v1')?.value ?? ''}:${partsById.get('ohms-law-r1')?.value ?? ''}`}
-                supplyValue={partsById.get('ohms-law-v1')?.value ?? ''}
-                resistanceValue={partsById.get('ohms-law-r1')?.value ?? ''}
-              />}
-              {exampleLesson.id === 'voltage-divider' && !lessonNextStep && <VoltageDividerPrediction
-                key={`${partsById.get('divider-v1')?.value ?? ''}:${partsById.get('divider-r1')?.value ?? ''}:${partsById.get('divider-r2')?.value ?? ''}`}
-                supplyValue={partsById.get('divider-v1')?.value ?? ''}
-                upperResistanceValue={partsById.get('divider-r1')?.value ?? ''}
-                lowerResistanceValue={partsById.get('divider-r2')?.value ?? ''}
-              />}
-              {exampleLesson.id === 'parallel-resistors' && !lessonNextStep && <CurrentDividerPrediction
-                key={`${partsById.get('current-divider-v1')?.value ?? ''}:${partsById.get('current-divider-r1')?.value ?? ''}:${partsById.get('current-divider-r2')?.value ?? ''}`}
-                supplyValue={partsById.get('current-divider-v1')?.value ?? ''}
-                firstResistanceValue={partsById.get('current-divider-r1')?.value ?? ''}
-                secondResistanceValue={partsById.get('current-divider-r2')?.value ?? ''}
-              />}
-              {exampleLesson.id === 'capacitor-discharge' && !lessonNextStep && <CapacitorDischargePrediction
-                key={`${capacitorDischargeInitialVoltage}:${partsById.get('cap-discharge-r1')?.value ?? ''}:${partsById.get('cap-discharge-c1')?.value ?? ''}`}
-                initialVoltageValue={capacitorDischargeInitialVoltage}
-                resistanceValue={partsById.get('cap-discharge-r1')?.value ?? ''}
-                capacitanceValue={partsById.get('cap-discharge-c1')?.value ?? ''}
-              />}
-              {exampleLesson.id === 'led-current-limiter' && !lessonNextStep && <LedCurrentPrediction
-                key={`${partsById.get('p-v1')?.value ?? ''}:${partsById.get('p-r1')?.value ?? ''}`}
-                supplyValue={partsById.get('p-v1')?.value ?? ''}
-                resistanceValue={partsById.get('p-r1')?.value ?? ''}
-              />}
+              {!lessonNextStep && <Suspense fallback={null}>
+                {exampleLesson.id === 'rc' && <BeginnerPrediction kind="rc" key={`${partsById.get('p-r1')?.value ?? ''}:${partsById.get('p-c1')?.value ?? ''}`} resistanceValue={partsById.get('p-r1')?.value ?? ''} capacitanceValue={partsById.get('p-c1')?.value ?? ''}/>}
+                {exampleLesson.id === 'switch-lamp' && <BeginnerPrediction kind="switch-lamp"/>}
+                {exampleLesson.id === 'ohms-law' && <BeginnerPrediction kind="ohms-law" key={`${partsById.get('ohms-law-v1')?.value ?? ''}:${partsById.get('ohms-law-r1')?.value ?? ''}`} supplyValue={partsById.get('ohms-law-v1')?.value ?? ''} resistanceValue={partsById.get('ohms-law-r1')?.value ?? ''}/>}
+                {exampleLesson.id === 'voltage-divider' && <BeginnerPrediction kind="voltage-divider" key={`${partsById.get('divider-v1')?.value ?? ''}:${partsById.get('divider-r1')?.value ?? ''}:${partsById.get('divider-r2')?.value ?? ''}`} supplyValue={partsById.get('divider-v1')?.value ?? ''} upperResistanceValue={partsById.get('divider-r1')?.value ?? ''} lowerResistanceValue={partsById.get('divider-r2')?.value ?? ''}/>}
+                {exampleLesson.id === 'parallel-resistors' && <BeginnerPrediction kind="parallel-resistors" key={`${partsById.get('current-divider-v1')?.value ?? ''}:${partsById.get('current-divider-r1')?.value ?? ''}:${partsById.get('current-divider-r2')?.value ?? ''}`} supplyValue={partsById.get('current-divider-v1')?.value ?? ''} firstResistanceValue={partsById.get('current-divider-r1')?.value ?? ''} secondResistanceValue={partsById.get('current-divider-r2')?.value ?? ''}/>}
+                {exampleLesson.id === 'capacitor-discharge' && <BeginnerPrediction kind="capacitor-discharge" key={`${capacitorDischargeInitialVoltage}:${partsById.get('cap-discharge-r1')?.value ?? ''}:${partsById.get('cap-discharge-c1')?.value ?? ''}`} initialVoltageValue={capacitorDischargeInitialVoltage} resistanceValue={partsById.get('cap-discharge-r1')?.value ?? ''} capacitanceValue={partsById.get('cap-discharge-c1')?.value ?? ''}/>}
+                {exampleLesson.id === 'led-current-limiter' && <BeginnerPrediction kind="led-current-limiter" key={`${partsById.get('p-v1')?.value ?? ''}:${partsById.get('p-r1')?.value ?? ''}`} supplyValue={partsById.get('p-v1')?.value ?? ''} resistanceValue={partsById.get('p-r1')?.value ?? ''}/>}
+              </Suspense>}
               {lessonNextStep ? <div className="example-lesson-next-step">
                 <span className="eyebrow">TRY THIS NEXT</span>
                 <p>{lessonNextStep}</p>

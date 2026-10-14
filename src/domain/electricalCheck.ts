@@ -1,9 +1,9 @@
 import { analyzeConnectivity } from './connectivity'
 import type { Connectivity } from './connectivity'
 import { componentPins } from './geometry'
-import type { Project } from './project'
+import type { Part, Project } from './project'
 import { componentMagnitude } from './componentValue'
-import { analyzeModelDependencies } from './subcircuitLibrary'
+import { analyzeModelDependencies, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionFor } from './componentDefinitions'
 
@@ -87,14 +87,15 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     view: project.view,
   }, connectivity)
 
-  const importedDeviceModels = new Set<string>()
+  const importedDeviceModels = new Map<string, string>()
   for (const asset of project.modelAssets ?? []) {
     try {
-      for (const name of analyzeModelDependencies([asset]).deviceModelAssets.keys()) importedDeviceModels.add(name)
+      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) importedDeviceModels.set(model.name.toLowerCase(), model.type.toLowerCase())
     } catch {
       // Invalid library syntax has its own importer diagnostic.
     }
   }
+  const expectedDeviceModelType = (part: Part) => part.kind === 'voltageSwitch' ? 'sw' : undefined
 
   for (const { sheet, topLevelInstanceId } of reachableSheets) {
     const partsByReference = new Map<string, Project['parts']>()
@@ -135,13 +136,21 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         detail: 'Enter a whole-number forward beta from 1 to 1000, or select an imported device model to replace the educational beta approximation.',
         partId: topLevelInstanceId,
       })
-      if (['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos'].includes(part.kind) && part.deviceModel) {
-        const foundModel = importedDeviceModels.has(part.deviceModel.toLowerCase())
-        if (!foundModel) issues.push({
+      if (['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'voltageSwitch'].includes(part.kind) && part.deviceModel) {
+        const modelType = importedDeviceModels.get(part.deviceModel.toLowerCase())
+        const expectedType = expectedDeviceModelType(part)
+        if (!modelType) issues.push({
           id: `missing-device-model:${sheet.id}:${part.id}`,
           severity: 'warning',
           title: `${part.ref} needs device model ${part.deviceModel} in ${sheet.name}`,
           detail: 'This model is not in the imported project libraries. Import the library that defines it or select a compatible model before running.',
+          partId: topLevelInstanceId,
+        })
+        else if (expectedType && modelType !== expectedType) issues.push({
+          id: `incompatible-device-model:${sheet.id}:${part.id}`,
+          severity: 'warning',
+          title: `${part.ref} uses an incompatible ${modelType.toUpperCase()} model in ${sheet.name}`,
+          detail: `${part.ref} is a voltage-controlled switch and requires a SW model, but ${part.deviceModel} is a ${modelType.toUpperCase()} card. Select an imported SW model before running.`,
           partId: topLevelInstanceId,
         })
       }
@@ -368,13 +377,21 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
       }
     }
-    if ((part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'npn' || part.kind === 'pnp' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos') && part.deviceModel) {
-      const foundModel = importedDeviceModels.has(part.deviceModel.toLowerCase())
-      if (!foundModel) issues.push({
+    if ((part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'npn' || part.kind === 'pnp' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'voltageSwitch') && part.deviceModel) {
+      const modelType = importedDeviceModels.get(part.deviceModel.toLowerCase())
+      const expectedType = expectedDeviceModelType(part)
+      if (!modelType) issues.push({
         id: `missing-device-model:${part.id}`,
         severity: 'warning',
         title: `${part.ref} needs device model ${part.deviceModel}`,
         detail: 'This model is not in the imported project libraries. Import the library that defines it or select a compatible model before running.',
+        partId: part.id,
+      })
+      else if (expectedType && modelType !== expectedType) issues.push({
+        id: `incompatible-device-model:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} uses an incompatible ${modelType.toUpperCase()} model`,
+        detail: `${part.ref} is a voltage-controlled switch and requires a SW model, but ${part.deviceModel} is a ${modelType.toUpperCase()} card. Select an imported SW model before running.`,
         partId: part.id,
       })
     }
