@@ -294,6 +294,30 @@ test('imported subcircuit defaults and instance overrides can call included libr
   assert.throws(() => validateProject(missingInclude), /not available from its library include chain/)
 })
 
+test('imported subcircuit-scoped .FUNC defaults and overrides stay within their nested scope', () => {
+  const project = createBlockProject()
+  project.modelAssets = [{
+    id: 'scoped-functions', filename: 'scoped.lib',
+    content: '.SUBCKT AMP IN OUT GAIN={DOUBLE(2)}\n.FUNC DOUBLE(x) {2*x}\nR1 IN OUT {GAIN}\n.SUBCKT CORE A B GAIN={DOUBLE(3)}\nR2 A B {GAIN}\n.ENDS CORE\n.ENDS AMP\n.SUBCKT OTHER IN OUT\nR3 IN OUT 1k\n.ENDS OTHER',
+    sha256: 'c'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString(),
+  }]
+  const imported = { id: 'root-amp', kind: 'subcircuit', ref: 'XAMP', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], modelParameters: { GAIN: '{DOUBLE(4)}' }, x: 500, y: 400, rotation: 0 }
+  project.parts.push(imported)
+  project.sheets[0].parts = project.parts
+
+  const validated = validateProject(project)
+  const netlist = createNetlistArtifact(validated)
+  assert.deepEqual(netlist.diagnostics.filter(({ severity }) => severity === 'error'), [])
+  assert.match(netlist.text, /^\.SUBCKT AMP IN OUT GAIN=\{DOUBLE\(2\)\}$/mi)
+  assert.match(netlist.text, /^\.SUBCKT CORE A B GAIN=\{DOUBLE\(3\)\}$/mi)
+  assert.match(netlist.text, /^XAMP\s+\S+\s+\S+\s+AMP PARAMS: GAIN=\{DOUBLE\(4\)\}$/mi)
+
+  const siblingCall = structuredClone(project)
+  siblingCall.parts.push({ id: 'root-other', kind: 'subcircuit', ref: 'XOTHER', value: 'OTHER', modelName: 'OTHER', modelPins: ['IN', 'OUT'], modelParameters: { GAIN: '{DOUBLE(4)}' }, x: 700, y: 400, rotation: 0 })
+  siblingCall.sheets[0].parts = siblingCall.parts
+  assert.throws(() => validateProject(siblingCall), /unsupported override for subcircuit parameter GAIN/)
+})
+
 test('imported .MODEL defaults can call functions only from their library include chain', () => {
   const project = createBlockProject()
   project.modelAssets = [

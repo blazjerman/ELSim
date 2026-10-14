@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 
 export type ExampleId = 'ohms-law' | 'potentiometer' | 'wheatstone-bridge' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'sine-wave' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'diode-polarity' | 'parallel-resistors' | 'resistor-power' | 'lamp-power' | 'switch-lamp' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'educational-opamp' | 'imported-opamp' | 'inverting-opamp' | 'noninverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
@@ -88,13 +88,15 @@ export function ExamplesDialog({ open, onClose, onOpen, onKeyDown, engineAvailab
   const [restoreExampleFocus, setRestoreExampleFocus] = useState<ExampleId | null>(null)
   const dialogRef = useRef<HTMLElement>(null)
   const cancelPendingRef = useRef<HTMLButtonElement>(null)
-  const filtered = exampleCatalog.filter(({ id, title, description }) => (topic === 'all' || exampleTopicIds[topic].includes(id)) && `${title} ${description}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
-  if (topic !== 'all') {
-    const topicOrder = exampleTopicIds[topic]
-    filtered.sort((left, right) => topicOrder.indexOf(left.id) - topicOrder.indexOf(right.id))
-  } else {
-    filtered.sort((left, right) => (startOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (startOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER))
-  }
+  const filtered = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase()
+    const topicOrder = topic === 'all' ? null : exampleTopicIds[topic]
+    return exampleCatalog
+      .filter(({ id, title, description }) => (topicOrder === null || topicOrder.includes(id)) && (!normalizedQuery || `${title} ${description}`.toLocaleLowerCase().includes(normalizedQuery)))
+      .sort((left, right) => topicOrder
+        ? topicOrder.indexOf(left.id) - topicOrder.indexOf(right.id)
+        : (startOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (startOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER))
+  }, [query, topic])
   useEffect(() => {
     if (pending) cancelPendingRef.current?.focus()
     else if (restoreExampleFocus) {

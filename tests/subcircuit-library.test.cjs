@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceModelName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceModelName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
@@ -25,6 +25,48 @@ test('parses top-level .FUNC signatures for forward-referenced subcircuit defaul
   assert.throws(() => parseSubcircuitLibrary('.FUNC DOUBLE(x) {2*x}\n.SUBCKT USER_GAIN IN OUT PARAMS: GAIN={DOUBLE(2, 3)}\n.ENDS USER_GAIN'), /unsupported default value/)
   assert.throws(() => parseSubcircuitLibrary('.FUNC sqrt(x) {x}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /name sqrt is reserved/)
   assert.throws(() => parseSubcircuitLibrary('.FUNC F(x) {x}\n.FUNC f(x, y) {x+y}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /conflicting argument counts/)
+})
+
+test('keeps subcircuit .FUNC declarations in their lexical scopes, including nested inheritance', () => {
+  const source = [
+    '.SUBCKT PARENT IN OUT gain={DOUBLE(2)}',
+    '.FUNC DOUBLE(x) {2*x}',
+    '.SUBCKT CHILD IN OUT gain={DOUBLE(3)}',
+    '.FUNC DOUBLE(x) {3*x}',
+    'R1 IN OUT {gain}',
+    '.ENDS CHILD',
+    '.ENDS PARENT',
+    '.SUBCKT SIBLING IN OUT',
+    'R2 IN OUT 1k',
+    '.ENDS SIBLING',
+  ].join('\n')
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.functions, [])
+  assert.deepEqual(parsed.subcircuits.map(({ name, parentName, parameters, functions }) => ({ name, parentName, parameters, functions: functions?.map(({ name, arity }) => [name, arity]) })), [
+    { name: 'PARENT', parentName: undefined, parameters: [{ name: 'gain', defaultValue: '{DOUBLE(2)}' }], functions: [['DOUBLE', 1]] },
+    { name: 'CHILD', parentName: 'PARENT', parameters: [{ name: 'gain', defaultValue: '{DOUBLE(3)}' }], functions: [['DOUBLE', 1]] },
+    { name: 'SIBLING', parentName: undefined, parameters: [], functions: undefined },
+  ])
+  const asset = { id: 'scope', filename: 'scope.lib', content: source }
+  const assets = [{ asset, parsed }]
+  assert.equal(modelFunctionsForSubcircuit(assets, 'scope', 'PARENT').get('double'), 1)
+  assert.equal(modelFunctionsForSubcircuit(assets, 'scope', 'CHILD').get('double'), 1)
+  assert.equal(modelFunctionsForSubcircuit(assets, 'scope', 'SIBLING').has('double'), false)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT SIBLING IN OUT gain={DOUBLE(2)}\n.ENDS SIBLING'), /unsupported default value/)
+})
+
+test('scoped .FUNC declarations validate .MODEL expressions inside their subcircuit only', () => {
+  const source = [
+    '.SUBCKT AMP IN OUT',
+    '.FUNC DOUBLE(x) {2*x}',
+    '.MODEL DLOCAL D(IS={DOUBLE(2)})',
+    'D1 IN OUT DLOCAL',
+    '.ENDS AMP',
+  ].join('\n')
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.models[0].scope, 'AMP')
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'DOUBLE(2)' }])
+  assert.equal(modelFunctionsForSubcircuit([{ asset: { id: 'amp', filename: 'amp.lib', content: source }, parsed }], 'amp', 'AMP').get('double'), 1)
 })
 
 test('parses .MODEL parameters that call forward-declared library functions', () => {

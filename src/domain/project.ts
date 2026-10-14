@@ -1,6 +1,6 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
-import { isSafeSubcircuitParameterValue, isValidSpiceModelName, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, isValidSpiceModelName, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId } from './componentDefinitions'
@@ -512,9 +512,9 @@ export function validateProject(input: unknown): Project {
   for (const asset of (data.modelAssets as ModelLibraryAsset[] | undefined) ?? []) {
     const parsed = parsedModelAssets.get(asset.id)
     if (!parsed) throw new Error(`${asset.filename} could not be parsed as a model library.`)
-    const functions = modelFunctionsForAsset(parsedModelLibraryEntries, asset.id)
     const siblingModelNames = parsed.subcircuits.map((definition) => definition.name)
     for (const definition of parsed.subcircuits) {
+      const functions = modelFunctionsForSubcircuit(parsedModelLibraryEntries, asset.id, definition.name)
       for (const parameter of definition.parameters) {
         if (!isSafeSubcircuitParameterValue(parameter.defaultValue, functions)) throw new Error(`Line ${definition.startLine}: .SUBCKT ${definition.name} parameter ${parameter.name} calls a function that is not available from its library include chain.`)
       }
@@ -522,6 +522,9 @@ export function validateProject(input: unknown): Project {
       if (!importedDefinitionByName.has(name)) importedDefinitionByName.set(name, { asset, definition, functions, siblingModelNames })
     }
     for (const model of parsed.models) {
+      const functions = model.scope
+        ? modelFunctionsForSubcircuit(parsedModelLibraryEntries, asset.id, model.scope)
+        : modelFunctionsForAsset(parsedModelLibraryEntries, asset.id)
       for (const parameter of model.parameters) {
         // .MODEL parsing stores the expression without its optional SPICE
         // braces; restore them for the shared bounded-expression validator.

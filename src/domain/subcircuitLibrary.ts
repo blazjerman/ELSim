@@ -1,7 +1,7 @@
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
-export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; startLine: number; endLine: number }
+export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
 export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; parameters: SubcircuitParameter[]; scope?: string; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
@@ -278,6 +278,43 @@ function parseLibraryFunctions(lines: readonly LogicalLine[]): ModelFunction[] {
     if (!previous) functions.set(key, definition)
   }
   return [...functions.values()]
+}
+
+/** Collect .FUNC declarations by the subcircuit that owns them. */
+function parseScopedLibraryFunctions(lines: readonly LogicalLine[]): Map<string, ModelFunction[]> {
+  const functions = new Map<string, ModelFunction[]>()
+  const scopes: string[] = []
+  for (const line of lines) {
+    const text = withoutInlineComment(line.text)
+    if (!text || text.startsWith('*')) continue
+    const tokens = text.split(/\s+/)
+    const directive = tokens[0].toLowerCase()
+    if (directive === '.subckt') {
+      if (tokens[1]) scopes.push(tokens[1].toLowerCase())
+      continue
+    }
+    if (directive === '.ends') {
+      scopes.pop()
+      continue
+    }
+    if (directive !== '.func' || !scopes.length) continue
+    const definition = parseFunctionDefinition(text, line.start)
+    const key = scopes.at(-1)!
+    const inScope = functions.get(key) ?? []
+    const previous = inScope.find((candidate) => candidate.name.toLowerCase() === definition.name.toLowerCase())
+    if (previous && previous.arity !== definition.arity) throw new Error(`Line ${line.start}: .FUNC ${definition.name} is declared with conflicting argument counts in .SUBCKT ${scopes.at(-1)}.`)
+    if (!previous) {
+      inScope.push(definition)
+      functions.set(key, inScope)
+    }
+  }
+  return functions
+}
+
+function functionAritiesForScopes(globalFunctions: ReadonlyMap<string, number>, scopes: readonly string[], localFunctions: ReadonlyMap<string, readonly ModelFunction[]>): Map<string, number> {
+  const arities = new Map(globalFunctions)
+  for (const scope of scopes) for (const definition of localFunctions.get(scope.toLowerCase()) ?? []) arities.set(definition.name.toLowerCase(), definition.arity)
+  return arities
 }
 
 /**
@@ -675,6 +712,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     if (availableArity !== undefined && availableArity !== definition.arity) throw new Error(`Line ${definition.sourceLine}: .FUNC ${definition.name} conflicts with an available function signature.`)
     functionArities.set(key, definition.arity)
   }
+  const scopedFunctions = parseScopedLibraryFunctions(lines)
   const subcircuits: SubcircuitDefinition[] = []
   const models: SpiceModelDefinition[] = []
   const dependencies: ModelDependency[] = []
@@ -766,7 +804,9 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !pinName.test(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
         throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
       }
-      activeSubcircuits.push({ name, pins, parameters: paramsAt < 0 ? [] : parseParameterDefaults(parameterSource, line.start, functionArities), dependencies: [], ...(activeSubcircuits.at(-1) ? { parentName: activeSubcircuits.at(-1)!.name } : {}), start: line.start })
+      const scopes = [...activeSubcircuits.map(({ name }) => name), name]
+      const scopedArities = functionAritiesForScopes(functionArities, scopes, scopedFunctions)
+      activeSubcircuits.push({ name, pins, parameters: paramsAt < 0 ? [] : parseParameterDefaults(parameterSource, line.start, scopedArities), dependencies: [], ...(activeSubcircuits.at(-1) ? { parentName: activeSubcircuits.at(-1)!.name } : {}), start: line.start })
       modelLines.push(line)
       continue
     }
@@ -775,7 +815,8 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       const active = activeSubcircuits.at(-1)
       if (!active) throw new Error(`Line ${line.start}: .ENDS has no matching .SUBCKT.`)
       if (tokens.length > 2) throw new Error(`Line ${line.start}: .ENDS accepts at most one optional subcircuit name.`)
-      subcircuits.push({ name: active.name, pins: active.pins, parameters: active.parameters, dependencies: active.dependencies, ...(active.parentName ? { parentName: active.parentName } : {}), startLine: active.start, endLine: line.end })
+      const functions = scopedFunctions.get(active.name.toLowerCase()) ?? []
+      subcircuits.push({ name: active.name, pins: active.pins, parameters: active.parameters, dependencies: active.dependencies, ...(active.parentName ? { parentName: active.parentName } : {}), ...(functions.length ? { functions } : {}), startLine: active.start, endLine: line.end })
       activeSubcircuits.pop()
       continue
     }
@@ -788,7 +829,8 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (directive === '.probe') throw new Error(`Line ${line.start}: .PROBE can instrument only top-level circuit devices and cannot appear inside a .SUBCKT.`)
       if (directive === '.meas' || directive === '.measure') throw new Error(`Line ${line.start}: ${tokens[0]} evaluates circuit-wide analysis results and cannot appear inside a .SUBCKT.`)
       if (directive === '.model') {
-        const model = parseModelCard(text, line, activeSubcircuits.at(-1)!.name, functionArities)
+        const activeScopes = activeSubcircuits.map(({ name }) => name)
+        const model = parseModelCard(text, line, activeSubcircuits.at(-1)!.name, functionAritiesForScopes(functionArities, activeScopes, scopedFunctions))
         registerModelCard(model, conditionalBlocks.map(({ id, branch }) => ({ id, branch })), seenModelNames, models)
         continue
       }
@@ -886,6 +928,24 @@ export function modelFunctionsForAsset<T extends ModelLibraryInput>(assets: read
     }
   }
   visit(assetId)
+  return functions
+}
+
+/** Return the global include-chain functions plus local functions visible to one subcircuit and its nested children. */
+export function modelFunctionsForSubcircuit<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[], assetId: string, subcircuitName: string): Map<string, number> {
+  const functions = modelFunctionsForAsset(assets, assetId)
+  const entry = assets.find(({ asset }) => asset.id === assetId)
+  if (!entry) return functions
+  const definitions = new Map(entry.parsed.subcircuits.map((definition) => [definition.name.toLowerCase(), definition]))
+  let definition = definitions.get(subcircuitName.toLowerCase())
+  const scopes: SubcircuitDefinition[] = []
+  const visited = new Set<string>()
+  while (definition && !visited.has(definition.name.toLowerCase())) {
+    visited.add(definition.name.toLowerCase())
+    scopes.push(definition)
+    definition = definition.parentName ? definitions.get(definition.parentName.toLowerCase()) : undefined
+  }
+  for (const scope of scopes.reverse()) for (const local of scope.functions ?? []) functions.set(local.name.toLowerCase(), local.arity)
   return functions
 }
 

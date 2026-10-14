@@ -1,0 +1,11 @@
+Subcircuit-scoped user function parameter default
+V1 IN 0 5
+X1 IN OUT AMP
+R1 OUT 0 1k
+.SUBCKT AMP IN OUT gain={DOUBLE(2)}
+.FUNC DOUBLE(x) {2*x}
+E1 OUT 0 IN 0 {gain}
+.ENDS AMP
+.op
+.print op v(out)
+.end

@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, modelFunctionsForSubcircuit, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
@@ -175,12 +175,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const subcircuitsByName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()
   const subcircuitFunctionsByName = new Map<string, ReadonlyMap<string, number>>()
   for (const [assetIndex, library] of parsedModelAssets.entries()) {
-    const functions = modelFunctionsForAsset(parsedModelLibraryEntries, modelAssets[assetIndex].id)
     for (const definition of library.subcircuits) {
       const key = definition.name.toLowerCase()
       if (!subcircuitsByName.has(key)) {
         subcircuitsByName.set(key, definition)
-        subcircuitFunctionsByName.set(key, functions)
+        subcircuitFunctionsByName.set(key, modelFunctionsForSubcircuit(parsedModelLibraryEntries, modelAssets[assetIndex].id, definition.name))
       }
     }
   }
