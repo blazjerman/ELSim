@@ -156,6 +156,8 @@ test('measure rendering and solve time for a 500-instance nested circuit in brow
 
 test('measure a million-sample transient through the browser ngspice worker and plot UI', async ({ page, browserName }) => {
   test.setTimeout(120_000)
+  const plotWindowCount = Number(process.env.ELSIM_PERF_PLOT_WINDOWS ?? 8)
+  expect(Number.isInteger(plotWindowCount) && plotWindowCount >= 1 && plotWindowCount <= 8, 'ELSIM_PERF_PLOT_WINDOWS must be an integer from 1 to 8').toBe(true)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the browser transient benchmark').toEqual([])
   const pageErrors: string[] = []
@@ -168,21 +170,21 @@ test('measure a million-sample transient through the browser ngspice worker and 
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(4)
-  await page.evaluate(() => {
+  await page.evaluate((windowCount) => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     project.simulation.analysis = 'tran'
     project.simulation.stopTime = '1 s'
     project.simulation.maxStep = '1 µs'
     project.plotSettings.selectedTraceIds = []
     const traces = ['v(vout)', 'v(vin)', 'i(@r1[i])', 'i(@c1[i])']
-    project.plotSettings.panels = Array.from({ length: 8 }, (_, index) => ({
+    project.plotSettings.panels = Array.from({ length: windowCount }, (_, index) => ({
       id: `million-sample-panel-${index + 1}`,
       bounds: { x: 12 + (index % 2) * 628, y: 128 + Math.floor(index / 2) * 356, width: 600, height: 340 },
       selectedTraceIds: traces,
       ranges: {},
     }))
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
-  })
+  }, plotWindowCount)
   await page.reload()
   await expect(page.locator('svg.schematic .circuit-part')).toHaveCount(4)
   const before = await page.evaluate(() => {
@@ -209,8 +211,8 @@ test('measure a million-sample transient through the browser ngspice worker and 
   const maxSample = Number(await slider.getAttribute('max'))
   expect(maxSample).toBeGreaterThan(1_000_000)
   const plots = page.locator('.plot-window')
-  await expect(plots).toHaveCount(8)
-  for (let index = 0; index < 8; index += 1) {
+  await expect(plots).toHaveCount(plotWindowCount)
+  for (let index = 0; index < plotWindowCount; index += 1) {
     const plot = plots.nth(index)
     await expect(plot.locator('.trace-selected-item')).toHaveCount(4)
     await expect(plot.getByRole('button', { name: 'Disable V(vout)' })).toBeVisible()
@@ -218,7 +220,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
   }
   const selectedTraceCount = await page.locator('.plot-window .trace-selected-item').count()
   const renderedTraceCount = await page.locator('.plot-window .waveform-chart polyline').count()
-  expect(selectedTraceCount).toBe(32)
+  expect(selectedTraceCount).toBe(plotWindowCount * 4)
   expect(renderedTraceCount).toBe(selectedTraceCount)
   await page.evaluate(() => { const watch = (window as Window & { __largeTransientWatch?: { phase: string } }).__largeTransientWatch; if (watch) watch.phase = 'cursor-scrubbing' })
   const scrubTimes: number[] = []
@@ -249,7 +251,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
     expect(wasmLinearMemoryBytes, 'the Emscripten worker should report its WASM linear-memory capacity').toBeGreaterThan(0)
     console.log(workerProfiles[0])
   }
-  console.log(JSON.stringify({ benchmark: 'browser-million-sample-eight-window-transient-v4', browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plotWindowCount: await plots.count(), tracesPerWindow: 4, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, wasmLinearMemoryBytes, heapBefore: before, heapAfter: after }, null, 2))
+  console.log(JSON.stringify({ benchmark: `browser-million-sample-${plotWindowCount}-window-transient-v5`, browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plotWindowCount: await plots.count(), tracesPerWindow: 4, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, wasmLinearMemoryBytes, heapBefore: before, heapAfter: after }, null, 2))
 })
 
 test('measure browser waveform rendering with dozens of solved traces', async ({ page, browserName }) => {
