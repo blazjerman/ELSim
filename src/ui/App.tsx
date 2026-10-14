@@ -813,8 +813,7 @@ const CanvasWire = memo(function CanvasWire({ wire, selected, hovered, tool, spa
   </g>
 })
 
-const WireCurrentFlowLayer = memo(function WireCurrentFlowLayer({ wireIds, wires, sampleFlows, animationEnabled, dotSize, dotSpacing }: {
-  wireIds: ReadonlySet<string>
+const WireCurrentFlowLayer = memo(function WireCurrentFlowLayer({ wires, sampleFlows, animationEnabled, dotSize, dotSpacing }: {
   wires: Project['wires']
   sampleFlows: (sampleIndex: number | null) => Map<string, WireCurrentFlowSegment[]>
   animationEnabled: boolean
@@ -822,9 +821,8 @@ const WireCurrentFlowLayer = memo(function WireCurrentFlowLayer({ wireIds, wires
   dotSpacing: number
 }) {
   const sampleIndex = useSimulationCursor()
-  const animatedWires = useMemo(() => wires.filter((wire) => wireIds.has(wire.id)), [wires, wireIds])
   const flows = useMemo(() => sampleFlows(sampleIndex), [sampleIndex, sampleFlows])
-  return <g className="wire-current-flow-layer" aria-hidden="true" pointerEvents="none">{animatedWires.map((wire) => <g key={wire.id} data-wire-id={wire.id}>{(flows.get(wire.id) ?? []).map((segment, index) => {
+  return <g className="wire-current-flow-layer" aria-hidden="true" pointerEvents="none">{wires.map((wire) => <g key={wire.id} data-wire-id={wire.id}>{(flows.get(wire.id) ?? []).map((segment, index) => {
     return <WireFlowPath key={`${wire.id}:${index}`} wireId={wire.id} index={index} segment={segment} enabled={animationEnabled} dotSize={dotSize} dotSpacing={dotSpacing}/>
   })}</g>)}</g>
 })
@@ -1800,7 +1798,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
       <defs><pattern id="small-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#333d36"/></pattern><pattern id="large-grid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#small-grid)"/><circle cx="1" cy="1" r="1.5" fill="#47534a"/></pattern></defs>
       <rect x={viewportLeft} y={viewportTop} width={viewWidth} height={viewHeight} fill="url(#large-grid)" pointerEvents="none"/>
       {orderedVisibleWires.map(renderWire)}
-      {wireFlowSampler && <WireCurrentFlowLayer wireIds={animatedWireIds} wires={project.wires} sampleFlows={sampleWireFlows} animationEnabled={currentAnimationEnabled} dotSize={currentDotSize} dotSpacing={currentDotSpacing}/>}
+      {wireFlowSampler && <WireCurrentFlowLayer wires={visibleWires} sampleFlows={sampleWireFlows} animationEnabled={currentAnimationEnabled} dotSize={currentDotSize} dotSpacing={currentDotSpacing}/>}
       <CanvasConnectionDotLayer dots={wireConnectionDots} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
       <CanvasNetLabelLayer labels={project.netLabels} selectedIds={selectedNetLabelIds} tool={tool} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight} onPointerDown={beginLabelDrag} onSelect={selectLabel}/>
       <CanvasJunctionLayer junctions={project.junctions} viewportLeft={viewportLeft} viewportTop={viewportTop} viewportRight={viewportLeft + viewWidth} viewportBottom={viewportTop + viewHeight}/>
