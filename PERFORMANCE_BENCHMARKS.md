@@ -2,7 +2,7 @@
 
 This is a reproducible baseline, not a claim that every circuit of the same size has the same cost. The labeled fixture is a chain of 100, 500, 1,000, or 5,000 resistors. Every adjacent pair shares a named net; a 5 V source drives the first node and the final node is ground. The generated project contains `N + 1` parts, `2N + 2` labels, and `N + 1` nets. The runner verifies every pin is connected and netlisting emits no error before recording timings. A second fixture places resistors in 50-column rows and connects adjacent parts with independent two-endpoint wire segments; it checks all pin assignments, endpoint counts, and netlist diagnostics.
 
-Run `npm run benchmark:performance` from the repository root. It compiles the relevant TypeScript modules into a temporary directory, performs two warmups and seven measured runs for connectivity, netlisting, hierarchy, plot reduction, raw parsing, and structured cloning, reports median and nearest-rank p95, then removes the temporary build. The plot fixture runs the production extrema reducer over sinusoidal Float64 vectors with narrow injected peaks and enforces a maximum output of 902 points. If the ignored local ngspice WASM runtime exists under `public/engine`, it also runs one cold-worker operating-point solve at each of 100, 1,000, and 5,000 resistor sections, checks that node N0 remains 5 V, and records solver startup, solve, and round-trip observations. It also runs 100k- and 1M-sample transient circuits in fresh workers, parses the raw output with ELSim's production parser, and records raw/vector bytes and 10 ms sampled process RSS. RSS is process-wide and the increase is an estimate relative to the pre-run process baseline; it is not a browser heap or exact per-worker allocation measurement. It does not require the optional runtime for domain/plot measurements and does not modify project files.
+Run `npm run benchmark:performance` from the repository root. It compiles the relevant TypeScript modules into a temporary directory, performs two warmups and seven measured runs for connectivity, netlisting, hierarchy, raw parsing, and structured cloning, reports median and nearest-rank p95, and measures cold and cached plot reduction separately, then removes the temporary build. The plot fixture runs the production extrema reducer over sinusoidal Float64 vectors with narrow injected peaks and enforces a maximum output of 902 points. If the ignored local ngspice WASM runtime exists under `public/engine`, it also runs one cold-worker operating-point solve at each of 100, 1,000, and 5,000 resistor sections, checks that node N0 remains 5 V, and records solver startup, solve, and round-trip observations. It also runs 100k- and 1M-sample transient circuits in fresh workers, parses the raw output with ELSim's production parser, and records raw/vector bytes and 10 ms sampled process RSS. RSS is process-wide and the increase is an estimate relative to the pre-run process baseline; it is not a browser heap or exact per-worker allocation measurement. It does not require the optional runtime for domain/plot measurements and does not modify project files.
 
 ## Baseline
 
@@ -21,6 +21,17 @@ Measured on 2026-10-10 with Node 18.20.4, Linux x64, and an Intel Core i7-12700F
 | 1,000,000 | 8,000,000 | 902 | 0.983 |
 
 The optional local ngspice 47 WebAssembly build was available for this run. Solver timings below are a single cold-worker observation per circuit size; parser and Node structured-clone estimates use the repeated-run statistics described above.
+
+### Plot reducer cache-aware measurement
+
+The current benchmark version measures cold downsampling and cached lookup separately. Cold vectors are prepared outside the timed interval so the first reducer pass is measured without including array allocation; each run uses a distinct vector so a previous pass cannot satisfy it from the WeakMap cache. The cached lookup row measures repeated requests for the same immutable vector/range after populating that cache.
+
+| Input samples | Output points | Cold reduction median / p95 (ms) | Cached lookup median / p95 (ms) |
+| ---: | ---: | ---: | ---: |
+| 100,000 | 901 | 0.139 / 3.463 | 0.001 / 0.003 |
+| 1,000,000 | 902 | 1.010 / 1.023 | <0.001 / 0.001 |
+
+Measured 2026-10-14 on the same local Node/Linux/i7-12700F host stated above. The 100k p95 includes a single outlier; these are microbenchmark observations, not browser-frame or CI guarantees. Earlier reducer numbers in the baseline table were recorded by an older benchmark version and should not be compared directly with these cache-separated timings.
 
 | Resistor sections | Module load | OP solve | Worker round trip | Raw bytes | Vector bytes | Raw parse p95 | Clone estimate p95 |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

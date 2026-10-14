@@ -489,13 +489,17 @@ try {
   const plotResults = []
   for (const sampleCount of [100_000, 1_000_000]) {
     const values = Float64Array.from({ length: sampleCount }, (_, index) => Math.sin(index * 0.013) + (index % 100_003 === 17 ? 10 : 0))
-    const result = measure(() => extremaIndices(values, 0, values.length - 1, 900))
-    if (result.value.length > 902) throw new Error(`Plot reducer exceeded its point budget for ${sampleCount} samples.`)
+    const ranges = Array.from({ length: 9 }, () => values.slice())
+    let rangeIndex = 0
+    const cold = measure(() => extremaIndices(ranges[rangeIndex++], 0, sampleCount - 1, 900))
+    const cached = measure(() => extremaIndices(values, 0, sampleCount - 1, 900))
+    if (cold.value.length > 902) throw new Error(`Plot reducer exceeded its point budget for ${sampleCount} samples.`)
     plotResults.push({
       inputSamples: sampleCount,
-      outputPoints: result.value.length,
+      outputPoints: cold.value.length,
       bytesAtFloat64: sampleCount * Float64Array.BYTES_PER_ELEMENT,
-      reducedPoints: { medianMs: result.medianMs, p95Ms: result.p95Ms },
+      coldReduction: { medianMs: cold.medianMs, p95Ms: cold.p95Ms },
+      cachedLookup: { medianMs: cached.medianMs, p95Ms: cached.p95Ms },
     })
   }
 
@@ -582,7 +586,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 9,
+    benchmarkVersion: 10,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
