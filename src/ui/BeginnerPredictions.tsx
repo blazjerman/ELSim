@@ -102,6 +102,24 @@ export function DiodePolarityPrediction({ supplyValue }: { supplyValue: string }
   />
 }
 
+export function RectifierPeakPrediction({ offsetValue, amplitudeValue }: { offsetValue: string; amplitudeValue: string }) {
+  const offset = componentMagnitude(offsetValue, 'source')
+  const amplitude = componentMagnitude(amplitudeValue, 'source')
+  const inputPeak = offset !== null && amplitude !== null ? offset + Math.abs(amplitude) : null
+  const outputPeak = inputPeak === null ? null : Math.max(0, inputPeak - 0.7)
+  const explanation = outputPeak === null
+    ? 'Use numeric sine offset and amplitude values to estimate the positive output peak.'
+    : `The positive input peak is ${formatValue(inputPeak!)} V. A forward-biased silicon diode drops about 0.7 V, so the estimated output peak is ${formatValue(outputPeak)} V. During the negative half-cycle the diode blocks and VOUT stays near 0 V. The actual diode model is nonlinear, so ngspice may differ from this simple estimate.`
+  return <NumericPrediction
+    id="rectifier-output-peak-prediction"
+    prompt="Before running, estimate the positive VOUT peak after D1"
+    unit="V"
+    predictedValue={outputPeak}
+    absoluteTolerance={0.15}
+    explanation={explanation}
+  />
+}
+
 type BjtSwitchPredictionProps = {
   driveValue: string
   baseResistanceValue: string
@@ -552,7 +570,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -589,6 +607,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'diode-polarity': return <DiodePolarityPrediction supplyValue={props.supplyValue ?? ''}/>
+    case 'rectifier-peak': return <RectifierPeakPrediction offsetValue={props.offsetValue ?? ''} amplitudeValue={props.amplitudeValue ?? ''}/>
     case 'npn-switch': return <NpnSwitchPrediction driveValue={props.driveValue ?? ''} baseResistanceValue={props.resistanceValue ?? ''} betaValue={props.betaValue ?? ''} supplyValue={props.supplyValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'pnp-switch': return <PnpSwitchPrediction driveValue={props.driveValue ?? ''} baseResistanceValue={props.resistanceValue ?? ''} betaValue={props.betaValue ?? ''} supplyValue={props.supplyValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'nmos-switch': return <FetSwitchPrediction channelType="n" driveValue={props.driveValue ?? ''} supplyValue={props.supplyValue ?? ''} thresholdValue={props.thresholdValue ?? ''}/>

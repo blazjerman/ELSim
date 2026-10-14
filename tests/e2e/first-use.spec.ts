@@ -686,6 +686,32 @@ test('diode-polarity lesson updates its current-flow prediction with source pola
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
 })
 
+test('half-wave rectifier predicts its output peak from the live sine source', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Diodes & LEDs' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Diode half-wave rectifier' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('textbox', { name: 'Before running, estimate the positive VOUT peak after D1' })
+  await expect(lesson).toContainText('approximate 0.7 V forward drop')
+  await estimate.fill('5V')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Not quite. The positive input peak is 5 V')
+  await expect(lesson.getByRole('status')).toContainText('estimated output peak is 4.3 V')
+
+  await page.locator('.circuit-part[data-part-id="rectifier-v1"]').click()
+  await page.getByLabel('Amplitude (V)').fill('8')
+  await expect(estimate).toHaveValue('')
+  await estimate.fill('7.3V')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. The positive input peak is 8 V')
+  await expect(lesson.getByRole('status')).toContainText('estimated output peak is 7.3 V')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+})
+
 test('NPN switch lesson predicts collector drive and recalculates with base resistance', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
