@@ -9990,6 +9990,35 @@ test('imported .MODEL defaults that call .FUNC helpers stay in the generated net
   await expect(netlist).toContainText('.MODEL USER_NPN NPN (IS=1e-14 BF={SCALE(5)} VAF=100)')
 })
 
+test('imported subcircuit-local .FUNC validates IC defaults and instance overrides', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  const library = '.SUBCKT LOCAL_GAIN IN OUT GAIN={DOUBLE(2)}\n.FUNC DOUBLE(x) {2*x}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS LOCAL_GAIN\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'local-function.lib', mimeType: 'text/plain', buffer: Buffer.from(library),
+  })
+  const model = page.locator('.imported-model').filter({ hasText: 'LOCAL_GAIN' })
+  await expect(model).toContainText('Parameters: GAIN={DOUBLE(2)}')
+  await model.getByRole('button', { name: 'Create simple symbol & place' }).click()
+
+  const part = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(part).toBeVisible()
+  await part.click()
+  const parameter = page.getByRole('textbox', { name: 'GAIN model value' })
+  await expect(parameter).toHaveValue('{DOUBLE(2)}')
+  await parameter.fill('{DOUBLE(4)}')
+  await parameter.blur()
+  await expect(parameter).not.toHaveAttribute('aria-invalid', 'true')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((item: { ref: string }) => item.ref === 'X1')?.modelParameters)).toEqual({ GAIN: '{DOUBLE(4)}' })
+
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')
+  await expect(netlist).toContainText('.FUNC DOUBLE(x) {2*x}')
+  await expect(netlist).toContainText('.SUBCKT LOCAL_GAIN IN OUT GAIN={DOUBLE(2)}')
+  await expect(netlist).toContainText('GAIN={DOUBLE(4)}')
+})
+
 test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
