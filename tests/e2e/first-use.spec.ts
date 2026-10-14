@@ -1781,6 +1781,26 @@ test('native passive and transmission-line model references resolve across impor
   await expect(report).toHaveCount(0)
 })
 
+test('standalone resistor capacitor and inductor can select imported native models', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const library = ['.MODEL R_CUSTOM R(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n')
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'passives.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
+  for (const [id, modelName, modelType] of [['p-r1', 'R_CUSTOM', 'R'], ['p-c1', 'C_CUSTOM', 'C']]) {
+    await page.locator(`.circuit-part[data-part-id="${id}"]`).click()
+    const model = page.getByLabel(`Device model for ${id === 'p-r1' ? 'R1' : 'C1'}`)
+    await expect(model.locator('option', { hasText: `${modelName} (${modelType})` })).toHaveCount(1)
+    await model.selectOption(modelName)
+    await expect(page.locator(`.circuit-part[data-part-id="${id}"]`)).toBeVisible()
+  }
+  await page.locator('.circuit-part[data-part-id="p-c1"]').click()
+  await expect(page.getByLabel('Device model for C1').locator('option', { hasText: 'C_CUSTOM (C)' })).toHaveCount(1)
+  await page.getByLabel('Device model for C1').selectOption('C_CUSTOM')
+  await expect(page.locator('[data-part-setting="p-c1:value"]')).toHaveAttribute('placeholder', 'Leave blank to use model default')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+    await expect(page.locator('.netlist-modal pre')).toContainText(/^C1 .* C_CUSTOM$/m)
+})
+
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()

@@ -293,6 +293,10 @@
           },
           "required": {
             "type": "boolean"
+          },
+          "defaultValue": {
+            "type": "string",
+            "maxLength": 128
           }
         }
       }

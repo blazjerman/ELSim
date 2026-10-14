@@ -182,6 +182,7 @@ test('imported device model compatibility has one canonical type per built-in de
     voltageSwitch: 'sw',
   }
   for (const [kind, type] of Object.entries(expected)) assert.equal(compatibleDeviceModelType(kind), type, kind)
+  for (const kind of ['resistor', 'capacitor', 'inductor']) assert.equal(compatibleDeviceModelType(kind), undefined, kind)
   for (const definition of componentDefinitions) {
     if (!(definition.kind in expected)) assert.equal(compatibleDeviceModelType(definition.kind), undefined, definition.kind)
   }

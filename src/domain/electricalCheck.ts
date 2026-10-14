@@ -31,7 +31,7 @@ function expectedModelTypeLabel(types: readonly string[]): string {
 }
 
 function importedDeviceModelIssue(part: Part, modelTypes: Map<string, { type: string; channel?: 'n' | 'p' }>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
-  const expectedType = compatibleDeviceModelType(part.kind)
+  const expectedType = compatibleDeviceModelType(part.kind) ?? (part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined)
   if (!expectedType || !part.deviceModel) return null
   const modelType = modelTypes.get(part.deviceModel.toLowerCase())
   const location = sheetName ? ` in ${sheetName}` : ''
@@ -122,10 +122,10 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     view: project.view,
   }, connectivity)
 
-  const importedDeviceModels = new Map<string, { type: string; channel?: 'n' | 'p' }>()
+  const importedDeviceModels = new Map<string, { type: string; channel?: 'n' | 'p'; parameters: { name: string; defaultValue: string }[] }>()
   for (const asset of project.modelAssets ?? []) {
     try {
-      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope) importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel: model.channel })
+      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope || ['r', 'c', 'l'].includes(model.type.toLowerCase())) importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel: model.channel, parameters: model.parameters })
     } catch {
       // Invalid library syntax has its own importer diagnostic.
     }
@@ -208,7 +208,10 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         invalidValue('Enter a numeric current with an optional SI prefix, or use a parameter declared on this sheet.')
       } else if (['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) {
         const magnitude = componentMagnitude(part.value, part.kind)
-        if (magnitude === null && !isSheetParameter(part.value)) invalidValue('Enter a numeric value with an optional SI prefix, or use a parameter declared on this sheet.')
+        const requiredModelParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
+        const deviceModel = part.deviceModel ? importedDeviceModels.get(part.deviceModel.toLowerCase()) : undefined
+        const modelSuppliesValue = Boolean(requiredModelParameter && deviceModel?.type === part.kind[0] && deviceModel.parameters.some((parameter) => parameter.name.toLowerCase() === requiredModelParameter))
+        if (magnitude === null && !isSheetParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) invalidValue(part.value.trim() === '' && part.deviceModel ? `Imported model ${part.deviceModel} must declare ${requiredModelParameter?.toUpperCase()} to supply this value.` : 'Enter a numeric value with an optional SI prefix, or use a parameter declared on this sheet.')
         else if (magnitude !== null && magnitude <= 0) issues.push({
           id: `nonpositive-value:${sheet.id}:${part.id}`,
           severity: 'warning',
@@ -388,8 +391,11 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
     if (['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) {
       const magnitude = componentMagnitude(part.value, part.kind)
-      if (magnitude === null && !isDeclaredParameter(part.value)) {
-        issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid value`, detail: 'Enter a numeric value with an optional SI prefix, such as 1 kΩ, 10 µF, or 2 mH.', partId: part.id })
+      const requiredModelParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
+      const deviceModel = part.deviceModel ? importedDeviceModels.get(part.deviceModel.toLowerCase()) : undefined
+      const modelSuppliesValue = Boolean(requiredModelParameter && deviceModel?.type === part.kind[0] && deviceModel.parameters.some((parameter) => parameter.name.toLowerCase() === requiredModelParameter))
+      if (magnitude === null && !isDeclaredParameter(part.value) && !(part.value.trim() === '' && modelSuppliesValue)) {
+        issues.push({ id: `invalid-value:${part.id}`, severity: 'warning', title: `${part.ref} has an invalid value`, detail: part.value.trim() === '' && part.deviceModel ? `Imported model ${part.deviceModel} must declare ${requiredModelParameter?.toUpperCase()} to supply this value.` : 'Enter a numeric value with an optional SI prefix, such as 1 kΩ, 10 µF, or 2 mH.', partId: part.id })
       } else if (magnitude !== null && magnitude <= 0) {
         issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
       }

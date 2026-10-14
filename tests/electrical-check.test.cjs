@@ -33,7 +33,7 @@ test('voltage-controlled switch checks imported SW model presence and type', () 
 
 test('device-model preflight matches each built-in device family to its SPICE card type', () => {
   const cases = [
-    ['diode', 'D'], ['zener', 'D'], ['led', 'D'],
+    ['resistor', 'R'], ['capacitor', 'C'], ['inductor', 'L'], ['diode', 'D'], ['zener', 'D'], ['led', 'D'],
     ['npn', 'NPN'], ['pnp', 'PNP'], ['njfet', 'NJF'], ['pjfet', 'PJF'],
     ['nmos', 'NMOS'], ['pmos', 'PMOS'], ['voltageSwitch', 'SW'],
   ]
@@ -50,7 +50,8 @@ test('device-model preflight matches each built-in device family to its SPICE ca
     root.wires = []
     root.junctions = []
     root.netLabels = []
-    const asset = (modelType) => ({ id: 'user-model', filename: 'device.lib', sha256: 'a'.repeat(64), content: `.model USER_MODEL ${modelType}(Is=1n)\n`, licenseStatus: 'unknown', importedAt: new Date().toISOString() })
+    const modelParameters = { R: 'R=1k', C: 'CAP=1u', L: 'IND=1m' }
+    const asset = (modelType) => ({ id: 'user-model', filename: 'device.lib', sha256: 'a'.repeat(64), content: `.model USER_MODEL ${modelType}(${modelParameters[modelType] ?? 'Is=1n'})\n`, licenseStatus: 'unknown', importedAt: new Date().toISOString() })
 
     project.modelAssets = [asset(expectedType)]
     let issue = checkCircuit(project).find((item) => item.id.startsWith('incompatible-device-model:') || item.id.startsWith('missing-device-model:'))
@@ -59,9 +60,20 @@ test('device-model preflight matches each built-in device family to its SPICE ca
     const wrongType = expectedType === 'D' ? 'SW' : 'D'
     project.modelAssets = [asset(wrongType)]
     issue = checkCircuit(project).find((item) => item.id === `incompatible-device-model:${id}`)
-    assert.ok(issue, `${kind} should reject a ${wrongType} model`)
+    assert.ok(issue, `${kind} should reject a ${wrongType} model; issues: ${JSON.stringify(checkCircuit(project))}`)
     assert.match(issue.detail, new RegExp(`requires a ${expectedType} model`))
   }
+})
+
+test('blank passive value is accepted only when its imported model declares the SPICE default', () => {
+  const project = createStarterProject()
+  const capacitor = project.parts.find((part) => part.kind === 'capacitor')
+  capacitor.value = ''
+  capacitor.deviceModel = 'C_USER'
+  project.modelAssets = [{ id: 'c-model', filename: 'c.lib', sha256: 'f'.repeat(64), content: '.model C_USER C(CAP=10u)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  assert.equal(checkCircuit(project).some((issue) => issue.id === `invalid-value:${capacitor.id}`), false)
+  project.modelAssets[0].content = '.model C_USER C(TC1=0.01)\n'
+  assert.match(checkCircuit(project).find((issue) => issue.id === `invalid-value:${capacitor.id}`).detail, /must declare CAP/i)
 })
 
 test('current sources accept signed SI-prefix currents and flag malformed values', () => {

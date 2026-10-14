@@ -934,7 +934,8 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       subcircuitParents.set(`${asset.id}:${model.name.toLowerCase()}`, model.parentName?.toLowerCase())
     }
     for (const model of parsed.models) {
-      if (model.scope) {
+      const passiveModel = ['r', 'c', 'l'].includes(model.type.toLowerCase())
+      if (model.scope && !passiveModel) {
         scopedDeviceModelAssets.set(`${asset.id}:${model.scope.toLowerCase()}:${model.name.toLowerCase()}`, asset.id)
         scopedDeviceModels.set(`${asset.id}:${model.scope.toLowerCase()}:${model.name.toLowerCase()}`, model)
         continue

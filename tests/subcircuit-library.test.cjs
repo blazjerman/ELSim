@@ -826,6 +826,15 @@ test('resolves cross-library device and nested-subcircuit dependencies', () => {
   assert.deepEqual([...requiredModelAssetIds(report, [{ kind: 'diode', deviceModel: 'DFAST' }])], ['core'])
 })
 
+test('standalone R C L model cards keep their imported libraries required', () => {
+  const report = analyzeModelDependencies([{ id: 'passive-models', filename: 'passives.lib', content: [
+    '.MODEL R_CUSTOM R(R=2k)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)',
+  ].join('\n') }])
+  for (const [kind, deviceModel] of [['resistor', 'R_CUSTOM'], ['capacitor', 'C_CUSTOM'], ['inductor', 'L_CUSTOM']]) {
+    assert.deepEqual([...requiredModelAssetIds(report, [{ kind, deviceModel }])], ['passive-models'])
+  }
+})
+
 test('reports duplicate model names across imported files with both source locations', () => {
   const report = analyzeModelDependencies([
     { id: 'amp-a', filename: 'amp-a.lib', content: '.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP\n.MODEL DFAST D(Is=1n)' },

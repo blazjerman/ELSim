@@ -209,8 +209,13 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
     const value = part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
-    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && value === null) {
-      const message = `${part.ref} has an invalid numeric value.`
+    const passiveModelType = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined
+    const passiveModel = part.deviceModel ? parsedModelAssets.flatMap((library) => library.models).find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
+    const passiveDefaultParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
+    const passiveModelSuppliesValue = Boolean(passiveModelType && passiveModel?.type.toLowerCase() === passiveModelType && passiveDefaultParameter && passiveModel.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
+    const valueCanBeModelDefault = value === null && part.value.trim() === '' && passiveModelSuppliesValue
+    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && value === null && !valueCanBeModelDefault) {
+      const message = `${part.ref} has an invalid numeric value${passiveDefaultParameter && part.value.trim() === '' ? ` (no compatible model with ${passiveDefaultParameter.toUpperCase()} default)` : ''}.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
       continue
@@ -496,7 +501,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           elementPositive = internalNode
         }
       }
-      append(`${part.ref} ${elementPositive} ${negative} ${value}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
+      if (part.deviceModel && (!passiveModel || passiveModel.type.toLowerCase() !== passiveModelType)) {
+        const message = `${part.ref} device model ${part.deviceModel} is missing or is not a ${passiveModelType?.toUpperCase()} model.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const instanceValue = value ?? ''
+      const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
+      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led') {
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined

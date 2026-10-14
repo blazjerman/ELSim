@@ -23,6 +23,37 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('standalone R C and L parts can use imported models and model defaults', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'passive-models', filename: 'passives.lib', sha256: 'd'.repeat(64), content: ['.MODEL R_CUSTOM R(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  const capacitor = project.parts.find((part) => part.kind === 'capacitor')
+  const inductor = { ...capacitor, id: 'l1', ref: 'L1', kind: 'inductor', value: '' }
+  resistor.deviceModel = 'R_CUSTOM'
+  resistor.value = '1k'
+  capacitor.deviceModel = 'C_CUSTOM'
+  capacitor.value = ''
+  inductor.deviceModel = 'L_CUSTOM'
+  project.parts.push(inductor)
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^R1 vin vout 1k R_CUSTOM$/m)
+  assert.match(artifact.text, /^C1 vout 0 C_CUSTOM$/m)
+  assert.match(artifact.text, /^L1 vout 0 L_CUSTOM$/m)
+})
+
+test('passive model defaults require a matching card and declared nominal parameter', () => {
+  const project = createStarterProject()
+  const capacitor = project.parts.find((part) => part.kind === 'capacitor')
+  capacitor.value = ''
+  capacitor.deviceModel = 'BAD_C'
+  project.modelAssets = [{ id: 'bad-passives', filename: 'bad.lib', sha256: 'e'.repeat(64), content: '.MODEL BAD_C D(Is=1n)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const artifact = createNetlistArtifact(project)
+  assert.ok(artifact.diagnostics.some((diagnostic) => /invalid numeric value.*CAP default/.test(diagnostic.message)))
+  assert.match(artifact.text, /\* ERROR: C1 has an invalid numeric value/)
+})
+
 test('project-local .LIB references flatten only the selected named section into the generated netlist', () => {
   const project = createStarterProject()
   project.modelAssets = [
