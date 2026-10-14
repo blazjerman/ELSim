@@ -686,3 +686,7 @@ The existing local runtime solved 1,000,130 transient samples and rendered 32 tr
 | Two-level repeated hierarchy | 5,000 root instances | 76.77 / 87.37 | 110.21 / 133.34 | 104.11 |
 
 All remain within the current 500 ms domain targets. One-million-sample cold plot reduction was 1.04 ms median / 1.04 ms p95 with the 902-point bound. The quick profile does not measure browser rendering, solver execution, or cross-machine behavior; no new optimization was justified by these measurements.
+
+### Firefox 5,000-part interaction recheck (2026-10-14)
+
+The existing `editor-wire-heavy-navigation-v9` Playwright benchmark was rerun on Firefox after the full UI audit. With 5,000 parts and 4,900 independent two-endpoint wires, initial render was **760.93 ms**; viewport culling mounted 64 parts and 551 wires. Selection median/p95 was **6/18 ms**, select-all-to-frame **46 ms**, zoom-to-two-frames median/max **40/57 ms**, and arrow-navigation median/max **18/21 ms**. The focused benchmark passed. These are one-host measurements, consistent with the preceding Firefox profile; they do not establish a cross-device budget or justify speculative renderer changes. No WASM rebuild or Pages workflow ran.
