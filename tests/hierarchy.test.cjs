@@ -252,6 +252,26 @@ test('sheet block parameters provide defaults, per-instance overrides, and safe 
   assert.match(createNetlistArtifact(unsafeExpression).diagnostics.find((item) => item.severity === 'error')?.message ?? '', /invalid numeric value/)
 })
 
+test('sheet block parameter defaults and overrides can call imported project functions', () => {
+  const project = createBlockProject()
+  project.modelAssets = [{ id: 'functions', filename: 'functions.lib', content: '.FUNC DOUBLE(x) {2k*x}\n', sha256: 'f'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const child = project.sheets[1]
+  child.parameters = [{ id: 'param-load', name: 'RLOAD', defaultValue: '{DOUBLE(1)}' }]
+  child.parts[0].value = '{RLOAD}'
+  project.parts[1].sheetParameters = { RLOAD: '{DOUBLE(3)}' }
+  project.sheets[0].parts = project.parts
+  const checked = validateProject(project)
+  const artifact = createNetlistArtifact(checked)
+  assert.deepEqual(artifact.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
+  assert.match(artifact.text, /^\.FUNC DOUBLE\(x\) \{2k\*x\}$/mi)
+  assert.match(artifact.text, /^\.SUBCKT ELSIM_SHEET_sheet_load IN OUT PARAMS: RLOAD=\{DOUBLE\(1\)\}$/m)
+  assert.match(artifact.text, /^XLOAD\s+\S+\s+\S+\s+ELSIM_SHEET_sheet_load PARAMS: RLOAD=\{DOUBLE\(3\)\}$/m)
+  const invalid = structuredClone(checked)
+  invalid.parts[1].sheetParameters = { RLOAD: '{MISSING(3)}' }
+  invalid.sheets[0].parts = invalid.parts
+  assert.throws(() => validateProject(invalid), /unsupported block parameter override/)
+})
+
 test('nested sheet data generates inner definitions before outer reusable blocks', () => {
   const project = createBlockProject()
   const outer = project.sheets[1]

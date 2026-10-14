@@ -609,7 +609,7 @@ export function needsLtspiceFullDeckTranslation(source: string): boolean {
 }
 
 /** Parse self-contained SPICE model libraries without executing file directives. */
-export function parseSubcircuitLibrary(source: string, selectedSections?: string[]): ParsedSubcircuitLibrary {
+export function parseSubcircuitLibrary(source: string, selectedSections?: string[], availableFunctions: ReadonlyMap<string, number> = new Map()): ParsedSubcircuitLibrary {
   if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
   if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
   const inspected = inspectLibrarySections(source)
@@ -626,7 +626,13 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     : inspected.lines.map(({ line }) => line)
 
   const functions = parseLibraryFunctions(lines)
-  const functionArities = new Map(functions.map(({ name, arity }) => [name.toLowerCase(), arity]))
+  const functionArities = new Map(availableFunctions)
+  for (const definition of functions) {
+    const key = definition.name.toLowerCase()
+    const availableArity = functionArities.get(key)
+    if (availableArity !== undefined && availableArity !== definition.arity) throw new Error(`Line ${definition.sourceLine}: .FUNC ${definition.name} conflicts with an available function signature.`)
+    functionArities.set(key, definition.arity)
+  }
   const subcircuits: SubcircuitDefinition[] = []
   const models: SpiceModelDefinition[] = []
   const dependencies: ModelDependency[] = []
@@ -836,6 +842,22 @@ export function modelFunctionsForAsset<T extends ModelLibraryInput>(assets: read
     }
   }
   visit(assetId)
+  return functions
+}
+
+/** Return unique function signatures declared by all imported project libraries. */
+export function modelFunctionsForProject<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[]): Map<string, number> {
+  const functions = new Map<string, number>()
+  const ambiguous = new Set<string>()
+  for (const { parsed } of assets) for (const definition of parsed.functions) {
+    const key = definition.name.toLowerCase()
+    if (ambiguous.has(key)) continue
+    const previous = functions.get(key)
+    if (previous !== undefined && previous !== definition.arity) {
+      functions.delete(key)
+      ambiguous.add(key)
+    } else functions.set(key, definition.arity)
+  }
   return functions
 }
 

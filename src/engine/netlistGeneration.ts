@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { isSafeSubcircuitParameterValue, modelFunctionsForAsset, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
@@ -160,13 +160,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const modelAssets = project.modelAssets ?? []
   const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections))
   const parsedModelLibraryEntries = modelAssets.map((asset, index) => ({ asset, parsed: parsedModelAssets[index] }))
+  const projectModelFunctions = modelFunctionsForProject(parsedModelLibraryEntries)
   const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models.filter((model) => !model.scope))
   const importedDeviceModelsByName = new Map<string, typeof importedDeviceModels[number]>()
   for (const model of importedDeviceModels) {
     const key = model.name.toLowerCase()
     if (!importedDeviceModelsByName.has(key)) importedDeviceModelsByName.set(key, model)
   }
-  const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary).subcircuits : []
+  const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary, undefined, projectModelFunctions).subcircuits : []
   const subcircuitsByName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()
   const subcircuitFunctionsByName = new Map<string, ReadonlyMap<string, number>>()
   for (const [assetIndex, library] of parsedModelAssets.entries()) {
@@ -181,7 +182,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   }
   for (const definition of generatedSubcircuits) {
     const key = definition.name.toLowerCase()
-    if (!subcircuitsByName.has(key)) subcircuitsByName.set(key, definition)
+    if (!subcircuitsByName.has(key)) {
+      subcircuitsByName.set(key, definition)
+      subcircuitFunctionsByName.set(key, projectModelFunctions)
+    }
   }
   const usedReferences = new Set(project.parts.map((part) => part.ref.toLowerCase()))
   const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.map((label) => label.name)].map((name) => name.toLowerCase()))
@@ -573,7 +577,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      const invalidParameter = Object.entries(part.modelParameters ?? {}).find(([name, value]) => !definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value, subcircuitFunctionsByName.get(definition.name.toLowerCase())))
+      const overrides = part.sheetId ? part.sheetParameters : part.modelParameters
+      const functions = part.sheetId ? projectModelFunctions : subcircuitFunctionsByName.get(definition.name.toLowerCase())
+      const invalidParameter = Object.entries(overrides ?? {}).find(([name, value]) => !definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value, functions))
       if (invalidParameter) {
         const message = `${part.ref} has an invalid value for subcircuit parameter ${cleanComment(invalidParameter[0])}. Enter a numeric SPICE value such as 10k or 2.5.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -581,7 +587,6 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const nodes = part.modelPins.map((_, index) => pinNet(connectivity, part, index))
-      const overrides = part.sheetId ? part.sheetParameters : part.modelParameters
       const parameters = definition.parameters.flatMap((parameter) => {
         const override = Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1]
         return override === undefined ? [] : [`${parameter.name}=${override}`]

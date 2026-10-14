@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionsForAsset, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
   for (const value of ['1k', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}']) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
@@ -33,6 +33,11 @@ test('imported functions are scoped to the model and its project-local include c
     { asset: { id: 'unrelated', filename: 'unrelated.lib', content: '.FUNC SECRET(x) {x}\n' }, parsed: parseSubcircuitLibrary('.FUNC SECRET(x) {x}\n') },
   ]
   assert.deepEqual([...modelFunctionsForAsset(assets, 'root')], [['double', 1]])
+  assert.deepEqual([...modelFunctionsForProject(assets)], [['double', 1], ['secret', 1]])
+  const conflicting = { asset: { id: 'conflict', filename: 'conflict.lib', content: '.FUNC DOUBLE(x, y) {x+y}\n' }, parsed: parseSubcircuitLibrary('.FUNC DOUBLE(x, y) {x+y}\n') }
+  assert.equal(modelFunctionsForProject([...assets, conflicting]).has('double'), false)
+  const block = parseSubcircuitLibrary('.SUBCKT BLOCK IN OUT GAIN={DOUBLE(2)}\nR1 IN OUT {GAIN}\n.ENDS BLOCK', undefined, modelFunctionsForProject(assets))
+  assert.equal(block.subcircuits[0].parameters[0].defaultValue, '{DOUBLE(2)}')
 })
 
 test('combined model-library analysis shares parsed cards with dependency resolution', () => {

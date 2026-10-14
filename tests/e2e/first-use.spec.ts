@@ -3213,8 +3213,12 @@ test('reused sheet interface edits update block pins and attached wires', async 
 test('hierarchical block parameter overrides validate before saving and update the netlist', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const functionLibrary = '.FUNC DOUBLE(x) {2k*x}\n'
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(functionLibrary))
+    const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    project.modelAssets = [{ id: 'block-functions', filename: 'block-functions.lib', content: functionLibrary, sha256, licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
     const child = {
       id: 'sheet-parameter', name: 'Parameterized load', parentSheetId: 'sheet-main',
       parts: [{ id: 'parameter-resistor', kind: 'resistor', componentDefinitionId: 'elsim.resistor', ref: 'RLOAD', value: '{RLOAD}', x: 300, y: 200, rotation: 0 }],
@@ -3222,7 +3226,7 @@ test('hierarchical block parameter overrides validate before saving and update t
       netLabels: [{ id: 'parameter-label-in', name: 'IN', x: 248, y: 200, visible: true }, { id: 'parameter-label-out', name: 'OUT', x: 352, y: 200, visible: true }],
       view: { zoom: 1, panX: 0, panY: 0 },
       ports: [{ id: 'parameter-port-in', name: 'IN', side: 'left', direction: 'input' }, { id: 'parameter-port-out', name: 'OUT', side: 'right', direction: 'output' }],
-      parameters: [{ id: 'parameter-rload', name: 'RLOAD', defaultValue: '1k' }],
+      parameters: [{ id: 'parameter-rload', name: 'RLOAD', defaultValue: '{DOUBLE(1)}' }],
     }
     const block = { id: 'parameter-block', kind: 'subcircuit', componentDefinitionId: 'elsim.subcircuit', ref: 'XLOAD', value: 'Parameterized load', modelName: 'ELSIM_SHEET_sheet_parameter', modelPins: ['IN', 'OUT'], sheetId: child.id, sheetPortLayout: child.ports.map(({ side, direction }) => ({ side, direction })), x: 420, y: 350, rotation: 0 }
     project.parts.push(block)
@@ -3238,12 +3242,13 @@ test('hierarchical block parameter overrides validate before saving and update t
   await expect(page.getByRole('alert')).toContainText('Enter a numeric SPICE value')
   await expect(value).toHaveAttribute('aria-invalid', 'true')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'parameter-block').sheetParameters)).toBeUndefined()
-  await value.fill('3k')
+  await value.fill('{DOUBLE(3)}')
   await value.blur()
   await expect(value).toHaveAttribute('aria-invalid', 'false')
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'parameter-block').sheetParameters)).toEqual({ RLOAD: '3k' })
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'parameter-block').sheetParameters)).toEqual({ RLOAD: '{DOUBLE(3)}' })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText(/XLOAD \S+ \S+ ELSIM_SHEET_sheet_parameter PARAMS: RLOAD=3k/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/\.SUBCKT ELSIM_SHEET_sheet_parameter IN OUT PARAMS: RLOAD=\{DOUBLE\(1\)\}/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/XLOAD \S+ \S+ ELSIM_SHEET_sheet_parameter PARAMS: RLOAD=\{DOUBLE\(3\)\}/)
 })
 
 test('shift selection moves, copies, pastes, and deletes a group of parts', async ({ page }) => {

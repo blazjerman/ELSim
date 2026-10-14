@@ -1,6 +1,6 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
-import { isSafeSubcircuitParameterValue, modelFunctionsForAsset, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
@@ -504,6 +504,7 @@ export function validateProject(input: unknown): Project {
     const parsed = parsedModelAssets.get(asset.id)
     return parsed ? [{ asset, parsed }] : []
   })
+  const projectModelFunctions = modelFunctionsForProject(parsedModelLibraryEntries)
   const importedDefinitionByName = new Map<string, { asset: ModelLibraryAsset; definition: SubcircuitDefinition; functions: ReadonlyMap<string, number> }>()
   const importedDeviceModelByName = new Map<string, SpiceModelDefinition>()
   for (const asset of (data.modelAssets as ModelLibraryAsset[] | undefined) ?? []) {
@@ -754,7 +755,7 @@ export function validateProject(input: unknown): Project {
     }
     const parameterNames = new Set<string>(), parameterIds = new Set<string>()
     for (const parameter of sheet.parameters ?? []) {
-      if (!parameter || typeof parameter.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(parameter.id) || parameterIds.has(parameter.id) || typeof parameter.name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(parameter.name) || ['__proto__', 'constructor', 'prototype'].includes(parameter.name.toLowerCase()) || parameterNames.has(parameter.name.toLowerCase()) || typeof parameter.defaultValue !== 'string' || !isSafeSubcircuitParameterValue(parameter.defaultValue)) throw new Error(`Sheet ${sheet.name} has a malformed block parameter.`)
+      if (!parameter || typeof parameter.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(parameter.id) || parameterIds.has(parameter.id) || typeof parameter.name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(parameter.name) || ['__proto__', 'constructor', 'prototype'].includes(parameter.name.toLowerCase()) || parameterNames.has(parameter.name.toLowerCase()) || typeof parameter.defaultValue !== 'string' || !isSafeSubcircuitParameterValue(parameter.defaultValue, projectModelFunctions)) throw new Error(`Sheet ${sheet.name} has a malformed block parameter.`)
       parameterIds.add(parameter.id); parameterNames.add(parameter.name.toLowerCase())
     }
   }
@@ -785,7 +786,7 @@ export function validateProject(input: unknown): Project {
     if (part.modelName !== sheetModelName(definition.id) || part.modelPins?.length !== definition.ports.length || definition.ports.some((port, index) => port.name.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) throw new Error(`${part.ref} block pins do not match sheet ${definition.name}.`)
     if (part.sheetParameters !== undefined) {
       if (!part.sheetParameters || typeof part.sheetParameters !== 'object' || Array.isArray(part.sheetParameters) || Object.keys(part.sheetParameters).length > 32) throw new Error(`${part.ref} block parameter overrides are malformed.`)
-      for (const [name, value] of Object.entries(part.sheetParameters)) if (!(definition.parameters ?? []).some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value)) throw new Error(`${part.ref} has an unsupported block parameter override for ${name}.`)
+      for (const [name, value] of Object.entries(part.sheetParameters)) if (!(definition.parameters ?? []).some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value, projectModelFunctions)) throw new Error(`${part.ref} has an unsupported block parameter override for ${name}.`)
     }
     if (part.sheetPortLayout !== undefined && (!Array.isArray(part.sheetPortLayout) || part.sheetPortLayout.length !== definition.ports.length || part.sheetPortLayout.some((entry, index) => entry.side !== (definition.ports[index].side ?? 'auto') || entry.direction !== (definition.ports[index].direction ?? 'inout')))) throw new Error(`${part.ref} block port layout does not match sheet ${definition.name}.`)
   }
