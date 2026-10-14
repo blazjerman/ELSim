@@ -42,6 +42,10 @@ export function isValidSpiceModelName(value: string, allowLeadingDigit = false):
 const safeTopLevel = new Set(['.title', '.model', '.param', '.func', '.csparam', '.global', '.options', '.temp', '.ic', '.nodeset', '.save', '.probe', '.meas', '.measure'])
 const forbidden = new Set(['.control', '.endc', '.end', '.exec', '.shell', '.cm'])
 
+function hasValidGlobalNodeNames(tokens: string[]): boolean {
+  return tokens.length > 1 && tokens.slice(1).every(isValidSpiceNodeName)
+}
+
 function includedAssetBasename(reference: string): string | null {
   const normalized = reference.replace(/\\/g, '/')
   if (!normalized || normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized) || /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(normalized)) return null
@@ -702,6 +706,7 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
 export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[] {
   const features = [
     { pattern: /^\s*\.title\s+\S/i, name: 'ngspice .TITLE overrides the generated circuit heading', impact: 'This imported card replaces the generated project title in ngspice output. It does not change the circuit’s electrical behavior.', suggestion: 'Keep the card if its title is useful in solver output, or remove it to retain the ELSim project title.' },
+    { pattern: /^\s*\.global\s+\S+/i, name: 'ngspice .GLOBAL connects nodes across circuit hierarchy', impact: 'Every listed node is shared by the root circuit and all subcircuits, independently of their instance hierarchy. A reused node name can therefore connect otherwise separate circuit sections.', suggestion: 'Review each global node name and use explicit subcircuit pins when a signal should remain local to one instance.' },
     { pattern: /^\s*\.temp\s+\S+/i, name: 'ngspice .TEMP sets the global circuit temperature', impact: 'This imported card sets the temperature for the whole circuit. When the project temperature is left at its 27 °C default, the library value applies; choosing a non-default temperature in Simulation overrides this card.', suggestion: 'Check whether the model library requires this temperature. Set a non-default Simulation temperature to override it for the whole circuit.' },
     { pattern: /^\s*\.options\b/i, name: 'ngspice .OPTIONS changes circuit-wide solver settings', impact: 'This imported card changes solver options for the whole circuit, which can affect convergence, accuracy, and runtime.', suggestion: 'Review the option values and confirm they are appropriate for this project. Remove or edit the card if these global solver settings are unintended.' },
     { pattern: /^\s*\.nodeset\b/i, name: 'ngspice .NODESET changes circuit-wide initial voltage guesses', impact: 'This imported card supplies starting voltage guesses to the whole circuit’s operating-point or initial-transient solve. It does not normally force the final DC solution.', suggestion: 'Check that the referenced node names match this project. Remove or edit the card if its convergence hint is not appropriate for the whole circuit.' },
@@ -958,6 +963,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (directive === '.lib' || directive === '.endl') throw new Error(`Line ${line.start}: .LIB/.ENDL section wrappers cannot appear inside a .SUBCKT.`)
       if (directive === '.csparam') throw new Error(`Line ${line.start}: .CSPARAM creates a circuit-wide constant vector and cannot appear inside a .SUBCKT.`)
       if (directive === '.title') throw new Error(`Line ${line.start}: .TITLE changes the title of the whole circuit and cannot appear inside a .SUBCKT.`)
+      if (directive === '.global' && !hasValidGlobalNodeNames(tokens)) throw new Error(`Line ${line.start}: .GLOBAL needs one or more valid node names.`)
       if (directive === '.temp') throw new Error(`Line ${line.start}: .TEMP sets the global circuit temperature and cannot appear inside a .SUBCKT.`)
       if (directive === '.ic' || directive === '.nodeset') throw new Error(`Line ${line.start}: ${tokens[0]} applies to the whole circuit and cannot appear inside a .SUBCKT.`)
       if (directive === '.probe') throw new Error(`Line ${line.start}: .PROBE can instrument only top-level circuit devices and cannot appear inside a .SUBCKT.`)
@@ -993,6 +999,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     if (directive.startsWith('.')) {
       if (!safeTopLevel.has(directive)) throw new Error(`Line ${line.start}: top-level directive ${tokens[0]} is unsupported in imported model libraries.`)
       if (directive === '.title' && !text.slice(tokens[0].length).trim()) throw new Error(`Line ${line.start}: .TITLE needs title text.`)
+      if (directive === '.global' && !hasValidGlobalNodeNames(tokens)) throw new Error(`Line ${line.start}: .GLOBAL needs one or more valid node names.`)
       if (directive === '.temp' && (tokens.length !== 2 || !isSafeSubcircuitParameterValue(tokens[1]))) {
         throw new Error(`Line ${line.start}: .TEMP needs exactly one numeric value or safe parameter expression.`)
       }

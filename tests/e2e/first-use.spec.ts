@@ -5017,6 +5017,23 @@ test('native ngspice .TITLE imports, is explained, and runs in the generated dec
   await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' })).toContainText('.TITLE User diode library')
 })
 
+test('ngspice .GLOBAL inside an imported subcircuit is preserved and warns about shared nodes', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'global-node-model.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.SUBCKT POWERED IN OUT\n.GLOBAL VCC\nR1 IN VCC 1k\n.ENDS POWERED\n.MODEL DTEST D(IS=1n)\n'),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 1 device model from global-node-model\.lib/)).toBeVisible()
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice .GLOBAL connects nodes across circuit hierarchy')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' })).toContainText('.GLOBAL VCC')
+})
+
 test('imported ngspice .IC and .NODESET cards are preserved with circuit-wide guidance', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
