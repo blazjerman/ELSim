@@ -183,6 +183,29 @@ export function VoltageDividerPrediction({ supplyValue, upperResistanceValue, lo
   />
 }
 
+export function LoadedVoltageDividerPrediction({ supplyValue, upperResistanceValue, lowerResistanceValue, loadResistanceValue }: { supplyValue: string; upperResistanceValue: string; lowerResistanceValue: string; loadResistanceValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const upper = componentMagnitude(upperResistanceValue, 'resistor')
+  const lower = componentMagnitude(lowerResistanceValue, 'resistor')
+  const load = componentMagnitude(loadResistanceValue, 'resistor')
+  const parallelLowerLoad = lower !== null && load !== null && lower > 0 && load > 0 ? lower * load / (lower + load) : null
+  const predictedOutput = supply !== null && upper !== null && parallelLowerLoad !== null && upper > 0
+    ? supply * parallelLowerLoad / (upper + parallelLowerLoad)
+    : null
+  const explanation = predictedOutput === null || supply === null || upper === null || lower === null || load === null || parallelLowerLoad === null
+    ? ''
+    : `The load is in parallel with R2, so R2 ∥ RLOAD = ${formatResistance(parallelLowerLoad)}. VOUT = VIN × (R2 ∥ RLOAD)/(R1 + R2 ∥ RLOAD) = ${formatValue(supply)} V × ${formatResistance(parallelLowerLoad)}/(${formatResistance(upper)} + ${formatResistance(parallelLowerLoad)}) = ${formatValue(predictedOutput)} V. A heavier load (smaller RLOAD) pulls the output down.`
+
+  return <NumericPrediction
+    id="loaded-divider-prediction"
+    prompt="Before running, predict the loaded output voltage VOUT"
+    unit="V"
+    predictedValue={predictedOutput}
+    absoluteTolerance={0.02}
+    explanation={explanation}
+  />
+}
+
 export function CurrentDividerPrediction({ supplyValue, firstResistanceValue, secondResistanceValue }: { supplyValue: string; firstResistanceValue: string; secondResistanceValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const firstResistance = componentMagnitude(firstResistanceValue, 'resistor')
@@ -222,12 +245,13 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
   upperResistanceValue?: string
   lowerResistanceValue?: string
+  loadResistanceValue?: string
   firstResistanceValue?: string
   secondResistanceValue?: string
   initialVoltageValue?: string
@@ -240,6 +264,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'switch-lamp': return <SwitchPathPrediction/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
+    case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
     case 'series-resistors': return <SeriesVoltageDropPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'capacitor-discharge': return <CapacitorDischargePrediction initialVoltageValue={props.initialVoltageValue ?? ''} resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>

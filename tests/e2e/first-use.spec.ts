@@ -4989,6 +4989,34 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await expect(page.locator('.example-lesson-next-step')).toContainText('divider formula predicts VOUT = 6.667 V; ngspice solved 6.667 V')
 })
 
+test('loaded divider prediction explains the load effect and resets after edits', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: '5 V, 500 Ω Thevenin model' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const prediction = page.locator('.example-prediction')
+  const answer = prediction.locator('input')
+  await expect(prediction).toContainText('Before running, predict the loaded output voltage VOUT')
+  await answer.fill('3.333')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('R2 ∥ RLOAD = 500 Ω')
+
+  await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
+  await page.locator('.circuit-part[data-part-id="loaded-divider-rload"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="loaded-divider-rload:value"]').fill('10 kΩ')
+  await expect(answer).toHaveValue('')
+  await expect(page.getByRole('button', { name: 'Run this circuit' })).toBeEnabled()
+  await answer.fill('4.762')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('R2 ∥ RLOAD = 909.1 Ω')
+})
+
 test('loaded voltage-divider lesson predicts and verifies how RLOAD pulls down VOUT', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
