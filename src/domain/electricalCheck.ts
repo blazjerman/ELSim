@@ -17,7 +17,7 @@ export type ElectricalIssue = {
 }
 
 type ReachableSimulationSheet = { sheet: Project['sheets'][number]; topLevelInstanceId?: string }
-type Bsim3BinRange = { name: string; minLength: number; maxLength: number; minWidth: number; maxWidth: number }
+type Bsim3BinRange = { name: string; minLength: number; maxLength: number; minWidth: number; maxWidth: number; minLengthText: string; maxLengthText: string; minWidthText: string; maxWidthText: string }
 type ImportedDeviceModel = { type: string; channel?: 'n' | 'p'; parameters: { name: string; defaultValue: string }[]; bsim3Bins?: Bsim3BinRange[] }
 
 // Device prefixes and accepted .MODEL families from the ngspice device-line
@@ -49,7 +49,7 @@ function importedDeviceModelIssue(part: Part, modelTypes: Map<string, ImportedDe
       const length = spiceDimensionMagnitude(part.mosfetGeometry.length)
       const width = spiceDimensionMagnitude(part.mosfetGeometry.width)
       if (length !== null && width !== null && !modelType.bsim3Bins.some((bin) => length >= bin.minLength && length <= bin.maxLength && width >= bin.minWidth && width <= bin.maxWidth)) {
-        const availableRanges = modelType.bsim3Bins.map((bin) => `${bin.name}: L ${bin.minLength}–${bin.maxLength} m, W ${bin.minWidth}–${bin.maxWidth} m`).join('; ')
+        const availableRanges = modelType.bsim3Bins.map((bin) => `${bin.name}: L ${bin.minLengthText}–${bin.maxLengthText}, W ${bin.minWidthText}–${bin.maxWidthText}`).join('; ')
         return {
           id: `mosfet-bin-range:${id}`,
           severity: 'warning',
@@ -155,10 +155,14 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   for (const family of ngspiceBsim3BinFamilies(importedDeviceModelCards)) {
     if (!importedDeviceModels.has(family.name)) {
       const bins = family.models.map((model): Bsim3BinRange | null => {
-        const value = (name: string) => spiceDimensionMagnitude(model.parameters.find((parameter) => parameter.name.toLowerCase() === name)?.defaultValue ?? '')
-        const minLength = value('lmin'), maxLength = value('lmax'), minWidth = value('wmin'), maxWidth = value('wmax')
+        const value = (name: string) => model.parameters.find((parameter) => parameter.name.toLowerCase() === name)?.defaultValue
+        const minLengthText = value('lmin'), maxLengthText = value('lmax'), minWidthText = value('wmin'), maxWidthText = value('wmax')
+        const minLength = minLengthText ? spiceDimensionMagnitude(minLengthText) : null
+        const maxLength = maxLengthText ? spiceDimensionMagnitude(maxLengthText) : null
+        const minWidth = minWidthText ? spiceDimensionMagnitude(minWidthText) : null
+        const maxWidth = maxWidthText ? spiceDimensionMagnitude(maxWidthText) : null
         return minLength !== null && maxLength !== null && minWidth !== null && maxWidth !== null && minLength <= maxLength && minWidth <= maxWidth
-          ? { name: model.name, minLength, maxLength, minWidth, maxWidth }
+          ? { name: model.name, minLength, maxLength, minWidth, maxWidth, minLengthText: minLengthText!, maxLengthText: maxLengthText!, minWidthText: minWidthText!, maxWidthText: maxWidthText! }
           : null
       })
       importedDeviceModels.set(family.name, { type: family.type, parameters: [], ...(bins.every((bin): bin is Bsim3BinRange => bin !== null) ? { bsim3Bins: bins } : {}) })

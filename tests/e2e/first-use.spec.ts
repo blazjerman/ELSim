@@ -1929,6 +1929,7 @@ test('standalone MOSFET can select an imported BSIM3 bin family by its base name
   const checks = page.getByRole('dialog', { name: 'Circuit checks' })
   await expect(checks).toContainText('M1 dimensions are outside the imported BSIM3 bins')
   await expect(checks).toContainText('do not fall within any complete L/W range')
+  await expect(checks).toContainText('NCH.1: L 0.5u–2u, W 0.5u–20u')
 })
 
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
