@@ -2071,6 +2071,7 @@ export default function App() {
     const pending = pendingViewRef.current
     if (pending?.rootSheetId === project.rootSheetId && project.sheets.find((sheet) => sheet.id === pending.sheetId)?.view === pending.view) pendingViewRef.current = null
   }, [project])
+  const partsById = useMemo(() => new Map(project.parts.map((part) => [part.id, part])), [project.parts])
   const transientAxis = simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
   const simulationResultStale = Boolean(simulationResult && simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt)
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && !simulationResultStale)
@@ -2093,10 +2094,10 @@ export default function App() {
     let active = true
     setLessonNextStep(null)
     void import('./exampleLessonAnalysis').then(({ calculateExampleLessonNextStep }) => {
-      if (active) setLessonNextStep(calculateExampleLessonNextStep(exampleLesson, project.parts, project.simulation.initialConditions, simulationResult, simulationResultStale, rlcResonancePeak))
+      if (active) setLessonNextStep(calculateExampleLessonNextStep(exampleLesson, partsById, project.simulation.initialConditions, simulationResult, simulationResultStale, rlcResonancePeak))
     }).catch(() => { if (active) setLessonNextStep(null) })
     return () => { active = false }
-  }, [exampleLesson, project.parts, project.simulation.initialConditions, simulationResult, simulationResultStale, rlcResonancePeak])
+  }, [exampleLesson, partsById, project.simulation.initialConditions, simulationResult, simulationResultStale, rlcResonancePeak])
   useEffect(() => {
     if (!playbackRunning || !playbackAvailable || !transientAxis?.length) return
     const findSample = createTimeAxisLookup(transientAxis)
@@ -2599,7 +2600,6 @@ export default function App() {
     recordUndoSnapshot(projectRef.current)
   }
   const endEdit = () => { editGroup.current = false }
-  const partsById = useMemo(() => new Map(project.parts.map((part) => [part.id, part])), [project.parts])
   const capacitorInitialCondition = project.simulation.initialConditions?.find((condition) =>
     'element' in condition && 'voltage' in condition && condition.element.toLowerCase() === 'c1',
   )

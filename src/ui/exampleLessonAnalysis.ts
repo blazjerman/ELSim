@@ -67,9 +67,8 @@ function nearestAxisIndex(axis: Float64Array, target: number): number {
   return target - axis[lower] <= axis[upper] - target ? lower : upper
 }
 
-export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, parts: Project['parts'], initialConditions: Project['simulation']['initialConditions'], simulationResult: SimulationResult | null, simulationResultStale: boolean, rlcResonancePeak: ResonancePeak): string | null {
+export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, partsById: ReadonlyMap<string, Project['parts'][number]>, initialConditions: Project['simulation']['initialConditions'], simulationResult: SimulationResult | null, simulationResultStale: boolean, rlcResonancePeak: ResonancePeak): string | null {
   const lessonId = exampleLesson.id
-  const partsById = new Map(parts.map((part) => [part.id, part]))
   const ohmsLawSupply = lessonId === 'ohms-law' ? componentMagnitude(partsById.get('ohms-law-v1')?.value ?? '5 V', 'source') : null
   const ohmsLawResistance = lessonId === 'ohms-law' ? componentMagnitude(partsById.get('ohms-law-r1')?.value ?? '1 kΩ', 'resistor') : null
   const ohmsLawPredictedCurrent = ohmsLawSupply !== null && ohmsLawResistance !== null && ohmsLawResistance > 0 ? ohmsLawSupply / ohmsLawResistance : null
