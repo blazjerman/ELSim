@@ -87,7 +87,7 @@ const EDITOR_SHORTCUTS = [
 const LOGIC_GATE_SHORTCUTS_HELP = [['1', 'Inverter'], ['2', 'AND gate'], ['3', 'OR gate'], ['4', 'XOR gate'], ['5', 'XNOR gate'], ['@', 'NAND gate'], ['#', 'NOR gate']] as const
 const EMPTY_SYMBOL_GEOMETRY: NonNullable<ReturnType<typeof componentDefinitionFor>['symbolGeometry']> = []
 const exampleSelection: Record<ExampleId, string> = {
-  'ohms-law': 'ohms-law-r1', potentiometer: 'pot-p1', 'wheatstone-bridge': 'bridge-r4', rc: 'p-r1', 'ac-lowpass': 'ac-lowpass-c1', 'ac-highpass': 'ac-highpass-c1', led: 'p-c1', 'led-current-limiter': 'p-r1', 'led-parallel': 'parallel-led-d1', 'diode-polarity': 'diode-polarity-d1', 'switch-lamp': 'switch-lamp-s1', 'capacitor-discharge': 'cap-discharge-c1',
+  'ohms-law': 'ohms-law-r1', potentiometer: 'pot-p1', 'wheatstone-bridge': 'bridge-r4', rc: 'p-r1', 'ac-lowpass': 'ac-lowpass-c1', 'ac-highpass': 'ac-highpass-c1', 'sine-wave': 'sine-wave-v1', led: 'p-c1', 'led-current-limiter': 'p-r1', 'led-parallel': 'parallel-led-d1', 'diode-polarity': 'diode-polarity-d1', 'switch-lamp': 'switch-lamp-s1', 'capacitor-discharge': 'cap-discharge-c1',
   rlc: 'rlc-l1', 'lc-energy': 'lc-energy-c1', 'rl-step': 'rl-step-l1', flyback: 'flyback-d1', controlled: 'amp-e1', 'current-controlled': 'current-f1', transistor: 'switch-q1', 'voltage-switch': 'vswitch-s1', pnp: 'pnp-switch-q1',
   pjfet: 'pjfet-switch-j1', mosfet: 'mos-switch-m1', pmos: 'pmos-switch-m1', jfet: 'jfet-switch-j1', hierarchy: 'example-x1', 'rlc-resonance': 'resonance-l1', 'parallel-resistors': 'current-divider-r1', 'resistor-power': 'resistor-power-r1', 'lamp-power': 'lamp-power-r1', 'series-resistors': 'divider-r2', 'supply-droop': 'supply-droop-rload',
   pwl: 'p-v1', 'current-source': 'isource-i1', rectifier: 'rectifier-d1', 'bridge-rectifier': 'bridge-d1', 'voltage-divider': 'divider-r1', 'loaded-voltage-divider': 'loaded-divider-r1', superposition: 'superposition-r1', 'thevenin-norton': 'equivalent-rth', zener: 'zener-d1', transformer: 'transformer-t1', 'transformer-current': 'transformer-t1', 'imported-opamp': 'example-opamp-xu1', 'inverting-opamp': 'example-opamp-xu1', 'noninverting-opamp': 'example-opamp-xu1', 'common-emitter': 'common-emitter-q1', 'logic-gates': 'logic-and', 'logic-gates-3v3': 'logic-and',
@@ -4127,6 +4127,7 @@ export default function App() {
         const examples = await import('../domain/examples')
         const createExample = {
           'ac-lowpass': examples.createAcLowPassExampleProject, 'ac-highpass': examples.createAcHighPassExampleProject,
+          'sine-wave': examples.createSineWaveExampleProject,
           superposition: examples.createSuperpositionExampleProject,
           'thevenin-norton': examples.createTheveninNortonExampleProject,
           led: examples.createLedExampleProject, 'led-current-limiter': examples.createLedCurrentLimiterExampleProject,
@@ -4183,6 +4184,7 @@ export default function App() {
       'thevenin-norton': { title: 'One source, two equivalent models', guidance: 'These circuits should produce the same load voltage. The left has a 5 V Thevenin source with 500 Ω series resistance. The right replaces it with a 10 mA Norton source and 500 Ω in parallel. Predict the difference between VTHOUT and NOUT, then run and compare both traces.' },
       'ac-lowpass': { title: 'Find the RC cutoff frequency', guidance: 'Predict the cutoff from R1 and C1, then run the AC sweep and compare V(VIN) with V(VOUT). At cutoff, the output is about 0.707 V, or 3 dB below the 1 V input.' },
       'ac-highpass': { title: 'See the RC high-pass cutoff', guidance: 'Predict the cutoff from R1 and C1, then run the AC sweep and compare V(VIN) with V(VOUT). Below cutoff the output is reduced; at cutoff it is about 0.707 V, or 3 dB below the 1 V input.' },
+      'sine-wave': { title: 'Read a sine-wave source', guidance: 'Run the transient and compare V(VIN) with I(R1). The source is centered on 0 V with a 5 V peak amplitude, so it swings from −5 V to +5 V (10 V peak-to-peak). At 1 kHz, one cycle takes 1 ms. Change the source amplitude or frequency in its properties and rerun to see which part of the waveform changes.' },
       rectifier: { title: 'A diode passes one half of an AC wave', guidance: 'Run the transient and compare V(VIN) with V(VOUT). The diode conducts on positive half-cycles and blocks negative ones; inspect I(D1) to see when it conducts.' },
       'bridge-rectifier': { title: 'Rectify both halves and smooth the output', guidance: 'Run the transient, then right-click C1 and choose Plot voltage across pin 1 → pin 2. The bridge keeps this capacitor voltage positive on both input half-cycles; C1 charges near each peak and discharges through RLOAD between peaks. Change C1 or RLOAD to compare the ripple.' },
       led: { title: 'Current makes the LED glow', guidance: 'Run the pulse response and scrub between on and off. The glow follows solved LED current; it is not a thermal model.' },

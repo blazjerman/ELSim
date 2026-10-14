@@ -1411,6 +1411,40 @@ export function createAcHighPassExampleProject(): Project {
   return project
 }
 
+/** A first transient SINE-source example showing how peak amplitude and frequency shape voltage. */
+export function createSineWaveExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = {
+    id: 'sine-wave-v1', kind: 'source', ref: 'V1', value: '0 V', sourceMode: 'sine',
+    sine: { offset: '0 V', amplitude: '5 V', frequency: '1 kHz', delay: '0', damping: '0', phase: '0' },
+    x: 300, y: 360, rotation: 0,
+  }
+  const resistor: Part = { id: 'sine-wave-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 500, y: 310, rotation: 0 }
+  const sourcePins = componentPins(source)
+  project.name = 'Sine wave source'
+  project.parts = [source, resistor]
+  project.wires = [
+    { id: 'sine-wave-source-rise', points: [[300, 310], [300, 260]] },
+    { id: 'sine-wave-source-top', points: [[300, 260], [450, 260]] },
+    { id: 'sine-wave-resistor-feed', points: [[450, 260], [450, 310]] },
+    { id: 'sine-wave-resistor-return', points: [[550, 310], [600, 310]] },
+    { id: 'sine-wave-return-drop', points: [[600, 310], [600, 440]] },
+    { id: 'sine-wave-ground-return', points: [[600, 440], [300, 440]] },
+    { id: 'sine-wave-source-ground', points: [[300, 410], [300, 440]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    { id: 'sine-wave-vin', name: 'VIN', x: sourcePins[0].x, y: sourcePins[0].y, visible: true },
+    { id: 'sine-wave-ground', name: '0', x: sourcePins[1].x, y: sourcePins[1].y, visible: true },
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '5 ms', maxStep: '10 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'I(R1)'], ranges: {} }
+  project.view = { zoom: 0.95, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A pulse-driven voltage-controlled amplifier with an explicit load. */
 /** A parallel LC tank with a damped AC response peak near its calculated resonance. */
 export function createRlcResonanceExampleProject(): Project {

@@ -6347,6 +6347,34 @@ test('voltage source SINE waveform is editable and runs in the browser ngspice e
   await expect(source.locator('title').first()).toContainText(/3(?:\.0+)? V across pins/)
 })
 
+test('beginner sine-wave example shows the amplitude and period in transient results', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'AC & reactive' }).click()
+  await dialog.locator('article[data-example-id="sine-wave"]').getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  await expect(lesson).toContainText('10 V peak-to-peak')
+  await expect(lesson).toContainText('one cycle takes 1 ms')
+  await expect(page.getByLabel('Analysis type')).toHaveValue('tran')
+  await expect(page.locator('.schematic .wire-line')).toHaveCount(7)
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/V1 VIN 0 SIN\(0 5 1k 0 0 0\)/)
+  await page.keyboard.press('Escape')
+
+  await page.getByTitle('Pause result playback (does not pause ngspice)').click()
+  const plotWindow = await openComponentVoltagePlot(page, 'R1')
+  const slider = page.getByRole('slider', { name: 'Simulation time' })
+  await slider.fill('25')
+  await expect(plotWindow.locator('.cursor-readout')).toContainText(/V\(R1\)\s*=\s*4\.[5-9]\d* V/)
+  await slider.fill('75')
+  await expect(plotWindow.locator('.cursor-readout')).toContainText(/V\(R1\)\s*=\s*-4\.[5-9]\d* V/)
+})
+
 test('LTspice voltage EXP waveform is editable and simulates in the browser engine', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
