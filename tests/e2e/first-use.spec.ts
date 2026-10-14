@@ -652,6 +652,36 @@ test('switch-and-lamp lesson predicts the open-circuit current path before runni
   await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
 })
 
+test('diode-polarity lesson updates its current-flow prediction with source polarity', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Diodes & LEDs' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Diode direction: forward and reverse bias' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  await expect(lesson).toContainText('will current flow through D1 with V1 = 5 V?')
+  await lesson.getByRole('radio', { name: 'No' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Not quite. With V1 = 5 V, the anode is positive relative to the cathode')
+  await lesson.getByRole('radio', { name: 'Yes' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. With V1 = 5 V, the anode is positive relative to the cathode')
+
+  await page.locator('.circuit-part[data-part-id="diode-polarity-v1"]').click()
+  await page.locator('[data-part-setting="diode-polarity-v1:value"]').fill('-5 V')
+  await expect(lesson).toContainText('will current flow through D1 with V1 = -5 V?')
+  await expect(lesson.getByRole('radio', { name: 'Yes' })).not.toBeChecked()
+  await lesson.getByRole('radio', { name: 'Yes' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Not quite. With V1 = -5 V, the anode is below the cathode')
+  await lesson.getByRole('radio', { name: 'No' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. With V1 = -5 V, the anode is below the cathode')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+})
+
 test("Ohm's law lesson checks a beginner's current prediction before simulation", { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

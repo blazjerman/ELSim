@@ -45,30 +45,57 @@ function NumericPrediction({ id, prompt, unit, predictedValue, absoluteTolerance
   </div>
 }
 
-export function SwitchPathPrediction() {
+function BinaryChoicePrediction({ id, prompt, expected, explanation }: { id: string; prompt: string; expected: 'yes' | 'no'; explanation: string }) {
   const [answer, setAnswer] = useState('')
   const [feedback, setFeedback] = useState<{ correct: boolean; text: string } | null>(null)
-  const explanation = 'With S1 open, the loop is broken, so the ideal circuit has no current. Close S1 to complete the path; the lamp then glows according to its solved current.'
   const checkPrediction = () => {
     if (!answer) {
-      setFeedback({ correct: false, text: 'Choose whether current flows before checking.' })
+      setFeedback({ correct: false, text: 'Choose Yes or No before checking.' })
       return
     }
-    const correct = answer === 'no'
+    const correct = answer === expected
     setFeedback({ correct, text: `${correct ? 'Correct.' : 'Not quite.'} ${explanation}` })
   }
 
   return <div className="example-prediction">
     <fieldset>
-      <legend>Before running, does current flow with S1 open?</legend>
+      <legend>{prompt}</legend>
       <div className="example-prediction-input">
-        <label><input type="radio" name="switch-path-prediction" value="yes" checked={answer === 'yes'} onChange={() => { setAnswer('yes'); setFeedback(null) }}/> Yes</label>
-        <label><input type="radio" name="switch-path-prediction" value="no" checked={answer === 'no'} onChange={() => { setAnswer('no'); setFeedback(null) }}/> No</label>
+        <label><input type="radio" name={id} value="yes" checked={answer === 'yes'} onChange={() => { setAnswer('yes'); setFeedback(null) }}/> Yes</label>
+        <label><input type="radio" name={id} value="no" checked={answer === 'no'} onChange={() => { setAnswer('no'); setFeedback(null) }}/> No</label>
         <button type="button" onClick={checkPrediction}>Check prediction</button>
       </div>
     </fieldset>
     {feedback && <p className={`example-prediction-feedback${feedback.correct ? ' correct' : ''}`} role="status">{feedback.text}</p>}
   </div>
+}
+
+export function SwitchPathPrediction() {
+  return <BinaryChoicePrediction
+    id="switch-path-prediction"
+    prompt="Before running, does current flow with S1 open?"
+    expected="no"
+    explanation="With S1 open, the loop is broken, so the ideal circuit has no current. Close S1 to complete the path; the lamp then glows according to its solved current."
+  />
+}
+
+export function DiodePolarityPrediction({ supplyValue }: { supplyValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const polarity = supply === null ? null : supply > 0 ? 'forward' : supply < 0 ? 'reverse' : 'zero'
+  const expected = polarity === 'forward' ? 'yes' : 'no'
+  const explanation = polarity === 'forward'
+    ? `With V1 = ${formatValue(supply!)} V, the anode is positive relative to the cathode, so D1 is forward biased. Reversing V1 to a negative value reverse-biases the diode.`
+    : polarity === 'reverse'
+      ? `With V1 = ${formatValue(supply!)} V, the anode is below the cathode, so D1 is reverse biased and blocks current apart from tiny leakage. Set V1 to a positive value to forward-bias it.`
+      : polarity === 'zero'
+        ? 'With V1 = 0 V, there is no voltage to forward-bias D1, so no meaningful current flows. A positive source voltage forward-biases the diode.'
+        : 'Enter a valid numeric DC source voltage to determine the diode polarity.'
+  return <BinaryChoicePrediction
+    id="diode-polarity-prediction"
+    prompt={`Before running, will current flow through D1 with V1 = ${supply === null ? 'an invalid voltage' : `${formatValue(supply)} V`}?`}
+    expected={expected}
+    explanation={explanation}
+  />
 }
 
 function formatValue(value: number): string {
@@ -441,7 +468,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
@@ -474,6 +501,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'switch-lamp': return <SwitchPathPrediction/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
+    case 'diode-polarity': return <DiodePolarityPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
     case 'potentiometer': return <PotentiometerPrediction supplyValue={props.supplyValue ?? ''} wiperPosition={props.wiperPosition ?? ''}/>
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
