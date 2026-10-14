@@ -533,6 +533,25 @@ test('RC lesson checks a time-constant prediction and recalculates it after an e
   expect(await page.locator('html').evaluate((element) => element.scrollWidth)).toBe(390)
 })
 
+test('switch-and-lamp lesson predicts the open-circuit current path before running', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Start here' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Open and close a lamp circuit' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  await expect(lesson).toContainText('S1 starts open, breaking the path')
+  await lesson.getByRole('radio', { name: 'Yes' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Not quite. With S1 open, the loop is broken')
+  await lesson.getByRole('radio', { name: 'No' }).check()
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. With S1 open, the loop is broken')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+})
+
 test("Ohm's law lesson checks a beginner's current prediction before simulation", { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

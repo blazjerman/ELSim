@@ -23,7 +23,7 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
-import { CapacitorDischargePrediction, LedCurrentPrediction, OhmsLawPrediction, RcTimeConstantPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
+import { CapacitorDischargePrediction, LedCurrentPrediction, OhmsLawPrediction, RcTimeConstantPrediction, SwitchPathPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
@@ -4007,7 +4007,7 @@ export default function App() {
       'resistor-power': { title: 'See how current and voltage set resistor power', guidance: 'Run the operating point and compare the selected resistor voltage and current. Power is P = V × I = V²/R: 5 V across 1 kΩ is 25 mW. Change R1 to 100 Ω and rerun; power rises to 250 mW. This circuit calculates electrical power; it does not model resistor temperature.' },
       'lamp-power': { title: 'Connect lamp glow to electrical power', guidance: 'Run the operating point. The 5 V supply across the fixed 100 Ω lamp predicts P = V²/R = 250 mW, matching its nominal animation power. Change V1 to 2.5 V and rerun: power falls to 62.5 mW, one quarter as much, and the lamp glow dims. The glow is an illustration; this fixed-resistance model does not simulate filament temperature.' },
       'diode-polarity': { title: 'See how diode direction controls current', guidance: 'Run the operating point with V1 = +5 V. The source drives conventional current through R1 and into D1’s anode; the diode is forward biased and its anode sits near 0.7 V. Change V1 to −5 V and rerun: D1 is reverse biased, so its current falls close to zero and the anode goes near −5 V. The series resistor limits forward current.' },
-      'switch-lamp': { title: 'See how a switch controls a complete circuit', guidance: 'Run the operating point with S1 open. The gap breaks the path from the 5 V source through R1 and back to ground, so almost no current flows and the lamp stays dark. Click S1 to close the circuit; ELSim reruns ngspice and the lamp glows from its solved voltage and current. Click it again to open the path.' },
+      'switch-lamp': { title: 'See how a switch controls a complete circuit', guidance: 'S1 starts open, breaking the path from the 5 V source through R1 and back to ground. Predict whether current flows, then run the operating point. Click S1 to close the circuit; ELSim reruns ngspice and the lamp glows from its solved voltage and current. Click it again to open the path.' },
       'series-resistors': { title: 'The same current flows through series resistors', guidance: 'Run the operating point and compare I(R1) with I(R2). The 10 V supply crosses 1 kΩ + 2 kΩ, so I = V/Rtotal = 3.333 mA; the drops are 3.333 V and 6.667 V. Change R2 to 1 kΩ and rerun: both drops become 5 V and current rises to 5 mA.' },
       'supply-droop': { title: 'A supply’s internal resistance causes voltage sag', guidance: 'RSOURCE is a simple model of supply resistance, not a battery chemistry model. At 5 V with RSOURCE = 100 Ω and RLOAD = 1 kΩ, VOUT is about 4.55 V. Reduce RLOAD to 100 Ω and rerun: more current flows, more voltage drops across RSOURCE, and VOUT falls to 2.5 V.' },
       zener: { title: 'A Zener diode holds a reference voltage', guidance: 'Run the operating point and inspect V(VZ) and I(DZ1). The reverse-connected Zener holds the output near 5.1 V while it has enough current; R1 limits current from the 12 V supply.' },
@@ -4149,6 +4149,7 @@ export default function App() {
                 resistanceValue={partsById.get('p-r1')?.value ?? ''}
                 capacitanceValue={partsById.get('p-c1')?.value ?? ''}
               />}
+              {exampleLesson.id === 'switch-lamp' && !lessonNextStep && <SwitchPathPrediction/>}
               {exampleLesson.id === 'ohms-law' && !lessonNextStep && <OhmsLawPrediction
                 key={`${partsById.get('ohms-law-v1')?.value ?? ''}:${partsById.get('ohms-law-r1')?.value ?? ''}`}
                 supplyValue={partsById.get('ohms-law-v1')?.value ?? ''}

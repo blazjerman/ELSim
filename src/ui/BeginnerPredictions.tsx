@@ -44,6 +44,32 @@ function NumericPrediction({ id, prompt, unit, predictedValue, absoluteTolerance
   </div>
 }
 
+export function SwitchPathPrediction() {
+  const [answer, setAnswer] = useState('')
+  const [feedback, setFeedback] = useState<{ correct: boolean; text: string } | null>(null)
+  const explanation = 'With S1 open, the loop is broken, so the ideal circuit has no current. Close S1 to complete the path; the lamp then glows according to its solved current.'
+  const checkPrediction = () => {
+    if (!answer) {
+      setFeedback({ correct: false, text: 'Choose whether current flows before checking.' })
+      return
+    }
+    const correct = answer === 'no'
+    setFeedback({ correct, text: `${correct ? 'Correct.' : 'Not quite.'} ${explanation}` })
+  }
+
+  return <div className="example-prediction">
+    <fieldset>
+      <legend>Before running, does current flow with S1 open?</legend>
+      <div className="example-prediction-input">
+        <label><input type="radio" name="switch-path-prediction" value="yes" checked={answer === 'yes'} onChange={() => { setAnswer('yes'); setFeedback(null) }}/> Yes</label>
+        <label><input type="radio" name="switch-path-prediction" value="no" checked={answer === 'no'} onChange={() => { setAnswer('no'); setFeedback(null) }}/> No</label>
+        <button type="button" onClick={checkPrediction}>Check prediction</button>
+      </div>
+    </fieldset>
+    {feedback && <p className={`example-prediction-feedback${feedback.correct ? ' correct' : ''}`} role="status">{feedback.text}</p>}
+  </div>
+}
+
 function formatValue(value: number): string {
   return String(Number(value.toPrecision(4)))
 }
