@@ -501,6 +501,42 @@ test('example picker offers a short beginner path before the full catalog', { ta
   await expect(cards).toHaveCount(allExampleCount)
 })
 
+test("Ohm's law lesson checks a beginner's current prediction before simulation", { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: "Ohm's law: voltage, current, resistance" }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('spinbutton', { name: 'Before running, predict current through R1' })
+  await expect(lesson).toContainText('Use the prediction check before you run')
+  await estimate.fill('2.5')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Ohm’s law gives I = V/R = 5 V / 1 kΩ = 5 mA.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+
+  await estimate.fill('5')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. I = V/R = 5 V / 1 kΩ = 5 mA.')
+
+  await page.locator('.circuit-part[data-part-id="ohms-law-r1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="ohms-law-r1:value"]').fill('2 kΩ')
+  const updatedEstimate = page.getByRole('spinbutton', { name: 'Before running, predict current through R1' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('2.5')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toHaveText('Correct. I = V/R = 5 V / 2 kΩ = 2.5 mA.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(updatedEstimate).toBeVisible()
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+  expect(await page.locator('html').evaluate((element) => element.scrollWidth)).toBe(390)
+})
+
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')

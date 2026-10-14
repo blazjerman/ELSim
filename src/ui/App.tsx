@@ -91,6 +91,55 @@ function IconButton({ title, children, onClick, active, disabled = false }: { ti
   return <button className={`icon-button${active ? ' active' : ''}`} title={title} aria-label={title} aria-pressed={active} onClick={onClick} disabled={disabled}>{children}</button>
 }
 
+function OhmsLawPrediction({ supplyValue, resistanceValue }: { supplyValue: string; resistanceValue: string }) {
+  const [answer, setAnswer] = useState('')
+  const [feedback, setFeedback] = useState<{ correct: boolean; text: string } | null>(null)
+  const supply = componentMagnitude(supplyValue, 'source')
+  const resistance = componentMagnitude(resistanceValue, 'resistor')
+  const predictedCurrentMa = supply !== null && resistance !== null && resistance > 0
+    ? Math.abs(supply / resistance) * 1000
+    : null
+
+  const checkPrediction = () => {
+    if (!answer.trim()) {
+      setFeedback({ correct: false, text: 'Enter your current estimate in milliamps.' })
+      return
+    }
+    const value = Number(answer)
+    if (!Number.isFinite(value) || value < 0) {
+      setFeedback({ correct: false, text: 'Enter a non-negative current in milliamps.' })
+      return
+    }
+    if (predictedCurrentMa === null || !Number.isFinite(predictedCurrentMa)) {
+      setFeedback({ correct: false, text: 'Use a numeric supply voltage and a positive resistor value first.' })
+      return
+    }
+    const tolerance = Math.max(predictedCurrentMa * 0.05, 0.001)
+    const correct = Math.abs(value - predictedCurrentMa) <= tolerance
+    const expected = Number(predictedCurrentMa.toPrecision(4))
+    const supplyText = Number(Math.abs(supply!).toPrecision(4))
+    const resistanceText = resistance! >= 1000
+      ? `${Number((resistance! / 1000).toPrecision(4))} kΩ`
+      : `${Number(resistance!.toPrecision(4))} Ω`
+    setFeedback({
+      correct,
+      text: correct
+        ? `Correct. I = V/R = ${supplyText} V / ${resistanceText} = ${expected} mA.`
+        : `Ohm’s law gives I = V/R = ${supplyText} V / ${resistanceText} = ${expected} mA.`,
+    })
+  }
+
+  return <div className="example-prediction">
+    <label htmlFor="ohms-law-prediction">Before running, predict current through R1</label>
+    <div className="example-prediction-input">
+      <input id="ohms-law-prediction" type="number" min="0" step="any" inputMode="decimal" value={answer} onChange={(event) => { setAnswer(event.target.value); setFeedback(null) }}/>
+      <span>mA</span>
+      <button type="button" onClick={checkPrediction}>Check prediction</button>
+    </div>
+    {feedback && <p className={`example-prediction-feedback${feedback.correct ? ' correct' : ''}`} role="status">{feedback.text}</p>}
+  </div>
+}
+
 const CanvasConnectionDotLayer = memo(function CanvasConnectionDotLayer({ dots, viewportLeft, viewportTop, viewportRight, viewportBottom }: {
   dots: { x: number; y: number }[]
   viewportLeft: number
@@ -3969,7 +4018,7 @@ export default function App() {
     setProjectState(next)
     const lessons = {
       rc: { title: 'Watch the capacitor charge', guidance: 'Run the transient, then scrub time. Change R1 or C1 and compare how the charging time changes.' },
-      'ohms-law': { title: "Predict current with Ohm's law", guidance: 'Run the operating point. At 5 V across 1 kΩ, I = V/R predicts 5 mA. Change R1 to 2 kΩ and rerun: the current should halve to 2.5 mA.' },
+      'ohms-law': { title: "Predict current with Ohm's law", guidance: 'Use the prediction check before you run the operating point. Then change R1 from 1 kΩ to 2 kΩ and rerun: the current should halve.' },
       'wheatstone-bridge': { title: 'Balance a Wheatstone bridge', guidance: 'Run the operating point and compare V(VLEFT) with V(VOUT). The unequal right-hand resistor ratio creates a midpoint difference. Change the sensor resistor R4 from 2 kΩ to 1 kΩ and rerun; matching arm ratios should bring both midpoints to 5 V.' },
       'ac-lowpass': { title: 'Find the RC cutoff frequency', guidance: 'Run the AC sweep and compare V(VIN) with V(VOUT). Near 1 kHz, the capacitor output should be about 0.707 V, or 3 dB below the 1 V input.' },
       'ac-highpass': { title: 'See the RC high-pass cutoff', guidance: 'Run the AC sweep and compare V(VIN) with V(VOUT). Low frequencies are reduced, high frequencies pass, and near 1 kHz the output is about 0.707 V, or 3 dB below the 1 V input.' },
@@ -4134,7 +4183,25 @@ export default function App() {
 
       <main aria-label="Schematic workspace" className={`editor-column${mobilePane === 'schematic' ? ' mobile-active' : ''}`}>
         <div className="sheet-tabs">{project.sheets.map((sheet) => <div key={sheet.id} className={`sheet-tab${sheet.id === project.activeSheetId ? ' active' : ''}`} style={{ paddingInlineStart: sheet.parentSheetId ? 18 : undefined }} title={sheet.parentSheetId ? `Child of ${project.sheets.find((parent) => parent.id === sheet.parentSheetId)?.name ?? 'sheet'}` : 'Root sheet'}><button className="sheet-tab-select" aria-current={sheet.id === project.activeSheetId ? 'page' : undefined} onClick={() => openSheet(sheet.id)}><span className="sheet-dot"/>{sheet.name}</button>{sheet.id === project.activeSheetId && <div className="sheet-tab-menu"><button className="sheet-tab-menu-trigger" aria-label={`More options for ${sheet.name}`} aria-haspopup="menu" aria-expanded={sheetTabMenu?.id === sheet.id} title={`More options for ${sheet.name}`} onClick={(event) => { if (sheetTabMenu?.id === sheet.id) setSheetTabMenu(null); else { const bounds = event.currentTarget.getBoundingClientRect(); setSheetTabMenu({ id: sheet.id, left: Math.max(8, Math.min(bounds.left, window.innerWidth - 202)), top: Math.max(8, Math.min(bounds.bottom + 4, window.innerHeight - 112)) }) } }}><MoreHorizontal size={16}/></button>{sheetTabMenu?.id === sheet.id && <div className="sheet-tab-menu-items" role="menu" aria-label={`${sheet.name} options`} style={{ left: sheetTabMenu.left, top: sheetTabMenu.top }} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); setSheetTabMenu(null); document.querySelector<HTMLButtonElement>('.sheet-tab-menu-trigger[aria-expanded="true"]')?.focus() } }}><button role="menuitem" onClick={() => { setSheetTabMenu(null); setSheetNameDraft(sheet.name); setSheetNameError(''); setSheetSettingsOpen(true) }}>Sheet and block settings…</button><button role="menuitem" disabled={sheet.parentSheetId === null} title={sheet.parentSheetId === null ? 'The root sheet cannot be duplicated as a block' : undefined} onClick={() => { setSheetTabMenu(null); duplicateActiveSheet() }}>Duplicate block</button><button role="menuitem" className="danger" disabled={sheet.parentSheetId === null || Boolean(activeSheetDeleteReason)} title={sheet.parentSheetId === null ? 'The root sheet cannot be deleted' : activeSheetDeleteReason ?? 'Delete this block and nested sheets'} onClick={() => { setSheetTabMenu(null); deleteActiveSheet() }}>Delete block</button></div>}</div>}</div>)}<button className="add-sheet" onClick={addSheet}><Plus size={15}/> Add sheet</button><div className="tab-spacer"/><button ref={sheetSettingsTriggerRef} className="sheet-action" title="Sheet ports and block settings" aria-label="Sheet ports and block settings" onClick={() => { setSheetNameDraft(activeSheet?.name ?? ''); setSheetNameError(''); setSheetSettingsOpen(true) }}><SlidersHorizontal size={15}/></button></div>
-        {exampleLesson && <aside className="example-lesson" aria-label="Guided example"><div><span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span><p>{exampleLesson.guidance}</p>{lessonNextStep ? <div className="example-lesson-next-step"><span className="eyebrow">TRY THIS NEXT</span><p>{lessonNextStep}</p>{simulationResultStale && <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : 'Run this circuit again'}</button>}</div> : <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : simulationResultStale ? 'Run this circuit again' : 'Run this circuit'}</button>}</div><button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button></aside>}
+        {exampleLesson && (
+          <aside className="example-lesson" aria-label="Guided example">
+            <div>
+              <span className="eyebrow">LEARNING GOAL · {exampleLesson.title}</span>
+              <p>{exampleLesson.guidance}</p>
+              {exampleLesson.id === 'ohms-law' && !lessonNextStep && <OhmsLawPrediction
+                key={`${partsById.get('ohms-law-v1')?.value ?? ''}:${partsById.get('ohms-law-r1')?.value ?? ''}`}
+                supplyValue={partsById.get('ohms-law-v1')?.value ?? ''}
+                resistanceValue={partsById.get('ohms-law-r1')?.value ?? ''}
+              />}
+              {lessonNextStep ? <div className="example-lesson-next-step">
+                <span className="eyebrow">TRY THIS NEXT</span>
+                <p>{lessonNextStep}</p>
+                {simulationResultStale && <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : 'Run this circuit again'}</button>}
+              </div> : <button className="example-lesson-run" onClick={startSimulation} disabled={runState === 'loading' || runState === 'running'}><Play size={12} fill="currentColor"/>{runState === 'loading' || runState === 'running' ? 'Simulation running…' : simulationResultStale ? 'Run this circuit again' : 'Run this circuit'}</button>}
+            </div>
+            <button className="subtle-icon" aria-label="Dismiss example guidance" onClick={() => setExampleLesson(null)}><X size={15}/></button>
+          </aside>
+        )}
         <Schematic project={project} symbolsById={symbolsById} connectivity={connectivity} setSelection={setSelection} setHoveredSchematicObject={setHoveredSchematicObject} setSelectedWireId={setSelectedWireId} selectedWireIds={selectedWireIds} setSelectedWireIds={setSelectedWireIds} selectedPartIds={selectedPartIds} setSelectedPartIds={setSelectedPartIds} selectedNetLabelIds={selectedNetLabelIds} setSelectedNetLabelIds={setSelectedNetLabelIds} setProject={setProject} commitView={commitView} recordViewDraft={recordViewDraft} spacePan={spacePan} tool={tool} setTool={setTool} pendingComponent={pendingComponentKind} pendingRotation={pendingComponentRotation} pendingPolarizedCapacitor={pendingPolarizedCapacitor} pendingLogicOperation={pendingLogicOperation} onPlaceComponent={addPart} onClearPendingComponent={() => { setPendingComponentKind(null); setPendingPolarizedCapacitor(false); setPendingLogicOperation(undefined) }} setNotice={setNotice} beginEdit={beginEdit} endEdit={endEdit} onProbe={addProbe} onProbeVoltage={addComponentVoltageProbe} onSwitchChanged={requestSwitchSolve} simulationResult={simulationResult} currentAnimationEnabled={currentAnimationEnabled} currentDotSize={currentDotSize} currentDotSpacing={currentDotSpacing}/>
       </main>
 
