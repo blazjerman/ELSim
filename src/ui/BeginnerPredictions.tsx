@@ -245,6 +245,23 @@ export function AcCutoffPrediction({ resistanceValue, capacitanceValue, filterTy
   />
 }
 
+export function SineWavePrediction({ amplitudeValue, frequencyValue }: { amplitudeValue: string; frequencyValue: string }) {
+  const amplitude = componentMagnitude(amplitudeValue, 'source')
+  const frequencyKhz = parsePredictionValue(frequencyValue, 'kHz')
+  const periodMs = frequencyKhz !== null && frequencyKhz > 0 ? 1 / frequencyKhz : null
+  const amplitudeExplanation = amplitude === null
+    ? ''
+    : `A is the peak amplitude: ${formatValue(amplitude)} V. With zero offset, the source swings from −${formatValue(Math.abs(amplitude))} V to +${formatValue(Math.abs(amplitude))} V (${formatValue(2 * Math.abs(amplitude))} V peak-to-peak).`
+  const periodExplanation = periodMs === null
+    ? ''
+    : `T = 1/f = 1/${frequencyValue} = ${formatValue(periodMs)} ms. Increasing frequency shortens the period.`
+
+  return <div className="example-prediction-group">
+    <NumericPrediction id="sine-wave-amplitude-prediction" prompt="Before running, predict the source peak amplitude" unit="V" predictedValue={amplitude} absoluteTolerance={0.01} explanation={amplitudeExplanation}/>
+    <NumericPrediction id="sine-wave-period-prediction" prompt="Predict one cycle's period" unit="ms" predictedValue={periodMs} absoluteTolerance={0.01} explanation={periodExplanation}/>
+  </div>
+}
+
 export function TheveninNortonPrediction({ supplyValue, seriesResistanceValue, theveninLoadValue, currentValue, nortonResistanceValue, nortonLoadValue }: { supplyValue: string; seriesResistanceValue: string; theveninLoadValue: string; currentValue: string; nortonResistanceValue: string; nortonLoadValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const seriesResistance = componentMagnitude(seriesResistanceValue, 'resistor')
@@ -382,7 +399,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
@@ -402,6 +419,8 @@ type BeginnerPredictionProps = {
   secondSourceValue?: string
   currentValue?: string
   seriesResistanceValue?: string
+  amplitudeValue?: string
+  frequencyValue?: string
 }
 
 /** Keep lesson-only prediction logic out of the editor's initial download. */
@@ -417,6 +436,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'lc-energy': return <LcEnergyPrediction initialVoltageValue={props.initialVoltageValue ?? ''} inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'wheatstone-bridge': return <WheatstoneBridgePrediction supplyValue={props.supplyValue ?? ''} leftTopValue={props.leftTopValue ?? ''} leftBottomValue={props.leftBottomValue ?? ''} rightTopValue={props.rightTopValue ?? ''} rightBottomValue={props.rightBottomValue ?? ''}/>
     case 'ac-cutoff': return <AcCutoffPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''} filterType={props.filterType ?? 'low-pass'}/>
+    case 'sine-wave': return <SineWavePrediction amplitudeValue={props.amplitudeValue ?? ''} frequencyValue={props.frequencyValue ?? ''}/>
     case 'rlc-resonance': return <RlcResonancePrediction inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'resistor-power': return <ResistorPowerPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
