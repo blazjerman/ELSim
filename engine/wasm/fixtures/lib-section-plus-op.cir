@@ -1,0 +1,8 @@
+Ngspice .LIB section-name compatibility: gain+
+V1 IN 0 10
+R1 IN OUT 1k
+.LIB lib-section-plus-op.lib gain+
+X1 OUT 0 TEST
+.op
+.print op v(out)
+.end

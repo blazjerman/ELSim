@@ -189,6 +189,11 @@ test('user model libraries round-trip inside project data with digest and licens
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], rightsNotes: 'x'.repeat(1001) }] }), /malformed imported model library/)
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], licenseReference: 42 }] }), /malformed imported model library/)
   assert.throws(() => validateProject({ ...restored, modelAssets: [{ ...restored.modelAssets[0], selectedSections: ['missing'] }] }), /section names that exist/)
+
+  const extendedSectionName = '.LIB 1.8V\n.MODEL DFAST D(IS=1n)\n.ENDL 1.8V'
+  const extendedDigest = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(extendedSectionName)))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  const extendedSectionProject = validateProject({ ...createStarterProject(), modelAssets: [{ id: 'numeric-section', filename: 'numeric-section.lib', sha256: extendedDigest, content: extendedSectionName, selectedSections: ['1.8V'], licenseStatus: 'unknown', importedAt: new Date().toISOString() }] })
+  assert.deepEqual(extendedSectionProject.modelAssets[0].selectedSections, ['1.8V'])
 })
 
 test('large imported model libraries validate many placed IC instances', async () => {

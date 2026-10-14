@@ -1,0 +1,8 @@
+Ngspice .LIB section-name compatibility: fast.typ
+V1 IN 0 10
+R1 IN OUT 1k
+.LIB lib-section-dot-op.lib fast.typ
+X1 OUT 0 TEST
+.op
+.print op v(out)
+.end

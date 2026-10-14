@@ -1,5 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 
 try {
   const { default: createNgspiceModule } = await import(workerData.moduleUrl)
@@ -10,6 +11,9 @@ try {
     print: (...parts) => stdout.push(parts.join(' ')),
     printErr: (...parts) => stderr.push(parts.join(' ')),
   })
+  for (const assetPath of workerData.assetPaths ?? []) {
+    module.FS.writeFile(path.basename(assetPath), new Uint8Array(await readFile(assetPath)))
+  }
   if (workerData.ltspiceMode) module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
   const deck = new Uint8Array(await readFile(workerData.deckPath))
   module.FS.writeFile('/test.cir', deck)

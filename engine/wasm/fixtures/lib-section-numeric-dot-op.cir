@@ -1,0 +1,8 @@
+Ngspice .LIB section-name compatibility: 1.8V
+V1 IN 0 10
+R1 IN OUT 1k
+.LIB lib-section-numeric-dot-op.lib 1.8V
+X1 OUT 0 TEST
+.op
+.print op v(out)
+.end

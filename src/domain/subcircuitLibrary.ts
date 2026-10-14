@@ -18,6 +18,12 @@ export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInp
 
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
+// A .LIB section is a single ngspice token, not a C-style identifier. Keep
+// selection names aligned with the native runtime's model-name punctuation.
+const librarySectionName = /^[A-Za-z0-9_][A-Za-z0-9_.$+/-]*$/
+export function isValidSpiceLibrarySectionName(value: string): boolean {
+  return librarySectionName.test(value)
+}
 // ngspice node names may carry polarity suffixes such as IN+ and IN- in
 // imported .SUBCKT interfaces. Keep this separate from ELSim net-label syntax.
 const pinName = /^(?:\d+|[A-Za-z0-9_][A-Za-z0-9_.$+/-]*)$/
@@ -186,11 +192,11 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     }
     if (directive === '.lib') {
       if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .LIB directives are not allowed inside a .SUBCKT.`)
-      const external = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z_][A-Za-z0-9_-]*)$/i)
+      const external = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z0-9_][A-Za-z0-9_.$+/-]*)$/i)
       if (external) { lines.push({ line, section: activeSection }); continue }
       if (activeSection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
       const section = tokens[1]
-      if (tokens.length !== 2 || !section || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) throw new Error(`Line ${line.start}: malformed .LIB section or file reference.`)
+      if (tokens.length !== 2 || !section || !isValidSpiceLibrarySectionName(section)) throw new Error(`Line ${line.start}: malformed .LIB section or file reference.`)
       if (sections.some((known) => known.toLowerCase() === section.toLowerCase())) throw new Error(`Line ${line.start}: .LIB section ${section} is declared more than once.`)
       sections.push(section)
       activeSection = section
@@ -806,10 +812,10 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     }
     if (directive === '.lib') {
       if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .LIB file references must be outside a .SUBCKT.`)
-      const match = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z_][A-Za-z0-9_-]*)$/i)
+      const match = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z0-9_][A-Za-z0-9_.$+/-]*)$/i)
       if (!match) {
         const tokens = text.split(/\s+/)
-        if (tokens.length !== 2 || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(tokens[1] ?? '')) throw new Error(`Line ${line.start}: malformed .LIB section or file reference.`)
+        if (tokens.length !== 2 || !isValidSpiceLibrarySectionName(tokens[1] ?? '')) throw new Error(`Line ${line.start}: malformed .LIB section or file reference.`)
         const section = tokens[1]
         if (activeLibrarySection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
         activeLibrarySection = section
@@ -887,7 +893,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     if (directive === '.lib') {
       const section = tokens[1]
       if (activeLibrarySection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
-      if (!section || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) throw new Error(`Line ${line.start}: .LIB needs one section name.`)
+      if (!section || !isValidSpiceLibrarySectionName(section)) throw new Error(`Line ${line.start}: .LIB needs one section name.`)
       activeLibrarySection = section
       continue
     }

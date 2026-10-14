@@ -1,6 +1,6 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
-import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isValidSpiceModelName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
+import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId } from './componentDefinitions'
@@ -466,7 +466,7 @@ export function validateProject(input: unknown): Project {
       if (size > 4 * 1024 * 1024) throw new Error(`${candidate.filename} exceeds the 4 MiB model library limit.`)
       totalBytes += size
       if (totalBytes > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
-      if (candidate.selectedSections !== undefined && (!Array.isArray(candidate.selectedSections) || candidate.selectedSections.length > 32 || candidate.selectedSections.some((section) => typeof section !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) || new Set(candidate.selectedSections.map((section) => section.toLowerCase())).size !== candidate.selectedSections.length)) throw new Error(`${candidate.filename} has invalid selected .LIB sections.`)
+      if (candidate.selectedSections !== undefined && (!Array.isArray(candidate.selectedSections) || candidate.selectedSections.length > 32 || candidate.selectedSections.some((section) => typeof section !== 'string' || !isValidSpiceLibrarySectionName(section)) || new Set(candidate.selectedSections.map((section) => section.toLowerCase())).size !== candidate.selectedSections.length)) throw new Error(`${candidate.filename} has invalid selected .LIB sections.`)
       assetIds.add(candidate.id)
     }
     const availableFunctions = modelFunctionSignaturesForLibraries(modelAssets)

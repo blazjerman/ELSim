@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceModelName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
@@ -877,6 +877,21 @@ test('imports and flattens an unambiguous single-section model library', () => {
   assert.deepEqual(parsed.subcircuits.map(({ name }) => name), ['BUFFER'])
   assert.match(parsed.modelText, /\.MODEL DFAST/)
   assert.doesNotMatch(parsed.modelText, /\.LIB|\.ENDL/i)
+})
+
+test('accepts ngspice .LIB section tokens with numeric, dot, slash, dollar, and plus names', () => {
+  const names = ['1.8V', 'fast.typ', 'fast/typ', 'FAST$LOW', 'gain+']
+  assert.deepEqual(names.map((name) => isValidSpiceLibrarySectionName(name)), names.map(() => true))
+  for (const name of names) {
+    const source = `.LIB ${name}\n.MODEL D_${name.replace(/[^A-Za-z0-9]/g, '_')} D(IS=1n)\n.ENDL ${name}`
+    assert.deepEqual(listModelLibrarySections(source), [name])
+    const parsed = parseSubcircuitLibrary(source, [name])
+    assert.equal(parsed.models.length, 1, name)
+  }
+  for (const name of ['', 'white space', '.leading', 'bad;comment', 'bad\nname']) assert.equal(isValidSpiceLibrarySectionName(name), false, name)
+  assert.deepEqual(parseSubcircuitLibrary('.LIB models.lib 1.8V').includes, [
+    { reference: 'models.lib', filename: 'models.lib', section: '1.8V', sourceLine: 1 },
+  ])
 })
 
 test('selects one or more named sections while excluding unselected model definitions', () => {

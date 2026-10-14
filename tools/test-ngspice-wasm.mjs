@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { tmpdir } from 'node:os'
@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['bsource-basic-functions-op', 'behavioral-differential-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'rc-lowpass-ac', 'rc-highpass-ac', 'current-source-op', 'current-source-dc-sweep', 'two-source-dc-sweep', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'voltage-divider-op', 'superposition-op', 'thevenin-norton-equivalent-op', 'lc-energy-transient', 'rlc-ac', 'subckt-op', 'transformer-winding-loss-ac', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-bare-params-op', 'imported-subckt-local-param-shadow-op', 'imported-subckt-param-arithmetic-op', 'imported-subckt-math-params-op', 'imported-subckt-user-function-params-op', 'imported-subckt-scale-suffixes-op', 'numeric-leading-subckt-name-pins-op', 'slash-subckt-pin-identifiers-op', 'conditional-device-model-op', 'conditional-scoped-device-model-op', 'nested-user-subckt-op', 'nested-mismatched-ends-names-op', 'scoped-user-function-params-op', 'scoped-user-device-model-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'imported-passive-model-defaults-op', 'imported-library-temp-default', 'imported-library-temp-override', 'imported-library-ic-nodeset', 'imported-library-csparam-op', 'imported-library-save-vectors-tran', 'imported-library-probe-current-tran', 'imported-library-measurement-tran', 'imported-library-measurement-ac', 'imported-library-measurement-dc', 'imported-library-measurement-duplicate-tran', 'vdmos-power-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-user-function-params-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op', 'educational-opamp-op', 'educational-opamp-inverting-op']
+const fixtures = ['bsource-basic-functions-op', 'behavioral-differential-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'rc-lowpass-ac', 'rc-highpass-ac', 'current-source-op', 'current-source-dc-sweep', 'two-source-dc-sweep', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'voltage-divider-op', 'superposition-op', 'thevenin-norton-equivalent-op', 'lc-energy-transient', 'rlc-ac', 'subckt-op', 'transformer-winding-loss-ac', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-bare-params-op', 'imported-subckt-local-param-shadow-op', 'imported-subckt-param-arithmetic-op', 'imported-subckt-math-params-op', 'imported-subckt-user-function-params-op', 'imported-subckt-scale-suffixes-op', 'numeric-leading-subckt-name-pins-op', 'slash-subckt-pin-identifiers-op', 'lib-section-numeric-dot-op', 'lib-section-dot-op', 'lib-section-slash-op', 'lib-section-dollar-op', 'lib-section-plus-op', 'conditional-device-model-op', 'conditional-scoped-device-model-op', 'nested-user-subckt-op', 'nested-mismatched-ends-names-op', 'scoped-user-function-params-op', 'scoped-user-device-model-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'imported-passive-model-defaults-op', 'imported-library-temp-default', 'imported-library-temp-override', 'imported-library-ic-nodeset', 'imported-library-csparam-op', 'imported-library-save-vectors-tran', 'imported-library-probe-current-tran', 'imported-library-measurement-tran', 'imported-library-measurement-ac', 'imported-library-measurement-dc', 'imported-library-measurement-duplicate-tran', 'vdmos-power-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-user-function-params-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op', 'educational-opamp-op', 'educational-opamp-inverting-op']
 const requestedFixtures = process.env.NGSPICE_WASM_ONLY?.split(',').map((name) => name.trim()).filter(Boolean) ?? []
 const selectedFixtures = requestedFixtures.length ? requestedFixtures : fixtures
 const unknownFixtures = selectedFixtures.filter((name) => !fixtures.includes(name))
@@ -20,8 +20,9 @@ const hierarchyNestedRaws = new Map()
 
 function runInWorker(deckPath, readRaw = false, rawPaths, ltspiceMode = false) {
   return new Promise((resolve, reject) => {
+    const sidecarPaths = ['.lib', '.inc'].map((extension) => deckPath.replace(/\.cir$/i, extension)).filter(existsSync)
     const worker = new Worker(new URL('../tests/wasm/ngspice-case-worker.mjs', import.meta.url), {
-      workerData: { moduleUrl, deckPath, readRaw, rawPaths, ltspiceMode },
+      workerData: { moduleUrl, deckPath, readRaw, rawPaths, ltspiceMode, assetPaths: sidecarPaths },
     })
     const timeout = setTimeout(() => {
       worker.terminate()
@@ -307,6 +308,7 @@ for (const fixture of selectedFixtures) {
       assert.match(wasmResult.stdout, /ind\s+0\.001/i, 'LDEFAULT should expose its declared 1 mH IND parameter')
     }
     if (fixture === 'imported-subckt-op') assert.match(wasmResult.stdout, /out\s+1\.000000e\+01/i, 'imported-subckt-op: four-pin model did not produce the expected 10 V output')
+    if (fixture.startsWith('lib-section-')) assert.match(wasmResult.stdout, /out\s+5\.000000e\+00/i, `${fixture}: ngspice did not select and simulate the named model-library section`)
     if (fixture === 'imported-subckt-params-op') assert.match(wasmResult.stdout, /out\s+1\.500000e\+01/i, 'imported-subckt-params-op: GAIN=3 override did not produce the expected 15 V output')
     if (fixture === 'imported-subckt-scale-suffixes-op') assert.match(wasmResult.stdout, /out\s+5\.000000e\+00/i, 'ngspice mil, atto, and ignored unit suffixes should resolve to a unity gain')
     if (fixture === 'numeric-leading-subckt-name-pins-op') assert.match(wasmResult.stdout, /out\s+1\.000000e\+01/i, 'ngspice should expand a 74HC-style subcircuit with numeric-leading pin names')

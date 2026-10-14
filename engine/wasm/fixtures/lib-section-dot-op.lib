@@ -1,0 +1,5 @@
+.LIB fast.typ
+.SUBCKT TEST A B
+R2 A B 1k
+.ENDS TEST
+.ENDL fast.typ
