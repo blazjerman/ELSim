@@ -1892,7 +1892,9 @@ test('standalone resistor capacitor and inductor can select imported native mode
 
 test('standalone MOSFET can select an imported BSIM3 bin family by its base name', { tag: '@ui-smoke' }, async ({ page }) => {
   const project = createStarterProject()
-  const mosfet = { id: 'm-binned', kind: 'nmos' as const, ref: 'M1', value: '0', x: 700, y: 500, rotation: 0 as const }
+  // Keep this fixture inside the initial visible schematic viewport. This
+  // workflow tests imported model selection, not panning to an off-screen part.
+  const mosfet = { id: 'm-binned', kind: 'nmos' as const, ref: 'M1', value: '0', x: 500, y: 220, rotation: 0 as const }
   project.parts.push(mosfet)
   project.netLabels.push(...componentPins(mosfet).map((pin, index) => ({
     id: `m-binned-net-${index}`, name: `m1pin${index}`, x: pin.x, y: pin.y, visible: false,
