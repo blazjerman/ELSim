@@ -125,6 +125,23 @@ test('parses ordered subcircuit pins, parameters, continuations, shared models, 
   ])
 })
 
+test('parses native ngspice subcircuit defaults with and without PARAMS:', () => {
+  const source = [
+    '.SUBCKT AMP IN OUT gain=2 RLOAD = 10k',
+    'E1 OUT 0 IN 0 {gain}',
+    '.ENDS AMP',
+    '.SUBCKT BUFFER IN OUT PARAMS: delay=1u',
+    'R1 IN OUT 1k',
+    '.ENDS BUFFER',
+  ].join('\n')
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.subcircuits.map(({ name, pins, parameters }) => ({ name, pins, parameters })), [
+    { name: 'AMP', pins: ['IN', 'OUT'], parameters: [{ name: 'gain', defaultValue: '2' }, { name: 'RLOAD', defaultValue: '10k' }] },
+    { name: 'BUFFER', pins: ['IN', 'OUT'], parameters: [{ name: 'delay', defaultValue: '1u' }] },
+  ])
+  assert.equal(parsed.modelText, source)
+})
+
 test('imports .MODEL-only libraries, including numeric-leading model names and continuations', () => {
   const parsed = parseSubcircuitLibrary('Vendor device cards\n.MODEL 1N4148 D(Is=2n N=1.8)\n+ Rs=1\n')
   assert.deepEqual(parsed.subcircuits, [])

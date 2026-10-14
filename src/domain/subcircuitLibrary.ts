@@ -464,9 +464,20 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (seenNames.has(folded)) throw new Error(`Line ${line.start}: model ${name} is declared more than once.`)
       seenNames.add(folded)
       const header = tokens.slice(2)
-      const paramsAt = header.findIndex((token) => /^params?:$/i.test(token))
+      const paramsMarkerAt = header.findIndex((token) => /^params?:$/i.test(token))
+      // Native ngspice permits formal defaults directly after the pin list;
+      // PARAMS: is optional. Also accept whitespace around '=' because it is
+      // valid in the card grammar and the value parser already handles it.
+      const bareParameterAt = header.findIndex((token, index) =>
+        /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(token)
+        || (/^[A-Za-z_][A-Za-z0-9_]*$/.test(token) && /^=/.test(header[index + 1] ?? '')))
+      const paramsAt = paramsMarkerAt >= 0 ? paramsMarkerAt : bareParameterAt
       const pins = (paramsAt < 0 ? header : header.slice(0, paramsAt)).filter(Boolean)
-      const parameterSource = paramsAt < 0 ? '' : text.slice(text.toLowerCase().indexOf(header[paramsAt].toLowerCase()) + header[paramsAt].length).trim()
+      const headerTokens = [...text.matchAll(/\S+/g)]
+      const parameterToken = paramsAt < 0 ? undefined : headerTokens[paramsAt + 2]
+      const parameterSource = parameterToken
+        ? text.slice((parameterToken.index ?? 0) + (paramsMarkerAt === paramsAt ? parameterToken[0].length : 0)).trim()
+        : ''
       if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !pinName.test(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
         throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
       }

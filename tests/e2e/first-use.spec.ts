@@ -91,6 +91,14 @@ async function rightClickNetLabel(page: import('@playwright/test').Page, name: s
       else await movePlotWindowLeft(page, obstructed.plot)
     } else if (attempt === 0) await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   }
+  // Imported symbol hit targets can cover a label placed directly on a pin.
+  // Keep the probe workflow usable through the label's supported keyboard menu.
+  if (await labels.count()) {
+    await labels.first().focus()
+    await page.keyboard.press('Shift+F10')
+    const menu = page.locator('.schematic-context-menu')
+    if (await menu.count()) return
+  }
   throw new Error(`No visible, unobstructed label for net ${name} can be right-clicked`)
 }
 
@@ -4346,7 +4354,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', { tag: ['
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/')
 
-  const modelLibrary = '.LIB typical\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n.ENDL typical\n'
+  const modelLibrary = '.LIB typical\n.SUBCKT USER_DOUBLE IN OUT VSS gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n.ENDL typical\n'
   const expectedDefinitionId = `user.${createHash('sha256').update(modelLibrary).digest('hex')}.user-double`
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -4378,6 +4386,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', { tag: ['
     { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
   ])
   await expect(page.getByText(/Imported user-double with 3 parts, 0 wires/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.selectedTraceIds)).toEqual(['v(out)', 'i(@r1[i])'])
   const importedDefinition = page.locator(`[data-component-definition-id="${expectedDefinitionId}"]`)
   await expect(importedDefinition).toBeVisible()
