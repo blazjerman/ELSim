@@ -7280,6 +7280,19 @@ test('creating a child sheet can be undone and redone', async ({ page }) => {
   await expect(undo).toBeEnabled()
 })
 
+test('creating a child sheet restores the parent sheet selection when returning', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await expect(resistor).toHaveClass(/selected/)
+  await page.getByRole('button', { name: 'Add sheet' }).click()
+  await expect(page.locator('.sheet-tab.active')).toContainText('Block 1')
+  await expect(page.locator('.circuit-part.selected')).toHaveCount(0)
+  await page.locator('.sheet-tab').first().click()
+  await expect(page.locator('.sheet-tab.active')).toContainText('Main circuit')
+  await expect(resistor).toHaveClass(/selected/)
+})
+
 test('@ui-smoke component property edits use stable undo and redo snapshots', async ({ page }) => {
   await page.goto('/')
   const value = page.locator('[data-part-setting="p-r1:value"]')

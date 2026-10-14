@@ -2459,6 +2459,7 @@ export default function App() {
     const parent = project.sheets.find((sheet) => sheet.id === project.activeSheetId)
     const name = nextBlockSheetName(project, parent?.id ?? project.rootSheetId)
     const sheet = { id: `sheet-${crypto.randomUUID()}`, name, parentSheetId: parent?.id ?? null, parts: [] as Part[], wires: [] as Project['wires'], junctions: [] as Project['junctions'], netLabels: [] as Project['netLabels'], view: { zoom: 1, panX: 0, panY: 0 }, ports: [] as { id: string; name: string }[], parameters: [] as NonNullable<Project['sheets'][number]['parameters']> }
+    if (parent) sheetSelectionState.current.set(parent.id, { selection, partIds: selectedPartIds, wireIds: selectedWireIds, labelIds: selectedNetLabelIds })
     recordUndoSnapshot(projectRef.current)
     setProjectState((current) => ({ ...current, sheets: [...current.sheets, sheet], activeSheetId: sheet.id, parts: sheet.parts, wires: sheet.wires, junctions: sheet.junctions, netLabels: sheet.netLabels, view: sheet.view, updatedAt: new Date().toISOString() }))
     setSelection(null)
