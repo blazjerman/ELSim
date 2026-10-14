@@ -1954,6 +1954,12 @@ test('NPN placement preview shows its orientation and click places that orientat
 test('component cards explain behavior on hover and keyboard focus', async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.component-card').filter({ hasText: 'Resistor' })
+  await expect(resistor.locator('.component-symbol-preview rect')).toHaveCount(1)
+  const inductor = page.locator('.component-card').filter({ hasText: 'Inductor' })
+  await expect(inductor.locator('.component-symbol-preview path')).not.toHaveCount(0)
+  const manualSwitch = page.locator('.component-card').filter({ hasText: 'Switch' })
+  await expect(manualSwitch.locator('.component-symbol-preview line')).not.toHaveCount(0)
+  await expect(manualSwitch.locator('.component-symbol-preview path')).not.toHaveCount(0)
   await expect(resistor).toHaveAttribute('aria-label', /Limits current/)
   await expect(resistor).toHaveAttribute('data-help', /larger resistance/)
   await resistor.hover()
