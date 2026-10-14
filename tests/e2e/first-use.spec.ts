@@ -2865,11 +2865,14 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
   await expect(generatedPart).toBeVisible()
   await expect(generatedPart.locator('.imported-symbol-art rect')).toHaveCount(1)
   await expect(generatedPart.locator('.imported-symbol-art circle')).toHaveCount(5)
+  await expect(generatedPart.locator('.imported-symbol-art circle[cx="70"][cy="0"]')).toHaveCount(1)
   await expect(generatedPart.locator('.imported-symbol-art text')).toContainText(['USER_AMP', 'INP', 'INM', 'VCC', 'VEE', 'OUT'])
   await expect.poll(() => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    return project.symbolAssets.some((item: { filename: string }) => item.filename === 'USER_AMP-symbol.elsym')
-  })).toBe(true)
+    const symbol = project.symbolAssets.find((item: { filename: string }) => item.filename === 'USER_AMP-symbol.elsym')
+    const part = project.parts.find((item: { ref: string }) => item.ref === 'X2')
+    return { found: Boolean(symbol), pinOffsets: part?.symbolPinOffsets }
+  })).toEqual({ found: true, pinOffsets: [[-70, -30], [-70, -10], [-70, 10], [-70, 30], [70, 0]] })
   const generated = await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return {
@@ -2880,7 +2883,7 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
   expect(generated.asset.licenseStatus).toBe('unknown')
   expect(generated.asset.content).toContain('"format": "elsim-symbol"')
   expect(createHash('sha256').update(generated.asset.content).digest('hex')).toBe(generated.asset.sha256)
-  expect(generated.pins).toEqual([[-70, -20], [-70, 0], [-70, 20], [70, -10], [70, 10]])
+  expect(generated.pins).toEqual([[-70, -30], [-70, -10], [-70, 10], [-70, 30], [70, 0]])
 
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Download USER_AMP-symbol.elsym' }).click()

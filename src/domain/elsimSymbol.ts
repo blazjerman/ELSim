@@ -95,21 +95,29 @@ export function parseElsimSymbol(source: string, filename = 'Custom symbol.elsym
   return { name, attributes: {}, primitives, pins, warnings: [] }
 }
 
-/** Create a simple, readable left/right-pin symbol for a user model. */
+/** Create a simple, readable symbol for a user model, preserving SPICE pin order. */
 export function createDefaultElsimSymbol(name: string, pinNames: readonly string[]): string {
   const symbolName = name.trim()
   if (!symbolName || symbolName.length > 80 || /[\u0000-\u001f]/.test(symbolName)) throw new Error('A symbol name must contain 1–80 printable characters.')
   if (!pinNames.length || pinNames.length > MAX_PINS) throw new Error(`A symbol needs 1–${MAX_PINS} ordered pins.`)
   const normalizedPins = pinNames.map((pin) => pin.trim())
   if (normalizedPins.some((pin) => !pin || pin.length > 64) || new Set(normalizedPins.map((pin) => pin.toLowerCase())).size !== normalizedPins.length) throw new Error('Model pins must have unique names of 1–64 characters.')
-  const leftCount = Math.ceil(normalizedPins.length / 2)
-  const rightCount = normalizedPins.length - leftCount
-  const rows = Math.max(leftCount, rightCount, 1)
+  // Keep common output pins on the right so generated ICs read like ordinary
+  // schematic symbols. Pin labels remain in SPICE order regardless of layout.
+  const outputPinNames = /^(?:OUT|OUTPUT|VOUT|VO|QOUT)(?:[+-]|[PN])?\d*$/i
+  const detectedOutputs = normalizedPins.flatMap((pin, index) => outputPinNames.test(pin) ? [index] : [])
+  const rightPinIndexes = new Set(detectedOutputs.length > 0 && detectedOutputs.length < normalizedPins.length
+    ? detectedOutputs
+    : normalizedPins.flatMap((_, index) => index >= Math.ceil(normalizedPins.length / 2) ? [index] : []))
+  const leftPinIndexes = normalizedPins.flatMap((_, index) => rightPinIndexes.has(index) ? [] : [index])
+  const leftPinRows = new Map(leftPinIndexes.map((index, row) => [index, row]))
+  const rightPinRows = new Map([...rightPinIndexes].map((index, row) => [index, row]))
+  const rows = Math.max(leftPinIndexes.length, rightPinIndexes.size, 1)
   const halfHeight = Math.max(30, (rows - 1) * 10 + 10)
   const pins = normalizedPins.map((pin, index) => {
-    const left = index < leftCount
-    const sideIndex = left ? index : index - leftCount
-    const count = left ? leftCount : rightCount
+    const left = !rightPinIndexes.has(index)
+    const sideIndex = (left ? leftPinRows : rightPinRows).get(index)!
+    const count = left ? leftPinIndexes.length : rightPinIndexes.size
     return {
       name: pin,
       spiceOrder: index + 1,

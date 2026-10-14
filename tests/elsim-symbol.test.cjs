@@ -48,16 +48,23 @@ test('native symbol parser rejects unsafe or ambiguous symbol data', () => {
   assert.throws(() => parseElsimSymbol(' '.repeat(1024 * 1024 + 1), 'large.elsym'), /1 MiB/)
 })
 
-test('default ELSim symbols retain model pin order and create left/right leads', () => {
+test('default ELSim symbols retain SPICE pin order and place a named output on the right', () => {
   const content = createDefaultElsimSymbol(' USER_AMP ', ['INP', 'INM', 'VPOS', 'VNEG', 'OUT'])
   const symbol = parseElsimSymbol(content, 'USER_AMP-symbol.elsym')
   assert.equal(symbol.name, 'USER_AMP')
   assert.deepEqual(symbol.pins.map(({ name, spiceOrder }) => [name, spiceOrder]), [
     ['INP', 1], ['INM', 2], ['VPOS', 3], ['VNEG', 4], ['OUT', 5],
   ])
-  assert.deepEqual(symbol.pins.map(({ x }) => x), [-70, -70, -70, 70, 70])
-  assert.deepEqual(symbol.primitives[0], { kind: 'rectangle', x1: -50, y1: -30, x2: 50, y2: 30 })
+  assert.deepEqual(symbol.pins.map(({ x, y, orientation }) => [x, y, orientation]), [
+    [-70, -30, 'R'], [-70, -10, 'R'], [-70, 10, 'R'], [-70, 30, 'R'], [70, 0, 'L'],
+  ])
+  assert.deepEqual(symbol.primitives[0], { kind: 'rectangle', x1: -50, y1: -40, x2: 50, y2: 40 })
   assert.equal(symbol.primitives.filter(({ kind }) => kind === 'line').length, 5)
+})
+
+test('default ELSim symbols keep balanced sides when pin names have no recognized output', () => {
+  const symbol = parseElsimSymbol(createDefaultElsimSymbol('BLOCK', ['A', 'B', 'C', 'D']))
+  assert.deepEqual(symbol.pins.map(({ x }) => x), [-70, -70, 70, 70])
 })
 
 test('default ELSim symbols reject empty, duplicate, or oversized pin lists', () => {
