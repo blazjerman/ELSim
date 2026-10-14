@@ -673,3 +673,16 @@ The 95 tagged engine-independent Firefox UI-smoke tests passed, including focus 
 ### Eight-window Firefox plot recheck (2026-10-14)
 
 The existing local runtime solved 1,000,130 transient samples and rendered 32 traces across eight plot windows in 10,067 ms. End/Home/End cursor interactions took 53.31/48.71/36.57 ms; the 16 ms interval observer recorded maximum excess delays of 40 ms during solving, 17 ms during plot validation, and 7 ms during cursor scrubbing. Firefox did not expose page-heap or WASM-memory values in this run. This is consistent with earlier same-host profiles and does not indicate a new plot-rendering bottleneck. The runtime was reused; no WASM build or Pages workflow ran.
+
+
+### Quick domain profile repeat (2026-10-14)
+
+`npm run benchmark:performance:quick` (benchmark version 10, seven measured runs after two warmups) rechecked the domain, hierarchy, and plot paths without invoking the local ngspice runtime. It ran on the documented i7-12700F host.
+
+| Fixture | Size | Connectivity median / p95 (ms) | Netlisting median / p95 (ms) | Full circuit checks p95 (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| Labeled resistor chain | 5,000 resistors | 36.97 / 42.33 | 48.39 / 57.22 | 48.82 |
+| Two-endpoint wire grid | 5,000 resistors, 4,900 wires | 34.63 / 46.64 | 41.23 / 49.59 | 54.40 |
+| Two-level repeated hierarchy | 5,000 root instances | 76.77 / 87.37 | 110.21 / 133.34 | 104.11 |
+
+All remain within the current 500 ms domain targets. One-million-sample cold plot reduction was 1.04 ms median / 1.04 ms p95 with the 902-point bound. The quick profile does not measure browser rendering, solver execution, or cross-machine behavior; no new optimization was justified by these measurements.

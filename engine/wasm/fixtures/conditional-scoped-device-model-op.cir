@@ -1,0 +1,18 @@
+Conditional scoped device model branch selection
+.param variant=0
+V1 IN 0 5
+X1 IN OUT DIODE_CORE
+R1 OUT 0 1k
+.SUBCKT DIODE_CORE A K
+D1 A K DLOCAL
+.IF (variant == 0)
+.MODEL DLOCAL D(Is=1n)
+.ELSEIF (variant == 1)
+.MODEL DLOCAL D(Is=10n)
+.ELSE
+.MODEL DLOCAL D(Is=100n)
+.ENDIF
+.ENDS DIODE_CORE
+.OP
+.PRINT OP V(OUT)
+.END
