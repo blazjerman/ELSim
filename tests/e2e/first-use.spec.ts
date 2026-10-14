@@ -4161,6 +4161,17 @@ test('floating waveform windows can be moved and resized from the keyboard', { t
   await expect.poll(() => waveform.evaluate((element) => element.viewBox.baseVal.height)).toBeGreaterThan(initialWaveformGeometry.height)
   await expect.poll(() => waveform.locator('polyline[role="img"]').getAttribute('points')).not.toBe(initialWaveformGeometry.tracePoints)
   await expect(plotWindow.getByRole('status')).toContainText(/V\(R1\).*resized to .* pixels/)
+  const beforePointerResize = await plotWindow.boundingBox()
+  const beforePointerResizeGeometry = await waveform.evaluate((element) => ({
+    width: element.viewBox.baseVal.width,
+    height: element.viewBox.baseVal.height,
+    tracePoints: element.querySelector<SVGPolylineElement>('polyline[role="img"]')?.getAttribute('points'),
+  }))
+  expect(beforePointerResize).not.toBeNull()
+  await resizePlotWindow(page, plotWindow, beforePointerResize!.width + 30, beforePointerResize!.height + 30)
+  await expect.poll(async () => (await plotWindow.boundingBox())?.width).toBeGreaterThan(beforePointerResize!.width + 20)
+  await expect.poll(() => waveform.evaluate((element) => element.viewBox.baseVal.width)).toBeGreaterThan(beforePointerResizeGeometry.width)
+  await expect.poll(() => waveform.locator('polyline[role="img"]').getAttribute('points')).not.toBe(beforePointerResizeGeometry.tracePoints)
   await page.setViewportSize({ width: 390, height: 844 })
   const titleBounds = await moveHandle.boundingBox()
   const closeBounds = await plotWindow.getByRole('button', { name: 'Close V(R1)' }).boundingBox()
