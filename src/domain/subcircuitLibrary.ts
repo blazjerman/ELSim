@@ -319,6 +319,21 @@ function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): 
     return dependency
   } else if (prefix === 'j' || prefix === 'w' || prefix === 'z') index = 4
   else if (prefix === 'm' || prefix === 's') index = 5
+  else if (prefix === 'o') index = 5 // O transmission lines use an LTRA model after four nodes.
+  else if (prefix === 'u') index = 4 // U distributed RC lines use a URC model after three nodes.
+  else if (prefix === 'r' || prefix === 'c' || prefix === 'l') {
+    // Ngspice R/C/L instances may use a model name directly, or after an
+    // explicit value. Do not mistake ordinary scalar values, behavioral
+    // expressions, or instance options for model references.
+    const first = tokens[3]
+    if (!first || new RegExp(`^${prefix}\\s*=`, 'i').test(first) || (first.toLowerCase() === prefix && tokens[4] === '=') || /^[{'\"]/.test(first)) return null
+    const numericValue = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?[a-z]*$/i.test(first)
+    if (numericValue) {
+      const candidate = tokens[4]
+      if (!candidate || /^(?:[A-Za-z_][A-Za-z0-9_]*\s*=|off$)/i.test(candidate) || (/^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate) && tokens[5] === '=')) return null
+      index = 4
+    } else index = 3
+  }
   const modelName = tokens[index]
   if (index <= 0 || !modelName || !/^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(modelName)) return null
   return { owner, reference, modelName, kind, sourceLine }

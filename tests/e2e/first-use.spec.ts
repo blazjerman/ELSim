@@ -1748,6 +1748,34 @@ test('model dependency report offers a direct import action for referenced libra
   await expect(page.getByText('CORE', { exact: true })).toBeVisible()
 })
 
+test('native passive and transmission-line model references resolve across imported files', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const deviceFile = [
+    '.SUBCKT NATIVE_NETWORK IN OUT',
+    'R1 IN N1 RMOD l=10u',
+    'C1 N1 OUT 1p CMOD',
+    'L1 IN OUT LMOD',
+    'O1 IN 0 OUT 0 LTRAMOD',
+    'U1 IN OUT 0 URCMOD L=50u',
+    '.ENDS NATIVE_NETWORK',
+  ].join('\n')
+  const input = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await input.setInputFiles({ name: 'native-devices.lib', mimeType: 'text/plain', buffer: Buffer.from(deviceFile) })
+  const report = page.getByRole('region', { name: 'Model dependency report' })
+  const missing = report.getByRole('list', { name: 'Missing model definitions' })
+  for (const model of ['RMOD', 'CMOD', 'LMOD', 'LTRAMOD', 'URCMOD']) await expect(missing).toContainText(model)
+
+  await report.getByRole('button', { name: 'Import model library' }).click()
+  await input.setInputFiles({
+    name: 'native-models.lib', mimeType: 'text/plain', buffer: Buffer.from([
+      '.MODEL RMOD R(RSH=100)', '.MODEL CMOD C(CAP=1p)', '.MODEL LMOD L(IND=3n)',
+      '.MODEL LTRAMOD LTRA(R=1 L=1 G=0 C=1 LEN=1)', '.MODEL URCMOD URC(CPERL=100p RPERL=100k FMAX=10G)',
+    ].join('\n')),
+  })
+  await expect(report).toHaveCount(0)
+})
+
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()

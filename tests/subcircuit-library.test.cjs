@@ -28,6 +28,43 @@ test('combined model-library analysis shares parsed cards with dependency resolu
   assert.deepEqual(analyzeModelDependencies(assets), result.dependencies)
 })
 
+test('resolves native ngspice passive and transmission-line model references', () => {
+  const devices = { id: 'devices', filename: 'devices.lib', content: [
+    '.SUBCKT NETWORK IN OUT',
+    'R0 IN OUT 10k',
+    'R1 IN N1 RMOD l=10u',
+    'R2 N1 OUT 1k RMOD l=10u',
+    'R3 N1 OUT r = {V(N1)}',
+    'C1 IN OUT CMOD',
+    'C2 IN N1 1p CMOD',
+    'C3 N1 OUT 10n',
+    'L1 IN N1 LMOD',
+    'L2 N1 OUT 1u LMOD',
+    'O1 IN 0 OUT 0 LTRAMOD',
+    'U1 IN OUT 0 URCMOD L=50u',
+    '.ENDS NETWORK',
+  ].join('\n') }
+  const models = { id: 'models', filename: 'models.lib', content: [
+    '.MODEL RMOD R(RSH=100)',
+    '.MODEL CMOD C(CAP=1p)',
+    '.MODEL LMOD L(IND=3n)',
+    '.MODEL LTRAMOD LTRA(R=1 L=1 G=0 C=1 LEN=1)',
+    '.MODEL URCMOD URC(CPERL=100p RPERL=100k FMAX=10G)',
+  ].join('\n') }
+  const analysis = analyzeModelLibraries([devices, models])
+  assert.deepEqual(analysis.dependencies.missing, [])
+  assert.deepEqual(analysis.dependencies.resolved.map(({ reference, modelName, targetAssetId }) => [reference, modelName, targetAssetId]), [
+    ['R1', 'RMOD', 'models'], ['R2', 'RMOD', 'models'],
+    ['C1', 'CMOD', 'models'], ['C2', 'CMOD', 'models'],
+    ['L1', 'LMOD', 'models'], ['L2', 'LMOD', 'models'],
+    ['O1', 'LTRAMOD', 'models'], ['U1', 'URCMOD', 'models'],
+  ])
+  assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'NETWORK' }])].sort(), ['devices', 'models'])
+
+  const unresolved = analyzeModelDependencies([{ id: 'broken', filename: 'broken.lib', content: '.SUBCKT BROKEN IN OUT\nR1 IN OUT MISSING\n.ENDS BROKEN' }])
+  assert.deepEqual(unresolved.missing.map(({ reference, modelName }) => [reference, modelName]), [['R1', 'MISSING']])
+})
+
 test('project-local includes resolve against imported assets without filesystem access', () => {
   const parent = { id: 'parent', filename: 'amplifier.lib', content: '.include "shared.lib"\n.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP' }
   const missing = analyzeModelLibraries([parent])
