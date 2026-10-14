@@ -31,7 +31,6 @@ import { getSimulationCursor, setSimulationCursor, setSimulationCursorForPlaybac
 import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
 import type { ComponentPaletteCategory } from './ComponentPalette'
-import { ModelDependencyReport } from './ModelDependencyReport'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { compatibleDeviceModelType, componentDefaultValue, componentDefinitionFor, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import type { ComponentSymbolPrimitive } from '../domain/componentDefinitions'
@@ -95,6 +94,7 @@ const ResultPlot = lazy(() => import('./AnalysisPlots').then((module) => ({ defa
 const KeyboardShortcuts = lazy(() => import('./KeyboardShortcuts'))
 const ExamplesDialog = lazy(() => import('./ExamplesDialog').then((module) => ({ default: module.ExamplesDialog })))
 const BeginnerPrediction = lazy(() => import('./BeginnerPredictions').then((module) => ({ default: module.BeginnerPrediction })))
+const ModelDependencyReport = lazy(() => import('./ModelDependencyReport').then((module) => ({ default: module.ModelDependencyReport })))
 const LOGIC_GATE_SHORTCUTS: Record<string, NonNullable<Part['logicOperation']>> = { '2': 'and', '3': 'or', '4': 'xor', '5': 'xnor', '@': 'nand', '#': 'nor' }
 // Keep Falstad-style keys reserved before their matching component types exist.
 // `event.key` is case-sensitive, so e.g. n and N remain different shortcuts.
@@ -4635,7 +4635,7 @@ export default function App() {
             <button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button>
           </div>)}
         </div>}
-        <ModelDependencyReport analysis={modelDependencyAnalysis} onImport={openModelLibraryPicker}/>
+        {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.missingIncludes.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <Suspense fallback={<div className="field-hint">Loading model dependency details…</div>}><ModelDependencyReport analysis={modelDependencyAnalysis} onImport={openModelLibraryPicker}/></Suspense>}
         {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions">
           <strong>CONFLICTING IMPORTED NAMES</strong>
           <p>Imported libraries contain duplicate model, function, or measurement names. ELSim preserves the source and identifies each original line so you can resolve conflicts deliberately.</p>
