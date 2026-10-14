@@ -1,0 +1,9 @@
+ELSim linear superposition in a two-source resistor network
+V1 n1 0 DC 9
+V2 n2 0 DC 3
+R1 n1 vout 10k
+R2 n2 vout 10k
+RL vout 0 10k
+.op
+.print op v(vout)
+.end

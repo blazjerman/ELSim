@@ -726,12 +726,13 @@ test('superposition lesson creates two independent source branches that sum at V
   assert.deepEqual(artifact.diagnostics, [])
   assert.equal(project.name, 'Superposition in a two-source circuit')
   assert.equal(project.simulation.analysis, 'op')
-  assert.match(artifact.text, /^V1 V1SRC 0 DC 9$/m)
-  assert.match(artifact.text, /^V2 V2SRC 0 DC 3$/m)
-  assert.match(artifact.text, /^R1 V1SRC VOUT 10k$/m)
-  assert.match(artifact.text, /^R2 V2SRC VOUT 10k$/m)
+  assert.match(artifact.text, /^V1 \S+ 0 DC 9$/m)
+  assert.match(artifact.text, /^V2 \S+ 0 DC 3$/m)
+  assert.match(artifact.text, /^R1 \S+ VOUT 10k$/m)
+  assert.match(artifact.text, /^R2 \S+ VOUT 10k$/m)
   assert.match(artifact.text, /^RL VOUT 0 10k$/m)
-  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(V1SRC)', 'V(V2SRC)', 'V(VOUT)'])
+  assert.equal(project.wires.length, 11)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(VOUT)'])
 })
 
 test('parallel-resistor beginner example creates two grounded branches with predicted 10 mA and 5 mA currents', () => {

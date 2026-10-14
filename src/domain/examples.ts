@@ -718,25 +718,38 @@ export function createSuperpositionExampleProject(): Project {
   const branch2: Part = { id: 'superposition-r2', kind: 'resistor', ref: 'R2', value: '10 kΩ', x: 560, y: 620, rotation: 0 }
   const load: Part = { id: 'superposition-rload', kind: 'resistor', ref: 'RL', value: '10 kΩ', x: 880, y: 480, rotation: 90 }
   const parts = [source1, source2, branch1, branch2, load]
-  const labelAt = (id: string, name: string, part: Part, pin: number) => {
-    const location = componentPins(part)[pin]
-    return { id, name, x: location.x, y: location.y, visible: true }
-  }
+  const [source1Positive, source1Negative] = componentPins(source1)
+  const [source2Positive, source2Negative] = componentPins(source2)
+  const [branch1Input, branch1Output] = componentPins(branch1)
+  const [branch2Input, branch2Output] = componentPins(branch2)
+  const [loadOutput, loadReturn] = componentPins(load)
+  const point = (x: number, y: number): [number, number] => [x, y]
+  const route = (id: string, points: [number, number][]) => points.slice(0, -1).map((point, index) => ({
+    id: `${id}-${index + 1}`,
+    points: [point, points[index + 1]] as [[number, number], [number, number]],
+  }))
+  const wires = [
+    ...route('superposition-source1-branch', [point(source1Positive.x, source1Positive.y), point(source1Positive.x, 240), point(branch1Input.x, 240), point(branch1Input.x, branch1Input.y)]),
+    ...route('superposition-source2-branch', [point(source2Positive.x, source2Positive.y), point(source2Positive.x, 520), point(branch2Input.x, 520), point(branch2Input.x, branch2Input.y)]),
+    ...route('superposition-first-output', [point(branch1Output.x, branch1Output.y), point(740, branch1Output.y)]),
+    ...route('superposition-second-output', [point(branch2Output.x, branch2Output.y), point(740, branch2Output.y)]),
+    ...route('superposition-output-bus', [point(740, branch1Output.y), point(740, branch2Output.y)]),
+    ...route('superposition-load-output', [point(740, loadOutput.y + 50), point(load.x, loadOutput.y + 50), point(loadOutput.x, loadOutput.y)]),
+  ]
   const netLabels = [
-    labelAt('superposition-v1-positive', 'V1SRC', source1, 0), labelAt('superposition-v1-return', '0', source1, 1),
-    labelAt('superposition-v2-positive', 'V2SRC', source2, 0), labelAt('superposition-v2-return', '0', source2, 1),
-    labelAt('superposition-r1-input', 'V1SRC', branch1, 0), labelAt('superposition-r1-output', 'VOUT', branch1, 1),
-    labelAt('superposition-r2-input', 'V2SRC', branch2, 0), labelAt('superposition-r2-output', 'VOUT', branch2, 1),
-    labelAt('superposition-load-output', 'VOUT', load, 0), labelAt('superposition-load-return', '0', load, 1),
+    { id: 'superposition-v1-return', name: '0', x: source1Negative.x, y: source1Negative.y, visible: true },
+    { id: 'superposition-v2-return', name: '0', x: source2Negative.x, y: source2Negative.y, visible: true },
+    { id: 'superposition-output-probe', name: 'VOUT', x: loadOutput.x, y: loadOutput.y, visible: true },
+    { id: 'superposition-load-return', name: '0', x: loadReturn.x, y: loadReturn.y, visible: true },
   ]
   project.name = 'Superposition in a two-source circuit'
   project.parts = parts
-  project.wires = []
+  project.wires = wires
   project.junctions = []
   project.netLabels = netLabels
-  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels }]
+  project.sheets = [{ ...project.sheets[0], parts, wires, junctions: [], netLabels }]
   project.simulation = { ...project.simulation, analysis: 'op' }
-  project.plotSettings = { selectedTraceIds: ['V(V1SRC)', 'V(V2SRC)', 'V(VOUT)'], ranges: {} }
+  project.plotSettings = { selectedTraceIds: ['V(VOUT)'], ranges: {} }
   project.view = { zoom: 0.82, panX: 0, panY: -20 }
   project.sheets[0].view = project.view
   return project
