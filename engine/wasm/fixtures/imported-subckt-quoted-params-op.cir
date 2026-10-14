@@ -1,0 +1,11 @@
+ELSim imported subcircuit single-quoted parameter expressions
+.PARAM BASE_GAIN=2
+V1 IN 0 1
+XDEFAULT IN OUT_DEFAULT AMP_QUOTED
+XOVERRIDE IN OUT_OVERRIDE AMP_QUOTED PARAMS: GAIN='BASE_GAIN + 4'
+.SUBCKT AMP_QUOTED IN OUT PARAMS: GAIN='BASE_GAIN + 3'
+EGAIN OUT 0 IN 0 {GAIN}
+.ENDS AMP_QUOTED
+.op
+.print op v(out_default) v(out_override)
+.end
