@@ -3361,6 +3361,19 @@ export default function App() {
     const pastedIds = sources.map(() => `p-${crypto.randomUUID()}`)
     const pastedWires = clipboard.wires.map((wire) => ({ id: `w-${crypto.randomUUID()}`, points: [[wire.points[0][0] + offsetX, wire.points[0][1] + offsetY], [wire.points[1][0] + offsetX, wire.points[1][1] + offsetY]] as [[number, number], [number, number]] }))
     const pastedLabels = clipboard.netLabels.map((label) => ({ ...label, id: `label-${crypto.randomUUID()}`, x: label.x + offsetX, y: label.y + offsetY }))
+    const lastPartId = pastedIds.at(-1)
+    const lastLabel = pastedLabels.at(-1)
+    const pastedWireIds = pastedWires.map((wire) => wire.id)
+    const pastedLabelIds = pastedLabels.map((label) => label.id)
+    const nextSelection: Selection = lastPartId
+      ? { kind: 'part', id: lastPartId }
+      : lastLabel
+        ? { kind: 'label', id: lastLabel.id }
+        : null
+    // Arm reconciliation before scheduling the project update. This guarantees
+    // the layout effect can see the exact clone IDs even if React commits the
+    // project update synchronously (or splits it from other updates).
+    pendingPasteSelection.current = { partIds: pastedIds, wireIds: pastedWireIds, labelIds: pastedLabelIds, selection: nextSelection }
     setProject((current) => {
       const parts = [...current.parts]
       const usedReferences = new Set(parts.map((part) => part.ref.toLowerCase()))
@@ -3394,19 +3407,9 @@ export default function App() {
       })
       return { ...current, sheets: [...current.sheets, ...resolved.sheets], modelAssets: [...(current.modelAssets ?? []), ...resolved.modelAssets], symbolAssets: [...(current.symbolAssets ?? []), ...resolved.symbolAssets], parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))], netLabels: [...current.netLabels, ...pastedLabels] }
     })
-    const lastPartId = pastedIds.at(-1)
-    const lastLabel = pastedLabels.at(-1)
-    const pastedWireIds = pastedWires.map((wire) => wire.id)
-    const pastedLabelIds = pastedLabels.map((label) => label.id)
-    const nextSelection: Selection = pastedIds.at(-1)
-      ? { kind: 'part', id: pastedIds.at(-1)! }
-      : pastedLabels.at(-1)
-        ? { kind: 'label', id: pastedLabels.at(-1)!.id }
-        : null
     // Reconcile selection only after the copied records are in the project.
     // This avoids the wire-validity effect pruning newly generated IDs if a
     // large paste causes the selection and project updates to render separately.
-    pendingPasteSelection.current = { partIds: pastedIds, wireIds: pastedWireIds, labelIds: pastedLabelIds, selection: nextSelection }
     if (lastPartId) {
       setNotice(`Pasted ${sources.length} ${sources.length === 1 ? kindNames[sources[0].kind].toLowerCase() : 'components'} and ${pastedWires.length} attached wire segments. Ends at unselected parts stay open; net labels are not copied.`)
     } else if (lastLabel) {
