@@ -4868,6 +4868,30 @@ test('wire segments move independently and wheel zoom preserves their geometry',
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires[0].points)).toEqual(moved)
 })
 
+test('wheel zoom during an object drag keeps subsequent movement aligned', async ({ page }) => {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  const part = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const initial = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const part = project.parts.find((candidate: { id: string }) => candidate.id === 'p-r1')
+    return { x: part.x, y: part.y }
+  })
+  const bounds = await part.boundingBox()
+  expect(bounds).not.toBeNull()
+  const origin = { x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 }
+  await page.mouse.move(origin.x, origin.y)
+  await page.mouse.down()
+  await page.mouse.wheel(0, -100)
+  const scale = await page.locator('svg.schematic').evaluate((element) => element.getScreenCTM()!.a)
+  await page.mouse.move(origin.x + 30 * scale, origin.y, { steps: 1 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => {
+    const part = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((candidate: { id: string }) => candidate.id === 'p-r1')
+    return [part.x, part.y]
+  })).toEqual([initial.x + 30, initial.y])
+})
+
 test('moving a component leaves independent wire geometry in place', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)

@@ -1180,6 +1180,13 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     x: ((event.clientX - transform.left - transform.offsetX) / transform.scale) + transform.viewX,
     y: ((event.clientY - transform.top - transform.offsetY) / transform.scale) + transform.viewY,
   })
+  useLayoutEffect(() => {
+    const activeDrag = drag.current
+    if (!activeDrag || activeDrag.kind === 'pan') return
+    // Wheel zoom changes the viewBox during a pointer gesture. Refresh only
+    // after that view update commits so later pointer events use its mapping.
+    activeDrag.transform = captureSchematicTransform()
+  }, [view.zoom, view.panX, view.panY])
   const resolveNode = (point: { x: number; y: number }) => {
     let best: { x: number; y: number; distance: number } | null = null
     for (const pin of pinsNear({ left: point.x - 16, top: point.y - 16, right: point.x + 16, bottom: point.y + 16 })) {
