@@ -263,6 +263,19 @@ export function TheveninNortonPrediction({ supplyValue, seriesResistanceValue, t
   return <NumericPrediction id="thevenin-norton-prediction" prompt="Predict the difference VTHOUT − NOUT" unit="V" predictedValue={difference} absoluteTolerance={0.02} explanation={explanation}/>
 }
 
+export function LcEnergyPrediction({ initialVoltageValue, inductanceValue, capacitanceValue }: { initialVoltageValue: string; inductanceValue: string; capacitanceValue: string }) {
+  const voltage = componentMagnitude(initialVoltageValue, 'source')
+  const inductance = componentMagnitude(inductanceValue, 'inductor')
+  const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
+  const idealPeakCurrentMa = voltage !== null && inductance !== null && capacitance !== null && inductance > 0 && capacitance > 0
+    ? Math.abs(voltage) * Math.sqrt(capacitance / inductance) * 1000
+    : null
+  const explanation = idealPeakCurrentMa === null || voltage === null || inductance === null || capacitance === null
+    ? ''
+    : `If no energy were lost, ½CVC² = ½LIpeak², so Ipeak = |VC|√(C/L) = ${initialVoltageValue} × √(${capacitanceValue} / ${inductanceValue}) = ${formatValue(idealPeakCurrentMa)} mA. R1 dissipates energy, so ngspice's actual peak will be a little lower.`
+  return <NumericPrediction id="lc-energy-prediction" prompt="Ignoring resistor losses, predict the peak current through L1" unit="mA" predictedValue={idealPeakCurrentMa} absoluteTolerance={Math.max(1, (idealPeakCurrentMa ?? 0) * 0.08)} explanation={explanation}/>
+}
+
 export function RlcResonancePrediction({ inductanceValue, capacitanceValue }: { inductanceValue: string; capacitanceValue: string }) {
   const inductance = componentMagnitude(inductanceValue, 'inductor')
   const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
@@ -369,7 +382,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'wheatstone-bridge' | 'ac-cutoff' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
@@ -401,6 +414,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'superposition': return <SuperpositionPrediction firstSourceValue={props.firstSourceValue ?? ''} secondSourceValue={props.secondSourceValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'thevenin-norton': return <TheveninNortonPrediction supplyValue={props.supplyValue ?? ''} seriesResistanceValue={props.upperResistanceValue ?? ''} theveninLoadValue={props.lowerResistanceValue ?? ''} currentValue={props.currentValue ?? ''} nortonResistanceValue={props.seriesResistanceValue ?? ''} nortonLoadValue={props.loadResistanceValue ?? ''}/>
+    case 'lc-energy': return <LcEnergyPrediction initialVoltageValue={props.initialVoltageValue ?? ''} inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'wheatstone-bridge': return <WheatstoneBridgePrediction supplyValue={props.supplyValue ?? ''} leftTopValue={props.leftTopValue ?? ''} leftBottomValue={props.leftBottomValue ?? ''} rightTopValue={props.rightTopValue ?? ''} rightBottomValue={props.rightBottomValue ?? ''}/>
     case 'ac-cutoff': return <AcCutoffPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''} filterType={props.filterType ?? 'low-pass'}/>
     case 'rlc-resonance': return <RlcResonancePrediction inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>

@@ -3740,14 +3740,23 @@ export default function App() {
         let initialTraces = restoredTraces
         if (!initialTraces.length && parameterSweep.length) {
           const groups = new Map<string, Trace[]>()
-          for (const trace of response.result.traces.filter((item) => item.unit === 'V' && /^v\(/i.test(item.baseId ?? item.id))) {
+          for (const trace of response.result.traces) {
+            if (trace.unit !== 'V' || !/^v\(/i.test(trace.baseId ?? trace.id)) continue
             const key = trace.baseId ?? trace.id
-            groups.set(key, [...(groups.get(key) ?? []), trace])
+            const group = groups.get(key)
+            if (group) group.push(trace)
+            else groups.set(key, [trace])
           }
           const varying = [...groups.values()].sort((left, right) => {
-            const span = (traces: Trace[]) => {
-              const values = traces.map((trace) => trace.values.at(-1) ?? 0)
-              return Math.max(...values) - Math.min(...values)
+            const span = (group: Trace[]) => {
+              let minimum = Infinity
+              let maximum = -Infinity
+              for (const trace of group) {
+                const value = trace.values.at(-1) ?? 0
+                minimum = Math.min(minimum, value)
+                maximum = Math.max(maximum, value)
+              }
+              return maximum - minimum
             }
             return span(right) - span(left)
           })[0]
@@ -4181,7 +4190,7 @@ export default function App() {
       'led-parallel': { title: 'Give every parallel LED its own resistor', guidance: 'Run the operating point and compare I(D1) with I(D2). Each branch has its own 330 Ω resistor. Change R2 to 680 Ω and rerun: only the second branch current should drop.' },
       'capacitor-discharge': { title: 'Watch stored charge leave a capacitor', guidance: 'C1 starts charged and discharges through R1 with no source connected. Predict VOUT after 10 ms using the RC exponential, then run the transient and compare capacitor voltage with resistor current.' },
       rlc: { title: 'See energy move between L and C', guidance: 'Run the transient and compare capacitor voltage with inductor current as the circuit rings and loses energy in R1.' },
-      'lc-energy': { title: 'Watch electrical energy become magnetic energy', guidance: 'C1 starts charged to 5 V. Run the transient and compare V(VC) with I(L1): as capacitor voltage falls, inductor current rises; then the energy returns to C1. The 1 Ω resistor slowly dissipates energy, so each swing gets smaller. L1 and C1 set a period of about 6.3 ms.' },
+      'lc-energy': { title: 'Watch electrical energy become magnetic energy', guidance: 'C1 starts charged to 5 V. Before running, predict the ideal peak inductor current from ½CV² = ½LI². Then compare V(VC) with I(L1): as capacitor voltage falls, inductor current rises; the energy then returns to C1. R1 dissipates some energy, so the solved current peak is lower than the ideal estimate and each swing gets smaller.' },
       'rl-step': { title: 'An inductor resists a sudden current change', guidance: 'Run the transient and compare V(V_RL) with I(L1). Current rises gradually while the pulse is on, then continues briefly and decays after the source switches off. Here L/R = 1 ms, so the current changes most over a few milliseconds.' },
       flyback: { title: 'Give an inductor current a path when switching off', guidance: 'Run the transient and compare V(COIL), I(L1), and I(D1). When the source pulse switches off, the inductor keeps current flowing through D1; the diode clamps the coil voltage instead of leaving it to spike.' },
       controlled: { title: 'Compare voltage and current control', guidance: 'Run the transient. E1 scales the input voltage; G1 converts the same input voltage into output current.' },
@@ -4405,6 +4414,7 @@ export default function App() {
                 {exampleLesson.id === 'loaded-voltage-divider' && <BeginnerPrediction kind="loaded-voltage-divider" key={`${partsById.get('loaded-divider-v1')?.value ?? ''}:${partsById.get('loaded-divider-r1')?.value ?? ''}:${partsById.get('loaded-divider-r2')?.value ?? ''}:${partsById.get('loaded-divider-rload')?.value ?? ''}`} supplyValue={partsById.get('loaded-divider-v1')?.value ?? ''} upperResistanceValue={partsById.get('loaded-divider-r1')?.value ?? ''} lowerResistanceValue={partsById.get('loaded-divider-r2')?.value ?? ''} loadResistanceValue={partsById.get('loaded-divider-rload')?.value ?? ''}/>}
                 {exampleLesson.id === 'superposition' && <BeginnerPrediction kind="superposition" key={`${partsById.get('superposition-v1')?.value ?? ''}:${partsById.get('superposition-v2')?.value ?? ''}:${partsById.get('superposition-r1')?.value ?? ''}:${partsById.get('superposition-r2')?.value ?? ''}:${partsById.get('superposition-rload')?.value ?? ''}`} firstSourceValue={partsById.get('superposition-v1')?.value ?? ''} secondSourceValue={partsById.get('superposition-v2')?.value ?? ''} firstResistanceValue={partsById.get('superposition-r1')?.value ?? ''} secondResistanceValue={partsById.get('superposition-r2')?.value ?? ''} loadResistanceValue={partsById.get('superposition-rload')?.value ?? ''}/>}
                 {exampleLesson.id === 'thevenin-norton' && <BeginnerPrediction kind="thevenin-norton" key={`${partsById.get('equivalent-vth')?.value ?? ''}:${partsById.get('equivalent-rth')?.value ?? ''}:${partsById.get('equivalent-rload-th')?.value ?? ''}:${partsById.get('equivalent-in')?.value ?? ''}:${partsById.get('equivalent-rn')?.value ?? ''}:${partsById.get('equivalent-rload-n')?.value ?? ''}`} supplyValue={partsById.get('equivalent-vth')?.value ?? ''} upperResistanceValue={partsById.get('equivalent-rth')?.value ?? ''} lowerResistanceValue={partsById.get('equivalent-rload-th')?.value ?? ''} currentValue={partsById.get('equivalent-in')?.value ?? ''} seriesResistanceValue={partsById.get('equivalent-rn')?.value ?? ''} loadResistanceValue={partsById.get('equivalent-rload-n')?.value ?? ''}/>}
+                {exampleLesson.id === 'lc-energy' && <BeginnerPrediction kind="lc-energy" key={`${capacitorDischargeInitialVoltage}:${partsById.get('lc-energy-l1')?.value ?? ''}:${partsById.get('lc-energy-c1')?.value ?? ''}`} initialVoltageValue={capacitorDischargeInitialVoltage} inductanceValue={partsById.get('lc-energy-l1')?.value ?? ''} capacitanceValue={partsById.get('lc-energy-c1')?.value ?? ''}/>}
                 {exampleLesson.id === 'parallel-resistors' && <BeginnerPrediction kind="parallel-resistors" key={`${partsById.get('current-divider-v1')?.value ?? ''}:${partsById.get('current-divider-r1')?.value ?? ''}:${partsById.get('current-divider-r2')?.value ?? ''}`} supplyValue={partsById.get('current-divider-v1')?.value ?? ''} firstResistanceValue={partsById.get('current-divider-r1')?.value ?? ''} secondResistanceValue={partsById.get('current-divider-r2')?.value ?? ''}/>}
                 {exampleLesson.id === 'series-resistors' && <BeginnerPrediction kind="series-resistors" key={partsById.get('divider-v1')?.value ?? ''} supplyValue={partsById.get('divider-v1')?.value ?? ''}/>}
                 {exampleLesson.id === 'capacitor-discharge' && <BeginnerPrediction kind="capacitor-discharge" key={`${capacitorDischargeInitialVoltage}:${partsById.get('cap-discharge-r1')?.value ?? ''}:${partsById.get('cap-discharge-c1')?.value ?? ''}`} initialVoltageValue={capacitorDischargeInitialVoltage} resistanceValue={partsById.get('cap-discharge-r1')?.value ?? ''} capacitanceValue={partsById.get('cap-discharge-c1')?.value ?? ''}/>}

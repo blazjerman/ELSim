@@ -266,6 +266,20 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const equivalentPredictedDifference = equivalentTheveninOutput !== null && equivalentNortonOutput !== null ? equivalentTheveninOutput - equivalentNortonOutput : null
   const equivalentSolvedTheveninOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vthout)')?.values[0] : undefined
   const equivalentSolvedNortonOutput = simulationResult?.analysis === 'op' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(nout)')?.values[0] : undefined
+  const isLcEnergyLesson = lessonId === 'lc-energy'
+  const lcEnergyInitialCondition = initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === 'c1' && 'voltage' in condition)
+  const lcEnergyInitialVoltage = isLcEnergyLesson ? componentMagnitude(lcEnergyInitialCondition && 'voltage' in lcEnergyInitialCondition ? lcEnergyInitialCondition.voltage : '5 V', 'source') : null
+  const lcEnergyInductance = isLcEnergyLesson ? componentMagnitude(partsById.get('lc-energy-l1')?.value ?? '10 mH', 'inductor') : null
+  const lcEnergyCapacitance = isLcEnergyLesson ? componentMagnitude(partsById.get('lc-energy-c1')?.value ?? '100 µF', 'capacitor') : null
+  const lcEnergyIdealPeakCurrentMa = lcEnergyInitialVoltage !== null && lcEnergyInductance !== null && lcEnergyCapacitance !== null && lcEnergyInductance > 0 && lcEnergyCapacitance > 0
+    ? Math.abs(lcEnergyInitialVoltage) * Math.sqrt(lcEnergyCapacitance / lcEnergyInductance) * 1000
+    : null
+  const lcEnergyCurrentTrace = isLcEnergyLesson && simulationResult?.analysis === 'tran'
+    ? simulationResult.traces.find((trace) => [trace.id, trace.baseId ?? ''].some((id) => ['i(l1)', 'i(@l1[i])'].includes(id.toLowerCase())))
+    : undefined
+  const lcEnergySolvedPeakCurrentMa = lcEnergyCurrentTrace?.values.length
+    ? lcEnergyCurrentTrace.values.reduce((peak, value) => Math.max(peak, Math.abs(value)), 0) * 1000
+    : undefined
   const isResistorPowerLesson = lessonId === 'resistor-power'
   const resistorPowerResistance = isResistorPowerLesson ? componentMagnitude(partsById.get('resistor-power-r1')?.value ?? '1 kΩ', 'resistor') : null
   const resistorPowerSupply = isResistorPowerLesson ? componentMagnitude(partsById.get('resistor-power-v1')?.value ?? '5 V', 'source') : null
@@ -581,7 +595,13 @@ export function calculateExampleLessonNextStep(exampleLesson: ExampleLesson, par
   const voltageSwitchPredictedClosed = voltageSwitchThreshold !== null && voltageSwitchHysteresis !== null && voltageSwitchControlAt25Ms !== undefined
     ? voltageSwitchControlAt25Ms >= voltageSwitchThreshold + voltageSwitchHysteresis / 2
     : undefined
-  const lessonNextStep = lessonId === 'thevenin-norton' && simulationResult?.analysis === 'op'
+  const lessonNextStep = lessonId === 'lc-energy' && simulationResult?.analysis === 'tran'
+    ? lcEnergyIdealPeakCurrentMa !== null && lcEnergySolvedPeakCurrentMa !== undefined
+      ? simulationResultStale
+        ? `The previous transient reached |I(L1)| = ${formatLessonCurrent(lcEnergySolvedPeakCurrentMa)}. The edited values predict an ideal peak of ${formatLessonCurrent(lcEnergyIdealPeakCurrentMa)} before resistor losses; rerun to compare the new result.`
+        : `The ideal energy equation predicts ${formatLessonCurrent(lcEnergyIdealPeakCurrentMa)} peak current. Ngspice solved a peak of ${formatLessonCurrent(lcEnergySolvedPeakCurrentMa)}; R1 = ${partsById.get('lc-energy-r1')?.value ?? 'changed'} dissipates energy, so the real peak is lower. Scrub to about 1.5 ms to see energy transfer from C1 to L1. Lower R1 and rerun to reduce the loss.`
+      : 'Set valid positive L1/C1 values and a numeric capacitor initial voltage, then run the transient and inspect I(L1).'
+    : lessonId === 'thevenin-norton' && simulationResult?.analysis === 'op'
     ? equivalentPredictedDifference !== null
       ? simulationResultStale
         ? `The previous solve measured VTHOUT = ${equivalentSolvedTheveninOutput !== undefined ? formatLessonVoltage(equivalentSolvedTheveninOutput) : 'not available'} and NOUT = ${equivalentSolvedNortonOutput !== undefined ? formatLessonVoltage(equivalentSolvedNortonOutput) : 'not available'}. The edited values predict VTHOUT − NOUT = ${formatLessonVoltage(equivalentPredictedDifference)}; rerun to compare the updated circuits.`
