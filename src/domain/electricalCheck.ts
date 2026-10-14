@@ -18,6 +18,34 @@ export type ElectricalIssue = {
 
 type ReachableSimulationSheet = { sheet: Project['sheets'][number]; topLevelInstanceId?: string }
 
+const expectedDeviceModelTypes: Partial<Record<Part['kind'], string>> = {
+  diode: 'd', zener: 'd', led: 'd',
+  npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmos: 'nmos', pmos: 'pmos',
+  voltageSwitch: 'sw',
+}
+
+function importedDeviceModelIssue(part: Part, modelTypes: Map<string, string>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
+  const expectedType = expectedDeviceModelTypes[part.kind]
+  if (!expectedType || !part.deviceModel) return null
+  const modelType = modelTypes.get(part.deviceModel.toLowerCase())
+  const location = sheetName ? ` in ${sheetName}` : ''
+  if (!modelType) return {
+    id: `missing-device-model:${id}`,
+    severity: 'warning',
+    title: `${part.ref} needs device model ${part.deviceModel}${location}`,
+    detail: 'This model is not in the imported project libraries. Import the library that defines it or select a compatible model before running.',
+    partId: selectedPartId,
+  }
+  if (modelType === expectedType) return null
+  return {
+    id: `incompatible-device-model:${id}`,
+    severity: 'warning',
+    title: `${part.ref} uses an incompatible ${modelType.toUpperCase()} model${location}`,
+    detail: `${part.ref} requires a ${expectedType.toUpperCase()} model, but ${part.deviceModel} is a ${modelType.toUpperCase()} card. Select an imported model of the required type before running.`,
+    partId: selectedPartId,
+  }
+}
+
 function reachableSimulationSheets(project: Project): ReachableSimulationSheet[] {
   const sheetsById = new Map(project.sheets.map((sheet) => [sheet.id, sheet]))
   const pending: { id: string; topLevelInstanceId?: string }[] = [{ id: project.activeSheetId }]
@@ -95,8 +123,6 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       // Invalid library syntax has its own importer diagnostic.
     }
   }
-  const expectedDeviceModelType = (part: Part) => part.kind === 'voltageSwitch' ? 'sw' : undefined
-
   for (const { sheet, topLevelInstanceId } of reachableSheets) {
     const partsByReference = new Map<string, Project['parts']>()
     for (const part of sheet.parts) {
@@ -136,24 +162,8 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         detail: 'Enter a whole-number forward beta from 1 to 1000, or select an imported device model to replace the educational beta approximation.',
         partId: topLevelInstanceId,
       })
-      if (['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'voltageSwitch'].includes(part.kind) && part.deviceModel) {
-        const modelType = importedDeviceModels.get(part.deviceModel.toLowerCase())
-        const expectedType = expectedDeviceModelType(part)
-        if (!modelType) issues.push({
-          id: `missing-device-model:${sheet.id}:${part.id}`,
-          severity: 'warning',
-          title: `${part.ref} needs device model ${part.deviceModel} in ${sheet.name}`,
-          detail: 'This model is not in the imported project libraries. Import the library that defines it or select a compatible model before running.',
-          partId: topLevelInstanceId,
-        })
-        else if (expectedType && modelType !== expectedType) issues.push({
-          id: `incompatible-device-model:${sheet.id}:${part.id}`,
-          severity: 'warning',
-          title: `${part.ref} uses an incompatible ${modelType.toUpperCase()} model in ${sheet.name}`,
-          detail: `${part.ref} is a voltage-controlled switch and requires a SW model, but ${part.deviceModel} is a ${modelType.toUpperCase()} card. Select an imported SW model before running.`,
-          partId: topLevelInstanceId,
-        })
-      }
+      const modelIssue = importedDeviceModelIssue(part, importedDeviceModels, `${sheet.id}:${part.id}`, topLevelInstanceId ?? part.id, sheet.name)
+      if (modelIssue) issues.push(modelIssue)
       if (part.kind === 'cccs' || part.kind === 'ccvs') {
         const controlSource = part.controlSource?.trim().toLowerCase()
         const sourceExists = controlSource && sheet.parts.some((candidate) => candidate.kind === 'source' && candidate.ref.toLowerCase() === controlSource)
@@ -377,24 +387,8 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         issues.push({ id: `nonpositive-value:${part.id}`, severity: 'warning', title: `${part.ref} must have a positive value`, detail: 'Resistances, capacitances, and inductances must be greater than zero for this component.', partId: part.id })
       }
     }
-    if ((part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' || part.kind === 'npn' || part.kind === 'pnp' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'voltageSwitch') && part.deviceModel) {
-      const modelType = importedDeviceModels.get(part.deviceModel.toLowerCase())
-      const expectedType = expectedDeviceModelType(part)
-      if (!modelType) issues.push({
-        id: `missing-device-model:${part.id}`,
-        severity: 'warning',
-        title: `${part.ref} needs device model ${part.deviceModel}`,
-        detail: 'This model is not in the imported project libraries. Import the library that defines it or select a compatible model before running.',
-        partId: part.id,
-      })
-      else if (expectedType && modelType !== expectedType) issues.push({
-        id: `incompatible-device-model:${part.id}`,
-        severity: 'warning',
-        title: `${part.ref} uses an incompatible ${modelType.toUpperCase()} model`,
-        detail: `${part.ref} is a voltage-controlled switch and requires a SW model, but ${part.deviceModel} is a ${modelType.toUpperCase()} card. Select an imported SW model before running.`,
-        partId: part.id,
-      })
-    }
+    const modelIssue = importedDeviceModelIssue(part, importedDeviceModels, part.id, part.id)
+    if (modelIssue) issues.push(modelIssue)
     if (part.kind === 'behavioral') {
       try {
         const parsed = parseBehavioralExpression(part.value)

@@ -1355,18 +1355,19 @@ test('voltage-controlled switch uses an imported SW model card', () => {
   const project = createVoltageSwitchExampleProject()
   project.parts.find((part) => part.kind === 'voltageSwitch').deviceModel = 'USER_SW'
   project.modelAssets = [{ id: 'user-switch-model', filename: 'switches.lib', sha256: 'a'.repeat(64), content: '.model USER_SW SW(Ron=10 Roff=1Meg Vt=2.5 Vh=1)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-  const artifact = createNetlistArtifact(project)
+  const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^S1 VCC VOUT CTRL 0 USER_SW OFF$/m)
   assert.match(artifact.text, /^\.model USER_SW SW\(Ron=10 Roff=1Meg Vt=2\.5 Vh=1\)$/m)
   assert.doesNotMatch(artifact.text, /\.model ELSIM_S1_SW/)
 })
 
-test('voltage-controlled switch rejects an imported model card of the wrong type', () => {
+test('voltage-controlled switch preflights an imported model card of the wrong type', () => {
   const project = createVoltageSwitchExampleProject()
   project.parts.find((part) => part.kind === 'voltageSwitch').deviceModel = 'WRONG_TYPE'
   project.modelAssets = [{ id: 'wrong-switch-model', filename: 'devices.lib', sha256: 'b'.repeat(64), content: '.model WRONG_TYPE D(Is=1n)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-  const artifact = createNetlistArtifact(project)
+  const editable = validateProject(project)
+  const artifact = createNetlistArtifact(editable)
   assert.match(artifact.diagnostics.map(({ message }) => message).join('\n'), /not a SW model/i)
   assert.doesNotMatch(artifact.text, /^S1 /m)
 })
@@ -1503,7 +1504,10 @@ test('imported diode, BJT, and MOSFET .MODEL cards connect to compatible devices
   assert.match(artifact.text, /^\.model DDEFAULT D$/m)
   assert.match(artifact.text, /^\.model ELSIM_MODEL_Q2 NPN/m)
   assert.doesNotMatch(artifact.text, /^\.model ELSIM_MODEL_Q1/m)
-  assert.throws(() => validateProject({ ...validated, parts: validated.parts.map((part) => part.id === 'p-q1' ? { ...part, deviceModel: '1N4148' } : part) }), /missing or incompatible imported device model/)
+  const wrongFamily = validateProject({ ...validated, parts: validated.parts.map((part) => part.id === 'p-q1' ? { ...part, deviceModel: '1N4148' } : part) })
+  assert.equal(wrongFamily.parts.find((part) => part.id === 'p-q1').deviceModel, '1N4148')
+  assert.match(createNetlistArtifact(wrongFamily).diagnostics.map(({ message }) => message).join('\n'), /not a NPN model/i)
+  assert.throws(() => validateProject({ ...validated, parts: validated.parts.map((part) => part.id === 'p-q1' ? { ...part, deviceModel: '1N4148\n.end' } : part) }), /invalid imported device model name/)
 })
 
 

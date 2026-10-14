@@ -7034,6 +7034,30 @@ test('circuit checks select the component with an ambiguous imported model name'
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('XAMP1 · AMP')
 })
 
+test('circuit checks explain and select a semiconductor assigned to the wrong model family', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  const content = '.model USER_DEVICE D(Is=1n)\n'
+  await page.evaluate(async (modelContent) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(modelContent))
+    const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    project.modelAssets = [{ id: 'wrong-device-model', filename: 'device.lib', sha256, content: modelContent, licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
+    project.parts.push({ id: 'wrong-device-family', kind: 'nmos', ref: 'M1', value: '1', deviceModel: 'USER_DEVICE', x: 800, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  }, content)
+  await page.reload()
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  const issue = report.getByRole('listitem').filter({ hasText: 'M1 uses an incompatible D model' })
+  await expect(issue).toContainText('requires a NMOS model')
+  await expect(issue).toContainText('Select an imported model of the required type before running.')
+  await issue.getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="wrong-device-family"].selected')).toHaveCount(1)
+})
+
 test('circuit checks explain and select a current-controlled source with no control source', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

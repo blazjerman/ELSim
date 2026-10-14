@@ -549,9 +549,12 @@ export function validateProject(input: unknown): Project {
       continue
     }
     if (part.deviceModel !== undefined) {
-      const model = importedDeviceModelByName.get(part.deviceModel.toLowerCase())
-      const expectedType = part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'npn' ? 'npn' : part.kind === 'pnp' ? 'pnp' : part.kind === 'njfet' ? 'njf' : part.kind === 'pjfet' ? 'pjf' : part.kind === 'nmos' ? 'nmos' : part.kind === 'pmos' ? 'pmos' : null
-      if (!model || !expectedType || model.type.toLowerCase() !== expectedType) throw new Error(`${part.ref} has a missing or incompatible imported device model ${part.deviceModel}.`)
+      // Keep unresolved or wrong-family references in the editable project so
+      // Circuit Checks can explain the problem and point to the affected part.
+      // Restrict the token syntax here to prevent malformed references from
+      // becoming extra netlist records; the netlist validator checks presence
+      // and device-family compatibility before emitting a device line.
+      if (!/^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(part.deviceModel)) throw new Error(`${part.ref} has an invalid imported device model name.`)
     }
   }
   const simulation = data.simulation as Project['simulation'] | undefined

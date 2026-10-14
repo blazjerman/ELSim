@@ -31,6 +31,39 @@ test('voltage-controlled switch checks imported SW model presence and type', () 
   assert.equal(issues.some((item) => item.id === `missing-device-model:${sw.id}` || item.id === `incompatible-device-model:${sw.id}`), false)
 })
 
+test('device-model preflight matches each built-in device family to its SPICE card type', () => {
+  const cases = [
+    ['diode', 'D'], ['zener', 'D'], ['led', 'D'],
+    ['npn', 'NPN'], ['pnp', 'PNP'], ['njfet', 'NJF'], ['pjfet', 'PJF'],
+    ['nmos', 'NMOS'], ['pmos', 'PMOS'], ['voltageSwitch', 'SW'],
+  ]
+  for (const [kind, expectedType] of cases) {
+    const project = createStarterProject()
+    const id = `model-type-${kind}`
+    const part = { id, kind, ref: `${kind}-1`, value: '1', deviceModel: 'USER_MODEL', x: 800, y: 600, rotation: 0 }
+    project.parts = [part]
+    project.wires = []
+    project.junctions = []
+    project.netLabels = []
+    const root = project.sheets.find((sheet) => sheet.id === project.rootSheetId)
+    root.parts = project.parts
+    root.wires = []
+    root.junctions = []
+    root.netLabels = []
+    const asset = (modelType) => ({ id: 'user-model', filename: 'device.lib', sha256: 'a'.repeat(64), content: `.model USER_MODEL ${modelType}(Is=1n)\n`, licenseStatus: 'unknown', importedAt: new Date().toISOString() })
+
+    project.modelAssets = [asset(expectedType)]
+    let issue = checkCircuit(project).find((item) => item.id.startsWith('incompatible-device-model:') || item.id.startsWith('missing-device-model:'))
+    assert.equal(issue, undefined, `${kind} should accept a ${expectedType} model`)
+
+    const wrongType = expectedType === 'D' ? 'SW' : 'D'
+    project.modelAssets = [asset(wrongType)]
+    issue = checkCircuit(project).find((item) => item.id === `incompatible-device-model:${id}`)
+    assert.ok(issue, `${kind} should reject a ${wrongType} model`)
+    assert.match(issue.detail, new RegExp(`requires a ${expectedType} model`))
+  }
+})
+
 test('current sources accept signed SI-prefix currents and flag malformed values', () => {
   const project = createStarterProject()
   const source = { id: 'current-source', kind: 'currentSource', ref: 'I1', value: '-250 µA', x: 700, y: 600, rotation: 0 }
