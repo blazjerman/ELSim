@@ -5595,6 +5595,35 @@ test('multi-file model import lets users choose sections before resolving librar
   ])
 })
 
+test('dependency report can repair a missing section in an imported library', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const libraries = [
+    { name: 'amplifier.lib', mimeType: 'text/plain', buffer: Buffer.from('.LIB devices.lib fast\n.SUBCKT AMP IN OUT\nD1 IN OUT D_FAST\n.ENDS AMP') },
+    { name: 'devices.lib', mimeType: 'text/plain', buffer: Buffer.from('.LIB fast\n.MODEL D_FAST D(IS=1n)\n.ENDL fast\n.LIB slow\n.MODEL D_SLOW D(IS=2n)\n.ENDL slow') },
+  ]
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles(libraries)
+  const importDialog = page.getByRole('dialog', { name: 'Choose model sections' })
+  await importDialog.getByRole('checkbox', { name: 'Include devices.lib section slow' }).check()
+  await importDialog.getByRole('button', { name: 'Import selected libraries' }).click()
+
+  const report = page.getByRole('region', { name: 'Model dependency report' })
+  await expect(report).toContainText('section is missing or was not selected')
+  await report.getByRole('button', { name: 'Choose section fast in referenced library' }).click()
+  const updateDialog = page.getByRole('dialog', { name: 'Choose model sections' })
+  await expect(updateDialog.getByRole('checkbox', { name: 'Include section slow' })).toBeChecked()
+  await expect(updateDialog.getByRole('checkbox', { name: 'Include section fast' })).toBeChecked()
+  await updateDialog.getByRole('checkbox', { name: 'Include section slow' }).uncheck()
+  await updateDialog.getByRole('button', { name: 'Update selected sections' }).click()
+
+  await expect(report).toHaveCount(0)
+  await expect(page.getByText(/Replaced 0 subcircuits and 1 device model from devices\.lib \(fast\)/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null')?.modelAssets?.map((asset: { filename: string; selectedSections?: string[]; content: string }) => [asset.filename, asset.selectedSections ?? [], asset.content]))).toEqual([
+    ['amplifier.lib', [], '.LIB devices.lib fast\n.SUBCKT AMP IN OUT\nD1 IN OUT D_FAST\n.ENDS AMP'],
+    ['devices.lib', ['fast'], '.LIB fast\n.MODEL D_FAST D(IS=1n)\n.ENDL fast\n.LIB slow\n.MODEL D_SLOW D(IS=2n)\n.ENDL slow'],
+  ])
+})
+
 test('model section picker preserves ngspice numeric and punctuated names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
