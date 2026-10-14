@@ -370,6 +370,8 @@ WASM memory benchmark follow-up (2026-10-13): The local Node benchmark worker no
 
 Large-circuit benchmark repeat (2026-10-14): `npm run benchmark:performance:quick` on the documented i7-12700F host measured the 5,000-part/4,900-wire fixture at 34.2/46.6 ms connectivity median/p95 and 40.1/56.3 ms netlisting median/p95; cached-pin connection-dot computation was 7.8/19.9 ms for 9,800 dots. For 5,000 hierarchy instances, connectivity was 76.5/88.7 ms and netlisting 111.1/135.1 ms median/p95. Engine and transient benchmarks were skipped by the quick command. These repeat the existing same-machine profile; the second-hardware and in-browser total-memory measurements remain open.
 
+Visible current-flow overlay (2026-10-14): During pan/zoom, the schematic already computes the visible wire list, but the animation layer was scanning every project wire to find that same subset. It now consumes the visible list directly, avoiding an additional full-wire filter on each viewport update. Firefox/ngspice verifies parallel-branch current animation against the existing local WASM runtime. The engine-free 5,000-part browser benchmark passes, but does not exercise active current-flow overlays, so no animation speedup is claimed.
+
 ## 4. Legal and open-source release policy
 
 > **Owner decision (2026-10-12): out of scope.** The owner will build the ngspice WASM locally and is not preparing a public app/runtime release. Do not spend feature-work time simplifying, auditing, or changing license handling, and do not make these checks a gate for roadmap work. Keep existing notices and checks untouched unless the owner explicitly reopens distribution work.
