@@ -684,12 +684,24 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
       draggedBounds.current = null
       if (next && (next.x !== panel.bounds.x || next.y !== panel.bounds.y)) onBoundsChange(next)
     }
+    const cancelDrag = () => {
+      if (!drag.current) return
+      drag.current = null
+      draggedBounds.current = null
+      // Pointer capture can be canceled by the browser when focus changes or
+      // the pointer leaves the active surface. Discard the visual preview and
+      // let the saved project bounds remain authoritative.
+      if (ref.current) {
+        ref.current.style.left = `${panel.bounds.x}px`
+        ref.current.style.top = `${panel.bounds.y}px`
+      }
+    }
     const resize = () => onBoundsChange(clampPlotPanelBounds(panel.bounds))
     window.addEventListener('pointermove', previewPosition)
     window.addEventListener('pointerup', finishDrag)
-    window.addEventListener('pointercancel', finishDrag)
+    window.addEventListener('pointercancel', cancelDrag)
     window.addEventListener('resize', resize)
-    return () => { observer.disconnect(); clearTimeout(resizeTimer); window.removeEventListener('pointermove', previewPosition); window.removeEventListener('pointerup', finishDrag); window.removeEventListener('pointercancel', finishDrag); window.removeEventListener('resize', resize) }
+    return () => { observer.disconnect(); clearTimeout(resizeTimer); window.removeEventListener('pointermove', previewPosition); window.removeEventListener('pointerup', finishDrag); window.removeEventListener('pointercancel', cancelDrag); window.removeEventListener('resize', resize) }
   }, [panel.bounds, onBoundsChange])
   return <section ref={ref} data-plot-panel-id={panel.id} className="plot-window additional-plot-window" role="dialog" aria-label={title} title="Middle-click anywhere in this window to close it" style={{ left: panel.bounds.x, top: panel.bounds.y, width: panel.bounds.width, height: panel.bounds.height, zIndex: 9 + index }} onPointerDownCapture={onActivate} onMouseDownCapture={(event) => { if (event.button === 1) { event.preventDefault(); event.stopPropagation(); onClose() } }}>
     <div className="plot-window-title" role="group" aria-label={`Move and resize ${title}. Drag or use arrow keys to move; hold Shift with an arrow key to resize.`} aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight" tabIndex={0} title="Drag or use arrow keys to move this waveform window; Shift+arrow keys resize it" onKeyDown={(event) => {
