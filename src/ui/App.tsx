@@ -2627,12 +2627,15 @@ export default function App() {
       labelIds: selectedNetLabelIds,
     })
     const savedSelection = sheetSelectionState.current.get(sheet.id)
-    const partIds = savedSelection?.partIds.filter((id) => sheet.parts.some((part) => part.id === id)) ?? []
-    const wireIds = savedSelection?.wireIds.filter((id) => sheet.wires.some((wire) => wire.id === id)) ?? []
-    const labelIds = savedSelection?.labelIds.filter((id) => sheet.netLabels.some((label) => label.id === id)) ?? []
+    const partIdsInSheet = new Set(sheet.parts.map((part) => part.id))
+    const wireIdsInSheet = new Set(sheet.wires.map((wire) => wire.id))
+    const labelIdsInSheet = new Set(sheet.netLabels.map((label) => label.id))
+    const partIds = savedSelection?.partIds.filter((id) => partIdsInSheet.has(id)) ?? []
+    const wireIds = savedSelection?.wireIds.filter((id) => wireIdsInSheet.has(id)) ?? []
+    const labelIds = savedSelection?.labelIds.filter((id) => labelIdsInSheet.has(id)) ?? []
     const nextSelection = savedSelection?.selection && (savedSelection.selection.kind === 'part'
-      ? sheet.parts.some((part) => part.id === savedSelection.selection!.id)
-      : sheet.netLabels.some((label) => label.id === savedSelection.selection!.id))
+      ? partIdsInSheet.has(savedSelection.selection.id)
+      : labelIdsInSheet.has(savedSelection.selection.id))
       ? savedSelection.selection
       : null
     const viaPart = viaPartId ? project.parts.find((part) => part.id === viaPartId && part.sheetId === sheetId) : undefined
@@ -2663,6 +2666,28 @@ export default function App() {
   }
   const sheetsById = useMemo(() => new Map(project.sheets.map((sheet) => [sheet.id, sheet])), [project.sheets])
   const activeSheet = sheetsById.get(project.activeSheetId)
+  const sheetsContainingActive = useMemo(() => {
+    const ownersByChild = new Map<string, string[]>()
+    for (const owner of project.sheets) for (const part of owner.parts) {
+      if (!part.sheetId) continue
+      const owners = ownersByChild.get(part.sheetId)
+      if (owners) owners.push(owner.id)
+      else ownersByChild.set(part.sheetId, [owner.id])
+    }
+    const containing = new Set<string>([project.activeSheetId])
+    const pending = [project.activeSheetId]
+    for (let index = 0; index < pending.length; index += 1) {
+      for (const ownerId of ownersByChild.get(pending[index]) ?? []) {
+        if (containing.has(ownerId)) continue
+        containing.add(ownerId)
+        pending.push(ownerId)
+      }
+    }
+    return containing
+  }, [project.activeSheetId, project.sheets])
+  const availableSheetBlocks = useMemo(() => project.sheets.filter((sheet) =>
+    sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetsContainingActive.has(sheet.id)),
+  [project.activeSheetId, project.sheets, sheetsContainingActive])
   const activeSheetHasInstances = useMemo(() => Boolean(activeSheet && project.sheets.some((sheet) => sheet.parts.some((part) => part.sheetId === activeSheet.id))), [activeSheet?.id, project.sheets])
   const activeSheetDeleteReason = useMemo(() => !activeSheet || activeSheet.parentSheetId === null
     ? 'The root circuit cannot be deleted.'
@@ -2674,13 +2699,6 @@ export default function App() {
             ? 'Remove uses of nested blocks outside this sheet before deleting its subtree.'
             : null
         })(), [activeSheet, activeSheetHasInstances, project.sheets])
-  const sheetContains = (sheetId: string, targetId: string, visited = new Set<string>()): boolean => {
-    if (sheetId === targetId) return true
-    if (visited.has(sheetId)) return false
-    visited.add(sheetId)
-    const sheet = sheetsById.get(sheetId)
-    return Boolean(sheet?.parts.some((part) => part.sheetId && sheetContains(part.sheetId, targetId, visited)))
-  }
   const addSheetPort = (name: string) => {
     if (!activeSheet || activeSheet.parentSheetId === null) { setNotice('The root circuit cannot be used as a reusable block. Add ports to a child sheet.'); return }
     if (activeSheet.ports.some((port) => port.name.toLowerCase() === name.toLowerCase())) return
@@ -4466,7 +4484,18 @@ export default function App() {
         </div>
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
         {filteredPalette.length ? <ComponentPalette items={filteredPalette} pendingKind={pendingComponentKind} onSelect={selectComponentForPlacement}/> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
-        {project.sheets.some((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)) && <div className="imported-models"><div className="component-list-label">PROJECT BLOCKS</div>{project.sheets.filter((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)).map((sheet) => <div className="imported-model" key={sheet.id}><div><strong>{sheet.name}</strong><span>{sheet.ports.length} ordered ports · {sheet.ports.map((port) => port.name).join(', ')}</span><small>Defined by this project</small><button className="place-model" onClick={() => placeSheetBlock(sheet)}>Place block</button></div><button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button></div>)}</div>}
+        {availableSheetBlocks.length > 0 && <div className="imported-models">
+          <div className="component-list-label">PROJECT BLOCKS</div>
+          {availableSheetBlocks.map((sheet) => <div className="imported-model" key={sheet.id}>
+            <div>
+              <strong>{sheet.name}</strong>
+              <span>{sheet.ports.length} ordered ports · {sheet.ports.map((port) => port.name).join(', ')}</span>
+              <small>Defined by this project</small>
+              <button className="place-model" onClick={() => placeSheetBlock(sheet)}>Place block</button>
+            </div>
+            <button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button>
+          </div>)}
+        </div>}
         <ModelDependencyReport analysis={modelDependencyAnalysis} onImport={openModelLibraryPicker}/>
         {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions"><strong>CONFLICTING MODEL DEFINITIONS</strong><p>More than one imported file defines the same model name. ELSim preserves both files; ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.</p><ul>{modelDependencyAnalysis.conflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.name}`}><code>{conflict.kind === 'subcircuit' ? '.SUBCKT' : '.MODEL'} {conflict.name}</code><ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>{definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => setModelSourceReview({ assetId: definition.assetId, line: definition.sourceLine })}>Review definition</button></li>)}</ul></li>)}</ul></div>}
         {compatibilityWarnings.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Imported model compatibility warnings"><strong>MODEL COMPATIBILITY CHECKS</strong><p>These source-line checks identify imported model or schematic constructs that may behave differently in the browser engine or affect the whole circuit. Imported source text is preserved unchanged; review the impact and suggested next step before editing or replacing a model.</p><ul>{visibleCompatibilityWarnings.map((warning, index) => <li key={`${warning.key}:${warning.sourceLine}:${index}`}><code>{warning.feature}</code> · {warning.sourceFilename}:{warning.sourceLine}<br/><code>{warning.excerpt}</code><p>{warning.impact}</p><small>Next step: {warning.suggestion}</small>{'assetId' in warning && typeof warning.assetId === 'string' && <button className="place-model" onClick={() => setModelSourceReview({ assetId: String(warning.assetId), line: Number(warning.sourceLine) })}>Review source line {warning.sourceLine}</button>}{/^Unresolved \.(?:include|inc|lib)/i.test(warning.feature) && <button className="place-model" onClick={(event) => chooseLibraryForCompatibilityWarning(warning.excerpt, event)}>{warning.feature.includes('section') ? 'Choose referenced library section' : 'Select referenced model library'}</button>}</li>)}</ul>{compatibilityWarnings.length > visibleCompatibilityWarnings.length && <button className="place-model" onClick={() => setCompatibilityWarningLimit((current) => Math.min(current + 20, compatibilityWarnings.length))}>Show {Math.min(20, compatibilityWarnings.length - visibleCompatibilityWarnings.length)} more compatibility warning{compatibilityWarnings.length - visibleCompatibilityWarnings.length === 1 ? '' : 's'}</button>}</div>}
