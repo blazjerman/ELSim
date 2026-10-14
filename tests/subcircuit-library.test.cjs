@@ -10,12 +10,26 @@ const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyz
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
-  for (const value of ['1k', '1mil', '1a', '10kOhm', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}']) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
-  for (const value of ['{if(RLOAD, 1k, 2k)}', '{system(RLOAD)}', '{sqrt(1, 2)}', '{pow(2)}', '{max(1, 2, 3)}', '{sqrt()}', '{RLOAD > 1k}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD ** 2}', '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+  for (const value of ['1k', '1mil', '1a', '10kOhm', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
+  for (const value of ['{if(RLOAD, 1k, 2k)}', '{system(RLOAD)}', '{sqrt(1, 2)}', '{pow(2)}', '{max(1, 2, 3)}', '{sqrt()}', '{RLOAD > 1k}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD ** 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
   const functions = new Map([['double', 1], ['blend', 2]])
   assert.equal(isSafeSubcircuitParameterValue('{DOUBLE(RLOAD)}', functions), true)
   assert.equal(isSafeSubcircuitParameterValue('{blend(1, 2)}', functions), true)
   for (const value of ['{double()}', '{double(1, 2)}', '{blend(1)}', '{unknown(1)}']) assert.equal(isSafeSubcircuitParameterValue(value, functions), false, value)
+})
+
+test('parses documented single-quoted ngspice parameter expressions', () => {
+  const parsed = parseSubcircuitLibrary([
+    '.PARAM BASE_GAIN=2',
+    ".SUBCKT AMP IN OUT PARAMS: GAIN='BASE_GAIN + 3' FACTOR='sqrt(BASE_GAIN) + 1'",
+    '.MODEL DLOCAL D(IS=\'BASE_GAIN + 1n\')',
+    '.ENDS AMP',
+  ].join('\n'))
+  assert.deepEqual(parsed.subcircuits[0].parameters, [
+    { name: 'GAIN', defaultValue: "'BASE_GAIN + 3'" },
+    { name: 'FACTOR', defaultValue: "'sqrt(BASE_GAIN) + 1'" },
+  ])
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'BASE_GAIN + 1n' }])
 })
 
 test('parses ngspice mil and atto suffixes in imported subcircuit parameters', () => {

@@ -2225,7 +2225,7 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Components', exact: true }).click()
-  const modelLibrary = '.FUNC DOUBLE(x) {2*x}\n.PARAM BASE_GAIN=2\n.CSPARAM USER_GAIN={BASE_GAIN}\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={DOUBLE(2)} RVAL=1mil TINY=1a RUNIT=10kOhm MIXED={2mil + 3a}\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
+  const modelLibrary = '.FUNC DOUBLE(x) {2*x}\n.PARAM BASE_GAIN=2\n.CSPARAM USER_GAIN={BASE_GAIN}\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={DOUBLE(2)} RVAL=1mil TINY=1a RUNIT=10kOhm MIXED={2mil + 3a} QUOTED=\'BASE_GAIN + 3\'\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-double.lib',
@@ -2234,7 +2234,7 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   })
   await expect(page.getByText(/Imported 1 subcircuit and 0 device models from user-double\.lib/)).toBeVisible()
   const importedModel = page.locator('.imported-model').filter({ hasText: 'USER_DOUBLE' })
-  await expect(importedModel).toContainText('Parameters: gain={DOUBLE(2)}, RVAL=1mil, TINY=1a, RUNIT=10kOhm, MIXED={2mil + 3a}')
+  await expect(importedModel).toContainText("Parameters: gain={DOUBLE(2)}, RVAL=1mil, TINY=1a, RUNIT=10kOhm, MIXED={2mil + 3a}, QUOTED='BASE_GAIN + 3'")
   await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
   await page.getByRole('button', { name: 'Schematic', exact: true }).click()
   const instance = page.locator('.circuit-part[aria-label^="X1,"]')
@@ -2254,8 +2254,15 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await tiny.blur()
   await expect(tiny).toHaveAttribute('aria-invalid', 'false')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelParameters)).toEqual({ gain: '{DOUBLE(3)}', TINY: '2a' })
+  const quoted = page.getByRole('textbox', { name: 'QUOTED model value' })
+  await expect(quoted).toHaveValue("'BASE_GAIN + 3'")
+  await quoted.fill("'BASE_GAIN + 4'")
+  await quoted.blur()
+  await expect(quoted).toHaveAttribute('aria-invalid', 'false')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelParameters)).toEqual({ gain: '{DOUBLE(3)}', TINY: '2a', QUOTED: "'BASE_GAIN + 4'" })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* USER_DOUBLE PARAMS: gain=\{DOUBLE\(3\)\} TINY=2a/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/QUOTED='BASE_GAIN \+ 4'/)
   await expect(page.locator('.netlist-modal pre')).toContainText(/\.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain=\{DOUBLE\(2\)\} RVAL=1mil TINY=1a RUNIT=10kOhm MIXED=\{2mil \+ 3a\}/)
   await expect(page.locator('.netlist-modal pre')).toContainText('.CSPARAM USER_GAIN={BASE_GAIN}')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])

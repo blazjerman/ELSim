@@ -298,7 +298,7 @@ function isLibrarySectionDollar(line: string, dollarIndex: number): boolean {
 function parseParameterDefaults(source: string, line: number, functions: ReadonlyMap<string, number>): SubcircuitParameter[] {
   const result: SubcircuitParameter[] = []
   let offset = 0
-  const assignment = /\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|[^\s]+)\s*/gy
+  const assignment = /\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|'[^']*'|[^\s]+)\s*/gy
   while (offset < source.length) {
     assignment.lastIndex = offset
     const match = assignment.exec(source)
@@ -441,8 +441,8 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
     ? /\bpchan\b/i.test(parameterSource) ? 'p' as const : 'n' as const
     : undefined
   const parameters: SubcircuitParameter[] = []
-  for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|[^\s,)]+)/g)) {
-    const value = match[2].replace(/^\{(.*)\}$/, '$1')
+  for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|'[^']*'|[^\s,)]+)/g)) {
+    const value = match[2].replace(/^\{([\s\S]*)\}$|^'([\s\S]*)'$/, (_whole, braced: string | undefined, quoted: string | undefined) => braced ?? quoted ?? _whole)
     if (isSafeSubcircuitParameterValue(match[2], functions) && !parameters.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) parameters.push({ name: match[1], defaultValue: value })
   }
   return { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
@@ -572,7 +572,11 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
 
 export function isSafeSubcircuitParameterValue(value: string, customFunctions: ReadonlyMap<string, number> = new Map()): boolean {
   if (typeof value !== 'string' || value.length > 64) return false
-  const scalar = value.trim().replace(/^\{(.*)\}$/, '$1')
+  const trimmed = value.trim()
+  const quoted = trimmed.startsWith("'") || trimmed.endsWith("'")
+  if (quoted && !(trimmed.startsWith("'") && trimmed.endsWith("'"))) return false
+  const expressionSource = quoted ? trimmed.slice(1, -1) : trimmed.replace(/^\{(.*)\}$/, '$1')
+  const scalar = expressionSource
   // ngspice §2.1.4.2 scale factors include both the layout unit `mil`
   // (25.4 µ) and atto (`a`), in addition to the familiar SI prefixes.
   // ngspice ignores trailing alphabetic unit text after a numeric field,
@@ -581,7 +585,7 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
 
   // Accept bounded arithmetic and deterministic ngspice math calls inside an
   // optional brace pair. Expressions are validated, never evaluated in JS.
-  const expression = value.trim().replace(/^\{([\s\S]*)\}$/, '$1')
+  const expression = expressionSource
   if (!expression || expression.length > 64) return false
   const tokens: string[] = []
   const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*|[A-Za-z_][A-Za-z0-9_]*|[(),+*/^\-]/iy
