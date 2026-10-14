@@ -27,13 +27,14 @@ test('project-local .LIB references flatten only the selected named section into
   const project = createStarterProject()
   project.modelAssets = [
     { id: 'wrapper', filename: 'wrapper.lib', sha256: 'a'.repeat(64), content: '.LIB "devices.lib" fast\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
-    { id: 'devices', filename: 'devices.lib', sha256: 'b'.repeat(64), content: '.LIB fast\n.MODEL FAST D(Is=1n)\n.ENDL fast\n.LIB slow\n.MODEL SLOW D(Is=10n)\n.ENDL slow\n', selectedSections: ['fast'], licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'devices', filename: 'devices.lib', sha256: 'b'.repeat(64), content: '.LIB fast\n.MODEL FAST D(Is=1n)\n.ENDL fast\n.LIB slow\n.MODEL SLOW D(Is=10n)\n.ENDL slow\n.END\n', selectedSections: ['fast'], licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
   ]
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^\.MODEL FAST D\(Is=1n\)$/m)
   assert.doesNotMatch(artifact.text, /\.MODEL SLOW/)
   assert.doesNotMatch(artifact.text, /^\.LIB /m)
+  assert.equal(artifact.text.match(/^\.END$/gim)?.length, 1)
 })
 
 test('transient start-saving time reduces stored results without changing the zero-time solve', () => {

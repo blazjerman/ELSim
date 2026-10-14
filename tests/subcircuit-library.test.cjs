@@ -73,6 +73,14 @@ test('preserves ngspice .OPTIONS cards in user model libraries', () => {
   ])
 })
 
+test('strips a terminal .END from model libraries without accepting trailing circuit records', () => {
+  const parsed = parseSubcircuitLibrary('.MODEL DFAST D(Is=1n)\n.END\n* allowed trailing comment\n')
+  assert.equal(parsed.modelText, '.MODEL DFAST D(Is=1n)')
+  assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(Is=1n)\n.END\n.MODEL DLATE D(Is=2n)'), /\.END must be the final non-comment line/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT AMP IN OUT\n.END\n.ENDS AMP'), /\.END is not allowed inside a \.SUBCKT/)
+  assert.throws(() => parseSubcircuitLibrary('.LIB fast\n.MODEL DFAST D\n.END\n.ENDL fast'), /\.END cannot appear inside a \.LIB section/)
+})
+
 test('project-local includes reject absolute paths and traversal as unresolved unsafe references', () => {
   const unsafe = ['../outside.lib', '/outside.lib', 'C:\\\\outside.lib', 'https://example.test/model.lib']
   for (const reference of unsafe) {

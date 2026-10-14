@@ -105,10 +105,23 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
   const lines: { line: LogicalLine; section: string | null }[] = []
   let activeSection: string | null = null
   let activeSubcircuit = false
+  let sawEnd = false
   for (const line of sourceLines) {
     const text = withoutInlineComment(line.text)
+    if (sawEnd) {
+      if (text && !text.startsWith('*')) throw new Error(`Line ${line.start}: .END must be the final non-comment line in an imported model library.`)
+      lines.push({ line, section: activeSection })
+      continue
+    }
     if (!text || text.startsWith('*')) { lines.push({ line, section: activeSection }); continue }
     const tokens = text.split(/\s+/), directive = tokens[0].toLowerCase()
+    if (directive === '.end') {
+      if (activeSubcircuit) throw new Error(`Line ${line.start}: .END is not allowed inside a .SUBCKT.`)
+      if (activeSection) throw new Error(`Line ${line.start}: .END cannot appear inside a .LIB section.`)
+      if (tokens.length !== 1) throw new Error(`Line ${line.start}: .END does not accept arguments in an imported model library.`)
+      sawEnd = true
+      continue
+    }
     if (directive === '.lib') {
       if (activeSubcircuit) throw new Error(`Line ${line.start}: .LIB directives are not allowed inside a .SUBCKT.`)
       const external = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z_][A-Za-z0-9_-]*)$/i)
@@ -377,7 +390,9 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   if (inspected.sections.length === 0 && selected?.length) throw new Error('This model library has no .LIB sections to select.')
   if (selected && (!selected.length || selected.length > inspected.sections.length || new Set(selected.map((section) => section.toLowerCase())).size !== selected.length || selected.some((section) => !inspected.sections.some((available) => available.toLowerCase() === section.toLowerCase())))) throw new Error('Choose one or more section names that exist in this model library.')
   const selectedNames = new Set(selected?.map((section) => section.toLowerCase()) ?? [])
-  const lines = inspected.sections.length ? inspected.lines.filter(({ section }) => section === null || section !== null && selectedNames.has(section.toLowerCase())).map(({ line }) => line) : logical
+  const lines = inspected.sections.length
+    ? inspected.lines.filter(({ section }) => section === null || section !== null && selectedNames.has(section.toLowerCase())).map(({ line }) => line)
+    : inspected.lines.map(({ line }) => line)
 
   const subcircuits: SubcircuitDefinition[] = []
   const models: SpiceModelDefinition[] = []

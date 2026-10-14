@@ -2112,7 +2112,7 @@ test('project-local model includes and shared parameter records load through bro
   await modelInput.setInputFiles({
     name: 'amplifier.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.LIB "shared.lib" fast\n.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n'),
+    buffer: Buffer.from('.LIB "shared.lib" fast\n.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n.END\n'),
   })
   const dependencyReport = page.getByRole('region', { name: 'Model dependency report' })
   await expect(dependencyReport).toContainText('shared.lib')
@@ -2140,6 +2140,7 @@ test('project-local model includes and shared parameter records load through bro
   expect(netlist).toContain('.SUBCKT CORE IN OUT')
   expect(netlist).not.toContain('.MODEL UNUSED')
   expect(netlist).not.toMatch(/^\.LIB /im)
+  expect(netlist.match(/^\.END$/gim)).toHaveLength(1)
   await netlistDialog.getByRole('button', { name: 'Close netlist' }).click()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
