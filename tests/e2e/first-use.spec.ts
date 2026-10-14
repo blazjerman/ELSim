@@ -3985,8 +3985,14 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   await expect(warnings).toContainText('intended statistical distribution')
   await warnings.getByRole('button', { name: 'Review source line 6' }).click()
   const sourceViewer = page.locator('.model-source-viewer')
-  await expect(sourceViewer.locator('li').nth(5)).toBeFocused()
-  await expect(sourceViewer.locator('li').nth(5)).toContainText('B4 OUT 0 V=mc(10,0.05)')
+  const reviewedSourceLine = sourceViewer.locator('li').nth(5)
+  await expect(reviewedSourceLine).toBeFocused()
+  await expect(reviewedSourceLine).toContainText('B4 OUT 0 V=mc(10,0.05)')
+  const focusOutline = await reviewedSourceLine.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { style: style.outlineStyle, width: Number.parseFloat(style.outlineWidth), color: style.outlineColor }
+  })
+  expect(focusOutline).toEqual({ style: 'solid', width: 2, color: 'rgb(128, 217, 167)' })
   await expect(warnings).toContainText('compatibility-model.lib:7')
   await expect(warnings).toContainText('XSPICE A-device (runtime support unverified)')
   await expect(warnings).toContainText('external .cm modules')
