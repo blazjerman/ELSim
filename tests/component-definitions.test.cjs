@@ -215,6 +215,15 @@ test('imported subcircuits become content-addressed component definitions with o
   assert.deepEqual(definition.modelParameters, [{ name: 'gain', defaultValue: '2' }, { name: 'bias', defaultValue: '{0.5}' }])
   assert.equal(definition.help, componentDefinitionFor('subcircuit').help)
   assert.deepEqual(definition.provenance, provenance)
+  const pinPattern = new RegExp(JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8')).properties.pins.items.properties.name.pattern, 'u')
+  const punctuationPins = ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+']
+  for (const pin of punctuationPins) assert.equal(pinPattern.test(pin), true, pin)
+  for (const pin of ['0', 'GND', 'A B', 'A=B', 'A%B', '[A]', '<A>', 'A~B', '{A}', "A'B", 'A’B']) assert.equal(pinPattern.test(pin), false, pin)
+  const punctuationDefinition = importedSubcircuitComponentDefinition(
+    parseSubcircuitLibrary('.SUBCKT AMP IN! IN:1 OUT#1\nE1 OUT#1 0 IN! IN:1 2\n.ENDS AMP').subcircuits[0],
+    provenance,
+  )
+  assert.deepEqual(punctuationDefinition.pins.map(({ name }) => name), ['IN!', 'IN:1', 'OUT#1'])
   assert.throws(() => importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'bad' }), /SHA-256/)
   assert.notEqual(importedSubcircuitComponentDefinition(parsed, { ...provenance, sha256: 'b'.repeat(64) }).id, definition.id)
   const punctuationModels = parseSubcircuitLibrary('.SUBCKT LF356/NS IN OUT\nR1 IN OUT 1k\n.ENDS LF356/NS\n.SUBCKT LF356.NS IN OUT\nR1 IN OUT 2k\n.ENDS LF356.NS').subcircuits

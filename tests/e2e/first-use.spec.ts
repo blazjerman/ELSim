@@ -2294,6 +2294,30 @@ test('native ngspice slash-named subcircuit imports and generates a valid instan
   await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* LF356\/NS/)
 })
 
+test('native ngspice punctuation-rich subcircuit pins import and remain ordered in project and netlist', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const modelLibrary = '.SUBCKT PUNCTUATED IN! IN:1 OUT#1\nE1 OUT#1 0 IN! IN:1 2\n.ENDS PUNCTUATED\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'punctuated-pins.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 0 device models from punctuated-pins\.lib/)).toBeVisible()
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'PUNCTUATED' })
+  await expect(importedModel).toContainText('IN!')
+  await expect(importedModel).toContainText('IN:1')
+  await expect(importedModel).toContainText('OUT#1')
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => {
+    const part = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((candidate: { ref: string }) => candidate.ref === 'X1')
+    return { modelName: part?.modelName, modelPins: part?.modelPins }
+  })).toEqual({ modelName: 'PUNCTUATED', modelPins: ['IN!', 'IN:1', 'OUT#1'] })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('.SUBCKT PUNCTUATED IN! IN:1 OUT#1')
+  await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* PUNCTUATED/)
+})
+
 test('native ngspice numeric-leading IC names and pins import and generate a valid instance', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const modelLibrary = '.SUBCKT 74HC00m 1A 1B 1Y\nE1 1Y 0 1A 1B 2\n.ENDS 74HC00m\n'

@@ -176,7 +176,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const key = model.name.toLowerCase()
     if (!importedDeviceModelsByName.has(key)) importedDeviceModelsByName.set(key, model)
   }
-  const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary, undefined, projectModelFunctions).subcircuits : []
+  const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary, undefined, projectModelFunctions, { allowGroundPins: true }).subcircuits : []
   const subcircuitsByName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()
   const subcircuitFunctionsByName = new Map<string, ReadonlyMap<string, number>>()
   for (const [assetIndex, library] of parsedModelAssets.entries()) {

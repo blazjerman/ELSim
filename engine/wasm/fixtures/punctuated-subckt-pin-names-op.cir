@@ -1,0 +1,11 @@
+ELSim ngspice punctuation-rich subcircuit pin names
+V1 in_bang 0 5
+V2 in_colon 0 2.5
+X1 in_bang in_colon out PUNCTUATED
+R1 out 0 1k
+.SUBCKT PUNCTUATED IN! IN:1 OUT#1
+E1 OUT#1 0 IN! IN:1 2
+.ENDS PUNCTUATED
+.op
+.print op v(out)
+.end

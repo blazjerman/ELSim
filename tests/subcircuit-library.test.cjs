@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
@@ -97,8 +97,31 @@ test('parses .MODEL parameters that call forward-declared library functions', ()
 })
 
 test('rejects ground node zero as an imported subcircuit external pin', () => {
-  assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID 0 OUT\nR1 0 OUT 1k\n.ENDS INVALID'), /Line 1: \.SUBCKT INVALID cannot use ground node 0 as an external pin/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID 0 OUT\nR1 0 OUT 1k\n.ENDS INVALID'), /Line 1: \.SUBCKT INVALID cannot use ground node 0 or its gnd alias as an external pin/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID GND OUT\nR1 GND OUT 1k\n.ENDS INVALID'), /cannot use ground node 0 or its gnd alias/)
   assert.deepEqual(parseSubcircuitLibrary('.SUBCKT VALID IN OUT\nR1 IN OUT 1k\n.ENDS VALID').subcircuits[0].pins, ['IN', 'OUT'])
+})
+
+test('accepts native ngspice punctuation-rich batch node names as ordered subcircuit pins', () => {
+  const names = ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+']
+  for (const name of names) {
+    assert.equal(isValidSpiceNodeName(name), true, name)
+    assert.equal(isValidSpiceSubcircuitPinName(name), true, name)
+  }
+  for (const name of ['A B', 'A=B', 'A%B', 'A(B', 'A)B', 'A,B', '[A]', '<A>', 'A~B', '{A}', "A'B", 'A’B', 'A\u0000B', 'A'.repeat(65)]) {
+    assert.equal(isValidSpiceNodeName(name), false, JSON.stringify(name))
+    assert.equal(isValidSpiceSubcircuitPinName(name), false, JSON.stringify(name))
+  }
+  assert.equal(isValidSpiceSubcircuitPinName('0'), false)
+  assert.equal(isValidSpiceSubcircuitPinName('gNd'), false)
+
+  const content = '.SUBCKT PUNCTUATED IN! IN:1 OUT#1\nE1 OUT#1 0 IN! IN:1 2\n.ENDS PUNCTUATED'
+  const parsed = parseSubcircuitLibrary(content)
+  assert.deepEqual(parsed.subcircuits[0].pins, ['IN!', 'IN:1', 'OUT#1'])
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'punctuated', filename: 'punctuated.lib', content, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'punctuated-instance', kind: 'subcircuit', ref: 'X1', value: '', x: 300, y: 200, rotation: 0, modelName: 'PUNCTUATED', modelPins: parsed.subcircuits[0].pins })
+  assert.deepEqual(validateProject(project).parts.at(-1).modelPins, ['IN!', 'IN:1', 'OUT#1'])
 })
 
 test('accepts ngspice polarity characters in imported subcircuit pin names', () => {

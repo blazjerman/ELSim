@@ -25,9 +25,15 @@ const librarySectionName = /^(?!;|\/\/)[^\s"'`\x00-\x1f]+$/
 export function isValidSpiceLibrarySectionName(value: string): boolean {
   return librarySectionName.test(value)
 }
-// ngspice node names may carry polarity suffixes such as IN+ and IN- in
-// imported .SUBCKT interfaces. Keep this separate from ELSim net-label syntax.
-const pinName = /^(?:\d+|[A-Za-z0-9_][A-Za-z0-9_.$+/-]*)$/
+// ngspice batch-mode node names are tokens, not C-style identifiers. Keep
+// this separate from ELSim's stricter user-facing net-label syntax.
+const forbiddenNodeNameCharacter = /[\s=%(),\[\]<>~{}'\u2019\x00-\x1f\x7f]/u
+export function isValidSpiceNodeName(value: string): boolean {
+  return value.length > 0 && value.length <= 64 && !forbiddenNodeNameCharacter.test(value)
+}
+export function isValidSpiceSubcircuitPinName(value: string): boolean {
+  return isValidSpiceNodeName(value) && value !== '0' && !/^gnd$/i.test(value)
+}
 /** Native SPICE model identifiers may contain slash (for example LF356/NS). */
 export function isValidSpiceModelName(value: string, allowLeadingDigit = false): boolean {
   return (allowLeadingDigit ? /^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/ : /^[A-Za-z_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/).test(value)
@@ -764,7 +770,7 @@ export function needsLtspiceFullDeckTranslation(source: string): boolean {
 }
 
 /** Parse self-contained SPICE model libraries without executing file directives. */
-export function parseSubcircuitLibrary(source: string, selectedSections?: string[], availableFunctions: ReadonlyMap<string, number> = new Map()): ParsedSubcircuitLibrary {
+export function parseSubcircuitLibrary(source: string, selectedSections?: string[], availableFunctions: ReadonlyMap<string, number> = new Map(), options: { allowGroundPins?: boolean } = {}): ParsedSubcircuitLibrary {
   if (typeof source !== 'string' || !source.trim()) throw new Error('The model library is empty.')
   if (new TextEncoder().encode(source).length > MAX_LIBRARY_BYTES) throw new Error('Model libraries are limited to 4 MiB per file.')
   const inspected = inspectLibrarySections(source)
@@ -877,8 +883,9 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       const parameterSource = parameterToken
         ? text.slice((parameterToken.index ?? 0) + (paramsMarkerAt === paramsAt ? parameterToken[0].length : 0)).trim()
         : ''
-      if (pins.some((pin) => pin === '0')) throw new Error(`Line ${line.start}: .SUBCKT ${name} cannot use ground node 0 as an external pin.`)
-      if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !pinName.test(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
+      if (!options.allowGroundPins && pins.some((pin) => pin === '0' || /^gnd$/i.test(pin))) throw new Error(`Line ${line.start}: .SUBCKT ${name} cannot use ground node 0 or its gnd alias as an external pin.`)
+      const validPin = options.allowGroundPins ? isValidSpiceNodeName : isValidSpiceSubcircuitPinName
+      if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !validPin(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
         throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
       }
       const scopes = [...activeSubcircuits.map(({ name }) => name), name]
