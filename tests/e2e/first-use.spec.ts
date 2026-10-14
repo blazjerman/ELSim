@@ -6305,6 +6305,42 @@ test('Wheatstone bridge lesson predicts and verifies a balanced sensor arm', { t
   await expect(page.locator('.example-lesson-next-step')).toContainText('VLEFT = 5 V and VOUT = 5 V')
 })
 
+test('transformer lesson predicts secondary voltage from the AC magnitude and turns ratio', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'AC & reactive' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'AC transformer' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const prediction = lesson.locator('.example-prediction')
+  const answer = prediction.getByRole('textbox', { name: 'Before running, predict the secondary AC voltage magnitude' })
+  await answer.fill('2V')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('Nsecondary/Nprimary')
+
+  await page.locator('.circuit-part[data-part-id="transformer-t1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.getByLabel('Secondary / primary turns ratio').fill('3')
+  await expect(answer).toHaveValue('')
+  await answer.fill('3V')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('3 V')
+
+  await page.locator('.circuit-part[data-part-id="transformer-v1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.getByLabel('AC magnitude').fill('2 V')
+  await expect(answer).toHaveValue('')
+  await answer.fill('6V')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('6 V')
+  await expect(page.getByRole('button', { name: 'Run this circuit' })).toBeEnabled()
+})
+
 test('transformer example solves the configured AC turns ratio', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])

@@ -645,6 +645,26 @@ export function LampPowerPrediction({ supplyValue, resistanceValue }: { supplyVa
   />
 }
 
+export function TransformerVoltagePrediction({ primaryValue, turnsRatioValue }: { primaryValue: string; turnsRatioValue: string }) {
+  const primary = componentMagnitude(primaryValue, 'source')
+  const turnsRatio = Number(turnsRatioValue)
+  const predictedSecondary = primary !== null && Number.isFinite(turnsRatio) && turnsRatio > 0
+    ? Math.abs(primary) * turnsRatio
+    : null
+  const explanation = predictedSecondary === null || primary === null
+    ? 'Enter a numeric AC magnitude and a positive secondary-to-primary turns ratio.'
+    : `For an ideal transformer, Vsecondary/Vprimary = Nsecondary/Nprimary. ${primaryValue} × ${turnsRatio} predicts ${formatValue(predictedSecondary)} V. The coupled-inductor simulation includes source and load effects, so its sweep can differ slightly.`
+
+  return <NumericPrediction
+    id="transformer-voltage-prediction"
+    prompt="Before running, predict the secondary AC voltage magnitude"
+    unit="V"
+    predictedValue={predictedSecondary}
+    absoluteTolerance={0.1}
+    explanation={explanation}
+  />
+}
+
 export function WheatstoneBridgePrediction({ supplyValue, leftTopValue, leftBottomValue, rightTopValue, rightBottomValue }: { supplyValue: string; leftTopValue: string; leftBottomValue: string; rightTopValue: string; rightBottomValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const leftTop = componentMagnitude(leftTopValue, 'resistor')
@@ -711,7 +731,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'lamp-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors'
+  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'lamp-power' | 'transformer-voltage' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -739,6 +759,7 @@ type BeginnerPredictionProps = {
   amplitudeValue?: string
   frequencyValue?: string
   referenceResistanceValue?: string
+  turnsRatioValue?: string
 }
 
 /** Keep lesson-only prediction logic out of the editor's initial download. */
@@ -770,6 +791,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'rlc-resonance': return <RlcResonancePrediction inductanceValue={props.inductanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'resistor-power': return <ResistorPowerPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'lamp-power': return <LampPowerPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
+    case 'transformer-voltage': return <TransformerVoltagePrediction primaryValue={props.supplyValue ?? ''} turnsRatioValue={props.turnsRatioValue ?? ''}/>
     case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
     case 'series-resistors': return <SeriesVoltageDropPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'capacitor-discharge': return <CapacitorDischargePrediction initialVoltageValue={props.initialVoltageValue ?? ''} resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
