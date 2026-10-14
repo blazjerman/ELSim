@@ -1,0 +1,12 @@
+* Native ngspice .CSPARAM cards are preserved from imported model libraries.
+.PARAM GAIN=3
+.CSPARAM GAIN_VECTOR={GAIN}
+V1 vin 0 5
+R1 vin out 1k
+R2 out 0 1k
+.OP
+.CONTROL
+echo CSPARAM_VALUE=$&GAIN_VECTOR
+print v(out)
+.ENDC
+.END

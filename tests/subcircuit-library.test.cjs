@@ -174,6 +174,18 @@ test('preserves ngspice .OPTIONS cards in user model libraries', () => {
   ])
 })
 
+test('preserves top-level ngspice .CSPARAM constants and rejects subcircuit scope', () => {
+  const source = '.PARAM GAIN=3\n.CSPARAM gain_vector={GAIN}\n.MODEL DFAST D(Is=1n)'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine, text }) => ({ sourceLine, text })), [
+    { sourceLine: 1, text: '.PARAM GAIN=3' },
+    { sourceLine: 2, text: '.CSPARAM gain_vector={GAIN}' },
+    { sourceLine: 3, text: '.MODEL DFAST D(Is=1n)' },
+  ])
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE A B\n.CSPARAM gain_vector=3\n.ENDS CORE'), /\.CSPARAM creates a circuit-wide constant vector and cannot appear inside a \.SUBCKT/)
+})
+
 test('preserves native ngspice global .TEMP cards and reports their project-wide effect', () => {
   const source = '.TEMP {TCIRCUIT}\n.PARAM TCIRCUIT=125\n.MODEL DFAST D(Is=1n)'
   const parsed = parseSubcircuitLibrary(source)

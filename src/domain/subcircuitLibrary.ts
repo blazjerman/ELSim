@@ -19,7 +19,7 @@ export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInp
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 const pinName = /^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/
-const safeTopLevel = new Set(['.model', '.param', '.func', '.global', '.options', '.temp', '.ic', '.nodeset'])
+const safeTopLevel = new Set(['.model', '.param', '.func', '.csparam', '.global', '.options', '.temp', '.ic', '.nodeset'])
 const forbidden = new Set(['.control', '.endc', '.end', '.exec', '.shell', '.cm'])
 
 function includedAssetBasename(reference: string): string | null {
@@ -777,6 +777,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
 
     if (activeSubcircuits.length) {
       if (directive === '.lib' || directive === '.endl') throw new Error(`Line ${line.start}: .LIB/.ENDL section wrappers cannot appear inside a .SUBCKT.`)
+      if (directive === '.csparam') throw new Error(`Line ${line.start}: .CSPARAM creates a circuit-wide constant vector and cannot appear inside a .SUBCKT.`)
       if (directive === '.temp') throw new Error(`Line ${line.start}: .TEMP sets the global circuit temperature and cannot appear inside a .SUBCKT.`)
       if (directive === '.ic' || directive === '.nodeset') throw new Error(`Line ${line.start}: ${tokens[0]} applies to the whole circuit and cannot appear inside a .SUBCKT.`)
       if (directive === '.model') {

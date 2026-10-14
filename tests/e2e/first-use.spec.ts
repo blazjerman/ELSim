@@ -2109,7 +2109,7 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Components', exact: true }).click()
-  const modelLibrary = '.FUNC DOUBLE(x) {2*x}\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={DOUBLE(2)}\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
+  const modelLibrary = '.FUNC DOUBLE(x) {2*x}\n.PARAM BASE_GAIN=2\n.CSPARAM USER_GAIN={BASE_GAIN}\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={DOUBLE(2)}\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-double.lib',
@@ -2134,6 +2134,7 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelParameters)).toEqual({ gain: '{DOUBLE(3)}' })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* USER_DOUBLE PARAMS: gain=\{DOUBLE\(3\)\}/)
+  await expect(page.locator('.netlist-modal pre')).toContainText('.CSPARAM USER_GAIN={BASE_GAIN}')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
