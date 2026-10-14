@@ -5000,6 +5000,23 @@ test('imported ngspice .TEMP is preserved and a project temperature overrides it
   expect(projectTemperatureLine).toBeGreaterThan(importedTemperatureLine)
 })
 
+test('native ngspice .TITLE imports, is explained, and runs in the generated deck', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'titled-diode.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.TITLE User diode library\n.MODEL DTEST D(IS=1n)\n'),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from titled-diode\.lib/)).toBeVisible()
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice .TITLE overrides the generated circuit heading')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' })).toContainText('.TITLE User diode library')
+})
+
 test('imported ngspice .IC and .NODESET cards are preserved with circuit-wide guidance', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()

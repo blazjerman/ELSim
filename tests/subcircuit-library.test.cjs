@@ -326,6 +326,22 @@ test('preserves ngspice .OPTIONS cards in user model libraries', () => {
   ])
 })
 
+test('preserves native ngspice .TITLE cards and explains their circuit-wide heading effect', () => {
+  const source = '.MODEL DFAST D(Is=1n)\n.TITLE User diode library'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine, text }) => ({ sourceLine, text })), [
+    { sourceLine: 1, text: '.MODEL DFAST D(Is=1n)' },
+    { sourceLine: 2, text: '.TITLE User diode library' },
+  ])
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.equal(warning.sourceLine, 2)
+  assert.equal(warning.feature, 'ngspice .TITLE overrides the generated circuit heading')
+  assert.match(warning.impact, /does not change the circuit’s electrical behavior/)
+  assert.throws(() => parseSubcircuitLibrary('.TITLE\n.MODEL DFAST D(Is=1n)'), /Line 1: \.TITLE needs title text/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE IN OUT\n.TITLE Core model\n.ENDS CORE'), /Line 2: \.TITLE changes the title of the whole circuit and cannot appear inside a \.SUBCKT/)
+})
+
 test('preserves ngspice .SAVE vectors from imported model libraries and warns about global effect', () => {
   const source = '.SAVE V(vin) @RLOAD[i]\n.MODEL DFAST D(Is=1n)'
   const parsed = parseSubcircuitLibrary(source)
