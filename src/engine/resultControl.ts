@@ -93,6 +93,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   }))
   for (let index = endLine - 1; index >= 0; index--) if (/^\s*\.meas\s+tran\s+ELSIM_/i.test(rows[index])) rows.splice(index, 1)
   let insideSubcircuit = false
+  const vdmosModels = new Set(rows.flatMap((row) => row.match(/^\s*\.model\s+(\S+)\s+vdmos\b/i)?.[1].toLowerCase() ?? []))
   const deviceCurrents = rows.flatMap((line) => {
     if (/^\s*\.subckt\b/i.test(line)) { insideSubcircuit = true; return [] }
     if (/^\s*\.ends\b/i.test(line)) { insideSubcircuit = false; return [] }
@@ -102,7 +103,9 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     if ((analysisType === 'ac' || analysisType === 'noise') && /^[CL]/i.test(ref)) return []
     const kind = ref[0].toUpperCase()
     const current = kind === 'D' || kind === 'J' || kind === 'M' ? 'id' : kind === 'Q' ? 'ic' : kind === 'I' ? 'current' : 'i'
-    const terminalCurrents = kind === 'Q' ? ['ib', 'ie'] : kind === 'M' ? ['ig', 'is', 'ib'] : kind === 'J' ? ['ig', 'is'] : []
+    const modelName = kind === 'M' ? line.match(/^\s*M\S+\s+\S+\s+\S+\s+\S+\s+(\S+)/i)?.[1]?.toLowerCase() : undefined
+    const isThreeTerminalVdmos = Boolean(modelName && vdmosModels.has(modelName))
+    const terminalCurrents = kind === 'Q' ? ['ib', 'ie'] : kind === 'M' && !isThreeTerminalVdmos ? ['ig', 'is', 'ib'] : kind === 'J' ? ['ig', 'is'] : []
     return [`@${ref}[${current}]`, ...terminalCurrents.map((name) => `@${ref}[${name}]`)]
   })
   const hasSourceCurrentVector = (measurement: TransientMeasurement) => /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.vector.trim()) || (measurement.operation === 'delay' && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.targetVector.trim()))

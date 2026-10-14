@@ -1,0 +1,21 @@
+Native ngspice N-channel and P-channel VDMOS model fixture
+VDDN vddn 0 DC 12
+VGN gn 0 DC 5
+RLOADN vddn dn 1k
+MN dn gn 0 NPOWER
+.model NPOWER VDMOS Nchan VTO=2 KP=1
+VSP sp 0 DC 12
+VGP gp 0 DC 7
+RLOADP dp 0 1k
+MP dp gp sp PPOWER
+.model PPOWER VDMOS Pchan VTO=-2 KP=1
+.op
+.print op v(dn) v(dp)
+.save all @mn[id] @mp[id]
+.control
+set filetype=ascii
+op
+write /result.raw all
+quit
+.endc
+.end

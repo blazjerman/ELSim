@@ -2090,6 +2090,44 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
+test('native VDMOS power MOSFET runs with an imported ngspice model', { tag: '@ngspice' }, async ({ page }) => {
+  const project = createStarterProject()
+  const modelContent = '.model NPOWER VDMOS Nchan VTO=2 KP=1\n'
+  const parts = [
+    { id: 'v-power', kind: 'source' as const, ref: 'V1', value: '12 V', sourceMode: 'dc' as const, x: 100, y: 300, rotation: 0 as const },
+    { id: 'v-gate', kind: 'source' as const, ref: 'V2', value: '5 V', sourceMode: 'dc' as const, x: 100, y: 500, rotation: 0 as const },
+    { id: 'r-load', kind: 'resistor' as const, ref: 'R1', value: '1 kΩ', x: 300, y: 400, rotation: 0 as const },
+    { id: 'm-power', kind: 'nvdmos' as const, ref: 'M1', value: 'NPOWER', deviceModel: 'NPOWER', x: 500, y: 400, rotation: 0 as const },
+  ]
+  const nodeNames = [['vdd', '0'], ['gate', '0'], ['vdd', 'drain'], ['drain', 'gate', '0']]
+  const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
+    id: `${part.id}-net-${pinIndex}`,
+    name: nodeNames[partIndex][pinIndex],
+    x: pin.x,
+    y: pin.y,
+    visible: false,
+  })))
+  project.parts = parts
+  project.wires = []
+  project.netLabels = netLabels
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.modelAssets = [{
+    id: 'vdmos-model', filename: 'power-mosfet.lib', sha256: createHash('sha256').update(modelContent).digest('hex'),
+    content: modelContent, licenseStatus: 'unknown', importedAt: '2026-10-14T00:00:00.000Z',
+  }]
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, netLabels: project.netLabels }
+  const validated = validateProject(project)
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await expect(page.locator('.circuit-part[data-part-id="m-power"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText('M1 drain gate 0 NPOWER')
+  await expect(netlist).toContainText('.model NPOWER VDMOS Nchan VTO=2 KP=1')
+})
+
 test('placing a reusable hierarchical block keeps it visible in the current viewport', async ({ page }) => {
   await page.addInitScript((project) => {
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))

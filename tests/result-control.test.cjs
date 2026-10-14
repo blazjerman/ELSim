@@ -97,6 +97,9 @@ test('BJT and MOSFET models save device current using ngspice-specific vectors',
   assert.match(mosfet, /^\.save all @M1\[id\] @M1\[ig\] @M1\[is\] @M1\[ib\]$/m)
   const jfet = addResultControl('J1 d g s ELSIM_MODEL_J1\n.tran 1u 1m\n.end')
   assert.match(jfet, /^\.save all @J1\[id\] @J1\[ig\] @J1\[is\]$/m)
+  const vdmos = addResultControl('M2 drain gate 0 NPOWER\n.model NPOWER VDMOS Nchan VTO=2 KP=1\n.op\n.end')
+  assert.match(vdmos, /^\.save all @M2\[id\]$/m)
+  assert.doesNotMatch(vdmos, /@M2\[(?:ig|is|ib)\]/i)
 })
 
 test('result control does not emit unscoped current saves for subcircuit definitions', () => {
