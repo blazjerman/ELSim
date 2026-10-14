@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { extremaIndices, plotPolylinePoints, valueRange } = require(path.join(build, 'engine/plot.js'))
+const { extremaIndices, plotPolylinePoints, valueRange, valueRangeAtIndices } = require(path.join(build, 'engine/plot.js'))
 
 test('extrema sampling remains bounded and preserves narrow peaks in large traces', () => {
   const values = new Float64Array(1_000_000).fill(0)
@@ -30,6 +30,15 @@ test('identical plot windows share bounded downsample indices for the same immut
   assert.strictEqual(extremaIndices(values, 0, values.length - 1, 900), first)
   assert.notStrictEqual(extremaIndices(values, 1, values.length - 1, 900), first)
   assert.ok(first.includes(50_001))
+})
+
+test('extrema-preserving plot samples retain exact bounds for large traces', () => {
+  const values = new Float64Array(1_000_000).fill(4)
+  values[123_456] = -17
+  values[654_321] = 29
+  const indices = extremaIndices(values, 0, values.length - 1, 900)
+  assert.deepEqual(valueRangeAtIndices(values, indices), [-17, 29])
+  assert.equal(valueRangeAtIndices(values, []), null)
 })
 
 test('transformed AC vectors can cache shared extrema when the caller supplies a stable mode key', () => {

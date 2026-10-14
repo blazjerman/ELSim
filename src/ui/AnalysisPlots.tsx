@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange } from '../domain/project'
-import { extremaIndices, plotPolylinePoints, valueRange } from '../engine/plot'
+import { extremaIndices, plotPolylinePoints, valueRange, valueRangeAtIndices } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation } from './simulationCursor'
 import { formatTime } from './formatTime'
@@ -312,24 +312,30 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const first = Math.floor(navigation.window.start * Math.max(0, (axis?.length ?? 1) - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, (axis?.length ?? 1) - 1)))
   const minTime = axis?.[first] ?? 0, maxTime = axis?.[Math.min(last, (axis?.length ?? 1) - 1)] ?? 1
-  const rangeFor = (unit: string): [number, number] | null => {
-    let min = Infinity, max = -Infinity
-    for (const trace of shown) if (trace.unit === unit) {
+  const sampledTraceData = useMemo(() => {
+    const indicesById = new Map<string, number[]>()
+    const rangeByUnit = new Map<string, [number, number]>()
+    for (const trace of shown) {
       const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
       const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
-      const range = valueRange(trace.values, traceFirst, traceLast)
-      if (range) { min = Math.min(min, range[0]); max = Math.max(max, range[1]) }
+      const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
+      indicesById.set(trace.id, indices)
+      const range = valueRangeAtIndices(trace.values, indices)
+      if (!range) continue
+      let [min, max] = range
+      if (min === max) { min -= 1; max += 1 }
+      const previous = rangeByUnit.get(trace.unit)
+      rangeByUnit.set(trace.unit, [Math.min(previous?.[0] ?? 0, min, 0), Math.max(previous?.[1] ?? 0, max, 0)])
     }
-    if (!Number.isFinite(min) || !Number.isFinite(max)) return null
-    if (min === max) { min -= 1; max += 1 }
-    return [Math.min(0, min), Math.max(0, max)] as [number, number]
-  }
+    return { indicesById, rangeByUnit }
+  }, [shown, minTime, maxTime])
   const scopeDomain = useMemo<[number, number]>(() => {
-    const voltage = rangeFor('V'), current = rangeFor('A')
+    const voltage = sampledTraceData.rangeByUnit.get('V') ?? null
+    const current = sampledTraceData.rangeByUnit.get('A') ?? null
     const ranges = [voltage, current].filter((range): range is [number, number] => range !== null)
     if (!ranges.length) return [-1, 1]
     return [Math.min(0, ...ranges.map(([min]) => min)), Math.max(0, ...ranges.map(([, max]) => max))]
-  }, [shown, minTime, maxTime])
+  }, [sampledTraceData])
   const scopeAxis = useValueWindow(scopeDomain)
   const scopeRange: [number, number] = [scopeAxis.range.min, scopeAxis.range.max]
   const hasVoltage = shown.some((trace) => trace.unit === 'V'), hasCurrent = shown.some((trace) => trace.unit === 'A')
@@ -359,16 +365,14 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const xForTime = (time: number) => left + ((time - minTime) / (maxTime - minTime || 1)) * (right - left)
   const yForValue = (value: number) => bottom - ((value - scopeRange[0]) / (scopeRange[1] - scopeRange[0])) * (bottom - top)
   const plotPaths = useMemo(() => shown.map((trace) => {
-    const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
-    const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
-    const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
+    const indices = sampledTraceData.indicesById.get(trace.id) ?? []
     const [minValue, maxValue] = scopeRange
     const coordinateKey = `linear:${minTime}:${maxTime}:${left}:${right}:${top}:${bottom}:${minValue}:${maxValue}`
     const points = plotPolylinePoints(trace.axis, trace.values, indices, coordinateKey,
       (time) => left + ((time - minTime) / (maxTime - minTime || 1)) * (right - left),
       (value) => bottom - ((value - minValue) / (maxValue - minValue)) * (bottom - top))
     return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points, accessibleName: `${trace.label}, trace in ${trace.unit}` }
-  }), [shown, minTime, maxTime, width, height, scopeRange[0], scopeRange[1], traceIndexById, colors])
+  }), [shown, sampledTraceData, minTime, maxTime, width, height, scopeRange[0], scopeRange[1], traceIndexById, colors])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
     const rect = event.currentTarget.getBoundingClientRect()

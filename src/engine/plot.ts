@@ -107,3 +107,15 @@ export function valueRange(values: ArrayLike<number>, start: number, end: number
   }
   return range
 }
+
+/** Find exact bounds from the extrema-preserving indices returned by `extremaIndices`. */
+export function valueRangeAtIndices(values: ArrayLike<number>, indices: readonly number[]): [number, number] | null {
+  if (!indices.length) return null
+  let minimum = Infinity, maximum = -Infinity
+  for (const index of indices) {
+    const value = values[index]
+    if (value < minimum) minimum = value
+    if (value > maximum) maximum = value
+  }
+  return Number.isFinite(minimum) && Number.isFinite(maximum) ? [minimum, maximum] : null
+}
