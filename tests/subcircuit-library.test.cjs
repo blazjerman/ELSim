@@ -379,6 +379,9 @@ test('preserves ngspice conditional model variants as one selectable device mode
   assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL D1 D(Is=1n)\n.ELSE\n.MODEL D1 NMOS(Level=1)\n.ENDIF'), /same device type/)
   assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.ELSE\n.ELSEIF (B == 1)\n.ENDIF'), /no open \.IF branch/)
   assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.PARAM X=1\n.ENDIF'), /not supported inside an ngspice \.IF block/)
+  assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.FUNC SCALE(x) {x}\n.ENDIF\n.SUBCKT AMP IN OUT PARAMS: GAIN={SCALE(2)}\n.ENDS AMP'), /Line 2: \.FUNC is not supported inside an ngspice \.IF block/)
+  assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.OPTIONS reltol=.01\n.ENDIF'), /Line 2: \.OPTIONS is not supported inside an ngspice \.IF block/)
+  assert.doesNotThrow(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL DFAST D(IS=1n)\n.ENDIF'))
   assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL D1 D(Is=1n)'), /no matching \.ENDIF/)
 })
 
@@ -944,7 +947,7 @@ test('reports duplicate model names across imported files with both source locat
 
 test('reports duplicate imported measurement names only when they share an analysis', () => {
   const report = analyzeModelDependencies([
-    { id: 'measure-a', filename: 'measure-a.lib', content: '.MEAS TRAN shared_result MAX V(out)\n.MEAS AC shared_result MAX VM(out)\n.IF (MODE=1)\n.MEAS TRAN branch_result MAX V(out)\n.ELSE\n.MEASURE TRAN branch_result MIN V(out)\n.ENDIF' },
+    { id: 'measure-a', filename: 'measure-a.lib', content: '.MEAS TRAN shared_result MAX V(out)\n.MEAS AC shared_result MAX VM(out)' },
     { id: 'measure-b', filename: 'measure-b.lib', content: '.MEASURE TRAN SHARED_RESULT MIN V(out)\n.MEAS DC shared_result FIND V(out) AT=1' },
   ])
   assert.deepEqual(report.conflicts, [
@@ -955,9 +958,9 @@ test('reports duplicate imported measurement names only when they share an analy
   ])
 })
 
-test('reports duplicate top-level function names but ignores mutually exclusive conditional definitions', () => {
+test('reports duplicate top-level imported function names with both source locations', () => {
   const report = analyzeModelDependencies([
-    { id: 'function-a', filename: 'function-a.lib', content: '.FUNC gain(x) {x * 2}\n.IF (MODE=1)\n.FUNC branch_gain(x) {x * 2}\n.ELSE\n.FUNC branch_gain(x) {x * 3}\n.ENDIF' },
+    { id: 'function-a', filename: 'function-a.lib', content: '.FUNC gain(x) {x * 2}' },
     { id: 'function-b', filename: 'function-b.lib', content: '.FUNC GAIN(value) {value * 3}' },
   ])
   assert.deepEqual(report.conflicts, [
@@ -966,6 +969,12 @@ test('reports duplicate top-level function names but ignores mutually exclusive 
       { assetId: 'function-b', filename: 'function-b.lib', sourceLine: 1 },
     ] },
   ])
+})
+
+test('rejects ngspice directives that are not supported in conditional blocks', () => {
+  for (const directive of ['.FUNC SCALE(x) {x}', '.MEAS TRAN RESULT MAX V(out)', '.GLOBAL 0', '.OPTIONS reltol=.01']) {
+    assert.throws(() => parseSubcircuitLibrary(`.IF (MODE == 1)\n${directive}\n.ENDIF`), /Line 2: .* is not supported inside an ngspice \.IF block/, directive)
+  }
 })
 
 test('tracks ordered model references for common diode, transistor, JFET, MOSFET, and switch cards', () => {

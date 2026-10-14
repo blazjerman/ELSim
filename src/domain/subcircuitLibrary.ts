@@ -144,7 +144,7 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
       lines.push({ line, section: activeSection })
       continue
     }
-    if (conditionals.length && ['.end', '.lib', '.endl', '.subckt', '.ends', '.include', '.inc', '.param'].includes(directive)) {
+    if (conditionals.length && directive.startsWith('.') && !['.if', '.elseif', '.else', '.endif', '.model'].includes(directive)) {
       throw new Error(`Line ${line.start}: ${tokens[0]} is not supported inside an ngspice .IF block.`)
     }
     if (directive === '.end') {
