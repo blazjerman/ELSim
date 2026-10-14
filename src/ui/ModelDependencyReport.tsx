@@ -23,9 +23,9 @@ export function ModelDependencyReport({ analysis, onImport }: {
     {analysis.missingIncludes.length > 0 && <>
       <p>ELSim never reads paths from a model file. Import each referenced file into this project; imported file contents are added directly to the generated netlist.</p>
       <ul aria-label="Missing referenced model files">{analysis.missingIncludes.slice(0, visibleIncludeCount).map((include, index) => <li key={`${include.assetId}:${include.sourceLine}:${index}`}>
-        <code>{include.reference || '(empty include)'}</code> · {include.assetFilename}:{include.sourceLine} — {include.reason === 'missing' ? 'file not imported' : include.reason === 'ambiguous' ? 'matches multiple imported filenames' : 'path is unsupported; use a project-local relative path'}
+        <code>{include.reference || '(empty include)'}</code>{include.section && <> · section <code>{include.section}</code></>} · {include.assetFilename}:{include.sourceLine} — {include.reason === 'missing' ? 'file not imported' : include.reason === 'ambiguous' ? 'matches multiple imported filenames' : include.reason === 'section' ? 'section is missing or was not selected when the file was imported' : 'path is unsupported; use a project-local relative path'}
       </li>)}</ul>
-      {analysis.missingIncludes.some((include) => include.reason === 'missing') && <button className="place-model" onClick={onImport}>Import referenced model files</button>}
+      {analysis.missingIncludes.some((include) => include.reason === 'missing' || include.reason === 'section') && <button className="place-model" onClick={onImport}>Import referenced model files or sections</button>}
       {analysis.missingIncludes.length > visibleIncludeCount && <button className="place-model" onClick={() => setVisibleIncludeCount((count) => Math.min(count + PAGE_SIZE, analysis.missingIncludes.length))}>
         Show {Math.min(PAGE_SIZE, analysis.missingIncludes.length - visibleIncludeCount)} more referenced file{analysis.missingIncludes.length - visibleIncludeCount === 1 ? '' : 's'}
       </button>}

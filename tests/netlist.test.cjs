@@ -23,6 +23,19 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('project-local .LIB references flatten only the selected named section into the generated netlist', () => {
+  const project = createStarterProject()
+  project.modelAssets = [
+    { id: 'wrapper', filename: 'wrapper.lib', sha256: 'a'.repeat(64), content: '.LIB "devices.lib" fast\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'devices', filename: 'devices.lib', sha256: 'b'.repeat(64), content: '.LIB fast\n.MODEL FAST D(Is=1n)\n.ENDL fast\n.LIB slow\n.MODEL SLOW D(Is=10n)\n.ENDL slow\n', selectedSections: ['fast'], licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.MODEL FAST D\(Is=1n\)$/m)
+  assert.doesNotMatch(artifact.text, /\.MODEL SLOW/)
+  assert.doesNotMatch(artifact.text, /^\.LIB /m)
+})
+
 test('transient start-saving time reduces stored results without changing the zero-time solve', () => {
   const project = createStarterProject()
   project.simulation.startSavingTime = '20 ms'

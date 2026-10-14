@@ -2112,10 +2112,11 @@ test('project-local model includes and shared parameter records load through bro
   await modelInput.setInputFiles({
     name: 'amplifier.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.include "shared.lib"\n.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n'),
+    buffer: Buffer.from('.LIB "shared.lib" fast\n.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n'),
   })
   const dependencyReport = page.getByRole('region', { name: 'Model dependency report' })
   await expect(dependencyReport).toContainText('shared.lib')
+  await expect(dependencyReport).toContainText('section fast')
   await expect(dependencyReport).toContainText('file not imported')
   await expect(dependencyReport).toContainText('CORE')
 
@@ -2123,8 +2124,11 @@ test('project-local model includes and shared parameter records load through bro
   await modelInput.setInputFiles({
     name: 'shared.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.OPTIONS reltol=.005 trtol=8\n.PARAM RBASE=1k\n.FUNC TWICE(x) {2*x}\n.GLOBAL 0\n.SUBCKT CORE IN OUT\nR1 IN OUT {RBASE}\n.ENDS CORE\n'),
+    buffer: Buffer.from('.LIB fast\n.OPTIONS reltol=.005 trtol=8\n.PARAM RBASE=1k\n.FUNC TWICE(x) {2*x}\n.GLOBAL 0\n.SUBCKT CORE IN OUT\nR1 IN OUT {RBASE}\n.ENDS CORE\n.ENDL fast\n.LIB unused\n.MODEL UNUSED D(Is=10n)\n.ENDL unused\n'),
   })
+  const sectionDialog = page.getByRole('dialog', { name: 'Choose model sections' })
+  await sectionDialog.getByRole('checkbox', { name: 'Include section fast' }).check()
+  await sectionDialog.getByRole('button', { name: 'Import selected sections' }).click()
   await expect(dependencyReport).toHaveCount(0)
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlistDialog = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
@@ -2134,7 +2138,8 @@ test('project-local model includes and shared parameter records load through bro
   expect(netlist).toContain('.OPTIONS reltol=.005 trtol=8')
   expect(netlist).toContain('.FUNC TWICE(x) {2*x}')
   expect(netlist).toContain('.SUBCKT CORE IN OUT')
-  expect(netlist).not.toMatch(/^\.include/im)
+  expect(netlist).not.toContain('.MODEL UNUSED')
+  expect(netlist).not.toMatch(/^\.LIB /im)
   await netlistDialog.getByRole('button', { name: 'Close netlist' }).click()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })

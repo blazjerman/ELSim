@@ -47,6 +47,22 @@ test('project-local includes resolve against imported assets without filesystem 
   assert.match(sharedRecordsOnly.modelText, /\.FUNC TWICE/)
 })
 
+test('project-local .LIB references select named sections and retain their transitive assets', () => {
+  const wrapper = { id: 'wrapper', filename: 'wrapper.lib', content: '.LIB "devices.lib" fast\n.SUBCKT AMP IN OUT\nX1 IN OUT FAST\n.ENDS AMP' }
+  const devices = { id: 'devices', filename: 'devices.lib', content: '.LIB fast\n.SUBCKT FAST A B\nR1 A B 1k\n.ENDS FAST\n.ENDL fast\n.LIB slow\n.SUBCKT SLOW A B\nR1 A B 10k\n.ENDS SLOW\n.ENDL slow', selectedSections: ['fast'] }
+  const analysis = analyzeModelLibraries([wrapper, devices])
+  assert.deepEqual(analysis.assets[0].parsed.includes, [{ reference: 'devices.lib', filename: 'devices.lib', section: 'fast', sourceLine: 1 }])
+  assert.doesNotMatch(analysis.assets[0].parsed.modelText, /^\.LIB/im)
+  assert.deepEqual(analysis.dependencies.missingIncludes, [])
+  assert.deepEqual(analysis.dependencies.resolvedIncludes, [{ assetId: 'wrapper', targetAssetId: 'devices', reference: 'devices.lib', section: 'fast', sourceLine: 1 }])
+  assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'AMP' }])].sort(), ['devices', 'wrapper'])
+
+  const unselected = analyzeModelDependencies([wrapper, { ...devices, selectedSections: ['slow'] }])
+  assert.deepEqual(unselected.missingIncludes.map(({ reference, section, reason }) => ({ reference, section, reason })), [{ reference: 'devices.lib', section: 'fast', reason: 'section' }])
+  const unsafe = analyzeModelDependencies([{ ...wrapper, content: '.LIB ../outside.lib fast' }])
+  assert.equal(unsafe.missingIncludes[0].reason, 'unsafe')
+})
+
 test('preserves ngspice .OPTIONS cards in user model libraries', () => {
   const source = '.OPTIONS reltol=.005 trtol=8\n.MODEL DFAST D(Is=1n)'
   const parsed = parseSubcircuitLibrary(source)
@@ -423,7 +439,9 @@ test('rejects ambiguous or malformed model-library section wrappers explicitly',
   assert.throws(() => parseSubcircuitLibrary('.LIB fast\n.MODEL D1 D\n.ENDL fast\n.LIB slow\n.MODEL D2 D\n.ENDL slow'), /multiple \.LIB sections.*Select the section/i)
   assert.throws(() => parseSubcircuitLibrary('.LIB typical\n.MODEL D1 D\n.ENDL other'), /does not match/)
   assert.throws(() => parseSubcircuitLibrary('.MODEL D1 D\n.ENDL typical'), /no matching \.LIB/)
-  assert.throws(() => parseSubcircuitLibrary('.LIB models.lib typical'), /external \.LIB file references are not allowed/i)
+  const external = parseSubcircuitLibrary('.LIB models.lib typical')
+  assert.deepEqual(external.includes, [{ reference: 'models.lib', filename: 'models.lib', section: 'typical', sourceLine: 1 }])
+  assert.equal(external.modelText, '')
 })
 
 test('rejects nested includes, external .LIB references, executable, and whole-circuit directives', () => {

@@ -2,15 +2,15 @@ export type SubcircuitParameter = { name: string; defaultValue: string }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; startLine: number; endLine: number }
 export type SpiceModelDefinition = { name: string; type: string; parameters: SubcircuitParameter[]; startLine: number; endLine: number }
-export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number }
+export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
 export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
 export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string }
-export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number }
+export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number; section?: string }
 export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
-export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; reason: 'missing' | 'ambiguous' | 'unsafe' }
+export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; section?: string; reason: 'missing' | 'ambiguous' | 'unsafe' | 'section' }
 export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string> }
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
 export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInput> = { assets: { asset: T; parsed: ParsedSubcircuitLibrary }[]; dependencies: ModelDependencyAnalysis }
@@ -110,10 +110,12 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     if (!text || text.startsWith('*')) { lines.push({ line, section: activeSection }); continue }
     const tokens = text.split(/\s+/), directive = tokens[0].toLowerCase()
     if (directive === '.lib') {
-      const section = tokens[1]
       if (activeSubcircuit) throw new Error(`Line ${line.start}: .LIB directives are not allowed inside a .SUBCKT.`)
+      const external = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z_][A-Za-z0-9_-]*)$/i)
+      if (external) { lines.push({ line, section: activeSection }); continue }
       if (activeSection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
-      if (tokens.length !== 2 || !section || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) throw new Error(`Line ${line.start}: external .LIB file references are not allowed inside an imported library.`)
+      const section = tokens[1]
+      if (tokens.length !== 2 || !section || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(section)) throw new Error(`Line ${line.start}: malformed .LIB section or file reference.`)
       if (sections.some((known) => known.toLowerCase() === section.toLowerCase())) throw new Error(`Line ${line.start}: .LIB section ${section} is declared more than once.`)
       sections.push(section)
       activeSection = section
@@ -401,6 +403,21 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       includes.push({ reference, filename: match ? includedAssetBasename(reference) : null, sourceLine: line.start })
       continue
     }
+    if (directive === '.lib') {
+      if (active) throw new Error(`Line ${line.start}: .LIB file references must be outside a .SUBCKT.`)
+      const match = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([A-Za-z_][A-Za-z0-9_-]*)$/i)
+      if (!match) {
+        const tokens = text.split(/\s+/)
+        if (tokens.length !== 2 || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(tokens[1] ?? '')) throw new Error(`Line ${line.start}: malformed .LIB section or file reference.`)
+        const section = tokens[1]
+        if (activeLibrarySection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
+        activeLibrarySection = section
+        continue
+      }
+      const reference = match[1] ?? match[2] ?? match[3]
+      includes.push({ reference, filename: includedAssetBasename(reference), section: match[4], sourceLine: line.start })
+      continue
+    }
     if (forbidden.has(directive)) throw new Error(`Line ${line.start}: ${tokens[0]} is not allowed in an imported model library.`)
 
     if (active) {
@@ -527,8 +544,20 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       continue
     }
     const matches = parsedAssets.filter(({ asset: candidate }) => candidate.filename.split(/[\\/]/).at(-1)?.toLowerCase() === include.filename!.toLowerCase())
-    if (matches.length !== 1) missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: matches.length ? 'ambiguous' : 'missing' })
-    else resolvedIncludes.push({ assetId: asset.id, targetAssetId: matches[0].asset.id, reference: include.reference, sourceLine: include.sourceLine })
+    if (matches.length !== 1) {
+      missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: matches.length ? 'ambiguous' : 'missing' })
+      continue
+    }
+    const target = matches[0].asset
+    if (include.section) {
+      const availableSections = listModelLibrarySections(target.content)
+      const selectedSections = target.selectedSections ?? (availableSections.length === 1 ? availableSections : [])
+      if (!availableSections.some((section) => section.toLowerCase() === include.section!.toLowerCase()) || !selectedSections.some((section) => section.toLowerCase() === include.section!.toLowerCase())) {
+        missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: 'section' })
+        continue
+      }
+    }
+    resolvedIncludes.push({ assetId: asset.id, targetAssetId: target.id, reference: include.reference, ...(include.section ? { section: include.section } : {}), sourceLine: include.sourceLine })
   }
   const graph = new Map<string, Set<string>>()
   for (const { asset, parsed } of parsedAssets) for (const dependency of parsed.dependencies) {
