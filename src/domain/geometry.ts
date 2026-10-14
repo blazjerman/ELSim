@@ -355,20 +355,21 @@ export function projectPinLocations(project: Pick<Project, 'parts'>): PinLocatio
 export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'>, cachedPins?: readonly PinLocation[]): Point[] {
   const pins = cachedPins ?? projectPinLocations(project)
   const cellSize = 64
-  const cellKey = (x: number, y: number) => `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`
-  const segmentCells = new Map<string, Wire[]>()
+  const segmentCells = new Map<number, Map<number, Wire[]>>()
+  const addSegmentCell = (x: number, y: number, wire: Wire) => {
+    let row = segmentCells.get(x)
+    if (!row) { row = new Map(); segmentCells.set(x, row) }
+    const bucket = row.get(y)
+    if (bucket) bucket.push(wire)
+    else row.set(y, [wire])
+  }
   const longSegments: Wire[] = []
   for (const wire of project.wires) {
     const [[x1, y1], [x2, y2]] = wire.points
     const minX = Math.floor(Math.min(x1, x2) / cellSize), maxX = Math.floor(Math.max(x1, x2) / cellSize)
     const minY = Math.floor(Math.min(y1, y2) / cellSize), maxY = Math.floor(Math.max(y1, y2) / cellSize)
     if ((maxX - minX + 1) * (maxY - minY + 1) > 256) { longSegments.push(wire); continue }
-    for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
-      const key = `${x}:${y}`
-      const bucket = segmentCells.get(key)
-      if (bucket) bucket.push(wire)
-      else segmentCells.set(key, [wire])
-    }
+    for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) addSegmentCell(x, y, wire)
   }
   const onWire = (point: Point, wire: Wire) => {
     const [[x1, y1], [x2, y2]] = wire.points
@@ -388,21 +389,23 @@ export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'
   const hasWireAt = (point: Point, excludedWireId?: string) => {
     const matches = (wire: Wire) => wire.id !== excludedWireId && onWire(point, wire)
     for (const wire of longSegments) if (matches(wire)) return true
-    for (const wire of segmentCells.get(cellKey(point.x, point.y)) ?? []) if (matches(wire)) return true
+    for (const wire of segmentCells.get(Math.floor(point.x / cellSize))?.get(Math.floor(point.y / cellSize)) ?? []) if (matches(wire)) return true
     return false
   }
-  const pinCells = new Map<string, PinLocation[]>()
+  const pinCells = new Map<number, Map<number, PinLocation[]>>()
   for (const pin of pins) {
-    const key = cellKey(pin.x, pin.y)
-    const bucket = pinCells.get(key)
+    const x = Math.floor(pin.x / cellSize), y = Math.floor(pin.y / cellSize)
+    let row = pinCells.get(x)
+    if (!row) { row = new Map(); pinCells.set(x, row) }
+    const bucket = row.get(y)
     if (bucket) bucket.push(pin)
-    else pinCells.set(key, [pin])
+    else row.set(y, [pin])
   }
   const hasPinAt = (point: Point) => {
     const minX = Math.floor((point.x - 0.5) / cellSize), maxX = Math.floor((point.x + 0.5) / cellSize)
     const minY = Math.floor((point.y - 0.5) / cellSize), maxY = Math.floor((point.y + 0.5) / cellSize)
     for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) {
-      for (const pin of pinCells.get(`${x}:${y}`) ?? []) {
+      for (const pin of pinCells.get(x)?.get(y) ?? []) {
         const dx = pin.x - point.x, dy = pin.y - point.y
         if (dx * dx + dy * dy < 0.25) return true
       }

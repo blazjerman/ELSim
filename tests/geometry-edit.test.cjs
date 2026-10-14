@@ -133,6 +133,21 @@ test('wire-connection dot broadphase preserves exact pin, T-join, and crossing g
   assert.deepEqual(wireConnectionDotPoints(project).map(({ x, y }) => [x, y]), [[-50, 0], [50, 0], [0, 0]])
 })
 
+test('wire-connection dot spatial cells support large positive and negative coordinates', () => {
+  const project = createStarterProject()
+  project.parts = []
+  project.wires = [
+    { id: 'positive-a', points: [[1_000_000_000, 0], [1_000_000_100, 0]] },
+    { id: 'positive-b', points: [[1_000_000_100, 0], [1_000_000_100, 100]] },
+    { id: 'negative-a', points: [[-1_000_000_000, 0], [-999_999_900, 0]] },
+    { id: 'negative-b', points: [[-999_999_900, 0], [-999_999_900, 100]] },
+  ]
+  assert.deepEqual(wireConnectionDotPoints(project), [
+    { x: 1_000_000_100, y: 0 },
+    { x: -999_999_900, y: 0 },
+  ])
+})
+
 test('point viewport index matches padded full-scan membership and source order', () => {
   const points = Array.from({ length: 500 }, (_, index) => ({ x: (index % 25) * 80 - 960, y: Math.floor(index / 25) * 80 - 760, id: `dot-${index}` }))
   points.push({ x: 255, y: 255, id: 'cell-edge' }, { x: -255, y: -255, id: 'negative-cell-edge' })
