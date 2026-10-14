@@ -1000,7 +1000,7 @@ test('keyboard focus remains visible in search, analysis, inspector, expandable 
   await expectFocusRing(closeExamples)
 })
 
-test('waveform window title, plot, and navigation retain visible keyboard focus', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('waveform window title, plot, and navigation retain visible keyboard focus', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
@@ -1070,7 +1070,7 @@ test('closing floating waveform windows restores keyboard focus', { tag: '@ui-sm
   await expect(page.locator('.schematic')).toBeFocused()
 })
 
-test('keyboard waveform cursor announces the selected time and trace readings', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('keyboard waveform cursor announces the selected time and trace readings', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
@@ -1311,7 +1311,7 @@ test('LTspice parameter arithmetic imports while unsupported expressions are pre
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).importedSchematicSource.originalText)).toBe(source)
 })
 
-test('quick tour can edit a component value and run the changed circuit', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('quick tour can edit a component value and run the changed circuit', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -1623,7 +1623,7 @@ test('placing a reusable hierarchical block keeps it visible in the current view
   await block.click()
 })
 
-test('project-local model includes and shared parameter records load through browser ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('project-local model includes and shared parameter records load through browser ngspice', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
@@ -2187,7 +2187,7 @@ test('transient start-saving time is persisted and appears in the generated netl
   })).toEqual(['20 ms', '2.000000e-5 s'])
 })
 
-test('ngspice stores transient results only after the selected start time', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('ngspice stores transient results only after the selected start time', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Use the existing local ngspice WASM runtime').toEqual([])
   await page.goto('/')
@@ -2234,7 +2234,7 @@ test('wire current animation keeps moving while transient playback advances', as
   expect(Math.abs(after - before)).toBeGreaterThan(1)
 })
 
-test('viewport culling removes off-screen wire flows and restores them when the circuit is fit', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('viewport culling removes off-screen wire flows and restores them when the circuit is fit', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
@@ -2277,7 +2277,7 @@ test('viewport culling removes off-screen wire flows and restores them when the 
   await expect.poll(() => flow.count()).toBeLessThan(fittedFlowCount)
 })
 
-test('ngspice current animates through the grounded RC return wire', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('ngspice current animates through the grounded RC return wire', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -3979,7 +3979,7 @@ test('LTspice capacitor SpiceLine IC starts the ngspice transient at its importe
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(out\) = 2(?:\.0+)? V/)
 })
 
-test('capacitor initial voltage editor starts the transient at the requested voltage', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('capacitor initial voltage editor starts the transient at the requested voltage', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
@@ -3997,7 +3997,7 @@ test('capacitor initial voltage editor starts the transient at the requested vol
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 2(?:\.0+)? V/)
 })
 
-test('capacitor plate animation expands with charge from the solved waveform', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('capacitor plate animation expands with charge from the solved waveform', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -4021,7 +4021,7 @@ test('capacitor plate animation expands with charge from the solved waveform', {
   await expect(capacitor.locator(':scope > title')).toContainText('Q = C × V =')
 })
 
-test('capacitor discharge lesson compares solved RC decay before and after a resistor change', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('capacitor discharge lesson compares solved RC decay before and after a resistor change', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
@@ -4749,7 +4749,7 @@ test('RLC example opens and solves with capacitor-voltage and inductor-current p
   await expect(page.locator('.component-current-flow')).toHaveCount(0)
 })
 
-test('LC energy lesson shows capacitor charge exchanging with inductor current', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('LC energy lesson shows capacitor charge exchanging with inductor current', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(60_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser workflow').toEqual([])
@@ -4857,7 +4857,7 @@ test('inductor current ramp lesson shows gradual current rise and decay after th
   expect(currentWith50mHAtHalfMs).toBeLessThan(currentWith100mHAtHalfMs * 2.05)
 })
 
-test('flyback diode carries inductor current after the source pulse turns off', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('flyback diode carries inductor current after the source pulse turns off', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -4929,7 +4929,7 @@ test('voltage-divider example teaches and solves the equal-resistor midpoint', {
   await expect(page.locator('.example-lesson-next-step')).toContainText('divider formula predicts VOUT = 6.667 V; ngspice solved 6.667 V')
 })
 
-test('loaded voltage-divider lesson predicts and verifies how RLOAD pulls down VOUT', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('loaded voltage-divider lesson predicts and verifies how RLOAD pulls down VOUT', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -4971,7 +4971,7 @@ test('loaded voltage-divider lesson predicts and verifies how RLOAD pulls down V
   await expect(lesson).toContainText('0.476 mA through RLOAD')
 })
 
-test('parallel-resistor lesson predicts, solves, and compares branch current division', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('parallel-resistor lesson predicts, solves, and compares branch current division', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -5025,7 +5025,7 @@ test('parallel-resistor lesson predicts, solves, and compares branch current div
   await expect(lesson).toContainText('15 mA from V1 versus 15 mA from R1 + R2')
 })
 
-test('supply-droop lesson compares a light and heavy load using ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('supply-droop lesson compares a light and heavy load using ngspice', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -5057,7 +5057,7 @@ test('supply-droop lesson compares a light and heavy load using ngspice', { tag:
   await expect(lesson).toContainText('ngspice solved 2.5 V')
 })
 
-test('series-resistor lesson predicts equal current and voltage drops, then verifies an edit', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('series-resistor lesson predicts equal current and voltage drops, then verifies an edit', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -5089,7 +5089,7 @@ test('series-resistor lesson predicts equal current and voltage drops, then veri
   await expect(lesson).toContainText('ngspice solved 5 V')
 })
 
-test('resistor-power lesson predicts electrical dissipation and checks it against ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('resistor-power lesson predicts electrical dissipation and checks it against ngspice', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -5122,7 +5122,7 @@ test('resistor-power lesson predicts electrical dissipation and checks it agains
   await expect(lesson).toContainText('Ngspice solved 50 mA through R1, giving 250 mW')
 })
 
-test("Ohm's law lesson compares predicted and solved current", { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test("Ohm's law lesson compares predicted and solved current", { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -5632,7 +5632,7 @@ test('LED current-limiter example explains and solves its resistor-limited curre
   await expect(page.locator('.plot-window').getByRole('row', { name: /I\(D1\)/i })).toBeVisible()
 })
 
-test('parallel LED lesson shows separate branch currents and the effect of one resistor', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('parallel LED lesson shows separate branch currents and the effect of one resistor', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser workflow').toEqual([])
   await page.goto('/')
@@ -5760,7 +5760,7 @@ test('diode rectifier example clips the negative half-cycle in the browser engin
   expect(Math.abs(blockedOutput)).toBeLessThan(0.01)
 })
 
-test('diode polarity lesson compares forward conduction with reverse blocking', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('diode polarity lesson compares forward conduction with reverse blocking', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -5795,7 +5795,7 @@ test('diode polarity lesson compares forward conduction with reverse blocking', 
   expect(reverseCurrentMa).toBeLessThan(forwardCurrentMa / 1000)
 })
 
-test('manual switch lesson updates lamp current when the circuit opens and closes', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('manual switch lesson updates lamp current when the circuit opens and closes', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -5877,7 +5877,7 @@ test('bridge rectifier example keeps capacitor voltage positive between AC peaks
   await expect(page.locator('.example-lesson-next-step')).toContainText('about 46.8%')
 })
 
-test('NPN common-emitter lesson shows amplified, inverted AC output', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('NPN common-emitter lesson shows amplified, inverted AC output', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
@@ -7633,7 +7633,7 @@ test('lamp glow renders from its definition animation at solved electrical power
   await expect(page.locator('.circuit-part[data-part-id="isource-r1"] .lamp-glow-outline')).toHaveCount(1)
 })
 
-test('lamp-power lesson compares predicted power, ngspice current, and the result-driven glow', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('lamp-power lesson compares predicted power, ngspice current, and the result-driven glow', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice runtime before running this browser test').toEqual([])
   await page.goto('/')
