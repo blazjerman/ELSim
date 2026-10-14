@@ -167,6 +167,7 @@
             "behavioral",
             "inverter",
             "logicGate",
+            "opamp",
             "npn",
             "pnp",
             "nmos",

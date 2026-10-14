@@ -7,7 +7,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createSineWaveExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createNonInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPnpSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSuperpositionExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTheveninNortonExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createSineWaveExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createEducationalOpampExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createNonInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPnpSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSuperpositionExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTheveninNortonExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -229,6 +229,21 @@ test('imported op-amp example includes its user model and ordered five-pin insta
   assert.match(artifact.text, /^XU1 VIN FB VPOS VNEG VOUT ELSIM_EDU_OPAMP$/m)
   assert.match(artifact.text, /^\.SUBCKT ELSIM_EDU_OPAMP INP INM VPOS VNEG OUT$/m)
   assert.match(artifact.text, /^\.op$/m)
+})
+
+test('built-in educational op-amp expands as a supply-limited X instance with a current probe vector', () => {
+  const project = validateProject(createEducationalOpampExampleProject())
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.modelAssets.length, 0)
+  assert.equal(project.symbolAssets.length, 0)
+  assert.equal(project.parts.find((part) => part.kind === 'opamp').componentDefinitionId, 'elsim.educational-opamp')
+  assert.match(artifact.text, /^XU1 VIN FB VPOS VNEG VOUT ELSIM_EDUCATIONAL_OPAMP$/m)
+  assert.match(artifact.text, /^\.subckt ELSIM_EDUCATIONAL_OPAMP INP INM VPOS VNEG OUT$/im)
+  assert.match(artifact.text, /^BGAIN NDRIVE 0 V=\{max\(min\(1e6\*\(V\(INP\)-V\(INM\)\),V\(VPOS\)\),V\(VNEG\)\)\}$/m)
+  assert.match(artifact.text, /^\.save @r\.xu1\.rout\[i\]$/m)
+  const { componentCurrentVector } = require(path.join(build, 'domain/probe.js'))
+  assert.equal(componentCurrentVector({ kind: 'opamp', ref: 'U1' }), 'i(@r.xU1.rout[i])')
 })
 
 test('inverting op-amp lesson wires negative feedback and its resistor ratio', () => {

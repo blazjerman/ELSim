@@ -24,10 +24,10 @@ export type LtspiceExportResult = {
 const encoder = new TextEncoder()
 const refPrefix: Record<PartKind, string> = {
   source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'R', voltageSwitch: 'S',
-  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
+  vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'X', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
 }
 const genericPrefix: Partial<Record<PartKind, string>> = {
-  source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', zener: 'D', led: 'D', switch: 'R', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
+  source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', inductor: 'L', diode: 'D', zener: 'D', led: 'D', switch: 'R', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'X', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X',
 }
 
 function safeStem(value: string, fallback: string): string {
@@ -889,6 +889,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
     if (sheet.ports.length > 0 && sheet.ports.some((port) => !sheet.netLabels.some((label) => label.name.toLowerCase() === port.name.toLowerCase()))) blockers.push({ sourceId: sheet.id, message: `${sheet.name} has a port without a matching named label.` })
     for (const part of sheet.parts) {
       if (part.kind === 'voltageSwitch') blockers.push({ sourceId: part.id, message: 'Voltage-controlled switch export is not implemented.' })
+      if (part.kind === 'opamp') blockers.push({ sourceId: part.id, message: 'The ELSim educational op-amp model is generated in the ELSim netlist and is not included in this export.' })
       if (part.kind === 'logicGate' || part.kind === 'inverter') blockers.push({ sourceId: part.id, message: 'Ideal logic-gate export is not implemented; the ELSim voltage threshold and output model are not translated to LTspice.' })
       if (part.kind === 'behavioral') {
         try {

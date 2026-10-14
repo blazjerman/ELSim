@@ -48,6 +48,7 @@
         "behavioral",
         "inverter",
         "logicGate",
+        "opamp",
         "npn",
         "pnp",
         "subcircuit",

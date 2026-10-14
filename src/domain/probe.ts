@@ -12,6 +12,7 @@ export function transformerWindingCurrentVector(ref: string, winding: 'P' | 'S')
 
 export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref'>): string {
   if (part.kind === 'source') return `i(${part.ref})`
+  if (part.kind === 'opamp') return `i(@r.x${part.ref}.rout[i])`
   if (part.kind === 'currentSource') return `i(@${part.ref}[current])`
   if (part.kind === 'transformer') return transformerWindingCurrentVector(part.ref, 'P')
   if (part.kind === 'potentiometer') return `i(@R${part.ref}_A[i])`

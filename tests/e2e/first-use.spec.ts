@@ -289,7 +289,7 @@ test('keyboard shortcut reference matches editor controls and restores focus', {
   await expect(dialog.getByText('Polarized capacitor', { exact: true })).toBeVisible()
   await expect(dialog.locator('kbd').filter({ hasText: /^c$/ })).toHaveCount(1)
   await expect(dialog.locator('kbd').filter({ hasText: /^C$/ })).toHaveCount(1)
-  await expect(dialog.getByText(/Operational amplifier/)).toBeVisible()
+  await expect(dialog.getByText(/Idealized op-amp/)).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(trigger).toBeFocused()
@@ -2476,7 +2476,7 @@ test('component shortcuts are case-sensitive and logic-gate keys select their ma
     ['i', 'Current source'], ['Shift+S', 'Voltage-controlled switch'], ['d', 'Diode'], ['z', 'Zener diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
     ['Shift+G', 'VCCS'], ['Shift+F', 'CCCS'], ['Shift+H', 'CCVS'], ['b', 'Behavioral source'], ['n', 'NPN transistor'],
     ['p', 'PNP transistor'], ['j', 'N-channel JFET'], ['Shift+J', 'P-channel JFET'], ['N', 'N-channel MOSFET'],
-    ['P', 'P-channel MOSFET'], ['6', 'N-channel power MOSFET'], ['7', 'P-channel power MOSFET'], ['g', 'Ground'],
+    ['P', 'P-channel MOSFET'], ['6', 'N-channel power MOSFET'], ['7', 'P-channel power MOSFET'], ['g', 'Ground'], ['a', 'Idealized op-amp'],
   ]
   for (const [shortcut, label] of shortcuts) {
     const card = page.locator('.component-card').filter({ has: page.locator('.component-label').getByText(label, { exact: true }) })
@@ -2487,7 +2487,7 @@ test('component shortcuts are case-sensitive and logic-gate keys select their ma
   await page.keyboard.press('Shift+C')
   await expect(page.locator('.component-card').filter({ hasText: 'Capacitor' })).toHaveAttribute('aria-pressed', 'true')
   await page.keyboard.press('Escape')
-  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+V', 'One-terminal voltage source'], ['a', 'Operational amplifier'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output']] as const) {
+  for (const [shortcut, label] of [['Shift+R', 'Relay'], ['Shift+V', 'One-terminal voltage source'], ['Shift+A', 'Alternate operational amplifier'], ['Shift+I', 'Logic input'], ['Shift+O', 'Logic output']] as const) {
     await page.keyboard.press(shortcut)
     await expect(page.locator('.toast')).toContainText(`${label} is reserved for a future component`)
   }
@@ -6333,6 +6333,46 @@ test('save and reopen an imported IC with two waveform traces in a fresh browser
   } finally {
     await context.close()
   }
+})
+
+test('built-in educational op-amp uses its supply pins, feedback, and current probe without imported assets', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Advanced' }).click()
+  await dialog.locator('article[data-example-id="educational-opamp"]').getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Idealized op-amp amplifier')
+  await expect(page.getByLabel('Guided example')).toContainText('not a specific IC')
+  await expect(page.locator('.circuit-part[data-part-id="educational-opamp-u1"]')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return { modelAssets: project.modelAssets, symbolAssets: project.symbolAssets, opamp: project.parts.find((part: { kind: string }) => part.kind === 'opamp')?.ref }
+  })).toEqual({ modelAssets: [], symbolAssets: [], opamp: 'U1' })
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await page.locator('.circuit-part[data-part-id="educational-opamp-u1"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
+  const currentChooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
+  await currentChooser.getByRole('button', { name: /New waveform window/ }).click()
+  const plot = page.locator('.plot-window').last()
+  await expect(plot.locator('.trace-toggles button', { hasText: 'I(r.xu1.rout)' })).toBeVisible()
+  await expect(plot.locator('.op-table').getByRole('row', { name: /I\(r\.xu1\.rout\)/i })).toContainText('0.001199')
+  const plotTitle = plot.locator('.plot-window-title')
+  const titleBounds = await plotTitle.boundingBox()
+  expect(titleBounds).not.toBeNull()
+  await page.mouse.move(titleBounds!.x + titleBounds!.width / 2, titleBounds!.y + titleBounds!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(20, titleBounds!.y + titleBounds!.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await page.locator('.canvas-label[data-net-label-id="educational-opamp-output"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot voltage to ground' }).click()
+  const outputChooser = page.getByRole('dialog', { name: /V\(vout\)/i })
+  await outputChooser.getByRole('button', { name: /Add to current window/ }).click()
+  await expect(plot.locator('.trace-toggles button', { hasText: 'V(VOUT)' })).toBeVisible()
+  await expect(plot.locator('.op-table').getByRole('row', { name: /V\(vout\)/i })).toContainText('1.999')
 })
 
 test('inverting op-amp lesson demonstrates negative feedback gain', { tag: '@ngspice' }, async ({ page }) => {

@@ -187,6 +187,46 @@ export function createNonInvertingOpampExampleProject(): Project {
   return project
 }
 
+/** A model-free example using ELSim's documented, idealized built-in op-amp. */
+export function createEducationalOpampExampleProject(): Project {
+  const project = createStarterProject()
+  const amp: Part = { id: 'educational-opamp-u1', kind: 'opamp', componentDefinitionId: 'elsim.educational-opamp', ref: 'U1', value: '', x: 520, y: 400, rotation: 0 }
+  const input: Part = { id: 'educational-opamp-vin', kind: 'source', ref: 'VIN', value: '1 V', sourceMode: 'dc', x: 200, y: 400, rotation: 0 }
+  const positiveSupply: Part = { id: 'educational-opamp-vcc', kind: 'source', ref: 'VCC', value: '5 V', sourceMode: 'dc', x: 400, y: 200, rotation: 0 }
+  const negativeSupply: Part = { id: 'educational-opamp-vee', kind: 'source', ref: 'VEE', value: '-5 V', sourceMode: 'dc', x: 640, y: 200, rotation: 0 }
+  const lower: Part = { id: 'educational-opamp-rg', kind: 'resistor', ref: 'RG', value: '1 kΩ', x: 360, y: 520, rotation: 0 }
+  const feedback: Part = { id: 'educational-opamp-rf', kind: 'resistor', ref: 'RF', value: '1 kΩ', x: 700, y: 350, rotation: 90 }
+  const load: Part = { id: 'educational-opamp-rload', kind: 'resistor', ref: 'RLOAD', value: '10 kΩ', x: 800, y: 550, rotation: 90 }
+  const parts = [input, positiveSupply, negativeSupply, amp, lower, feedback, load]
+  const atPin = (id: string, name: string, part: Part, index: number) => {
+    const point = componentPins(part)[index]
+    return { id, name, x: point.x, y: point.y, visible: true }
+  }
+  project.name = 'Idealized op-amp amplifier'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = [
+    atPin('educational-opamp-vin-source', 'VIN', input, 0), atPin('educational-opamp-vin-return', '0', input, 1),
+    atPin('educational-opamp-vcc-source', 'VPOS', positiveSupply, 0), atPin('educational-opamp-vcc-return', '0', positiveSupply, 1),
+    atPin('educational-opamp-vee-source', 'VNEG', negativeSupply, 0), atPin('educational-opamp-vee-return', '0', negativeSupply, 1),
+    atPin('educational-opamp-input-positive', 'VIN', amp, 0), atPin('educational-opamp-input-negative', 'FB', amp, 1),
+    atPin('educational-opamp-supply-positive', 'VPOS', amp, 2), atPin('educational-opamp-supply-negative', 'VNEG', amp, 3),
+    atPin('educational-opamp-output', 'VOUT', amp, 4), atPin('educational-opamp-rg-top', 'FB', lower, 0),
+    atPin('educational-opamp-rg-return', '0', lower, 1), atPin('educational-opamp-rf-output', 'VOUT', feedback, 0),
+    atPin('educational-opamp-rf-feedback', 'FB', feedback, 1), atPin('educational-opamp-load-output', 'VOUT', load, 0),
+    atPin('educational-opamp-load-return', '0', load, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels: project.netLabels }]
+  project.modelAssets = []
+  project.symbolAssets = []
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(FB)', 'V(VOUT)', 'I(RLOAD)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -20, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A beginner AC lesson that uses an NPN stage to demonstrate gain and phase inversion. */
 export function createCommonEmitterExampleProject(): Project {
   const project = createStarterProject()

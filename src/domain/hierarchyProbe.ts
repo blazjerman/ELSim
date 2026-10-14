@@ -50,6 +50,7 @@ export function hierarchyComponentCurrentVector(project: Project, sheetId: strin
   if (sheet.id !== sheetId) return null
   const part = sheet.parts.find((candidate) => candidate.id === partId)
   if (!part || part.kind === 'ground' || part.kind === 'subcircuit') return null
+  if (part.kind === 'opamp') return `i(@r.${[...refs, `x${part.ref.toLowerCase()}`, 'rout'].join('.')}[i])`
   if (part.kind === 'source') {
     const device = [...refs, part.ref.toLowerCase()].join('.')
     return `i(${refs.length ? `v.${device}` : part.ref.toLowerCase()})`

@@ -122,6 +122,8 @@ function hierarchicalSaveVectors(project: Project): string[] {
       if (part.kind === 'transformer') {
         saves.add(`.save i(l.${device}_p)`)
         saves.add(`.save i(l.${device}_s)`)
+      } else if (part.kind === 'opamp') {
+        saves.add(`.save @r.${[...path, `x${part.ref.toLowerCase()}`, 'rout'].join('.')}[i]`)
       } else if (part.kind === 'potentiometer') {
         saves.add(`.save @r.${[...path, `${part.ref.toLowerCase()}_a`].join('.')}[i]`)
         saves.add(`.save @r.${[...path, `${part.ref.toLowerCase()}_b`].join('.')}[i]`)
@@ -153,6 +155,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   let usesDiode = false
   let usesZener = false
   let usesSwitch = false
+  let usesEducationalOpamp = false
   const voltageSwitchModels: { name: string; onResistance: string; offResistance: string; threshold: string; hysteresis: string }[] = []
   const transistorModels: { part: Part; name: string }[] = []
   const jfetModels: { part: Part; name: string }[] = []
@@ -208,13 +211,13 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
-    const value = part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
+    const value = part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' || part.kind === 'opamp' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
     const passiveModelType = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined
     const passiveModel = part.deviceModel ? parsedModelAssets.flatMap((library) => library.models).find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
     const passiveDefaultParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
     const passiveModelSuppliesValue = Boolean(passiveModelType && passiveModel?.type.toLowerCase() === passiveModelType && passiveDefaultParameter && passiveModel.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
     const valueCanBeModelDefault = value === null && part.value.trim() === '' && passiveModelSuppliesValue
-    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && value === null && !valueCanBeModelDefault) {
+    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && value === null && !valueCanBeModelDefault) {
       const message = `${part.ref} has an invalid numeric value${passiveDefaultParameter && part.value.trim() === '' ? ` (no compatible model with ${passiveDefaultParameter.toUpperCase()} default)` : ''}.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -583,6 +586,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       append(`${part.ref} ${positive} ${gate} ${source} ${importedModel.name}`, part.id, 'component')
     }
+    else if (part.kind === 'opamp') {
+      const nodes = [0, 1, 2, 3, 4].map((pin) => pinNet(connectivity, part, pin))
+      append(`X${part.ref} ${nodes.join(' ')} ELSIM_EDUCATIONAL_OPAMP`, part.id, 'component')
+      usesEducationalOpamp = true
+    }
     else if (part.kind === 'subcircuit') {
       const definition = subcircuitsByName.get(part.modelName?.toLowerCase() ?? '')
       if (!definition || !part.modelPins || definition.pins.length !== part.modelPins.length || definition.pins.some((pin, index) => pin.toLowerCase() !== part.modelPins?.[index]?.toLowerCase())) {
@@ -729,6 +737,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   for (const { part, name } of transistorModels) append(`.model ${name} ${part.kind === 'npn' ? 'NPN' : 'PNP'}(IS=1e-14 BF=${part.value} VAF=100 CJE=10p CJC=5p TF=300p TR=10n)`, `model:${name}`, 'model')
   for (const { part, name } of jfetModels) append(`.model ${name} ${part.kind === 'njfet' ? 'NJF (VTO=-2 BETA=1m' : 'PJF (VTO=2 BETA=1m'} LAMBDA=0.02)`, `model:${name}`, 'model')
   for (const { part, name } of mosfetModels) append(`.model ${name} ${part.kind === 'nmos' ? 'NMOS' : 'PMOS'} (LEVEL=1 VTO=${part.kind === 'nmos' ? '2' : '-2'} KP=20u LAMBDA=0.02)`, `model:${name}`, 'model')
+  if (usesEducationalOpamp) {
+    append('.subckt ELSIM_EDUCATIONAL_OPAMP INP INM VPOS VNEG OUT', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    append('RINP INP VNEG 1T', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    append('RINM INM VNEG 1T', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    append('BGAIN NDRIVE 0 V={max(min(1e6*(V(INP)-V(INM)),V(VPOS)),V(VNEG))}', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    append('ROUT NDRIVE OUT 50', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    append('.ends ELSIM_EDUCATIONAL_OPAMP', 'model:ELSIM_EDUCATIONAL_OPAMP', 'model')
+    for (const part of project.parts.filter((candidate) => candidate.kind === 'opamp')) append(`.save @r.x${part.ref.toLowerCase()}.rout[i]`, part.id, 'generated')
+  }
   if (generatedSheetLibrary) for (const line of generatedSheetLibrary.split('\n').filter(Boolean)) append(line, 'hierarchy:generated', 'model')
   if (project.simulation.analysis === 'op') {
     append('.op', 'analysis:op', 'analysis')
@@ -841,7 +858,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 

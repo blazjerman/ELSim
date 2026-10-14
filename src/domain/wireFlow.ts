@@ -54,6 +54,14 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
     const current = currentForPin?.(part, pinIndex)
     return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex === 2 ? current : -current }
   }
+  if (part.kind === 'opamp') {
+    const current = currentForPart(part)
+    if (current === undefined || !Number.isFinite(current)) return {}
+    if (pinIndex === 2) return { value: current > 0 ? -current : 0 }
+    if (pinIndex === 3) return { value: current < 0 ? -current : 0 }
+    if (pinIndex === 4) return { value: current }
+    return { value: 0 }
+  }
   if (part.kind === 'inverter' || part.kind === 'logicGate') {
     const current = currentForPart(part)
     const outputPin = part.kind === 'inverter' ? 1 : 2
