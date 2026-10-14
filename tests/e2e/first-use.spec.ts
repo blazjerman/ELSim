@@ -1061,6 +1061,15 @@ test('keyboard focus remains visible in search, analysis, inspector, expandable 
   const closeExamples = examplesDialog.getByRole('button', { name: 'Close examples' })
   await expect(closeExamples).toBeFocused()
   await expectFocusRing(closeExamples)
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  await page.getByRole('button', { name: 'AC & reactive' }).click()
+  await page.locator('article[data-example-id="sine-wave"]').getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  const amplitudePrediction = page.getByLabel('Guided example').locator('#sine-wave-amplitude-prediction')
+  await amplitudePrediction.focus()
+  await expect(amplitudePrediction).toBeFocused()
+  await expectFocusRing(amplitudePrediction)
 })
 
 test('waveform window title, plot, and navigation retain visible keyboard focus', { tag: '@ngspice' }, async ({ page }) => {
