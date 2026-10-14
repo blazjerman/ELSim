@@ -940,7 +940,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
   }, [])
   const svg = useRef<SVGSVGElement>(null)
   const [viewportSize, setViewportSize] = useState({ width: 760, height: 600 })
-  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; transform?: SchematicTransform; additive?: boolean; pointIndex?: number; points?: [number, number][]; group?: { parts: Part[]; wires: Project['wires']; netLabels: Project['netLabels'] }; previewInitialized?: boolean } | null>(null)
+  const drag = useRef<{ kind: 'part' | 'wire' | 'wire-point' | 'wire-create' | 'label' | 'pan' | 'box-select'; id: string; pointer: number; x: number; y: number; originX: number; originY: number; screenX?: number; screenY?: number; lastClientX?: number; lastClientY?: number; transform?: SchematicTransform; additive?: boolean; pointIndex?: number; points?: [number, number][]; group?: { parts: Part[]; wires: Project['wires']; netLabels: Project['netLabels'] }; previewInitialized?: boolean } | null>(null)
   const dragPreviewElements = useRef<{ element: SVGGElement; transform: string | null }[]>([])
   const wirePointPreview = useRef<{ attributes: { element: Element; values: [string, string | null][] }[] } | null>(null)
   const suppressCanvasClick = useRef(false)
@@ -1187,13 +1187,46 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     x: ((event.clientX - transform.left - transform.offsetX) / transform.scale) + transform.viewX,
     y: ((event.clientY - transform.top - transform.offsetY) / transform.scale) + transform.viewY,
   })
-  useLayoutEffect(() => {
+  const pointFromClient = (clientX: number, clientY: number, transform: SchematicTransform) => ({
+    x: ((clientX - transform.left - transform.offsetX) / transform.scale) + transform.viewX,
+    y: ((clientY - transform.top - transform.offsetY) / transform.scale) + transform.viewY,
+  })
+  const refreshDragTransform = () => {
     const activeDrag = drag.current
-    if (!activeDrag || activeDrag.kind === 'pan') return
+    if (!activeDrag) return
+    const previousTransform = activeDrag.transform
+    const nextTransform = captureSchematicTransform()
+    const clientX = activeDrag.lastClientX ?? activeDrag.x
+    const clientY = activeDrag.lastClientY ?? activeDrag.y
+    if (activeDrag.kind === 'pan') {
+      activeDrag.originX = viewRef.current.panX
+      activeDrag.originY = viewRef.current.panY
+      activeDrag.x = clientX
+      activeDrag.y = clientY
+    } else if (activeDrag.kind === 'box-select' && activeDrag.screenX !== undefined && activeDrag.screenY !== undefined) {
+      const anchor = pointFromClient(activeDrag.screenX, activeDrag.screenY, nextTransform)
+      activeDrag.originX = anchor.x
+      activeDrag.originY = anchor.y
+    } else if (previousTransform && activeDrag.kind !== 'wire-create') {
+      const previousPoint = pointFromClient(clientX, clientY, previousTransform)
+      const deltaX = Math.round((previousPoint.x - activeDrag.x) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      const deltaY = Math.round((previousPoint.y - activeDrag.y) / EDITOR_GRID_SIZE) * EDITOR_GRID_SIZE
+      const nextPoint = pointFromClient(clientX, clientY, nextTransform)
+      activeDrag.x = nextPoint.x - deltaX
+      activeDrag.y = nextPoint.y - deltaY
+    }
+    activeDrag.transform = nextTransform
+  }
+  useLayoutEffect(() => {
     // Wheel zoom changes the viewBox during a pointer gesture. Refresh only
     // after that view update commits so later pointer events use its mapping.
-    activeDrag.transform = captureSchematicTransform()
+    refreshDragTransform()
   }, [view.zoom, view.panX, view.panY])
+  useLayoutEffect(() => {
+    // A resize changes SVG scale/letterboxing without changing the project view.
+    // Rebase the active gesture at its last pointer position to avoid a jump.
+    refreshDragTransform()
+  }, [viewportSize.width, viewportSize.height])
   const resolveNode = (point: { x: number; y: number }) => {
     let best: { x: number; y: number; distance: number } | null = null
     for (const pin of pinsNear({ left: point.x - 16, top: point.y - 16, right: point.x + 16, bottom: point.y + 16 })) {
@@ -1252,7 +1285,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     const anchor = resolveNode(point) ?? { x: snapToEditorGrid(point.x), y: snapToEditorGrid(point.y) }
     setWireStart(anchor)
     setWirePreviewEnd(anchor)
-    drag.current = { kind: 'wire-create', id: 'new-wire', pointer: event.pointerId, x: anchor.x, y: anchor.y, originX: anchor.x, originY: anchor.y, transform }
+    drag.current = { kind: 'wire-create', id: 'new-wire', pointer: event.pointerId, x: anchor.x, y: anchor.y, originX: anchor.x, originY: anchor.y, lastClientX: event.clientX, lastClientY: event.clientY, transform }
     suppressCanvasClick.current = true
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -1262,7 +1295,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     if (target?.closest('.circuit-part, .wire-line, .canvas-label, .schematic-context-menu')) return
     const transform = captureSchematicTransform()
     const point = pointFromEvent(event, transform)
-    drag.current = { kind: 'box-select', id: 'selection', pointer: event.pointerId, x: point.x, y: point.y, originX: point.x, originY: point.y, screenX: event.clientX, screenY: event.clientY, transform, additive: event.shiftKey || event.ctrlKey || event.metaKey }
+    drag.current = { kind: 'box-select', id: 'selection', pointer: event.pointerId, x: point.x, y: point.y, originX: point.x, originY: point.y, screenX: event.clientX, screenY: event.clientY, lastClientX: event.clientX, lastClientY: event.clientY, transform, additive: event.shiftKey || event.ctrlKey || event.metaKey }
     setSelectionBox({ x: point.x, y: point.y, width: 0, height: 0, crossing: false })
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -1319,7 +1352,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     else setSelection({ kind, id })
     beginEdit()
     const groupSize = group.parts.length + group.wires.length + group.netLabels.length
-    drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, transform, points: wire?.points.map(([x,y]) => [x,y]), group: groupSize > 1 ? group : undefined }
+    drag.current = { kind, id, pointer: event.pointerId, x: point.x, y: point.y, originX: part?.x ?? label?.x ?? 0, originY: part?.y ?? label?.y ?? 0, lastClientX: event.clientX, lastClientY: event.clientY, transform, points: wire?.points.map(([x,y]) => [x,y]), group: groupSize > 1 ? group : undefined }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const labelEventHandlers = useRef({ beginDrag })
@@ -1399,7 +1432,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     // Keep the inspector's current component while moving this independent wire endpoint.
     suppressCanvasClick.current = true
     beginEdit()
-    drag.current = { kind: 'wire-point', id, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, transform, pointIndex, points: wire.points.map(([x, y]) => [x, y]) }
+    drag.current = { kind: 'wire-point', id, pointer: event.pointerId, x: point.x, y: point.y, originX: 0, originY: 0, lastClientX: event.clientX, lastClientY: event.clientY, transform, pointIndex, points: wire.points.map(([x, y]) => [x, y]) }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const probeWireStable = useCallback((id: string) => wireEventHandlers.current.probeWire(id), [])
@@ -1421,13 +1454,15 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     event.stopPropagation()
     suppressCanvasClick.current = event.button === 0
     const transform = captureSchematicTransform()
-    drag.current = { kind: 'pan', id: event.button === 1 ? 'middle' : 'space', pointer: event.pointerId, x: event.clientX, y: event.clientY, originX: view.panX, originY: view.panY, transform }
+    drag.current = { kind: 'pan', id: event.button === 1 ? 'middle' : 'space', pointer: event.pointerId, x: event.clientX, y: event.clientY, originX: view.panX, originY: view.panY, lastClientX: event.clientX, lastClientY: event.clientY, transform }
     event.currentTarget.style.cursor = 'grabbing'
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const moveDrag = (event: PointerEvent<SVGSVGElement>) => {
     const activeDrag = drag.current
     if (!activeDrag) return
+    activeDrag.lastClientX = event.clientX
+    activeDrag.lastClientY = event.clientY
     if (activeDrag.kind === 'pan') {
       const scale = activeDrag.transform?.scale ?? captureSchematicTransform().scale
       const deltaX = (event.clientX - activeDrag.x) / scale

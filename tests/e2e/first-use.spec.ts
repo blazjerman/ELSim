@@ -5012,6 +5012,37 @@ test('wheel zoom during an object drag keeps subsequent movement aligned', async
   })).toEqual([initial.x + 30, initial.y])
 })
 
+test('resizing the viewport during an object drag keeps subsequent movement aligned', async ({ page }) => {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
+  const part = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const initial = await page.evaluate(() => {
+    const resistor = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((candidate: { id: string }) => candidate.id === 'p-r1')
+    return { x: resistor.x, y: resistor.y }
+  })
+  const bounds = await part.boundingBox()
+  expect(bounds).not.toBeNull()
+  const initialCanvasBounds = await page.locator('svg.schematic').boundingBox()
+  expect(initialCanvasBounds).not.toBeNull()
+  const origin = { x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 }
+  const initialScale = await page.locator('svg.schematic').evaluate((element) => element.getScreenCTM()!.a)
+  await page.mouse.move(origin.x, origin.y)
+  await page.mouse.down()
+  await page.mouse.move(origin.x + 10 * initialScale, origin.y, { steps: 1 })
+  await page.setViewportSize({ width: 1280, height: 700 })
+  await expect.poll(() => page.locator('svg.schematic').evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return [rect.width, rect.height]
+  })).not.toEqual([initialCanvasBounds!.width, initialCanvasBounds!.height])
+  const resizedScale = await page.locator('svg.schematic').evaluate((element) => element.getScreenCTM()!.a)
+  await page.mouse.move(origin.x + 30 * resizedScale, origin.y, { steps: 1 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => {
+    const resistor = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((candidate: { id: string }) => candidate.id === 'p-r1')
+    return [resistor.x, resistor.y]
+  })).toEqual([initial.x + 30, initial.y])
+})
+
 test('moving a component leaves independent wire geometry in place', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
