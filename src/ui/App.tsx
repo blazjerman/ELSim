@@ -4145,6 +4145,15 @@ export default function App() {
       setNotice('Could not load the example. Refresh ELSim and try again.')
       return
     }
+    const canvasBounds = document.querySelector<SVGSVGElement>('svg.schematic')?.getBoundingClientRect()
+    const fittedView = fitEditorView(next, canvasBounds && canvasBounds.width > 0 && canvasBounds.height > 0
+      ? { width: canvasBounds.width, height: canvasBounds.height }
+      : undefined)
+    next = {
+      ...next,
+      view: fittedView,
+      sheets: next.sheets.map((sheet) => sheet.id === next.rootSheetId ? { ...sheet, view: fittedView } : sheet),
+    }
     activeWorkerRef.current?.terminate()
     activeWorkerRef.current = null
     setRunState('idle')

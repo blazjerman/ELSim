@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { componentMagnitude } from '../domain/componentValue'
+import { componentMagnitude, parsePredictionValue, type PredictionUnit } from '../domain/componentValue'
 
 type NumericPredictionProps = {
   id: string
   prompt: string
-  unit: string
+  unit: PredictionUnit
   predictedValue: number | null
   absoluteTolerance: number
   explanation: string
@@ -19,9 +19,9 @@ function NumericPrediction({ id, prompt, unit, predictedValue, absoluteTolerance
       setFeedback({ correct: false, text: `Enter your estimate in ${unit}.` })
       return
     }
-    const value = Number(answer)
-    if (!Number.isFinite(value)) {
-      setFeedback({ correct: false, text: `Enter a numeric estimate in ${unit}.` })
+    const value = parsePredictionValue(answer, unit)
+    if (value === null) {
+      setFeedback({ correct: false, text: `Enter a number in ${unit}, optionally with an SI prefix (for example, ${unit === 'kHz' ? '1kHz' : unit === 'mW' ? '25mW' : unit === 'ms' ? '10ms' : unit === 'mA' ? '5mA' : '5V'}).` })
       return
     }
     if (predictedValue === null || !Number.isFinite(predictedValue)) {
@@ -36,10 +36,11 @@ function NumericPrediction({ id, prompt, unit, predictedValue, absoluteTolerance
   return <div className="example-prediction">
     <label htmlFor={id}>{prompt}</label>
     <div className="example-prediction-input">
-      <input id={id} type="number" step="any" inputMode="decimal" value={answer} onChange={(event) => { setAnswer(event.target.value); setFeedback(null) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); checkPrediction() } }}/>
+      <input id={id} type="text" inputMode="text" autoComplete="off" aria-describedby={`${id}-help`} title={`Enter a number in ${unit}; SI prefixes are accepted.`} placeholder="Estimate" value={answer} onChange={(event) => { setAnswer(event.target.value); setFeedback(null) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); checkPrediction() } }}/>
       <span>{unit}</span>
       <button type="button" onClick={checkPrediction}>Check prediction</button>
     </div>
+    <span id={`${id}-help`} className="sr-only">Enter a value in {unit}. You may include an SI prefix and unit, such as {unit === 'kHz' ? '1kHz' : unit === 'mW' ? '25mW' : unit === 'ms' ? '10ms' : unit === 'mA' ? '5mA' : '5V'}.</span>
     {feedback && <p className={`example-prediction-feedback${feedback.correct ? ' correct' : ''}`} role="status">{feedback.text}</p>}
   </div>
 }
