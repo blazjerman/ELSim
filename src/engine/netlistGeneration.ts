@@ -582,6 +582,17 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'voltageSwitch') {
       const controlPositive = pinNet(connectivity, part, 2)
       const controlNegative = pinNet(connectivity, part, 3)
+      const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
+      if (part.deviceModel && importedModel?.type.toLowerCase() !== 'sw') {
+        const message = `${part.ref} device model ${part.deviceModel} is missing or is not a SW model.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      if (importedModel) {
+        append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${importedModel.name} OFF`, part.id, 'component')
+        continue
+      }
       const settings = part.voltageSwitch ?? {}
       const onResistance = spiceScalar(settings.onResistance ?? '1 Ω', '')
       const offResistance = spiceScalar(settings.offResistance ?? '1 GΩ', '')

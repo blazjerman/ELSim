@@ -1351,6 +1351,26 @@ test('voltage-controlled switch emits four-terminal device and its own model', (
   assert.match(artifact.text, /^\.tran 100u 100m$/m)
 })
 
+test('voltage-controlled switch uses an imported SW model card', () => {
+  const project = createVoltageSwitchExampleProject()
+  project.parts.find((part) => part.kind === 'voltageSwitch').deviceModel = 'USER_SW'
+  project.modelAssets = [{ id: 'user-switch-model', filename: 'switches.lib', sha256: 'a'.repeat(64), content: '.model USER_SW SW(Ron=10 Roff=1Meg Vt=2.5 Vh=1)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^S1 VCC VOUT CTRL 0 USER_SW OFF$/m)
+  assert.match(artifact.text, /^\.model USER_SW SW\(Ron=10 Roff=1Meg Vt=2\.5 Vh=1\)$/m)
+  assert.doesNotMatch(artifact.text, /\.model ELSIM_S1_SW/)
+})
+
+test('voltage-controlled switch rejects an imported model card of the wrong type', () => {
+  const project = createVoltageSwitchExampleProject()
+  project.parts.find((part) => part.kind === 'voltageSwitch').deviceModel = 'WRONG_TYPE'
+  project.modelAssets = [{ id: 'wrong-switch-model', filename: 'devices.lib', sha256: 'b'.repeat(64), content: '.model WRONG_TYPE D(Is=1n)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  const artifact = createNetlistArtifact(project)
+  assert.match(artifact.diagnostics.map(({ message }) => message).join('\n'), /not a SW model/i)
+  assert.doesNotMatch(artifact.text, /^S1 /m)
+})
+
 test('voltage-controlled switch rejects invalid resistance and hysteresis settings', () => {
   const project = createVoltageSwitchExampleProject()
   const device = project.parts.find((part) => part.kind === 'voltageSwitch')
