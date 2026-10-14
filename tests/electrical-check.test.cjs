@@ -506,11 +506,11 @@ test('reports missing transitive dependencies of an instantiated model', () => {
   assert.ok(checkCircuit(project).some((item) => item.id.startsWith('missing-model-dependency:') && /MISSING_CORE/.test(item.title)))
 })
 
-test('reports passive device references with an incompatible imported model family', () => {
+test('reports passive and transmission-line references with an incompatible imported model family', () => {
   const project = createStarterProject()
   project.modelAssets = [
-    { id: 'amp-lib', filename: 'amp.lib', sha256: '0'.repeat(64), content: '.SUBCKT AMP IN OUT\nR1 IN OUT R_BAD\nL1 IN OUT L_BAD\n.MODEL R_BAD C(CAP=1p)\n.ENDS AMP\n', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
-    { id: 'passive-lib', filename: 'passives.lib', sha256: '1'.repeat(64), content: '.MODEL L_BAD R(RSH=100)\n', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'amp-lib', filename: 'amp.lib', sha256: '0'.repeat(64), content: '.SUBCKT AMP IN OUT\nR1 IN OUT R_BAD\nL1 IN OUT L_BAD\nY1 IN 0 OUT 0 Y_BAD\nP1 A1 A2 0 B1 B2 0 P_BAD\n.MODEL R_BAD C(CAP=1p)\n.ENDS AMP\n', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'passive-lib', filename: 'passives.lib', sha256: '1'.repeat(64), content: '.MODEL L_BAD R(RSH=100)\n.MODEL Y_BAD CPL(LEN=1)\n.MODEL P_BAD TXL(LEN=1)\n', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
   ]
   const instance = { id: 'amp-instance', kind: 'subcircuit', ref: 'X1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 }
   project.parts.push(instance)
@@ -519,13 +519,15 @@ test('reports passive device references with an incompatible imported model fami
   const issues = checkCircuit(project).filter((item) => item.id.startsWith('incompatible-model-dependency:'))
   assert.deepEqual(issues.map(({ title }) => title).sort(), [
     'L1 uses L_BAD type R, expected L',
+    'P1 uses P_BAD type TXL, expected CPL',
     'R1 uses R_BAD type C, expected R',
+    'Y1 uses Y_BAD type CPL, expected TXL',
   ])
   assert.ok(issues.every((issue) => issue.severity === 'warning' && issue.partId === instance.id))
   assert.ok(issues.some((issue) => /amp\.lib:2/.test(issue.detail)))
 
-  project.modelAssets[0] = { ...project.modelAssets[0], content: '.SUBCKT AMP IN OUT\nR1 IN OUT R_GOOD\nL1 IN OUT L_GOOD\n.MODEL R_GOOD R(RSH=100)\n.ENDS AMP\n' }
-  project.modelAssets[1] = { ...project.modelAssets[1], content: '.MODEL L_GOOD L(IND=1u)\n' }
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.SUBCKT AMP IN OUT\nR1 IN OUT R_GOOD\nL1 IN OUT L_GOOD\nY1 IN 0 OUT 0 Y_GOOD\nP1 A1 A2 0 B1 B2 0 P_GOOD\n.MODEL R_GOOD R(RSH=100)\n.ENDS AMP\n' }
+  project.modelAssets[1] = { ...project.modelAssets[1], content: '.MODEL L_GOOD L(IND=1u)\n.MODEL Y_GOOD TXL(LEN=1)\n.MODEL P_GOOD CPL(LEN=1)\n' }
   assert.equal(checkCircuit(project).some((item) => item.id.startsWith('incompatible-model-dependency:')), false)
 })
 

@@ -45,6 +45,10 @@ test('resolves native ngspice passive and transmission-line model references', (
     'L3 OUT 0 {LBASE * 3} LMOD',
     'O1 IN 0 OUT 0 LTRAMOD',
     'U1 IN OUT 0 URCMOD L=50u',
+    'Y1 IN 0 OUT 0 TXLMOD LEN=2',
+    'P1 IN1 IN2 0 OUT1 OUT2 0 CPLMOD LEN=3',
+    'P2 IN1 IN2 IN3 0 OUT1 OUT2 OUT3 0 CPLMOD',
+    'P3 IN1 IN2 0 OUT1 OUT2 0 CPLMOD LEN = 2',
     '.ENDS NETWORK',
   ].join('\n') }
   const models = { id: 'models', filename: 'models.lib', content: [
@@ -53,6 +57,8 @@ test('resolves native ngspice passive and transmission-line model references', (
     '.MODEL LMOD L(IND=3n)',
     '.MODEL LTRAMOD LTRA(R=1 L=1 G=0 C=1 LEN=1)',
     '.MODEL URCMOD URC(CPERL=100p RPERL=100k FMAX=10G)',
+    '.MODEL TXLMOD TXL(R=1 L=1 G=0 C=1 LEN=1)',
+    '.MODEL CPLMOD CPL(R=1 0 1 L=1 0 1 G=0 0 0 C=1 0 1 LEN=1)',
   ].join('\n') }
   const analysis = analyzeModelLibraries([devices, models])
   assert.deepEqual(analysis.dependencies.missing, [])
@@ -62,8 +68,9 @@ test('resolves native ngspice passive and transmission-line model references', (
     ['C1', 'CMOD', 'models'], ['C2', 'CMOD', 'models'], ['C4', 'CMOD', 'models'],
     ['L1', 'LMOD', 'models'], ['L2', 'LMOD', 'models'], ['L3', 'LMOD', 'models'],
     ['O1', 'LTRAMOD', 'models'], ['U1', 'URCMOD', 'models'],
+    ['Y1', 'TXLMOD', 'models'], ['P1', 'CPLMOD', 'models'], ['P2', 'CPLMOD', 'models'], ['P3', 'CPLMOD', 'models'],
   ])
-  assert.deepEqual(analysis.dependencies.resolved.map(({ targetModelType }) => targetModelType), ['R', 'R', 'R', 'C', 'C', 'C', 'L', 'L', 'L', 'LTRA', 'URC'])
+  assert.deepEqual(analysis.dependencies.resolved.map(({ targetModelType }) => targetModelType), ['R', 'R', 'R', 'C', 'C', 'C', 'L', 'L', 'L', 'LTRA', 'URC', 'TXL', 'CPL', 'CPL', 'CPL'])
   assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'NETWORK' }])].sort(), ['devices', 'models'])
 
   const unresolved = analyzeModelDependencies([{ id: 'broken', filename: 'broken.lib', content: '.SUBCKT BROKEN IN OUT\nR1 IN OUT MISSING\n.ENDS BROKEN' }])
@@ -71,6 +78,9 @@ test('resolves native ngspice passive and transmission-line model references', (
 
   const unresolvedExpression = analyzeModelDependencies([{ id: 'expression', filename: 'expression.lib', content: '.SUBCKT BROKEN IN OUT\nR1 IN OUT {RBASE * 2} MISSING\n.ENDS BROKEN' }])
   assert.deepEqual(unresolvedExpression.missing.map(({ reference, modelName }) => [reference, modelName]), [['R1', 'MISSING']])
+
+  const unresolvedLines = analyzeModelDependencies([{ id: 'lines', filename: 'lines.lib', content: '.SUBCKT BROKEN IN OUT\nY1 IN 0 OUT 0 MISSING_Y LEN=2\nP1 A1 A2 0 B1 B2 0 MISSING_P LEN = 3\n.ENDS BROKEN' }])
+  assert.deepEqual(unresolvedLines.missing.map(({ reference, modelName }) => [reference, modelName]), [['Y1', 'MISSING_Y'], ['P1', 'MISSING_P']])
 })
 
 test('project-local includes resolve against imported assets without filesystem access', () => {

@@ -343,6 +343,13 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
   else if (prefix === 'm' || prefix === 's') index = 5
   else if (prefix === 'o') index = 5 // O transmission lines use an LTRA model after four nodes.
   else if (prefix === 'u') index = 4 // U distributed RC lines use a URC model after three nodes.
+  else if (prefix === 'y') index = 5 // Y single-lossy lines use a TXL model after four port nodes.
+  else if (prefix === 'p') {
+    // P coupled lines have a variable number of conductor pins. The model is
+    // the final positional field before optional LEN syntax.
+    const lengthAt = tokens.findIndex((token, candidate) => candidate > 1 && (/^len\s*=/i.test(token) || (/^len$/i.test(token) && tokens[candidate + 1] === '=')))
+    index = (lengthAt < 0 ? tokens.length : lengthAt) - 1
+  }
   else if (prefix === 'r' || prefix === 'c' || prefix === 'l') {
     // Ngspice R/C/L instances may use a model name directly, or after an
     // explicit value. Do not mistake ordinary scalar values, behavioral

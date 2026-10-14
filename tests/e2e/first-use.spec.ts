@@ -8280,12 +8280,12 @@ test('circuit checks explain missing transitive model dependencies and select th
   await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('XAMP1 · AMP')
 })
 
-test('circuit checks identify an incompatible native passive model inside an imported IC', { tag: '@ui-smoke' }, async ({ page }) => {
+test('circuit checks identify incompatible native passive and transmission-line models inside an imported IC', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.evaluate(async () => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    const content = '.SUBCKT AMP IN OUT\nR1 IN OUT R_BAD\n.ENDS AMP\n.MODEL R_BAD C(CAP=1p)\n'
+    const content = '.SUBCKT AMP IN OUT\nR1 IN OUT R_BAD\nY1 IN 0 OUT 0 Y_BAD\nP1 A1 A2 0 B1 B2 0 P_BAD LEN=1\n.ENDS AMP\n.MODEL R_BAD C(CAP=1p)\n.MODEL Y_BAD CPL(LEN=1)\n.MODEL P_BAD TXL(LEN=1)\n'
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
     const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
     project.modelAssets = [{ id: 'wrong-passive-family', filename: 'amp.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
@@ -8299,6 +8299,8 @@ test('circuit checks identify an incompatible native passive model inside an imp
   const report = page.getByRole('dialog', { name: 'Circuit checks' })
   const issue = report.getByRole('listitem').filter({ hasText: 'R1 uses R_BAD type C, expected R' })
   await expect(issue).toContainText('amp.lib:2')
+  await expect(report).toContainText('Y1 uses Y_BAD type CPL, expected TXL')
+  await expect(report).toContainText('P1 uses P_BAD type TXL, expected CPL')
   await issue.getByRole('button', { name: 'Select affected component' }).click()
   await expect(page.locator('.circuit-part[data-part-id="incompatible-passive-instance"].selected')).toHaveCount(1)
 })

@@ -21,7 +21,7 @@ type ReachableSimulationSheet = { sheet: Project['sheets'][number]; topLevelInst
 // Device prefixes and accepted .MODEL families from the ngspice device-line
 // grammar. Some prefixes intentionally accept multiple polarities/families.
 const nativeModelTypesByDevice: Readonly<Record<string, readonly string[]>> = {
-  r: ['r'], c: ['c'], l: ['l'], o: ['ltra'], u: ['urc'],
+  r: ['r'], c: ['c'], l: ['l'], o: ['ltra'], u: ['urc'], y: ['txl'], p: ['cpl'],
   d: ['d'], q: ['npn', 'pnp'], j: ['njf', 'pjf'], z: ['nmf', 'pmf'],
   m: ['nmos', 'pmos', 'vdmos'], s: ['sw'], w: ['csw'],
 } as const
