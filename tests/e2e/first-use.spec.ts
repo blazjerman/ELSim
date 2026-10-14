@@ -4973,6 +4973,8 @@ test('series-resistor lesson predicts equal current and voltage drops, then veri
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   const lesson = page.locator('.example-lesson-next-step')
   await expect(lesson).toContainText('3.33 mA through R1 and 3.33 mA through R2')
+  await expect(lesson).toContainText('3.333 V across R1 and 6.667 V across R2')
+  await expect(lesson).toContainText('together they sum to 10 V, matching V1 by Kirchhoff’s voltage law')
   await expectAvailableTrace(page, 'V(VOUT)')
   await expectAvailableTrace(page, 'I(R1)')
   await expectAvailableTrace(page, 'I(R2)')
@@ -4984,6 +4986,7 @@ test('series-resistor lesson predicts equal current and voltage drops, then veri
   await lesson.getByRole('button', { name: 'Run this circuit again' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
   await expect(lesson).toContainText('predicts 5 mA through each resistor and 5 V at VOUT')
+  await expect(lesson).toContainText('voltage drops across both resistors add to the supply voltage')
   await expect(lesson).toContainText('ngspice solved 5 V')
 })
 
