@@ -8302,6 +8302,20 @@ test('waveform cursor, zoom, and drag-pan preserve the view and selected traces 
   await expect.poll(readSavedTransientRange).not.toEqual(rangeBeforeDrag)
   const draggedRange = await readSavedTransientRange()
 
+  await page.evaluate(() => {
+    document.addEventListener('pointerdown', (event) => {
+      if ((event.target as Element | null)?.closest('.waveform-chart')) document.documentElement.dataset.plotPointerId = String(event.pointerId)
+    }, { capture: true, once: true })
+  })
+  await page.mouse.move(box!.x + box!.width * 0.68, box!.y + box!.height * 0.55)
+  await page.mouse.down()
+  await page.mouse.move(box!.x + box!.width * 0.55, box!.y + box!.height * 0.55, { steps: 4 })
+  const pointerId = Number(await page.locator('html').getAttribute('data-plot-pointer-id'))
+  expect(Number.isFinite(pointerId)).toBe(true)
+  await page.evaluate((id) => window.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: id, pointerType: 'mouse' })), pointerId)
+  await page.mouse.up()
+  await expect.poll(readSavedTransientRange).toEqual(draggedRange)
+
   await chart.click({ position: { x: box!.width * 0.5, y: box!.height * 0.45 } })
   const timeReadout = page.getByText(/^t = /)
   await expect(timeReadout).toBeVisible()

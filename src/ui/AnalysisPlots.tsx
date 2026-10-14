@@ -58,7 +58,7 @@ function usePlotWindow(savedRange: PlotRange | undefined, onRangeChange: (range:
   }
   const zoom = (factor: number) => { const current = windowRef.current; zoomAt(factor, (current.start + current.end) / 2) }
   const reset = () => update({ start: 0, end: 1 })
-  return { window, zoom, zoomAt, panBy, reset }
+  return { window, zoom, zoomAt, panBy, reset, getRange: () => windowRef.current, restore: update }
 }
 
 type ValueWindow = { min: number; max: number }
@@ -98,14 +98,18 @@ function PlotNavigation({ zoom, reset, valueZoom, valuePan, disabled = false }: 
   </div>
 }
 
-function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
-  const drag = useRef<{ pointerId: number; x: number; y: number; width: number; moved: boolean } | null>(null)
+function usePlotDragPan(onHorizontalPan: (delta: number) => void, getRange: () => PlotRange, restoreRange: (range: PlotRange) => void) {
+  const drag = useRef<{ pointerId: number; x: number; y: number; width: number; moved: boolean; initialRange: PlotRange } | null>(null)
   const suppressClick = useRef(false)
   const pendingPan = useRef(0)
   const panFrame = useRef<number | null>(null)
   const onHorizontalPanRef = useRef(onHorizontalPan)
+  const getRangeRef = useRef(getRange)
+  const restoreRangeRef = useRef(restoreRange)
   const listeners = useRef<{ move: (event: globalThis.PointerEvent) => void; end: (event: globalThis.PointerEvent) => void; cancel: (event: globalThis.PointerEvent) => void } | null>(null)
   onHorizontalPanRef.current = onHorizontalPan
+  getRangeRef.current = getRange
+  restoreRangeRef.current = restoreRange
   const removeWindowListeners = () => {
     if (!listeners.current) return
     window.removeEventListener('pointermove', listeners.current.move)
@@ -136,7 +140,7 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
     // Measure once when the gesture starts. Reading layout on every pointermove
     // can force synchronous layout while the browser is processing the drag.
     const width = event.currentTarget.getBoundingClientRect().width
-    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, width, moved: false }
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, width, moved: false, initialRange: getRangeRef.current() }
     const move = (pointerEvent: globalThis.PointerEvent) => {
       const active = drag.current
       if (!active || active.pointerId !== pointerEvent.pointerId) return
@@ -166,9 +170,11 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void) {
     }
     const cancel = (pointerEvent: globalThis.PointerEvent) => {
       if (drag.current?.pointerId !== pointerEvent.pointerId) return
-      // Pointer cancellation should abort the gesture completely; committing a
-      // partial pan here makes touch interruption and lost capture surprising.
+      const initialRange = drag.current.initialRange
+      // Pointer cancellation aborts the whole gesture, including deltas already
+      // flushed during earlier animation frames.
       cancelPendingPan()
+      restoreRangeRef.current(initialRange)
       drag.current = null
       suppressClick.current = false
       removeWindowListeners()
@@ -356,7 +362,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const resetView = () => { navigation.reset(); scopeAxis.reset() }
   const zoomValue = (factor: number) => scopeAxis.zoom(factor)
   const panValue = (direction: -1 | 1) => scopeAxis.pan(direction)
-  const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta))
+  const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta), navigation.getRange, navigation.restore)
   const wheelZoom = (event: ReactWheelEvent<SVGSVGElement>) => {
     event.preventDefault()
     const rect = event.currentTarget.getBoundingClientRect()
@@ -519,7 +525,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const minValue = valueAxis.range.min
   const maxValue = valueAxis.range.max
   const resetView = () => { navigation.reset(); valueAxis.reset() }
-  const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta))
+  const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta), navigation.getRange, navigation.restore)
   const wheelZoom = (event: ReactWheelEvent<SVGSVGElement>) => {
     event.preventDefault()
     const rect = event.currentTarget.getBoundingClientRect()
@@ -625,7 +631,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   const min = valueAxis.range.min
   const max = valueAxis.range.max
   const resetView = () => { navigation.reset(); valueAxis.reset() }
-  const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta))
+  const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta), navigation.getRange, navigation.restore)
   const wheelZoom = (event: ReactWheelEvent<SVGSVGElement>) => {
     event.preventDefault()
     const rect = event.currentTarget.getBoundingClientRect()
