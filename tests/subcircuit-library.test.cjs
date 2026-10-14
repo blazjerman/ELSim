@@ -472,6 +472,39 @@ test('parses ordered subcircuit pins, parameters, continuations, shared models, 
   ])
 })
 
+test('parses ngspice double-backslash continuations and retains their physical source records', () => {
+  const source = String.raw`.MODEL DFAST D(IS=1n \\
++ BV=50)
+.SUBCKT AMP IN OUT PARAMS: GAIN=2 \\
++ RLOAD={GAIN * 10k}
+R1 IN OUT \\
+ {RLOAD}
+.ENDS AMP`
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.models[0].parameters, [
+    { name: 'IS', defaultValue: '1n' },
+    { name: 'BV', defaultValue: '50' },
+  ])
+  assert.deepEqual(parsed.subcircuits[0].parameters, [
+    { name: 'GAIN', defaultValue: '2' },
+    { name: 'RLOAD', defaultValue: '{GAIN * 10k}' },
+  ])
+  assert.equal(parsed.subcircuits[0].endLine, 7)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine }) => sourceLine), [1, 2, 3, 4, 5, 6, 7])
+  assert.equal(parsed.modelRecords[0].text, String.raw`.MODEL DFAST D(IS=1n \\`)
+  assert.equal(parsed.modelRecords[1].text, '+ BV=50)')
+  const comment = parseSubcircuitLibrary(String.raw`* comment \\
+.MODEL DCOMMENT D(IS=2n)`)
+  assert.equal(comment.models[0].name, 'DCOMMENT')
+})
+
+test('rejects ngspice backslash continuations for forbidden directives and missing next lines', () => {
+  for (const directive of ['.TITLE welcome', '.LIB typical', '.INCLUDE "child.lib"']) {
+    assert.throws(() => parseSubcircuitLibrary(`${directive} \\\\\n+`), /ngspice does not allow continuation lines/i, directive)
+  }
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT AMP IN OUT \\\\'), /continuation has no following line/)
+})
+
 test('accepts ngspice slash model identifiers and resolves them without relaxing pin names', () => {
   assert.equal(isValidSpiceModelName('LF356/NS'), true)
   assert.equal(isValidSpiceModelName('2N2222/A', true), true)

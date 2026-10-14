@@ -93,16 +93,44 @@ type LogicalLine = { text: string; start: number; end: number }
 function logicalLines(source: string): LogicalLine[] {
   const physical = source.replace(/^\uFEFF/, '').split(/\r?\n/)
   const result: LogicalLine[] = []
+  let backslashContinuation = false
+  let backslashContinuationLine = 0
   for (let index = 0; index < physical.length; index += 1) {
-    const text = physical[index]
-    if (/^\s*\+/.test(text)) {
+    const physicalText = physical[index]
+    const continuedText = withoutInlineComment(physicalText).trimEnd()
+    const hasBackslashContinuation = hasNgspiceBackslashContinuation(continuedText)
+    const text = hasBackslashContinuation ? continuedText.slice(0, -2) : physicalText
+    const plusContinuation = /^\s*\+/.test(text)
+    if (plusContinuation || backslashContinuation) {
       const previous = result.at(-1)
       if (!previous) throw new Error(`Line ${index + 1}: continuation has no preceding line.`)
-      previous.text += ` ${text.replace(/^\s*\+\s?/, '').trim()}`
+      const continuation = hasBackslashContinuation ? continuedText.slice(0, -2) : text
+      previous.text += ` ${continuation.replace(/^\s*\+\s?/, '').trim()}`
       previous.end = index + 1
-    } else result.push({ text, start: index + 1, end: index + 1 })
+    } else {
+      if (hasBackslashContinuation && /^\s*\.(?:title|lib|include)\b/i.test(continuedText)) {
+        const directive = /^\s*(\.[a-z]+)/i.exec(continuedText)?.[1] ?? 'directive'
+        throw new Error(`Line ${index + 1}: ngspice does not allow continuation lines for ${directive.toUpperCase()}.`)
+      }
+      result.push({ text, start: index + 1, end: index + 1 })
+    }
+    backslashContinuation = hasBackslashContinuation
+    if (hasBackslashContinuation) backslashContinuationLine = index + 1
   }
+  if (backslashContinuation) throw new Error(`Line ${backslashContinuationLine}: continuation has no following line.`)
   return result
+}
+
+function hasNgspiceBackslashContinuation(line: string): boolean {
+  if (/^\s*\*/.test(line) || !line.endsWith('\\\\')) return false
+  let quote = ''
+  for (let index = 0; index < line.length - 2; index += 1) {
+    const character = line[index]
+    if (quote) {
+      if (character === quote) quote = ''
+    } else if (character === '"' || character === "'") quote = character
+  }
+  return !quote
 }
 
 function inspectLibrarySections(source: string): { sections: string[]; lines: { line: LogicalLine; section: string | null }[]; logical: LogicalLine[] } {

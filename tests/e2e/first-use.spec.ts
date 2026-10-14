@@ -2224,6 +2224,40 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
+test('native ngspice backslash continuations import and preserve model source records', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Components', exact: true }).click()
+  const continuation = String.raw`\\`
+  const modelLibrary = [
+    `.MODEL DFAST D(IS=1n ${continuation}`,
+    '+ BV=50)',
+    `.SUBCKT USER_CONT IN OUT GAIN=2 ${continuation}`,
+    '+ RLOAD={GAIN * 1k}',
+    'R1 IN OUT {RLOAD}',
+    '.ENDS USER_CONT',
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'backslash-continuations.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 1 device model from backslash-continuations\.lib/)).toBeVisible()
+  const importedModel = page.locator('.imported-model').filter({ hasText: 'USER_CONT' })
+  await expect(importedModel).toContainText('Parameters: GAIN=2, RLOAD={GAIN * 1k}')
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await page.getByRole('button', { name: 'Schematic', exact: true }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DFAST')
+  const netlist = await page.locator('.netlist-modal pre').innerText()
+  expect(netlist).toContain(`.MODEL DFAST D(IS=1n ${continuation}\n+ BV=50)`)
+  expect(netlist).toContain(`.SUBCKT USER_CONT IN OUT GAIN=2 ${continuation}\n+ RLOAD={GAIN * 1k}`)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* USER_CONT/)
+})
+
 test('native ngspice slash-named subcircuit imports and generates a valid instance', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
