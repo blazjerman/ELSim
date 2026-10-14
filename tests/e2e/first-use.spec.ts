@@ -688,6 +688,43 @@ test("Ohm's law lesson checks a beginner's current prediction before simulation"
   expect(await page.locator('html').evaluate((element) => element.scrollWidth)).toBe(390)
 })
 
+test('current-source lesson predicts the load voltage from live current and resistance', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: '1 mA source drive a 1 kΩ load' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('textbox', { name: 'Before running, predict the load voltage VOUT' })
+  await estimate.fill('0.5')
+  await estimate.press('Enter')
+  await expect(lesson.getByRole('status')).toHaveText('Not quite. V = I × R = 1 mA × 1 kΩ = 1 V. For a fixed current, doubling the load resistance doubles the output voltage.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+
+  await estimate.fill('1')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. V = I × R')
+
+  await page.locator('.circuit-part[data-part-id="isource-r1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="isource-r1:value"]').fill('2 kΩ')
+  const updatedEstimate = page.getByRole('textbox', { name: 'Before running, predict the load voltage VOUT' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('2')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('1 mA × 2 kΩ = 2 V.')
+
+  await page.locator('.circuit-part[data-part-id="isource-i1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="isource-i1:value"]').fill('2 mA')
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('4')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('2 mA × 2 kΩ = 4 V.')
+})
+
 test('voltage-divider lesson checks the midpoint prediction and updates it when a resistor changes', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

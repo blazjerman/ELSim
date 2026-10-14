@@ -99,6 +99,26 @@ export function OhmsLawPrediction({ supplyValue, resistanceValue }: { supplyValu
   />
 }
 
+export function CurrentSourcePrediction({ currentValue, resistanceValue }: { currentValue: string; resistanceValue: string }) {
+  const current = componentMagnitude(currentValue, 'currentSource')
+  const resistance = componentMagnitude(resistanceValue, 'resistor')
+  const predictedVoltage = current !== null && resistance !== null && resistance > 0
+    ? current * resistance
+    : null
+  const explanation = predictedVoltage === null || current === null || resistance === null
+    ? ''
+    : `V = I × R = ${formatValue(current * 1000)} mA × ${formatResistance(resistance)} = ${formatValue(predictedVoltage)} V. For a fixed current, doubling the load resistance doubles the output voltage.`
+
+  return <NumericPrediction
+    id="current-source-prediction"
+    prompt="Before running, predict the load voltage VOUT"
+    unit="V"
+    predictedValue={predictedVoltage}
+    absoluteTolerance={0.01}
+    explanation={explanation}
+  />
+}
+
 export function RcTimeConstantPrediction({ resistanceValue, capacitanceValue }: { resistanceValue: string; capacitanceValue: string }) {
   const resistance = componentMagnitude(resistanceValue, 'resistor')
   const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
@@ -421,7 +441,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
@@ -453,6 +473,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'rc': return <RcTimeConstantPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
     case 'switch-lamp': return <SwitchPathPrediction/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
+    case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
     case 'potentiometer': return <PotentiometerPrediction supplyValue={props.supplyValue ?? ''} wiperPosition={props.wiperPosition ?? ''}/>
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
