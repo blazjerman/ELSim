@@ -619,6 +619,10 @@ function clampPlotPanelBounds(bounds: PlotPanel['bounds']): PlotPanel['bounds'] 
   return { x: Math.max(8 - width, Math.min(window.innerWidth - 48, bounds.x)), y: Math.max(8, Math.min(window.innerHeight - 48, bounds.y)), width, height }
 }
 
+function samePlotPanelBounds(left: PlotPanel['bounds'], right: PlotPanel['bounds']): boolean {
+  return left.x === right.x && left.y === right.y && left.width === right.width && left.height === right.height
+}
+
 function visibleComponentPlacement(parts: Part[], view: Project['view'], viewportWidth: number, viewportHeight: number) {
   const canvasWidth = viewportWidth <= 800
     ? viewportWidth
@@ -710,7 +714,10 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
         ref.current.style.top = `${panel.bounds.y}px`
       }
     }
-    const resize = () => onBoundsChange(clampPlotPanelBounds(panel.bounds))
+    const resize = () => {
+      const next = clampPlotPanelBounds(panel.bounds)
+      if (!samePlotPanelBounds(next, panel.bounds)) onBoundsChange(next)
+    }
     window.addEventListener('pointermove', previewPosition)
     window.addEventListener('pointerup', finishDrag)
     window.addEventListener('pointercancel', cancelDrag)
