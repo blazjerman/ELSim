@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, modelFunctionsForAsset, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
@@ -159,16 +159,27 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const mosfetModels: { part: Part; name: string }[] = []
   const modelAssets = project.modelAssets ?? []
   const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections))
+  const parsedModelLibraryEntries = modelAssets.map((asset, index) => ({ asset, parsed: parsedModelAssets[index] }))
   const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models.filter((model) => !model.scope))
   const importedDeviceModelsByName = new Map<string, typeof importedDeviceModels[number]>()
   for (const model of importedDeviceModels) {
     const key = model.name.toLowerCase()
     if (!importedDeviceModelsByName.has(key)) importedDeviceModelsByName.set(key, model)
   }
-  const importedSubcircuits = parsedModelAssets.flatMap((library) => library.subcircuits)
   const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary).subcircuits : []
   const subcircuitsByName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()
-  for (const definition of [...importedSubcircuits, ...generatedSubcircuits]) {
+  const subcircuitFunctionsByName = new Map<string, ReadonlyMap<string, number>>()
+  for (const [assetIndex, library] of parsedModelAssets.entries()) {
+    const functions = modelFunctionsForAsset(parsedModelLibraryEntries, modelAssets[assetIndex].id)
+    for (const definition of library.subcircuits) {
+      const key = definition.name.toLowerCase()
+      if (!subcircuitsByName.has(key)) {
+        subcircuitsByName.set(key, definition)
+        subcircuitFunctionsByName.set(key, functions)
+      }
+    }
+  }
+  for (const definition of generatedSubcircuits) {
     const key = definition.name.toLowerCase()
     if (!subcircuitsByName.has(key)) subcircuitsByName.set(key, definition)
   }
@@ -562,7 +573,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      const invalidParameter = Object.entries(part.modelParameters ?? {}).find(([name, value]) => !definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value))
+      const invalidParameter = Object.entries(part.modelParameters ?? {}).find(([name, value]) => !definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value, subcircuitFunctionsByName.get(definition.name.toLowerCase())))
       if (invalidParameter) {
         const message = `${part.ref} has an invalid value for subcircuit parameter ${cleanComment(invalidParameter[0])}. Enter a numeric SPICE value such as 10k or 2.5.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')

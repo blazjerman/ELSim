@@ -6,11 +6,33 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionsForAsset, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
   for (const value of ['1k', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}']) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
   for (const value of ['{if(RLOAD, 1k, 2k)}', '{system(RLOAD)}', '{sqrt(1, 2)}', '{pow(2)}', '{max(1, 2, 3)}', '{sqrt()}', '{RLOAD > 1k}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD ** 2}', '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+  const functions = new Map([['double', 1], ['blend', 2]])
+  assert.equal(isSafeSubcircuitParameterValue('{DOUBLE(RLOAD)}', functions), true)
+  assert.equal(isSafeSubcircuitParameterValue('{blend(1, 2)}', functions), true)
+  for (const value of ['{double()}', '{double(1, 2)}', '{blend(1)}', '{unknown(1)}']) assert.equal(isSafeSubcircuitParameterValue(value, functions), false, value)
+})
+
+test('parses top-level .FUNC signatures for forward-referenced subcircuit defaults', () => {
+  const parsed = parseSubcircuitLibrary('.FUNC DOUBLE(x) {2*x}\n.SUBCKT USER_GAIN IN OUT PARAMS: GAIN={DOUBLE(2)}\nR1 IN OUT {GAIN}\n.ENDS USER_GAIN\n')
+  assert.deepEqual(parsed.functions.map(({ name, arity }) => ({ name, arity })), [{ name: 'DOUBLE', arity: 1 }])
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: '{DOUBLE(2)}' }])
+  assert.throws(() => parseSubcircuitLibrary('.FUNC DOUBLE(x) {2*x}\n.SUBCKT USER_GAIN IN OUT PARAMS: GAIN={DOUBLE(2, 3)}\n.ENDS USER_GAIN'), /unsupported default value/)
+  assert.throws(() => parseSubcircuitLibrary('.FUNC sqrt(x) {x}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /name sqrt is reserved/)
+  assert.throws(() => parseSubcircuitLibrary('.FUNC F(x) {x}\n.FUNC f(x, y) {x+y}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /conflicting argument counts/)
+})
+
+test('imported functions are scoped to the model and its project-local include chain', () => {
+  const assets = [
+    { asset: { id: 'root', filename: 'root.lib', content: '.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT' }, parsed: parseSubcircuitLibrary('.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT') },
+    { asset: { id: 'helpers', filename: 'helpers.lib', content: '.FUNC DOUBLE(x) {2*x}\n' }, parsed: parseSubcircuitLibrary('.FUNC DOUBLE(x) {2*x}\n') },
+    { asset: { id: 'unrelated', filename: 'unrelated.lib', content: '.FUNC SECRET(x) {x}\n' }, parsed: parseSubcircuitLibrary('.FUNC SECRET(x) {x}\n') },
+  ]
+  assert.deepEqual([...modelFunctionsForAsset(assets, 'root')], [['double', 1]])
 })
 
 test('combined model-library analysis shares parsed cards with dependency resolution', () => {

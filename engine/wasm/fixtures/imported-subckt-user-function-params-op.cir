@@ -1,0 +1,11 @@
+ELSim imported subcircuit user-function parameter operating point
+.FUNC DOUBLE(x) {2*x}
+V1 IN 0 5
+XDEFAULT IN OUT_DEFAULT AMP_USER_FUNC
+XOVERRIDE IN OUT_OVERRIDE AMP_USER_FUNC gain={DOUBLE(3)}
+.SUBCKT AMP_USER_FUNC IN OUT gain={DOUBLE(2)}
+EGAIN OUT 0 IN 0 {gain}
+.ENDS AMP_USER_FUNC
+.op
+.print op v(out_default) v(out_override)
+.end

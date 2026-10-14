@@ -1,6 +1,6 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
-import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
+import { isSafeSubcircuitParameterValue, modelFunctionsForAsset, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
@@ -500,14 +500,19 @@ export function validateProject(input: unknown): Project {
       if (totalBytes > 50 * 1024 * 1024) throw new Error('Original LTspice schematic sources exceed the 50 MiB project limit.')
     }
   }
-  const importedDefinitionByName = new Map<string, { asset: ModelLibraryAsset; definition: SubcircuitDefinition }>()
+  const parsedModelLibraryEntries = ((data.modelAssets as ModelLibraryAsset[] | undefined) ?? []).flatMap((asset) => {
+    const parsed = parsedModelAssets.get(asset.id)
+    return parsed ? [{ asset, parsed }] : []
+  })
+  const importedDefinitionByName = new Map<string, { asset: ModelLibraryAsset; definition: SubcircuitDefinition; functions: ReadonlyMap<string, number> }>()
   const importedDeviceModelByName = new Map<string, SpiceModelDefinition>()
   for (const asset of (data.modelAssets as ModelLibraryAsset[] | undefined) ?? []) {
     const parsed = parsedModelAssets.get(asset.id)
     if (!parsed) throw new Error(`${asset.filename} could not be parsed as a model library.`)
+    const functions = modelFunctionsForAsset(parsedModelLibraryEntries, asset.id)
     for (const definition of parsed.subcircuits) {
       const name = definition.name.toLowerCase()
-      if (!importedDefinitionByName.has(name)) importedDefinitionByName.set(name, { asset, definition })
+      if (!importedDefinitionByName.has(name)) importedDefinitionByName.set(name, { asset, definition, functions })
     }
     for (const model of parsed.models) {
       if (model.scope) continue
@@ -533,13 +538,14 @@ export function validateProject(input: unknown): Project {
       if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
     }
     if (part.kind === 'subcircuit' && !part.sheetId) {
-      const definition = part.modelName ? importedDefinitionByName.get(part.modelName.toLowerCase())?.definition : undefined
-      if (!definition) throw new Error(`${part.ref} refers to missing imported subcircuit ${part.modelName}.`)
+      const importedDefinition = part.modelName ? importedDefinitionByName.get(part.modelName.toLowerCase()) : undefined
+      const definition = importedDefinition?.definition
+      if (!definition || !importedDefinition) throw new Error(`${part.ref} refers to missing imported subcircuit ${part.modelName}.`)
       if (!part.modelPins || part.modelPins.length !== definition.pins.length || part.modelPins.some((pin, index) => pin.toLowerCase() !== definition.pins[index].toLowerCase())) throw new Error(`${part.ref} pin order does not match imported subcircuit ${definition.name}.`)
       if (part.modelParameters !== undefined) {
         if (!part.modelParameters || typeof part.modelParameters !== 'object' || Array.isArray(part.modelParameters) || Object.keys(part.modelParameters).length > 32) throw new Error(`${part.ref} subcircuit parameter overrides are malformed.`)
         for (const [name, value] of Object.entries(part.modelParameters)) {
-          if (!definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value)) throw new Error(`${part.ref} has an unsupported override for subcircuit parameter ${name}.`)
+          if (!definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value, importedDefinition.functions)) throw new Error(`${part.ref} has an unsupported override for subcircuit parameter ${name}.`)
         }
       }
       if (part.symbolAssetId) {

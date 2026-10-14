@@ -2109,7 +2109,7 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Components', exact: true }).click()
-  const modelLibrary = '.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={max(sqrt(4), 1)}\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
+  const modelLibrary = '.FUNC DOUBLE(x) {2*x}\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={DOUBLE(2)}\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-double.lib',
@@ -2118,7 +2118,7 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   })
   await expect(page.getByText(/Imported 1 subcircuit and 0 device models from user-double\.lib/)).toBeVisible()
   const importedModel = page.locator('.imported-model').filter({ hasText: 'USER_DOUBLE' })
-  await expect(importedModel).toContainText('Parameters: gain={max(sqrt(4), 1)}')
+  await expect(importedModel).toContainText('Parameters: gain={DOUBLE(2)}')
   await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
   await page.getByRole('button', { name: 'Schematic', exact: true }).click()
   const instance = page.locator('.circuit-part[aria-label^="X1,"]')
@@ -2127,13 +2127,13 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await instance.click()
   await page.getByRole('button', { name: 'Properties', exact: true }).click()
   const gain = page.getByRole('textbox', { name: 'gain model value' })
-  await expect(gain).toHaveValue('{max(sqrt(4), 1)}')
-  await gain.fill('sqrt(9)')
+  await expect(gain).toHaveValue('{DOUBLE(2)}')
+  await gain.fill('{DOUBLE(3)}')
   await gain.blur()
   await expect(gain).toHaveAttribute('aria-invalid', 'false')
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelParameters)).toEqual({ gain: 'sqrt(9)' })
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelParameters)).toEqual({ gain: '{DOUBLE(3)}' })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* USER_DOUBLE PARAMS: gain=sqrt\(9\)/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* USER_DOUBLE PARAMS: gain=\{DOUBLE\(3\)\}/)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 

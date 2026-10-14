@@ -1,9 +1,10 @@
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean }
+export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; startLine: number; endLine: number }
 export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; parameters: SubcircuitParameter[]; scope?: string; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
-export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
+export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
 export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
 export type SchematicCompatibilityWarning = ModelDialectWarning
@@ -213,7 +214,7 @@ function withoutInlineComment(line: string): string {
   return line.trim()
 }
 
-function parseParameterDefaults(source: string, line: number): SubcircuitParameter[] {
+function parseParameterDefaults(source: string, line: number, functions: ReadonlyMap<string, number>): SubcircuitParameter[] {
   const result: SubcircuitParameter[] = []
   let offset = 0
   const assignment = /\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|[^\s]+)\s*/gy
@@ -223,11 +224,57 @@ function parseParameterDefaults(source: string, line: number): SubcircuitParamet
     if (!match) throw new Error(`Line ${line}: malformed .SUBCKT PARAMS: declaration.`)
     if (['__proto__', 'constructor', 'prototype'].includes(match[1].toLowerCase())) throw new Error(`Line ${line}: parameter name ${match[1]} is reserved.`)
     if (result.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) throw new Error(`Line ${line}: parameter ${match[1]} is declared more than once.`)
+    if (!isSafeSubcircuitParameterValue(match[2], functions)) throw new Error(`Line ${line}: parameter ${match[1]} has an unsupported default value.`)
     result.push({ name: match[1], defaultValue: match[2] })
     offset = assignment.lastIndex
   }
   if (result.length > 32) throw new Error(`Line ${line}: a subcircuit may declare at most 32 parameters.`)
   return result
+}
+
+const builtinFunctionArities: Readonly<Record<string, number>> = {
+  sqrt: 1,
+  sin: 1, cos: 1, tan: 1,
+  sinh: 1, cosh: 1, tanh: 1,
+  asin: 1, acos: 1, atan: 1, arctan: 1,
+  asinh: 1, acosh: 1, atanh: 1,
+  exp: 1, ln: 1, log: 1, abs: 1,
+  nint: 1, int: 1, floor: 1, ceil: 1, sgn: 1,
+  pow: 2, pwr: 2, min: 2, max: 2,
+  ternary_fcn: 3,
+}
+
+function parseFunctionDefinition(text: string, sourceLine: number): ModelFunction {
+  const match = text.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^()]*)\))?\s*=?\s*\{[\s\S]*\}\s*$/i)
+  if (!match) throw new Error(`Line ${sourceLine}: malformed .FUNC declaration.`)
+  const name = match[1]
+  const key = name.toLowerCase()
+  if (['__proto__', 'constructor', 'prototype'].includes(key) || Object.hasOwn(builtinFunctionArities, key)) throw new Error(`Line ${sourceLine}: .FUNC name ${name} is reserved.`)
+  const args = match[2]?.trim() ? match[2].split(/\s*,\s*/) : []
+  if (args.length > 16 || args.some((argument) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(argument)) || new Set(args.map((argument) => argument.toLowerCase())).size !== args.length) {
+    throw new Error(`Line ${sourceLine}: .FUNC ${name} must declare up to 16 unique argument names.`)
+  }
+  return { name, arity: args.length, sourceLine }
+}
+
+/** Collect top-level user functions before parsing defaults, which may refer forward to them. */
+function parseLibraryFunctions(lines: readonly LogicalLine[]): ModelFunction[] {
+  const functions = new Map<string, ModelFunction>()
+  let subcircuitDepth = 0
+  for (const line of lines) {
+    const text = withoutInlineComment(line.text)
+    if (!text || text.startsWith('*')) continue
+    const directive = text.split(/\s/, 1)[0].toLowerCase()
+    if (directive === '.subckt') { subcircuitDepth += 1; continue }
+    if (directive === '.ends') { subcircuitDepth = Math.max(0, subcircuitDepth - 1); continue }
+    if (directive !== '.func' || subcircuitDepth) continue
+    const definition = parseFunctionDefinition(text, line.start)
+    const key = definition.name.toLowerCase()
+    const previous = functions.get(key)
+    if (previous && previous.arity !== definition.arity) throw new Error(`Line ${line.start}: .FUNC ${definition.name} is declared with conflicting argument counts.`)
+    if (!previous) functions.set(key, definition)
+  }
+  return [...functions.values()]
 }
 
 function parseModelCard(text: string, line: LogicalLine, scope?: string): SpiceModelDefinition {
@@ -369,7 +416,7 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
   return { owner, reference, modelName, kind, sourceLine }
 }
 
-export function isSafeSubcircuitParameterValue(value: string): boolean {
+export function isSafeSubcircuitParameterValue(value: string, customFunctions: ReadonlyMap<string, number> = new Map()): boolean {
   if (typeof value !== 'string' || value.length > 64) return false
   const scalar = value.trim().replace(/^\{(.*)\}$/, '$1')
   if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?$/i.test(scalar)) return true
@@ -391,17 +438,6 @@ export function isSafeSubcircuitParameterValue(value: string): boolean {
   }
   let index = 0
   let depth = 0
-  const functionArity: Record<string, number> = {
-    sqrt: 1,
-    sin: 1, cos: 1, tan: 1,
-    sinh: 1, cosh: 1, tanh: 1,
-    asin: 1, acos: 1, atan: 1, arctan: 1,
-    asinh: 1, acosh: 1, atanh: 1,
-    exp: 1, ln: 1, log: 1, abs: 1,
-    nint: 1, int: 1, floor: 1, ceil: 1, sgn: 1,
-    pow: 2, pwr: 2, min: 2, max: 2,
-    ternary_fcn: 3,
-  }
   const primary = (): boolean => {
     const token = tokens[index]
     if (!token) return false
@@ -416,7 +452,8 @@ export function isSafeSubcircuitParameterValue(value: string): boolean {
     if (token === ')' || token === ',' || /^[+*/^\-]$/.test(token)) return false
     index += 1
     if (/^[A-Za-z_]/.test(token) && tokens[index] === '(') {
-      const arity = functionArity[token.toLowerCase()]
+      const functionName = token.toLowerCase()
+      const arity = builtinFunctionArities[functionName] ?? customFunctions.get(functionName)
       if (arity === undefined) return false
       if (++depth > 16) return false
       index += 1
@@ -588,6 +625,8 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     ? inspected.lines.filter(({ section }) => section === null || section !== null && selectedNames.has(section.toLowerCase())).map(({ line }) => line)
     : inspected.lines.map(({ line }) => line)
 
+  const functions = parseLibraryFunctions(lines)
+  const functionArities = new Map(functions.map(({ name, arity }) => [name.toLowerCase(), arity]))
   const subcircuits: SubcircuitDefinition[] = []
   const models: SpiceModelDefinition[] = []
   const dependencies: ModelDependency[] = []
@@ -679,7 +718,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !pinName.test(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
         throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
       }
-      activeSubcircuits.push({ name, pins, parameters: paramsAt < 0 ? [] : parseParameterDefaults(parameterSource, line.start), dependencies: [], ...(activeSubcircuits.at(-1) ? { parentName: activeSubcircuits.at(-1)!.name } : {}), start: line.start })
+      activeSubcircuits.push({ name, pins, parameters: paramsAt < 0 ? [] : parseParameterDefaults(parameterSource, line.start, functionArities), dependencies: [], ...(activeSubcircuits.at(-1) ? { parentName: activeSubcircuits.at(-1)!.name } : {}), start: line.start })
       modelLines.push(line)
       continue
     }
@@ -757,7 +796,47 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   for (const [start, end] of ranges) for (let line = start; line <= end; line += 1) retained.add(line)
   const modelRecords = [...retained].sort((a, b) => a - b).map((sourceLine) => ({ sourceLine, text: physical[sourceLine - 1] }))
   const modelText = modelRecords.map(({ text }) => text).join('\n')
-  return { subcircuits, models, dependencies, includes, modelText, modelRecords }
+  return { subcircuits, models, functions, dependencies, includes, modelText, modelRecords }
+}
+
+/** Return the unique function signatures reachable from one imported library. */
+export function modelFunctionsForAsset<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[], assetId: string): Map<string, number> {
+  const byId = new Map(assets.map(({ asset, parsed }) => [asset.id, { asset, parsed }]))
+  const byFilename = new Map<string, { asset: T; parsed: ParsedSubcircuitLibrary }[]>()
+  for (const entry of assets) {
+    const key = entry.asset.filename.toLowerCase()
+    const candidates = byFilename.get(key)
+    if (candidates) candidates.push(entry)
+    else byFilename.set(key, [entry])
+  }
+  const functions = new Map<string, number>()
+  const ambiguous = new Set<string>()
+  const visited = new Set<string>()
+  const visit = (id: string) => {
+    if (visited.has(id)) return
+    visited.add(id)
+    const entry = byId.get(id)
+    if (!entry) return
+    for (const definition of entry.parsed.functions) {
+      const key = definition.name.toLowerCase()
+      if (ambiguous.has(key)) continue
+      const previous = functions.get(key)
+      if (previous !== undefined && previous !== definition.arity) {
+        functions.delete(key)
+        ambiguous.add(key)
+      } else functions.set(key, definition.arity)
+    }
+    for (const include of entry.parsed.includes) {
+      if (!include.filename) continue
+      const matches = byFilename.get(include.filename.toLowerCase()) ?? []
+      if (matches.length !== 1) continue
+      const target = matches[0]
+      if (include.section && target.asset.selectedSections?.length && !target.asset.selectedSections.some((section) => section.toLowerCase() === include.section!.toLowerCase())) continue
+      visit(target.asset.id)
+    }
+  }
+  visit(assetId)
+  return functions
 }
 
 /** Parse each library once, then share its definitions with dependency checks and the UI. */

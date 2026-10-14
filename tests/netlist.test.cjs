@@ -1575,11 +1575,11 @@ test('N- and P-channel JFETs generate J devices in D-G-S order and matching teac
   assert.equal(nextRef(project.parts, 'njfet'), 'J3')
 })
 
-test('imported subcircuits place ordered pins and generate X-device netlists with model source mapping', () => {
+test('imported subcircuits preserve declared .FUNC expressions in validated parameter overrides', () => {
   const project = createStarterProject()
-  const content = '.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN=2\nE1 OUT 0 IN 0 {GAIN}\n.ENDS gain\n'
+  const content = '.FUNC DOUBLE(x) {2*x}\n.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN={DOUBLE(2)}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS gain\n'
   project.modelAssets = [{ id: 'model-gain', filename: 'gain.lib', content, sha256: '204a70330fd3a6eaa3a42e469e18b6c73596a9ace6d5c6fad84939961f516d5b', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'gain', modelName: 'gain', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], modelParameters: { GAIN: '3' }, x: 760, y: 350, rotation: 0 })
+  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'gain', modelName: 'gain', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], modelParameters: { GAIN: '{DOUBLE(3)}' }, x: 760, y: 350, rotation: 0 })
   project.netLabels.push(
     { id: 'x-in', name: 'xinput', x: 680, y: 338, visible: false },
     { id: 'x-out', name: 'xoutput', x: 840, y: 338, visible: false },
@@ -1590,14 +1590,18 @@ test('imported subcircuits place ordered pins and generate X-device netlists wit
   assert.deepEqual(componentPins(validated.parts.at(-1)).map(({ x, y }) => [x - 760, y - 350]), [[-80, -10], [80, -10], [-80, 10], [80, 10]])
   const artifact = createNetlistArtifact(validated)
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^X1 xinput xoutput xvcc xvee gain PARAMS: GAIN=3$/m)
-  assert.match(artifact.text, /^\.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN=2$/m)
+  assert.match(artifact.text, /^X1 xinput xoutput xvcc xvee gain PARAMS: GAIN=\{DOUBLE\(3\)\}$/m)
+  assert.match(artifact.text, /^\.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN=\{DOUBLE\(2\)\}$/m)
   assert.match(artifact.text, /^E1 OUT 0 IN 0 \{GAIN\}$/m)
   assert.equal(artifact.sourceMap.find((entry) => entry.sourceId === 'p-x1')?.role, 'component')
-  assert.equal(artifact.sourceMap.filter((entry) => entry.sourceId === 'model-file:model-gain').length, 3)
+  assert.equal(artifact.sourceMap.filter((entry) => entry.sourceId === 'model-file:model-gain').length, 4)
   assert.throws(() => validateProject({ ...validated, parts: validated.parts.map((part) => part.id === 'p-x1' ? { ...part, modelPins: ['OUT', 'IN', 'VCC', 'VEE'] } : part) }), /pin order does not match/)
   const unsafe = { ...validated, parts: validated.parts.map((part) => part.id === 'p-x1' ? { ...part, modelParameters: { GAIN: '2\n.end' } } : part) }
   assert.throws(() => validateProject(unsafe), /unsupported override/)
+  const wrongArity = { ...validated, parts: validated.parts.map((part) => part.id === 'p-x1' ? { ...part, modelParameters: { GAIN: '{DOUBLE(1, 2)}' } } : part) }
+  assert.throws(() => validateProject(wrongArity), /unsupported override/)
+  const unrelated = { ...validated, modelAssets: [...validated.modelAssets, { id: 'other', filename: 'other.lib', content: '.FUNC SECRET(x) {x}\n', sha256: 'd'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }], parts: validated.parts.map((part) => part.id === 'p-x1' ? { ...part, modelParameters: { GAIN: '{SECRET(1)}' } } : part) }
+  assert.throws(() => validateProject(unrelated), /unsupported override/)
   const unsafeNetlist = createNetlistArtifact(unsafe)
   assert.equal(unsafeNetlist.diagnostics[0].sourceId, 'p-x1')
   assert.doesNotMatch(unsafeNetlist.text, /^X1 .*\.end/m)
