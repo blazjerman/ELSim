@@ -348,6 +348,36 @@ test('autosave falls back to IndexedDB and restores the latest project after rel
   await expect(page.locator('.project-title')).toHaveText('Recovered from IndexedDB')
 })
 
+test('a newer local project survives a crash between its JSON and timestamp writes', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.app-status [role="status"]')).toHaveText('All changes saved locally')
+  await page.evaluate(async () => {
+    const local = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const newerUpdatedAt = Date.now() + 60_000
+    const stale = { ...local, name: 'Older IndexedDB copy', updatedAt: new Date(newerUpdatedAt - 1_000).toISOString() }
+    const newer = { ...local, name: 'Newer local copy', updatedAt: new Date(newerUpdatedAt).toISOString() }
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('elsim-local-projects', 1)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction('autosaves', 'readwrite')
+      transaction.objectStore('autosaves').put({ json: JSON.stringify(stale), savedAt: 100 }, 'current-project')
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+      transaction.onabort = () => reject(transaction.error)
+    })
+    database.close()
+    localStorage.setItem('elsim:project:v7', JSON.stringify(newer))
+    // Simulate a browser closing after writing the project JSON but before
+    // updating its separate savedAt entry.
+    localStorage.setItem('elsim:project:v7:savedAt', '100')
+  })
+  await page.reload()
+  await expect(page.locator('.project-title')).toHaveText('Newer local copy')
+})
+
 test('engine-free preview explains the local runtime requirement while keeping the editor usable', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.route('**/engine/ngspice.mjs', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))
   await page.route('**/engine/ngspice.wasm', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))

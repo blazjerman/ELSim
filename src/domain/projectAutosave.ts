@@ -1,5 +1,25 @@
 export type ProjectAutosaveSnapshot = { json: string; savedAt: number }
 
+/** Decide whether a valid IndexedDB snapshot is newer than the local project.
+ * The project JSON and its localStorage timestamp are separate writes, so a
+ * crash can leave the timestamp behind the JSON. Compare project revisions by
+ * updatedAt first, then use savedAt only when those timestamps tie or are not
+ * comparable. Equal save timestamps prefer localStorage because it is the
+ * synchronous startup copy. */
+export function shouldRestoreProjectAutosave(
+  local: { updatedAt: string; savedAt: number } | null,
+  indexedDb: { updatedAt: string; savedAt: number } | null,
+): boolean {
+  if (!indexedDb || !Number.isFinite(indexedDb.savedAt) || indexedDb.savedAt <= 0) return false
+  if (!local) return true
+  const localUpdatedAt = Date.parse(local.updatedAt)
+  const indexedDbUpdatedAt = Date.parse(indexedDb.updatedAt)
+  if (Number.isFinite(localUpdatedAt) && Number.isFinite(indexedDbUpdatedAt) && localUpdatedAt !== indexedDbUpdatedAt) {
+    return indexedDbUpdatedAt > localUpdatedAt
+  }
+  return indexedDb.savedAt > local.savedAt
+}
+
 const DATABASE_NAME = 'elsim-local-projects'
 const DATABASE_VERSION = 1
 const STORE_NAME = 'autosaves'

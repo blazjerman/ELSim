@@ -41,7 +41,7 @@ import type { LtspiceExportResult } from '../domain/ltspiceExport'
 import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type PlotTraceReference, type Project, type SymbolAsset, type TransientMeasurement, type Wire } from '../domain/project'
 import { validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlistValidation'
 import { partUiState, subscribePartUiState, updatePartUiState } from './partUiState'
-import { clearProjectAutosave, readProjectAutosave, writeProjectAutosave } from '../domain/projectAutosave'
+import { clearProjectAutosave, readProjectAutosave, shouldRestoreProjectAutosave, writeProjectAutosave } from '../domain/projectAutosave'
 import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
@@ -1877,12 +1877,13 @@ export default function App() {
     window.requestAnimationFrame(() => modelImportReturnFocusRef.current?.focus())
   }
   const [mobilePane, setMobilePane] = useState<'components' | 'schematic' | 'properties'>('schematic')
-  const [project, setProjectState] = useState(() => {
+  const [initialProjectLoad] = useState(() => {
     try {
       const saved = localStorage.getItem('elsim:project:v7') ?? localStorage.getItem('elsim:project:v6') ?? localStorage.getItem('elsim:project:v5') ?? localStorage.getItem('elsim:project:v4') ?? localStorage.getItem('elsim:project:v3') ?? localStorage.getItem('elsim:project:v2') ?? localStorage.getItem('elsim:project:v1')
-      return saved ? validateProject(JSON.parse(saved)) : createStarterProject()
-    } catch { return createStarterProject() }
+      return saved ? { project: validateProject(JSON.parse(saved)), fromLocalStorage: true } : { project: createStarterProject(), fromLocalStorage: false }
+    } catch { return { project: createStarterProject(), fromLocalStorage: false } }
   })
+  const [project, setProjectState] = useState(initialProjectLoad.project)
   const [projectSessionId, setProjectSessionId] = useState(0)
   const [initialSelectedPartId] = useState(() => (project.parts.find((part) => part.id === 'p-r1') ?? project.parts.find((part) => part.kind === 'resistor') ?? project.parts[0])?.id ?? null)
   const [selection, setSelection] = useState<Selection>(() => initialSelectedPartId ? { kind: 'part', id: initialSelectedPartId } : null)
@@ -2073,19 +2074,24 @@ export default function App() {
       try {
         const snapshot = await readProjectAutosave()
         if (!active) return
-        if (snapshot && snapshot.savedAt >= localSavedAt && snapshot.savedAt > 0) {
+        if (snapshot && snapshot.savedAt > 0) {
           try {
             const recoveredProject = validateProject(JSON.parse(snapshot.json))
-            setProjectState(recoveredProject)
-            resetDocumentInteractionState()
-            const firstPart = recoveredProject.parts.find((part) => part.id === 'p-r1') ?? recoveredProject.parts.find((part) => part.kind === 'resistor') ?? recoveredProject.parts[0]
-            setSelection(firstPart ? { kind: 'part', id: firstPart.id } : null)
-            setSelectedPartIds(firstPart ? [firstPart.id] : [])
-            setSelectedWireIds([])
-            setSelectedNetLabelIds([])
-            sheetSelectionState.current.clear()
-            autosaveTimestampRef.current = snapshot.savedAt
-            setAutosaveStatus('recovered')
+            if (shouldRestoreProjectAutosave(
+              initialProjectLoad.fromLocalStorage ? { updatedAt: initialProjectLoad.project.updatedAt, savedAt: localSavedAt } : null,
+              { updatedAt: recoveredProject.updatedAt, savedAt: snapshot.savedAt },
+            )) {
+              setProjectState(recoveredProject)
+              resetDocumentInteractionState()
+              const firstPart = recoveredProject.parts.find((part) => part.id === 'p-r1') ?? recoveredProject.parts.find((part) => part.kind === 'resistor') ?? recoveredProject.parts[0]
+              setSelection(firstPart ? { kind: 'part', id: firstPart.id } : null)
+              setSelectedPartIds(firstPart ? [firstPart.id] : [])
+              setSelectedWireIds([])
+              setSelectedNetLabelIds([])
+              sheetSelectionState.current.clear()
+              autosaveTimestampRef.current = snapshot.savedAt
+              setAutosaveStatus('recovered')
+            } else void clearProjectAutosave().catch(() => {})
           } catch {
             void clearProjectAutosave().catch(() => {})
           }
