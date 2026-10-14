@@ -547,6 +547,14 @@ test('accepts ngspice slash and numeric-leading subcircuit identifiers and pins'
   numericProject.modelAssets = [{ id: 'numeric-ic', filename: 'numeric-ic.lib', content: numericContent, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   numericProject.parts.push({ id: 'numeric-ic-instance', kind: 'subcircuit', ref: 'X1', value: '', x: 300, y: 200, rotation: 0, modelName: '74HC00m', modelPins: ['1A', '1B', '1Y'] })
   assert.deepEqual(validateProject(numericProject).parts.at(-1).modelPins, ['1A', '1B', '1Y'])
+
+  const slashPins = parseSubcircuitLibrary('.SUBCKT OPA/IO IN/P OUT/P\nE1 OUT/P 0 IN/P 0 2\n.ENDS OPA/IO')
+  assert.deepEqual(slashPins.subcircuits[0].pins, ['IN/P', 'OUT/P'])
+  const slashProject = createStarterProject()
+  const slashContent = '.SUBCKT OPA/IO IN/P OUT/P\nE1 OUT/P 0 IN/P 0 2\n.ENDS OPA/IO'
+  slashProject.modelAssets = [{ id: 'slash-pin-ic', filename: 'slash-pin-ic.lib', content: slashContent, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  slashProject.parts.push({ id: 'slash-pin-instance', kind: 'subcircuit', ref: 'X1', value: '', x: 300, y: 200, rotation: 0, modelName: 'OPA/IO', modelPins: ['IN/P', 'OUT/P'] })
+  assert.deepEqual(validateProject(slashProject).parts.at(-1).modelPins, ['IN/P', 'OUT/P'])
 })
 
 test('parses native ngspice subcircuit defaults with and without PARAMS:', () => {

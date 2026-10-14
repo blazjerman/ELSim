@@ -20,7 +20,7 @@ const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 // ngspice node names may carry polarity suffixes such as IN+ and IN- in
 // imported .SUBCKT interfaces. Keep this separate from ELSim net-label syntax.
-const pinName = /^(?:\d+|[A-Za-z0-9_][A-Za-z0-9_.$+-]*)$/
+const pinName = /^(?:\d+|[A-Za-z0-9_][A-Za-z0-9_.$+/-]*)$/
 /** Native SPICE model identifiers may contain slash (for example LF356/NS). */
 export function isValidSpiceModelName(value: string, allowLeadingDigit = false): boolean {
   return (allowLeadingDigit ? /^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/ : /^[A-Za-z_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/).test(value)

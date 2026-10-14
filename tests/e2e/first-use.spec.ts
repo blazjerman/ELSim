@@ -2270,7 +2270,7 @@ test('native ngspice slash-named subcircuit imports and generates a valid instan
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Components', exact: true }).click()
-  const modelLibrary = '.SUBCKT LF356/NS IN OUT\nE1 OUT 0 IN 0 2\n.ENDS LF356/NS\n.SUBCKT LF356.NS IN OUT\nE1 OUT 0 IN 0 3\n.ENDS LF356.NS\n'
+  const modelLibrary = '.SUBCKT LF356/NS IN/P OUT/P\nE1 OUT/P 0 IN/P 0 2\n.ENDS LF356/NS\n.SUBCKT LF356.NS IN OUT\nE1 OUT 0 IN 0 3\n.ENDS LF356.NS\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'lf356.lib',
@@ -2287,7 +2287,9 @@ test('native ngspice slash-named subcircuit imports and generates a valid instan
   const instance = page.locator('.circuit-part[aria-label^="X1,"]')
   await expect(instance).toBeVisible()
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelName)).toBe('LF356/NS')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN/P', 'OUT/P'])
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('.SUBCKT LF356/NS IN/P OUT/P')
   await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* LF356\/NS/)
 })
 

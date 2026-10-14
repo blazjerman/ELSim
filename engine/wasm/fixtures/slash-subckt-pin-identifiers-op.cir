@@ -1,0 +1,10 @@
+ELSim ngspice slash-delimited subcircuit pin identifiers
+V1 in 0 5
+X1 in out OPA/IO
+R1 out 0 1k
+.SUBCKT OPA/IO IN/P OUT/P
+E1 OUT/P 0 IN/P 0 2
+.ENDS OPA/IO
+.op
+.print op v(out)
+.end
