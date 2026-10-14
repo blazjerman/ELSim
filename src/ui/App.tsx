@@ -2767,7 +2767,7 @@ export default function App() {
       return `${definition.paletteName ?? definition.name} ${definition.name} ${kindNames[kind]} ${definition.paletteSubtitle ?? ''}`.toLowerCase().includes(query)
     })
   }, [componentCategory, componentQuery])
-  const selectComponentForPlacement = (kind: PartKind, polarized = false, logicOperation?: Part['logicOperation']) => {
+  const selectComponentForPlacement = useCallback((kind: PartKind, polarized = false, logicOperation?: Part['logicOperation']) => {
     const component = componentPaletteItems.find((item) => item.kind === kind)
     if (!component) return
     setPendingComponentKind(kind)
@@ -2779,7 +2779,7 @@ export default function App() {
     const definition = componentDefinitionFor(kind)
     setComponentCategory(definition.paletteCategory ?? 'basics')
     setNotice(`${definition.paletteName ?? definition.name} selected. Click the schematic to place it; press R to rotate before placing.`)
-  }
+  }, [])
   const startTour = () => {
     tourTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const firstPart = projectRef.current.parts.find((part) => part.kind === 'resistor') ?? projectRef.current.parts[0]
