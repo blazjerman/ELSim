@@ -1,0 +1,13 @@
+ELSim beginner LC energy exchange fixture
+C1 vc 0 100u IC=5
+L1 vc n1 10m
+R1 n1 0 1
+.tran 10u 25m uic
+.save v(vc) i(l1)
+.control
+set filetype=ascii
+tran 10u 25m uic
+write /result.raw v(vc) i(l1)
+quit
+.endc
+.end
