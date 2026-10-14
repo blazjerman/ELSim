@@ -5659,6 +5659,37 @@ test('parallel RLC lesson predicts resonance from live L and C values', { tag: '
   await expect(page.getByRole('button', { name: 'Run this circuit' })).toBeEnabled()
 })
 
+test('resistor-power lesson predicts dissipation from live supply and resistance', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Resistor power dissipation' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const prediction = page.locator('.example-prediction')
+  const answer = prediction.getByRole('spinbutton', { name: 'Before running, predict the power dissipated by R1' })
+  await answer.fill('20')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Not quite.')
+  await expect(prediction.getByRole('status')).toContainText('P = V × I = V²/R')
+
+  await answer.fill('25')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('25 mW')
+
+  await page.locator('.circuit-part[data-part-id="resistor-power-r1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="resistor-power-r1:value"]').fill('100 Ω')
+  await expect(answer).toHaveValue('')
+  await answer.fill('250')
+  await prediction.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(prediction.getByRole('status')).toContainText('Correct.')
+  await expect(prediction.getByRole('status')).toContainText('250 mW')
+  await expect(page.getByRole('button', { name: 'Run this circuit' })).toBeEnabled()
+})
+
 test('Wheatstone bridge lesson predicts and verifies a balanced sensor arm', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
