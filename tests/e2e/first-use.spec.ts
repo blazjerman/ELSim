@@ -4354,7 +4354,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', { tag: ['
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('/')
 
-  const modelLibrary = '.LIB typical\n.SUBCKT USER_DOUBLE IN OUT VSS gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n.ENDL typical\n'
+  const modelLibrary = '.LIB typical\n.SUBCKT USER_DOUBLE IN OUT VSS gain=2\nXCORE IN OUT VSS USER_CORE gain = {gain}\n.ENDS USER_DOUBLE\n.SUBCKT USER_CORE IN OUT VSS gain=2\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_CORE\n.ENDL typical\n'
   const expectedDefinitionId = `user.${createHash('sha256').update(modelLibrary).digest('hex')}.user-double`
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -4362,7 +4362,7 @@ test('import, place, and simulate a user-supplied IC with its symbol', { tag: ['
     mimeType: 'text/plain',
     buffer: Buffer.from(modelLibrary),
   })
-  await expect(page.getByText(/Imported 1 subcircuit and 0 device models from user-double\.lib/)).toBeVisible()
+  await expect(page.getByText(/Imported 2 subcircuits and 0 device models from user-double\.lib/)).toBeVisible()
 
   const source = [
     'Version 4',

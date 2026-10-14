@@ -556,12 +556,13 @@ test('checks SHA-256 and rejects edited model content', async () => {
 
 test('resolves cross-library device and nested-subcircuit dependencies', () => {
   const report = analyzeModelDependencies([
-    { id: 'amp', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE m=2\nXCORE2 IN OUT CORE PARAMS: GAIN=3\nD1 OUT 0 DFAST\n.ENDS AMP' },
+    { id: 'amp', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE m=2\nXCORE2 IN OUT CORE GAIN = 3\nXCORE3 IN OUT CORE PARAMS: GAIN = 4\nD1 OUT 0 DFAST\n.ENDS AMP' },
     { id: 'core', filename: 'core.lib', content: '.SUBCKT CORE A B\nR1 A B 1k\n.ENDS CORE\n.MODEL DFAST D(Is=1n)' },
   ])
   assert.deepEqual(report.missing, [])
   assert.deepEqual(report.recursiveChains, [])
   assert.deepEqual(report.resolved.map(({ owner, modelName, kind, targetAssetId }) => ({ owner, modelName, kind, targetAssetId })), [
+    { owner: 'AMP', modelName: 'CORE', kind: 'subcircuit', targetAssetId: 'core' },
     { owner: 'AMP', modelName: 'CORE', kind: 'subcircuit', targetAssetId: 'core' },
     { owner: 'AMP', modelName: 'CORE', kind: 'subcircuit', targetAssetId: 'core' },
     { owner: 'AMP', modelName: 'DFAST', kind: 'device', targetAssetId: 'core' },

@@ -1,7 +1,7 @@
 ELSim imported subcircuit bare parameter override operating point
 V1 IN 0 5
-XAMP IN OUT AMP2 GAIN=3
-.SUBCKT AMP2 IN OUT GAIN=2
+XAMP IN OUT AMP2 GAIN = 3
+.SUBCKT AMP2 IN OUT GAIN = 2
 EGAIN OUT 0 IN 0 {GAIN}
 .ENDS AMP2
 .op

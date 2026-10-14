@@ -220,7 +220,13 @@ function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): 
   if (prefix === 'x') {
     const paramsIndex = tokens.findIndex((token) => /^params?:$/i.test(token))
     let end = paramsIndex < 0 ? tokens.length : paramsIndex
-    while (end > 1 && /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(tokens[end - 1])) end -= 1
+    for (let candidate = 1; candidate < end; candidate += 1) {
+      if (/^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(tokens[candidate])
+        || (/^[A-Za-z_][A-Za-z0-9_]*$/.test(tokens[candidate]) && /^=/.test(tokens[candidate + 1] ?? ''))) {
+        end = candidate
+        break
+      }
+    }
     index = end - 1
     kind = 'subcircuit'
   } else if (prefix === 'd') index = 3
