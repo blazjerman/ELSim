@@ -254,6 +254,8 @@ Imported primitive-device assignments now retain syntactically safe unresolved o
 
 Cross-browser UI pass (2026-10-14): The 66 `@ui-smoke` browser workflows pass in Firefox, including the missing/wrong-family model guidance. The production preview and Vite development server were both used by the Firefox configuration; no WASM rebuild or Pages deployment was needed.
 
+Full Firefox compatibility pass (2026-10-14): `npm run test:e2e:compat` passes all 132 workflows that exclude only engine-tagged suites. This includes wire and mixed-selection editing, copy/paste, archive round trips, model import/diagnostics, hierarchy editing, keyboard/focus behavior, and plot controls. No failures were found and no WASM rebuild was needed.
+
 Fresh-session verification (2026-10-12): Firefox opens a `.elsim` archive containing the imported educational op-amp model in an isolated browser context, confirms the model asset and symbol are restored, and simulates the circuit to the expected 1.5 V output using the existing local WASM runtime. The focused `@engine-smoke` regression passes without rebuilding WASM.
 
 The imported-model browser now searches subcircuit names, source filenames, ordered pins, parameter names, and device-model names/types. Both subcircuit and device-model lists render 50 matches initially and reveal further groups on request. Imported-symbol matches are capped at 50 and follow the subcircuit search, so large libraries do not create unbounded model-card or symbol-match button lists. A Chromium regression imports 52 subcircuits and 52 device models, verifies both caps and search paths, and checks that a matching two-pin symbol lists 50 matches before narrowing to one IC.
