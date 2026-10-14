@@ -367,9 +367,16 @@ test('malformed local project data is downloaded before the recovered copy repla
   const recoveryDialog = page.getByRole('alertdialog', { name: 'A saved project copy could not be opened' })
   await expect(recoveryDialog).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('elsim:project:v7'))).toBe(malformedData)
+  const downloadButton = recoveryDialog.getByRole('button', { name: 'Download unreadable local copy 1' })
+  const continueButton = recoveryDialog.getByRole('button', { name: 'Continue with open project' })
+  await expect(continueButton).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(downloadButton).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(continueButton).toBeFocused()
 
   const downloadPromise = page.waitForEvent('download')
-  await recoveryDialog.getByRole('button', { name: 'Download unreadable local copy 1' }).click()
+  await downloadButton.click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe('elsim-project-v7-recovery.json')
   expect(readFileSync(await download.path()!, 'utf8')).toBe(malformedData)
