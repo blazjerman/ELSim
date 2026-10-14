@@ -1,0 +1,11 @@
+ELSim hierarchical sheet parameter user-function operating point
+.FUNC SCALE(x) {2*x}
+V1 IN 0 10
+XDEFAULT IN OUT_DEFAULT 0 ELSIM_SHEET_AMP
+XOVERRIDE IN OUT_OVERRIDE 0 ELSIM_SHEET_AMP PARAMS: GAIN={SCALE(1.5)}
+.SUBCKT ELSIM_SHEET_AMP IN OUT VSS PARAMS: GAIN={SCALE(1)}
+E1 OUT VSS IN VSS {GAIN}
+.ENDS ELSIM_SHEET_AMP
+.op
+.print op v(out_default) v(out_override)
+.end
