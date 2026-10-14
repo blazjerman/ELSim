@@ -1,0 +1,16 @@
+Imported passive .MODEL defaults and explicit overrides
+V1 vin 0 5
+R1 vin out RDEFAULT
+R2 out 0 2k
+R3 vin explicit 1k RDEFAULT
+R6 explicit 0 2k
+C1 vin cap CDEFAULT
+R4 cap 0 1k
+L1 vin ind LDEFAULT
+R5 ind 0 1k
+.MODEL RDEFAULT R(R=2k TC1=0.01)
+.MODEL CDEFAULT C(CAP=10u)
+.MODEL LDEFAULT L(IND=1m)
+.OP
+.PRINT OP V(out) V(explicit) V(cap) V(ind)
+.END
