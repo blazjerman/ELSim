@@ -23,7 +23,7 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
-import { CapacitorDischargePrediction, OhmsLawPrediction, RcTimeConstantPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
+import { CapacitorDischargePrediction, LedCurrentPrediction, OhmsLawPrediction, RcTimeConstantPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
@@ -3981,7 +3981,7 @@ export default function App() {
       rectifier: { title: 'A diode passes one half of an AC wave', guidance: 'Run the transient and compare V(VIN) with V(VOUT). The diode conducts on positive half-cycles and blocks negative ones; inspect I(D1) to see when it conducts.' },
       'bridge-rectifier': { title: 'Rectify both halves and smooth the output', guidance: 'Run the transient, then right-click C1 and choose Plot voltage across pin 1 → pin 2. The bridge keeps this capacitor voltage positive on both input half-cycles; C1 charges near each peak and discharges through RLOAD between peaks. Change C1 or RLOAD to compare the ripple.' },
       led: { title: 'Current makes the LED glow', guidance: 'Run the pulse response and scrub between on and off. The glow follows solved LED current; it is not a thermal model.' },
-      'led-current-limiter': { title: 'Limit current to protect an LED', guidance: 'Run the operating point and compare V(OUT) with I(D1). R1 limits current from the 5 V supply; increase R1 to reduce the LED current.' },
+      'led-current-limiter': { title: 'Limit current to protect an LED', guidance: 'Before running, estimate the LED current using a rough 2 V LED drop. R1 limits current from the 5 V supply; increase R1 to reduce the LED current, then compare your estimate with ngspice.' },
       'led-parallel': { title: 'Give every parallel LED its own resistor', guidance: 'Run the operating point and compare I(D1) with I(D2). Each branch has its own 330 Ω resistor. Change R2 to 680 Ω and rerun: only the second branch current should drop.' },
       'capacitor-discharge': { title: 'Watch stored charge leave a capacitor', guidance: 'C1 starts charged and discharges through R1 with no source connected. Predict VOUT after 10 ms using the RC exponential, then run the transient and compare capacitor voltage with resistor current.' },
       rlc: { title: 'See energy move between L and C', guidance: 'Run the transient and compare capacitor voltage with inductor current as the circuit rings and loses energy in R1.' },
@@ -4165,6 +4165,11 @@ export default function App() {
                 initialVoltageValue={capacitorDischargeInitialVoltage}
                 resistanceValue={partsById.get('cap-discharge-r1')?.value ?? ''}
                 capacitanceValue={partsById.get('cap-discharge-c1')?.value ?? ''}
+              />}
+              {exampleLesson.id === 'led-current-limiter' && !lessonNextStep && <LedCurrentPrediction
+                key={`${partsById.get('p-v1')?.value ?? ''}:${partsById.get('p-r1')?.value ?? ''}`}
+                supplyValue={partsById.get('p-v1')?.value ?? ''}
+                resistanceValue={partsById.get('p-r1')?.value ?? ''}
               />}
               {lessonNextStep ? <div className="example-lesson-next-step">
                 <span className="eyebrow">TRY THIS NEXT</span>

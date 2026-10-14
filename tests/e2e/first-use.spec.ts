@@ -631,6 +631,39 @@ test('capacitor-discharge lesson checks the 10 ms voltage prediction and recalcu
   await expect(lesson.getByRole('status')).toContainText('Correct. τ = R1 × C1 = 2 kΩ × 10 µF = 20 ms.')
 })
 
+test('LED current-limiter lesson checks an approximate current prediction and recalculates after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'LED current limiter' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('spinbutton', { name: 'Before running, estimate current through the LED' })
+  await expect(lesson).toContainText('using a rough 2 V LED drop')
+  await estimate.fill('12')
+  await estimate.press('Enter')
+  await expect(lesson.getByRole('status')).toContainText('Not quite. Using a rough 2 V LED drop')
+  await expect(lesson.getByRole('status')).toContainText('9.091 mA')
+  await expect(lesson.getByRole('status')).toContainText('ngspice may differ slightly')
+
+  await estimate.fill('9.091')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+
+  await page.locator('.circuit-part[data-part-id="p-r1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="p-r1:value"]').fill('1 kΩ')
+  const updatedEstimate = page.getByRole('spinbutton', { name: 'Before running, estimate current through the LED' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('3')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct. Using a rough 2 V LED drop')
+  await expect(lesson.getByRole('status')).toContainText('3 mA')
+})
+
 test('keyboard opens schematic probe actions and restores focus after closing', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')

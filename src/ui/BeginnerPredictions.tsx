@@ -116,6 +116,26 @@ export function CapacitorDischargePrediction({ initialVoltageValue, resistanceVa
   />
 }
 
+export function LedCurrentPrediction({ supplyValue, resistanceValue }: { supplyValue: string; resistanceValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const resistance = componentMagnitude(resistanceValue, 'resistor')
+  const predictedCurrentMa = supply !== null && resistance !== null && resistance > 0 && supply > 2
+    ? (supply - 2) / resistance * 1000
+    : null
+  const explanation = predictedCurrentMa === null || supply === null || resistance === null
+    ? ''
+    : `Using a rough 2 V LED drop, I ≈ (Vsource − VLED)/R1 = (${formatValue(supply)} V − 2 V)/${formatResistance(resistance)} = ${formatValue(predictedCurrentMa)} mA. The real LED drop changes with its model and current, so ngspice may differ slightly.`
+
+  return <NumericPrediction
+    id="led-current-prediction"
+    prompt="Before running, estimate current through the LED"
+    unit="mA"
+    predictedValue={predictedCurrentMa}
+    absoluteTolerance={0.5}
+    explanation={explanation}
+  />
+}
+
 export function VoltageDividerPrediction({ supplyValue, upperResistanceValue, lowerResistanceValue }: { supplyValue: string; upperResistanceValue: string; lowerResistanceValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const upper = componentMagnitude(upperResistanceValue, 'resistor')
