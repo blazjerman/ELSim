@@ -750,6 +750,46 @@ test('series-resistor lesson checks Kirchhoff voltage law before simulation', { 
   await expect(lesson.getByRole('status')).toHaveText('Correct. Kirchhoff’s voltage law: the drops around a closed loop add to the source, so V(R1) + V(R2) = 12 V.')
 })
 
+test('potentiometer lesson checks its live wiper-voltage prediction before simulation', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Basics' }).click()
+  await dialog.locator('.example-list article').filter({ hasText: 'Potentiometer voltage divider' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.getByLabel('Guided example')
+  const estimate = page.getByRole('textbox', { name: 'Before running, predict the wiper output voltage VOUT' })
+  await expect(lesson).toContainText(/the wiper percentage is measured from the upper terminal/i)
+  await estimate.fill('6')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Not quite. The wiper position is measured from the upper terminal')
+  await expect(lesson.getByRole('status')).toContainText('10 V × (1 − 0.5) = 5 V.')
+
+  await estimate.fill('5')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct.')
+  await expect(lesson.getByRole('button', { name: 'Run this circuit' })).toBeVisible()
+
+  await page.locator('.circuit-part[data-part-id="pot-p1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.getByLabel('Potentiometer wiper position').fill('25')
+  const updatedEstimate = page.getByRole('textbox', { name: 'Before running, predict the wiper output voltage VOUT' })
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('7.5')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('Correct.')
+  await expect(lesson.getByRole('status')).toContainText('10 V × (1 − 0.25) = 7.5 V.')
+
+  await page.locator('.circuit-part[data-part-id="pot-v1"]').focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-part-setting="pot-v1:value"]').fill('12 V')
+  await expect(updatedEstimate).toHaveValue('')
+  await updatedEstimate.fill('9')
+  await lesson.getByRole('button', { name: 'Check prediction' }).click()
+  await expect(lesson.getByRole('status')).toContainText('12 V × (1 − 0.25) = 9 V.')
+})
+
 test('capacitor-discharge lesson checks the 10 ms voltage prediction and recalculates after an edit', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()

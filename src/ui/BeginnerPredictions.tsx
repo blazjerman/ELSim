@@ -184,6 +184,26 @@ export function VoltageDividerPrediction({ supplyValue, upperResistanceValue, lo
   />
 }
 
+export function PotentiometerPrediction({ supplyValue, wiperPosition }: { supplyValue: string; wiperPosition: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const position = Number(wiperPosition)
+  const predictedOutput = supply !== null && Number.isFinite(position) && position >= 0.001 && position <= 0.999
+    ? supply * (1 - position)
+    : null
+  const explanation = predictedOutput === null || supply === null
+    ? ''
+    : `The wiper position is measured from the upper terminal, so the lower section is ${(1 - position) * 100}% of the track. VOUT = VIN × (1 − wiper position) = ${formatValue(supply)} V × (1 − ${formatValue(position)}) = ${formatValue(predictedOutput)} V.`
+
+  return <NumericPrediction
+    id="potentiometer-prediction"
+    prompt="Before running, predict the wiper output voltage VOUT"
+    unit="V"
+    predictedValue={predictedOutput}
+    absoluteTolerance={0.01}
+    explanation={explanation}
+  />
+}
+
 export function LoadedVoltageDividerPrediction({ supplyValue, upperResistanceValue, lowerResistanceValue, loadResistanceValue }: { supplyValue: string; upperResistanceValue: string; lowerResistanceValue: string; loadResistanceValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const upper = componentMagnitude(upperResistanceValue, 'resistor')
@@ -401,10 +421,11 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
+  wiperPosition?: string
   upperResistanceValue?: string
   lowerResistanceValue?: string
   loadResistanceValue?: string
@@ -433,6 +454,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'switch-lamp': return <SwitchPathPrediction/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
+    case 'potentiometer': return <PotentiometerPrediction supplyValue={props.supplyValue ?? ''} wiperPosition={props.wiperPosition ?? ''}/>
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'superposition': return <SuperpositionPrediction firstSourceValue={props.firstSourceValue ?? ''} secondSourceValue={props.secondSourceValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'thevenin-norton': return <TheveninNortonPrediction supplyValue={props.supplyValue ?? ''} seriesResistanceValue={props.upperResistanceValue ?? ''} theveninLoadValue={props.lowerResistanceValue ?? ''} currentValue={props.currentValue ?? ''} nortonResistanceValue={props.seriesResistanceValue ?? ''} nortonLoadValue={props.loadResistanceValue ?? ''}/>
