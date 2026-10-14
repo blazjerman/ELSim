@@ -251,17 +251,15 @@ export function SineWavePrediction({ offsetValue, amplitudeValue, frequencyValue
   const frequencyKhz = parsePredictionValue(frequencyValue, 'kHz')
   const periodMs = frequencyKhz !== null && frequencyKhz > 0 ? 1 / frequencyKhz : null
   const peak = amplitude === null ? null : Math.abs(amplitude)
-  const minimum = offset !== null && peak !== null ? offset - peak : null
-  const maximum = offset !== null && peak !== null ? offset + peak : null
   const amplitudeExplanation = peak === null
     ? ''
-    : `A is the peak amplitude: ${formatValue(peak)} V, and peak-to-peak is 2A = ${formatValue(2 * peak)} V. With offset ${offset === null ? offsetValue : `${formatValue(offset)} V`}, the ideal source range is ${minimum === null ? 'unknown' : `${formatValue(minimum)} V`} to ${maximum === null ? 'unknown' : `${formatValue(maximum)} V`}.`
+    : `A is the nominal peak amplitude: ${formatValue(peak)} V relative to the ${offset === null ? `offset ${offsetValue}` : `${formatValue(offset)} V offset`}. A complete undamped cycle has 2A = ${formatValue(2 * peak)} V peak-to-peak. Damping reduces later peaks; delay and phase shift the waveform in time.`
   const periodExplanation = periodMs === null
     ? ''
     : `T = 1/f = 1/${frequencyValue} = ${formatValue(periodMs)} ms. Increasing frequency shortens the period.`
 
   return <div className="example-prediction-group">
-    <NumericPrediction id="sine-wave-amplitude-prediction" prompt="Before running, predict the source peak amplitude" unit="V" predictedValue={amplitude} absoluteTolerance={0.01} explanation={amplitudeExplanation}/>
+    <NumericPrediction id="sine-wave-amplitude-prediction" prompt="Before running, predict the nominal source amplitude" unit="V" predictedValue={peak} absoluteTolerance={0.01} explanation={amplitudeExplanation}/>
     <NumericPrediction id="sine-wave-period-prediction" prompt="Predict one cycle's period" unit="ms" predictedValue={periodMs} absoluteTolerance={0.01} explanation={periodExplanation}/>
   </div>
 }
