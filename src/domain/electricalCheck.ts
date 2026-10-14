@@ -18,6 +18,18 @@ export type ElectricalIssue = {
 
 type ReachableSimulationSheet = { sheet: Project['sheets'][number]; topLevelInstanceId?: string }
 
+// Device prefixes and accepted .MODEL families from the ngspice device-line
+// grammar. Some prefixes intentionally accept multiple polarities/families.
+const nativeModelTypesByDevice: Readonly<Record<string, readonly string[]>> = {
+  r: ['r'], c: ['c'], l: ['l'], o: ['ltra'], u: ['urc'],
+  d: ['d'], q: ['npn', 'pnp'], j: ['njf', 'pjf'], z: ['nmf', 'pmf'],
+  m: ['nmos', 'pmos', 'vdmos'], s: ['sw'], w: ['csw'],
+} as const
+
+function expectedModelTypeLabel(types: readonly string[]): string {
+  return types.map((type) => type.toUpperCase()).join(' or ')
+}
+
 function importedDeviceModelIssue(part: Part, modelTypes: Map<string, { type: string; channel?: 'n' | 'p' }>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
   const expectedType = compatibleDeviceModelType(part.kind)
   if (!expectedType || !part.deviceModel) return null
@@ -430,16 +442,30 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         children.add(child)
         graph.set(owner, children)
       }
-      const reaches = (root: string, target: string): boolean => {
-        const pending = [root], visited = new Set<string>()
-        while (pending.length) {
-          const name = pending.pop()!
-          if (name === target) return true
-          if (visited.has(name)) continue
-          visited.add(name)
-          pending.push(...(graph.get(name) ?? []))
+      // Resolve each distinct placed model's transitive closure once, then
+      // index the top-level ICs by every definition they reach. Missing,
+      // recursive, conflicting, and incompatible-card findings can all use
+      // the same lookup instead of rescanning the whole model graph per issue.
+      const definitionsByRoot = new Map<string, Set<string>>()
+      const instancesByDefinition = new Map<string, Set<string>>()
+      for (const part of modelParts) {
+        let definitions = definitionsByRoot.get(part.modelName)
+        if (!definitions) {
+          definitions = new Set<string>()
+          const pending = [part.modelName]
+          while (pending.length) {
+            const name = pending.pop()!
+            if (definitions.has(name)) continue
+            definitions.add(name)
+            pending.push(...(graph.get(name) ?? []))
+          }
+          definitionsByRoot.set(part.modelName, definitions)
         }
-        return false
+        for (const name of definitions) {
+          const instances = instancesByDefinition.get(name) ?? new Set<string>()
+          instances.add(part.id)
+          instancesByDefinition.set(name, instances)
+        }
       }
       const usedDevices = new Map<string, Set<string>>()
       for (const { sheet, topLevelInstanceId } of reachableSheets) for (const part of sheet.parts) if (part.deviceModel) {
@@ -450,8 +476,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       }
       const assets = new Map(project.modelAssets.map((asset) => [asset.id, asset.filename]))
       for (const missing of dependencies.missing) {
-        const affectedModels = modelParts.filter((part) => reaches(part.modelName, missing.owner.toLowerCase()))
-        const affectedIds = new Set(affectedModels.map((part) => part.id))
+        const affectedIds = new Set(instancesByDefinition.get(missing.owner.toLowerCase()) ?? [])
         if (missing.kind === 'device') for (const id of usedDevices.get(missing.owner.toLowerCase()) ?? []) affectedIds.add(id)
         if (!affectedIds.size) continue
         for (const partId of affectedIds) issues.push({
@@ -462,31 +487,31 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
           partId,
         })
       }
-      const nativeModelTypeByDevice = { r: 'r', c: 'c', l: 'l', o: 'ltra', u: 'urc' } as const
       for (const dependency of dependencies.resolved) {
         if (dependency.kind !== 'device' || !dependency.targetModelType) continue
-        const expectedType = nativeModelTypeByDevice[dependency.reference[0]?.toLowerCase() as keyof typeof nativeModelTypeByDevice]
+        const expectedTypes = nativeModelTypesByDevice[dependency.reference[0]?.toLowerCase() ?? '']
         const actualType = dependency.targetModelType.toLowerCase()
-        if (!expectedType || actualType === expectedType) continue
-        const affectedModels = modelParts.filter((part) => reaches(part.modelName, dependency.owner.toLowerCase()))
-        for (const part of affectedModels) issues.push({
-          id: `incompatible-model-dependency:${dependency.assetId}:${dependency.sourceLine}:${dependency.reference.toLowerCase()}:${part.id}`,
+        if (!expectedTypes || expectedTypes.includes(actualType)) continue
+        const expectedLabel = expectedModelTypeLabel(expectedTypes)
+        for (const partId of instancesByDefinition.get(dependency.owner.toLowerCase()) ?? []) issues.push({
+          id: `incompatible-model-dependency:${dependency.assetId}:${dependency.sourceLine}:${dependency.reference.toLowerCase()}:${partId}`,
           severity: 'warning',
-          title: `${dependency.reference} uses ${dependency.modelName} type ${actualType.toUpperCase()}, expected ${expectedType.toUpperCase()}`,
-          detail: `${dependency.reference} is an ${dependency.reference[0].toUpperCase()} device in ${dependency.filename}:${dependency.sourceLine}, but ${dependency.modelName} is a ${actualType.toUpperCase()} model. This ngspice device requires a ${expectedType.toUpperCase()} model. Review the imported model assignment before running.`,
-          partId: part.id,
+          title: `${dependency.reference} uses ${dependency.modelName} type ${actualType.toUpperCase()}, expected ${expectedLabel}`,
+          detail: `${dependency.reference} is an ${dependency.reference[0].toUpperCase()} device in ${dependency.filename}:${dependency.sourceLine}, but ${dependency.modelName} is a ${actualType.toUpperCase()} model. This ngspice device requires a ${expectedLabel} model. Review the imported model assignment before running.`,
+          partId,
         })
       }
       for (const chain of dependencies.recursiveChains) {
         const chainNames = new Set(chain.map((name) => name.toLowerCase()))
-        const affected = modelParts.find((part) => [...chainNames].some((name) => reaches(part.modelName, name)))
+        const affectedIds = new Set([...chainNames].flatMap((name) => [...(instancesByDefinition.get(name) ?? [])]))
+        const affected = modelParts.find((part) => affectedIds.has(part.id))
         if (!affected) continue
         issues.push({ id: `recursive-model:${chain.map((name) => name.toLowerCase()).join(':')}`, severity: 'warning', title: 'A used subcircuit has a recursive model chain', detail: `${chain.join(' → ')}. ngspice cannot instantiate a recursive subcircuit chain.`, partId: affected.id })
       }
       for (const conflict of dependencies.conflicts) {
         const name = conflict.name.toLowerCase()
         const affectedIds = conflict.kind === 'subcircuit'
-          ? new Set(modelParts.filter((part) => reaches(part.modelName, name)).map((part) => part.id))
+          ? instancesByDefinition.get(name) ?? new Set<string>()
           : usedDevices.get(name) ?? new Set<string>()
         const locations = conflict.definitions.map((definition) => `${definition.filename}:${definition.sourceLine}`).join(', ')
         for (const partId of affectedIds) issues.push({

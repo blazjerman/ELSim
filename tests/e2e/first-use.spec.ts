@@ -8246,6 +8246,38 @@ test('circuit checks identify an incompatible native passive model inside an imp
   await expect(page.locator('.circuit-part[data-part-id="incompatible-passive-instance"].selected')).toHaveCount(1)
 })
 
+test('circuit checks identify incompatible native semiconductor and switch models inside an imported IC', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate(async () => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const content = [
+      '.SUBCKT MIXED IN OUT',
+      'D1 IN OUT D_BAD', 'Q1 IN OUT 0 Q_BAD', 'J1 IN OUT 0 J_BAD',
+      'M1 IN OUT 0 0 M_BAD', 'S1 IN OUT IN 0 S_BAD',
+      'W1 IN OUT VCTRL W_BAD', 'Z1 IN OUT 0 Z_BAD',
+      '.MODEL D_BAD R(RSH=1)', '.MODEL Q_BAD D(IS=1p)',
+      '.MODEL J_BAD PNP(BF=10)', '.MODEL M_BAD NJF(VTO=-1)',
+      '.MODEL S_BAD URC(RPERL=1)', '.MODEL W_BAD SW(RON=1)',
+      '.MODEL Z_BAD D(IS=1p)', '.ENDS MIXED',
+    ].join('\n') + '\n'
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
+    const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    project.modelAssets = [{ id: 'wrong-native-device-families', filename: 'mixed.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+    project.parts.push({ id: 'mixed-family-instance', kind: 'subcircuit', ref: 'XMIXED', value: 'MIXED', modelName: 'MIXED', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  const issue = report.getByRole('listitem').filter({ hasText: 'W1 uses W_BAD type SW, expected CSW' })
+  await expect(issue).toContainText('mixed.lib:7')
+  await issue.getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="mixed-family-instance"].selected')).toHaveCount(1)
+})
+
 test('circuit checks select the component with an ambiguous imported model name', async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()

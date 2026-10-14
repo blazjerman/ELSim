@@ -529,6 +529,61 @@ test('reports passive device references with an incompatible imported model fami
   assert.equal(checkCircuit(project).some((item) => item.id.startsWith('incompatible-model-dependency:')), false)
 })
 
+test('reports incompatible native semiconductor, switch, and MESFET model families inside an imported IC', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{
+    id: 'native-family-lib', filename: 'native-families.lib', sha256: '2'.repeat(64),
+    content: [
+      '.SUBCKT MIXED IN OUT',
+      'D1 IN OUT D_BAD',
+      'Q1 IN OUT 0 Q_BAD',
+      'J1 IN OUT 0 J_BAD',
+      'M1 IN OUT 0 0 M_BAD',
+      'S1 IN OUT IN 0 S_BAD',
+      'W1 IN OUT VCTRL W_BAD',
+      'Z1 IN OUT 0 Z_BAD',
+      '.MODEL D_BAD R(RSH=1)',
+      '.MODEL Q_BAD D(IS=1p)',
+      '.MODEL J_BAD PNP(BF=10)',
+      '.MODEL M_BAD NJF(VTO=-1)',
+      '.MODEL S_BAD URC(RPERL=1)',
+      '.MODEL W_BAD SW(RON=1)',
+      '.MODEL Z_BAD D(IS=1p)',
+      '.ENDS MIXED',
+    ].join('\n'),
+    licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z',
+  }]
+  const instance = { id: 'mixed-instance', kind: 'subcircuit', ref: 'X1', value: 'MIXED', modelName: 'MIXED', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 }
+  project.parts.push(instance)
+  project.sheets[0].parts = project.parts
+
+  const issues = checkCircuit(project).filter((item) => item.id.startsWith('incompatible-model-dependency:'))
+  assert.deepEqual(issues.map(({ title }) => title).sort(), [
+    'D1 uses D_BAD type R, expected D',
+    'J1 uses J_BAD type PNP, expected NJF or PJF',
+    'M1 uses M_BAD type NJF, expected NMOS or PMOS or VDMOS',
+    'Q1 uses Q_BAD type D, expected NPN or PNP',
+    'S1 uses S_BAD type URC, expected SW',
+    'W1 uses W_BAD type SW, expected CSW',
+    'Z1 uses Z_BAD type D, expected NMF or PMF',
+  ])
+  assert.ok(issues.every((issue) => issue.severity === 'warning' && issue.partId === instance.id))
+  assert.ok(issues.every((issue) => /native-families\.lib:\d+/.test(issue.detail)))
+
+  project.modelAssets[0] = {
+    ...project.modelAssets[0],
+    content: project.modelAssets[0].content
+      .replace('.MODEL D_BAD R(', '.MODEL D_BAD D(')
+      .replace('.MODEL Q_BAD D(', '.MODEL Q_BAD NPN(')
+      .replace('.MODEL J_BAD PNP(', '.MODEL J_BAD NJF(')
+      .replace('.MODEL M_BAD NJF(', '.MODEL M_BAD NMOS(')
+      .replace('.MODEL S_BAD URC(', '.MODEL S_BAD SW(')
+      .replace('.MODEL W_BAD SW(', '.MODEL W_BAD CSW(')
+      .replace('.MODEL Z_BAD D(', '.MODEL Z_BAD NMF('),
+  }
+  assert.equal(checkCircuit(project).some((item) => item.id.startsWith('incompatible-model-dependency:')), false)
+})
+
 test('reports placed external ICs with no matching imported subcircuit definition', () => {
   const project = createHierarchicalExampleProject()
   const core = project.sheets.find((sheet) => sheet.id === 'sheet-core')
