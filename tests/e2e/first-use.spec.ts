@@ -5820,6 +5820,9 @@ test('NPN common-emitter lesson shows amplified, inverted AC output', { tag: ['@
   const outputMagnitude = Number(magnitudeReadout.match(/V\(VOUT\) = ([+-]?[\d.]+) dB/i)?.[1])
   expect(Number.isFinite(inputMagnitude) && Number.isFinite(outputMagnitude)).toBe(true)
   expect(outputMagnitude).toBeGreaterThan(inputMagnitude + 3)
+  // The floating plot intentionally receives pointer input while it covers
+  // the schematic; close it before selecting the resistor underneath.
+  await plotWindow.getByRole('button', { name: /Close/ }).click()
   await page.locator('.circuit-part[data-part-id="common-emitter-rc"]').click()
   await page.locator('[data-part-setting="common-emitter-rc:value"]').fill('4.7k')
   await expect(lessonNextStep).toContainText('RC is now 4.7 kΩ')
