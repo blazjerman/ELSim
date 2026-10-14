@@ -20,7 +20,7 @@ const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 // ngspice node names may carry polarity suffixes such as IN+ and IN- in
 // imported .SUBCKT interfaces. Keep this separate from ELSim net-label syntax.
-const pinName = /^(?:\d+|[A-Za-z_][A-Za-z0-9_.$+-]*)$/
+const pinName = /^(?:\d+|[A-Za-z0-9_][A-Za-z0-9_.$+-]*)$/
 /** Native SPICE model identifiers may contain slash (for example LF356/NS). */
 export function isValidSpiceModelName(value: string, allowLeadingDigit = false): boolean {
   return (allowLeadingDigit ? /^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/ : /^[A-Za-z_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/).test(value)
@@ -206,7 +206,7 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     }
     if (directive === '.subckt') {
       const name = tokens[1]
-      if (!name || !isValidSpiceModelName(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
+      if (!name || !isValidSpiceModelName(name, true)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
       activeSubcircuits.push({ name, start: line.start })
     } else if (directive === '.ends') {
       const active = activeSubcircuits.at(-1)
@@ -823,7 +823,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
 
     if (directive === '.subckt') {
       const name = tokens[1]
-      if (!name || !isValidSpiceModelName(name)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
+      if (!name || !isValidSpiceModelName(name, true)) throw new Error(`Line ${line.start}: .SUBCKT needs a valid model name.`)
       const folded = name.toLowerCase()
       if (seenNames.has(folded)) throw new Error(`Line ${line.start}: model ${name} is declared more than once.`)
       seenNames.add(folded)

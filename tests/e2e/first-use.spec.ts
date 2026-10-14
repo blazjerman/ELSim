@@ -2291,6 +2291,29 @@ test('native ngspice slash-named subcircuit imports and generates a valid instan
   await expect(page.locator('.netlist-modal pre')).toContainText(/X1 .* LF356\/NS/)
 })
 
+test('native ngspice numeric-leading IC names and pins import and generate a valid instance', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const modelLibrary = '.SUBCKT 74HC00m 1A 1B 1Y\nE1 1Y 0 1A 1B 2\n.ENDS 74HC00m\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: '74hc00.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 1 subcircuit and 0 device models from 74hc00\.lib/)).toBeVisible()
+  const importedModel = page.locator('.imported-model').filter({ hasText: '74HC00m' })
+  await importedModel.getByRole('button', { name: 'Add to schematic' }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => {
+    const part = JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((candidate: { ref: string }) => candidate.ref === 'X1')
+    return { modelName: part?.modelName, modelPins: part?.modelPins }
+  })).toEqual({ modelName: '74HC00m', modelPins: ['1A', '1B', '1Y'] })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('.SUBCKT 74HC00m 1A 1B 1Y')
+  const netlist = await page.locator('.netlist-modal pre').innerText()
+  expect(netlist).toContain('.SUBCKT 74HC00m 1A 1B 1Y')
+  expect(netlist).toMatch(/X1 .* 74HC00m/)
+})
+
 test('native ngspice ignores mismatched optional names on nested .ENDS cards', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
@@ -2653,6 +2676,7 @@ test('component shortcuts are case-sensitive and logic-gate keys select their ma
 
 test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
   const parts = page.locator('.circuit-part')
   const count = await parts.count()
   await page.keyboard.press('Control+a')

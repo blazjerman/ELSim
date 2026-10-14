@@ -515,10 +515,12 @@ test('rejects ngspice backslash continuations for forbidden directives and missi
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT AMP IN OUT \\\\'), /continuation has no following line/)
 })
 
-test('accepts ngspice slash model identifiers and resolves them without relaxing pin names', () => {
+test('accepts ngspice slash and numeric-leading subcircuit identifiers and pins', () => {
   assert.equal(isValidSpiceModelName('LF356/NS'), true)
   assert.equal(isValidSpiceModelName('2N2222/A', true), true)
   assert.equal(isValidSpiceModelName('2N2222/A'), false)
+  assert.equal(isValidSpiceModelName('74HC00m', true), true)
+  assert.equal(isValidSpiceModelName('74HC00m'), false)
   assert.equal(isValidSpiceModelName('BAD//NAME'), false)
   const parsed = parseSubcircuitLibrary('.SUBCKT LF356/NS IN OUT\nR1 IN OUT 1k\n.ENDS LF356/NS\n.MODEL DIODE/FAST D(IS=1n)\n.SUBCKT WRAPPER IN OUT\nX1 IN OUT LF356/NS\nD1 OUT 0 DIODE/FAST\n.ENDS WRAPPER')
   assert.equal(parsed.subcircuits[0].name, 'LF356/NS')
@@ -535,6 +537,16 @@ test('accepts ngspice slash model identifiers and resolves them without relaxing
   project.modelAssets = [{ id: 'lf356', filename: 'lf356.lib', content, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push({ id: 'lf356-instance', kind: 'subcircuit', ref: 'X1', value: '', x: 300, y: 200, rotation: 0, modelName: 'LF356/NS', modelPins: ['IN', 'OUT'] })
   assert.equal(validateProject(project).parts.at(-1).modelName, 'LF356/NS')
+
+  const numeric = parseSubcircuitLibrary('.SUBCKT 74HC00m 1A 1B 1Y\nE1 1Y 0 1A 1B 2\n.ENDS 74HC00m')
+  assert.deepEqual(numeric.subcircuits[0], {
+    name: '74HC00m', pins: ['1A', '1B', '1Y'], parameters: [], dependencies: [], startLine: 1, endLine: 3,
+  })
+  const numericProject = createStarterProject()
+  const numericContent = '.SUBCKT 74HC00m 1A 1B 1Y\nE1 1Y 0 1A 1B 2\n.ENDS 74HC00m'
+  numericProject.modelAssets = [{ id: 'numeric-ic', filename: 'numeric-ic.lib', content: numericContent, sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  numericProject.parts.push({ id: 'numeric-ic-instance', kind: 'subcircuit', ref: 'X1', value: '', x: 300, y: 200, rotation: 0, modelName: '74HC00m', modelPins: ['1A', '1B', '1Y'] })
+  assert.deepEqual(validateProject(numericProject).parts.at(-1).modelPins, ['1A', '1B', '1Y'])
 })
 
 test('parses native ngspice subcircuit defaults with and without PARAMS:', () => {

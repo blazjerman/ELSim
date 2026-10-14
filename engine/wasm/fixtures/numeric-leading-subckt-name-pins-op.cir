@@ -1,0 +1,11 @@
+ELSim numeric-leading subcircuit name and pin names
+V1 IN 0 5
+V2 REF 0 0
+XU1 IN REF OUT 74HC00m
+R1 OUT 0 1k
+.SUBCKT 74HC00m 1A 1B 1Y
+E1 1Y 0 1A 1B 2
+.ENDS 74HC00m
+.op
+.print op v(out)
+.end
