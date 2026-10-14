@@ -16,7 +16,7 @@ import { trapDialogTab } from './dialogKeyboard'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import type { SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
-import { parseSymbolAsset } from '../domain/symbolAsset'
+import { importedSymbolBounds, parseSymbolAsset } from '../domain/symbolAsset'
 import { createDefaultElsimSymbol, defaultElsimPinSides, type ElsimPinSide } from '../domain/elsimSymbol'
 import { componentPins, createPartNavigationIndex, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, retainConnectedJunctions, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector } from '../domain/probe'
@@ -465,27 +465,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const horizontalPins = Math.max(topPins, bottomPins)
   const customHeight = Math.max(80, (verticalPins - 1) * 20 + 50)
   const customWidth = Math.max(120, (horizontalPins - 1) * 20 + 50)
-  const symbolBounds = useMemo(() => {
-    if (!symbol) return null
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    const include = (x: number, y: number) => { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y) }
-    for (const primitive of symbol.primitives) {
-      if (primitive.kind === 'polyline') for (const [x, y] of primitive.points) include(x, y)
-      else if (primitive.kind === 'text') include(primitive.x, primitive.y)
-      else if (primitive.kind === 'path') {
-        // Path coordinates are bounded by the symbol parser. Treating each
-        // numeric token as a possible x/y bound is conservative for H/V/arc
-        // commands and avoids clipping custom paths without parsing SVG data.
-        for (const match of primitive.d.matchAll(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g)) {
-          const value = Number(match[0])
-          include(value, value)
-        }
-      }
-      else { include(primitive.x1, primitive.y1); include(primitive.x2, primitive.y2) }
-    }
-    for (const pin of symbol.pins) include(pin.x, pin.y)
-    return Number.isFinite(minX) ? { minX, minY, maxX, maxY } : null
-  }, [symbol])
+  const symbolBounds = symbol ? importedSymbolBounds(symbol) : null
   const labelBounds = useMemo(() => {
     const angle = part.rotation * Math.PI / 180
     const cosine = Math.cos(angle), sine = Math.sin(angle)

@@ -7,6 +7,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { createDefaultElsimSymbol, defaultElsimPinSides, parseElsimSymbol } = require(path.join(build, 'domain/elsimSymbol.js'))
+const { importedSymbolBounds } = require(path.join(build, 'domain/symbolAsset.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createProjectArchive, readProjectArchive } = require(path.join(build, 'domain/projectArchive.js'))
@@ -34,6 +35,13 @@ test('native symbol parser preserves ordered pins and supported vector geometry'
   assert.deepEqual(symbol.pins.map(({ spiceOrder, name }) => [spiceOrder, name]), [[1, 'IN+'], [2, 'IN-'], [3, 'VCC'], [4, 'VEE'], [5, 'OUT']])
   assert.deepEqual(symbol.primitives[0], { kind: 'path', d: 'M-30 -40L35 0L-30 40Z' })
   assert.deepEqual(symbol.primitives[1], { kind: 'text', x: -5, y: 5, alignment: 'Center', size: 3, text: '+' })
+})
+
+test('reused imported symbols share one cached drawing-bounds result', () => {
+  const symbol = parseElsimSymbol(JSON.stringify(symbolDocument), 'amp.elsym')
+  const bounds = importedSymbolBounds(symbol)
+  assert.deepEqual(bounds, { minX: -60, minY: -60, maxX: 60, maxY: 60 })
+  assert.strictEqual(importedSymbolBounds(symbol), bounds)
 })
 
 test('native symbol parser rejects unsafe or ambiguous symbol data', () => {
