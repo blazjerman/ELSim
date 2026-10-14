@@ -307,7 +307,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(range, onRangeChange)
   const plotSize = useResponsivePlotSize()
-  const width = plotSize.size.width, height = plotSize.size.height, left = 42, right = width - 12, top = 8, bottom = height - 21
+  const width = plotSize.size.width, height = plotSize.size.height, left = 42, right = Math.round((width - 12) * 100) / 100, top = 8, bottom = Math.round((height - 21) * 100) / 100
   const axis = shown[0]?.axis ?? traces[0]?.axis
   const first = Math.floor(navigation.window.start * Math.max(0, (axis?.length ?? 1) - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, (axis?.length ?? 1) - 1)))
@@ -372,7 +372,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       (time) => left + ((time - minTime) / (maxTime - minTime || 1)) * (right - left),
       (value) => bottom - ((value - minValue) / (maxValue - minValue)) * (bottom - top))
     return { id: trace.id, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], points, accessibleName: `${trace.label}, trace in ${trace.unit}` }
-  }), [shown, sampledTraceData, minTime, maxTime, width, height, scopeRange[0], scopeRange[1], traceIndexById, colors])
+  }), [shown, sampledTraceData, minTime, maxTime, right, bottom, scopeRange[0], scopeRange[1], traceIndexById, colors])
   const handleCursor = (event: MouseEvent<SVGSVGElement>) => {
     if (!axis?.length) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -476,7 +476,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorFor = useCallback((index: number) => colors[index % colors.length], [colors])
   const plotSize = useResponsivePlotSize()
-  const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = width - 12, top = 12, bottom = height - 30
+  const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = Math.round((width - 12) * 100) / 100, top = 12, bottom = Math.round((height - 30) * 100) / 100
   const frequencies = traces[0]?.axis ?? Float64Array.of(1, 10)
   const first = Math.floor(navigation.window.start * Math.max(0, frequencies.length - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, frequencies.length - 1)))
@@ -526,7 +526,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       ? `${trace.label}, noise density in ${trace.unit}`
       : `${trace.label}, AC ${mode === 'magnitude' ? 'magnitude in decibels' : 'phase in degrees'}`
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], accessibleName }
-  }), [traces, shown, first, last, width, height, minFrequency, maxFrequency, minValue, maxValue, mode, colors, traceIndexById, sampledIndicesById])
+  }), [traces, shown, first, last, minFrequency, maxFrequency, right, bottom, minValue, maxValue, mode, colors, traceIndexById, sampledIndicesById])
   return <div className="waveform-view ac-view">
     <div className="waveform-title"><strong>{isNoise ? 'Noise spectral density' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><AcCursorTime result={result} frequencies={frequencies}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <div className="ac-mode">{isNoise ? <span>Noise density · {noiseAxisUnit}</span> : <><button className={mode === 'magnitude' ? 'active' : ''} onClick={() => setMode('magnitude')}>Magnitude (dB)</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setMode('phase')}>Phase (°)</button></>}</div>
@@ -590,7 +590,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(range, onRangeChange)
   const plotSize = useResponsivePlotSize()
-  const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = width - 12, top = 10, bottom = height - 30
+  const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = Math.round((width - 12) * 100) / 100, top = 10, bottom = Math.round((height - 30) * 100) / 100
   const axis = traces[0]?.axis ?? Float64Array.of(0, 1)
   const first = Math.floor(navigation.window.start * Math.max(0, axis.length - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, axis.length - 1)))
@@ -631,7 +631,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
       (value) => left + (value - x0) / (x1 - x0 || 1) * (right - left),
       (value) => bottom - (value - min) / span * (bottom - top))
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], accessibleName: `${trace.label}, swept response in ${trace.unit}` }
-  }), [traces, shown, first, last, width, height, x0, x1, min, span, colors, traceIndexById])
+  }), [traces, shown, first, last, x0, x1, right, bottom, min, span, colors, traceIndexById])
   return <div className="waveform-view">
     <div className="waveform-title"><strong>DC sweep results</strong><span>{axis.length.toLocaleString()} sweep points · {traces.length} vectors</span><DcCursorTime result={result} axis={axis} axisUnit={traces[0]?.axisUnit}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={valueAxis.zoom} valuePan={valueAxis.pan} disabled={axis.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`DC sweep of ${traces[0]?.axisLabel ?? 'source'} from ${x0} to ${x1}. Focus the plot and use Left and Right arrows to move the cursor, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={(event) => { const cursorValue = getAnalysisCursor(result); const cursorIndex = cursorValue === null || axis.length === 0 ? null : nearestAxisIndex(axis, cursorValue, first, Math.min(last, axis.length - 1)); handleCursorKeyDown(event, cursorIndex, first, Math.min(last, axis.length - 1), (index) => setAnalysisCursor(result, axis[index])) }} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={(event) => { if (plotDrag.shouldSuppressClick()) { event.preventDefault(); return } const rect = event.currentTarget.getBoundingClientRect(); const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * width - left) / (right - left))); const index = nearestAxisIndex(axis, x0 + fraction * (x1 - x0), first, Math.min(last, axis.length - 1)); setAnalysisCursor(result, axis[index]) }}>

@@ -1717,8 +1717,8 @@ test('large imported IC lists can be searched and expanded on demand', async ({ 
   await expect(devices.locator('.imported-model').first()).toContainText('DMOD_052')
 
   const symbol = ['Version 4', 'SymbolType CELL', 'PIN -32 0 R', 'PINATTR PinName INPUT', 'PINATTR SpiceOrder 1', 'PIN 32 0 L', 'PINATTR PinName OUTPUT', 'PINATTR SpiceOrder 2', 'SYMATTR Prefix X', 'SYMATTR Value USER_SYMBOL'].join('\n')
-  await page.getByRole('button', { name: 'Import LTspice symbol' }).click()
-  await page.locator('input[accept=".asy,text/plain"]').setInputFiles({ name: 'user-symbol.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol) })
+  await page.getByRole('button', { name: 'Import symbol file' }).click()
+  await page.locator('input[accept=".elsym,.asy,application/json,text/plain"]').setInputFiles({ name: 'user-symbol.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol) })
   const symbols = page.locator('.imported-models').filter({ has: page.getByText('IMPORTED SYMBOLS', { exact: true }) })
   const symbolCard = symbols.locator('.imported-model')
   await expect(symbolCard.locator('button').filter({ hasText: /^Place USER_/ })).toHaveCount(50)
