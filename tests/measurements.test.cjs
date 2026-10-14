@@ -68,6 +68,19 @@ test('imported ngspice measurements return values with original library source l
   const missing = parseImportedMeasurementOutput(artifact, '')
   assert.equal(missing.diagnostics.length, 2)
   assert.equal(missing.diagnostics[0].assetLine, 17)
+
+  const frequencyAndSweep = parseImportedMeasurementOutput({
+    text: '.MEASURE AC gain_at_1k FIND VM(out) AT=1k\n.MEAS DC output_at_5 FIND V(out) AT=5\n',
+    sourceMap: [
+      { line: 1, sourceId: 'model-file:asset-rc', role: 'model', assetId: 'asset-rc', assetLine: 31 },
+      { line: 2, sourceId: 'model-file:asset-rc', role: 'model', assetId: 'asset-rc', assetLine: 32 },
+    ],
+    diagnostics: [],
+  }, 'gain_at_1k = 1.57000e-01\noutput_at_5 = 2.50000e+00')
+  assert.deepEqual(frequencyAndSweep.results.map(({ id, value, sourceLine }) => ({ id, value, sourceLine })), [
+    { id: 'gain_at_1k', value: 0.157, sourceLine: 31 },
+    { id: 'output_at_5', value: 2.5, sourceLine: 32 },
+  ])
 })
 
 test('current-source measurements use the solved raw vector when ngspice has no scalar measurement', () => {

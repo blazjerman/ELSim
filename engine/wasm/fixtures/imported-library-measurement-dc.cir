@@ -1,0 +1,14 @@
+* Imported ngspice DC measurement remains available beside raw sweep vectors.
+.MEAS DC output_at_5 FIND V(out) AT=5
+V1 vin 0 0
+R1 vin out 1k
+R2 out 0 1k
+.DC V1 0 10 1
+.SAVE all
+.CONTROL
+set filetype=ascii
+dc V1 0 10 1
+write /result.raw all
+quit
+.ENDC
+.END

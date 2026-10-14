@@ -1,0 +1,14 @@
+* Imported ngspice AC measurement remains available beside raw waveform vectors.
+.MEAS AC gain_at_1k FIND VM(out) AT=1k
+V1 vin 0 AC 1 0
+R1 vin out 1k
+C1 out 0 1u
+.AC dec 10 10 100k
+.SAVE all
+.CONTROL
+set filetype=ascii
+ac dec 10 10 100k
+write /result.raw all
+quit
+.ENDC
+.END
