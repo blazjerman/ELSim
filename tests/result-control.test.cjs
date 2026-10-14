@@ -15,6 +15,7 @@ test('result control saves device currents needed for probes and visualizations'
     'L1 n2 n3 1m',
     'D1 n3 0 DDEFAULT',
     'S1 n3 0 ctrl 0 ELSIM_INTERNAL_SW',
+    'W1 n3 0 V1 ELSIM_W1_CSW OFF',
     'F1 n3 0 VSENSE 2',
     'H1 n3 0 VSENSE 1k',
     'M1 d g s b ELSIM_MODEL_M1',
@@ -24,7 +25,7 @@ test('result control saves device currents needed for probes and visualizations'
     '.end',
   ].join('\n')
   const instrumented = addResultControl(netlist)
-  assert.match(instrumented, /^\.save all @R1\[i\] @C1\[i\] @L1\[i\] @D1\[id\] @S1\[i\] @F1\[i\] @H1\[i\] @M1\[id\] @M1\[ig\] @M1\[is\] @M1\[ib\] @B1\[i\]$/m)
+  assert.match(instrumented, /^\.save all @R1\[i\] @C1\[i\] @L1\[i\] @D1\[id\] @S1\[i\] @W1\[i\] @F1\[i\] @H1\[i\] @M1\[id\] @M1\[ig\] @M1\[is\] @M1\[ib\] @B1\[i\]$/m)
   assert.match(instrumented, /\.control\nset filetype=binary\ntran 1u 1m\nwrite \/result\.raw all\nquit\n\.endc\n\.end\n$/)
 })
 

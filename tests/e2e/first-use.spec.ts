@@ -2146,9 +2146,10 @@ test('component categories filter the library and search crosses categories', as
   await page.getByRole('button', { name: 'Clear component search' }).click()
   await expect(cards).toHaveCount(13)
   await categories.getByRole('button', { name: 'Controlled sources' }).click()
-  await expect(cards).toHaveCount(7)
+  await expect(cards).toHaveCount(8)
   await expect(cards.filter({ hasText: 'VCVS' })).toBeVisible()
   await expect(cards.filter({ hasText: 'Voltage-controlled switch' })).toBeVisible()
+  await expect(cards.filter({ hasText: 'Current-controlled switch' })).toBeVisible()
   await categories.getByRole('button', { name: 'Basics' }).click()
   await expect(cards).toHaveCount(12)
   await expect(cards.filter({ hasText: 'Potentiometer' })).toBeVisible()
@@ -2642,7 +2643,7 @@ test('component shortcuts are case-sensitive and logic-gate keys select their ma
   await page.keyboard.press('Escape')
   const shortcuts: [string, string][] = [
     ['r', 'Resistor'], ['e', 'Lamp'], ['c', 'Capacitor'], ['Shift+L', 'Inductor'], ['v', 'Voltage source'],
-    ['i', 'Current source'], ['Shift+S', 'Voltage-controlled switch'], ['d', 'Diode'], ['z', 'Zener diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
+    ['i', 'Current source'], ['Shift+S', 'Voltage-controlled switch'], ['w', 'Current-controlled switch'], ['d', 'Diode'], ['z', 'Zener diode'], ['l', 'LED'], ['s', 'Switch'], ['Shift+E', 'VCVS'],
     ['Shift+G', 'VCCS'], ['Shift+F', 'CCCS'], ['Shift+H', 'CCVS'], ['b', 'Behavioral source'], ['n', 'NPN transistor'],
     ['p', 'PNP transistor'], ['j', 'N-channel JFET'], ['Shift+J', 'P-channel JFET'], ['N', 'N-channel MOSFET'],
     ['P', 'P-channel MOSFET'], ['6', 'N-channel power MOSFET'], ['7', 'P-channel power MOSFET'], ['g', 'Ground'], ['a', 'Idealized op-amp'],
@@ -4570,6 +4571,28 @@ test('new voltage-controlled switches use their component definition defaults', 
   await expect(page.getByLabel('Switch on resistance')).toHaveValue('1 Ω')
   await expect(page.getByLabel('Switch off resistance')).toHaveValue('1 GΩ')
   await expect(page.getByLabel('Switch hysteresis')).toHaveValue('0 V')
+})
+
+test('new current-controlled switches expose their controller and CSW settings @ui-smoke', async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Controlled sources' }).click()
+  await page.locator('.component-card').filter({ hasText: 'Current-controlled switch' }).click()
+  const svg = page.locator('svg.schematic')
+  const point = await svg.evaluate((element) => {
+    const target = (element as SVGSVGElement).createSVGPoint()
+    target.x = 500; target.y = 460
+    const screen = target.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
+  await page.mouse.click(point.x, point.y)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'currentSwitch')?.currentSwitch)).toEqual({ onResistance: '1 Ω', offResistance: '1 GΩ', hysteresis: '0 A' })
+  await page.getByRole('button', { name: 'Select and move' }).click()
+  await page.locator('.circuit-part[aria-label^="W1,"]').click()
+  await expect(page.getByLabel('Controlling voltage source for W1')).toBeVisible()
+  await expect(page.getByLabel('Controlling voltage source for W1')).toHaveValue('V1')
+  await expect(page.getByLabel('Current switch threshold')).toHaveValue('1 mA')
+  await expect(page.getByLabel('Current switch on resistance')).toHaveValue('1 Ω')
 })
 
 async function openComponentVoltagePlot(page: import('@playwright/test').Page, ref = 'R1') {

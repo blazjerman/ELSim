@@ -160,6 +160,7 @@
             "led",
             "switch",
             "voltageSwitch",
+            "currentSwitch",
             "vcvs",
             "vccs",
             "cccs",
@@ -654,6 +655,16 @@
             }
           },
           "description": "Optional voltage-controlled switch parameters; omitted values use 1 \u03a9, 1 G\u03a9, and 0 V defaults."
+        },
+        "currentSwitch": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "onResistance": { "type": "string", "maxLength": 64 },
+            "offResistance": { "type": "string", "maxLength": 64 },
+            "hysteresis": { "type": "string", "maxLength": 64 }
+          },
+          "description": "Optional current-controlled switch parameters; omitted values use 1 Ω, 1 GΩ, and 0 A defaults."
         }
       },
       "allOf": [

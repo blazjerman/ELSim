@@ -1,0 +1,16 @@
+ELSim current-controlled switch transient fixture
+V1 0 ctrl PULSE(0 1 0 1u 1u 5m 10m)
+RSENSE ctrl 0 1k
+VCC in 0 DC 5
+RLOAD in out 1k
+W1 out 0 V1 ELSIM_W1_CSW OFF
+.model ELSIM_W1_CSW CSW(It=-0.5m Ih=0.1m Ron=1 Roff=1Meg)
+.tran 10u 10m
+.save all @W1[i]
+.control
+set filetype=ascii
+tran 10u 10m
+write /result.raw all
+quit
+.endc
+.end

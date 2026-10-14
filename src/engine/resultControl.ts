@@ -98,7 +98,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     if (/^\s*\.subckt\b/i.test(line)) { insideSubcircuit = true; return [] }
     if (/^\s*\.ends\b/i.test(line)) { insideSubcircuit = false; return [] }
     if (insideSubcircuit) return []
-    const ref = line.match(/^\s*([RCLDSEGFHQBJIMZ][A-Za-z0-9_]+)\s+/i)?.[1]
+    const ref = line.match(/^\s*([RCLDSEGFHQBJIMZW][A-Za-z0-9_]+)\s+/i)?.[1]
     if (!ref) return []
     if ((analysisType === 'ac' || analysisType === 'noise') && /^[CL]/i.test(ref)) return []
     const kind = ref[0].toUpperCase()

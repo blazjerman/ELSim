@@ -1539,6 +1539,29 @@ test('voltage-controlled switch rejects invalid resistance and hysteresis settin
   assert.throws(() => validateProject(project), /nonnegative hysteresis/i)
 })
 
+test('current-controlled switch emits a W device and a current threshold model', () => {
+  const project = createStarterProject()
+  const switchPart = { id: 'p-w1', kind: 'currentSwitch', ref: 'W1', value: '2 mA', controlSource: 'V1', currentSwitch: { onResistance: '2 Ω', offResistance: '10 MΩ', hysteresis: '0.2 mA' }, x: 700, y: 300, rotation: 0 }
+  project.parts.push(switchPart)
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^W1 \S+ \S+ V1 ELSIM_W1_CSW OFF$/m)
+  assert.match(artifact.text, /^\.model ELSIM_W1_CSW CSW\(It=2m Ih=0\.2m Ron=2 Roff=10meg\)$/m)
+})
+
+test('current-controlled switch rejects a missing controller and mismatched model type', () => {
+  const project = createStarterProject()
+  const switchPart = { id: 'p-w1', kind: 'currentSwitch', ref: 'W1', value: '1 mA', controlSource: 'VNOTTHERE', x: 700, y: 300, rotation: 0 }
+  project.parts.push(switchPart)
+  project.sheets[0].parts = project.parts
+  assert.match(createNetlistArtifact(validateProject(project)).diagnostics.map(({ message }) => message).join('\n'), /must reference an existing independent voltage source/i)
+  switchPart.controlSource = 'V1'
+  switchPart.deviceModel = 'WRONG_TYPE'
+  project.modelAssets = [{ id: 'wrong-switch-model', filename: 'devices.lib', sha256: 'b'.repeat(64), content: '.model WRONG_TYPE D(Is=1n)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  assert.match(createNetlistArtifact(validateProject(project)).diagnostics.map(({ message }) => message).join('\n'), /not a CSW model/i)
+})
+
 test('NPN and PNP parts create separate educational BJT models in C-B-E pin order', () => {
   const project = createStarterProject()
   project.parts.push(

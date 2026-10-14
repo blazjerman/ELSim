@@ -33,6 +33,7 @@ test('component current vectors use ngspice device-specific names', () => {
   assert.equal(componentCurrentVector({ kind: 'led', ref: 'D1' }), 'i(@D1[id])')
   assert.equal(componentCurrentVector({ kind: 'diode', ref: 'D2' }), 'i(@D2[id])')
   assert.equal(componentCurrentVector({ kind: 'vcvs', ref: 'E1' }), 'i(@E1[i])')
+  assert.equal(componentCurrentVector({ kind: 'currentSwitch', ref: 'W1' }), 'i(@W1[i])')
   assert.equal(componentCurrentVector({ kind: 'currentSource', ref: 'I1' }), 'i(@I1[current])')
   assert.equal(componentCurrentVector({ kind: 'potentiometer', ref: 'POT1' }), 'i(@RPOT1_A[i])')
   assert.equal(componentCurrentVector({ kind: 'transformer', ref: 'T1' }), 'i(@LT1_P[i])')

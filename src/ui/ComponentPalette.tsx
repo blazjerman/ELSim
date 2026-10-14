@@ -7,8 +7,8 @@ type PaletteKind = Exclude<PartKind, 'subcircuit'>
 
 const paletteOrder = {
   resistor: 0, potentiometer: 1, lamp: 2, capacitor: 3, inductor: 4, transformer: 5, source: 6, currentSource: 7,
-  diode: 8, zener: 9, led: 10, switch: 11, voltageSwitch: 12, vcvs: 13, vccs: 14, cccs: 15, ccvs: 16,
-  behavioral: 17, inverter: 18, logicGate: 19, opamp: 20, npn: 21, pnp: 22, njfet: 23, pjfet: 24, nmesfet: 25, pmesfet: 26, nmos: 27, pmos: 28, nvdmos: 29, pvdmos: 30, ground: 31,
+  diode: 8, zener: 9, led: 10, switch: 11, voltageSwitch: 12, currentSwitch: 13, vcvs: 14, vccs: 15, cccs: 16, ccvs: 17,
+  behavioral: 18, inverter: 19, logicGate: 20, opamp: 21, npn: 22, pnp: 23, njfet: 24, pjfet: 25, nmesfet: 26, pmesfet: 27, nmos: 28, pmos: 29, nvdmos: 30, pvdmos: 31, ground: 32,
 } satisfies Record<PaletteKind, number>
 
 export const componentPaletteItems: readonly { kind: PaletteKind }[] = Object.freeze(

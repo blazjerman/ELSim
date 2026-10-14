@@ -118,7 +118,7 @@ function hierarchicalSaveVectors(project: Project): string[] {
     }
     if (path.length) for (const part of sheet.parts) {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
-      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmesfet' || part.kind === 'pmesfet' ? 'z' : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? 'b' : 'g'
+      const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmesfet' || part.kind === 'pmesfet' ? 'z' : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : part.kind === 'currentSwitch' ? 'w' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
       if (part.kind === 'transformer') {
         saves.add(`.save i(l.${device}_p)`)
@@ -160,6 +160,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   let usesSwitch = false
   let usesEducationalOpamp = false
   const voltageSwitchModels: { name: string; onResistance: string; offResistance: string; threshold: string; hysteresis: string }[] = []
+  const currentSwitchModels: { name: string; onResistance: string; offResistance: string; threshold: string; hysteresis: string }[] = []
   const transistorModels: { part: Part; name: string }[] = []
   const jfetModels: { part: Part; name: string }[] = []
   const mosfetModels: { part: Part; name: string }[] = []
@@ -220,7 +221,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const passiveDefaultParameter = part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
     const passiveModelSuppliesValue = Boolean(passiveModelType && passiveModel?.type.toLowerCase() === passiveModelType && passiveDefaultParameter && passiveModel.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
     const valueCanBeModelDefault = value === null && part.value.trim() === '' && passiveModelSuppliesValue
-    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && value === null && !valueCanBeModelDefault) {
+    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'currentSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && value === null && !valueCanBeModelDefault) {
       const message = `${part.ref} has an invalid numeric value${passiveDefaultParameter && part.value.trim() === '' ? ` (no compatible model with ${passiveDefaultParameter.toUpperCase()} default)` : ''}.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -655,6 +656,41 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       append(`${part.ref} ${positive} ${negative} ${controlNode} 0 ELSIM_INTERNAL_SW`, part.id, 'component')
       usesSwitch = true
     }
+    else if (part.kind === 'currentSwitch') {
+      const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
+      if (part.deviceModel && importedModel?.type.toLowerCase() !== 'csw') {
+        const message = `${part.ref} device model ${part.deviceModel} is missing or is not a CSW model.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const source = project.parts.find((candidate) => candidate.kind === 'source' && candidate.ref.toLowerCase() === part.controlSource?.toLowerCase())
+      if (!source) {
+        const message = `${part.ref} must reference an existing independent voltage source; its current controls the switch.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const model = importedModel?.name ?? allocateName(`ELSIM_${part.ref}_CSW`, usedModelNames)
+      if (!importedModel) {
+        const settings = part.currentSwitch ?? {}
+        const onResistance = spiceScalar(settings.onResistance ?? '1 Ω', '')
+        const offResistance = spiceScalar(settings.offResistance ?? '1 GΩ', '')
+        const hysteresis = spiceScalar(settings.hysteresis ?? '0 A', 'a')
+        const threshold = value
+        const onMagnitude = componentMagnitude(settings.onResistance ?? '1 Ω', 'resistor')
+        const offMagnitude = componentMagnitude(settings.offResistance ?? '1 GΩ', 'resistor')
+        const hysteresisMagnitude = componentMagnitude(settings.hysteresis ?? '0 A', 'currentSource')
+        if (!onResistance || !offResistance || !threshold || onMagnitude === null || onMagnitude <= 0 || offMagnitude === null || offMagnitude <= onMagnitude || hysteresis === null || hysteresisMagnitude === null || hysteresisMagnitude < 0) {
+          const message = `${part.ref} needs a numeric current threshold, positive on resistance, greater off resistance, and nonnegative current hysteresis.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        currentSwitchModels.push({ name: model, onResistance, offResistance, threshold, hysteresis })
+      }
+      append(`${part.ref} ${positive} ${negative} ${source.ref} ${model} OFF`, part.id, 'component')
+    }
     else if (part.kind === 'voltageSwitch') {
       const controlPositive = pinNet(connectivity, part, 2)
       const controlNegative = pinNet(connectivity, part, 3)
@@ -760,6 +796,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   if (usesZener) append('.model DZENER D(BV=5.1 IBV=1m)', 'model:DZENER', 'model')
   if (usesSwitch) append('.model ELSIM_INTERNAL_SW SW(Ron=1m Roff=1T Vt=2.5 Vh=0)', 'model:ELSIM_INTERNAL_SW', 'model')
   for (const model of voltageSwitchModels) append(`.model ${model.name} SW(Ron=${model.onResistance} Roff=${model.offResistance} Vt=${model.threshold} Vh=${model.hysteresis})`, `model:${model.name}`, 'model')
+  for (const model of currentSwitchModels) append(`.model ${model.name} CSW(It=${model.threshold} Ih=${model.hysteresis} Ron=${model.onResistance} Roff=${model.offResistance})`, `model:${model.name}`, 'model')
   for (const { part, name } of transistorModels) append(`.model ${name} ${part.kind === 'npn' ? 'NPN' : 'PNP'}(IS=1e-14 BF=${part.value} VAF=100 CJE=10p CJC=5p TF=300p TR=10n)`, `model:${name}`, 'model')
   for (const { part, name } of jfetModels) append(`.model ${name} ${part.kind === 'njfet' ? 'NJF (VTO=-2 BETA=1m' : 'PJF (VTO=2 BETA=1m'} LAMBDA=0.02)`, `model:${name}`, 'model')
   for (const { part, name } of mosfetModels) append(`.model ${name} ${part.kind === 'nmos' ? 'NMOS' : 'PMOS'} (LEVEL=1 VTO=${part.kind === 'nmos' ? '2' : '-2'} KP=20u LAMBDA=0.02)`, `model:${name}`, 'model')
@@ -887,7 +924,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', currentSwitch: 'W', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
