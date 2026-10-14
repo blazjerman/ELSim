@@ -70,6 +70,8 @@ function fetThresholdValue(part: Part | undefined, models: SpiceModelDefinition[
   return override ?? model?.parameters.find((parameter) => parameter.name.toLowerCase() === 'vto')?.defaultValue ?? ''
 }
 
+const MODEL_DIAGNOSTIC_PAGE_SIZE = 20
+
 const ParameterSweepEditor = lazy(() => import('./ParameterSweepEditor'))
 const TransientEditors = lazy(() => import('./TransientEditors'))
 const PwlPointsEditor = lazy(() => import('./PwlPointsEditor'))
@@ -2004,6 +2006,8 @@ export default function App() {
   const [compatibilityDiagnostic, setCompatibilityDiagnostic] = useState<SimulationDiagnostic | null>(null)
   const [modelSourceReview, setModelSourceReview] = useState<{ assetId: string; line: number } | null>(null)
   const [compatibilityWarningLimit, setCompatibilityWarningLimit] = useState(20)
+  const [modelConflictLimit, setModelConflictLimit] = useState(MODEL_DIAGNOSTIC_PAGE_SIZE)
+  const reviewModelDefinition = useCallback((assetId: string, line: number) => setModelSourceReview({ assetId, line }), [])
   const [replacementModelAssetId, setReplacementModelAssetId] = useState<string | null>(null)
   const [pendingModelImport, setPendingModelImport] = useState<{ filename: string; content: string; replaceId: string | null; sections: string[]; selectedSections: string[] } | null>(null)
   const [examplesOpen, setExamplesOpen] = useState(false)
@@ -2379,6 +2383,8 @@ export default function App() {
   }, [importedDeviceModels, importedDeviceModelQuery])
   const visibleImportedDeviceModels = filteredImportedDeviceModels.slice(0, visibleImportedDeviceModelCount)
   const modelDependencyAnalysis = modelLibraryAnalysis.dependencies
+  const visibleModelConflicts = modelDependencyAnalysis.conflicts.slice(0, modelConflictLimit)
+  useEffect(() => { setModelConflictLimit(MODEL_DIAGNOSTIC_PAGE_SIZE) }, [modelDependencyAnalysis.conflicts])
   const modelDialectWarnings = useMemo(() => (project.modelAssets ?? []).flatMap((asset) => analyzeLtspiceModelDialect(asset.content).map((warning) => ({ ...warning, filename: asset.filename, assetId: asset.id }))), [modelLibraryRevision])
   useEffect(() => {
     if (!modelSourceReview) return
@@ -4510,7 +4516,19 @@ export default function App() {
           </div>)}
         </div>}
         <ModelDependencyReport analysis={modelDependencyAnalysis} onImport={openModelLibraryPicker}/>
-        {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions"><strong>CONFLICTING MODEL DEFINITIONS</strong><p>More than one imported file defines the same model name. ELSim preserves both files; ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.</p><ul>{modelDependencyAnalysis.conflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.name}`}><code>{conflict.kind === 'subcircuit' ? '.SUBCKT' : '.MODEL'} {conflict.name}</code><ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>{definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => setModelSourceReview({ assetId: definition.assetId, line: definition.sourceLine })}>Review definition</button></li>)}</ul></li>)}</ul></div>}
+        {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions">
+          <strong>CONFLICTING MODEL DEFINITIONS</strong>
+          <p>More than one imported file defines the same model name. ELSim preserves both files; ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.</p>
+          <ul>{visibleModelConflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.name}`}>
+            <code>{conflict.kind === 'subcircuit' ? '.SUBCKT' : '.MODEL'} {conflict.name}</code>
+            <ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>
+              {definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => reviewModelDefinition(definition.assetId, definition.sourceLine)}>Review definition</button>
+            </li>)}</ul>
+          </li>)}</ul>
+          {modelDependencyAnalysis.conflicts.length > visibleModelConflicts.length && <button className="place-model" onClick={() => setModelConflictLimit((count) => Math.min(count + MODEL_DIAGNOSTIC_PAGE_SIZE, modelDependencyAnalysis.conflicts.length))}>
+            Show {Math.min(MODEL_DIAGNOSTIC_PAGE_SIZE, modelDependencyAnalysis.conflicts.length - visibleModelConflicts.length)} more model conflict{modelDependencyAnalysis.conflicts.length - visibleModelConflicts.length === 1 ? '' : 's'}
+          </button>}
+        </div>}
         {compatibilityWarnings.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Imported model compatibility warnings"><strong>MODEL COMPATIBILITY CHECKS</strong><p>These source-line checks identify imported model or schematic constructs that may behave differently in the browser engine or affect the whole circuit. Imported source text is preserved unchanged; review the impact and suggested next step before editing or replacing a model.</p><ul>{visibleCompatibilityWarnings.map((warning, index) => <li key={`${warning.key}:${warning.sourceLine}:${index}`}><code>{warning.feature}</code> · {warning.sourceFilename}:{warning.sourceLine}<br/><code>{warning.excerpt}</code><p>{warning.impact}</p><small>Next step: {warning.suggestion}</small>{'assetId' in warning && typeof warning.assetId === 'string' && <button className="place-model" onClick={() => setModelSourceReview({ assetId: String(warning.assetId), line: Number(warning.sourceLine) })}>Review source line {warning.sourceLine}</button>}{/^Unresolved \.(?:include|inc|lib)/i.test(warning.feature) && <button className="place-model" onClick={(event) => chooseLibraryForCompatibilityWarning(warning.excerpt, event)}>{warning.feature.includes('section') ? 'Choose referenced library section' : 'Select referenced model library'}</button>}</li>)}</ul>{compatibilityWarnings.length > visibleCompatibilityWarnings.length && <button className="place-model" onClick={() => setCompatibilityWarningLimit((current) => Math.min(current + 20, compatibilityWarnings.length))}>Show {Math.min(20, compatibilityWarnings.length - visibleCompatibilityWarnings.length)} more compatibility warning{compatibilityWarnings.length - visibleCompatibilityWarnings.length === 1 ? '' : 's'}</button>}</div>}
         {importedModels.length > 0 && <div className="imported-models"><div className="component-list-label">{importedSubcircuitQuery ? `${filteredImportedModels.length} MATCHING IMPORTED ICs` : `IMPORTED SUBCIRCUITS · ${importedModels.length}`}</div><label className="search-box imported-model-search"><Search size={14}/><input aria-label="Find an imported IC" placeholder="Find an imported IC" value={importedSubcircuitQuery} onChange={(event) => { setImportedSubcircuitQuery(event.target.value); setVisibleImportedSubcircuits(50) }}/>{importedSubcircuitQuery && <button type="button" aria-label="Clear imported IC search" onClick={() => { setImportedSubcircuitQuery(''); setVisibleImportedSubcircuits(50) }}><X size={12}/></button>}</label>{visibleImportedModels.map((model) => {
           const used = modelAssetInUse(model.assetId)
