@@ -182,3 +182,24 @@ export function VoltageDividerPrediction({ supplyValue, upperResistanceValue, lo
     explanation={explanation}
   />
 }
+
+export function CurrentDividerPrediction({ supplyValue, firstResistanceValue, secondResistanceValue }: { supplyValue: string; firstResistanceValue: string; secondResistanceValue: string }) {
+  const supply = componentMagnitude(supplyValue, 'source')
+  const firstResistance = componentMagnitude(firstResistanceValue, 'resistor')
+  const secondResistance = componentMagnitude(secondResistanceValue, 'resistor')
+  const branch1Ma = supply !== null && firstResistance !== null && firstResistance > 0 ? Math.abs(supply / firstResistance) * 1000 : null
+  const branch2Ma = supply !== null && secondResistance !== null && secondResistance > 0 ? Math.abs(supply / secondResistance) * 1000 : null
+  const predictedTotal = branch1Ma !== null && branch2Ma !== null ? branch1Ma + branch2Ma : null
+  const explanation = branch1Ma === null || branch2Ma === null || predictedTotal === null
+    ? ''
+    : `Both branches have ${formatValue(Math.abs(supply!))} V. I(R1) = V/R1 = ${formatValue(branch1Ma)} mA; I(R2) = V/R2 = ${formatValue(branch2Ma)} mA. The source supplies ${formatValue(predictedTotal)} mA, equal to the branch-current sum (KCL).`
+
+  return <NumericPrediction
+    id="current-divider-prediction"
+    prompt="Before running, predict current through R2"
+    unit="mA"
+    predictedValue={branch2Ma}
+    absoluteTolerance={0.01}
+    explanation={explanation}
+  />
+}

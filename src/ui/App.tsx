@@ -24,7 +24,7 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
-import { CapacitorDischargePrediction, LedCurrentPrediction, OhmsLawPrediction, RcTimeConstantPrediction, SwitchPathPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
+import { CapacitorDischargePrediction, CurrentDividerPrediction, LedCurrentPrediction, OhmsLawPrediction, RcTimeConstantPrediction, SwitchPathPrediction, VoltageDividerPrediction } from './BeginnerPredictions'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
@@ -4030,7 +4030,7 @@ export default function App() {
       potentiometer: { title: 'The wiper adjusts the output', guidance: 'Run the operating point and inspect V(VOUT). The wiper percentage is measured from the upper terminal: 50% gives about 5 V from the 10 V supply, while a smaller percentage moves the output closer to VIN.' },
       'voltage-divider': { title: 'Two resistors split a voltage', guidance: 'Use the prediction check before running. Equal resistors split the supply evenly; change either resistor afterward and compare how the output ratio changes.' },
       'loaded-voltage-divider': { title: 'Replace a divider with its Thevenin equivalent', guidance: 'Run the operating point. With RLOAD removed, the 10 V divider is equivalent to a 5 V source with 500 Ω output resistance (R1 ∥ R2). Reconnect the 1 kΩ load and compare the predicted 3.33 V output with ngspice. Increase RLOAD to 10 kΩ and rerun; VOUT should move closer to 5 V.' },
-      'parallel-resistors': { title: 'Compare branch currents and check Kirchhoff’s current law', guidance: 'Run the operating point and compare I(V1) with I(R1) + I(R2). Both resistors have the same 10 V across them, so the 1 kΩ branch carries twice the current of the 2 kΩ branch, and the source current equals the sum entering both branches. Change R2 to 1 kΩ and rerun: the branch currents should match and the source current should equal their new sum.' },
+      'parallel-resistors': { title: 'Compare branch currents and check Kirchhoff’s current law', guidance: 'Before running, estimate current in the 2 kΩ branch. Both resistors see the same 10 V, so the 1 kΩ branch carries twice its current. Then compare the source current with the branch-current sum. Change R2 to 1 kΩ and rerun: the branch currents should match.' },
       'resistor-power': { title: 'See how current and voltage set resistor power', guidance: 'Run the operating point and compare the selected resistor voltage and current. Power is P = V × I = V²/R: 5 V across 1 kΩ is 25 mW. Change R1 to 100 Ω and rerun; power rises to 250 mW. This circuit calculates electrical power; it does not model resistor temperature.' },
       'lamp-power': { title: 'Connect lamp glow to electrical power', guidance: 'Run the operating point. The 5 V supply across the fixed 100 Ω lamp predicts P = V²/R = 250 mW, matching its nominal animation power. Change V1 to 2.5 V and rerun: power falls to 62.5 mW, one quarter as much, and the lamp glow dims. The glow is an illustration; this fixed-resistance model does not simulate filament temperature.' },
       'diode-polarity': { title: 'See how diode direction controls current', guidance: 'Run the operating point with V1 = +5 V. The source drives conventional current through R1 and into D1’s anode; the diode is forward biased and its anode sits near 0.7 V. Change V1 to −5 V and rerun: D1 is reverse biased, so its current falls close to zero and the anode goes near −5 V. The series resistor limits forward current.' },
@@ -4187,6 +4187,12 @@ export default function App() {
                 supplyValue={partsById.get('divider-v1')?.value ?? ''}
                 upperResistanceValue={partsById.get('divider-r1')?.value ?? ''}
                 lowerResistanceValue={partsById.get('divider-r2')?.value ?? ''}
+              />}
+              {exampleLesson.id === 'parallel-resistors' && !lessonNextStep && <CurrentDividerPrediction
+                key={`${partsById.get('current-divider-v1')?.value ?? ''}:${partsById.get('current-divider-r1')?.value ?? ''}:${partsById.get('current-divider-r2')?.value ?? ''}`}
+                supplyValue={partsById.get('current-divider-v1')?.value ?? ''}
+                firstResistanceValue={partsById.get('current-divider-r1')?.value ?? ''}
+                secondResistanceValue={partsById.get('current-divider-r2')?.value ?? ''}
               />}
               {exampleLesson.id === 'capacitor-discharge' && !lessonNextStep && <CapacitorDischargePrediction
                 key={`${capacitorDischargeInitialVoltage}:${partsById.get('cap-discharge-r1')?.value ?? ''}:${partsById.get('cap-discharge-c1')?.value ?? ''}`}
