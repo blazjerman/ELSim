@@ -1851,6 +1851,20 @@ test('@ui-smoke active toolbar tools expose their pressed state to assistive tec
   await expect(zoom).not.toHaveAttribute('aria-pressed')
 })
 
+test('toolbar menus close when clicking outside', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'More options for Main circuit' }).click()
+  await expect(page.getByRole('menu', { name: 'Main circuit options' })).toBeVisible()
+  await page.locator('.brand').click()
+  await expect(page.getByRole('menu', { name: 'Main circuit options' })).toHaveCount(0)
+
+  const animationSettings = page.locator('details.animation-tuning')
+  await animationSettings.evaluate((details: HTMLDetailsElement) => { details.open = true })
+  await expect(animationSettings).toHaveJSProperty('open', true)
+  await page.locator('.brand').click()
+  await expect(animationSettings).toHaveJSProperty('open', false)
+})
+
 test('component categories filter the library and search crosses categories', async ({ page }) => {
   await page.goto('/')
   const cards = page.locator('.component-card')
