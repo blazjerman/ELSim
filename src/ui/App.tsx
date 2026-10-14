@@ -1,4 +1,5 @@
 import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { flushSync } from 'react-dom'
 import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
   Activity, AlertTriangle, ArrowUp, BookOpen, Bookmark, Cable, Check, ChevronDown, CircleDot, CircleHelp,
@@ -3431,49 +3432,50 @@ export default function App() {
       : lastLabel
         ? { kind: 'label', id: lastLabel.id }
         : null
-    // Arm reconciliation before scheduling the project update. This guarantees
+    // Arm reconciliation before enqueuing the project update. This guarantees
     // the layout effect can see the exact clone IDs even if React commits the
     // project update synchronously (or splits it from other updates).
-    pendingPasteSelection.current = { partIds: pastedIds, wireIds: pastedWireIds, labelIds: pastedLabelIds, selection: nextSelection }
-    // Switch the synchronous selection refs as soon as paste is requested.
-    // That makes a quick drag/copy after Ctrl+V use only the clone IDs even
-    // when React schedules the project update separately from selection.
-    setSelectedPartIds(pastedIds)
-    setSelectedWireIds(pastedWireIds)
-    setSelectedNetLabelIds(pastedLabelIds)
-    setSelection(nextSelection)
-    setProject((current) => {
-      const parts = [...current.parts]
-      const usedReferences = new Set(parts.map((part) => part.ref.toLowerCase()))
-      const nextReferenceIndices = new Map<string, number>()
-      sources.forEach((source, index) => {
-        const prefix = referencePrefixForKind(source.kind)
-        let referenceIndex = nextReferenceIndices.get(prefix) ?? 1
-        let reference = `${prefix}${referenceIndex}`
-        while (usedReferences.has(reference.toLowerCase())) {
-          referenceIndex += 1
-          reference = `${prefix}${referenceIndex}`
-        }
-        usedReferences.add(reference.toLowerCase())
-        nextReferenceIndices.set(prefix, referenceIndex + 1)
-        const pasted: Part = {
-          ...source,
-          id: pastedIds[index],
-          ref: reference,
-          x: source.x + offsetX,
-          y: source.y + offsetY,
-          ...(source.modelPins ? { modelPins: [...source.modelPins] } : {}),
-          ...(source.symbolPinOffsets ? { symbolPinOffsets: source.symbolPinOffsets.map(([x, y]) => [x, y] as [number, number]) } : {}),
-          ...(source.sheetPortLayout ? { sheetPortLayout: source.sheetPortLayout.map((port) => ({ ...port })) } : {}),
-          ...(source.sheetParameters ? { sheetParameters: { ...source.sheetParameters } } : {}),
-          ...(source.modelParameters ? { modelParameters: { ...source.modelParameters } } : {}),
-        }
-        // This array and reference index are local to the state updater. Append
-        // each clone once and consult one prebuilt set instead of rescanning
-        // the growing project for every pasted object.
-        parts.push(pasted)
+    flushSync(() => {
+      pendingPasteSelection.current = { partIds: pastedIds, wireIds: pastedWireIds, labelIds: pastedLabelIds, selection: nextSelection }
+      // Commit the pasted records and their exact clone selection together so
+      // the next pointer event cannot begin against the previous selection.
+      setSelectedPartIds(pastedIds)
+      setSelectedWireIds(pastedWireIds)
+      setSelectedNetLabelIds(pastedLabelIds)
+      setSelection(nextSelection)
+      setProject((current) => {
+        const parts = [...current.parts]
+        const usedReferences = new Set(parts.map((part) => part.ref.toLowerCase()))
+        const nextReferenceIndices = new Map<string, number>()
+        sources.forEach((source, index) => {
+          const prefix = referencePrefixForKind(source.kind)
+          let referenceIndex = nextReferenceIndices.get(prefix) ?? 1
+          let reference = `${prefix}${referenceIndex}`
+          while (usedReferences.has(reference.toLowerCase())) {
+            referenceIndex += 1
+            reference = `${prefix}${referenceIndex}`
+          }
+          usedReferences.add(reference.toLowerCase())
+          nextReferenceIndices.set(prefix, referenceIndex + 1)
+          const pasted: Part = {
+            ...source,
+            id: pastedIds[index],
+            ref: reference,
+            x: source.x + offsetX,
+            y: source.y + offsetY,
+            ...(source.modelPins ? { modelPins: [...source.modelPins] } : {}),
+            ...(source.symbolPinOffsets ? { symbolPinOffsets: source.symbolPinOffsets.map(([x, y]) => [x, y] as [number, number]) } : {}),
+            ...(source.sheetPortLayout ? { sheetPortLayout: source.sheetPortLayout.map((port) => ({ ...port })) } : {}),
+            ...(source.sheetParameters ? { sheetParameters: { ...source.sheetParameters } } : {}),
+            ...(source.modelParameters ? { modelParameters: { ...source.modelParameters } } : {}),
+          }
+          // This array and reference index are local to the state updater. Append
+          // each clone once and consult one prebuilt set instead of rescanning
+          // the growing project for every pasted object.
+          parts.push(pasted)
+        })
+        return { ...current, sheets: [...current.sheets, ...resolved.sheets], modelAssets: [...(current.modelAssets ?? []), ...resolved.modelAssets], symbolAssets: [...(current.symbolAssets ?? []), ...resolved.symbolAssets], parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))], netLabels: [...current.netLabels, ...pastedLabels] }
       })
-      return { ...current, sheets: [...current.sheets, ...resolved.sheets], modelAssets: [...(current.modelAssets ?? []), ...resolved.modelAssets], symbolAssets: [...(current.symbolAssets ?? []), ...resolved.symbolAssets], parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))], netLabels: [...current.netLabels, ...pastedLabels] }
     })
     // Clear the pending marker only after the copied records are in the project.
     // The selection refs already point at this exact clone set.
