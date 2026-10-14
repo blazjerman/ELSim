@@ -2581,6 +2581,8 @@ test('copying the whole schematic selects and moves only the pasted wires with p
   })
   expect(pasted.parts).toHaveLength(partCount)
   expect(pasted.wires).toHaveLength(wireCount)
+  const selectedWireIds = await page.locator('.wire-line.selected').evaluateAll((elements) => elements.map((element) => (element as SVGGElement).dataset.wireId))
+  expect(new Set(selectedWireIds)).toEqual(new Set(pasted.wires.map((wire: { id: string }) => wire.id)))
 
   const draggedPart = page.locator(`.circuit-part[data-part-id="${pasted.parts[0].id}"]`)
   const bounds = await draggedPart.boundingBox()
@@ -2598,7 +2600,12 @@ test('copying the whole schematic selects and moves only the pasted wires with p
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     return project.wires.filter((wire: { id: string }) => pastedWireIds.includes(wire.id))
   }, pasted.wires.map((wire: { id: string }) => wire.id))
+  const originals = await page.evaluate((originalWireIds) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return project.wires.filter((wire: { id: string }) => originalWireIds.includes(wire.id))
+  }, before.wires.map((wire: { id: string }) => wire.id))
   expect(moved).toHaveLength(wireCount)
+  expect(originals).toEqual(before.wires)
   for (let index = 0; index < wireCount; index += 1) {
     const [[beforeX, beforeY], [beforeEndX, beforeEndY]] = pasted.wires[index].points
     const [[afterX, afterY], [afterEndX, afterEndY]] = moved[index].points
