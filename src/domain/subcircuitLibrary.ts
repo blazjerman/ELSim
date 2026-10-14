@@ -105,6 +105,7 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
   const lines: { line: LogicalLine; section: string | null }[] = []
   let activeSection: string | null = null
   const activeSubcircuits: { name: string; start: number }[] = []
+  const conditionals: { line: number; sawElse: boolean }[] = []
   let sawEnd = false
   for (const line of sourceLines) {
     const text = withoutInlineComment(line.text)
@@ -115,6 +116,32 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     }
     if (!text || text.startsWith('*')) { lines.push({ line, section: activeSection }); continue }
     const tokens = text.split(/\s+/), directive = tokens[0].toLowerCase()
+    if (directive === '.if' || directive === '.elseif') {
+      if (!/^\.(?:if|elseif)\s*\(.+\)$/i.test(text)) throw new Error(`Line ${line.start}: ${tokens[0]} needs a parenthesized ngspice condition.`)
+      if (directive === '.if') conditionals.push({ line: line.start, sawElse: false })
+      else {
+        const active = conditionals.at(-1)
+        if (!active || active.sawElse) throw new Error(`Line ${line.start}: .ELSEIF has no open .IF branch.`)
+      }
+      lines.push({ line, section: activeSection })
+      continue
+    }
+    if (directive === '.else') {
+      const active = conditionals.at(-1)
+      if (!active || active.sawElse || tokens.length !== 1) throw new Error(`Line ${line.start}: malformed or unmatched .ELSE.`)
+      active.sawElse = true
+      lines.push({ line, section: activeSection })
+      continue
+    }
+    if (directive === '.endif') {
+      if (!conditionals.length || tokens.length !== 1) throw new Error(`Line ${line.start}: malformed or unmatched .ENDIF.`)
+      conditionals.pop()
+      lines.push({ line, section: activeSection })
+      continue
+    }
+    if (conditionals.length && ['.end', '.lib', '.endl', '.subckt', '.ends', '.include', '.inc', '.param'].includes(directive)) {
+      throw new Error(`Line ${line.start}: ${tokens[0]} is not supported inside an ngspice .IF block.`)
+    }
     if (directive === '.end') {
       if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .END is not allowed inside a .SUBCKT.`)
       if (activeSection) throw new Error(`Line ${line.start}: .END cannot appear inside a .LIB section.`)
@@ -158,6 +185,10 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
   if (activeSubcircuits.length) {
     const active = activeSubcircuits.at(-1)!
     throw new Error(`.SUBCKT ${active.name} opened on line ${active.start} has no matching .ENDS.`)
+  }
+  if (conditionals.length) {
+    const active = conditionals.at(-1)!
+    throw new Error(`.IF opened on line ${active.line} has no matching .ENDIF.`)
   }
   if (activeSection) throw new Error(`.LIB ${activeSection} has no matching .ENDL.`)
   return { sections, lines, logical: sourceLines }
@@ -217,6 +248,29 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string): SpiceM
 }
 
 const alternateBjtModelNames = new WeakMap<ModelDependency, string[]>()
+
+type ModelConditionPath = { id: number; branch: number }[]
+type SeenModelCard = { model: SpiceModelDefinition; conditionPath: ModelConditionPath }
+
+function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelConditionPath, seen: Map<string, SeenModelCard>, models: SpiceModelDefinition[]) {
+  const key = `${model.scope?.toLowerCase() ?? ''}:${model.name.toLowerCase()}`
+  const previous = seen.get(key)
+  if (!previous) {
+    seen.set(key, { model, conditionPath })
+    models.push(model)
+    return
+  }
+  const mutuallyExclusive = previous.conditionPath.some((frame) => conditionPath.some((candidate) => candidate.id === frame.id && candidate.branch !== frame.branch))
+  const location = model.scope ? ` in .SUBCKT ${model.scope}` : ''
+  if (!mutuallyExclusive) throw new Error(`Line ${model.startLine}: model card ${model.name} is declared more than once${location}.`)
+  if (previous.model.type.toLowerCase() !== model.type.toLowerCase() || previous.model.channel !== model.channel) {
+    throw new Error(`Line ${model.startLine}: conditional model cards named ${model.name} must keep the same device type and channel.`)
+  }
+  // A model used in mutually exclusive branches is still one selectable card.
+  // Only expose parameters that exist in every variant so parameter stepping
+  // cannot offer a setting absent from the active ngspice model.
+  previous.model.parameters = previous.model.parameters.filter((parameter) => model.parameters.some((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase()))
+}
 
 function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): ModelDependency | null {
   const reference = tokens[0] ?? ''
@@ -450,9 +504,11 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   const dependencies: ModelDependency[] = []
   const includes: ModelIncludeReference[] = []
   const seenNames = new Set<string>()
-  const seenModelNames = new Set<string>()
+  const seenModelNames = new Map<string, SeenModelCard>()
   const modelLines: LogicalLine[] = []
   const activeSubcircuits: { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; start: number }[] = []
+  const conditionalBlocks: { id: number; branch: number; sawElse: boolean }[] = []
+  let nextConditionalId = 0
   let sawTopLevelRecord = false
   let activeLibrarySection: string | null = null
 
@@ -461,6 +517,30 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     if (!text || text.startsWith('*')) continue
     const tokens = text.split(/\s+/)
     const directive = tokens[0].toLowerCase()
+    if (directive === '.if') {
+      conditionalBlocks.push({ id: nextConditionalId++, branch: 0, sawElse: false })
+      modelLines.push(line)
+      if (!activeSubcircuits.length) sawTopLevelRecord = true
+      continue
+    }
+    if (directive === '.elseif') {
+      const active = conditionalBlocks.at(-1)!
+      active.branch += 1
+      modelLines.push(line)
+      continue
+    }
+    if (directive === '.else') {
+      const active = conditionalBlocks.at(-1)!
+      active.branch += 1
+      active.sawElse = true
+      modelLines.push(line)
+      continue
+    }
+    if (directive === '.endif') {
+      conditionalBlocks.pop()
+      modelLines.push(line)
+      continue
+    }
     if (directive === '.include' || directive === '.inc') {
       if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .INCLUDE must be a top-level library reference, outside a .SUBCKT.`)
       const argument = text.slice(tokens[0].length).trim()
@@ -529,10 +609,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (directive === '.lib' || directive === '.endl') throw new Error(`Line ${line.start}: .LIB/.ENDL section wrappers cannot appear inside a .SUBCKT.`)
       if (directive === '.model') {
         const model = parseModelCard(text, line, activeSubcircuits.at(-1)!.name)
-        const key = `${model.scope!.toLowerCase()}:${model.name.toLowerCase()}`
-        if (seenModelNames.has(key)) throw new Error(`Line ${line.start}: model card ${model.name} is declared more than once in .SUBCKT ${model.scope}.`)
-        seenModelNames.add(key)
-        models.push(model)
+        registerModelCard(model, conditionalBlocks.map(({ id, branch }) => ({ id, branch })), seenModelNames, models)
         continue
       }
       if (!directive.startsWith('.')) {
@@ -562,10 +639,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       modelLines.push(line)
       if (directive === '.model') {
         const model = parseModelCard(text, line)
-        const key = model.name.toLowerCase()
-        if (seenModelNames.has(key)) throw new Error(`Line ${line.start}: model card ${model.name} is declared more than once.`)
-        seenModelNames.add(key)
-        models.push(model)
+        registerModelCard(model, conditionalBlocks.map(({ id, branch }) => ({ id, branch })), seenModelNames, models)
       }
       sawTopLevelRecord = true
       continue

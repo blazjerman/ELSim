@@ -73,6 +73,52 @@ test('preserves ngspice .OPTIONS cards in user model libraries', () => {
   ])
 })
 
+test('preserves ngspice conditional model variants as one selectable device model', () => {
+  const source = [
+    'Conditional diode variants',
+    '.PARAM variant=0',
+    '.IF (variant == 0)',
+    '.MODEL DSELECT D(Is=1n N=1)',
+    '.ELSEIF (variant == 1)',
+    '.MODEL dselect D(Is=10n N=1)',
+    '.ELSE',
+    '.MODEL DSELECT D(Is=100n)',
+    '.ENDIF',
+  ].join('\n')
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source.split('\n').slice(1).join('\n'))
+  assert.equal(parsed.models.length, 1)
+  assert.deepEqual(parsed.models[0], {
+    name: 'DSELECT', type: 'D', parameters: [{ name: 'Is', defaultValue: '1n' }], startLine: 4, endLine: 4,
+  })
+  const analyzed = analyzeModelLibraries([{ id: 'conditional', filename: 'conditional.lib', content: source }])
+  assert.deepEqual(analyzed.dependencies.conflicts, [])
+
+  const scoped = parseSubcircuitLibrary([
+    'Scoped conditional diode variants',
+    '.PARAM variant=0',
+    '.SUBCKT CORE IN OUT',
+    '.IF (variant == 0)',
+    'D1 IN OUT DLOCAL',
+    '.MODEL DLOCAL D(Is=1n)',
+    '.ELSE',
+    'D1 IN OUT DLOCAL',
+    '.MODEL dlocal D(Is=10n)',
+    '.ENDIF',
+    '.ENDS CORE',
+  ].join('\n'))
+  assert.equal(scoped.models.length, 1)
+  assert.equal(scoped.models[0].scope, 'CORE')
+  assert.equal(scoped.subcircuits[0].dependencies[0].modelName, 'DLOCAL')
+  assert.match(scoped.modelText, /\.MODEL dlocal D\(Is=10n\)/)
+
+  assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL D1 D(Is=1n)\n.MODEL D1 D(Is=2n)\n.ENDIF'), /declared more than once/)
+  assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL D1 D(Is=1n)\n.ELSE\n.MODEL D1 NMOS(Level=1)\n.ENDIF'), /same device type/)
+  assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.ELSE\n.ELSEIF (B == 1)\n.ENDIF'), /no open \.IF branch/)
+  assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.PARAM X=1\n.ENDIF'), /not supported inside an ngspice \.IF block/)
+  assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL D1 D(Is=1n)'), /no matching \.ENDIF/)
+})
+
 test('strips a terminal .END from model libraries without accepting trailing circuit records', () => {
   const parsed = parseSubcircuitLibrary('.MODEL DFAST D(Is=1n)\n.END\n* allowed trailing comment\n')
   assert.equal(parsed.modelText, '.MODEL DFAST D(Is=1n)')

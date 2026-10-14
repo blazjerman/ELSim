@@ -37,6 +37,30 @@ test('project-local .LIB references flatten only the selected named section into
   assert.equal(artifact.text.match(/^\.END$/gim)?.length, 1)
 })
 
+test('conditional imported device-model branches retain source lines in the generated netlist', () => {
+  const project = createStarterProject()
+  const content = [
+    'Conditional device models',
+    '.PARAM variant=0',
+    '.IF (variant == 0)',
+    '.MODEL DSELECT D(Is=1n)',
+    '.ELSEIF (variant == 1)',
+    '.MODEL dselect D(Is=10n)',
+    '.ELSE',
+    '.MODEL DSELECT D(Is=100n)',
+    '.ENDIF',
+  ].join('\n')
+  project.modelAssets = [{ id: 'conditional-models', filename: 'conditional.lib', sha256: 'c'.repeat(64), content, licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  for (const line of ['.IF (variant == 0)', '.MODEL DSELECT D(Is=1n)', '.ELSEIF (variant == 1)', '.MODEL dselect D(Is=10n)', '.ELSE', '.MODEL DSELECT D(Is=100n)', '.ENDIF']) {
+    assert.ok(artifact.text.split(/\r?\n/).includes(line), `expected netlist to retain ${line}`)
+  }
+  for (const sourceLine of [3, 4, 5, 6, 7, 8, 9]) {
+    assert.ok(artifact.sourceMap.some((entry) => entry.sourceId === 'model-file:conditional-models' && entry.assetLine === sourceLine))
+  }
+})
+
 test('transient start-saving time reduces stored results without changing the zero-time solve', () => {
   const project = createStarterProject()
   project.simulation.startSavingTime = '20 ms'

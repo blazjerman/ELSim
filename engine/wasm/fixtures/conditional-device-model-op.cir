@@ -1,0 +1,15 @@
+Conditional model branch selection
+.param variant=0
+V1 IN 0 5
+D1 IN OUT DSEL
+R1 OUT 0 1k
+.IF (variant == 0)
+.MODEL DSEL D(Is=1n)
+.ELSEIF (variant == 1)
+.MODEL DSEL D(Is=10n)
+.ELSE
+.MODEL DSEL D(Is=100n)
+.ENDIF
+.OP
+.PRINT OP V(OUT)
+.END
