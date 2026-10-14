@@ -26,10 +26,11 @@ import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, re
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { formatTime } from './formatTime'
-import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
+import { getSimulationCursor, setSimulationCursor, setSimulationCursorForPlayback, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
 import { createTimeAxisLookup } from './timeAxis'
 import { COMPONENT_SHORTCUTS, ComponentPalette, componentCategoryKinds, componentPaletteItems } from './ComponentPalette'
 import type { ComponentPaletteCategory } from './ComponentPalette'
+import { ModelDependencyReport } from './ModelDependencyReport'
 import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { componentDefaultValue, componentDefinitionFor, componentPropertyDefault, compatibleDeviceModelType, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import type { ComponentSymbolPrimitive } from '../domain/componentDefinitions'
@@ -2240,11 +2241,11 @@ export default function App() {
         const progress = Math.min(1, (now - wallStart) / playbackDuration)
         const target = startTime + (endTime - startTime) * progress
         if (progress >= 1) {
-          setSimulationCursor(transientAxis.length - 1)
+          setSimulationCursorForPlayback(transientAxis.length - 1)
           setPlaybackRunning(false)
           return
         }
-        setSimulationCursor(findSample(target, startIndex))
+        setSimulationCursorForPlayback(findSample(target, startIndex))
         frame = requestAnimationFrame(advance)
       }
       frame = requestAnimationFrame(advance)
@@ -2257,11 +2258,11 @@ export default function App() {
     const advance = (now: number) => {
       const target = startTime + (now - wallStart) / 1000
       if (target >= transientAxis[transientAxis.length - 1]) {
-        setSimulationCursor(transientAxis.length - 1)
+        setSimulationCursorForPlayback(transientAxis.length - 1)
         setPlaybackRunning(false)
         return
       }
-      setSimulationCursor(findSample(target, startIndex))
+      setSimulationCursorForPlayback(findSample(target, startIndex))
       frame = requestAnimationFrame(advance)
     }
     frame = requestAnimationFrame(advance)
@@ -4382,7 +4383,7 @@ export default function App() {
         <div className="component-list-label">{componentQuery ? `${filteredPalette.length} SEARCH RESULTS` : componentCategory === 'basics' ? 'BASIC COMPONENTS' : componentCategory === 'semiconductors' ? 'SEMICONDUCTORS' : 'CONTROLLED SOURCES'}</div>
         {filteredPalette.length ? <ComponentPalette items={filteredPalette} pendingKind={pendingComponentKind} onSelect={selectComponentForPlacement}/> : <div className="component-empty" role="status">No components found for “{componentQuery}”.</div>}
         {project.sheets.some((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)) && <div className="imported-models"><div className="component-list-label">PROJECT BLOCKS</div>{project.sheets.filter((sheet) => sheet.id !== project.activeSheetId && sheet.ports.length > 0 && !sheetContains(sheet.id, project.activeSheetId)).map((sheet) => <div className="imported-model" key={sheet.id}><div><strong>{sheet.name}</strong><span>{sheet.ports.length} ordered ports · {sheet.ports.map((port) => port.name).join(', ')}</span><small>Defined by this project</small><button className="place-model" onClick={() => placeSheetBlock(sheet)}>Place block</button></div><button aria-label={`Open sheet ${sheet.name}`} title="Open sheet definition" onClick={() => openSheet(sheet.id)}><ArrowUp size={13}/></button></div>)}</div>}
-        {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.missingIncludes.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Model dependency report"><strong>MODEL DEPENDENCIES</strong>{modelDependencyAnalysis.missingIncludes.length > 0 && <><p>ELSim never reads paths from a model file. Import each referenced file into this project; imported file contents are added directly to the generated netlist.</p><ul>{modelDependencyAnalysis.missingIncludes.slice(0, 20).map((include, index) => <li key={`${include.assetId}:${include.sourceLine}:${index}`}><code>{include.reference || '(empty include)'}</code> · {include.assetFilename}:{include.sourceLine} — {include.reason === 'missing' ? 'file not imported' : include.reason === 'ambiguous' ? 'matches multiple imported filenames' : 'path is unsupported; use a project-local relative path'}</li>)}</ul>{modelDependencyAnalysis.missingIncludes.some((include) => include.reason === 'missing') && <button className="place-model" onClick={openModelLibraryPicker}>Import referenced model files</button>}{modelDependencyAnalysis.missingIncludes.length > 20 && <p>{modelDependencyAnalysis.missingIncludes.length - 20} additional include references are omitted.</p>}</>}{modelDependencyAnalysis.missing.length > 0 && <><p>These references are not present in the imported project libraries. Import the library that defines each name before running a circuit that uses it.</p><ul>{modelDependencyAnalysis.missing.slice(0, 20).map((dependency, index) => <li key={`${dependency.assetId}:${dependency.sourceLine}:${index}`}><code>{dependency.modelName}</code> ({dependency.kind}) · {dependency.filename}:{dependency.sourceLine}, in {dependency.owner}</li>)}</ul>{modelDependencyAnalysis.missing.length > 20 && <p>{modelDependencyAnalysis.missing.length - 20} additional missing references are omitted.</p>}</>}{modelDependencyAnalysis.recursiveChains.length > 0 && <><p>A circuit that instantiates one of these recursive call chains will fail in ngspice.</p><ul>{modelDependencyAnalysis.recursiveChains.map((chain) => <li key={chain.join(':')}>{chain.join(' → ')}</li>)}</ul></>}</div>}
+        <ModelDependencyReport analysis={modelDependencyAnalysis} onImport={openModelLibraryPicker}/>
         {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions"><strong>CONFLICTING MODEL DEFINITIONS</strong><p>More than one imported file defines the same model name. ELSim preserves both files; ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.</p><ul>{modelDependencyAnalysis.conflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.name}`}><code>{conflict.kind === 'subcircuit' ? '.SUBCKT' : '.MODEL'} {conflict.name}</code><ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>{definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => setModelSourceReview({ assetId: definition.assetId, line: definition.sourceLine })}>Review definition</button></li>)}</ul></li>)}</ul></div>}
         {compatibilityWarnings.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="LTspice model compatibility warnings"><strong>LTSPICE COMPATIBILITY CHECKS</strong><p>These source-line checks identify known LTspice constructs that are only partly translated or unavailable in this browser engine. Imported source text is preserved unchanged; review the suggested next step before editing or replacing a model.</p><ul>{visibleCompatibilityWarnings.map((warning, index) => <li key={`${warning.key}:${warning.sourceLine}:${index}`}><code>{warning.feature}</code> · {warning.sourceFilename}:{warning.sourceLine}<br/><code>{warning.excerpt}</code><p>{warning.impact}</p><small>Next step: {warning.suggestion}</small>{'assetId' in warning && typeof warning.assetId === 'string' && <button className="place-model" onClick={() => setModelSourceReview({ assetId: String(warning.assetId), line: Number(warning.sourceLine) })}>Review source line {warning.sourceLine}</button>}{/^Unresolved \.(?:include|inc|lib)/i.test(warning.feature) && <button className="place-model" onClick={(event) => chooseLibraryForCompatibilityWarning(warning.excerpt, event)}>{warning.feature.includes('section') ? 'Choose referenced library section' : 'Select referenced model library'}</button>}</li>)}</ul>{compatibilityWarnings.length > visibleCompatibilityWarnings.length && <button className="place-model" onClick={() => setCompatibilityWarningLimit((current) => Math.min(current + 20, compatibilityWarnings.length))}>Show {Math.min(20, compatibilityWarnings.length - visibleCompatibilityWarnings.length)} more compatibility warning{compatibilityWarnings.length - visibleCompatibilityWarnings.length === 1 ? '' : 's'}</button>}</div>}
         {importedModels.length > 0 && <div className="imported-models"><div className="component-list-label">{importedSubcircuitQuery ? `${filteredImportedModels.length} MATCHING IMPORTED ICs` : `IMPORTED SUBCIRCUITS · ${importedModels.length}`}</div><label className="search-box imported-model-search"><Search size={14}/><input aria-label="Find an imported IC" placeholder="Find an imported IC" value={importedSubcircuitQuery} onChange={(event) => { setImportedSubcircuitQuery(event.target.value); setVisibleImportedSubcircuits(50) }}/>{importedSubcircuitQuery && <button type="button" aria-label="Clear imported IC search" onClick={() => { setImportedSubcircuitQuery(''); setVisibleImportedSubcircuits(50) }}><X size={12}/></button>}</label>{visibleImportedModels.map((model) => {

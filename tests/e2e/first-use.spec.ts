@@ -1537,7 +1537,8 @@ test('large imported-model dependency reports are navigable regions, not live st
   const projectJson = await page.evaluate(async (fallbackProjectJson) => {
     const key = 'elsim:project:v7'
     const project = JSON.parse(localStorage.getItem(key) ?? 'null') ?? JSON.parse(fallbackProjectJson)
-    const content = '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n'
+    const missingCores = Array.from({ length: 25 }, (_, index) => `XCORE${index + 1} IN OUT CORE${index + 1}`).join('\n')
+    const content = `.SUBCKT AMP IN OUT\n${missingCores}\n.ENDS AMP\n`
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
     const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
     project.modelAssets = [{ id: 'amp-library', filename: 'amp.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
@@ -1555,6 +1556,15 @@ test('large imported-model dependency reports are navigable regions, not live st
   await expect(report).toContainText('CORE')
   await expect(report).toContainText('amp.lib')
   await expect(page.locator('[role="status"][aria-label="Model dependency report"]')).toHaveCount(0)
+  const missingModels = report.getByRole('list', { name: 'Missing model definitions' })
+  await expect(missingModels.getByRole('listitem')).toHaveCount(20)
+  await report.getByRole('button', { name: 'Show 5 more missing model references' }).click()
+  await expect(missingModels.getByRole('listitem')).toHaveCount(25)
+  const chooserPromise = page.waitForEvent('filechooser')
+  await report.getByRole('button', { name: 'Import model library' }).click()
+  const chooser = await chooserPromise
+  expect(await chooser.isMultiple()).toBe(true)
+  await chooser.setFiles([])
   const importedModel = page.locator('.imported-model').filter({ hasText: 'amp.lib' }).first()
   await expect(importedModel).toContainText('This library is required by a placed IC')
   await expect(importedModel.getByRole('button', { name: 'Remove model library amp.lib' })).toBeDisabled()
