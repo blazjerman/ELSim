@@ -801,6 +801,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       const parameterSource = parameterToken
         ? text.slice((parameterToken.index ?? 0) + (paramsMarkerAt === paramsAt ? parameterToken[0].length : 0)).trim()
         : ''
+      if (pins.some((pin) => pin === '0')) throw new Error(`Line ${line.start}: .SUBCKT ${name} cannot use ground node 0 as an external pin.`)
       if (pins.length < 1 || pins.length > 64 || pins.some((pin) => !pinName.test(pin)) || new Set(pins.map((pin) => pin.toLowerCase())).size !== pins.length) {
         throw new Error(`Line ${line.start}: ${name} must declare 1–64 unique ordered pins before PARAMS: .`)
       }

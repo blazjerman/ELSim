@@ -86,6 +86,11 @@ test('parses .MODEL parameters that call forward-declared library functions', ()
   assert.deepEqual(parsed.functions.map(({ name, arity }) => ({ name, arity })), [{ name: 'SCALE', arity: 1 }])
 })
 
+test('rejects ground node zero as an imported subcircuit external pin', () => {
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID 0 OUT\nR1 0 OUT 1k\n.ENDS INVALID'), /Line 1: \.SUBCKT INVALID cannot use ground node 0 as an external pin/)
+  assert.deepEqual(parseSubcircuitLibrary('.SUBCKT VALID IN OUT\nR1 IN OUT 1k\n.ENDS VALID').subcircuits[0].pins, ['IN', 'OUT'])
+})
+
 test('imported functions are scoped to the model and its project-local include chain', () => {
   const assets = [
     { asset: { id: 'root', filename: 'root.lib', content: '.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT' }, parsed: parseSubcircuitLibrary('.include "helpers.lib"\n.SUBCKT ROOT IN OUT\n.ENDS ROOT') },

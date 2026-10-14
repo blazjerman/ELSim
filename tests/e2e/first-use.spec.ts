@@ -1753,6 +1753,18 @@ test('model dependency report offers a direct import action for referenced libra
   await expect(page.getByText('CORE', { exact: true })).toBeVisible()
 })
 
+test('model importer reports a ground pin in an imported subcircuit header', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'invalid-ground-pin.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.SUBCKT INVALID 0 OUT\nR1 0 OUT 1k\n.ENDS INVALID'),
+  })
+  await expect(page.locator('.toast[role="status"]')).toContainText('Line 1: .SUBCKT INVALID cannot use ground node 0 as an external pin.')
+  await expect(page.getByRole('button', { name: 'Remove library file invalid-ground-pin.lib' })).toHaveCount(0)
+})
+
 test('native passive and transmission-line model references resolve across imported files', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
