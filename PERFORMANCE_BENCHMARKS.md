@@ -690,3 +690,15 @@ All remain within the current 500 ms domain targets. One-million-sample cold plo
 ### Firefox 5,000-part interaction recheck (2026-10-14)
 
 The existing `editor-wire-heavy-navigation-v9` Playwright benchmark was rerun on Firefox after the full UI audit. With 5,000 parts and 4,900 independent two-endpoint wires, initial render was **760.93 ms**; viewport culling mounted 64 parts and 551 wires. Selection median/p95 was **6/18 ms**, select-all-to-frame **46 ms**, zoom-to-two-frames median/max **40/57 ms**, and arrow-navigation median/max **18/21 ms**. The focused benchmark passed. These are one-host measurements, consistent with the preceding Firefox profile; they do not establish a cross-device budget or justify speculative renderer changes. No WASM rebuild or Pages workflow ran.
+
+### Quick domain profile repeat (2026-10-14 follow-up)
+
+A fresh `npm run benchmark:performance:quick` run (benchmark version 10, two warmups and seven measured runs) on the documented i7-12700F host confirmed the large domain paths remain inside the existing 500 ms budget:
+
+| Fixture | Size | Connectivity p95 (ms) | Netlisting p95 (ms) | Full circuit checks p95 (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| Labeled resistor chain | 5,000 resistors | 47.90 | 63.29 | 55.04 |
+| Two-endpoint wire grid | 5,000 resistors, 4,900 wires | 47.51 | 49.48 | 62.79 |
+| Two-level repeated hierarchy | 5,000 root instances | 88.72 | 135.58 | 111.55 |
+
+One-million-sample cold plot reduction was 1.04 ms p95 with the 902-point cap. Compared with the previous quick repeat, results remain within same-host variance and do not point to a new domain bottleneck. This does not measure UI rendering, ngspice runtime, or cross-machine behavior.
