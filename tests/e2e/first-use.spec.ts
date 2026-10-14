@@ -5586,6 +5586,38 @@ test('Wheatstone bridge prediction calculates imbalance and resets at balance', 
   await expect(prediction.getByRole('status')).toContainText('VOUT − VLEFT = 0 V')
 })
 
+test('RC filter lessons predict live cutoff frequency before an AC run', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+
+  for (const filter of [
+    { id: 'ac-lowpass', title: 'RC low-pass frequency response', type: 'low-pass' },
+    { id: 'ac-highpass', title: 'RC high-pass frequency response', type: 'high-pass' },
+  ]) {
+    await page.getByRole('button', { name: 'Examples' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+    await dialog.locator('.example-list article').filter({ hasText: filter.title }).getByRole('button', { name: 'Open example' }).click()
+    await page.getByRole('button', { name: 'Replace and open' }).click()
+
+    const prediction = page.locator('.example-prediction')
+    const answer = prediction.getByRole('spinbutton')
+    await expect(answer).toHaveAccessibleName(`Before running, predict this RC ${filter.type} cutoff frequency`)
+    await answer.fill('1')
+    await prediction.getByRole('button', { name: 'Check prediction' }).click()
+    await expect(prediction.getByRole('status')).toContainText('Correct.')
+    await expect(prediction.getByRole('status')).toContainText('−3 dB')
+
+    await page.locator(`.circuit-part[data-part-id="${filter.id}-r1"]`).focus()
+    await page.keyboard.press('Enter')
+    await page.locator(`[data-part-setting="${filter.id}-r1:value"]`).fill('2 kΩ')
+    await expect(answer).toHaveValue('')
+    await answer.fill('0.5')
+    await prediction.getByRole('button', { name: 'Check prediction' }).click()
+    await expect(prediction.getByRole('status')).toContainText('Correct.')
+    await expect(prediction.getByRole('status')).toContainText('0.5005 kHz')
+    await expect(page.getByRole('button', { name: 'Run this circuit' })).toBeEnabled()
+  }
+})
+
 test('Wheatstone bridge lesson predicts and verifies a balanced sensor arm', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])

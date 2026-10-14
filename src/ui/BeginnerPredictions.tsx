@@ -206,6 +206,26 @@ export function LoadedVoltageDividerPrediction({ supplyValue, upperResistanceVal
   />
 }
 
+export function AcCutoffPrediction({ resistanceValue, capacitanceValue, filterType }: { resistanceValue: string; capacitanceValue: string; filterType: 'low-pass' | 'high-pass' }) {
+  const resistance = componentMagnitude(resistanceValue, 'resistor')
+  const capacitance = componentMagnitude(capacitanceValue, 'capacitor')
+  const predictedCutoffKhz = resistance !== null && capacitance !== null && resistance > 0 && capacitance > 0
+    ? 1 / (2 * Math.PI * resistance * capacitance) / 1000
+    : null
+  const explanation = predictedCutoffKhz === null || resistance === null || capacitance === null
+    ? ''
+    : `f₍c₎ = 1/(2πR1C1) = 1/(2π × ${formatResistance(resistance)} × ${capacitanceValue}) = ${formatValue(predictedCutoffKhz)} kHz. At cutoff, an ideal one-pole ${filterType} output is about 0.707 of its passband value (−3 dB).`
+
+  return <NumericPrediction
+    id="ac-cutoff-prediction"
+    prompt={`Before running, predict this RC ${filterType} cutoff frequency`}
+    unit="kHz"
+    predictedValue={predictedCutoffKhz}
+    absoluteTolerance={0.01}
+    explanation={explanation}
+  />
+}
+
 export function WheatstoneBridgePrediction({ supplyValue, leftTopValue, leftBottomValue, rightTopValue, rightBottomValue }: { supplyValue: string; leftTopValue: string; leftBottomValue: string; rightTopValue: string; rightBottomValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const leftTop = componentMagnitude(leftTopValue, 'resistor')
@@ -272,7 +292,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'wheatstone-bridge' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
+  kind: 'rc' | 'switch-lamp' | 'ohms-law' | 'voltage-divider' | 'loaded-voltage-divider' | 'wheatstone-bridge' | 'ac-cutoff' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'series-resistors'
   resistanceValue?: string
   capacitanceValue?: string
   supplyValue?: string
@@ -283,6 +303,7 @@ type BeginnerPredictionProps = {
   leftBottomValue?: string
   rightTopValue?: string
   rightBottomValue?: string
+  filterType?: 'low-pass' | 'high-pass'
   firstResistanceValue?: string
   secondResistanceValue?: string
   initialVoltageValue?: string
@@ -297,6 +318,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'voltage-divider': return <VoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''}/>
     case 'loaded-voltage-divider': return <LoadedVoltageDividerPrediction supplyValue={props.supplyValue ?? ''} upperResistanceValue={props.upperResistanceValue ?? ''} lowerResistanceValue={props.lowerResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'wheatstone-bridge': return <WheatstoneBridgePrediction supplyValue={props.supplyValue ?? ''} leftTopValue={props.leftTopValue ?? ''} leftBottomValue={props.leftBottomValue ?? ''} rightTopValue={props.rightTopValue ?? ''} rightBottomValue={props.rightBottomValue ?? ''}/>
+    case 'ac-cutoff': return <AcCutoffPrediction resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''} filterType={props.filterType ?? 'low-pass'}/>
     case 'parallel-resistors': return <CurrentDividerPrediction supplyValue={props.supplyValue ?? ''} firstResistanceValue={props.firstResistanceValue ?? ''} secondResistanceValue={props.secondResistanceValue ?? ''}/>
     case 'series-resistors': return <SeriesVoltageDropPrediction supplyValue={props.supplyValue ?? ''}/>
     case 'capacitor-discharge': return <CapacitorDischargePrediction initialVoltageValue={props.initialVoltageValue ?? ''} resistanceValue={props.resistanceValue ?? ''} capacitanceValue={props.capacitanceValue ?? ''}/>
