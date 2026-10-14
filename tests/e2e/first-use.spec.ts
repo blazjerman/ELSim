@@ -2027,6 +2027,18 @@ test('toolbar menus close when clicking outside', { tag: '@ui-smoke' }, async ({
   await expect(animationSettings).toHaveJSProperty('open', false)
 })
 
+test('wire context menu selects a wire without changing the active editor tool', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const wire = page.locator('.wire-line').first()
+  await expect(wire).toBeVisible()
+  await wire.click({ button: 'right' })
+  await expect(page.getByRole('menu', { name: 'Wire options' })).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Select wire' }).click()
+  await expect(wire).toHaveClass(/selected/)
+  await expect(wire).toBeFocused()
+  await expect(page.getByRole('button', { name: 'Select and move (M)' })).toHaveAttribute('aria-pressed', 'true')
+})
+
 test('component categories filter the library and search crosses categories', async ({ page }) => {
   await page.goto('/')
   const cards = page.locator('.component-card')

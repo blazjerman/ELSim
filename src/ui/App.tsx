@@ -1848,7 +1848,6 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
         const point = pointFromEvent(event)
         const hit = wireNetAt(project, point, 12, wiresNear({ left: point.x - 12, top: point.y - 12, right: point.x + 12, bottom: point.y + 12 }))
         const node = hit ? connectivity.wireNets.get(hit.wireId) : undefined
-        setSelectedWireId(id); setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null)
         setContextMenu({ kind: 'wire', id, x, y, point: hit ? { x: hit.point.x, y: hit.point.y } : point, ...(node ? { node } : {}) })
       } else setContextMenu(null)
     }} onWheel={(event) => {
@@ -1921,7 +1920,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
         <div className="context-menu-heading">{contextMenu.node ? 'Net ' + contextMenu.node : 'Wire'}</div>
         <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node, wireId: contextMenu.id }); setContextMenu(null) }}>Plot voltage to ground</button>
         <button role="menuitem" onClick={() => { const existing = project.netLabels.find((label) => Math.hypot(label.x - contextMenu.point.x, label.y - contextMenu.point.y) < 1); setLabelDraft({ ...contextMenu.point, id: existing?.id, name: existing?.name ?? contextMenu.node ?? 'net' }); setContextMenu(null) }}>{project.netLabels.some((label) => Math.hypot(label.x - contextMenu.point.x, label.y - contextMenu.point.y) < 1) ? 'Edit net label' : 'Add net label'}</button>
-        <button role="menuitem" onClick={() => setContextMenu(null)}>Select wire</button>
+        <button role="menuitem" onClick={() => { setSelectedWireIds([contextMenu.id]); setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null); setContextMenu(null); window.requestAnimationFrame(() => svg.current?.querySelector<SVGGElement>(`.wire-line[data-wire-id="${CSS.escape(contextMenu.id)}"]`)?.focus()) }}>Select wire</button>
       </> : null}
     </div>}
     {labelDraft && <form className="label-editor" onSubmit={saveLabel}><label htmlFor="net-label-name">{labelDraft.id ? 'Rename net label' : 'Name this net'}</label><div><input id="net-label-name" autoFocus value={labelDraft.name} onChange={(event) => setLabelDraft({ ...labelDraft, name: event.target.value })} aria-describedby="net-label-help"/><button type="submit">Apply</button><button type="button" className="label-cancel" onClick={() => setLabelDraft(null)}>Cancel</button></div><small id="net-label-help">Same names connect the same electrical node. Use a letter, underscore, or 0.</small></form>}
