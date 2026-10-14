@@ -1,0 +1,14 @@
+* Imported ngspice .SAVE vectors coexist with ELSim's generated waveform saves.
+.SAVE V(vin)
+V1 vin 0 PULSE(0 1 0 1u 1u 5m 10m)
+R1 vin out 1k
+C1 out 0 1u
+.TRAN 10u 1m
+.SAVE all @R1[i]
+.CONTROL
+set filetype=ascii
+tran 10u 1m
+write /result.raw all
+quit
+.ENDC
+.END

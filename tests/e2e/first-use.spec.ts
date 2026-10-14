@@ -4452,6 +4452,25 @@ test('imported ngspice .IC and .NODESET cards are preserved with circuit-wide gu
   await expect(netlist).toContainText(/\.NODESET\s+V\(in\)=1/i)
 })
 
+test('imported ngspice .SAVE vectors are preserved and coexist with ELSim waveform saves', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'saved-vectors.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.SAVE V(vin)\n.MODEL DTEST D(IS=1n)\n'),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from saved-vectors\.lib/)).toBeVisible()
+  const warnings = page.getByRole('status', { name: 'LTspice model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice .SAVE changes circuit-wide saved vectors')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete .* result vectors/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText(/\.SAVE\s+V\(vin\)/i)
+  await netlist.getByRole('button', { name: 'Close' }).click()
+})
+
 test('invalid global temperature focuses its setting before simulation', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.setViewportSize({ width: 1280, height: 900 })

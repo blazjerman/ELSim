@@ -174,6 +174,20 @@ test('preserves ngspice .OPTIONS cards in user model libraries', () => {
   ])
 })
 
+test('preserves ngspice .SAVE vectors from imported model libraries and warns about global effect', () => {
+  const source = '.SAVE V(vin) @RLOAD[i]\n.MODEL DFAST D(Is=1n)'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine, text }) => ({ sourceLine, text })), [
+    { sourceLine: 1, text: '.SAVE V(vin) @RLOAD[i]' },
+    { sourceLine: 2, text: '.MODEL DFAST D(Is=1n)' },
+  ])
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.equal(warning.sourceLine, 1)
+  assert.equal(warning.feature, 'ngspice .SAVE changes circuit-wide saved vectors')
+  assert.match(warning.impact, /ELSim adds its own save request/)
+})
+
 test('preserves top-level ngspice .CSPARAM constants and rejects subcircuit scope', () => {
   const source = '.PARAM GAIN=3\n.CSPARAM gain_vector={GAIN}\n.MODEL DFAST D(Is=1n)'
   const parsed = parseSubcircuitLibrary(source)
