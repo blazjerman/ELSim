@@ -299,7 +299,10 @@ const ImportedSymbolArt = memo(function ImportedSymbolArt({ symbol, stroke }: { 
               : primitive.kind === 'path'
                 ? <path key={index} d={primitive.d} {...common}/>
                 : <path key={index} d={symbolArcPath(primitive)} {...common}/>)}
-    {symbol.pins.map((pin, index) => <g key={index}><circle cx={pin.x} cy={pin.y} r="3" fill="#86e3b7"/><text x={pin.x + (pin.orientation === 'R' ? -6 : 6)} y={pin.y - 6} textAnchor={pin.orientation === 'R' ? 'end' : 'start'} className="subcircuit-pin-label">{pin.name}</text></g>)}
+    {symbol.pins.map((pin, index) => {
+      const vertical = pin.orientation === 'D' || pin.orientation === 'U'
+      return <g key={index}><circle cx={pin.x} cy={pin.y} r="3" fill="#86e3b7"/><text x={vertical ? pin.x : pin.x + (pin.orientation === 'R' ? -6 : 6)} y={vertical ? pin.y + (pin.orientation === 'D' ? -8 : 14) : pin.y - 6} textAnchor={vertical ? 'middle' : pin.orientation === 'R' ? 'end' : 'start'} className="subcircuit-pin-label">{pin.name}</text></g>
+    })}
   </g>
 })
 

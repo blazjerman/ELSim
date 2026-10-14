@@ -102,34 +102,52 @@ export function createDefaultElsimSymbol(name: string, pinNames: readonly string
   if (!pinNames.length || pinNames.length > MAX_PINS) throw new Error(`A symbol needs 1–${MAX_PINS} ordered pins.`)
   const normalizedPins = pinNames.map((pin) => pin.trim())
   if (normalizedPins.some((pin) => !pin || pin.length > 64) || new Set(normalizedPins.map((pin) => pin.toLowerCase())).size !== normalizedPins.length) throw new Error('Model pins must have unique names of 1–64 characters.')
-  // Keep common output pins on the right so generated ICs read like ordinary
-  // schematic symbols. Pin labels remain in SPICE order regardless of layout.
+  // Use common pin names to make generated symbols easier to read without
+  // changing their electrical order. Unknown pins remain on the input side.
   const outputPinNames = /^(?:OUT|OUTPUT|VOUT|VO|QOUT)(?:[+-]|[PN])?\d*$/i
-  const detectedOutputs = normalizedPins.flatMap((pin, index) => outputPinNames.test(pin) ? [index] : [])
-  const rightPinIndexes = new Set(detectedOutputs.length > 0 && detectedOutputs.length < normalizedPins.length
-    ? detectedOutputs
-    : normalizedPins.flatMap((_, index) => index >= Math.ceil(normalizedPins.length / 2) ? [index] : []))
-  const leftPinIndexes = normalizedPins.flatMap((_, index) => rightPinIndexes.has(index) ? [] : [index])
+  const positiveSupplyNames = /^(?:VPOS|VCC|VDD|VPLUS|VP|AVDD|DVDD|SUPPLYPLUS|POSITIVE)$/i
+  const negativeSupplyNames = /^(?:VNEG|VEE|VSS|VMINUS|VM|AVSS|DVSS|GND|GROUND|NEGATIVE)$/i
+  const hasRecognizedLayout = normalizedPins.some((pin) => outputPinNames.test(pin) || positiveSupplyNames.test(pin) || negativeSupplyNames.test(pin))
+  let sides = normalizedPins.map((pin) => outputPinNames.test(pin) ? 'right'
+    : positiveSupplyNames.test(pin) ? 'top'
+      : negativeSupplyNames.test(pin) ? 'bottom'
+        : 'left')
+  if (!hasRecognizedLayout || sides.every((side) => side === 'right')) {
+    const leftCount = Math.ceil(normalizedPins.length / 2)
+    sides = sides.map((_, index) => index < leftCount ? 'left' : 'right')
+  }
+  const sideIndexes = (side: string) => normalizedPins.flatMap((_, index) => sides[index] === side ? [index] : [])
+  const leftPinIndexes = sideIndexes('left'), rightPinIndexes = sideIndexes('right')
+  const topPinIndexes = sideIndexes('top'), bottomPinIndexes = sideIndexes('bottom')
   const leftPinRows = new Map(leftPinIndexes.map((index, row) => [index, row]))
-  const rightPinRows = new Map([...rightPinIndexes].map((index, row) => [index, row]))
-  const rows = Math.max(leftPinIndexes.length, rightPinIndexes.size, 1)
-  const halfHeight = Math.max(30, (rows - 1) * 10 + 10)
+  const rightPinRows = new Map(rightPinIndexes.map((index, row) => [index, row]))
+  const topPinRows = new Map(topPinIndexes.map((index, row) => [index, row]))
+  const bottomPinRows = new Map(bottomPinIndexes.map((index, row) => [index, row]))
+  const halfHeight = Math.max(30, (Math.max(leftPinIndexes.length, rightPinIndexes.length, 1) - 1) * 10 + 10)
+  const halfWidth = Math.max(50, (Math.max(topPinIndexes.length, bottomPinIndexes.length, 1) - 1) * 25 + 25)
   const pins = normalizedPins.map((pin, index) => {
-    const left = !rightPinIndexes.has(index)
-    const sideIndex = (left ? leftPinRows : rightPinRows).get(index)!
-    const count = left ? leftPinIndexes.length : rightPinIndexes.size
+    const side = sides[index]
+    const sideRows = side === 'left' ? leftPinRows : side === 'right' ? rightPinRows : side === 'top' ? topPinRows : bottomPinRows
+    const sideIndex = sideRows.get(index)!
+    const count = sideRows.size
+    const centered = (sideIndex - (count - 1) / 2)
     return {
       name: pin,
       spiceOrder: index + 1,
-      x: left ? -70 : 70,
-      y: (sideIndex - (count - 1) / 2) * 20,
-      orientation: left ? 'R' : 'L',
+      x: side === 'left' ? -halfWidth - 20 : side === 'right' ? halfWidth + 20 : centered * 50,
+      y: side === 'top' ? -halfHeight - 20 : side === 'bottom' ? halfHeight + 20 : centered * 20,
+      orientation: side === 'left' ? 'R' : side === 'right' ? 'L' : side === 'top' ? 'D' : 'U',
     }
   })
   const primitives = [
-    { kind: 'rectangle', x1: -50, y1: -halfHeight, x2: 50, y2: halfHeight },
+    { kind: 'rectangle', x1: -halfWidth, y1: -halfHeight, x2: halfWidth, y2: halfHeight },
     { kind: 'text', x: 0, y: 4, alignment: 'Center', size: 2.5, text: symbolName },
-    ...pins.map((pin) => ({ kind: 'line', x1: pin.x < 0 ? pin.x : 50, y1: pin.y, x2: pin.x < 0 ? -50 : pin.x, y2: pin.y })),
+    ...pins.map((pin) => ({ kind: 'line',
+      x1: pin.orientation === 'R' ? pin.x : pin.orientation === 'L' ? halfWidth : pin.x,
+      y1: pin.orientation === 'D' ? pin.y : pin.orientation === 'U' ? halfHeight : pin.y,
+      x2: pin.orientation === 'R' ? -halfWidth : pin.orientation === 'L' ? pin.x : pin.x,
+      y2: pin.orientation === 'D' ? -halfHeight : pin.orientation === 'U' ? pin.y : pin.y,
+    })),
   ]
   const source = JSON.stringify({ format: 'elsim-symbol', version: 1, name: symbolName, pins, primitives }, null, 2)
   parseElsimSymbol(source, `${symbolName}.elsym`)
