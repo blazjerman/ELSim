@@ -7058,6 +7058,25 @@ test('circuit checks explain and select a semiconductor assigned to the wrong mo
   await expect(page.locator('.circuit-part[data-part-id="wrong-device-family"].selected')).toHaveCount(1)
 })
 
+test('circuit checks keep a missing device model editable and select its component', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.parts.push({ id: 'missing-device-model', kind: 'nmos', ref: 'M1', value: '1', deviceModel: 'USER_NMOS_MISSING', x: 800, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+    localStorage.setItem('elsim:project:v7:savedAt', String(Date.now() + 10_000))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  const issue = report.getByRole('listitem').filter({ hasText: 'M1 needs device model USER_NMOS_MISSING' })
+  await expect(issue).toContainText('Import the library that defines it or select a compatible model before running.')
+  await issue.getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part[data-part-id="missing-device-model"].selected')).toHaveCount(1)
+})
+
 test('circuit checks explain and select a current-controlled source with no control source', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
