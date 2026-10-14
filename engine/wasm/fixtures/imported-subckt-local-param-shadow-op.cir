@@ -1,0 +1,11 @@
+ELSim imported subcircuit local parameter shadows global parameter
+.PARAM SCALE=10
+V1 IN 0 1
+XAMP IN OUT AMP
+.SUBCKT AMP IN OUT
+.PARAM SCALE=2
+EGAIN OUT 0 IN 0 {SCALE}
+.ENDS AMP
+.op
+.print op v(out)
+.end

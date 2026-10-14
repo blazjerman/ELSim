@@ -142,6 +142,13 @@ test('parses native ngspice subcircuit defaults with and without PARAMS:', () =>
   assert.equal(parsed.modelText, source)
 })
 
+test('preserves scoped .PARAM cards with their containing subcircuit', () => {
+  const source = '.PARAM SCALE=10\n.SUBCKT AMP IN OUT\n.PARAM SCALE=2\nE1 OUT 0 IN 0 {SCALE}\n.ENDS AMP'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine }) => sourceLine), [1, 2, 3, 4, 5])
+})
+
 test('imports .MODEL-only libraries, including numeric-leading model names and continuations', () => {
   const parsed = parseSubcircuitLibrary('Vendor device cards\n.MODEL 1N4148 D(Is=2n N=1.8)\n+ Rs=1\n')
   assert.deepEqual(parsed.subcircuits, [])
