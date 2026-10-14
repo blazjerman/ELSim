@@ -2123,7 +2123,7 @@ test('project-local model includes and shared parameter records load through bro
   await modelInput.setInputFiles({
     name: 'shared.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.PARAM RBASE=1k\n.FUNC TWICE(x) {2*x}\n.GLOBAL 0\n.SUBCKT CORE IN OUT\nR1 IN OUT {RBASE}\n.ENDS CORE\n'),
+    buffer: Buffer.from('.OPTIONS reltol=.005 trtol=8\n.PARAM RBASE=1k\n.FUNC TWICE(x) {2*x}\n.GLOBAL 0\n.SUBCKT CORE IN OUT\nR1 IN OUT {RBASE}\n.ENDS CORE\n'),
   })
   await expect(dependencyReport).toHaveCount(0)
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
@@ -2131,6 +2131,7 @@ test('project-local model includes and shared parameter records load through bro
   await expect(netlistDialog.locator('pre')).toContainText('.PARAM RBASE=1k')
   const netlist = await netlistDialog.innerText()
   expect(netlist).toContain('.PARAM RBASE=1k')
+  expect(netlist).toContain('.OPTIONS reltol=.005 trtol=8')
   expect(netlist).toContain('.FUNC TWICE(x) {2*x}')
   expect(netlist).toContain('.SUBCKT CORE IN OUT')
   expect(netlist).not.toMatch(/^\.include/im)

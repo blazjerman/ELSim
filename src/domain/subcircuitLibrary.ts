@@ -18,7 +18,7 @@ export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInp
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 const pinName = /^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/
-const safeTopLevel = new Set(['.model', '.param', '.func', '.global'])
+const safeTopLevel = new Set(['.model', '.param', '.func', '.global', '.options'])
 const forbidden = new Set(['.control', '.endc', '.end', '.exec', '.shell', '.cm'])
 
 function includedAssetBasename(reference: string): string | null {

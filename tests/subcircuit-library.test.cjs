@@ -47,6 +47,16 @@ test('project-local includes resolve against imported assets without filesystem 
   assert.match(sharedRecordsOnly.modelText, /\.FUNC TWICE/)
 })
 
+test('preserves ngspice .OPTIONS cards in user model libraries', () => {
+  const source = '.OPTIONS reltol=.005 trtol=8\n.MODEL DFAST D(Is=1n)'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine, text }) => ({ sourceLine, text })), [
+    { sourceLine: 1, text: '.OPTIONS reltol=.005 trtol=8' },
+    { sourceLine: 2, text: '.MODEL DFAST D(Is=1n)' },
+  ])
+})
+
 test('project-local includes reject absolute paths and traversal as unresolved unsafe references', () => {
   const unsafe = ['../outside.lib', '/outside.lib', 'C:\\\\outside.lib', 'https://example.test/model.lib']
   for (const reference of unsafe) {
