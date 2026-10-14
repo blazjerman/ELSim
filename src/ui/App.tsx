@@ -2894,8 +2894,13 @@ export default function App() {
   }, [partsById, activeSelected, selectedPartIds])
   const selectedLabel = selection?.kind === 'label' ? project.netLabels.find((label) => label.id === selection.id) ?? null : null
   useEffect(() => {
-    const validIds = selectedWireIds.filter((id) => projectWireIds.has(id))
-    if (validIds.length !== selectedWireIds.length) setSelectedWireIds(validIds)
+    // A paste publishes its fresh selection and project records in the same
+    // event. If React commits the selection first, keep those not-yet-rendered
+    // IDs until the matching project update arrives instead of letting this
+    // validity pass silently fall back to the old wire selection.
+    const pendingWireIds = new Set(pendingPasteSelection.current?.wireIds ?? [])
+    const retainedIds = selectedWireIds.filter((id) => projectWireIds.has(id) || pendingWireIds.has(id))
+    if (retainedIds.length !== selectedWireIds.length) setSelectedWireIds(retainedIds)
   }, [projectWireIds, selectedWireIds])
   useLayoutEffect(() => {
     const pending = pendingPasteSelection.current
@@ -3416,6 +3421,13 @@ export default function App() {
     // the layout effect can see the exact clone IDs even if React commits the
     // project update synchronously (or splits it from other updates).
     pendingPasteSelection.current = { partIds: pastedIds, wireIds: pastedWireIds, labelIds: pastedLabelIds, selection: nextSelection }
+    // Switch the synchronous selection refs as soon as paste is requested.
+    // That makes a quick drag/copy after Ctrl+V use only the clone IDs even
+    // when React schedules the project update separately from selection.
+    setSelectedPartIds(pastedIds)
+    setSelectedWireIds(pastedWireIds)
+    setSelectedNetLabelIds(pastedLabelIds)
+    setSelection(nextSelection)
     setProject((current) => {
       const parts = [...current.parts]
       const usedReferences = new Set(parts.map((part) => part.ref.toLowerCase()))
@@ -3449,9 +3461,8 @@ export default function App() {
       })
       return { ...current, sheets: [...current.sheets, ...resolved.sheets], modelAssets: [...(current.modelAssets ?? []), ...resolved.modelAssets], symbolAssets: [...(current.symbolAssets ?? []), ...resolved.symbolAssets], parts, wires: [...current.wires, ...pastedWires], junctions: [...current.junctions, ...clipboard.junctions.map((junction) => ({ x: junction.x + offsetX, y: junction.y + offsetY }))], netLabels: [...current.netLabels, ...pastedLabels] }
     })
-    // Reconcile selection only after the copied records are in the project.
-    // This avoids the wire-validity effect pruning newly generated IDs if a
-    // large paste causes the selection and project updates to render separately.
+    // Clear the pending marker only after the copied records are in the project.
+    // The selection refs already point at this exact clone set.
     if (lastPartId) {
       setNotice(`Pasted ${sources.length} ${sources.length === 1 ? kindNames[sources[0].kind].toLowerCase() : 'components'} and ${pastedWires.length} attached wire segments. Ends at unselected parts stay open; net labels are not copied.`)
     } else if (lastLabel) {

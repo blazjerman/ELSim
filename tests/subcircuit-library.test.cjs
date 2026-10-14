@@ -188,6 +188,21 @@ test('preserves ngspice .SAVE vectors from imported model libraries and warns ab
   assert.match(warning.impact, /ELSim adds its own save request/)
 })
 
+test('preserves ngspice .PROBE cards and reports circuit-wide instrumentation', () => {
+  const source = '.PROBE I(RLOAD) V(OUT,REF)\n.MODEL DFAST D(Is=1n)'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine, text }) => ({ sourceLine, text })), [
+    { sourceLine: 1, text: '.PROBE I(RLOAD) V(OUT,REF)' },
+    { sourceLine: 2, text: '.MODEL DFAST D(Is=1n)' },
+  ])
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.equal(warning.sourceLine, 1)
+  assert.equal(warning.feature, 'ngspice .PROBE instruments circuit-wide device terminals')
+  assert.match(warning.impact, /current-sense branches/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE IN OUT\n.PROBE I(Q1)\n.ENDS CORE'), /\.PROBE can instrument only top-level circuit devices/)
+})
+
 test('preserves top-level ngspice .CSPARAM constants and rejects subcircuit scope', () => {
   const source = '.PARAM GAIN=3\n.CSPARAM gain_vector={GAIN}\n.MODEL DFAST D(Is=1n)'
   const parsed = parseSubcircuitLibrary(source)

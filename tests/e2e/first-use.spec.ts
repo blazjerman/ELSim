@@ -3747,6 +3747,51 @@ test('copying and pasting the full circuit selects only all newly pasted wires',
   }
 })
 
+test('rapid repeated circuit paste selects and moves only the latest clone', async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.keyboard.press('Control+a')
+  await page.keyboard.press('Control+c')
+  const original = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  const partCount = original.parts.length
+  const wireCount = original.wires.length
+
+  // Do not wait for the first paste to render. The latest clipboard placement
+  // must own selection even if React commits the two updates in separate turns.
+  await page.keyboard.press('Control+v')
+  await page.keyboard.press('Control+v')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.length)).toBe(partCount * 3)
+  const clones = await page.evaluate((originalIds) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return {
+      parts: project.parts.filter((part: { id: string }) => !originalIds.parts.includes(part.id)),
+      wires: project.wires.filter((wire: { id: string }) => !originalIds.wires.includes(wire.id)),
+    }
+  }, { parts: original.parts.map((part: { id: string }) => part.id), wires: original.wires.map((wire: { id: string }) => wire.id) })
+  expect(clones.parts).toHaveLength(partCount * 2)
+  expect(clones.wires).toHaveLength(wireCount * 2)
+  const latestPartIds = clones.parts.slice(-partCount).map((part: { id: string }) => part.id)
+  const latestWireIds = clones.wires.slice(-wireCount).map((wire: { id: string }) => wire.id)
+  const selectedWireIds = await page.locator('.wire-line.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-wire-id')))
+  expect(new Set(selectedWireIds)).toEqual(new Set(latestWireIds))
+  const selectedPartIds = await page.locator('.circuit-part.selected').evaluateAll((elements) => elements.map((element) => element.getAttribute('data-part-id')))
+  expect(new Set(selectedPartIds)).toEqual(new Set(latestPartIds))
+
+  const beforeMove = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  const firstLatestPart = page.locator(`.circuit-part[data-part-id="${latestPartIds[0]}"]`)
+  const bounds = await firstLatestPart.boundingBox()
+  expect(bounds).not.toBeNull()
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(bounds!.x + bounds!.width / 2 + 40, bounds!.y + bounds!.height / 2 + 20, { steps: 3 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate((wireId) => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires.find((wire: { id: string }) => wire.id === wireId)?.points, latestWireIds[0])).not.toEqual(beforeMove.wires.find((wire: { id: string }) => wire.id === latestWireIds[0]).points)
+
+  const afterMove = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
+  const untouchedIds = new Set([...original.wires.map((wire: { id: string }) => wire.id), ...clones.wires.slice(0, wireCount).map((wire: { id: string }) => wire.id)])
+  expect(afterMove.wires.filter((wire: { id: string }) => untouchedIds.has(wire.id))).toEqual(beforeMove.wires.filter((wire: { id: string }) => untouchedIds.has(wire.id)))
+})
+
 test('fit schematic view frames distant parts, wires, and labels', async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
@@ -4480,6 +4525,24 @@ test('imported ngspice .SAVE vectors are preserved and coexist with ELSim wavefo
   const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
   await expect(netlist).toContainText(/\.SAVE\s+V\(vin\)/i)
   await netlist.getByRole('button', { name: 'Close' }).click()
+})
+
+test('imported ngspice .PROBE instruments a top-level component and preserves its waveform results', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'terminal-probe.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.PROBE I(R1)\n.MODEL DTEST D(IS=1n)\n'),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from terminal-probe\.lib/)).toBeVisible()
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice .PROBE instruments circuit-wide device terminals')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete .* result vectors/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText('.PROBE I(R1)')
 })
 
 test('invalid global temperature focuses its setting before simulation', { tag: '@ui-smoke' }, async ({ page }) => {
