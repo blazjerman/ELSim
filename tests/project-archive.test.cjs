@@ -289,6 +289,14 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const legacySchema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v7.schema.json'), 'utf8'))
   assert.equal(legacySchema.$defs.part.properties.modelPins.items.pattern, schema.$defs.part.properties.modelPins.items.pattern)
   assert.equal(legacySchema.$defs.modelAsset.properties.selectedSections.items.pattern, schema.$defs.modelAsset.properties.selectedSections.items.pattern)
+  for (let version = 2; version <= 8; version++) {
+    const projectSchema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, `../schemas/project-v${version}.schema.json`), 'utf8'))
+    for (const field of ['modelName', 'deviceModel']) {
+      const pattern = new RegExp(projectSchema.$defs.part.properties[field].pattern)
+      for (const name of ['LF356/NS', '74HC00m', 'DIODE/FAST', '1N4148']) assert.equal(pattern.test(name), true, `v${version} ${field} ${name}`)
+      for (const name of ['LF356/', '/NS', 'A//B', 'A B']) assert.equal(pattern.test(name), false, `v${version} ${field} ${name}`)
+    }
+  }
   assert.equal(schema.properties.symbolAssets.maxItems, 32)
   assert.equal(schema.properties.importedSchematicSource.$ref, '#/$defs/ltspiceSchematicSource')
   assert.equal(schema.properties.importedChildSchematicSources.maxItems, 63)
