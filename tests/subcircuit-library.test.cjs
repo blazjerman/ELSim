@@ -678,7 +678,7 @@ test('reports LTspice limit() semantic mismatch, compatibility-mode functions, a
   assert.equal(needsLtspiceFullDeckTranslation('B1 out 0 V=V(in)\n+ $ dnlim(V(ctrl),2,0.1)'), false)
 })
 
-test('warns when imported model libraries depend on unverified XSPICE A-device modules', () => {
+test('explains that imported XSPICE A-devices require unavailable code-model modules', () => {
   const source = [
     '* A1 OUT 0 fake is only a comment',
     '.SUBCKT controlled IN OUT',
@@ -687,9 +687,10 @@ test('warns when imported model libraries depend on unverified XSPICE A-device m
     '.ENDS controlled',
   ].join('\n')
   const [warning] = analyzeLtspiceModelDialect(source)
-  assert.deepEqual([warning.sourceLine, warning.feature], [3, 'XSPICE A-device (runtime support unverified)'])
-  assert.match(warning.impact, /does not package or validate external \.cm modules/)
-  assert.match(warning.suggestion, /verified for this browser build/)
+  assert.deepEqual([warning.sourceLine, warning.feature], [3, 'XSPICE A-device (code-model modules unavailable in browser runtime)'])
+  assert.match(warning.impact, /browser build omits those code-model modules/)
+  assert.match(warning.impact, /does not import \.cm files/)
+  assert.match(warning.suggestion, /plain-text \.SUBCKT using built-in devices/)
   assert.equal(source.includes('A1 IN OUT slew'), true)
 })
 

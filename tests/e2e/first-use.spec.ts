@@ -5441,8 +5441,24 @@ test('show source-line guidance for a known unsupported LTspice model construct'
   })
   expect(focusOutline).toEqual({ style: 'solid', width: 2, color: 'rgb(128, 217, 167)' })
   await expect(warnings).toContainText('compatibility-model.lib:7')
-  await expect(warnings).toContainText('XSPICE A-device (runtime support unverified)')
-  await expect(warnings).toContainText('external .cm modules')
+  await expect(warnings).toContainText('XSPICE A-device (code-model modules unavailable in browser runtime)')
+  await expect(warnings).toContainText('browser build omits those code-model modules')
+})
+
+test('imported XSPICE A-device warning explains the missing module and opens its source line', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const source = '.SUBCKT controlled IN OUT\nA1 IN OUT slew\n+ gain=2\n.ENDS controlled'
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'xspice-model.lib', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('XSPICE A-device (code-model modules unavailable in browser runtime)')
+  await expect(warnings).toContainText('A-device instances require a compiled XSPICE .cm code-model module')
+  await expect(warnings).toContainText('ELSim does not import .cm files')
+  await warnings.getByRole('button', { name: 'Review source line 2' }).click()
+  const sourceViewer = page.locator('.model-source-viewer')
+  const reviewedLine = sourceViewer.locator('li').nth(1)
+  await expect(reviewedLine).toBeFocused()
+  await expect(reviewedLine).toContainText('A1 IN OUT slew')
 })
 
 test('compatibility report reveals model warnings beyond its initial page', { tag: '@ltspice' }, async ({ page }) => {
