@@ -213,6 +213,8 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string): SpiceM
   return { name, type, parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
 }
 
+const alternateBjtModelNames = new WeakMap<ModelDependency, string[]>()
+
 function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): ModelDependency | null {
   const reference = tokens[0] ?? ''
   const prefix = reference[0]?.toLowerCase()
@@ -230,7 +232,25 @@ function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): 
     index = end - 1
     kind = 'subcircuit'
   } else if (prefix === 'd') index = 3
-  else if (prefix === 'q' || prefix === 'j' || prefix === 'w' || prefix === 'z') index = 4
+  else if (prefix === 'q') {
+    // ngspice allows optional substrate and junction-temperature nodes before
+    // the BJT model name. Instance parameters mark the end of this positional
+    // section; retain the candidates so multi-library analysis can identify
+    // the one that actually names a declared model.
+    const optionAt = tokens.findIndex((token, candidate) => candidate >= 4 && (
+      /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(token)
+      || (/^[A-Za-z_][A-Za-z0-9_]*$/.test(token) && /^=/.test(tokens[candidate + 1] ?? ''))
+      || /^off$/i.test(token)
+    ))
+    const end = optionAt < 0 ? tokens.length : optionAt
+    const candidates = tokens.slice(4, end).filter((token) => /^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(token))
+    index = end - 1
+    const dependency = tokens[index] && index > 0
+      ? { owner, reference, modelName: tokens[index], kind, sourceLine }
+      : null
+    if (dependency && candidates.length > 1) alternateBjtModelNames.set(dependency, candidates)
+    return dependency
+  } else if (prefix === 'j' || prefix === 'w' || prefix === 'z') index = 4
   else if (prefix === 'm' || prefix === 's') index = 5
   const modelName = tokens[index]
   if (index <= 0 || !modelName || !/^[A-Za-z0-9_][A-Za-z0-9_.$]*$/.test(modelName)) return null
@@ -630,26 +650,40 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   }
   const graph = new Map<string, Set<string>>()
   for (const { asset, parsed } of parsedAssets) for (const dependency of parsed.dependencies) {
-    const key = dependency.modelName.toLowerCase()
+    const modelCandidates = dependency.kind === 'device' ? alternateBjtModelNames.get(dependency) : undefined
+    let resolvedDependency = dependency
     let targetAssetId: string | undefined
-    if (dependency.kind === 'subcircuit') targetAssetId = subcircuitAssets.get(key)
-    else {
+    const findDeviceModel = (modelName: string) => {
       let scope: string | undefined = dependency.owner.toLowerCase()
       while (scope) {
-        targetAssetId = scopedDeviceModelAssets.get(`${asset.id}:${scope}:${key}`)
-        if (targetAssetId) break
+        const scopedAssetId = scopedDeviceModelAssets.get(`${asset.id}:${scope}:${modelName.toLowerCase()}`)
+        if (scopedAssetId) return scopedAssetId
         scope = subcircuitParents.get(`${asset.id}:${scope}`)
       }
-      targetAssetId ??= deviceModelAssets.get(key)
+      return deviceModelAssets.get(modelName.toLowerCase())
     }
+    if (dependency.kind === 'subcircuit') targetAssetId = subcircuitAssets.get(dependency.modelName.toLowerCase())
+    else if (modelCandidates) {
+      // Prefer the rightmost candidate that resolves to a declared card: it
+      // is the model token after any optional BJT substrate/temperature nodes.
+      for (let index = modelCandidates.length - 1; index >= 0; index -= 1) {
+        targetAssetId = findDeviceModel(modelCandidates[index])
+        if (targetAssetId) {
+          resolvedDependency = { ...dependency, modelName: modelCandidates[index] }
+          break
+        }
+      }
+      targetAssetId ??= findDeviceModel(dependency.modelName)
+    } else targetAssetId = findDeviceModel(dependency.modelName)
+    const key = resolvedDependency.modelName.toLowerCase()
     if (!targetAssetId) missing.push({ assetId: asset.id, filename: asset.filename, ...dependency })
     else if (dependency.kind === 'subcircuit') {
-      resolved.push({ assetId: asset.id, filename: asset.filename, ...dependency, targetAssetId })
+      resolved.push({ assetId: asset.id, filename: asset.filename, ...resolvedDependency, targetAssetId })
       const from = dependency.owner.toLowerCase()
       const edges = graph.get(from) ?? new Set<string>()
       edges.add(key)
       graph.set(from, edges)
-    } else resolved.push({ assetId: asset.id, filename: asset.filename, ...dependency, targetAssetId })
+    } else resolved.push({ assetId: asset.id, filename: asset.filename, ...resolvedDependency, targetAssetId })
   }
   const recursiveChains: string[][] = [], found = new Set<string>(), visited = new Set<string>()
   const stack: string[] = []

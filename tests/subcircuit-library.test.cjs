@@ -614,6 +614,32 @@ Z1 A B C ZFAST OFF
   assert.deepEqual(analyzeModelDependencies([{ id: 'devices', filename: 'devices.lib', content: parsed.modelText }]).missing, [])
 })
 
+test('resolves ngspice BJT model names after optional substrate and junction-temperature nodes', () => {
+  const analysis = analyzeModelLibraries([
+    { id: 'subckt', filename: 'devices.lib', content: [
+      '.SUBCKT DEVICES C B E',
+      'QDEFAULT C B E QFAST',
+      'QSUB C B E NS QFAST area=2',
+      'QVBIC C B E NS TJ QVBIC area=1 dtemp=5',
+      'QMISSING C B E NS QUNKNOWN area=1',
+      '.ENDS DEVICES',
+    ].join('\n') },
+    { id: 'models', filename: 'models.lib', content: '.MODEL QFAST NPN(Is=1n)\n.MODEL QVBIC VBIC(Is=1n)' },
+  ])
+  assert.deepEqual(analysis.dependencies.resolved.map(({ reference, modelName, targetAssetId }) => [reference, modelName, targetAssetId]), [
+    ['QDEFAULT', 'QFAST', 'models'],
+    ['QSUB', 'QFAST', 'models'],
+    ['QVBIC', 'QVBIC', 'models'],
+  ])
+  assert.deepEqual(analysis.dependencies.missing.map(({ reference, modelName }) => [reference, modelName]), [['QMISSING', 'QUNKNOWN']])
+  assert.deepEqual(analysis.assets[0].parsed.dependencies.map(({ reference, modelName }) => [reference, modelName]), [
+    ['QDEFAULT', 'QFAST'],
+    ['QSUB', 'QFAST'],
+    ['QVBIC', 'QVBIC'],
+    ['QMISSING', 'QUNKNOWN'],
+  ])
+})
+
 test('reports missing model dependencies and recursive subcircuit chains', () => {
   const report = analyzeModelDependencies([
     { id: 'amp', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\nD1 OUT 0 DFAST\n.ENDS AMP' },
