@@ -396,6 +396,8 @@ UI and browser-performance audit (2026-10-14): TypeScript, all 34 unit groups, a
 
 Schematic playback render follow-up (2026-10-14): SVG symbol primitives are now memoized individually, so cursor updates rerender animated marks while static strokes keep their existing React subtree. The capacitor charge animation passes its focused Firefox/ngspice workflow against the existing local runtime. TypeScript and the production build pass; initial JS+CSS is 227.9 KiB gzip against the 245 KiB budget. No WASM compilation or Pages workflow ran.
 
+Firefox UI audit (2026-10-14): The current 107-workflow engine-independent `@ui-smoke` suite passes in Firefox after the schematic playback render change. It covers project recovery, lessons, keyboard/focus behavior, selected-wire copy/paste and mixed movement, model controls, hierarchy, responsive guidance, lazy UI modules, and accessibility names. The focused capacitor-animation and waveform rerun/zoom workflows also pass against the existing local runtime. No WASM compilation or Pages workflow ran.
+
 ## 4. Legal and open-source release policy
 
 > **Owner decision (2026-10-12): out of scope.** The owner will build the ngspice WASM locally and is not preparing a public app/runtime release. Do not spend feature-work time simplifying, auditing, or changing license handling, and do not make these checks a gate for roadmap work. Keep existing notices and checks untouched unless the owner explicitly reopens distribution work.
