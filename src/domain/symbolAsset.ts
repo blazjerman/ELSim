@@ -17,12 +17,20 @@ export function importedSymbolBounds(symbol: ImportedSymbol): ImportedSymbolBoun
     maxX = Math.max(maxX, x)
     maxY = Math.max(maxY, y)
   }
+  const includeText = (x: number, y: number, value: string, alignment: 'Left' | 'Right' | 'Center', fontSize: number) => {
+    // A two-em-per-code-point advance safely covers wide fallback glyphs as
+    // well as ordinary Latin text. SVG text uses y as its baseline.
+    const width = 2 * fontSize * Array.from(value).length
+    const left = alignment === 'Left' ? x : alignment === 'Right' ? x - width : x - width / 2
+    include(left, y - 2 * fontSize)
+    include(left + width, y + fontSize)
+  }
 
   for (const primitive of symbol.primitives) {
     if (primitive.kind === 'polyline') {
       for (const [x, y] of primitive.points) include(x, y)
     } else if (primitive.kind === 'text') {
-      include(primitive.x, primitive.y)
+      includeText(primitive.x, primitive.y, primitive.text, primitive.alignment, primitive.size * 4)
     } else if (primitive.kind === 'path') {
       const pathBounds = svgPathBounds(primitive.d)
       include(pathBounds.minX, pathBounds.minY)
@@ -32,7 +40,14 @@ export function importedSymbolBounds(symbol: ImportedSymbol): ImportedSymbolBoun
       include(primitive.x2, primitive.y2)
     }
   }
-  for (const pin of symbol.pins) include(pin.x, pin.y)
+  for (const pin of symbol.pins) {
+    include(pin.x, pin.y)
+    const vertical = pin.orientation === 'D' || pin.orientation === 'U'
+    const x = vertical ? pin.x : pin.x + (pin.orientation === 'R' ? -6 : 6)
+    const y = vertical ? pin.y + (pin.orientation === 'D' ? -8 : 14) : pin.y - 6
+    const alignment = vertical ? 'Center' : pin.orientation === 'R' ? 'Right' : 'Left'
+    includeText(x, y, pin.name, alignment, 8)
+  }
 
   const bounds = Number.isFinite(minX) ? { minX, minY, maxX, maxY } : null
   symbolBoundsCache.set(symbol, bounds)

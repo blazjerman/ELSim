@@ -9,6 +9,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { createDefaultElsimSymbol, defaultElsimPinSides, parseElsimSymbol } = require(path.join(build, 'domain/elsimSymbol.js'))
 const { importedSymbolBounds } = require(path.join(build, 'domain/symbolAsset.js'))
 const { svgPathBounds } = require(path.join(build, 'domain/svgPathBounds.js'))
+const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createProjectArchive, readProjectArchive } = require(path.join(build, 'domain/projectArchive.js'))
@@ -41,7 +42,7 @@ test('native symbol parser preserves ordered pins and supported vector geometry'
 test('reused imported symbols share one cached drawing-bounds result', () => {
   const symbol = parseElsimSymbol(JSON.stringify(symbolDocument), 'amp.elsym')
   const bounds = importedSymbolBounds(symbol)
-  assert.deepEqual(bounds, { minX: -60, minY: -60, maxX: 60, maxY: 60 })
+  assert.deepEqual(bounds, { minX: -114, minY: -84, maxX: 114, maxY: 82 })
   assert.strictEqual(importedSymbolBounds(symbol), bounds)
 })
 
@@ -55,7 +56,30 @@ test('symbol path bounds account for relative segments and curve control points'
     ...symbolDocument,
     primitives: [{ kind: 'path', d: 'M100 100l100 100l100 100' }],
   }))
-  assert.deepEqual(importedSymbolBounds(curved), { minX: -60, minY: -60, maxX: 300, maxY: 300 })
+  assert.deepEqual(importedSymbolBounds(curved), { minX: -114, minY: -84, maxX: 300, maxY: 300 })
+})
+
+test('symbol drawing bounds include the full rendered extent of long symbol and pin text', () => {
+  const symbol = parseElsimSymbol(JSON.stringify({
+    ...symbolDocument,
+    primitives: [{ kind: 'text', x: 300, y: 0, alignment: 'Left', size: 16, text: 'W'.repeat(20) }],
+  }))
+  const bounds = importedSymbolBounds(symbol)
+  assert.equal(bounds.maxX, 2860)
+  assert.equal(bounds.minY, -128)
+  assert.ok(bounds.minX < -60)
+})
+
+test('fit view frames imported symbol artwork and text after component rotation', () => {
+  const symbol = parseElsimSymbol(JSON.stringify({
+    ...symbolDocument,
+    primitives: [{ kind: 'text', x: 300, y: 0, alignment: 'Left', size: 16, text: 'W'.repeat(20) }],
+  }))
+  const project = createStarterProject()
+  project.parts.push({ id: 'wide-model', kind: 'subcircuit', ref: 'X2', value: 'AMP', modelName: 'AMP', modelPins: ['A', 'B'], symbolAssetId: 'wide-symbol', x: 900, y: 900, rotation: 90 })
+  const view = fitEditorView(project, { width: 760, height: 600 }, 100, new Map([['wide-symbol', symbol]]))
+  assert.ok(view.zoom < .2)
+  assert.ok(view.panY < -1000)
 })
 
 test('symbol path parser rejects incomplete commands and cumulative coordinates outside the symbol limit', () => {

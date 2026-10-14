@@ -3940,7 +3940,7 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
       { name: 'VEE', spiceOrder: 4, x: 0, y: 60, orientation: 'U' },
       { name: 'OUT', spiceOrder: 5, x: 60, y: 0, orientation: 'L' },
     ],
-    primitives: [{ kind: 'path', d: 'M200 0l100 100l100 100' }, { kind: 'text', x: -5, y: 5, text: 'A' }],
+    primitives: [{ kind: 'path', d: 'M200 0l100 100l100 100' }, { kind: 'text', x: -5, y: 5, text: 'A' }, { kind: 'text', x: 200, y: 0, alignment: 'Left', size: 16, text: 'W'.repeat(20) }],
   })
   const symbol = parseElsimSymbol(symbolSource, 'native-amp.elsym')
   await page.goto('/')
@@ -4023,6 +4023,10 @@ test('native ELSim symbol files can be imported and placed on a user model', { t
   const pannedSymbol = page.locator('.circuit-part[aria-label^="X1,"]')
   await expect(pannedSymbol).toBeVisible()
   await expect(pannedSymbol.locator('.imported-symbol-art path')).toHaveAttribute('d', 'M200 0l100 100l100 100')
+  await expect(pannedSymbol.getByText('W'.repeat(20), { exact: true })).toBeVisible()
+  await page.getByTitle('Fit all circuit content in view').click()
+  const fittedZoom = Number((await page.locator('.zoom-label').innerText()).replace('%', ''))
+  expect(fittedZoom).toBeLessThan(30)
 })
 
 test('copying a user IC into a new project carries transitive libraries and its custom symbol', async ({ page }) => {
