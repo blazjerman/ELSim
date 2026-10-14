@@ -167,6 +167,26 @@ test('global temperature emits one top-level SPICE directive and is validated in
   assert.throws(() => validateProject(project), /temperature must be a number/)
 })
 
+test('an explicit project temperature follows and overrides imported library temperature cards', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'thermal-models', filename: 'thermal.lib', sha256: 'd'.repeat(64), content: '.TEMP 125\n.MODEL DFAST D(Is=1n)', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const inherited = createNetlistArtifact(project)
+  assert.deepEqual(inherited.diagnostics, [])
+  assert.match(inherited.text, /^\.TEMP 125$/m)
+  assert.doesNotMatch(inherited.text, /^\.temp 27$/m)
+
+  project.simulation.temperature = '85'
+  const overridden = createNetlistArtifact(project)
+  const netlistLines = overridden.text.split(/\r?\n/)
+  const importedTemperatureLine = netlistLines.indexOf('.TEMP 125')
+  const projectTemperatureLine = netlistLines.indexOf('.temp 85')
+  assert.ok(importedTemperatureLine >= 0)
+  assert.ok(projectTemperatureLine > importedTemperatureLine)
+  assert.equal((overridden.text.match(/^\.temp 85$/gm) ?? []).length, 1)
+  assert.ok(overridden.sourceMap.some((source) => source.sourceId === 'simulation:temperature' && source.role === 'generated' && source.line === projectTemperatureLine + 1))
+  assert.ok(overridden.sourceMap.some((source) => source.sourceId === 'model-file:thermal-models' && source.assetLine === 1 && source.role === 'model'))
+})
+
 test('imported op-amp example includes its user model and ordered five-pin instance', () => {
   const project = validateProject(createImportedOpampExampleProject())
   const instance = project.parts.find((part) => part.ref === 'XU1')

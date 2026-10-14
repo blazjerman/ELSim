@@ -118,6 +118,22 @@ test('preserves ngspice .OPTIONS cards in user model libraries', () => {
   ])
 })
 
+test('preserves native ngspice global .TEMP cards and reports their project-wide effect', () => {
+  const source = '.TEMP {TCIRCUIT}\n.PARAM TCIRCUIT=125\n.MODEL DFAST D(Is=1n)'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.equal(parsed.modelText, source)
+  assert.deepEqual(parsed.modelRecords.map(({ sourceLine, text }) => ({ sourceLine, text })), [
+    { sourceLine: 1, text: '.TEMP {TCIRCUIT}' },
+    { sourceLine: 2, text: '.PARAM TCIRCUIT=125' },
+    { sourceLine: 3, text: '.MODEL DFAST D(Is=1n)' },
+  ])
+  assert.deepEqual(analyzeLtspiceModelDialect(source).map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [1, 'ngspice .TEMP sets the global circuit temperature'],
+  ])
+  assert.throws(() => parseSubcircuitLibrary('.TEMP 25 100'), /\.TEMP needs exactly one numeric value or safe parameter expression/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE A B\n.TEMP 100\n.ENDS CORE'), /\.TEMP sets the global circuit temperature and cannot appear inside a \.SUBCKT/)
+})
+
 test('preserves ngspice conditional model variants as one selectable device model', () => {
   const source = [
     'Conditional diode variants',

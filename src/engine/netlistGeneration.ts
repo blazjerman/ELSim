@@ -146,8 +146,6 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     rows.push(text)
     sourceMap.push({ line: rows.length, sourceId, role, ...sourceExtra })
   }
-  const temperature = Number(project.simulation.temperature ?? '27')
-  if (includeHierarchyProbes && Number.isFinite(temperature) && temperature !== 27) append(`.temp ${temperature}`, 'simulation:temperature', 'generated')
   const sheetParameters = (project as Project & { _netlistSheetParameters?: Project['sheets'][number]['parameters'] })._netlistSheetParameters
     ?? (includeHierarchyProbes ? project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters : undefined)
     ?? []
@@ -689,6 +687,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       if (record.text.trim()) append(record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
     }
   }
+  // Imported model files may carry a global .TEMP card. Emit an explicit
+  // project temperature afterward so the user's non-default setting wins.
+  const temperature = Number(project.simulation.temperature ?? '27')
+  if (includeHierarchyProbes && Number.isFinite(temperature) && temperature !== 27) append(`.temp ${temperature}`, 'simulation:temperature', 'generated')
   if (includeHierarchyProbes) for (const directive of hierarchicalSaveVectors(project)) append(directive, 'hierarchy:probe', 'generated')
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
   if (usesZener) append('.model DZENER D(BV=5.1 IBV=1m)', 'model:DZENER', 'model')

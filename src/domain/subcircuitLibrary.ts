@@ -18,7 +18,7 @@ export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInp
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 const pinName = /^(?:\d+|[A-Za-z_][A-Za-z0-9_.$]*)$/
-const safeTopLevel = new Set(['.model', '.param', '.func', '.global', '.options'])
+const safeTopLevel = new Set(['.model', '.param', '.func', '.global', '.options', '.temp'])
 const forbidden = new Set(['.control', '.endc', '.end', '.exec', '.shell', '.cm'])
 
 function includedAssetBasename(reference: string): string | null {
@@ -426,6 +426,7 @@ export function isSafeSubcircuitParameterValue(value: string): boolean {
 /** Find compatibility-mode features and known gaps in the current WASM build. */
 export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[] {
   const features = [
+    { pattern: /^\s*\.temp\s+\S+/i, name: 'ngspice .TEMP sets the global circuit temperature', impact: 'This imported card sets the temperature for the whole circuit. When the project temperature is left at its 27 °C default, the library value applies; choosing a non-default temperature in Simulation overrides this card.', suggestion: 'Check whether the model library requires this temperature. Set a non-default Simulation temperature to override it for the whole circuit.' },
     { pattern: /^\s*\.model\s+\S+\s+ako\s*:\s*\S+\s+\S+\b/i, name: 'LTspice AKO model inheritance (unsupported by browser ngspice)', impact: 'The pinned browser ngspice rejects this model card with a model-type mismatch and cannot resolve the inherited model name.', suggestion: 'Provide a tested ngspice-compatible standalone model definition or subcircuit after checking the inherited parameters with the model author. ELSim preserves the original model and does not expand AKO inheritance.' },
     { pattern: /^\s*\.model\s+[A-Za-z_][A-Za-z0-9_$-]*\.[A-Za-z0-9_$-]+\s+(?:nmos|pmos)\b.*\b(?:lmin|lmax|wmin|wmax)\s*=/i, name: 'LTspice MOSFET model binning (automatic selection unsupported)', impact: 'LTspice selects suffixed MOSFET model cards by the instance L/W ranges. ELSim’s current browser import and ngspice path does not select a model bin by an unsuffixed base name; the pinned engine reports that the base model cannot be found.', suggestion: 'Use a device-specific model or subcircuit verified for ngspice, or explicitly select and validate a compatible model card for the instance dimensions. ELSim preserves the bins and does not choose one automatically.' },
     { pattern: /\b(?:uplim|dnlim|uplim_tanh|dnlim_tanh)\s*\(/i, name: 'LTspice limit function (ngspice lta mode)', impact: 'ngspice translates this documented subset only when ELSim enables whole-deck lta compatibility. Other LTspice syntax is not covered by that mode.', suggestion: 'If simulation fails, check the mapped model line and simplify or replace the expression with a tested ngspice-compatible form.' },
@@ -655,6 +656,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
 
     if (activeSubcircuits.length) {
       if (directive === '.lib' || directive === '.endl') throw new Error(`Line ${line.start}: .LIB/.ENDL section wrappers cannot appear inside a .SUBCKT.`)
+      if (directive === '.temp') throw new Error(`Line ${line.start}: .TEMP sets the global circuit temperature and cannot appear inside a .SUBCKT.`)
       if (directive === '.model') {
         const model = parseModelCard(text, line, activeSubcircuits.at(-1)!.name)
         registerModelCard(model, conditionalBlocks.map(({ id, branch }) => ({ id, branch })), seenModelNames, models)
@@ -684,6 +686,9 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     }
     if (directive.startsWith('.')) {
       if (!safeTopLevel.has(directive)) throw new Error(`Line ${line.start}: top-level directive ${tokens[0]} is unsupported in imported model libraries.`)
+      if (directive === '.temp' && (tokens.length !== 2 || !isSafeSubcircuitParameterValue(tokens[1]))) {
+        throw new Error(`Line ${line.start}: .TEMP needs exactly one numeric value or safe parameter expression.`)
+      }
       modelLines.push(line)
       if (directive === '.model') {
         const model = parseModelCard(text, line)

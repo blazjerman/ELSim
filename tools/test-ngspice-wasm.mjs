@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['bsource-basic-functions-op', 'behavioral-differential-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'rc-lowpass-ac', 'rc-highpass-ac', 'current-source-op', 'current-source-dc-sweep', 'two-source-dc-sweep', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'voltage-divider-op', 'superposition-op', 'thevenin-norton-equivalent-op', 'lc-energy-transient', 'rlc-ac', 'subckt-op', 'transformer-winding-loss-ac', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-bare-params-op', 'imported-subckt-local-param-shadow-op', 'imported-subckt-param-arithmetic-op', 'conditional-device-model-op', 'conditional-scoped-device-model-op', 'nested-user-subckt-op', 'scoped-user-device-model-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'vdmos-power-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op']
+const fixtures = ['bsource-basic-functions-op', 'behavioral-differential-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'rc-lowpass-ac', 'rc-highpass-ac', 'current-source-op', 'current-source-dc-sweep', 'two-source-dc-sweep', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'voltage-divider-op', 'superposition-op', 'thevenin-norton-equivalent-op', 'lc-energy-transient', 'rlc-ac', 'subckt-op', 'transformer-winding-loss-ac', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-bare-params-op', 'imported-subckt-local-param-shadow-op', 'imported-subckt-param-arithmetic-op', 'conditional-device-model-op', 'conditional-scoped-device-model-op', 'nested-user-subckt-op', 'scoped-user-device-model-op', 'imported-diode-model-op', 'imported-mosfet-model-op', 'imported-library-temp-default', 'imported-library-temp-override', 'vdmos-power-op', 'jfet-model-op', 'pjfet-model-op', 'jfet-switch', 'hierarchical-block-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op']
 const requestedFixtures = process.env.NGSPICE_WASM_ONLY?.split(',').map((name) => name.trim()).filter(Boolean) ?? []
 const selectedFixtures = requestedFixtures.length ? requestedFixtures : fixtures
 const unknownFixtures = selectedFixtures.filter((name) => !fixtures.includes(name))
@@ -61,6 +61,8 @@ for (const fixture of selectedFixtures) {
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
+  if (fixture === 'imported-library-temp-default') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 125\.000000/, 'an imported library .TEMP card should set the circuit temperature when the project uses its default')
+  if (fixture === 'imported-library-temp-override') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 85\.000000/, 'a later non-default project .TEMP directive should override the imported library value')
   const wasmRows = numericRows(wasmResult.stdout)
   if (fixture === 'param-arithmetic-op') {
     assert.match(wasmResult.stdout, /\bout\s+1\.666667e\+00/i, 'dependent braced .param arithmetic should set the 2 kΩ resistor and divide the 5 V source across 3 kΩ')
@@ -328,7 +330,7 @@ for (const fixture of selectedFixtures) {
     }
     if (fixture.startsWith('hierarchical-repeat-')) hierarchyRepeatRaws.set(fixture, wasmResult.raw)
     if (fixture.startsWith('hierarchical-nested-')) hierarchyNestedRaws.set(fixture, wasmResult.raw)
-  } else if (fixture !== 'hierarchical-parameter' && fixture !== 'two-source-dc-sweep' && fixture !== 'lc-energy-transient' && fixture !== 'mosfet-switch' && fixture !== 'jfet-switch' && !fixture.startsWith('hierarchical-nested-')) {
+  } else if (fixture !== 'hierarchical-parameter' && fixture !== 'two-source-dc-sweep' && fixture !== 'lc-energy-transient' && fixture !== 'mosfet-switch' && fixture !== 'jfet-switch' && fixture !== 'imported-library-temp-default' && fixture !== 'imported-library-temp-override' && !fixture.startsWith('hierarchical-nested-')) {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)
   }
 

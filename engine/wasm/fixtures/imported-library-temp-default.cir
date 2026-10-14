@@ -1,0 +1,9 @@
+Imported library .TEMP default behavior
+.TEMP 125
+V1 in 0 1
+R1 in out 1k
+.MODEL DTEST D(IS=1n)
+D1 out 0 DTEST
+.OP
+.PRINT OP V(out)
+.END
