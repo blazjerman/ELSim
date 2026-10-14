@@ -34,12 +34,15 @@ test('resolves native ngspice passive and transmission-line model references', (
     'R0 IN OUT 10k',
     'R1 IN N1 RMOD l=10u',
     'R2 N1 OUT 1k RMOD l=10u',
+    'R4 IN N1 {RBODY * 2} RMOD l=10u',
     'R3 N1 OUT r = {V(N1)}',
     'C1 IN OUT CMOD',
     'C2 IN N1 1p CMOD',
+    'C4 N1 OUT {CBODY / 2} CMOD',
     'C3 N1 OUT 10n',
     'L1 IN N1 LMOD',
     'L2 N1 OUT 1u LMOD',
+    'L3 OUT 0 {LBASE * 3} LMOD',
     'O1 IN 0 OUT 0 LTRAMOD',
     'U1 IN OUT 0 URCMOD L=50u',
     '.ENDS NETWORK',
@@ -55,14 +58,18 @@ test('resolves native ngspice passive and transmission-line model references', (
   assert.deepEqual(analysis.dependencies.missing, [])
   assert.deepEqual(analysis.dependencies.resolved.map(({ reference, modelName, targetAssetId }) => [reference, modelName, targetAssetId]), [
     ['R1', 'RMOD', 'models'], ['R2', 'RMOD', 'models'],
-    ['C1', 'CMOD', 'models'], ['C2', 'CMOD', 'models'],
-    ['L1', 'LMOD', 'models'], ['L2', 'LMOD', 'models'],
+    ['R4', 'RMOD', 'models'],
+    ['C1', 'CMOD', 'models'], ['C2', 'CMOD', 'models'], ['C4', 'CMOD', 'models'],
+    ['L1', 'LMOD', 'models'], ['L2', 'LMOD', 'models'], ['L3', 'LMOD', 'models'],
     ['O1', 'LTRAMOD', 'models'], ['U1', 'URCMOD', 'models'],
   ])
   assert.deepEqual([...requiredModelAssetIds(analysis.dependencies, [{ kind: 'subcircuit', modelName: 'NETWORK' }])].sort(), ['devices', 'models'])
 
   const unresolved = analyzeModelDependencies([{ id: 'broken', filename: 'broken.lib', content: '.SUBCKT BROKEN IN OUT\nR1 IN OUT MISSING\n.ENDS BROKEN' }])
   assert.deepEqual(unresolved.missing.map(({ reference, modelName }) => [reference, modelName]), [['R1', 'MISSING']])
+
+  const unresolvedExpression = analyzeModelDependencies([{ id: 'expression', filename: 'expression.lib', content: '.SUBCKT BROKEN IN OUT\nR1 IN OUT {RBASE * 2} MISSING\n.ENDS BROKEN' }])
+  assert.deepEqual(unresolvedExpression.missing.map(({ reference, modelName }) => [reference, modelName]), [['R1', 'MISSING']])
 })
 
 test('project-local includes resolve against imported assets without filesystem access', () => {

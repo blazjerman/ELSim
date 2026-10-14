@@ -1753,7 +1753,7 @@ test('native passive and transmission-line model references resolve across impor
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   const deviceFile = [
     '.SUBCKT NATIVE_NETWORK IN OUT',
-    'R1 IN N1 RMOD l=10u',
+    'R1 IN N1 {RBASE * 2} RMOD l=10u',
     'C1 N1 OUT 1p CMOD',
     'L1 IN OUT LMOD',
     'O1 IN 0 OUT 0 LTRAMOD',

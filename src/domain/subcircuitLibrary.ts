@@ -282,7 +282,29 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   })
 }
 
-function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): ModelDependency | null {
+function spiceFields(text: string): string[] {
+  const fields: string[] = []
+  let start = -1, braceDepth = 0, quote = ''
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]
+    if (quote) {
+      if (character === quote) quote = ''
+    } else if (character === '"' || character === "'") quote = character
+    else if (character === '{') braceDepth += 1
+    else if (character === '}') braceDepth = Math.max(0, braceDepth - 1)
+    else if (/\s/.test(character) && braceDepth === 0) {
+      if (start >= 0) fields.push(text.slice(start, index))
+      start = -1
+      continue
+    }
+    if (start < 0 && !/\s/.test(character)) start = index
+  }
+  if (start >= 0) fields.push(text.slice(start))
+  return fields
+}
+
+function dependencyOnLine(text: string, owner: string, sourceLine: number): ModelDependency | null {
+  const tokens = spiceFields(text)
   const reference = tokens[0] ?? ''
   const prefix = reference[0]?.toLowerCase()
   let index = -1, kind: ModelDependency['kind'] = 'device'
@@ -326,9 +348,10 @@ function dependencyOnLine(tokens: string[], owner: string, sourceLine: number): 
     // explicit value. Do not mistake ordinary scalar values, behavioral
     // expressions, or instance options for model references.
     const first = tokens[3]
-    if (!first || new RegExp(`^${prefix}\\s*=`, 'i').test(first) || (first.toLowerCase() === prefix && tokens[4] === '=') || /^[{'\"]/.test(first)) return null
+    if (!first || new RegExp(`^${prefix}\\s*=`, 'i').test(first) || (first.toLowerCase() === prefix && tokens[4] === '=')) return null
     const numericValue = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?[a-z]*$/i.test(first)
-    if (numericValue) {
+    const expressionValue = /^[{'\"]/.test(first)
+    if (numericValue || expressionValue) {
       const candidate = tokens[4]
       if (!candidate || /^(?:[A-Za-z_][A-Za-z0-9_]*\s*=|off$)/i.test(candidate) || (/^[A-Za-z_][A-Za-z0-9_]*$/.test(candidate) && tokens[5] === '=')) return null
       index = 4
@@ -639,7 +662,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       }
       if (!directive.startsWith('.')) {
         const active = activeSubcircuits.at(-1)!
-        const dependency = dependencyOnLine(tokens, active.name, line.start)
+        const dependency = dependencyOnLine(text, active.name, line.start)
         if (dependency) active.dependencies.push(dependency)
       }
       continue
