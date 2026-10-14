@@ -29,6 +29,8 @@ export type Part = {
   modelName?: string
   modelPins?: string[]
   modelParameters?: Record<string, string>
+  /** Optional MOSFET channel geometry for native M-device instances. */
+  mosfetGeometry?: { length?: string; width?: string }
   sheetParameters?: Record<string, string>
   deviceModel?: string
   controlSource?: string
@@ -378,6 +380,14 @@ export function validateProject(input: unknown): Project {
     if (candidate.coupling !== undefined && (candidate.kind !== 'transformer' || typeof candidate.coupling !== 'string' || candidate.coupling.length > 64)) throw new Error(`${candidate.ref} has invalid transformer coupling metadata.`)
     if (candidate.seriesResistance !== undefined && ((candidate.kind !== 'capacitor' && candidate.kind !== 'inductor') || typeof candidate.seriesResistance !== 'string' || candidate.seriesResistance.length > 64)) throw new Error(`${candidate.ref} has invalid series-resistance metadata.`)
     if (candidate.seriesResistance !== undefined && (componentMagnitude(candidate.seriesResistance, 'resistor') === null || componentMagnitude(candidate.seriesResistance, 'resistor')! < 0)) throw new Error(`${candidate.ref} series resistance must be a nonnegative numeric resistance.`)
+    if (candidate.mosfetGeometry !== undefined) {
+      const geometry = candidate.mosfetGeometry
+      if ((candidate.kind !== 'nmos' && candidate.kind !== 'pmos') || !geometry || typeof geometry !== 'object' || Array.isArray(geometry) || Object.keys(geometry).length < 1 || Object.keys(geometry).length > 2 || Object.keys(geometry).some((key) => key !== 'length' && key !== 'width')) throw new Error(`${candidate.ref} has malformed MOSFET channel geometry.`)
+      for (const [dimension, value] of Object.entries(geometry)) {
+        const magnitude = typeof value === 'string' && value.length <= 64 ? componentMagnitude(value, 'resistor') : null
+        if (magnitude === null || magnitude <= 0) throw new Error(`${candidate.ref} MOSFET ${dimension} must be a positive numeric SPICE dimension such as 1u.`)
+      }
+    }
     for (const key of ['primaryWindingResistance', 'secondaryWindingResistance'] as const) {
       const resistance = candidate[key]
       if (resistance !== undefined && (candidate.kind !== 'transformer' || typeof resistance !== 'string' || resistance.length > 64)) throw new Error(`${candidate.ref} has invalid ${key} metadata.`)

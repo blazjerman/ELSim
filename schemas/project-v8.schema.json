@@ -244,6 +244,17 @@
             "pattern": "^\\{?[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:meg|[tgkmunpf])?\\}?$"
           }
         },
+        "mosfetGeometry": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 2,
+          "additionalProperties": false,
+          "properties": {
+            "length": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$" },
+            "width": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$" }
+          },
+          "description": "Optional positive MOSFET channel length and width, expressed as SPICE dimensions."
+        },
         "deviceModel": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"
