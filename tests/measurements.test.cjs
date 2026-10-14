@@ -87,7 +87,28 @@ test('imported ngspice measurements return values with original library source l
     { id: 'output_at_5', value: 2.5, sourceLine: 32 },
   ])
   assert.deepEqual(dcResult.diagnostics, [])
-  assert.deepEqual(parseImportedMeasurementOutput(acArtifact, '', null), { results: [], diagnostics: [] })
+  assert.deepEqual(parseImportedMeasurementOutput(acArtifact, '', null), { results: [], diagnostics: [], conflictingProjectMeasurementIds: [] })
+
+  const duplicateArtifact = {
+    text: '.MEAS TRAN shared_result MAX V(out)\n.MEASURE TRAN shared_result MIN V(out)\n',
+    sourceMap: [
+      { line: 1, sourceId: 'model-file:asset-a', role: 'model', assetId: 'asset-a', assetLine: 8 },
+      { line: 2, sourceId: 'model-file:asset-b', role: 'model', assetId: 'asset-b', assetLine: 14 },
+    ],
+    diagnostics: [],
+  }
+  const duplicateResults = parseImportedMeasurementOutput(duplicateArtifact, 'shared_result = 5\nshared_result = 0', 'tran')
+  assert.deepEqual(duplicateResults.results, [])
+  assert.deepEqual(duplicateResults.conflictingProjectMeasurementIds, [])
+  assert.deepEqual(duplicateResults.diagnostics.map(({ assetId, assetLine }) => ({ assetId, assetLine })), [
+    { assetId: 'asset-a', assetLine: 8 }, { assetId: 'asset-b', assetLine: 14 },
+  ])
+  assert.match(duplicateResults.diagnostics[0].message, /declared more than once for this analysis/)
+
+  const projectNameCollision = parseImportedMeasurementOutput({ ...duplicateArtifact, text: '.MEAS TRAN shared_result MAX V(out)\n', sourceMap: [duplicateArtifact.sourceMap[0]] }, 'shared_result = 5', 'tran', [], ['SHARED_RESULT'])
+  assert.deepEqual(projectNameCollision.results, [])
+  assert.deepEqual(projectNameCollision.conflictingProjectMeasurementIds, ['SHARED_RESULT'])
+  assert.match(projectNameCollision.diagnostics[0].message, /conflicts with an ELSim transient measurement name/)
 })
 
 test('current-source measurements use the solved raw vector when ngspice has no scalar measurement', () => {

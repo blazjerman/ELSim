@@ -14,7 +14,7 @@ import { moveSelectedSceneObjects } from '../domain/sceneEdit'
 import type { ElectricalIssue } from '../domain/electricalCheck'
 import { trapDialogTab } from './dialogKeyboard'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelFunctionsForAsset, modelFunctionsForProject, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
-import type { SpiceModelDefinition } from '../domain/subcircuitLibrary'
+import type { ModelDefinitionConflict, SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { importedSymbolBounds, parseSymbolAsset } from '../domain/symbolAsset'
 import { createDefaultElsimSymbol, defaultElsimPinSides, type ElsimPinSide } from '../domain/elsimSymbol'
@@ -68,6 +68,17 @@ function fetThresholdValue(part: Part | undefined, models: SpiceModelDefinition[
   const model = models.find((candidate) => candidate.name.toLowerCase() === part.deviceModel?.toLowerCase())
   const override = Object.entries(part.modelParameters ?? {}).find(([name]) => name.toLowerCase() === 'vto')?.[1]
   return override ?? model?.parameters.find((parameter) => parameter.name.toLowerCase() === 'vto')?.defaultValue ?? ''
+}
+
+function modelConflictLabel(conflict: ModelDefinitionConflict): string {
+  if (conflict.kind === 'subcircuit') return `.SUBCKT ${conflict.name}`
+  if (conflict.kind === 'measurement') return `.MEAS ${conflict.analysis?.toUpperCase() ?? ''} ${conflict.name}`.trim()
+  return `.MODEL ${conflict.name}`
+}
+
+function modelConflictDescription(conflict: ModelDefinitionConflict): string {
+  if (conflict.kind === 'measurement') return `More than one imported library defines the ${conflict.analysis?.toUpperCase() ?? ''} measurement name ${conflict.name}. ngspice prints multiple values with this same name, so ELSim omits the ambiguous result. Rename one card before relying on it.`
+  return `More than one imported library defines ${conflict.name}. ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.`
 }
 
 const MODEL_DIAGNOSTIC_PAGE_SIZE = 20
@@ -4095,12 +4106,18 @@ export default function App() {
         }
         setSimulationResult(response.result)
         setRunState('idle')
+        const resultWarnings = response.result.diagnostics.filter((diagnostic) => diagnostic.severity === 'warning')
+        const firstResultWarning = resultWarnings[0]
+        const warningAsset = firstResultWarning?.assetId ? project.modelAssets?.find((asset) => asset.id === firstResultWarning.assetId) : undefined
+        const warningSuffix = firstResultWarning
+          ? ` · ${resultWarnings.length} warning${resultWarnings.length === 1 ? '' : 's'}: ${firstResultWarning.message}${warningAsset ? ` (${warningAsset.filename}${firstResultWarning.assetLine ? `:${firstResultWarning.assetLine}` : ''})` : ''}`
+          : ''
         if (hierarchyWalkthroughStep === 0) {
           setHierarchyWalkthroughStep(1)
-          setNotice('Simulation complete. Continue the nested-block walkthrough in the guide.')
-        } else if (parameterSweep.length) setNotice(`Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors${response.result.analysis === 'tran' && transientSamples > 1 ? prefersReducedMotionRef.current ? ' · animation paused for reduced motion' : ' · playing solved animation' : ''}`)
-        else if (response.result.analysis === 'tran' && transientSamples > 1) setNotice(prefersReducedMotionRef.current ? `Transient analysis complete · animation paused for reduced motion · ${response.result.traces.length} result vectors` : `Transient analysis complete · playing solved animation · ${response.result.traces.length} result vectors`)
-        else setNotice(`Analysis complete · ${response.result.traces.length} result vectors`)
+          setNotice(`Simulation complete. Continue the nested-block walkthrough in the guide.${warningSuffix}`)
+        } else if (parameterSweep.length) setNotice(`Parameter sweep complete · ${parameterSweep.length} cases · ${response.result.traces.length} result vectors${response.result.analysis === 'tran' && transientSamples > 1 ? prefersReducedMotionRef.current ? ' · animation paused for reduced motion' : ' · playing solved animation' : ''}${warningSuffix}`)
+        else if (response.result.analysis === 'tran' && transientSamples > 1) setNotice(`${prefersReducedMotionRef.current ? 'Transient analysis complete · animation paused for reduced motion' : 'Transient analysis complete · playing solved animation'} · ${response.result.traces.length} result vectors${warningSuffix}`)
+        else setNotice(`Analysis complete · ${response.result.traces.length} result vectors${warningSuffix}`)
             worker.terminate()
         if (activeWorkerRef.current === worker) activeWorkerRef.current = null
       } else if (response.type === 'error') {
@@ -4528,16 +4545,17 @@ export default function App() {
         </div>}
         <ModelDependencyReport analysis={modelDependencyAnalysis} onImport={openModelLibraryPicker}/>
         {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions">
-          <strong>CONFLICTING MODEL DEFINITIONS</strong>
-          <p>More than one imported file defines the same model name. ELSim preserves both files; ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.</p>
-          <ul>{visibleModelConflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.name}`}>
-            <code>{conflict.kind === 'subcircuit' ? '.SUBCKT' : '.MODEL'} {conflict.name}</code>
+          <strong>CONFLICTING IMPORTED NAMES</strong>
+          <p>More than one imported file defines the same model or measurement name. ELSim preserves both files and identifies each original source line so you can resolve the conflict deliberately.</p>
+          <ul>{visibleModelConflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.analysis ?? ''}:${conflict.name}`}>
+            <code>{modelConflictLabel(conflict)}</code>
+            <p>{modelConflictDescription(conflict)}</p>
             <ul>{conflict.definitions.map((definition) => <li key={`${definition.assetId}:${definition.sourceLine}`}>
               {definition.filename}:{definition.sourceLine} <button className="place-model" onClick={() => reviewModelDefinition(definition.assetId, definition.sourceLine)}>Review definition</button>
             </li>)}</ul>
           </li>)}</ul>
           {modelDependencyAnalysis.conflicts.length > visibleModelConflicts.length && <button className="place-model" onClick={() => setModelConflictLimit((count) => Math.min(count + MODEL_DIAGNOSTIC_PAGE_SIZE, modelDependencyAnalysis.conflicts.length))}>
-            Show {Math.min(MODEL_DIAGNOSTIC_PAGE_SIZE, modelDependencyAnalysis.conflicts.length - visibleModelConflicts.length)} more model conflict{modelDependencyAnalysis.conflicts.length - visibleModelConflicts.length === 1 ? '' : 's'}
+            Show {Math.min(MODEL_DIAGNOSTIC_PAGE_SIZE, modelDependencyAnalysis.conflicts.length - visibleModelConflicts.length)} more imported conflict{modelDependencyAnalysis.conflicts.length - visibleModelConflicts.length === 1 ? '' : 's'}
           </button>}
         </div>}
         {compatibilityWarnings.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="status" aria-label="Imported model compatibility warnings"><strong>MODEL COMPATIBILITY CHECKS</strong><p>These source-line checks identify imported model or schematic constructs that may behave differently in the browser engine or affect the whole circuit. Imported source text is preserved unchanged; review the impact and suggested next step before editing or replacing a model.</p><ul>{visibleCompatibilityWarnings.map((warning, index) => <li key={`${warning.key}:${warning.sourceLine}:${index}`}><code>{warning.feature}</code> · {warning.sourceFilename}:{warning.sourceLine}<br/><code>{warning.excerpt}</code><p>{warning.impact}</p><small>Next step: {warning.suggestion}</small>{'assetId' in warning && typeof warning.assetId === 'string' && <button className="place-model" onClick={() => setModelSourceReview({ assetId: String(warning.assetId), line: Number(warning.sourceLine) })}>Review source line {warning.sourceLine}</button>}{/^Unresolved \.(?:include|inc|lib)/i.test(warning.feature) && <button className="place-model" onClick={(event) => chooseLibraryForCompatibilityWarning(warning.excerpt, event)}>{warning.feature.includes('section') ? 'Choose referenced library section' : 'Select referenced model library'}</button>}</li>)}</ul>{compatibilityWarnings.length > visibleCompatibilityWarnings.length && <button className="place-model" onClick={() => setCompatibilityWarningLimit((current) => Math.min(current + 20, compatibilityWarnings.length))}>Show {Math.min(20, compatibilityWarnings.length - visibleCompatibilityWarnings.length)} more compatibility warning{compatibilityWarnings.length - visibleCompatibilityWarnings.length === 1 ? '' : 's'}</button>}</div>}

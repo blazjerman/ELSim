@@ -839,6 +839,19 @@ test('reports duplicate model names across imported files with both source locat
   assert.equal(report.deviceModelAssets.get('dfast'), 'amp-b')
 })
 
+test('reports duplicate imported measurement names only when they share an analysis', () => {
+  const report = analyzeModelDependencies([
+    { id: 'measure-a', filename: 'measure-a.lib', content: '.MEAS TRAN shared_result MAX V(out)\n.MEAS AC shared_result MAX VM(out)\n.IF (MODE=1)\n.MEAS TRAN branch_result MAX V(out)\n.ELSE\n.MEASURE TRAN branch_result MIN V(out)\n.ENDIF' },
+    { id: 'measure-b', filename: 'measure-b.lib', content: '.MEASURE TRAN SHARED_RESULT MIN V(out)\n.MEAS DC shared_result FIND V(out) AT=1' },
+  ])
+  assert.deepEqual(report.conflicts, [
+    { name: 'shared_result', kind: 'measurement', analysis: 'tran', definitions: [
+      { assetId: 'measure-a', filename: 'measure-a.lib', sourceLine: 1 },
+      { assetId: 'measure-b', filename: 'measure-b.lib', sourceLine: 1 },
+    ] },
+  ])
+})
+
 test('tracks ordered model references for common diode, transistor, JFET, MOSFET, and switch cards', () => {
   const parsed = parseSubcircuitLibrary(`.SUBCKT DEVICES A B C D
 D1 A B DFAST

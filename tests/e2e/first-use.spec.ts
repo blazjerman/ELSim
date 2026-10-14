@@ -2384,10 +2384,34 @@ test('duplicate model definitions show both library locations and open the sourc
   await expect(conflicts).toContainText('.MODEL DFAST')
   const conflictItems = conflicts.locator(':scope > ul > li')
   await expect(conflictItems).toHaveCount(20)
-  await conflicts.getByRole('button', { name: 'Show 6 more model conflicts' }).click()
+  await conflicts.getByRole('button', { name: 'Show 6 more imported conflicts' }).click()
   await expect(conflictItems).toHaveCount(26)
   await conflicts.getByRole('button', { name: 'Review definition' }).nth(1).click()
   await expect(page.locator('.model-source-viewer').filter({ has: page.locator('.active-source-line') })).toContainText('.SUBCKT amp A B')
+})
+
+test('duplicate imported measurement names show both source lines and omit ambiguous simulation results', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  const picker = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await picker.setInputFiles({ name: 'measure-a.lib', mimeType: 'text/plain', buffer: Buffer.from('.MEAS TRAN shared_peak MAX V(out)\n') })
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await picker.setInputFiles({ name: 'measure-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.MEASURE TRAN SHARED_PEAK MIN V(out)\n') })
+
+  const conflicts = page.getByRole('region', { name: 'Conflicting model definitions' })
+  const measurement = conflicts.locator(':scope > ul > li').filter({ hasText: '.MEAS TRAN shared_peak' })
+  await expect(measurement).toContainText('same name, so ELSim omits the ambiguous result')
+  await expect(measurement).toContainText('measure-a.lib:1')
+  await expect(measurement).toContainText('measure-b.lib:1')
+  await measurement.getByRole('button', { name: 'Review definition' }).nth(1).click()
+  await expect(page.locator('.model-source-viewer').filter({ has: page.locator('.active-source-line') })).toContainText('.MEASURE TRAN SHARED_PEAK MIN V(out)')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('Imported measurement shared_peak is declared more than once for this analysis')
+  await expect(page.locator('.toast')).toContainText('measure-a.lib:1')
+  const plot = await openComponentVoltagePlot(page)
+  await expect(plot.locator('.measurement-results')).toHaveCount(0)
 })
 
 test('LTspice schematic import preserves and reports duplicate model library files', { tag: '@ltspice' }, async ({ page }) => {

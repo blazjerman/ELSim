@@ -116,7 +116,14 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
     const importedMeasurementAnalysis = metadata.settings.analysis === 'tran' || metadata.settings.analysis === 'ac' || metadata.settings.analysis === 'dc'
       ? metadata.settings.analysis
       : null
-    const importedMeasurementOutput = parseImportedMeasurementOutput(artifact, output, importedMeasurementAnalysis, parameterSweep?.map((sweep) => sweep.label) ?? [])
+    const importedMeasurementOutput = parseImportedMeasurementOutput(
+      artifact,
+      output,
+      importedMeasurementAnalysis,
+      parameterSweep?.map((sweep) => sweep.label) ?? [],
+      importedMeasurementAnalysis === 'tran' ? measurements.map((measurement) => measurement.id) : [],
+    )
+    const ambiguousProjectMeasurementIds = new Set(importedMeasurementOutput.conflictingProjectMeasurementIds.map((id) => id.toLowerCase()))
     const result = {
       metadata: { ...metadata, completedAt: new Date().toISOString() },
       netlist: artifact.text,
@@ -124,7 +131,10 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
       traces,
       diagnostics: [...artifact.diagnostics, ...measurementOutput.diagnostics, ...importedMeasurementOutput.diagnostics],
       analysis: metadata.settings.analysis as 'tran' | 'op' | 'ac' | 'dc' | 'noise',
-      measurements: [...measurementOutput.results, ...importedMeasurementOutput.results],
+      measurements: [
+        ...measurementOutput.results.filter((measurement) => !ambiguousProjectMeasurementIds.has(measurement.id.toLowerCase())),
+        ...importedMeasurementOutput.results,
+      ],
     }
     if (profileWorker) {
       resultProcessingMs = performance.now() - resultProcessingStarted

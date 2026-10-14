@@ -123,7 +123,7 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
 }
 
 /** Read results from user-imported ngspice .MEAS/.MEASURE cards without rewriting them. */
-export function parseImportedMeasurementOutput(artifact: NetlistArtifact, output: string, analysis: 'tran' | 'ac' | 'dc' | null, sweepLabels: string[] = []): { results: MeasurementResult[]; diagnostics: SimulationDiagnostic[] } {
+export function parseImportedMeasurementOutput(artifact: NetlistArtifact, output: string, analysis: 'tran' | 'ac' | 'dc' | null, sweepLabels: string[] = [], reservedNames: string[] = []): { results: MeasurementResult[]; diagnostics: SimulationDiagnostic[]; conflictingProjectMeasurementIds: string[] } {
   const rows = artifact.text.split(/\r?\n/)
   const sourceByLine = new Map(artifact.sourceMap.map((source) => [source.line, source]))
   const cards: { line: number; text: string; assetId: string; assetLine: number; id: string; analysis: 'tran' | 'ac' | 'dc' }[] = []
@@ -143,8 +143,34 @@ export function parseImportedMeasurementOutput(artifact: NetlistArtifact, output
   const outputLines = output.split(/\r?\n/)
   const results: MeasurementResult[] = []
   const diagnostics: SimulationDiagnostic[] = []
-  for (const card of cards) {
-    if (card.analysis !== analysis) continue
+  const conflictingProjectMeasurementIds: string[] = []
+  const activeCards = cards.filter((card) => card.analysis === analysis)
+  const cardsByName = new Map<string, typeof activeCards>()
+  for (const card of activeCards) {
+    const key = card.id.toLowerCase()
+    const sameName = cardsByName.get(key)
+    if (sameName) sameName.push(card)
+    else cardsByName.set(key, [card])
+  }
+  const reserved = new Set(reservedNames.map((name) => name.toLowerCase()))
+  const ambiguousNames = new Set<string>()
+  for (const [name, sameName] of cardsByName) {
+    if (sameName.length < 2 && !reserved.has(name)) continue
+    ambiguousNames.add(name)
+    if (reserved.has(name)) conflictingProjectMeasurementIds.push(...reservedNames.filter((reservedName) => reservedName.toLowerCase() === name))
+    const reason = sameName.length > 1
+      ? 'is declared more than once for this analysis'
+      : 'conflicts with an ELSim transient measurement name'
+    for (const card of sameName) diagnostics.push({
+      severity: 'warning',
+      message: `Imported measurement ${card.id} ${reason}; its result is ambiguous and was omitted. Rename the measurement before relying on this result.`,
+      sourceId: `model-file:${card.assetId}`,
+      assetId: card.assetId,
+      assetLine: card.assetLine,
+    })
+  }
+  for (const card of activeCards) {
+    if (ambiguousNames.has(card.id.toLowerCase())) continue
     const escapedName = card.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const expression = new RegExp(`^\\s*${escapedName}\\s*=\\s*([-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[-+]?\\d+)?)`, 'i')
     const matches = outputLines.flatMap((line) => {
@@ -170,5 +196,5 @@ export function parseImportedMeasurementOutput(artifact: NetlistArtifact, output
       })
     })
   }
-  return { results, diagnostics }
+  return { results, diagnostics, conflictingProjectMeasurementIds }
 }
