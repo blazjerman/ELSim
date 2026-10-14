@@ -15,7 +15,8 @@ import type { ElectricalIssue } from '../domain/electricalCheck'
 import { trapDialogTab } from './dialogKeyboard'
 import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import type { SpiceModelDefinition } from '../domain/subcircuitLibrary'
-import { parseLtspiceSymbol, type ImportedSymbol } from '../domain/ltspiceSymbol'
+import type { ImportedSymbol } from '../domain/ltspiceSymbol'
+import { parseSymbolAsset } from '../domain/symbolAsset'
 import { componentPins, createPartNavigationIndex, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, retainConnectedJunctions, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector } from '../domain/probe'
 import { hierarchyComponentCurrentVector, hierarchyNodeVector } from '../domain/hierarchyProbe'
@@ -292,9 +293,11 @@ const ImportedSymbolArt = memo(function ImportedSymbolArt({ symbol, stroke }: { 
           ? <text key={index} x={primitive.x} y={primitive.y} textAnchor={primitive.alignment === 'Left' ? 'start' : primitive.alignment === 'Right' ? 'end' : 'middle'} fontSize={primitive.size * 4} fill={common.stroke} stroke="none">{primitive.text}</text>
           : primitive.kind === 'rectangle'
             ? <rect key={index} x={Math.min(primitive.x1, primitive.x2)} y={Math.min(primitive.y1, primitive.y2)} width={Math.abs(primitive.x2 - primitive.x1)} height={Math.abs(primitive.y2 - primitive.y1)} {...common}/>
-            : primitive.kind === 'circle'
+      : primitive.kind === 'circle'
               ? <ellipse key={index} cx={(primitive.x1 + primitive.x2) / 2} cy={(primitive.y1 + primitive.y2) / 2} rx={Math.abs(primitive.x2 - primitive.x1) / 2} ry={Math.abs(primitive.y2 - primitive.y1) / 2} {...common}/>
-              : <path key={index} d={symbolArcPath(primitive)} {...common}/>)}
+              : primitive.kind === 'path'
+                ? <path key={index} d={primitive.d} {...common}/>
+                : <path key={index} d={symbolArcPath(primitive)} {...common}/>)}
     {symbol.pins.map((pin, index) => <g key={index}><circle cx={pin.x} cy={pin.y} r="3" fill="#86e3b7"/><text x={pin.x + (pin.orientation === 'R' ? -6 : 6)} y={pin.y - 6} textAnchor={pin.orientation === 'R' ? 'end' : 'start'} className="subcircuit-pin-label">{pin.name}</text></g>)}
   </g>
 })
@@ -452,6 +455,15 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     for (const primitive of symbol.primitives) {
       if (primitive.kind === 'polyline') for (const [x, y] of primitive.points) include(x, y)
       else if (primitive.kind === 'text') include(primitive.x, primitive.y)
+      else if (primitive.kind === 'path') {
+        // Path coordinates are bounded by the symbol parser. Treating each
+        // numeric token as a possible x/y bound is conservative for H/V/arc
+        // commands and avoids clipping custom paths without parsing SVG data.
+        for (const match of primitive.d.matchAll(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g)) {
+          const value = Number(match[0])
+          include(value, value)
+        }
+      }
       else { include(primitive.x1, primitive.y1); include(primitive.x2, primitive.y2) }
     }
     for (const pin of symbol.pins) include(pin.x, pin.y)
@@ -2256,7 +2268,7 @@ export default function App() {
   const visibleCompatibilityWarnings = compatibilityWarnings.slice(0, compatibilityWarningLimit)
   useEffect(() => { setCompatibilityWarningLimit(20) }, [modelDialectWarnings, schematicCompatibilityWarnings])
   const requiredModelAssets = useMemo(() => requiredModelAssetIds(modelDependencyAnalysis, project.sheets.flatMap((sheet) => sheet.parts)), [modelDependencyAnalysis, project.sheets])
-  const importedSymbols = useMemo(() => (project.symbolAssets ?? []).map((asset) => ({ ...parseLtspiceSymbol(asset.content, asset.filename), assetId: asset.id, filename: asset.filename })), [project.symbolAssets])
+  const importedSymbols = useMemo(() => (project.symbolAssets ?? []).map((asset) => ({ ...parseSymbolAsset(asset.content, asset.filename), assetId: asset.id, filename: asset.filename })), [project.symbolAssets])
   const symbolsById = useMemo(() => new Map<string, ImportedSymbol>(importedSymbols.map((symbol) => [symbol.assetId, symbol])), [importedSymbols])
   const compatibleDeviceModels = (kind: PartKind) => {
     const type = compatibleDeviceModelType(kind)
@@ -2993,7 +3005,7 @@ export default function App() {
     try {
       if (file.size > 1024 * 1024) throw new Error('Symbols are limited to 1 MiB per file.')
       const content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
-      const parsed = parseLtspiceSymbol(content, file.name)
+      const parsed = parseSymbolAsset(content, file.name)
       const current = projectRef.current.symbolAssets ?? []
       if (current.length >= 32) throw new Error('A project can store up to 32 imported symbols.')
       const bytes = current.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0)
@@ -3026,7 +3038,7 @@ export default function App() {
       for (const file of files.filter((candidate) => /\.asy$/i.test(candidate.name))) {
         if (file.size > 1024 * 1024) throw new Error(`${file.name} exceeds the 1 MiB symbol limit.`)
         const content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
-        parseLtspiceSymbol(content, file.name)
+        parseSymbolAsset(content, file.name)
         const existing = [...currentSymbols, ...newSymbols].find((asset) => asset.filename.toLowerCase() === file.name.toLowerCase())
         if (existing) {
           if (existing.content !== content) throw new Error(`A different ${file.name} is already in this project. Remove or rename it before importing this schematic.`)
@@ -4236,9 +4248,9 @@ export default function App() {
         {(project.modelAssets?.length ?? 0) > 0 && <div className="imported-models"><div className="component-list-label">MODEL LIBRARY PROVENANCE</div>{project.modelAssets?.map((asset) => { const required = modelAssetInUse(asset.id); return <div className="asset-provenance-card" key={asset.id}><strong>{asset.filename}</strong>{asset.selectedSections?.length && <small>Loaded sections: {asset.selectedSections.join(', ')}</small>}<details className="model-source-viewer" open={modelSourceReview?.assetId === asset.id} onToggle={(event) => { if (event.currentTarget.open) setModelSourceReview((current) => current?.assetId === asset.id ? current : { assetId: asset.id, line: 1 }); else if (modelSourceReview?.assetId === asset.id) setModelSourceReview(null) }}><summary>View original library source</summary>{modelSourceReview?.assetId === asset.id && <ol>{asset.content.split(/\r?\n/).map((line, index) => <li key={index} id={`model-source-${asset.id}-line-${index + 1}`} tabIndex={0} className={modelSourceReview.line === index + 1 ? 'active-source-line' : undefined}><code>{line || ' '}</code></li>)}</ol>}</details>{assetProvenanceEditor('modelAssets', asset)}{required && <small>This file is required by a placed IC or another included library.</small>}<button className="place-model" aria-label={`Remove library file ${asset.filename}`} title={required ? 'A placed IC or imported library depends on this file' : 'Remove this imported library file'} disabled={required} onClick={() => setProject((current) => ({ ...current, modelAssets: (current.modelAssets ?? []).filter((candidate) => candidate.id !== asset.id) }))}>Remove library file</button></div>})}</div>}
         {importedSymbols.length > 0 && <div className="imported-models"><div className="component-list-label">IMPORTED SYMBOLS</div>{importedSymbols.map((symbol) => { const used = project.sheets.some((sheet) => sheet.parts.some((part) => part.symbolAssetId === symbol.assetId)); const asset = project.symbolAssets?.find((candidate) => candidate.id === symbol.assetId); const allCompatible = filteredImportedModels.filter((model) => model.pins.length === symbol.pins.length); const compatible = allCompatible.slice(0, 50); return <div className="imported-model" key={symbol.assetId}><div><strong>{symbol.name}</strong><span>{symbol.pins.length} ordered pins · {symbol.pins.map((pin) => pin.name).join(', ')}</span><small>{symbol.filename} · redistribution unknown</small>{used && <small>This symbol is used by a placed IC. Remove the instance before deleting this symbol.</small>}{symbol.warnings.length > 0 && <details className="field-hint"><summary>{symbol.warnings.length} unsupported drawing records</summary><ul>{symbol.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details>}{compatible.map((model) => { const mismatches = model.pins.filter((pin, index) => pin.toLowerCase() !== symbol.pins[index].name.toLowerCase()); return <div className="imported-symbol-match" key={`${symbol.assetId}:${model.assetId}:${model.name}`}><button className="place-model" onClick={() => addSubcircuit(model, symbol)}>Place {model.name} with this symbol</button>{mismatches.length > 0 && <small>Pin mapping by SpiceOrder: {model.pins.map((pin, index) => `${pin} → ${symbol.pins[index].name}`).join(', ')}</small>}</div>})}{allCompatible.length > compatible.length && <small>Showing the first 50 matches. Search imported ICs by model name to narrow this list.</small>}{asset && assetProvenanceEditor('symbolAssets', asset)}</div><button aria-label={`Remove symbol ${symbol.filename}`} title={used ? 'Remove instances using this symbol first' : 'Remove imported symbol'} disabled={used} onClick={() => setProject((current) => ({ ...current, symbolAssets: (current.symbolAssets ?? []).filter((candidate) => candidate.id !== symbol.assetId) }))}><X size={13}/></button></div>})}</div>}
         <input ref={modelFileInput} type="file" accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain" multiple hidden onChange={importModelLibrary}/>
-        <input ref={symbolFileInput} type="file" accept=".asy,text/plain" hidden onChange={importSymbol}/>
+        <input ref={symbolFileInput} type="file" accept=".elsym,.asy,application/json,text/plain" hidden onChange={importSymbol}/>
         <button className="library-import" onClick={openModelLibraryPicker}><Plus size={15}/> Import SPICE model library</button><small className="library-import-hint">Select multiple related files together to resolve model dependencies.</small>
-        <button className="library-import" onClick={() => symbolFileInput.current?.click()}><Plus size={15}/> Import LTspice symbol</button>
+        <button className="library-import" onClick={() => symbolFileInput.current?.click()}><Plus size={15}/> Import symbol file</button>
         <div className="model-import-note">Imported model and symbol files stay in this project. Import only files you are authorized to use; ELSim does not grant redistribution rights.</div>
         <div className="library-bottom"><div className="tip-card"><span className="tip-icon"><Lightbulb size={17}/></span><div><strong>New to circuits?</strong><p>Start with a resistor, capacitor, and a voltage source.</p><button onClick={startTour}>Take a quick tour <ArrowUp size={12}/></button></div></div><div className="library-version">ELSim Preview <span>·</span> v0.1</div></div>
       </aside>

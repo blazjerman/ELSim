@@ -9,6 +9,7 @@ export type SymbolPrimitive =
   | { kind: 'rectangle'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'circle'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'arc'; x1: number; y1: number; x2: number; y2: number; startX: number; startY: number; endX: number; endY: number }
+  | { kind: 'path'; d: string }
 
 export type SymbolPin = { x: number; y: number; orientation: string; name: string; spiceOrder: number }
 export type ImportedSymbol = {

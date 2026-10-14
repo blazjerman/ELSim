@@ -1,7 +1,7 @@
 import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
 import { isSafeSubcircuitParameterValue, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
-import { parseLtspiceSymbol } from './ltspiceSymbol'
+import { parseSymbolAsset } from './symbolAsset'
 import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition } from './componentDefinitions'
 import { componentMagnitude, timeMagnitude } from './componentValue'
@@ -480,7 +480,7 @@ export function validateProject(input: unknown): Project {
       if (size > 1024 * 1024) throw new Error(`${candidate.filename} exceeds the 1 MiB symbol limit.`)
       totalBytes += size
       if (totalBytes > 5 * 1024 * 1024) throw new Error('Imported symbols exceed the 5 MiB project limit.')
-      parseLtspiceSymbol(candidate.content, candidate.filename)
+      parseSymbolAsset(candidate.content, candidate.filename)
       symbolIds.add(candidate.id)
     }
   }
@@ -527,7 +527,7 @@ export function validateProject(input: unknown): Project {
     if (part.symbolAssetId) {
       const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
       if (!symbolAsset) throw new Error(`${part.ref} refers to a missing imported symbol.`)
-      const symbol = parseLtspiceSymbol(symbolAsset.content, symbolAsset.filename)
+      const symbol = parseSymbolAsset(symbolAsset.content, symbolAsset.filename)
       const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, currentSource: 2, resistor: 2, potentiometer: 3, lamp: 2, capacitor: 2, ground: 1, inductor: 2, transformer: 4, diode: 2, zener: 2, led: 2, switch: 2, voltageSwitch: 4, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, inverter: 2, logicGate: 3, npn: 3, pnp: 3, njfet: 3, pjfet: 3, nmos: 4, pmos: 4 } as const)[part.kind]
       if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
     }
@@ -543,8 +543,12 @@ export function validateProject(input: unknown): Project {
       }
       if (part.symbolAssetId) {
         const symbolAsset = (data.symbolAssets as SymbolAsset[]).find((asset) => asset.id === part.symbolAssetId)!
-        const symbol = parseLtspiceSymbol(symbolAsset.content, symbolAsset.filename)
-        if (symbol.pins.some((pin, index) => pin.name.toLowerCase() !== definition.pins[index].toLowerCase())) throw new Error(`${part.ref} symbol pin order does not match imported subcircuit ${definition.name}.`)
+        const symbol = parseSymbolAsset(symbolAsset.content, symbolAsset.filename)
+        // Symbol pin names are drawing labels; electrical mapping follows the
+        // ordered pins retained in symbolPinOffsets. Equal pin counts and the
+        // declared SpiceOrder preserve the model mapping when display labels
+        // differ from .SUBCKT pin identifiers.
+        if (symbol.pins.length !== definition.pins.length) throw new Error(`${part.ref} symbol pin count does not match imported subcircuit ${definition.name}.`)
       }
       continue
     }

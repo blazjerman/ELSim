@@ -7,6 +7,7 @@ import { createCurrentSourceExampleProject, createHierarchicalExampleProject } f
 import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
 import { componentPins } from '../../src/domain/geometry'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
+import { parseElsimSymbol } from '../../src/domain/elsimSymbol'
 import { parseSubcircuitLibrary } from '../../src/domain/subcircuitLibrary'
 
 async function waitForProjectAutosave(page: Page) {
@@ -2818,6 +2819,46 @@ test('nested reusable divider solves match an equivalent flattened circuit', { t
   const flattenedTable = page.locator('.plot-window').last().locator('.op-table')
   await expect(flattenedTable.getByRole('row', { name: /V\(out5\).*2\.500000 V/i })).toBeVisible()
   await expect(flattenedTable.getByRole('row', { name: /V\(out10\).*3\.333333 V/i })).toBeVisible()
+})
+
+test('native ELSim symbol files can be imported and placed on a user model', { tag: '@ui-smoke' }, async ({ page }) => {
+  const modelSource = '.SUBCKT USER_AMP INP INM VCC VEE OUT\nEOUT OUT 0 INP INM 100k\n.ENDS USER_AMP\n'
+  const modelAsset = { id: 'model-native-amp', filename: 'user-amp.lib', content: modelSource, sha256: createHash('sha256').update(modelSource).digest('hex'), licenseStatus: 'unknown' as const, importedAt: '2026-01-01T00:00:00.000Z' }
+  const model = parseSubcircuitLibrary(modelSource).subcircuits[0]
+  const definition = importedSubcircuitComponentDefinition(model, { assetId: modelAsset.id, filename: modelAsset.filename, sha256: modelAsset.sha256 })
+  const symbolSource = JSON.stringify({
+    format: 'elsim-symbol', version: 1, name: 'Native teaching amplifier',
+    pins: [
+      { name: 'IN+', spiceOrder: 1, x: -60, y: -20, orientation: 'R' },
+      { name: 'IN-', spiceOrder: 2, x: -60, y: 20, orientation: 'R' },
+      { name: 'VCC', spiceOrder: 3, x: 0, y: -60, orientation: 'D' },
+      { name: 'VEE', spiceOrder: 4, x: 0, y: 60, orientation: 'U' },
+      { name: 'OUT', spiceOrder: 5, x: 60, y: 0, orientation: 'L' },
+    ],
+    primitives: [{ kind: 'path', d: 'M-30 -40L35 0L-30 40Z' }, { kind: 'text', x: -5, y: 5, text: 'A' }],
+  })
+  const symbol = parseElsimSymbol(symbolSource, 'native-amp.elsym')
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate(({ modelAsset }) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    project.modelAssets = [modelAsset]
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  }, { modelAsset })
+  await page.reload()
+  await page.locator('input[accept*=".elsym"]').setInputFiles({ name: 'native-amp.elsym', mimeType: 'application/json', buffer: Buffer.from(symbolSource) })
+  await expect(page.getByText(/Imported Native teaching amplifier with 5 ordered pins/)).toBeVisible()
+  await expect(page.getByText('Native teaching amplifier', { exact: true })).toBeVisible()
+  await expect(page.getByText('5 ordered pins · IN+, IN-, VCC, VEE, OUT')).toBeVisible()
+  await page.getByRole('button', { name: 'Place USER_AMP with this symbol' }).click()
+  const part = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(part).toBeVisible()
+  await expect(part.locator('.imported-symbol-art path')).toHaveAttribute('d', 'M-30 -40L35 0L-30 40Z')
+  await expect(part.locator('.imported-symbol-art circle')).toHaveCount(5)
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    return project.parts.find((item: { ref: string }) => item.ref === 'X1')?.symbolPinOffsets
+  })).toEqual([[-60, -20], [-60, 20], [0, -60], [0, 60], [60, 0]])
 })
 
 test('copying a user IC into a new project carries transitive libraries and its custom symbol', async ({ page }) => {
