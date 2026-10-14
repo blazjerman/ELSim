@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, modelFunctionsForSubcircuit, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
@@ -164,6 +164,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const availableModelFunctions = modelFunctionSignaturesForLibraries(modelAssets)
   const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections, availableModelFunctions))
   const parsedModelLibraryEntries = modelAssets.map((asset, index) => ({ asset, parsed: parsedModelAssets[index] }))
+  const modelFunctionResolver = createModelFunctionResolver(parsedModelLibraryEntries)
   const projectModelFunctions = modelFunctionsForProject(parsedModelLibraryEntries)
   const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models.filter((model) => !model.scope))
   const importedDeviceModelsByName = new Map<string, typeof importedDeviceModels[number]>()
@@ -179,7 +180,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const key = definition.name.toLowerCase()
       if (!subcircuitsByName.has(key)) {
         subcircuitsByName.set(key, definition)
-        subcircuitFunctionsByName.set(key, modelFunctionsForSubcircuit(parsedModelLibraryEntries, modelAssets[assetIndex].id, definition.name))
+        subcircuitFunctionsByName.set(key, modelFunctionResolver.forSubcircuit(modelAssets[assetIndex].id, definition.name))
       }
     }
   }

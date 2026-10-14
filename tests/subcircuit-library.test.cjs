@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceModelName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceModelName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
@@ -53,6 +53,17 @@ test('keeps subcircuit .FUNC declarations in their lexical scopes, including nes
   assert.equal(modelFunctionsForSubcircuit(assets, 'scope', 'CHILD').get('double'), 1)
   assert.equal(modelFunctionsForSubcircuit(assets, 'scope', 'SIBLING').has('double'), false)
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT SIBLING IN OUT gain={DOUBLE(2)}\n.ENDS SIBLING'), /unsupported default value/)
+})
+
+test('reuses indexed function scopes across lookups for one parsed library set', () => {
+  const source = '.SUBCKT PARENT IN OUT\n.FUNC DOUBLE(x) {2*x}\n.SUBCKT CHILD IN OUT\n.ENDS CHILD\n.ENDS PARENT\n.SUBCKT SIBLING IN OUT\n.ENDS SIBLING'
+  const assets = [{ asset: { id: 'scope', filename: 'scope.lib', content: source }, parsed: parseSubcircuitLibrary(source) }]
+  const resolver = createModelFunctionResolver(assets)
+  const parent = resolver.forSubcircuit('scope', 'PARENT')
+  assert.equal(parent.get('double'), 1)
+  assert.equal(resolver.forSubcircuit('scope', 'PARENT'), parent)
+  assert.equal(resolver.forSubcircuit('scope', 'CHILD').get('double'), 1)
+  assert.equal(resolver.forSubcircuit('scope', 'SIBLING').has('double'), false)
 })
 
 test('scoped .FUNC declarations validate .MODEL expressions inside their subcircuit only', () => {

@@ -14,7 +14,7 @@ import { fitEditorView } from '../domain/editorView'
 import { moveSelectedSceneObjects } from '../domain/sceneEdit'
 import type { ElectricalIssue } from '../domain/electricalCheck'
 import { trapDialogTab } from './dialogKeyboard'
-import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelFunctionsForProject, modelFunctionsForSubcircuit, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
+import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelFunctionsForProject, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import type { ModelDefinitionConflict, SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { importedSymbolBounds, parseSymbolAsset } from '../domain/symbolAsset'
@@ -2391,11 +2391,12 @@ export default function App() {
   const analysisSettingError = (field: AnalysisSettingField, sourceId?: string) => analysisSettingErrors.find((error) => error.field === field && (sourceId === undefined || error.sourceId === sourceId))?.message
   const pwlCountValidationError = (sourceId: string) => analysisSettingErrors.find((error) => error.field === 'pwlPoints' && error.sourceId === sourceId && error.settingPath?.endsWith('.points'))?.message
   const modelLibraryAnalysis = useMemo(() => analyzeModelLibraries(project.modelAssets ?? []), [modelLibraryRevision])
+  const modelFunctionResolver = useMemo(() => createModelFunctionResolver(modelLibraryAnalysis.assets), [modelLibraryAnalysis])
   const projectModelFunctions = useMemo(() => modelFunctionsForProject(modelLibraryAnalysis.assets), [modelLibraryAnalysis])
   const importedModels = useMemo(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => {
     const siblingModelNames = parsed.subcircuits.map((subcircuit) => subcircuit.name)
-    return parsed.subcircuits.map((subcircuit) => ({ ...subcircuit, assetId: asset.id, filename: asset.filename, functions: modelFunctionsForSubcircuit(modelLibraryAnalysis.assets, asset.id, subcircuit.name), definition: importedSubcircuitComponentDefinition(subcircuit, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256, siblingModelNames }) }))
-  }), [modelLibraryAnalysis])
+    return parsed.subcircuits.map((subcircuit) => ({ ...subcircuit, assetId: asset.id, filename: asset.filename, functions: modelFunctionResolver.forSubcircuit(asset.id, subcircuit.name), definition: importedSubcircuitComponentDefinition(subcircuit, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256, siblingModelNames }) }))
+  }), [modelLibraryAnalysis, modelFunctionResolver])
   const filteredImportedModels = useMemo(() => {
     const query = importedSubcircuitQuery.trim().toLowerCase()
     if (!query) return importedModels

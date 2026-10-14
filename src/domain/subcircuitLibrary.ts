@@ -891,62 +891,82 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   return { subcircuits, models, functions, dependencies, includes, modelText, modelRecords }
 }
 
-/** Return the unique function signatures reachable from one imported library. */
-export function modelFunctionsForAsset<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[], assetId: string): Map<string, number> {
+/** Build indexed, memoized function lookups for a parsed set of model libraries. */
+export function createModelFunctionResolver<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[]) {
   const byId = new Map(assets.map(({ asset, parsed }) => [asset.id, { asset, parsed }]))
   const byFilename = new Map<string, { asset: T; parsed: ParsedSubcircuitLibrary }[]>()
+  const definitionsByAsset = new Map<string, Map<string, SubcircuitDefinition>>()
   for (const entry of assets) {
     const key = entry.asset.filename.toLowerCase()
     const candidates = byFilename.get(key)
     if (candidates) candidates.push(entry)
     else byFilename.set(key, [entry])
+    definitionsByAsset.set(entry.asset.id, new Map(entry.parsed.subcircuits.map((definition) => [definition.name.toLowerCase(), definition])))
   }
-  const functions = new Map<string, number>()
-  const ambiguous = new Set<string>()
-  const visited = new Set<string>()
-  const visit = (id: string) => {
-    if (visited.has(id)) return
-    visited.add(id)
-    const entry = byId.get(id)
-    if (!entry) return
-    for (const definition of entry.parsed.functions) {
-      const key = definition.name.toLowerCase()
-      if (ambiguous.has(key)) continue
-      const previous = functions.get(key)
-      if (previous !== undefined && previous !== definition.arity) {
-        functions.delete(key)
-        ambiguous.add(key)
-      } else functions.set(key, definition.arity)
+  const assetFunctionCache = new Map<string, Map<string, number>>()
+  const subcircuitFunctionCache = new Map<string, Map<string, number>>()
+  const forAsset = (assetId: string): Map<string, number> => {
+    const cached = assetFunctionCache.get(assetId)
+    if (cached) return cached
+    const functions = new Map<string, number>()
+    const ambiguous = new Set<string>()
+    const visited = new Set<string>()
+    const visit = (id: string) => {
+      if (visited.has(id)) return
+      visited.add(id)
+      const entry = byId.get(id)
+      if (!entry) return
+      for (const definition of entry.parsed.functions) {
+        const key = definition.name.toLowerCase()
+        if (ambiguous.has(key)) continue
+        const previous = functions.get(key)
+        if (previous !== undefined && previous !== definition.arity) {
+          functions.delete(key)
+          ambiguous.add(key)
+        } else functions.set(key, definition.arity)
+      }
+      for (const include of entry.parsed.includes) {
+        if (!include.filename) continue
+        const matches = byFilename.get(include.filename.toLowerCase()) ?? []
+        if (matches.length !== 1) continue
+        const target = matches[0]
+        if (include.section && target.asset.selectedSections?.length && !target.asset.selectedSections.some((section) => section.toLowerCase() === include.section!.toLowerCase())) continue
+        visit(target.asset.id)
+      }
     }
-    for (const include of entry.parsed.includes) {
-      if (!include.filename) continue
-      const matches = byFilename.get(include.filename.toLowerCase()) ?? []
-      if (matches.length !== 1) continue
-      const target = matches[0]
-      if (include.section && target.asset.selectedSections?.length && !target.asset.selectedSections.some((section) => section.toLowerCase() === include.section!.toLowerCase())) continue
-      visit(target.asset.id)
-    }
+    visit(assetId)
+    assetFunctionCache.set(assetId, functions)
+    return functions
   }
-  visit(assetId)
-  return functions
+  const forSubcircuit = (assetId: string, subcircuitName: string): Map<string, number> => {
+    const cacheKey = `${assetId}\u0000${subcircuitName.toLowerCase()}`
+    const cached = subcircuitFunctionCache.get(cacheKey)
+    if (cached) return cached
+    const functions = new Map(forAsset(assetId))
+    const definitions = definitionsByAsset.get(assetId)
+    let definition = definitions?.get(subcircuitName.toLowerCase())
+    const scopes: SubcircuitDefinition[] = []
+    const visited = new Set<string>()
+    while (definition && !visited.has(definition.name.toLowerCase())) {
+      visited.add(definition.name.toLowerCase())
+      scopes.push(definition)
+      definition = definition.parentName ? definitions?.get(definition.parentName.toLowerCase()) : undefined
+    }
+    for (const scope of scopes.reverse()) for (const local of scope.functions ?? []) functions.set(local.name.toLowerCase(), local.arity)
+    subcircuitFunctionCache.set(cacheKey, functions)
+    return functions
+  }
+  return { forAsset, forSubcircuit }
+}
+
+/** Return the unique function signatures reachable from one imported library. */
+export function modelFunctionsForAsset<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[], assetId: string): Map<string, number> {
+  return createModelFunctionResolver(assets).forAsset(assetId)
 }
 
 /** Return the global include-chain functions plus local functions visible to one subcircuit and its nested children. */
 export function modelFunctionsForSubcircuit<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[], assetId: string, subcircuitName: string): Map<string, number> {
-  const functions = modelFunctionsForAsset(assets, assetId)
-  const entry = assets.find(({ asset }) => asset.id === assetId)
-  if (!entry) return functions
-  const definitions = new Map(entry.parsed.subcircuits.map((definition) => [definition.name.toLowerCase(), definition]))
-  let definition = definitions.get(subcircuitName.toLowerCase())
-  const scopes: SubcircuitDefinition[] = []
-  const visited = new Set<string>()
-  while (definition && !visited.has(definition.name.toLowerCase())) {
-    visited.add(definition.name.toLowerCase())
-    scopes.push(definition)
-    definition = definition.parentName ? definitions.get(definition.parentName.toLowerCase()) : undefined
-  }
-  for (const scope of scopes.reverse()) for (const local of scope.functions ?? []) functions.set(local.name.toLowerCase(), local.arity)
-  return functions
+  return createModelFunctionResolver(assets).forSubcircuit(assetId, subcircuitName)
 }
 
 /** Return unique function signatures declared by all imported project libraries. */
