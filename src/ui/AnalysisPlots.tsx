@@ -334,19 +334,36 @@ function useResponsivePlotSize() {
   useLayoutEffect(() => {
     const element = ref.current
     if (!element) return
+    let frame: number | null = null
+    let measuredWidth = 0
+    let measuredHeight = 0
     const measure = () => {
+      frame = null
       const rect = element.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) return
+      measuredWidth = rect.width
+      measuredHeight = rect.height
       setSize((current) => Math.abs(current.width - rect.width) < 0.25 && Math.abs(current.height - rect.height) < 0.25
         ? current
         : { width: rect.width, height: rect.height })
     }
-    const observer = new ResizeObserver(measure)
-    // Observe the flex container instead of the SVG itself. SVG viewBox changes can
-    // affect its intrinsic size and make resize notifications lag behind a window resize.
-    observer.observe(element.parentElement ?? element)
+    const scheduleMeasure = () => {
+      if (frame === null) frame = requestAnimationFrame(measure)
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[entries.length - 1]
+      const box = entry?.contentRect
+      if (box && box.width > 0 && box.height > 0 && Math.abs(measuredWidth - box.width) < 0.25 && Math.abs(measuredHeight - box.height) < 0.25) return
+      scheduleMeasure()
+    })
+    // Observe the rendered SVG directly so flex and floating-panel resizes both
+    // update its viewBox. Coalesce observer bursts to one layout read per frame.
+    observer.observe(element)
     measure()
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
   }, [])
   return { ref, size }
 }
