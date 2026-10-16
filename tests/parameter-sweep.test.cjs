@@ -298,6 +298,33 @@ test('imported device model parameters are validated and emitted with altermod',
   assert.throws(() => validateProject(project), /numeric parameters on selected imported device models/)
 })
 
+test('imported SW and CSW model parameters can be stepped on their matching switches', () => {
+  const project = createStarterProject()
+  project.parts.push(
+    { id: 'sweep-s1', kind: 'voltageSwitch', ref: 'S1', value: '2 V', deviceModel: 'USER_SW', x: 700, y: 300, rotation: 0 },
+    { id: 'sweep-w1', kind: 'currentSwitch', ref: 'W1', value: '1 mA', deviceModel: 'USER_CSW', controlSource: 'V1', x: 700, y: 500, rotation: 0 },
+  )
+  project.sheets[0].parts = project.parts
+  project.modelAssets = [{
+    id: 'switch-models', filename: 'switches.lib', sha256: 'a'.repeat(64),
+    content: '.MODEL USER_SW SW(RON=1 ROFF=1MEG VT=2 VH=0)\n.MODEL USER_CSW CSW(RON=1 ROFF=1MEG IT=1mA IH=0)',
+    licenseStatus: 'unknown', importedAt: new Date().toISOString(),
+  }]
+
+  for (const [component, model, parameter] of [['S1', 'USER_SW', 'VT'], ['W1', 'USER_CSW', 'IT']]) {
+    project.simulation.parameterSweeps = [{ component, parameter, start: '1', stop: '3', points: 3 }]
+    const validated = validateProject(structuredClone(project))
+    const runs = prepareParameterSweep(validated)
+    assert.deepEqual(runs.map((run) => run.values[0]), [
+      { component, value: '1.00000000e+0', parameter, model },
+      { component, value: '2.00000000e+0', parameter, model },
+      { component, value: '3.00000000e+0', parameter, model },
+    ])
+    const control = addResultControl(createNetlistArtifact(validated).text, runs)
+    assert.match(control, new RegExp(`altermod ${model} ${parameter}=1\\.00000000e\\+0\\nrun`))
+  }
+})
+
 test('parameter sweep rejects duplicate parts, equal endpoints, and more than ten combinations', () => {
   const project = createStarterProject()
   project.simulation.parameterSweeps = [{ component: 'R1', start: '1 kΩ', stop: '1 kΩ', points: 3 }]

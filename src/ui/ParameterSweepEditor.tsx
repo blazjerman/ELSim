@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { X } from 'lucide-react'
-import { componentMagnitude } from '../domain/componentValue'
+import { componentMagnitude, spiceModelParameterMagnitude } from '../domain/componentValue'
 import { kindNames, type ParameterSweep, type Part, type Project } from '../domain/project'
 
 const sourceParameterLabels: Record<string, string> = {
@@ -18,8 +18,8 @@ export default function ParameterSweepEditor({ parts, sweeps, models, parameters
   const modelsByName = useMemo(() => new Map(models.map((model) => [model.name.toLowerCase(), model])), [models])
   const partsByRef = useMemo(() => new Map(parts.map((part) => [part.ref.toLowerCase(), part])), [parts])
   const modelFor = (part?: Part) => part?.deviceModel ? modelsByName.get(part.deviceModel.toLowerCase()) : undefined
-  const numericModelParameters = (part?: Part) => modelFor(part)?.parameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) ?? []
-  const modelRange = (value: string) => { const magnitude = componentMagnitude(value, 'resistor'); return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` } }
+  const numericModelParameters = (part?: Part) => modelFor(part)?.parameters.filter((parameter) => spiceModelParameterMagnitude(parameter.defaultValue) !== null) ?? []
+  const modelRange = (value: string) => { const magnitude = spiceModelParameterMagnitude(value); const unit = value.trim().replaceAll(' ', '').match(/(?:ohms?|hz|[vasfhw])$/i)?.[0]; return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}${unit ? ` ${unit}` : ''}` } }
   const sourceMode = (part: Part) => part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')
   const sourceValue = (part: Part, parameter: string) => {
     const [mode, field] = parameter.split('.')
@@ -48,7 +48,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, parameters
   }
   const supportedSourceModes = ['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm']
   const eligible = useMemo(() => {
-    const eligibleModelHasNumericParameter = (part: Part) => modelsByName.get(part.deviceModel?.toLowerCase() ?? '')?.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) ?? false
+    const eligibleModelHasNumericParameter = (part: Part) => modelsByName.get(part.deviceModel?.toLowerCase() ?? '')?.parameters.some((parameter) => spiceModelParameterMagnitude(parameter.defaultValue) !== null) ?? false
     return analysis === 'dc'
       ? parts.filter((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'dc' && part.ref.toLowerCase() !== dcSweepSource?.toLowerCase())
       : parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === undefined || supportedSourceModes.includes(part.sourceMode))) || (part.kind === 'source' && supportedSourceModes.includes(part.sourceMode ?? 'pulse')) || eligibleModelHasNumericParameter(part))

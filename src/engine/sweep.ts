@@ -1,5 +1,5 @@
 import type { ParameterSweep, Project, SourceSweepParameter } from '../domain/project'
-import { componentMagnitude } from '../domain/componentValue'
+import { componentMagnitude, spiceModelParameterMagnitude } from '../domain/componentValue'
 import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 
 export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; sourceParameter?: SourceSweepParameter; globalParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
@@ -45,7 +45,7 @@ function buildValues(project: Project, sweep: ParameterSweep) {
       .find((candidate) => candidate.name.toLowerCase() === part?.deviceModel?.toLowerCase())
     const parameter = model?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
     if (!part || !parameter) throw new Error(`${sweep.component}.${sweep.parameter} is not a numeric parameter on its selected imported device model.`)
-    const start = scalarMagnitude(sweep.start), stop = scalarMagnitude(sweep.stop)
+    const start = spiceModelParameterMagnitude(sweep.start), stop = spiceModelParameterMagnitude(sweep.stop)
     if (start === null || stop === null || start === stop) throw new Error(`${part.ref}.${parameter.name} needs valid, different start and stop values.`)
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
