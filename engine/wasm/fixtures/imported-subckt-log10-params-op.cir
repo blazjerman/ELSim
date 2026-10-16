@@ -1,0 +1,9 @@
+ELSim imported subcircuit log10 parameter operating point
+V1 IN 0 1
+XLOG IN OUT LOG_GAIN
+.SUBCKT LOG_GAIN IN OUT GAIN={log10(100)}
+E1 OUT 0 IN 0 {GAIN}
+.ENDS LOG_GAIN
+.op
+.print op v(out)
+.end

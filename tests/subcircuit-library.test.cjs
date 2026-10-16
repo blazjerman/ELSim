@@ -10,7 +10,7 @@ const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyz
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
-  for (const value of ['1k', '1mil', '1a', '10kOhm', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
+  for (const value of ['1k', '1mil', '1a', '10kOhm', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
   for (const value of ['{if(RLOAD, 1k, 2k)}', '{system(RLOAD)}', '{sqrt(1, 2)}', '{pow(2)}', '{max(1, 2, 3)}', '{sqrt()}', '{RLOAD > 1k}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD ** 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
   const functions = new Map([['double', 1], ['blend', 2]])
   assert.equal(isSafeSubcircuitParameterValue('{DOUBLE(RLOAD)}', functions), true)
@@ -48,7 +48,14 @@ test('parses top-level .FUNC signatures for forward-referenced subcircuit defaul
   assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: '{DOUBLE(2)}' }])
   assert.throws(() => parseSubcircuitLibrary('.FUNC DOUBLE(x) {2*x}\n.SUBCKT USER_GAIN IN OUT PARAMS: GAIN={DOUBLE(2, 3)}\n.ENDS USER_GAIN'), /unsupported default value/)
   assert.throws(() => parseSubcircuitLibrary('.FUNC sqrt(x) {x}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /name sqrt is reserved/)
+  assert.throws(() => parseSubcircuitLibrary('.FUNC log10(x) {x}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /name log10 is reserved/)
   assert.throws(() => parseSubcircuitLibrary('.FUNC F(x) {x}\n.FUNC f(x, y) {x+y}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /conflicting argument counts/)
+})
+
+test('parses ngspice built-in base-10 logarithm in imported model defaults', () => {
+  const source = '.SUBCKT LOG_GAIN IN OUT GAIN={log10(100)}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS LOG_GAIN'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: '{log10(100)}' }])
 })
 
 test('keeps subcircuit .FUNC declarations in their lexical scopes, including nested inheritance', () => {

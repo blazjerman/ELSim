@@ -324,7 +324,7 @@ const builtinFunctionArities: Readonly<Record<string, number>> = {
   sinh: 1, cosh: 1, tanh: 1,
   asin: 1, acos: 1, atan: 1, arctan: 1,
   asinh: 1, acosh: 1, atanh: 1,
-  exp: 1, ln: 1, log: 1, abs: 1,
+  exp: 1, ln: 1, log: 1, log10: 1, abs: 1,
   nint: 1, int: 1, floor: 1, ceil: 1, sgn: 1,
   pow: 2, pwr: 2, min: 2, max: 2,
   ternary_fcn: 3,
