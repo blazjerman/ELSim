@@ -169,7 +169,10 @@ for (const fixture of selectedFixtures) {
     assert.match(wasmResult.stdout, /out_default\s+2\.000000e\+01/i, 'deterministic math in the subcircuit default should produce 20 V')
     assert.match(wasmResult.stdout, /out_override\s+1\.500000e\+01/i, 'sqrt() in the instance override should produce 15 V')
   }
-  if (fixture === 'imported-subckt-log10-params-op') assert.match(wasmResult.stdout, /out\s+2\.000000e\+00/i, 'the imported subcircuit default should evaluate log10(100) to 2 V')
+  if (fixture === 'imported-subckt-log10-params-op') {
+    assert.match(wasmResult.stdout, /out\s+2\.000000e\+00/i, 'the imported subcircuit default should evaluate log10(100) to 2 V')
+    assert.match(wasmResult.stdout, /out_override\s+3\.000000e\+00/i, 'the imported subcircuit instance override should evaluate log10(1000) to 3 V')
+  }
   if (fixture === 'native-bsim3-binned-model-op') {
     assert.match(wasmResult.stdout, /model\s+nch\.1/i, 'ngspice should choose the .1 bin for the requested L/W')
     assert.match(wasmResult.stdout, /vds#branch\s+-2\.17575e-05/i, 'the selected low-threshold bin should produce the expected drain current')
