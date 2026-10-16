@@ -406,6 +406,8 @@ Firefox UI audit (2026-10-14): The current 107-workflow engine-independent `@ui-
 
 Imported device-model picker indexing (2026-10-14): Imported `.MODEL` cards are grouped once by device type and VDMOS channel for the inspector, so each App render no longer filters the full imported-library model list to build one selected component’s dropdown. Firefox verifies native R/C/L model selection and an N-channel VDMOS import, selection, and solve; TypeScript passes. No WASM compilation or Pages workflow ran.
 
+Large-circuit benchmark recheck (2026-10-16): `npm run benchmark:performance:quick` reran on the documented i7-12700F host without building or invoking WASM. At 5,000 resistor sections, connectivity/netlisting measured 39.6/47.8 ms and 54.3/67.1 ms median/p95; at 5,000 parts with 4,900 independent wires, they measured 35.9/39.6 ms and 45.8/53.6 ms. The 5,000-instance hierarchy measured 78.9/92.9 ms connectivity and 122.7/145.0 ms netlisting. Cached-pin computation of 9,800 connection dots measured 6.0/15.7 ms median/p95. These remain same-host observations without before/after claims; the results do not justify a risky renderer or geometry rewrite. Second-hardware profiling and browser/worker total-memory measurements remain open under M4.3.
+
 ## 4. Legal and open-source release policy
 
 > **Owner decision (2026-10-12): out of scope.** The owner will build the ngspice WASM locally and is not preparing a public app/runtime release. Do not spend feature-work time simplifying, auditing, or changing license handling, and do not make these checks a gate for roadmap work. Keep existing notices and checks untouched unless the owner explicitly reopens distribution work.
