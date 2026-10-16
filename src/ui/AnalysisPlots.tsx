@@ -345,6 +345,12 @@ function formatEngineeringTick(value: number, unit: string): string {
   return `${scaled} ${prefix}${unit}`
 }
 
+function symmetricZeroRange(range: [number, number] | undefined): [number, number] {
+  const extent = Math.max(Math.abs(range?.[0] ?? 0), Math.abs(range?.[1] ?? 0), Number.EPSILON)
+  const padded = extent * 1.06
+  return [-padded, padded]
+}
+
 function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, savedColors }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; savedColors: Record<string, string> }) {
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
@@ -375,10 +381,10 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
     return { indicesById, rangeByUnit }
   }, [shown, minTime, maxTime])
   const scopeDomain = useMemo<[number, number]>(() => {
-    return sampledTraceData.rangeByUnit.get('V') ?? [-1, 1]
+    return symmetricZeroRange(sampledTraceData.rangeByUnit.get('V'))
   }, [sampledTraceData])
   const hasVoltage = shown.some((trace) => trace.unit === 'V'), hasCurrent = shown.some((trace) => trace.unit === 'A')
-  const currentDomain = sampledTraceData.rangeByUnit.get('A') ?? [-1, 1]
+  const currentDomain = symmetricZeroRange(sampledTraceData.rangeByUnit.get('A'))
   const voltageAxis = useValueWindow(scopeDomain)
   const currentAxis = useValueWindow(currentDomain)
   const voltageRange: [number, number] = [voltageAxis.range.min, voltageAxis.range.max]
