@@ -5337,6 +5337,100 @@ test('import, place, and simulate a user-supplied IC with its symbol', { tag: ['
   expect(pageErrors).toEqual([])
 })
 
+test('native ngspice subcircuit parameter expressions solve with comparisons, logic, and conditionals', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const library = '.SUBCKT SELECT_GAIN IN OUT PARAMS: VSEL=0 GAIN={VSEL >= 2.5 && VSEL < 5 ? 2 : 1}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS SELECT_GAIN\n'
+  const sha256 = createHash('sha256').update(library).digest('hex')
+  const asset = { id: 'model-native-expression', filename: 'native-expression.lib', content: library, sha256, licenseStatus: 'unknown' as const, importedAt: new Date(0).toISOString() }
+  const definition = importedSubcircuitComponentDefinition(parseSubcircuitLibrary(library).subcircuits[0], { assetId: asset.id, filename: asset.filename, sha256 })
+  const project = createStarterProject()
+  const source = { id: 'v-native-expression', kind: 'source' as const, ref: 'V1', value: '1 V', x: 180, y: 360, rotation: 0 as const, componentDefinitionId: componentDefinitionFor('source').id }
+  const block = { id: 'x-native-expression', kind: 'subcircuit' as const, ref: 'X1', value: 'SELECT_GAIN', modelName: 'SELECT_GAIN', modelPins: ['IN', 'OUT'], modelParameters: { VSEL: '3' }, componentDefinitionId: definition.id, x: 360, y: 360, rotation: 0 as const }
+  const load = { id: 'r-native-expression', kind: 'resistor' as const, ref: 'R1', value: '1 kΩ', x: 540, y: 360, rotation: 0 as const, componentDefinitionId: componentDefinitionFor('resistor').id }
+  project.name = 'Native ngspice conditional parameter'
+  project.parts = [source, block, load]
+  project.wires = []
+  project.junctions = []
+  const label = (id: string, name: string, part: typeof source | typeof block | typeof load, pin: number) => {
+    const point = componentPins(part)[pin]
+    return { id, name, x: point.x, y: point.y, visible: true }
+  }
+  project.netLabels = [
+    label('native-expression-vin-source', 'VIN', source, 0), label('native-expression-vin-block', 'VIN', block, 0),
+    label('native-expression-vout-block', 'VOUT', block, 1), label('native-expression-vout-load', 'VOUT', load, 0),
+    label('native-expression-ground-source', '0', source, 1), label('native-expression-ground-load', '0', load, 1),
+  ]
+  project.modelAssets = [asset]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { ...project.plotSettings, selectedTraceIds: ['v(vout)'] }
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: [], junctions: [], netLabels: project.netLabels }
+  const validated = validateProject(project)
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(vout)')
+  const operatingPoint = page.locator('.plot-window').last().locator('.op-table')
+  await expect(operatingPoint.getByRole('row', { name: /V\(vout\)/ })).toContainText('2.000000')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('VSEL=3')
+})
+
+test('native ngspice Monte Carlo subcircuit parameter defaults import and solve', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  const library = '.SUBCKT MONTE_CARLO IN OUT PARAMS: RVAL={gauss(1k,0.1,3)}\nR1 IN OUT {RVAL}\n.ENDS MONTE_CARLO\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'monte-carlo.lib', mimeType: 'text/plain', buffer: Buffer.from(library),
+  })
+  await expect(page.locator('.imported-model').filter({ hasText: 'MONTE_CARLO' })).toContainText('RVAL={gauss(1k,0.1,3)}')
+
+  const source = [
+    'Version 4',
+    'FLAG -16 0 IN', 'FLAG 16 0 0', 'FLAG 48 0 IN', 'FLAG 80 0 OUT', 'FLAG 176 0 OUT', 'FLAG 208 0 0',
+    'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 5',
+    'SYMBOL monte_carlo 64 0 R0', 'SYMATTR InstName X1', 'SYMATTR Value MONTE_CARLO',
+    'SYMBOL res 192 0 R0', 'SYMATTR InstName RLOAD', 'SYMATTR Value 1k',
+    'TEXT 0 80 Left 2 !.op', 'TEXT 0 100 Left 2 !.save V(out)',
+  ].join('\n')
+  const symbol = (prefix: string, pins: Array<[string, number, number, string]>) => [
+    'Version 4', `SYMATTR Prefix ${prefix}`,
+    ...pins.flatMap(([name, x, y, orientation], index) => [`PIN ${x} ${y} ${orientation}`, `PINATTR PinName ${name}`, `PINATTR SpiceOrder ${index + 1}`]),
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import LTspice', exact: true }).click()
+  await page.locator('input[accept=".asc,.asy,text/plain"]').setInputFiles([
+    { name: 'monte-carlo.asc', mimeType: 'text/plain', buffer: Buffer.from(source) },
+    { name: 'voltage.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('V', [['PLUS', -16, 0, 'R'], ['MINUS', 16, 0, 'L']])) },
+    { name: 'monte_carlo.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('X', [['IN', -16, 0, 'R'], ['OUT', 16, 0, 'L']])) },
+    { name: 'res.asy', mimeType: 'text/plain', buffer: Buffer.from(symbol('R', [['A', -16, 0, 'R'], ['B', 16, 0, 'L']])) },
+  ])
+  await expect(page.getByText(/Imported monte-carlo with 3 parts/)).toBeVisible()
+  const modelInstance = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(modelInstance).toBeVisible()
+  await modelInstance.click()
+  const parameter = page.getByRole('textbox', { name: 'RVAL model value' })
+  await expect(parameter).toHaveValue('{gauss(1k,0.1,3)}')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(out)')
+  const outputRow = page.locator('.plot-window').last().locator('.op-table').getByRole('row', { name: /V\(out\)/ })
+  const output = Number((await outputRow.innerText()).match(/([0-9]+\.[0-9]+)/)?.[1])
+  expect(output).toBeGreaterThan(2)
+  expect(output).toBeLessThan(3.2)
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('RVAL={gauss(1k,0.1,3)}')
+  expect(pageErrors).toEqual([])
+})
+
 test('imported LTspice .ic node and inductor values run through ngspice', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
