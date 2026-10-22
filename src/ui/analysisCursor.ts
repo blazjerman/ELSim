@@ -38,7 +38,15 @@ export function setAnalysisCursor(result: SimulationResult, value: number): void
 export function subscribeAnalysisCursor(result: SimulationResult, listener: () => void): () => void {
   const state = stateFor(result)
   state.listeners.add(listener)
-  return () => state.listeners.delete(listener)
+  return () => {
+    state.listeners.delete(listener)
+    if (state.listeners.size || !pendingNotifications.has(state)) return
+    pendingNotifications.delete(state)
+    if (!pendingNotifications.size && notificationFrame) {
+      cancelAnimationFrame(notificationFrame)
+      notificationFrame = 0
+    }
+  }
 }
 
 export function useAnalysisCursor(result: SimulationResult): number | null {

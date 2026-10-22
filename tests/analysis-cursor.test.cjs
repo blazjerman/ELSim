@@ -34,3 +34,37 @@ test('analysis cursor exposes the latest value and batches plot notifications pe
     global.requestAnimationFrame = previousRequest
   }
 })
+
+test('analysis cursor cancels pending work after the last plot subscriber unmounts', () => {
+  const previousRequest = global.requestAnimationFrame
+  const previousCancel = global.cancelAnimationFrame
+  const callbacks = new Map()
+  const cancelled = []
+  let nextFrame = 1
+  global.requestAnimationFrame = (callback) => {
+    const id = nextFrame++
+    callbacks.set(id, callback)
+    return id
+  }
+  global.cancelAnimationFrame = (id) => {
+    cancelled.push(id)
+    callbacks.delete(id)
+  }
+  const result = { analysis: 'dc', traces: [] }
+  let notifications = 0
+  const unsubscribe = subscribeAnalysisCursor(result, () => { notifications += 1 })
+  try {
+    setAnalysisCursor(result, 12)
+    const frameId = callbacks.keys().next().value
+    assert.ok(frameId, 'cursor update schedules a frame while the plot is subscribed')
+
+    unsubscribe()
+
+    assert.deepEqual(cancelled, [frameId], 'unmounting the last subscriber cancels the queued frame')
+    assert.equal(callbacks.size, 0)
+    assert.equal(notifications, 0, 'the removed plot is not notified')
+  } finally {
+    global.requestAnimationFrame = previousRequest
+    global.cancelAnimationFrame = previousCancel
+  }
+})
