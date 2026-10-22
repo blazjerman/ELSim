@@ -209,7 +209,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   }
   const usedReferences = new Set(project.parts.map((part) => part.ref.toLowerCase()))
   const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.map((label) => label.name)].map((name) => name.toLowerCase()))
-  const usedModelNames = new Set([...importedDeviceModels.map((model) => model.name.toLowerCase()), ...usedReferences, ...usedNodes, 'ddefault', 'dzener', 'elsim_internal_sw'])
+  const usedModelNames = new Set([...importedDeviceModels.map((model) => model.name.toLowerCase()), ...subcircuitsByName.keys(), ...usedReferences, ...usedNodes, 'ddefault', 'dzener', 'elsim_internal_sw'])
   const stochasticModelNameByPart = new Map<string, string>()
   const stochasticModelCopies: { asset: (typeof modelAssets)[number]; name: string; lines: NonNullable<ReturnType<typeof specializeStochasticSubcircuit>> }[] = []
   const stochasticCopiesByParameters = new Map<string, string>()
