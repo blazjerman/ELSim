@@ -3897,11 +3897,15 @@ export default function App() {
     if (additions.length) setSimulationResult({ ...simulationResult, traces: [...simulationResult.traces, ...additions] })
     const ids = derived.map((trace) => trace.id)
     const componentVoltageProbe: ComponentVoltageProbe = { partId, positivePin, negativePin, positiveNet, negativeNet, positiveVector, negativeVector, ref, vectorRef, sheetId: currentProject.activeSheetId, scopeSheetId, instancePath: activePath }
-    const pinName = (index: number) => index < 0 ? 'ground' : part.modelPins?.[index] ?? componentDefinitionFor(part.kind).pins[index]?.name ?? `pin ${index + 1}`
+    const pinLabel = (index: number) => {
+      if (index < 0) return 'ground'
+      const name = part.modelPins?.[index] ?? componentDefinitionFor(part.kind).pins[index]?.name
+      return !name || /^pin\s*\d+$/i.test(name) ? `terminal ${index + 1}` : name
+    }
     waveformReturnFocusRef.current = document.querySelector<SVGElement>(`[data-part-id="${CSS.escape(partId)}"]`)
     const reference: PlotTraceReference = { kind: 'component-voltage', partId, positivePin, negativePin, sheetId: currentProject.activeSheetId, scopeSheetId, instancePath: activePath }
     setPendingWaveformTrace({ traceIds: ids, label: `V(${ref})`, componentVoltageProbe, reference })
-    setNotice(`Voltage is measured from pin ${positivePin + 1} (${pinName(positivePin)}) to ${negativePin < 0 ? 'ground' : `pin ${negativePin + 1} (${pinName(negativePin)})`}.`)
+    setNotice(`Voltage is measured from ${pinLabel(positivePin)} to ${pinLabel(negativePin)}.`)
   }
   const exportWaveformCsv = useCallback(async (traceIds?: string[]) => {
     const result = simulationResultRef.current

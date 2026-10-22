@@ -1266,6 +1266,24 @@ test('schematic context menu stays inside the canvas near the phone viewport edg
   await expect.poll(expectInsideCanvas).toBe(true)
 })
 
+test('keyboard opens the schematic context menu, moves focus through actions, and restores focus on Escape', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await resistor.focus()
+  await expect(resistor).toBeFocused()
+  await page.keyboard.press('Shift+F10')
+
+  const menu = page.getByRole('menu', { name: 'Options for R1' })
+  const actions = menu.getByRole('menuitem')
+  await expect(menu).toBeVisible()
+  await expect(actions.first()).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(actions.nth(1)).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(menu).not.toBeVisible()
+  await expect(resistor).toBeFocused()
+})
+
 test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('complementary', { name: 'Component library' })).toBeVisible()
@@ -2107,6 +2125,7 @@ test('right-click probes wire voltage to ground and component voltage across its
 
   await page.locator('.circuit-part[data-part-id="p-r1"]').click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Plot voltage across terminal 1 → terminal 2' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Voltage is measured from terminal 1 to terminal 2.' })).toBeVisible()
   const voltageChooser = page.getByRole('dialog', { name: 'V(R1)' })
   await voltageChooser.getByRole('button', { name: /New waveform window/ }).click()
   const plot = page.locator('.plot-window').last()
