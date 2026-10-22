@@ -1425,6 +1425,21 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await expectVisibleKeyboardControlsNamed(page)
   await page.keyboard.press('Escape')
   await expect(sheetSettings).toHaveCount(0)
+  const importModelButton = page.getByRole('button', { name: 'Import SPICE model library' })
+  await importModelButton.click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'accessibility-sections.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.LIB slow\n.MODEL D_SLOW D(IS=2n)\n.ENDL slow\n.LIB fast\n.MODEL D_FAST D(IS=1n)\n.ENDL fast'),
+  })
+  const modelSections = page.getByRole('dialog', { name: 'Choose model sections' })
+  await expect(modelSections).toBeVisible()
+  await expectNamedButtons()
+  await expectNamedFormControls()
+  await expectVisibleKeyboardControlsNamed(page)
+  await page.keyboard.press('Escape')
+  await expect(modelSections).toHaveCount(0)
+  await expect(importModelButton).toBeFocused()
   await page.setViewportSize({ width: 390, height: 844 })
   await expectVisibleKeyboardControlsNamed(page)
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
@@ -4971,6 +4986,7 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await page.getByRole('menuitem', { name: /Plot voltage across/ }).click()
   const destination = page.getByRole('dialog', { name: 'V(R1)' })
   await expect(destination).toBeVisible()
+  await expectVisibleKeyboardControlsNamed(page)
   const newWindowOption = destination.getByRole('button', { name: /New waveform window/ })
   await expect(newWindowOption).toBeFocused()
   await expect(destination.getByRole('button', { name: 'Open waveform' })).toHaveCount(0)
