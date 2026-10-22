@@ -31,6 +31,7 @@
     "benchmark:performance": "node tools/benchmark-performance.mjs",
     "benchmark:performance:quick": "node tools/benchmark-performance.mjs --skip-engine",
     "benchmark:browser": "playwright test --config playwright.performance.config.ts",
+    "benchmark:browser:memory": "python3 tools/benchmark-firefox-memory.py",
     "test:wasm": "node tools/test-ngspice-wasm.mjs",
     "check:ngspice-release": "node tools/check-ngspice-release.mjs",
     "build:release": "npm run check:npm-licenses && npm run check:ngspice-release && npm run typecheck && vite build --mode release",

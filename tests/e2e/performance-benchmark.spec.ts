@@ -302,6 +302,10 @@ test('measure a million-sample transient through the browser ngspice worker and 
     console.log(workerProfiles[0])
   }
   console.log(JSON.stringify({ benchmark: `browser-million-sample-${plotWindowCount}-window-transient-v5`, browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plotWindowCount: await plots.count(), tracesPerWindow: 4, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, wasmLinearMemoryBytes, heapBefore: before, heapAfter: after }, null, 2))
+  const memoryProfileHoldMs = Number(process.env.ELSIM_PERF_HOLD_MS ?? 0)
+  if (Number.isFinite(memoryProfileHoldMs) && memoryProfileHoldMs > 0) {
+    await page.waitForTimeout(Math.min(memoryProfileHoldMs, 10_000))
+  }
 })
 
 test('measure browser waveform rendering with dozens of solved traces', async ({ page, browserName }) => {
