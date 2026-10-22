@@ -1,0 +1,13 @@
+ELSim stochastic subcircuit default with an explicit instance override
+.SUBCKT MONTE_CARLO IN OUT PARAMS: RVAL={gauss(1k,0.1,3)}
+R1 IN OUT {RVAL}
+.ENDS MONTE_CARLO
+.SUBCKT ELSIM_OVERRIDE_X1 IN OUT PARAMS: RVAL=2k
+R1 IN OUT {RVAL}
+.ENDS ELSIM_OVERRIDE_X1
+V1 IN 0 5
+X1 IN OUT ELSIM_OVERRIDE_X1
+RLOAD OUT 0 1k
+.op
+.print op v(out)
+.end

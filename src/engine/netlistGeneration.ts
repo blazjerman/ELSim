@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
-import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
@@ -182,12 +182,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const generatedSubcircuits = generatedSheetLibrary ? parseSubcircuitLibrary(generatedSheetLibrary, undefined, projectModelFunctions, { allowGroundPins: true }).subcircuits : []
   const subcircuitsByName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()
   const subcircuitFunctionsByName = new Map<string, ReadonlyMap<string, number>>()
+  const subcircuitAssetsByName = new Map<string, (typeof modelAssets)[number]>()
   for (const [assetIndex, library] of parsedModelAssets.entries()) {
     for (const definition of library.subcircuits) {
       const key = definition.name.toLowerCase()
       if (!subcircuitsByName.has(key)) {
         subcircuitsByName.set(key, definition)
         subcircuitFunctionsByName.set(key, modelFunctionResolver.forSubcircuit(modelAssets[assetIndex].id, definition.name))
+        subcircuitAssetsByName.set(key, modelAssets[assetIndex])
       }
     }
   }
@@ -201,6 +203,25 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const usedReferences = new Set(project.parts.map((part) => part.ref.toLowerCase()))
   const usedNodes = new Set([...connectivity.pinNets.values(), ...project.netLabels.map((label) => label.name)].map((name) => name.toLowerCase()))
   const usedModelNames = new Set([...importedDeviceModels.map((model) => model.name.toLowerCase()), ...usedReferences, ...usedNodes, 'ddefault', 'dzener', 'elsim_internal_sw'])
+  const stochasticModelNameByPart = new Map<string, string>()
+  const stochasticModelCopies: { asset: (typeof modelAssets)[number]; name: string; lines: NonNullable<ReturnType<typeof specializeStochasticSubcircuit>> }[] = []
+  const stochasticCopiesByParameters = new Map<string, string>()
+  for (const part of project.parts) {
+    if (part.kind !== 'subcircuit' || part.sheetId || !part.modelName || !part.modelParameters) continue
+    const key = part.modelName.toLowerCase()
+    const definition = subcircuitsByName.get(key)
+    const asset = subcircuitAssetsByName.get(key)
+    if (!definition || !asset) continue
+    const signature = JSON.stringify([asset.id, key, Object.entries(part.modelParameters).sort(([left], [right]) => left.localeCompare(right))])
+    const existingName = stochasticCopiesByParameters.get(signature)
+    if (existingName) { stochasticModelNameByPart.set(part.id, existingName); continue }
+    const name = reserveUniqueName(`ELSIM_OVERRIDE_${part.id.replace(/[^A-Za-z0-9_]/g, '_')}`, usedModelNames)
+    const lines = specializeStochasticSubcircuit(asset.content, definition, name, part.modelParameters)
+    if (!lines) { usedModelNames.delete(name.toLowerCase()); continue }
+    stochasticCopiesByParameters.set(signature, name)
+    stochasticModelNameByPart.set(part.id, name)
+    stochasticModelCopies.push({ asset, name, lines })
+  }
 
   for (const part of project.parts) {
     if (part.kind === 'ground') continue
@@ -644,7 +665,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         const override = Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1]
         return override === undefined ? [] : [`${parameter.name}=${override}`]
       })
-      append(`${part.ref} ${nodes.join(' ')} ${definition.name}${parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}`, part.id, 'component')
+      const specializedModelName = stochasticModelNameByPart.get(part.id)
+      append(`${part.ref} ${nodes.join(' ')} ${specializedModelName ?? definition.name}${!specializedModelName && parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'switch') {
       const state = part.value.trim().toLowerCase()
@@ -790,6 +812,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     for (const record of parsedModelAssets[assetIndex].modelRecords) {
       if (record.text.trim()) append(record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
     }
+  }
+  for (const copy of stochasticModelCopies) {
+    for (const line of copy.lines) append(line.text, `model-file:${copy.asset.id}`, 'model', { assetId: copy.asset.id, assetLine: line.sourceLine })
   }
   // Imported model files may carry a global .TEMP card. Emit an explicit
   // project temperature afterward so the user's non-default setting wins.

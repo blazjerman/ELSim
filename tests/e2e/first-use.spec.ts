@@ -5431,6 +5431,49 @@ test('native ngspice Monte Carlo subcircuit parameter defaults import and solve'
   expect(pageErrors).toEqual([])
 })
 
+test('explicit imported subcircuit override replaces its sampled default in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createStarterProject()
+  const content = '.SUBCKT MONTE_CARLO IN OUT PARAMS: RVAL={gauss(1k,0.1,3)}\nR1 IN OUT {RVAL}\n.ENDS MONTE_CARLO\n'
+  project.parts = [
+    { id: 'p-v1', kind: 'source', ref: 'V1', value: '5', x: 400, y: 400, rotation: 90 },
+    { id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: '', modelName: 'MONTE_CARLO', modelPins: ['IN', 'OUT'], modelParameters: { RVAL: '2k' }, x: 600, y: 400, rotation: 0 },
+    { id: 'p-rload', kind: 'resistor', ref: 'RLOAD', value: '1k', x: 800, y: 400, rotation: 0 },
+  ] as typeof project.parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = []
+  for (const [ref, names] of [['V1', ['IN', '0']], ['X1', ['IN', 'OUT']], ['RLOAD', ['OUT', '0']]] as const) {
+    const part = project.parts.find((candidate) => candidate.ref === ref)!
+    for (const [index, pin] of componentPins(part).entries()) project.netLabels.push({ id: `label-${ref}-${index}`, name: names[index], x: pin.x, y: pin.y, visible: true })
+  }
+  project.modelAssets = [{ id: 'model-random', filename: 'random.lib', content, sha256: createHash('sha256').update(content).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { ...project.plotSettings, selectedTraceIds: ['v(out)'] }
+  const rootSheet = project.sheets.find((sheet) => sheet.id === project.rootSheetId)!
+  rootSheet.parts = project.parts
+  rootSheet.wires = project.wires
+  rootSheet.junctions = project.junctions
+  rootSheet.netLabels = project.netLabels
+  const validated = validateProject(project)
+
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Run simulation' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(OUT)')
+  const outputRow = page.locator('.plot-window').last().locator('.op-table').getByRole('row', { name: /V\(out\)/i })
+  await expect(outputRow).toContainText('1.666667')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  await expect(netlist).toContainText('X1 IN OUT ELSIM_OVERRIDE_p_x1')
+  await expect(netlist).toContainText('.SUBCKT MONTE_CARLO IN OUT PARAMS: RVAL={gauss(1k,0.1,3)}')
+  await expect(netlist).toContainText('.SUBCKT ELSIM_OVERRIDE_p_x1 IN OUT PARAMS: RVAL=2k')
+})
+
 test('imported LTspice .ic node and inductor values run through ngspice', { tag: ['@ngspice', '@ltspice'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

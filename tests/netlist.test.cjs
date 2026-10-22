@@ -1270,6 +1270,22 @@ test('imported model cards keep source filename and original line in the netlist
   assert.match(artifact.text.split('\n')[source.line - 1], /^R1 IN OUT 1k$/)
 })
 
+test('explicit overrides replace stochastic .SUBCKT defaults in an instance-local netlist copy', () => {
+  const project = createStarterProject()
+  const content = '* user-owned random model\n.SUBCKT MONTE_CARLO IN OUT PARAMS: RVAL={gauss(1k, 0.1, 3)}\nR1 IN OUT {RVAL}\n.ENDS MONTE_CARLO\n'
+  project.modelAssets = [{ id: 'model-monte-carlo', filename: 'random.lib', sha256: 'b'.repeat(64), content, licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.parts.push({ id: 'p-x-mc1', kind: 'subcircuit', ref: 'XMC1', value: '', modelName: 'MONTE_CARLO', modelPins: ['IN', 'OUT'], modelParameters: { RVAL: '2k' }, x: 760, y: 350, rotation: 0 })
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^XMC1 \S+ \S+ ELSIM_OVERRIDE_p_x_mc1$/m)
+  assert.match(artifact.text, /^\.SUBCKT MONTE_CARLO IN OUT PARAMS: RVAL=\{gauss\(1k, 0\.1, 3\)\}$/m)
+  assert.match(artifact.text, /^\.SUBCKT ELSIM_OVERRIDE_p_x_mc1 IN OUT PARAMS: RVAL=2k$/m)
+  assert.match(artifact.text, /^\.ENDS ELSIM_OVERRIDE_p_x_mc1$/m)
+  const generatedHeader = artifact.sourceMap.find((item) => item.sourceId === 'model-file:model-monte-carlo' && item.assetLine === 2 && artifact.text.split('\n')[item.line - 1]?.startsWith('.SUBCKT ELSIM_OVERRIDE_'))
+  assert.ok(generatedHeader)
+  assert.equal(generatedHeader.assetId, 'model-monte-carlo')
+})
+
 test('LED instances netlist as diode devices and retain D reference designators', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'p-led1', kind: 'led', ref: 'D1', value: 'Default LED', x: 700, y: 400, rotation: 0 })

@@ -17,6 +17,58 @@ export type NgspiceBsim3BinFamily<T extends SpiceModelDefinition = SpiceModelDef
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
 export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInput> = { assets: { asset: T; parsed: ParsedSubcircuitLibrary }[]; dependencies: ModelDependencyAnalysis }
 
+export type SpecializedSubcircuitLine = { text: string; sourceLine: number }
+
+/** Build an instance-specific copy when a random formal default is explicitly
+ * overridden. ngspice evaluates these defaults while reading the model, before
+ * applying X-instance parameters in some builds. The source asset stays intact;
+ * callers emit this generated copy under a private name. Conditional model
+ * declarations are left untouched because their lexical branch must be kept. */
+export function specializeStochasticSubcircuit(
+  source: string,
+  definition: SubcircuitDefinition,
+  name: string,
+  overrides: Readonly<Record<string, string>>,
+): SpecializedSubcircuitLine[] | null {
+  const overriddenRandomDefaults = definition.parameters.filter((parameter) =>
+    Object.entries(overrides).some(([key]) => key.toLowerCase() === parameter.name.toLowerCase())
+    && /\b(?:gauss|agauss|unif|aunif)\s*\(/i.test(parameter.defaultValue),
+  )
+  if (!overriddenRandomDefaults.length) return null
+
+  const lines = logicalLines(source)
+  const headerIndex = lines.findIndex((line) => line.start === definition.startLine && /^\s*\.subckt\b/i.test(line.text))
+  const closingIndex = lines.findIndex((line) => line.start === definition.endLine && /^\s*\.ends\b/i.test(line.text))
+  if (headerIndex < 0 || closingIndex <= headerIndex) return null
+  let conditionalDepth = 0
+  for (let index = 0; index <= headerIndex; index += 1) {
+    const directive = /^\s*\.(if|endif)\b/i.exec(withoutInlineComment(lines[index].text))?.[1]?.toLowerCase()
+    if (directive === 'if') conditionalDepth += 1
+    else if (directive === 'endif') conditionalDepth = Math.max(0, conditionalDepth - 1)
+  }
+  if (conditionalDepth) return null
+
+  const parameters = definition.parameters.map((parameter) => {
+    const override = Object.entries(overrides).find(([key]) => key.toLowerCase() === parameter.name.toLowerCase())?.[1]
+    return `${parameter.name}=${override ?? parameter.defaultValue}`
+  })
+  const physical = source.replace(/^\uFEFF/, '').split(/\r?\n/)
+  const header = lines[headerIndex]
+  const closing = lines[closingIndex]
+  const records: SpecializedSubcircuitLine[] = [{
+    text: `.SUBCKT ${name} ${definition.pins.join(' ')}${parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}`,
+    sourceLine: header.start,
+  }]
+  for (let line = header.end + 1; line < closing.start; line += 1) records.push({ text: physical[line - 1], sourceLine: line })
+  const endText = physical[closing.start - 1]
+  const endMatch = endText.match(/^(\s*\.ends\s+)([^\s*;]+)(.*)$/i)
+  records.push({
+    text: endMatch && endMatch[2].toLowerCase() === definition.name.toLowerCase() ? `${endMatch[1]}${name}${endMatch[3]}` : endText,
+    sourceLine: closing.start,
+  })
+  return records
+}
+
 const MAX_LIBRARY_BYTES = 4 * 1024 * 1024
 const MAX_LIBRARY_LINES = 100_000
 // A .LIB section is a single ngspice token, not a C-style identifier. Quotes,

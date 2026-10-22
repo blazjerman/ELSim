@@ -6,7 +6,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded ngspice parameter operators and deterministic math functions', () => {
@@ -41,6 +41,25 @@ test('validates native ngspice Monte Carlo functions without evaluating them', (
     '.ENDS MONTE_CARLO',
   ].join('\n'))
   assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'RVAL', defaultValue: '{gauss(1k, 0.1, 3)}' }])
+})
+
+test('specializes only the overridden stochastic subcircuit default and preserves source lines', () => {
+  const source = '* random model\n.SUBCKT MC IN OUT PARAMS: RVAL={gauss(1k, 0.1, 3)}\nR1 IN OUT {RVAL}\n.ENDS MC\n'
+  const definition = parseSubcircuitLibrary(source).subcircuits[0]
+  const specialized = specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', { RVAL: '2k' })
+  assert.deepEqual(specialized, [
+    { text: '.SUBCKT ELSIM_OVERRIDE_X1 IN OUT PARAMS: RVAL=2k', sourceLine: 2 },
+    { text: 'R1 IN OUT {RVAL}', sourceLine: 3 },
+    { text: '.ENDS ELSIM_OVERRIDE_X1', sourceLine: 4 },
+  ])
+  assert.equal(specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', {}), null)
+  assert.equal(specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', { OTHER: '2k' }), null)
+})
+
+test('does not lift stochastic subcircuits out of conditional model branches', () => {
+  const source = '.if (MODE > 0)\n.SUBCKT MC IN OUT PARAMS: RVAL={gauss(1k, 0.1, 3)}\nR1 IN OUT {RVAL}\n.ENDS MC\n.endif\n'
+  const definition = { ...parseSubcircuitLibrary('.SUBCKT MC IN OUT PARAMS: RVAL={gauss(1k, 0.1, 3)}\nR1 IN OUT {RVAL}\n.ENDS MC').subcircuits[0], startLine: 2, endLine: 4 }
+  assert.equal(specializeStochasticSubcircuit(source, definition, 'ELSIM_OVERRIDE_X1', { RVAL: '2k' }), null)
 })
 
 test('parses documented single-quoted ngspice parameter expressions', () => {
