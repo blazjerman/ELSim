@@ -327,6 +327,9 @@ const builtinFunctionArities: Readonly<Record<string, number>> = {
   exp: 1, ln: 1, log: 1, log10: 1, abs: 1,
   nint: 1, int: 1, floor: 1, ceil: 1, sgn: 1,
   pow: 2, pwr: 2, min: 2, max: 2,
+  // These ngspice Monte Carlo functions are preserved for solver evaluation;
+  // ELSim validates their bounded syntax and never evaluates randomness.
+  gauss: 3, agauss: 3, unif: 2, aunif: 2, limit: 2,
   ternary_fcn: 3,
 }
 
@@ -626,12 +629,12 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
   // while recognizing the longest scale factor first (notably `meg` and `mil`).
   if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*$/i.test(scalar)) return true
 
-  // Accept bounded arithmetic and deterministic ngspice math calls inside an
+  // Accept bounded ngspice parameter expressions and math calls inside an
   // optional brace pair. Expressions are validated, never evaluated in JS.
   const expression = expressionSource
   if (!expression || expression.length > 64) return false
   const tokens: string[] = []
-  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*|[A-Za-z_][A-Za-z0-9_]*|[(),+*/^\-]/iy
+  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*|[A-Za-z_][A-Za-z0-9_]*|\*\*|==|!=|<>|<=|>=|&&|\|\||[(),+*/^%\\\-!<>=?:]/iy
   let offset = 0
   while (offset < expression.length) {
     tokenPattern.lastIndex = offset
@@ -643,18 +646,26 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
   }
   let index = 0
   let depth = 0
+  const conditional = (): boolean => {
+    if (!logicalOr()) return false
+    if (tokens[index] !== '?') return true
+    index += 1
+    if (!conditional() || tokens[index] !== ':') return false
+    index += 1
+    return conditional()
+  }
   const primary = (): boolean => {
     const token = tokens[index]
     if (!token) return false
     if (token === '(') {
       if (++depth > 16) return false
       index += 1
-      const valid = sum() && tokens[index] === ')'
+      const valid = conditional() && tokens[index] === ')'
       index += valid ? 1 : 0
       depth -= 1
       return valid
     }
-    if (token === ')' || token === ',' || /^[+*/^\-]$/.test(token)) return false
+    if (token === ')' || token === ',' || token === ':' || token === '?' || /^(?:[+*/^%\\\-!<>=]|\*\*|==|!=|<>|<=|>=|&&|\|\|)$/i.test(token)) return false
     index += 1
     if (/^[A-Za-z_]/.test(token) && tokens[index] === '(') {
       const functionName = token.toLowerCase()
@@ -665,7 +676,7 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
       let argumentCount = 0
       if (tokens[index] !== ')') {
         while (true) {
-          if (!sum()) return false
+          if (!conditional()) return false
           argumentCount += 1
           if (tokens[index] !== ',') break
           index += 1
@@ -678,14 +689,14 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
     }
     return true
   }
-  const power = (): boolean => primary() && (tokens[index] !== '^' || (index += 1, unary()))
+  const power = (): boolean => primary() && (!['^', '**'].includes(tokens[index]) || (index += 1, unary()))
   const unary = (): boolean => {
-    while (tokens[index] === '+' || tokens[index] === '-') index += 1
+    while (['+', '-', '!'].includes(tokens[index])) index += 1
     return power()
   }
   const product = (): boolean => {
     if (!unary()) return false
-    while (tokens[index] === '*' || tokens[index] === '/') {
+    while (['*', '/', '%', '\\'].includes(tokens[index])) {
       index += 1
       if (!unary()) return false
     }
@@ -699,7 +710,31 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
     }
     return true
   }
-  return sum() && index === tokens.length
+  const comparison = (): boolean => {
+    if (!sum()) return false
+    while (['==', '!=', '<>', '<', '<=', '>', '>='].includes(tokens[index])) {
+      index += 1
+      if (!sum()) return false
+    }
+    return true
+  }
+  const logicalAnd = (): boolean => {
+    if (!comparison()) return false
+    while (tokens[index] === '&&') {
+      index += 1
+      if (!comparison()) return false
+    }
+    return true
+  }
+  const logicalOr = (): boolean => {
+    if (!logicalAnd()) return false
+    while (tokens[index] === '||') {
+      index += 1
+      if (!logicalAnd()) return false
+    }
+    return true
+  }
+  return conditional() && index === tokens.length
 }
 
 /** Find compatibility-mode features and known gaps in the current WASM build. */

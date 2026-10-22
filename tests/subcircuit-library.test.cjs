@@ -9,13 +9,38 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
-test('accepts bounded numeric SPICE arithmetic and documented deterministic math functions', () => {
-  for (const value of ['1k', '1mil', '1a', '10kOhm', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
-  for (const value of ['{if(RLOAD, 1k, 2k)}', '{system(RLOAD)}', '{sqrt(1, 2)}', '{pow(2)}', '{max(1, 2, 3)}', '{sqrt()}', '{RLOAD > 1k}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD ** 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+test('accepts bounded ngspice parameter operators and deterministic math functions', () => {
+  for (const value of ['1k', '1mil', '1a', '10kOhm', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
+  for (const value of ['{if(RLOAD, 1k, 2k)}', '{system(RLOAD)}', '{sqrt(1, 2)}', '{pow(2)}', '{max(1, 2, 3)}', '{sqrt()}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', '{RLOAD and 1}', '{not RLOAD}', '{RLOAD mod 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
   const functions = new Map([['double', 1], ['blend', 2]])
   assert.equal(isSafeSubcircuitParameterValue('{DOUBLE(RLOAD)}', functions), true)
   assert.equal(isSafeSubcircuitParameterValue('{blend(1, 2)}', functions), true)
   for (const value of ['{double()}', '{double(1, 2)}', '{blend(1)}', '{unknown(1)}']) assert.equal(isSafeSubcircuitParameterValue(value, functions), false, value)
+})
+
+test('parses native ngspice conditional expressions in subcircuit parameter defaults', () => {
+  const expression = '{VSEL >= 2.5 && VSEL < 5 ? 2 : 1}'
+  const parsed = parseSubcircuitLibrary(`.SUBCKT SELECT_GAIN IN OUT PARAMS: VSEL=3 GAIN=${expression}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS SELECT_GAIN`)
+  assert.deepEqual(parsed.subcircuits[0].parameters, [
+    { name: 'VSEL', defaultValue: '3' },
+    { name: 'GAIN', defaultValue: expression },
+  ])
+})
+
+test('validates native ngspice Monte Carlo functions without evaluating them', () => {
+  for (const value of [
+    '{gauss(1k, 0.1, 3)}', '{agauss(1k, 100, 3)}',
+    '{unif(1k, 0.1)}', '{aunif(1k, 100)}', '{limit(1k, 100)}',
+  ]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
+  for (const value of ['{gauss(1k, 0.1)}', '{agauss(1k, 100, 3, 4)}', '{unif(1k)}', '{aunif(1k, 100, 2)}', '{limit(1k)}']) {
+    assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+  }
+  const parsed = parseSubcircuitLibrary([
+    '.SUBCKT MONTE_CARLO IN OUT RVAL={gauss(1k, 0.1, 3)}',
+    'R1 IN OUT {RVAL}',
+    '.ENDS MONTE_CARLO',
+  ].join('\n'))
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'RVAL', defaultValue: '{gauss(1k, 0.1, 3)}' }])
 })
 
 test('parses documented single-quoted ngspice parameter expressions', () => {
