@@ -1284,6 +1284,32 @@ test('keyboard opens the schematic context menu, moves focus through actions, an
   await expect(resistor).toBeFocused()
 })
 
+test('keyboard context menu stays on its focused component when a net label overlaps it', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createStarterProject()
+  project.netLabels.push({ id: 'label-over-r1', name: 'BASE', x: 360, y: 290, visible: true })
+  const root = project.sheets.find((sheet) => sheet.id === project.rootSheetId)!
+  project.sheets[project.sheets.indexOf(root)] = { ...root, netLabels: project.netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const overlapsFocusedPoint = await page.evaluate(() => {
+    const part = document.querySelector<SVGGElement>('.circuit-part[data-part-id="p-r1"]')!
+    const text = document.querySelector<SVGGElement>('.canvas-label[data-net-label-id="label-over-r1"] text')!
+    const partBounds = part.getBoundingClientRect(), labelBounds = text.getBoundingClientRect()
+    const x = partBounds.left + partBounds.width / 2, y = partBounds.top + partBounds.height / 2
+    return x >= labelBounds.left && x <= labelBounds.right && y >= labelBounds.top && y <= labelBounds.bottom
+  })
+  expect(overlapsFocusedPoint).toBe(true)
+  await resistor.focus()
+  await page.keyboard.press('Shift+F10')
+
+  const menu = page.getByRole('menu', { name: 'Options for R1' })
+  await expect(menu).toBeVisible()
+  await expect(menu.getByRole('menuitem', { name: 'Plot current through component' })).toBeVisible()
+})
+
 test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('complementary', { name: 'Component library' })).toBeVisible()
@@ -2120,6 +2146,11 @@ test('right-click probes wire voltage to ground and component voltage across its
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const playbackControls = page.getByRole('group', { name: 'Result playback' })
+  const simulationTime = playbackControls.getByRole('slider', { name: 'Simulation time' })
+  await expect(simulationTime).toHaveAttribute('aria-valuetext', /(?:ps|ns|µs|ms|s)$/)
+  await expect(playbackControls.locator('.playback-time-readout')).toHaveAttribute('aria-hidden', 'true')
+  await expect(playbackControls.getByRole('status')).toHaveCount(0)
   await expect(page.locator('.analysis-panel')).toHaveCount(0)
   await expect(page.locator('.plot-window')).toHaveCount(0)
 
@@ -8726,7 +8757,8 @@ test('transistor switch example demonstrates base drive and collector switching'
   await expectAvailableTrace(page, 'I(q1)')
   const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
   const finalSample = Number(await timeSlider.getAttribute('max'))
-  const timeReadout = page.getByRole('group', { name: 'Result playback' }).getByRole('status')
+  const playbackControls = page.getByRole('group', { name: 'Result playback' })
+  const timeReadout = playbackControls.locator('.playback-time-readout')
   const selectSampleNearTime = async (targetSeconds: number) => {
     let low = 0
     let high = finalSample

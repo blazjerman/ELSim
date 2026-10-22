@@ -644,7 +644,7 @@ function SimulationPlaybackControls({ axis, available, running, rate, onRateChan
   return <div className="menu-group playback-controls" role="group" aria-label="Result playback">
     <IconButton title={running ? 'Pause result playback (does not pause ngspice)' : 'Play result animation (does not run or pause ngspice)'} onClick={() => { if (!running && (sampleIndex ?? 0) >= (axis?.length ?? 1) - 1) setSimulationCursor(0); onRunningChange(!running) }} active={running} disabled={!available}>{running ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</IconButton>
     <IconButton title="Rewind result playback to the first solved sample" onClick={() => { onRunningChange(false); setSimulationCursor(0) }} disabled={!available}><RotateCcw size={14}/></IconButton>
-    <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" aria-valuetext={axis?.length ? formatTime(axis[activeSample], axis[axis.length - 1]) : 'Unavailable'} type="range" min="0" max={Math.max(1, (axis?.length ?? 0) - 1)} step="1" value={activeSample} disabled={!available || !axis?.length} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><output>{axis?.length ? formatTime(axis[activeSample], axis[axis.length - 1]) : '— s'}</output></label>
+    <label className="simulation-scrubber toolbar-simulation-scrubber"><span>Time</span><input aria-label="Simulation time" aria-valuetext={axis?.length ? formatTime(axis[activeSample], axis[axis.length - 1]) : 'Unavailable'} type="range" min="0" max={Math.max(1, (axis?.length ?? 0) - 1)} step="1" value={activeSample} disabled={!available || !axis?.length} onChange={(event) => { onRunningChange(false); setSimulationCursor(Number(event.target.value)) }}/><span className="playback-time-readout" aria-hidden="true">{axis?.length ? formatTime(axis[activeSample], axis[axis.length - 1]) : '— s'}</span></label>
     <label className="playback-rate-control"><span>Playback</span><select aria-label="Simulation playback speed" value={rate} disabled={!available} onChange={(event) => onRateChange(event.target.value === 'realtime' ? 'realtime' : Number(event.target.value))}>{[0.1, ...Array.from({ length: 12 }, (_, index) => (index + 1) * 0.25), 4, 5, 10].map((speed) => <option key={speed} value={speed}>{speed === 1 ? '1× · current' : `${speed}×`}</option>)}<option value="realtime">Real time · 1 s/s</option></select></label>
   </div>
 }
@@ -991,6 +991,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
   const [contextMenu, setContextMenu] = useState<{ kind: 'part'; id: string; x: number; y: number } | { kind: 'wire'; id: string; x: number; y: number; point: { x: number; y: number }; node?: string } | { kind: 'label'; id: string; x: number; y: number; node?: string } | null>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
+  const keyboardContextMenuTargetRef = useRef<SVGElement | null>(null)
   const [contextPinPair, setContextPinPair] = useState({ positive: 0, negative: 1 })
   const documentSessionRef = useRef(documentSessionId)
   useLayoutEffect(() => {
@@ -1892,7 +1893,9 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
       event.stopPropagation()
       contextMenuReturnFocusRef.current = target
       const bounds = target.getBoundingClientRect()
+      keyboardContextMenuTargetRef.current = target
       target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2 }))
+      keyboardContextMenuTargetRef.current = null
     }} onContextMenu={(event) => {
       event.preventDefault()
       contextMenuReturnFocusRef.current = document.activeElement instanceof HTMLElement || document.activeElement instanceof SVGElement ? document.activeElement : null
@@ -1908,9 +1911,12 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
         return event.clientX >= bounds.left && event.clientX <= bounds.right
           && event.clientY >= bounds.top && event.clientY <= bounds.bottom
       })
-      const partElement = element?.closest<SVGGElement>('[data-part-id]')
-      const wireElement = element?.closest<SVGGElement>('[data-wire-id]')
-      const labelElement = labelAtPointer ?? element?.closest<SVGGElement>('[data-net-label-id]')
+      const keyboardTarget = keyboardContextMenuTargetRef.current
+      const partElement = keyboardTarget?.closest<SVGGElement>('[data-part-id]') ?? element?.closest<SVGGElement>('[data-part-id]')
+      const wireElement = keyboardTarget?.closest<SVGGElement>('[data-wire-id]') ?? element?.closest<SVGGElement>('[data-wire-id]')
+      const labelElement = keyboardTarget
+        ? keyboardTarget.closest<SVGGElement>('[data-net-label-id]')
+        : labelAtPointer ?? element?.closest<SVGGElement>('[data-net-label-id]')
       const labelId = labelElement?.dataset.netLabelId
       const wrapper = event.currentTarget.parentElement
       if (!wrapper) return
