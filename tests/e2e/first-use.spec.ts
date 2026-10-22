@@ -76,7 +76,8 @@ async function rightClickNetLabel(page: import('@playwright/test').Page, name: s
         if (!coveringPlot && !point.isTopmost) continue
         if (!coveringPlot) {
           await page.mouse.click(point.x, point.y, { button: 'right' })
-          return
+          const expectedMenu = page.getByRole('menu', { name: new RegExp(`Options for net ${name}`, 'i') })
+          if (await expectedMenu.isVisible().catch(() => false)) return
         }
         blocked.push({ box, plot: coveringPlot })
       }
@@ -96,8 +97,8 @@ async function rightClickNetLabel(page: import('@playwright/test').Page, name: s
   if (await labels.count()) {
     await labels.first().focus()
     await page.keyboard.press('Shift+F10')
-    const menu = page.locator('.schematic-context-menu')
-    if (await menu.count()) return
+    const expectedMenu = page.getByRole('menu', { name: new RegExp(`Options for net ${name}`, 'i') })
+    if (await expectedMenu.isVisible().catch(() => false)) return
   }
   throw new Error(`No visible, unobstructed label for net ${name} can be right-clicked`)
 }

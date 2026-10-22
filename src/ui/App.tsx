@@ -1897,9 +1897,20 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
       event.preventDefault()
       contextMenuReturnFocusRef.current = document.activeElement instanceof HTMLElement || document.activeElement instanceof SVGElement ? document.activeElement : null
       const element = event.target instanceof Element ? event.target : null
+      // Text labels can overlap pin/component hit targets. Prefer a label whose
+      // rendered text actually contains the pointer so right-clicking a net
+      // label opens its actions even when a symbol is painted above it.
+      const labelsUnderPointer = Array.from(event.currentTarget.querySelectorAll<SVGGElement>('[data-net-label-id]'))
+      const labelAtPointer = labelsUnderPointer.find((label) => {
+        const text = label.querySelector('text')
+        if (!text) return false
+        const bounds = text.getBoundingClientRect()
+        return event.clientX >= bounds.left && event.clientX <= bounds.right
+          && event.clientY >= bounds.top && event.clientY <= bounds.bottom
+      })
       const partElement = element?.closest<SVGGElement>('[data-part-id]')
       const wireElement = element?.closest<SVGGElement>('[data-wire-id]')
-      const labelElement = element?.closest<SVGGElement>('[data-net-label-id]')
+      const labelElement = labelAtPointer ?? element?.closest<SVGGElement>('[data-net-label-id]')
       const labelId = labelElement?.dataset.netLabelId
       const wrapper = event.currentTarget.parentElement
       if (!wrapper) return
