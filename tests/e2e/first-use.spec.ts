@@ -3847,7 +3847,11 @@ test('hierarchy journey cross-probes one instance and restores parent selection 
   await expect(page.getByText(/Simulation complete|Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
 
   await page.locator('.canvas-toolbar button[title="Zoom in"]').click()
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets[0].view.zoom)).not.toBe(1)
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const displayedZoom = Number(document.querySelector('.zoom-label')?.textContent?.replace('%', ''))
+    return Math.round(project.sheets[0].view.zoom * 100) === displayedZoom
+  })).toBe(true)
   const rootView = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).sheets[0].view)
   const secondInstance = page.locator('.circuit-part[aria-label^="X2,"]')
   await secondInstance.focus()
@@ -10350,8 +10354,11 @@ test('current-source PWL point can be swept in the browser ngspice engine', { ta
     maxStep: '100u',
     parameterSweeps: [{ component: 'I1', sourceParameter: 'pwl.point.2', start: '1 mA', stop: '3 mA', points: 2 }],
   }
-  await page.addInitScript((projectJson) => localStorage.setItem('elsim:project:v7', projectJson), JSON.stringify(project))
   await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate((projectJson) => localStorage.setItem('elsim:project:v7', projectJson), JSON.stringify(project))
+  await page.reload()
+  await expect(page.locator('.project-title')).toHaveText('Current source and load')
   await page.keyboard.press('Escape')
   await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('I1')
   await expect(page.getByRole('combobox', { name: 'Parameter 1 source parameter' })).toHaveValue('pwl.point.2')
