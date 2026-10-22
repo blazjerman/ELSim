@@ -6,7 +6,7 @@ const animationListeners = new Set<() => void>()
 
 export function subscribeSimulationCursor(listener: () => void): () => void {
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => unsubscribeFrom(listeners, listener)
 }
 
 function subscribeNever(): () => void { return () => {} }
@@ -29,6 +29,13 @@ function scheduleNotification() {
   }
 }
 
+function unsubscribeFrom(subscribers: Set<() => void>, listener: () => void): void {
+  subscribers.delete(listener)
+  if (listeners.size || animationListeners.size || !notificationFrame) return
+  cancelAnimationFrame(notificationFrame)
+  notificationFrame = 0
+}
+
 export function setSimulationCursor(next: number | null): void {
   if (Object.is(sampleIndex, next)) return
   sampleIndex = next
@@ -49,7 +56,7 @@ export function setSimulationCursorForPlayback(next: number | null): void {
 
 export function subscribeSimulationCursorAnimation(listener: () => void): () => void {
   animationListeners.add(listener)
-  return () => animationListeners.delete(listener)
+  return () => unsubscribeFrom(animationListeners, listener)
 }
 
 export function useSimulationCursorAnimation(): number | null {

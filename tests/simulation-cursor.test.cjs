@@ -69,3 +69,66 @@ test('playback cursor updates notify in the current frame and cancel a queued sc
     global.cancelAnimationFrame = previousCancel
   }
 })
+
+test('simulation cursor cancels queued notification after its final subscriber unmounts', () => {
+  const previousRequest = global.requestAnimationFrame
+  const previousCancel = global.cancelAnimationFrame
+  const callbacks = new Map()
+  const cancelled = []
+  let nextFrame = 1
+  global.requestAnimationFrame = (callback) => {
+    const id = nextFrame++
+    callbacks.set(id, callback)
+    return id
+  }
+  global.cancelAnimationFrame = (id) => {
+    cancelled.push(id)
+    callbacks.delete(id)
+  }
+  let notifications = 0
+  const unsubscribe = subscribeSimulationCursor(() => { notifications += 1 })
+  try {
+    setSimulationCursor(42)
+    const frameId = callbacks.keys().next().value
+    assert.ok(frameId, 'cursor update schedules a frame while subscribed')
+
+    unsubscribe()
+
+    assert.deepEqual(cancelled, [frameId], 'the final unsubscription cancels the pending frame')
+    assert.equal(callbacks.size, 0)
+    assert.equal(notifications, 0)
+  } finally {
+    global.requestAnimationFrame = previousRequest
+    global.cancelAnimationFrame = previousCancel
+  }
+})
+
+test('one remaining simulation cursor subscriber keeps the shared notification alive', () => {
+  const previousRequest = global.requestAnimationFrame
+  const previousCancel = global.cancelAnimationFrame
+  const callbacks = new Map()
+  let nextFrame = 1
+  global.requestAnimationFrame = (callback) => {
+    const id = nextFrame++
+    callbacks.set(id, callback)
+    return id
+  }
+  global.cancelAnimationFrame = (id) => callbacks.delete(id)
+  const counts = { regular: 0, animation: 0 }
+  const removeRegular = subscribeSimulationCursor(() => { counts.regular += 1 })
+  const removeAnimation = subscribeSimulationCursorAnimation(() => { counts.animation += 1 })
+  try {
+    setSimulationCursor(84)
+    const frameId = callbacks.keys().next().value
+    removeRegular()
+    assert.equal(callbacks.has(frameId), true, 'the other subscriber still needs the queued notification')
+    const callback = callbacks.get(frameId)
+    callbacks.delete(frameId)
+    callback(16)
+    assert.deepEqual(counts, { regular: 0, animation: 1 })
+  } finally {
+    removeAnimation()
+    global.requestAnimationFrame = previousRequest
+    global.cancelAnimationFrame = previousCancel
+  }
+})
