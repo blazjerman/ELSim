@@ -20,6 +20,8 @@ export type NetlistSource = {
   role: 'component' | 'model' | 'analysis' | 'generated'
   assetId?: string
   assetLine?: number
+  generatedCopy?: boolean
+  generatedCopyId?: string
 }
 
 export type NetlistArtifact = {

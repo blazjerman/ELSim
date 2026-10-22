@@ -272,6 +272,25 @@ test('sheet block parameter defaults and overrides can call imported project fun
   assert.throws(() => validateProject(invalid), /unsupported block parameter override/)
 })
 
+test('stochastic imported model overrides inside reusable sheets keep their generated model and source mapping', () => {
+  const project = createBlockProject()
+  const content = '.SUBCKT MONTE_CARLO IN OUT PARAMS: RVAL={gauss(1k,0.1,3)}\nR1 IN OUT {RVAL}\n.ENDS MONTE_CARLO\n'
+  project.modelAssets = [{ id: 'stochastic-lib', filename: 'random.lib', content, sha256: 'c'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.sheets[1].parts.push({ id: 'child-model-instance', kind: 'subcircuit', ref: 'XMC1', value: '', modelName: 'MONTE_CARLO', modelPins: ['IN', 'OUT'], modelParameters: { RVAL: '2k' }, x: 500, y: 300, rotation: 0 })
+  project.sheets[1].parts.push({ id: 'child-model-instance-two', kind: 'subcircuit', ref: 'XMC2', value: '', modelName: 'MONTE_CARLO', modelPins: ['IN', 'OUT'], modelParameters: { RVAL: '3k' }, x: 700, y: 300, rotation: 0 })
+
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics.filter(({ severity }) => severity === 'error'), [])
+  assert.match(artifact.text, /^XMC1\s+\S+\s+\S+\s+ELSIM_OVERRIDE_child_model_instance$/m)
+  assert.match(artifact.text, /^XMC2\s+\S+\s+\S+\s+ELSIM_OVERRIDE_child_model_instance_two$/m)
+  assert.match(artifact.text, /^\.SUBCKT ELSIM_OVERRIDE_child_model_instance IN OUT PARAMS: RVAL=2k$/m)
+  assert.match(artifact.text, /^\.SUBCKT ELSIM_OVERRIDE_child_model_instance_two IN OUT PARAMS: RVAL=3k$/m)
+  assert.match(artifact.text, /^\.ENDS ELSIM_OVERRIDE_child_model_instance$/m)
+  assert.match(artifact.text, /^\.ENDS ELSIM_OVERRIDE_child_model_instance_two$/m)
+  assert.equal(artifact.text.split('\n').filter((line) => line === 'R1 IN OUT {RVAL}').length, 3, 'keep the original model body and one copy for each distinct override')
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'model-file:stochastic-lib' && source.assetLine === 2 && source.generatedCopy && source.generatedCopyId === 'ELSIM_OVERRIDE_child_model_instance'))
+})
+
 test('imported subcircuit defaults and instance overrides can call included library functions', () => {
   const project = createBlockProject()
   project.modelAssets = [

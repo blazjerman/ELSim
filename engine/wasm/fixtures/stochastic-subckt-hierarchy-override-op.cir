@@ -1,0 +1,13 @@
+* Explicit parameter override inside a reusable sheet must specialize the imported random default.
+V1 IN 0 5
+XLOAD IN OUT ELSIM_SHEET_sheet_load
+.SUBCKT ELSIM_OVERRIDE_child_model_instance IN OUT PARAMS: RVAL=2k
+R1 IN OUT {RVAL}
+.ENDS ELSIM_OVERRIDE_child_model_instance
+.SUBCKT ELSIM_SHEET_sheet_load IN OUT
+XMC1 IN OUT ELSIM_OVERRIDE_child_model_instance
+RLOAD OUT 0 1k
+.ENDS ELSIM_SHEET_sheet_load
+.op
+.print op v(out)
+.end
