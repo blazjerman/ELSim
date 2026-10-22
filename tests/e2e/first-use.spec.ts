@@ -1512,6 +1512,7 @@ test('keyboard focus remains visible in search, analysis, inspector, expandable 
 })
 
 test('waveform window title, plot, and navigation retain visible keyboard focus', { tag: '@ngspice' }, async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
@@ -1557,6 +1558,15 @@ test('waveform window title, plot, and navigation retain visible keyboard focus'
   await zoomIn.focus()
   await expect(zoomIn).toBeFocused()
   await expectFocusRing(zoomIn)
+
+  const playbackControls = page.getByRole('group', { name: 'Result playback' })
+  const simulationTime = playbackControls.getByRole('slider', { name: 'Simulation time' })
+  await simulationTime.focus()
+  await expect(simulationTime).toBeFocused()
+  await expect(simulationTime).toHaveAttribute('aria-valuetext', /(?:ps|ns|µs|ms|s)$/)
+  const playbackSpeed = playbackControls.getByRole('combobox', { name: 'Simulation playback speed' })
+  await playbackSpeed.focus()
+  await expect(playbackSpeed).toBeFocused()
 })
 
 test('closing floating waveform windows restores keyboard focus', { tag: '@ui-smoke' }, async ({ page }) => {
