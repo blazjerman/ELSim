@@ -802,7 +802,7 @@ test('example picker offers a short beginner path before the full catalog', { ta
   await expect(cards).toHaveCount(allExampleCount)
 })
 
-test('guided starter lessons continue in order and confirm before replacing the current circuit', { tag: '@ui-smoke' }, async ({ page }) => {
+test('guided starter path continues through all seven lessons and confirms circuit replacement', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
   const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
@@ -828,6 +828,22 @@ test('guided starter lessons continue in order and confirm before replacing the 
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(secondLesson.getByRole('button', { name: 'Continue to next lesson' })).toBeVisible()
   await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
+
+  const remainingLessons = [
+    { title: 'RC step response', step: 3 },
+    { title: 'Voltage divider', step: 4 },
+    { title: 'Voltage drops in series resistors', step: 5 },
+    { title: 'LED current limiter', step: 6 },
+    { title: 'Capacitor discharge', step: 7 },
+  ]
+  for (const next of remainingLessons) {
+    await secondLesson.getByRole('button', { name: 'Continue to next lesson' }).click()
+    const replace = page.getByRole('alertdialog', { name: 'Replace the current circuit?' })
+    await expect(replace).toContainText(next.title)
+    await replace.getByRole('button', { name: 'Replace and open' }).click()
+    await expect(secondLesson).toContainText(`START HERE · STEP ${next.step} OF 7`)
+  }
+  await expect(secondLesson.getByRole('button', { name: 'Continue to next lesson' })).toHaveCount(0)
 })
 
 test('opening an example replaces stale multi-selection with its lesson component', { tag: '@ui-smoke' }, async ({ page }) => {
