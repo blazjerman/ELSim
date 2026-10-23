@@ -5617,13 +5617,13 @@ test('native ngspice subcircuit parameter expressions solve with comparisons, lo
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
-  const library = '.SUBCKT SELECT_GAIN IN OUT PARAMS: VSEL=0 GAIN={VSEL >= 2.5 && VSEL < 5 ? 2 : 1}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS SELECT_GAIN\n'
+  const library = '.SUBCKT SELECT_GAIN IN OUT PARAMS: VSEL=0 GAIN={VSEL >= 2.5 && VSEL < 5 ? 2 : 1} DATAFILE="input table.csv"\nE1 OUT 0 IN 0 {GAIN}\n.ENDS SELECT_GAIN\n'
   const sha256 = createHash('sha256').update(library).digest('hex')
   const asset = { id: 'model-native-expression', filename: 'native-expression.lib', content: library, sha256, licenseStatus: 'unknown' as const, importedAt: new Date(0).toISOString() }
   const definition = importedSubcircuitComponentDefinition(parseSubcircuitLibrary(library).subcircuits[0], { assetId: asset.id, filename: asset.filename, sha256 })
   const project = createStarterProject()
   const source = { id: 'v-native-expression', kind: 'source' as const, ref: 'V1', value: '1 V', x: 180, y: 360, rotation: 0 as const, componentDefinitionId: componentDefinitionFor('source').id }
-  const block = { id: 'x-native-expression', kind: 'subcircuit' as const, ref: 'X1', value: 'SELECT_GAIN', modelName: 'SELECT_GAIN', modelPins: ['IN', 'OUT'], modelParameters: { VSEL: '3' }, componentDefinitionId: definition.id, x: 360, y: 360, rotation: 0 as const }
+  const block = { id: 'x-native-expression', kind: 'subcircuit' as const, ref: 'X1', value: 'SELECT_GAIN', modelName: 'SELECT_GAIN', modelPins: ['IN', 'OUT'], modelParameters: { VSEL: '3', DATAFILE: '"selected table.csv"' }, componentDefinitionId: definition.id, x: 360, y: 360, rotation: 0 as const }
   const load = { id: 'r-native-expression', kind: 'resistor' as const, ref: 'R1', value: '1 kΩ', x: 540, y: 360, rotation: 0 as const, componentDefinitionId: componentDefinitionFor('resistor').id }
   project.name = 'Native ngspice conditional parameter'
   project.parts = [source, block, load]
@@ -5653,6 +5653,7 @@ test('native ngspice subcircuit parameter expressions solve with comparisons, lo
   await expect(operatingPoint.getByRole('row', { name: /V\(vout\)/ })).toContainText('2.000000')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('VSEL=3')
+  await expect(page.locator('.netlist-modal pre')).toContainText('DATAFILE="selected table.csv"')
 })
 
 test('native ngspice Monte Carlo subcircuit parameter defaults import and solve', { tag: '@ngspice' }, async ({ page }) => {
@@ -11163,13 +11164,13 @@ test('model-library import identifies a .ENDS name mismatch at its source line',
 test('imported subcircuit-local .FUNC validates IC defaults and instance overrides', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
-  const library = '.SUBCKT LOCAL_GAIN IN OUT GAIN={DOUBLE(2)}\n.FUNC DOUBLE(x) {2*x}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS LOCAL_GAIN\n'
+  const library = '.SUBCKT LOCAL_GAIN IN OUT GAIN={DOUBLE(2)} DATAFILE="default table.txt"\n.FUNC DOUBLE(x) {2*x}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS LOCAL_GAIN\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'local-function.lib', mimeType: 'text/plain', buffer: Buffer.from(library),
   })
   const model = page.locator('.imported-model').filter({ hasText: 'LOCAL_GAIN' })
-  await expect(model).toContainText('Parameters: GAIN={DOUBLE(2)}')
+  await expect(model).toContainText('Parameters: GAIN={DOUBLE(2)}, DATAFILE="default table.txt"')
   await model.getByRole('button', { name: 'Create simple symbol & place' }).click()
 
   const part = page.locator('.circuit-part[aria-label^="X1,"]')
@@ -11181,12 +11182,19 @@ test('imported subcircuit-local .FUNC validates IC defaults and instance overrid
   await parameter.blur()
   await expect(parameter).not.toHaveAttribute('aria-invalid', 'true')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((item: { ref: string }) => item.ref === 'X1')?.modelParameters)).toEqual({ GAIN: '{DOUBLE(4)}' })
+  const filename = page.getByRole('textbox', { name: 'DATAFILE model value' })
+  await expect(filename).toHaveValue('"default table.txt"')
+  await filename.fill('"selected data table.csv"')
+  await filename.blur()
+  await expect(filename).not.toHaveAttribute('aria-invalid', 'true')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((item: { ref: string }) => item.ref === 'X1')?.modelParameters)).toEqual({ GAIN: '{DOUBLE(4)}', DATAFILE: '"selected data table.csv"' })
 
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')
   await expect(netlist).toContainText('.FUNC DOUBLE(x) {2*x}')
-  await expect(netlist).toContainText('.SUBCKT LOCAL_GAIN IN OUT GAIN={DOUBLE(2)}')
+  await expect(netlist).toContainText('.SUBCKT LOCAL_GAIN IN OUT GAIN={DOUBLE(2)} DATAFILE="default table.txt"')
   await expect(netlist).toContainText('GAIN={DOUBLE(4)}')
+  await expect(netlist).toContainText('DATAFILE="selected data table.csv"')
 })
 
 test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {

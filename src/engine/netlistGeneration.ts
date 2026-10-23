@@ -662,7 +662,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const functions = part.sheetId ? projectModelFunctions : subcircuitFunctionsByName.get(definition.name.toLowerCase())
       const invalidParameter = Object.entries(overrides ?? {}).find(([name, value]) => !definition.parameters.some((parameter) => parameter.name.toLowerCase() === name.toLowerCase()) || !isSafeSubcircuitParameterValue(value, functions))
       if (invalidParameter) {
-        const message = `${part.ref} has an invalid value for subcircuit parameter ${cleanComment(invalidParameter[0])}. Enter a numeric SPICE value such as 10k or 2.5.`
+        const message = `${part.ref} has an invalid value for subcircuit parameter ${cleanComment(invalidParameter[0])}. Enter a numeric SPICE value, a supported math expression, or a double-quoted string.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue

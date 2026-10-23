@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { createHash } = require('node:crypto')
 const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
@@ -1718,9 +1719,10 @@ test('N- and P-channel JFETs generate J devices in D-G-S order and matching teac
 
 test('imported subcircuits preserve declared .FUNC expressions in validated parameter overrides', () => {
   const project = createStarterProject()
-  const content = '.FUNC DOUBLE(x) {2*x}\n.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN={DOUBLE(2)}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS gain\n'
-  project.modelAssets = [{ id: 'model-gain', filename: 'gain.lib', content, sha256: '204a70330fd3a6eaa3a42e469e18b6c73596a9ace6d5c6fad84939961f516d5b', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'gain', modelName: 'gain', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], modelParameters: { GAIN: '{DOUBLE(3)}' }, x: 760, y: 350, rotation: 0 })
+  const content = '.FUNC DOUBLE(x) {2*x}\n.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN={DOUBLE(2)} DATAFILE="default table.txt"\nE1 OUT 0 IN 0 {GAIN}\n.ENDS gain\n'
+  const sha256 = createHash('sha256').update(content).digest('hex')
+  project.modelAssets = [{ id: 'model-gain', filename: 'gain.lib', content, sha256, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.parts.push({ id: 'p-x1', kind: 'subcircuit', ref: 'X1', value: 'gain', modelName: 'gain', modelPins: ['IN', 'OUT', 'VCC', 'VEE'], modelParameters: { GAIN: '{DOUBLE(3)}', DATAFILE: '"selected table.txt"' }, x: 760, y: 350, rotation: 0 })
   project.netLabels.push(
     { id: 'x-in', name: 'xinput', x: 680, y: 338, visible: false },
     { id: 'x-out', name: 'xoutput', x: 840, y: 338, visible: false },
@@ -1731,8 +1733,8 @@ test('imported subcircuits preserve declared .FUNC expressions in validated para
   assert.deepEqual(componentPins(validated.parts.at(-1)).map(({ x, y }) => [x - 760, y - 350]), [[-80, -10], [80, -10], [-80, 10], [80, 10]])
   const artifact = createNetlistArtifact(validated)
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^X1 xinput xoutput xvcc xvee gain PARAMS: GAIN=\{DOUBLE\(3\)\}$/m)
-  assert.match(artifact.text, /^\.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN=\{DOUBLE\(2\)\}$/m)
+  assert.match(artifact.text, /^X1 xinput xoutput xvcc xvee gain PARAMS: GAIN=\{DOUBLE\(3\)\} DATAFILE="selected table.txt"$/m)
+  assert.match(artifact.text, /^\.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN=\{DOUBLE\(2\)\} DATAFILE="default table.txt"$/m)
   assert.match(artifact.text, /^E1 OUT 0 IN 0 \{GAIN\}$/m)
   assert.equal(artifact.sourceMap.find((entry) => entry.sourceId === 'p-x1')?.role, 'component')
   assert.equal(artifact.sourceMap.filter((entry) => entry.sourceId === 'model-file:model-gain').length, 4)

@@ -10,8 +10,8 @@ const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyz
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('accepts bounded ngspice parameter operators and deterministic math functions', () => {
-  for (const value of ['1k', '1mil', '1a', '10kOhm', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
-  for (const value of ['{if(RLOAD, 1k, 2k)}', '{system(RLOAD)}', '{sqrt(1, 2)}', '{pow(2)}', '{max(1, 2, 3)}', '{sqrt()}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', '{RLOAD and 1}', '{not RLOAD}', '{RLOAD mod 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+  for (const value of ['1k', '1mil', '1a', '10kOhm', '"input table.csv"', '"C:/models/my table.txt"', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
+  for (const value of ['"unterminated', '"two"quotes"', '"line\nbreak"', '"' + 'A'.repeat(63) + '"', '{if(RLOAD, 1k, 2k)}', '{system(RLOAD)}', '{sqrt(1, 2)}', '{pow(2)}', '{max(1, 2, 3)}', '{sqrt()}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', '{RLOAD and 1}', '{not RLOAD}', '{RLOAD mod 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
   const functions = new Map([['double', 1], ['blend', 2]])
   assert.equal(isSafeSubcircuitParameterValue('{DOUBLE(RLOAD)}', functions), true)
   assert.equal(isSafeSubcircuitParameterValue('{blend(1, 2)}', functions), true)
@@ -731,8 +731,9 @@ test('accepts hyphens inside ngspice model and subcircuit identifiers', () => {
 
 test('parses native ngspice subcircuit defaults with and without PARAMS:', () => {
   const source = [
-    '.SUBCKT AMP IN OUT gain=2 RLOAD = 10k',
+    '.SUBCKT AMP IN OUT gain=2 RLOAD = 10k FILE="input table.txt"',
     'E1 OUT 0 IN 0 {gain}',
+    '.MODEL SOURCE_MODEL d_source(input_file="{FILE}")',
     '.ENDS AMP',
     '.SUBCKT BUFFER IN OUT PARAMS: delay=1u',
     'R1 IN OUT 1k',
@@ -740,9 +741,10 @@ test('parses native ngspice subcircuit defaults with and without PARAMS:', () =>
   ].join('\n')
   const parsed = parseSubcircuitLibrary(source)
   assert.deepEqual(parsed.subcircuits.map(({ name, pins, parameters }) => ({ name, pins, parameters })), [
-    { name: 'AMP', pins: ['IN', 'OUT'], parameters: [{ name: 'gain', defaultValue: '2' }, { name: 'RLOAD', defaultValue: '10k' }] },
+    { name: 'AMP', pins: ['IN', 'OUT'], parameters: [{ name: 'gain', defaultValue: '2' }, { name: 'RLOAD', defaultValue: '10k' }, { name: 'FILE', defaultValue: '"input table.txt"' }] },
     { name: 'BUFFER', pins: ['IN', 'OUT'], parameters: [{ name: 'delay', defaultValue: '1u' }] },
   ])
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'input_file', defaultValue: '"{FILE}"' }])
   assert.equal(parsed.modelText, source)
 })
 

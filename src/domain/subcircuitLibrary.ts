@@ -358,7 +358,7 @@ function isLibrarySectionDollar(line: string, dollarIndex: number): boolean {
 function parseParameterDefaults(source: string, line: number, functions: ReadonlyMap<string, number>): SubcircuitParameter[] {
   const result: SubcircuitParameter[] = []
   let offset = 0
-  const assignment = /\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|'[^']*'|[^\s]+)\s*/gy
+  const assignment = /\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s]+)\s*/gy
   while (offset < source.length) {
     assignment.lastIndex = offset
     const match = assignment.exec(source)
@@ -506,7 +506,7 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
     : undefined
   const parameters: SubcircuitParameter[] = []
   const parameterIndex = new Map<string, number>()
-  for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|'[^']*'|[^\s,)]+)/g)) {
+  for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g)) {
     const value = match[2].replace(/^\{([\s\S]*)\}$|^'([\s\S]*)'$/, (_whole, braced: string | undefined, quoted: string | undefined) => braced ?? quoted ?? _whole)
     if (!isSafeSubcircuitParameterValue(match[2], functions)) continue
     const parameter = { name: match[1], defaultValue: value }
@@ -684,6 +684,10 @@ function dependencyOnLine(text: string, owner: string, sourceLine: number): Mode
 export function isSafeSubcircuitParameterValue(value: string, customFunctions: ReadonlyMap<string, number> = new Map()): boolean {
   if (typeof value !== 'string' || value.length > 64) return false
   const trimmed = value.trim()
+  // ngspice permits string-valued formal parameters in subcircuits (for
+  // example, a filename passed to a source model). Keep the accepted form
+  // narrow: one double-quoted, single-line literal. ELSim never evaluates it.
+  if (trimmed.startsWith('"') || trimmed.endsWith('"')) return /^"[^"\u0000-\u001f\u007f]*"$/.test(trimmed)
   const quoted = trimmed.startsWith("'") || trimmed.endsWith("'")
   if (quoted && !(trimmed.startsWith("'") && trimmed.endsWith("'"))) return false
   const expressionSource = quoted ? trimmed.slice(1, -1) : trimmed.replace(/^\{(.*)\}$/, '$1')
