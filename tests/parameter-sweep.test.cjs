@@ -8,6 +8,7 @@ const { createStarterProject, validateProject } = require(path.join(build, 'doma
 const { componentMagnitude, createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { prepareParameterSweep } = require(path.join(build, 'engine/sweep.js'))
 const { addResultControl } = require(path.join(build, 'engine/resultControl.js'))
+const { createUrcLineExampleProject } = require(path.join(build, 'domain/examples.js'))
 
 test('engineering units parse to base magnitudes for resistor, capacitor, and inductor values', () => {
   assert.equal(componentMagnitude('1 kΩ', 'resistor'), 1000)
@@ -295,7 +296,29 @@ test('imported device model parameters are validated and emitted with altermod',
   const control = addResultControl(createNetlistArtifact(validated).text, runs)
   assert.match(control, /altermod USER_NPN BF=8\.00000000e\+1\nrun/)
   project.simulation.parameterSweeps[0].parameter = 'UNSAFE'
-  assert.throws(() => validateProject(project), /numeric parameters on selected imported device models/)
+  assert.throws(() => validateProject(project), /numeric parameters on selected imported devices or ICs/)
+})
+
+test('imported IC instance parameters become alterparam-driven sweep cases', () => {
+  const project = createUrcLineExampleProject()
+  project.simulation.parameterSweeps = [{ component: 'XLINE', parameter: 'LENGTH', instanceParameter: true, start: '1m', stop: '3m', points: 3 }]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => run.label), ['XLINE.LENGTH=0.001', 'XLINE.LENGTH=0.002', 'XLINE.LENGTH=0.003'])
+  assert.deepEqual(runs.map((run) => run.values[0]), [
+    { component: 'XLINE', value: '1.00000000e-3', parameter: 'LENGTH', model: 'URC_LINE', instanceParameter: true },
+    { component: 'XLINE', value: '2.00000000e-3', parameter: 'LENGTH', model: 'URC_LINE', instanceParameter: true },
+    { component: 'XLINE', value: '3.00000000e-3', parameter: 'LENGTH', model: 'URC_LINE', instanceParameter: true },
+  ])
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /^\.param ELSIM_SWEEP_IC_XLINE_LENGTH=1\.00000000e-3$/m)
+  assert.match(control, /^XLINE IN OUT 0 URC_LINE PARAMS: LENGTH=\{ELSIM_SWEEP_IC_XLINE_LENGTH\}$/m)
+  assert.match(control, /alterparam ELSIM_SWEEP_IC_XLINE_LENGTH=1\.00000000e-3\nreset\nrun/)
+  assert.equal((control.match(/write \/result-\d+\.raw all/g) ?? []).length, 3)
+  project.simulation.parameterSweeps[0].parameter = 'UNKNOWN'
+  assert.throws(() => validateProject(project), /including numeric parameters on selected imported devices or ICs/)
+  project.simulation.parameterSweeps[0] = { component: 'XLINE', parameter: 'LENGTH', instanceParameter: true, start: 'one', stop: '3m', points: 3 }
+  assert.throws(() => validateProject(project), /valid, different parameter start and stop values/)
 })
 
 test('imported SW and CSW model parameters can be stepped on their matching switches', () => {

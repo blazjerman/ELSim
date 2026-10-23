@@ -11,14 +11,18 @@ const sourceParameterLabels: Record<string, string> = {
   'sffm.offset': 'Offset', 'sffm.amplitude': 'Amplitude', 'sffm.carrierFrequency': 'Carrier frequency', 'sffm.modulationIndex': 'Modulation index', 'sffm.signalFrequency': 'Signal frequency',
 }
 
-export default function ParameterSweepEditor({ parts, sweeps, models, parameters: globalParameters, analysis, dcSweepSource, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean }[] }[]; parameters: { name: string; defaultValue: string }[]; analysis: Project['simulation']['analysis']; dcSweepSource?: string; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
+export default function ParameterSweepEditor({ parts, sweeps, models, subcircuits, parameters: globalParameters, analysis, dcSweepSource, onAdd, onChange, onRemove }: { parts: Part[]; sweeps: ParameterSweep[]; models: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean }[] }[]; subcircuits: { name: string; parameters: { name: string; defaultValue: string; defaultVariesByCondition?: boolean }[] }[]; parameters: { name: string; defaultValue: string }[]; analysis: Project['simulation']['analysis']; dcSweepSource?: string; onAdd: () => void; onChange: (index: number, patch: Partial<ParameterSweep>) => void; onRemove: (index: number) => void }) {
   const [listDrafts, setListDrafts] = useState<Record<number, string>>({})
   const [listErrors, setListErrors] = useState<Record<number, string>>({})
   const [componentSearches, setComponentSearches] = useState<Record<number, string>>({})
   const modelsByName = useMemo(() => new Map(models.map((model) => [model.name.toLowerCase(), model])), [models])
+  const subcircuitsByName = useMemo(() => new Map(subcircuits.map((model) => [model.name.toLowerCase(), model])), [subcircuits])
   const partsByRef = useMemo(() => new Map(parts.map((part) => [part.ref.toLowerCase(), part])), [parts])
   const modelFor = (part?: Part) => part?.deviceModel ? modelsByName.get(part.deviceModel.toLowerCase()) : undefined
   const numericModelParameters = (part?: Part) => modelFor(part)?.parameters.filter((parameter) => spiceModelParameterMagnitude(parameter.defaultValue) !== null) ?? []
+  const subcircuitFor = (part?: Part) => part?.kind === 'subcircuit' && !part.sheetId ? subcircuitsByName.get(part.modelName?.toLowerCase() ?? '') : undefined
+  const numericSubcircuitParameters = (part?: Part) => subcircuitFor(part)?.parameters.filter((parameter) => spiceModelParameterMagnitude(Object.entries(part?.modelParameters ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1] ?? parameter.defaultValue) !== null) ?? []
+  const parameterDefault = (part: Part, name: string, fallback: string) => Object.entries(part.modelParameters ?? {}).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1] ?? fallback
   const modelRange = (value: string) => { const magnitude = spiceModelParameterMagnitude(value); const unit = value.trim().replaceAll(' ', '').match(/(?:ohms?|hz|[vasfhw])$/i)?.[0]; return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}${unit ? ` ${unit}` : ''}` } }
   const sourceMode = (part: Part) => part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')
   const sourceValue = (part: Part, parameter: string) => {
@@ -49,17 +53,18 @@ export default function ParameterSweepEditor({ parts, sweeps, models, parameters
   const supportedSourceModes = ['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm']
   const eligible = useMemo(() => {
     const eligibleModelHasNumericParameter = (part: Part) => modelsByName.get(part.deviceModel?.toLowerCase() ?? '')?.parameters.some((parameter) => spiceModelParameterMagnitude(parameter.defaultValue) !== null) ?? false
+    const eligibleSubcircuitHasNumericParameter = (part: Part) => part.kind === 'subcircuit' && numericSubcircuitParameters(part).length > 0
     return analysis === 'dc'
       ? parts.filter((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'dc' && part.ref.toLowerCase() !== dcSweepSource?.toLowerCase())
-      : parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === undefined || supportedSourceModes.includes(part.sourceMode))) || (part.kind === 'source' && supportedSourceModes.includes(part.sourceMode ?? 'pulse')) || eligibleModelHasNumericParameter(part))
-  }, [analysis, dcSweepSource, modelsByName, parts])
+      : parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === undefined || supportedSourceModes.includes(part.sourceMode))) || (part.kind === 'source' && supportedSourceModes.includes(part.sourceMode ?? 'pulse')) || eligibleModelHasNumericParameter(part) || eligibleSubcircuitHasNumericParameter(part))
+  }, [analysis, dcSweepSource, modelsByName, parts, subcircuitsByName])
   const numericParameters = useMemo(() => analysis === 'tran' ? globalParameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) : [], [analysis, globalParameters])
   const targetCount = eligible.length + numericParameters.length
   const parameterOptions = useMemo(() => globalParameters.filter((parameter) => numericParameters.includes(parameter) || sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase())), [globalParameters, numericParameters, sweeps])
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
-    <p className="field-hint">{analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : 'Compare up to 10 transient cases while changing passive values, scalar DC or waveform amplitude, PWL amplitude scales, or numeric parameters from imported device models.'}</p>
+    <p className="field-hint">{analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : 'Compare up to 10 transient cases while changing passive values, scalar DC or waveform amplitude, PWL amplitude scales, or numeric parameters from imported device models and ICs.'}</p>
     {sweeps.map((sweep, index) => {
       const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
       const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
@@ -70,7 +75,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, parameters
       const selectedEligible = eligible.find((part) => part.ref.toLowerCase() === sweep.component.toLowerCase())
       if (selectedEligible && !visibleEligible.some((part) => part.id === selectedEligible.id)) visibleEligible.push(selectedEligible)
       const selectedPart = partsByRef.get(sweep.component.toLowerCase())
-      const selectedModelParameters = numericModelParameters(selectedPart)
+      const selectedModelParameters = sweep.instanceParameter ? numericSubcircuitParameters(selectedPart) : numericModelParameters(selectedPart)
       const selectedSourceMode = selectedPart ? sourceMode(selectedPart) : ''
       const sourceParameterOptions = selectedPart
         ? Object.entries(sourceParameterLabels)
@@ -90,30 +95,38 @@ export default function ParameterSweepEditor({ parts, sweeps, models, parameters
             const parameter = globalParameters.find((item) => item.name.toLowerCase() === event.target.value.slice('$param:'.length).toLowerCase())
             if (!parameter) return
             const magnitude = componentMagnitude(parameter.defaultValue, 'resistor')
-            onChange(index, { component: `$param:${parameter.name}`, globalParameter: parameter.name, listValues: undefined, parameter: undefined, sourceParameter: undefined, start: parameter.defaultValue, stop: magnitude === null ? parameter.defaultValue : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` })
+            onChange(index, { component: `$param:${parameter.name}`, globalParameter: parameter.name, listValues: undefined, parameter: undefined, instanceParameter: undefined, sourceParameter: undefined, start: parameter.defaultValue, stop: magnitude === null ? parameter.defaultValue : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}` })
             return
           }
           const nextPart = eligible.find((item) => item.ref === event.target.value)
           if (!nextPart) return
           const parameters = numericModelParameters(nextPart)
+          const icParameters = numericSubcircuitParameters(nextPart)
+          if (icParameters.length) {
+            const parameter = icParameters[0]
+            const initial = parameterDefault(nextPart, parameter.name, parameter.defaultValue)
+            const { start, stop } = modelRange(initial)
+            onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: parameter.name, instanceParameter: true, sourceParameter: undefined, start, stop })
+            return
+          }
           if (parameters.length) {
             const parameter = parameters[0]
             const { start, stop } = modelRange(parameter.defaultValue)
-            onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: parameter.name, sourceParameter: undefined, start, stop })
+            onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: parameter.name, instanceParameter: undefined, sourceParameter: undefined, start, stop })
             return
           }
           if (nextPart.sourceMode === 'pwl') {
-            onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: undefined, sourceParameter: undefined, start: '1', stop: '2' })
+            onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: undefined, instanceParameter: undefined, sourceParameter: undefined, start: '1', stop: '2' })
             return
           }
           const sourceAmplitude = nextPart.sourceMode === 'sine' ? nextPart.sine?.amplitude : nextPart.sourceMode === 'exp' ? nextPart.exp?.pulsed : nextPart.sourceMode === 'sffm' ? nextPart.sffm?.amplitude : undefined
           const startValue = sourceAmplitude ?? nextPart.value
           const magnitude = componentMagnitude(startValue, nextPart.kind)
           const unit = nextPart.kind === 'source' ? 'V' : nextPart.kind === 'currentSource' ? 'A' : nextPart.kind === 'resistor' || nextPart.kind === 'potentiometer' || nextPart.kind === 'lamp' ? 'Ω' : nextPart.kind === 'capacitor' ? 'F' : 'H'
-          onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: undefined, sourceParameter: undefined, start: startValue, stop: magnitude === null ? startValue : `${(magnitude * 2).toExponential(5)} ${unit}` })
+          onChange(index, { component: nextPart.ref, globalParameter: undefined, listValues: undefined, parameter: undefined, instanceParameter: undefined, sourceParameter: undefined, start: startValue, stop: magnitude === null ? startValue : `${(magnitude * 2).toExponential(5)} ${unit}` })
         }}>{parameterOptions.map((parameter) => <option key={`param:${parameter.name}`} value={`$param:${parameter.name}`} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && other.globalParameter?.toLowerCase() === parameter.name.toLowerCase())}>Global · {parameter.name}</option>)}{visibleEligible.map((item) => <option key={item.id} value={item.ref} disabled={sweeps.some((other, otherIndex) => otherIndex !== index && !other.globalParameter && other.component.toLowerCase() === item.ref.toLowerCase())}>{item.ref} · {kindNames[item.kind]}</option>)}</select></label>
-        {selectedModelParameters.length > 0 && <label className="field-label">Imported model parameter<select aria-label={`Parameter ${index + 1} model parameter`} value={sweep.parameter ?? ''} onChange={(event) => { const parameter = selectedModelParameters.find((item) => item.name === event.target.value); if (!parameter) return; const { start, stop } = modelRange(parameter.defaultValue); onChange(index, { parameter: parameter.name, sourceParameter: undefined, start, stop }) }}>{selectedModelParameters.map((parameter) => <option key={parameter.name} value={parameter.name}>{parameter.name} · {parameter.defaultVariesByCondition ? `branch defaults vary (first: ${parameter.defaultValue})` : `default ${parameter.defaultValue}`}</option>)}</select></label>}
-        {sourceParameterOptions.length > 0 && selectedPart && <label className="field-label">Source waveform parameter<select aria-label={`Parameter ${index + 1} source parameter`} value={sweep.sourceParameter ?? defaultSourceParameter ?? ''} onChange={(event) => { const sourceParameter = event.target.value as ParameterSweep['sourceParameter']; if (!sourceParameter) return; const range = sourceRange(selectedPart, sourceParameter); onChange(index, { parameter: undefined, sourceParameter, start: range.start, stop: range.stop }) }}>{sourceParameterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
+        {selectedModelParameters.length > 0 && <label className="field-label">{sweep.instanceParameter ? 'Imported IC parameter' : 'Imported model parameter'}<select aria-label={`Parameter ${index + 1} ${sweep.instanceParameter ? 'IC' : 'model'} parameter`} value={sweep.parameter ?? ''} onChange={(event) => { const parameter = selectedModelParameters.find((item) => item.name === event.target.value); if (!parameter || !selectedPart) return; const initial = sweep.instanceParameter ? parameterDefault(selectedPart, parameter.name, parameter.defaultValue) : parameter.defaultValue; const { start, stop } = modelRange(initial); onChange(index, { parameter: parameter.name, instanceParameter: sweep.instanceParameter || undefined, sourceParameter: undefined, start, stop }) }}>{selectedModelParameters.map((parameter) => { const value = sweep.instanceParameter && selectedPart ? parameterDefault(selectedPart, parameter.name, parameter.defaultValue) : parameter.defaultValue; return <option key={parameter.name} value={parameter.name}>{parameter.name} · {parameter.defaultVariesByCondition ? `branch defaults vary (first: ${value})` : `default ${value}`}</option>})}</select></label>}
+        {sourceParameterOptions.length > 0 && selectedPart && <label className="field-label">Source waveform parameter<select aria-label={`Parameter ${index + 1} source parameter`} value={sweep.sourceParameter ?? defaultSourceParameter ?? ''} onChange={(event) => { const sourceParameter = event.target.value as ParameterSweep['sourceParameter']; if (!sourceParameter) return; const range = sourceRange(selectedPart, sourceParameter); onChange(index, { parameter: undefined, instanceParameter: undefined, sourceParameter, start: range.start, stop: range.stop }) }}>{sourceParameterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
         {(!sweep.listValues || analysis === 'dc') && <div className="parameter-sweep-inputs"><label className="field-label">Start<input aria-label={`Parameter ${index + 1} start value`} value={sweep.start} onChange={(event) => onChange(index, { start: event.target.value })}/></label><label className="field-label">Stop<input aria-label={`Parameter ${index + 1} stop value`} value={sweep.stop} onChange={(event) => onChange(index, { stop: event.target.value })}/></label></div>}
         {sweep.listValues && analysis === 'dc' && <small className="field-hint">Imported secondary values: {sweep.listValues.join(', ')}. Editing the range or count makes the values evenly spaced.</small>}
         {sweep.globalParameter && sweep.listValues ? <label className="field-label">Discrete values<input aria-label={`Parameter ${index + 1} discrete values`} value={listDrafts[index] ?? sweep.listValues.join(', ')} onChange={(event) => setListDrafts((current) => ({ ...current, [index]: event.target.value }))} onBlur={() => { const values = (listDrafts[index] ?? sweep.listValues!.join(', ')).split(',').map((value) => value.trim()).filter(Boolean); const valid = values.length >= 2 && values.length <= maxPoints && values.every((value) => componentMagnitude(value, 'resistor') !== null); if (!valid) { setListErrors((current) => ({ ...current, [index]: `Enter 2–${maxPoints} numeric values separated by commas.` })); return } setListErrors((current) => ({ ...current, [index]: '' })); onChange(index, { listValues: values, start: values[0], stop: values.at(-1)!, points: values.length }) }}/>{listErrors[index] && <small className="field-error" role="alert">{listErrors[index]}</small>}<small className="field-hint">Imported discrete sweep values; edit as a comma-separated list.</small></label> : <label className="field-label">Number of values<input aria-label={`Parameter ${index + 1} number of values`} type="number" min="2" max={maxPoints} value={sweep.points} onChange={(event) => onChange(index, { listValues: undefined, points: Number(event.target.value) })}/></label>}

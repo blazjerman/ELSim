@@ -17,6 +17,8 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const amplitudeParameters = new Map([...new Set(amplitudeSweeps)].map((component) => [component.toLowerCase(), `ELSIM_SWEEP_WAVE_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_AMPLITUDE`]))
   const sourceFieldTargets = parameterSweep.flatMap((run) => run.values.filter((value) => value.sourceParameter).map((value) => ({ component: value.component, sourceParameter: value.sourceParameter! })))
   const sourceFieldParameters = new Map(sourceFieldTargets.map(({ component, sourceParameter }) => [`${component.toLowerCase()}.${sourceParameter}`, `ELSIM_SWEEP_SOURCE_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_${sourceParameter.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}`]))
+  const instanceParameterTargets = parameterSweep.flatMap((run) => run.values.filter((value) => value.instanceParameter && value.parameter).map((value) => ({ component: value.component, parameter: value.parameter! })))
+  const instanceParameters = new Map(instanceParameterTargets.map(({ component, parameter }) => [`${component.toLowerCase()}.${parameter.toLowerCase()}`, { component, parameter, generated: `ELSIM_SWEEP_IC_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_${parameter.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}` }]))
   const waveformParameterRows = [...pulseParameters].map(([component, parameter]) => {
     const line = rows.findIndex((row) => row.trim().match(new RegExp(`^${component}\\s`, 'i')))
     if (line < 0) throw new Error(`Pulse source ${component} is missing from the generated netlist.`)
@@ -91,6 +93,17 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     if (!initial) throw new Error(`Waveform source ${component} has no initial stepped value.`)
     return `.param ${parameter}=${initial}`
   }))
+  waveformParameterRows.push(...[...instanceParameters.values()].map(({ component, parameter, generated }) => {
+    const line = rows.findIndex((row) => row.trim().match(new RegExp(`^${component}\\s`, 'i')))
+    if (line < 0) throw new Error(`Imported IC ${component} is missing from the generated netlist.`)
+    const parameterPattern = new RegExp(`(^|\\s)${parameter}=\\S+`, 'i')
+    if (parameterPattern.test(rows[line])) rows[line] = rows[line].replace(parameterPattern, (_match, prefix: string) => `${prefix}${parameter}={${generated}}`)
+    else if (/\bPARAMS:/i.test(rows[line])) rows[line] += ` ${parameter}={${generated}}`
+    else rows[line] += ` PARAMS: ${parameter}={${generated}}`
+    const initial = parameterSweep.flatMap((run) => run.values).find((value) => value.component.toLowerCase() === component.toLowerCase() && value.parameter?.toLowerCase() === parameter.toLowerCase() && value.instanceParameter)?.value
+    if (!initial) throw new Error(`Imported IC ${component}.${parameter} has no initial stepped value.`)
+    return `.param ${generated}=${initial}`
+  }))
   for (let index = endLine - 1; index >= 0; index--) if (/^\s*\.meas\s+tran\s+ELSIM_/i.test(rows[index])) rows.splice(index, 1)
   let insideSubcircuit = false
   const vdmosModels = new Set(rows.flatMap((row) => row.match(/^\s*\.model\s+(\S+)\s+vdmos\b/i)?.[1].toLowerCase() ?? []))
@@ -125,8 +138,8 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const commands = ['.control', 'set filetype=binary']
   if (parameterSweep.length) {
     parameterSweep.forEach((run, index) => {
-      run.values.forEach(({ component, value, parameter, model, sourceParameter, globalParameter, pulseHigh, pwlScale, waveformAmplitude }) => commands.push(globalParameter ? `alterparam ${globalParameter}=${value}` : parameter ? `altermod ${model} ${parameter}=${value}` : sourceParameter ? `alterparam ${sourceFieldParameters.get(`${component.toLowerCase()}.${sourceParameter}`)}=${value}` : pulseHigh ? `alterparam ${pulseParameters.get(component.toLowerCase())}=${value}` : pwlScale ? `alterparam ${pwlParameters.get(component.toLowerCase())}=${value}` : waveformAmplitude ? `alterparam ${amplitudeParameters.get(component.toLowerCase())}=${value}` : `alter ${component} ${value}`))
-      if (run.values.some((value) => value.globalParameter || value.sourceParameter || value.pulseHigh || value.pwlScale || value.waveformAmplitude)) commands.push('reset')
+      run.values.forEach(({ component, value, parameter, model, instanceParameter, sourceParameter, globalParameter, pulseHigh, pwlScale, waveformAmplitude }) => commands.push(globalParameter ? `alterparam ${globalParameter}=${value}` : parameter && instanceParameter ? `alterparam ${instanceParameters.get(`${component.toLowerCase()}.${parameter.toLowerCase()}`)?.generated}=${value}` : parameter ? `altermod ${model} ${parameter}=${value}` : sourceParameter ? `alterparam ${sourceFieldParameters.get(`${component.toLowerCase()}.${sourceParameter}`)}=${value}` : pulseHigh ? `alterparam ${pulseParameters.get(component.toLowerCase())}=${value}` : pwlScale ? `alterparam ${pwlParameters.get(component.toLowerCase())}=${value}` : waveformAmplitude ? `alterparam ${amplitudeParameters.get(component.toLowerCase())}=${value}` : `alter ${component} ${value}`))
+      if (run.values.some((value) => value.globalParameter || value.instanceParameter || value.sourceParameter || value.pulseHigh || value.pwlScale || value.waveformAmplitude)) commands.push('reset')
       commands.push('run', ...measurements.flatMap((measurement) => measurementCommand(measurement, `_${index}`)), `write /result-${index}.raw all`)
     })
   } else commands.push(analysisCommand, ...(/^(?:tran)\b/i.test(analysisCommand) ? measurements.flatMap((measurement) => measurementCommand(measurement)) : []), ...(analysisType === 'noise' ? ['setplot noise1'] : []), 'write /result.raw all')

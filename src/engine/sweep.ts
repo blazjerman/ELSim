@@ -2,7 +2,7 @@ import type { ParameterSweep, Project, SourceSweepParameter } from '../domain/pr
 import { componentMagnitude, spiceModelParameterMagnitude } from '../domain/componentValue'
 import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 
-export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; sourceParameter?: SourceSweepParameter; globalParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
+export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; instanceParameter?: boolean; sourceParameter?: SourceSweepParameter; globalParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
 
 function componentUnit(kind: string): string {
   return kind === 'source' ? 'V' : kind === 'currentSource' ? 'A' : kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
@@ -38,6 +38,18 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     const time = ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
     const positive = ['period', 'riseTau', 'fallTau'].includes(field)
     if (start === null || stop === null || start === stop || (frequency && (start <= 0 || stop <= 0)) || (time && (start < 0 || stop < 0 || (positive && (start <= 0 || stop <= 0))))) throw new Error(`${part.ref}.${sweep.sourceParameter} needs valid, different endpoints${frequency || positive ? ' (positive values required)' : ''}.`)
+    return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
+  }
+  if (sweep.parameter && sweep.instanceParameter) {
+    if (!part || part.kind !== 'subcircuit' || part.sheetId || !part.modelName) throw new Error(`${sweep.component} is not an imported IC with editable model parameters.`)
+    const definition = project.modelAssets?.flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).subcircuits)
+      .find((candidate) => candidate.name.toLowerCase() === part.modelName!.toLowerCase())
+    const parameter = definition?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
+    const override = Object.entries(part.modelParameters ?? {}).find(([name]) => name.toLowerCase() === parameter?.name.toLowerCase())?.[1]
+    const initial = override ?? parameter?.defaultValue
+    const start = initial === undefined ? null : scalarMagnitude(initial)
+    const stop = scalarMagnitude(sweep.stop)
+    if (!parameter || start === null || stop === null || start === stop) throw new Error(`${sweep.component}.${sweep.parameter} must be a numeric imported IC parameter with different valid endpoints.`)
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (sweep.parameter) {
@@ -109,9 +121,9 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
       const display = parameter ? `${Number(value.toPrecision(5))}` : sourceParameter ? `${Number(value.toPrecision(5))}${parameterUnit ? ` ${parameterUnit}` : ''}` : pwlScale ? `${Number(value.toPrecision(5))}×` : `${Number(value.toPrecision(5))} ${componentUnit(part.kind)}`
       const target = parameter ? `${part.ref}.${parameter}` : sourceParameter ? `${part.ref}.${sourceParameter}` : part.ref
       const label = combination.label ? `${combination.label}, ${target}=${display}` : `${target}=${display}`
-      const model = parameter ? part.deviceModel : undefined
+      const model = parameter ? (sweep.instanceParameter ? part.modelName : part.deviceModel) : undefined
       const pulseHigh = !parameter && !sourceParameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
-      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model } : {}), ...(sourceParameter ? { sourceParameter } : {}), ...(!sourceParameter && pulseHigh ? { pulseHigh: true } : {}), ...(!sourceParameter && pwlScale ? { pwlScale: true } : {}), ...(!sourceParameter && waveformAmplitude ? { waveformAmplitude: true } : {}) }], label }
+      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model, ...(sweep.instanceParameter ? { instanceParameter: true } : {}) } : {}), ...(sourceParameter ? { sourceParameter } : {}), ...(!sourceParameter && pulseHigh ? { pulseHigh: true } : {}), ...(!sourceParameter && pwlScale ? { pwlScale: true } : {}), ...(!sourceParameter && waveformAmplitude ? { waveformAmplitude: true } : {}) }], label }
     }))
   }
   if (combinations.length > 10) throw new Error('Parameter stepping is limited to 10 total combinations.')

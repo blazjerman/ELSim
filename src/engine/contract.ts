@@ -247,10 +247,13 @@ function isParameterSweepRun(value: unknown): boolean {
       || typeof entry.value !== 'string' || !Number.isFinite(Number(entry.value))) return false
     const hasGlobalParameter = entry.globalParameter !== undefined
     if (hasGlobalParameter && (typeof entry.globalParameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.globalParameter) || entry.component.toLowerCase() !== `$param:${entry.globalParameter}`.toLowerCase())) return false
+    if (entry.instanceParameter !== undefined && typeof entry.instanceParameter !== 'boolean') return false
+    const hasInstanceParameter = entry.instanceParameter === true
     const hasModelTarget = entry.parameter !== undefined || entry.model !== undefined
     if (entry.sourceParameter !== undefined && (!(['pulse.initial', 'pulse.high', 'pulse.delay', 'pulse.rise', 'pulse.fall', 'pulse.width', 'pulse.period', 'pwl.scale', 'sine.offset', 'sine.amplitude', 'sine.frequency', 'sine.delay', 'sine.damping', 'sine.phase', 'exp.initial', 'exp.pulsed', 'exp.riseDelay', 'exp.riseTau', 'exp.fallDelay', 'exp.fallTau', 'sffm.offset', 'sffm.amplitude', 'sffm.carrierFrequency', 'sffm.modulationIndex', 'sffm.signalFrequency'].includes(String(entry.sourceParameter)) || /^pwl\.point\.(?:[1-9]|[12]\d|3[0-2])$/.test(String(entry.sourceParameter))) || hasModelTarget || hasGlobalParameter)) return false
     if (hasModelTarget && (typeof entry.parameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter)
       || typeof entry.model !== 'string' || !isValidSpiceModelName(entry.model, true))) return false
+    if (hasInstanceParameter && (!hasModelTarget || typeof entry.parameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter) || hasGlobalParameter || entry.sourceParameter !== undefined)) return false
     if (entry.pulseHigh !== undefined && (typeof entry.pulseHigh !== 'boolean' || (entry.pulseHigh && (hasModelTarget || hasGlobalParameter)))) return false
     if (entry.pwlScale !== undefined && (typeof entry.pwlScale !== 'boolean' || (entry.pwlScale && (hasModelTarget || hasGlobalParameter)))) return false
     if (entry.waveformAmplitude !== undefined && (typeof entry.waveformAmplitude !== 'boolean' || (entry.waveformAmplitude && (hasModelTarget || hasGlobalParameter)))) return false
