@@ -1358,6 +1358,32 @@ test('keyboard context menu stays on its focused component when a net label over
   await expect(menu.getByRole('menuitem', { name: 'Plot current through component' })).toBeVisible()
 })
 
+test('schematic context menu preserves native keyboard selection for transistor pins', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  const example = dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' })
+  await example.getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const transistor = page.locator('.circuit-part[aria-label^="Q1,"]')
+  await expect(transistor).toBeVisible()
+  await transistor.click({ button: 'right' })
+  const menu = page.getByRole('menu', { name: 'Options for Q1' })
+  await expect(menu).toBeVisible()
+
+  const positivePin = menu.getByRole('combobox', { name: 'Positive voltage pin' })
+  const negativePin = menu.getByRole('combobox', { name: 'Negative voltage pin' })
+  await positivePin.focus()
+  await positivePin.press('ArrowDown')
+  await expect(positivePin).toHaveValue('1')
+  await expect(positivePin).toBeFocused()
+  await negativePin.focus()
+  await negativePin.press('ArrowDown')
+  await expect(negativePin).toHaveValue('2')
+  await expect(negativePin).toBeFocused()
+})
+
 test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('complementary', { name: 'Component library' })).toBeVisible()

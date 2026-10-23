@@ -186,12 +186,13 @@ function focusAfterInspectorRender(selector: string) {
   window.requestAnimationFrame(focusTarget)
 }
 
-function navigateMenuItems(container: HTMLElement, key: string, selector = '[role="menuitem"]:not(:disabled), select:not(:disabled)') {
+function navigateMenuItems(container: HTMLElement, key: string, selector = '[role="menuitem"]:not(:disabled)') {
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(key)) return false
   const items = [...container.querySelectorAll<HTMLElement>(selector)]
   if (!items.length) return false
   const index = items.indexOf(document.activeElement as HTMLElement)
-  const next = key === 'Home' ? 0 : key === 'End' ? items.length - 1 : index < 0 ? (key === 'ArrowDown' ? 0 : items.length - 1) : (index + (key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+  if (index < 0) return false
+  const next = key === 'Home' ? 0 : key === 'End' ? items.length - 1 : (index + (key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
   items[next].focus()
   return true
 }
