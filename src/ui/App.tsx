@@ -2303,6 +2303,7 @@ export default function App() {
     if (pending?.rootSheetId === project.rootSheetId && project.sheets.find((sheet) => sheet.id === pending.sheetId)?.view === pending.view) pendingViewRef.current = null
   }, [project])
   const partsById = useMemo(() => new Map(project.parts.map((part) => [part.id, part])), [project.parts])
+  const labelsById = useMemo(() => new Map(project.netLabels.map((label) => [label.id, label])), [project.netLabels])
   const transientAxis = simulationResult?.analysis === 'tran' ? simulationResult.traces[0]?.axis : undefined
   const simulationResultStale = Boolean(simulationResult && simulationResult.metadata.settings.projectUpdatedAt !== project.updatedAt)
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && !simulationResultStale)
@@ -3015,7 +3016,7 @@ export default function App() {
     })
     return activeSelected && !parts.some((part) => part.id === activeSelected.id) ? [activeSelected] : parts
   }, [partsById, activeSelected, selectedPartIds])
-  const selectedLabel = selection?.kind === 'label' ? project.netLabels.find((label) => label.id === selection.id) ?? null : null
+  const selectedLabel = selection?.kind === 'label' ? labelsById.get(selection.id) ?? null : null
   useEffect(() => {
     // A paste publishes its fresh selection and project records in the same
     // event. If React commits the selection first, keep those not-yet-rendered
