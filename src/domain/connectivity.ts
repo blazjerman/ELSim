@@ -40,7 +40,7 @@ class DisjointSet {
   values(): string[] { return [...this.parents.keys()] }
 }
 
-type Segment = { wireId: string; a: [number, number]; b: [number, number]; token: string }
+type Segment = { index: number; wireId: string; a: [number, number]; b: [number, number]; token: string }
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number }
 
 /** A broadphase only: callers still apply the existing exact geometry predicates. */
@@ -123,7 +123,7 @@ function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: str
   for (const wire of project.wires) {
     const token = wireToken(wire.id)
     dsu.add(token)
-    segments.push({ wireId: wire.id, a: wire.points[0], b: wire.points[1], token })
+    segments.push({ index: segments.length, wireId: wire.id, a: wire.points[0], b: wire.points[1], token })
   }
 
   const segmentGrid = new SpatialGrid<Segment>()
@@ -144,12 +144,11 @@ function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: str
 
   // Endpoint-on-wire T connections are joins. A crossing in the middle of
   // two segments stays separate unless the document has an explicit junction.
-  const segmentIndex = new Map(segments.map((segment, index) => [segment, index]))
   for (let left = 0; left < segments.length; left += 1) {
     const a = segments[left]
     const extent = Math.max(Math.abs(a.b[0] - a.a[0]), Math.abs(a.b[1] - a.a[1]))
     for (const b of segmentGrid.query(segmentBounds(a, 1e-4 + extent * 1e-6))) {
-      const right = segmentIndex.get(b)!
+      const right = b.index
       if (right <= left) continue
       if (a.wireId === b.wireId) continue
       const endpointsOverlap = [a.a, a.b].some((point) => pointOnSegment({ x: point[0], y: point[1] }, { x: b.a[0], y: b.a[1] }, { x: b.b[0], y: b.b[1] }, 1e-4))
