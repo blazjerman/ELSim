@@ -1,0 +1,14 @@
+ELSim ngspice AC current source multipliers
+I1 0 outi AC 1m M=3
+R1 outi 0 1k
+VCTRL ctrl 0 AC 1 0
+G1 0 outg ctrl 0 1m M=3
+R2 outg 0 1k
+VDRIVE drive 0 AC 1 0
+RSENSE drive sense 1k
+VSENSE sense 0 0
+F1 0 outf VSENSE 1 M=3
+R3 outf 0 1k
+.ac lin 1 1k 1k
+.print ac vm(outi) vm(outg) vm(outf)
+.end
