@@ -1122,6 +1122,10 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     return trace.values[index]
   }, [simulationResult, tracesByVector])
   const deviceModelsByName = useMemo(() => new Map(deviceModels.map((model) => [model.name.toLowerCase(), model])), [deviceModels])
+  const deviceModelParametersByName = useMemo(() => new Map(deviceModels.map((model) => [
+    model.name.toLowerCase(),
+    new Map(model.parameters.map((parameter) => [parameter.name.toLowerCase(), parameter.defaultValue])),
+  ])), [deviceModels])
   const voltageSwitchStateCache = useRef<{ result: SimulationResult | null; states: Map<string, Uint8Array> }>({ result: null, states: new Map() })
   const voltageSwitchStateAt = (part: Part, sampleIndex: number | null): boolean | undefined => {
     const axis = transientAxis
@@ -1130,7 +1134,8 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     if (cache.result !== simulationResult) { cache.result = simulationResult; cache.states.clear() }
     const importedModel = part.deviceModel ? deviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
     if (part.deviceModel && importedModel?.type.toLowerCase() !== 'sw') return undefined
-    const modelParameter = (name: string) => importedModel?.parameters.find((parameter) => parameter.name.toLowerCase() === name)?.defaultValue
+    const modelParameters = importedModel ? deviceModelParametersByName.get(importedModel.name.toLowerCase()) : undefined
+    const modelParameter = (name: string) => modelParameters?.get(name)
     const thresholdValue = importedModel ? modelParameter('vt') ?? '0' : part.value
     const hysteresisValue = importedModel ? modelParameter('vh') ?? '0' : part.voltageSwitch?.hysteresis ?? '0 V'
     const threshold = componentMagnitude(thresholdValue, 'source')
@@ -1167,7 +1172,8 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     if (part.kind !== 'currentSwitch' || !part.controlSource || !axis?.length || !simulationResult) return undefined
     const importedModel = part.deviceModel ? deviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
     if (part.deviceModel && importedModel?.type.toLowerCase() !== 'csw') return undefined
-    const modelParameter = (name: string) => importedModel?.parameters.find((parameter) => parameter.name.toLowerCase() === name)?.defaultValue
+    const modelParameters = importedModel ? deviceModelParametersByName.get(importedModel.name.toLowerCase()) : undefined
+    const modelParameter = (name: string) => modelParameters?.get(name)
     const thresholdValue = importedModel ? modelParameter('it') ?? '0' : part.value
     const hysteresisValue = importedModel ? modelParameter('ih') ?? '0' : part.currentSwitch?.hysteresis ?? '0 A'
     const threshold = componentMagnitude(thresholdValue, 'currentSource')
