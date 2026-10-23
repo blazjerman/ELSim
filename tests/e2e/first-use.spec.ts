@@ -11102,6 +11102,52 @@ test('a subcircuit-local .FUNC drives its local .MODEL through browser ngspice',
   await expect(page.locator('.plot-window').last().getByRole('button', { name: 'Disable V(X1)' })).toBeVisible()
 })
 
+test('nested native ngspice .IF model branches import and select the active diode model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  const library = [
+    '.PARAM OUTER=0 INNER=1',
+    '.SUBCKT NESTED_STAGE IN OUT',
+    'VDRIVE IN 0 1',
+    'D1 IN OUT DLOCAL',
+    'RLOAD OUT 0 1k',
+    '.IF (OUTER == 0)',
+    '.IF (INNER == 0)',
+    '.MODEL DLOCAL D(IS=1e-12 N=1)',
+    '.ELSE',
+    '.MODEL dlocal D(IS=1e-9 N=1)',
+    '.ENDIF',
+    '.ELSE',
+    '.MODEL DLOCAL D(IS=1e-14 N=1)',
+    '.ENDIF',
+    '.ENDS NESTED_STAGE',
+  ].join('\n')
+  await modelInput.setInputFiles({ name: 'nested-model.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
+  const model = page.locator('.imported-model').filter({ hasText: 'NESTED_STAGE' })
+  await expect(model).toBeVisible()
+  await model.getByRole('button', { name: 'Add to schematic' }).click()
+  await expect(page.locator('.circuit-part[aria-label^="X1,"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')
+  await expect(netlist).toContainText('.IF (OUTER == 0)\n.IF (INNER == 0)\n.MODEL DLOCAL D(IS=1e-12 N=1)')
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByLabel('Analysis type', { exact: true }).selectOption('op')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const instance = page.locator('.circuit-part[aria-label^="X1,"] .part-hit')
+  await instance.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /Plot voltage across IN → OUT/ }).click()
+  await page.getByRole('dialog', { name: /V\(X1/ }).getByRole('button', { name: /New waveform window/ }).click()
+  const plot = page.locator('.plot-window').last()
+  const row = plot.locator('.op-table').getByRole('row', { name: /V\(X1\).*V/i })
+  await expect(row).toBeVisible()
+  await expect(row).toContainText('0.346')
+})
+
 test('model-library import identifies a .ENDS name mismatch at its source line', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
