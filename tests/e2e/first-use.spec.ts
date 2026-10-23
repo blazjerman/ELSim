@@ -24,6 +24,27 @@ async function waitForProjectAutosave(page: Page) {
 }
 
 async function expectVisibleKeyboardControlsNamed(page: Page) {
+  const unnamedDialogs = await page.locator('[role="dialog"], [role="alertdialog"]').evaluateAll((dialogs) => dialogs.flatMap((dialog) => {
+    const element = dialog as HTMLElement
+    const style = getComputedStyle(element)
+    if (!element.getClientRects().length || style.visibility === 'hidden' || style.display === 'none' || element.closest('[aria-hidden="true"]')) return []
+    const referencedText = (attribute: 'aria-labelledby' | 'aria-describedby') => {
+      const ids = element.getAttribute(attribute)?.trim().split(/\s+/).filter(Boolean) ?? []
+      const missing = ids.filter((id) => !document.getElementById(id))
+      const text = ids.map((id) => document.getElementById(id)?.textContent?.trim() ?? '').filter(Boolean).join(' ')
+      return { ids, missing, text }
+    }
+    const label = referencedText('aria-labelledby')
+    const description = referencedText('aria-describedby')
+    const hasName = Boolean(element.getAttribute('aria-label')?.trim() || label.text)
+    const isModelessPlot = element.matches('.additional-plot-window')
+    const invalidModalState = !isModelessPlot && element.getAttribute('aria-modal') !== 'true'
+    return !hasName || label.missing.length || description.missing.length || !description.text || invalidModalState
+      ? [`<${element.outerHTML.slice(0, 240)}> name=${hasName}, missing label refs=${label.missing.join(',')}, missing description refs=${description.missing.join(',')}, description=${Boolean(description.text)}, modal=${element.getAttribute('aria-modal')}`]
+      : []
+  }))
+  expect(unnamedDialogs).toEqual([])
+
   const unnamed = await page.locator('a[href], button, input:not([type="hidden"]), select, textarea, [tabindex], [role]').evaluateAll((controls) => controls.flatMap((control) => {
     const element = control as HTMLElement
     const style = getComputedStyle(element)
