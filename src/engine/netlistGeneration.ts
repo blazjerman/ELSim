@@ -31,6 +31,12 @@ function fetInitialConditionSuffix(project: Project, reference: string, includeB
   return ` IC=${normalize(condition.vds)},${normalize(condition.vgs)}${includeBulk ? `,${normalize(condition.vbs ?? '0')}` : ''}`
 }
 
+function diodeInitialConditionOption(project: Project, reference: string): string | undefined {
+  const condition = project.simulation.initialConditions?.find((item) => 'diode' in item && item.diode.toLowerCase() === reference.toLowerCase())
+  if (!condition || !('diode' in condition)) return undefined
+  return `IC=${condition.voltage.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/v$/i, '')}`
+}
+
 function reserveUniqueName(base: string, used: Set<string>): string {
   let name = base
   let suffix = 2
@@ -743,7 +749,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? (part.kind === 'zener' ? 'DZENER' : 'DDEFAULT')
-      const instanceOptions = [part.diodeArea && `AREA=${part.diodeArea}`, part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.diodePerimeter && `PJ=${part.diodePerimeter}`, part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`, part.initialOff && 'OFF'].filter(Boolean).join(' ')
+      const instanceOptions = [part.diodeArea && `AREA=${part.diodeArea}`, part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.diodePerimeter && `PJ=${part.diodePerimeter}`, part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`, part.initialOff && 'OFF', diodeInitialConditionOption(project, part.ref)].filter(Boolean).join(' ')
       append(`${part.ref} ${positive} ${negative} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
       if (!part.deviceModel) {
         if (part.kind === 'zener') usesZener = true
@@ -1115,7 +1121,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)
     const startSavingTime = project.simulation.startSavingTime?.trim() ? spiceTime(project.simulation.startSavingTime) : null
-    const hasDeviceInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition || 'transistor' in condition || 'fet' in condition) ?? false
+    const hasDeviceInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition || 'diode' in condition || 'transistor' in condition || 'fet' in condition) ?? false
     if (maxStep && stopTime && (!project.simulation.startSavingTime?.trim() || startSavingTime)) append(`.tran ${maxStep} ${stopTime}${startSavingTime ? ` ${startSavingTime} ${maxStep}` : ''}${project.simulation.skipInitialOperatingPoint || hasDeviceInitial ? ' uic' : ''}`, 'analysis:tran', 'analysis')
     else {
       const message = 'Transient stop time and maximum step must be valid SPICE time values.'
@@ -1124,7 +1130,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   }
   for (const condition of project.simulation.initialConditions ?? []) {
-    if ('transistor' in condition || 'fet' in condition) continue
+    if ('diode' in condition || 'transistor' in condition || 'fet' in condition) continue
     if ('element' in condition) {
       const currentCondition = 'current' in condition
       const kind = currentCondition ? 'inductor' : 'capacitor'

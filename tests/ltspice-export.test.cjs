@@ -346,6 +346,17 @@ test('blocks native FET terminal initial conditions during LTspice export instea
   assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'initial:M1' && /FET IC=VDS,VGS\[,VBS\]/.test(blocker.message)))
 })
 
+test('blocks native diode initial voltage during LTspice export instead of dropping it', async () => {
+  const project = createStarterProject()
+  const diode = { id: 'export-diode-ic', kind: 'diode', ref: 'D1', value: '', x: 800, y: 600, rotation: 0 }
+  project.parts.push(diode)
+  project.sheets[0].parts = project.parts
+  project.simulation.initialConditions = [{ diode: 'D1', voltage: '0.6 V' }]
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.files, [])
+  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'initial:D1' && /diode IC=voltage/.test(blocker.message)))
+})
+
 test('reports retained imported LTspice attributes omitted from generated schematics', async () => {
   const project = createStarterProject()
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'original-value' } } }

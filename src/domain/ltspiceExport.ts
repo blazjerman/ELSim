@@ -708,6 +708,9 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       if ('transistor' in condition) {
         blockers.push({ sourceId: `initial:${condition.transistor}`, message: 'Per-instance BJT IC=VBE,VCE conditions are not translated by the current LTspice exporter.' })
       }
+      else if ('diode' in condition) {
+        blockers.push({ sourceId: `initial:${condition.diode}`, message: 'Per-instance diode IC=voltage conditions are not translated by the current LTspice exporter.' })
+      }
       else if ('fet' in condition) {
         blockers.push({ sourceId: `initial:${condition.fet}`, message: 'Per-instance FET IC=VDS,VGS[,VBS] conditions are not translated by the current LTspice exporter.' })
       }
@@ -773,7 +776,7 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       else blockers.push({ sourceId: 'analysis:dc', message: 'DC sweep settings are missing.' })
     } else {
       const maxStep = scalar(simulation.maxStep, 's'), stopTime = scalar(simulation.stopTime, 's')
-      if (maxStep && stopTime) addDirective(`.tran ${maxStep} ${stopTime}${simulation.skipInitialOperatingPoint || simulation.initialConditions?.some((condition) => 'element' in condition || 'transistor' in condition || 'fet' in condition) ? ' uic' : ''}`)
+      if (maxStep && stopTime) addDirective(`.tran ${maxStep} ${stopTime}${simulation.skipInitialOperatingPoint || simulation.initialConditions?.some((condition) => 'element' in condition || 'diode' in condition || 'transistor' in condition || 'fet' in condition) ? ' uic' : ''}`)
       else blockers.push({ sourceId: 'analysis:tran', message: 'Transient stop time and maximum step must be supported scalar time values.' })
     }
     const unsupportedSweeps: string[] = []

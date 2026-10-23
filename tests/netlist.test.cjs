@@ -2136,7 +2136,7 @@ test('BJT VBE/VCE initial conditions emit native Q-card IC values and enable tra
   project.simulation.initialConditions = [{ transistor: 'Q1', vbe: 'bad', vce: '5 V' }]
   assert.throws(() => validateProject(project), /Initial value for Q1 is malformed/i)
   project.simulation.initialConditions = [{ transistor: 'Q404', vbe: '0.7 V', vce: '5 V' }]
-  assert.throws(() => validateProject(project), /unique labeled nodes, capacitor voltages, inductor currents, BJT VBE\/VCE, or FET terminal voltages/i)
+  assert.throws(() => validateProject(project), /unique labeled nodes, capacitor or diode voltages, inductor currents, BJT VBE\/VCE, or FET terminal voltages/i)
 })
 
 test('FET terminal initial conditions emit native IC values and enable transient UIC', () => {
@@ -2159,7 +2159,29 @@ test('FET terminal initial conditions emit native IC values and enable transient
   project.simulation.initialConditions = [{ fet: 'J1', vds: '3 V', vgs: '-0.5 V', vbs: '0 V' }]
   assert.throws(() => validateProject(project), /three-terminal FET conditions use VDS and VGS/i)
   project.simulation.initialConditions = [{ fet: 'J404', vds: '3 V', vgs: '-0.5 V' }]
-  assert.throws(() => validateProject(project), /unique labeled nodes, capacitor voltages, inductor currents, BJT VBE\/VCE, or FET terminal voltages/i)
+  assert.throws(() => validateProject(project), /unique labeled nodes, capacitor or diode voltages, inductor currents, BJT VBE\/VCE, or FET terminal voltages/i)
+})
+
+test('diode, LED, and Zener initial voltages emit diode IC values and enable transient UIC', () => {
+  const project = createStarterProject()
+  const diodes = [
+    { id: 'd-initial', kind: 'diode', ref: 'D1', value: '', x: 700, y: 300, rotation: 0 },
+    { id: 'led-initial', kind: 'led', ref: 'D2', value: '', x: 850, y: 300, rotation: 0 },
+    { id: 'zener-initial', kind: 'zener', ref: 'D3', value: '', x: 1000, y: 300, rotation: 0 },
+  ]
+  project.parts.push(...diodes)
+  project.netLabels.push(...diodes.flatMap((part) => componentPins(part).map((pin, index) => ({ id: `${part.id}-net-${index}`, name: `${part.ref}N${index}`, x: pin.x, y: pin.y, visible: false }))))
+  project.simulation.initialConditions = diodes.map((part, index) => ({ diode: part.ref, voltage: `${index + 1}00 mV` }))
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^D1 D1N0 D1N1 DDEFAULT IC=100m$/m)
+  assert.match(artifact.text, /^D2 D2N0 D2N1 DDEFAULT IC=200m$/m)
+  assert.match(artifact.text, /^D3 D3N0 D3N1 DZENER IC=300m$/m)
+  assert.match(artifact.text, /^\.tran 100u 100m uic$/m)
+  project.simulation.initialConditions = [{ diode: 'D1', voltage: 'bad' }]
+  assert.throws(() => validateProject(project), /Initial value for D1 is malformed/i)
+  project.simulation.initialConditions = [{ diode: 'D404', voltage: '0.2 V' }]
+  assert.throws(() => validateProject(project), /unique labeled nodes, capacitor or diode voltages/i)
 })
 
 test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {

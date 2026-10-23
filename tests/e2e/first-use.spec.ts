@@ -7061,6 +7061,28 @@ test('MOSFET VDS, VGS, and VBS initial conditions emit M-card IC and run with UI
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
 })
 
+test('diode initial voltage emits D-card IC and runs with UIC', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Diode half-wave rectifier' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add diode voltage' }).click()
+  await page.getByLabel('Initial voltage for D1').fill('0.5 V')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.initialConditions)).toEqual([{ diode: 'D1', voltage: '0.5 V' }])
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')
+  await expect(netlist).toContainText(/^D1 .* IC=0\.5$/m)
+  await expect(netlist).toContainText(/^\.tran .* uic$/m)
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+})
+
 test('schematic tool guidance stays readable without overflowing at desktop and phone widths', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const status = page.locator('.canvas-status')

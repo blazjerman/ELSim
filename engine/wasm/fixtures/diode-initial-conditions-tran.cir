@@ -1,0 +1,14 @@
+Transient diode initial voltage uses the native D-device IC value with UIC
+V1 in 0 PULSE(0 1 0 1u 1u 5u 10u)
+R1 in out 1k
+D1 out 0 INITD IC=0.5
+.model INITD D(IS=1e-14)
+.model INITD D(IS=1e-14 CJO=1n)
+.control
+save all @d1[id]
+set filetype=ascii
+tran 1u 10u uic
+write /result.raw all
+quit
+.endc
+.end

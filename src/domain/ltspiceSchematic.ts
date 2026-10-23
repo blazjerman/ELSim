@@ -453,11 +453,12 @@ function applyDirective(project: Project, directive: string, warnings: string[],
       })() : undefined
       const capacitor = matchedCapacitor?.part
       const value = matchedCapacitor?.value ?? rawValue
-      const duplicate = conditions.some((condition) => 'node' in condition
-        ? kind === 'v' && !negativeTarget && condition.node.toLowerCase() === target.toLowerCase()
-        : kind === 'i' && 'current' in condition
-          ? condition.element.toLowerCase() === target.toLowerCase()
-          : kind === 'v' && 'voltage' in condition && capacitor !== undefined && condition.element.toLowerCase() === capacitor.ref.toLowerCase())
+      const duplicate = conditions.some((condition) => {
+        if ('node' in condition) return kind === 'v' && !negativeTarget && condition.node.toLowerCase() === target.toLowerCase()
+        if ('element' in condition && 'current' in condition) return kind === 'i' && condition.element.toLowerCase() === target.toLowerCase()
+        if ('element' in condition && 'voltage' in condition) return kind === 'v' && capacitor !== undefined && condition.element.toLowerCase() === capacitor.ref.toLowerCase()
+        return false
+      })
       const wrongUnit = kind === 'v' ? /a$/i.test(value) : /v$/i.test(value)
       if ((!node && !inductor && !capacitor) || (kind === 'v' && !negativeTarget && target === '0') || (kind === 'i' && negativeTarget) || !validScalar(value) || wrongUnit || duplicate || conditions.length >= 8) {
         warnings.push(`Line ${line}: .ic setting ${recordExcerpt(assignment[0])} does not resolve to a unique labeled node, capacitor terminal pair, or placed inductor with a scalar value and was skipped.`)

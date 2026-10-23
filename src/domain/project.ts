@@ -116,7 +116,7 @@ type ScalarMeasurementOperation = 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ'
 type ScalarMeasurementRange = { id: string; operation: ScalarMeasurementOperation; vector?: string; expression?: string; from?: string; to?: string }
 export type TransientMeasurement = ScalarMeasurementRange | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either'; triggerCount?: number; targetCount?: number; expression?: never; from?: never; to?: never }
 export type TransientMeasurementPatch = { id?: string; operation?: ScalarMeasurementOperation | 'delay'; vector?: string; expression?: string; from?: string; to?: string; threshold?: string; targetVector?: string; targetThreshold?: string; edge?: 'rise' | 'fall' | 'either'; targetEdge?: 'rise' | 'fall' | 'either'; triggerCount?: number; targetCount?: number }
-export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string } | { transistor: string; vbe: string; vce: string } | { fet: string; vds: string; vgs: string; vbs?: string }
+export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string } | { diode: string; voltage: string } | { transistor: string; vbe: string; vce: string } | { fet: string; vds: string; vgs: string; vbs?: string }
 export type AssetProvenance = { sourceUrl?: string; licenseReference?: string; rightsNotes?: string }
 export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; selectedSections?: string[]; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
 export type SymbolAsset = { id: string; filename: string; sha256: string; content: string; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
@@ -793,14 +793,17 @@ export function validateProject(input: unknown): Project {
     const initialTargets = new Set<string>()
     for (const condition of simulation.initialConditions) {
       const elementCondition = condition && 'element' in condition && typeof condition.element === 'string'
+      const diodeCondition = condition && 'diode' in condition && typeof condition.diode === 'string'
       const transistorCondition = condition && 'transistor' in condition && typeof condition.transistor === 'string'
       const fetCondition = condition && 'fet' in condition && typeof condition.fet === 'string'
       const currentCondition = elementCondition && 'current' in condition
-      const target = elementCondition && 'element' in condition ? condition.element : transistorCondition && 'transistor' in condition ? condition.transistor : fetCondition && 'fet' in condition ? condition.fet : condition && 'node' in condition ? condition.node : undefined
-      const quantity = currentCondition && 'current' in condition ? condition.current : !transistorCondition && !fetCondition && condition && 'voltage' in condition ? condition.voltage : undefined
+      const target = elementCondition && 'element' in condition ? condition.element : diodeCondition && 'diode' in condition ? condition.diode : transistorCondition && 'transistor' in condition ? condition.transistor : fetCondition && 'fet' in condition ? condition.fet : condition && 'node' in condition ? condition.node : undefined
+      const quantity = currentCondition && 'current' in condition ? condition.current : !diodeCondition && !transistorCondition && !fetCondition && condition && 'voltage' in condition ? condition.voltage : undefined
       const validTarget = elementCondition
         ? data.parts.some((part) => part.kind === (currentCondition ? 'inductor' : 'capacitor') && part.ref.toLowerCase() === target?.toLowerCase())
-        : transistorCondition
+        : diodeCondition
+          ? data.parts.some((part) => ['diode', 'led', 'zener'].includes(part.kind) && part.ref.toLowerCase() === target?.toLowerCase())
+          : transistorCondition
           ? data.parts.some((part) => (part.kind === 'npn' || part.kind === 'pnp') && part.ref.toLowerCase() === target?.toLowerCase())
           : fetCondition
             ? data.parts.some((part) => ['nmos', 'pmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nvdmos', 'pvdmos'].includes(part.kind) && part.ref.toLowerCase() === target?.toLowerCase())
@@ -808,9 +811,9 @@ export function validateProject(input: unknown): Project {
       const fetPart = fetCondition ? data.parts.find((part) => part.ref.toLowerCase() === target?.toLowerCase()) : undefined
       const fetNeedsBulk = fetPart?.kind === 'nmos' || fetPart?.kind === 'pmos'
       if (fetCondition && 'fet' in condition && (fetNeedsBulk ? typeof condition.vbs !== 'string' || !condition.vbs.trim() : condition.vbs !== undefined)) throw new Error(`${target} MOSFET initial conditions require VDS, VGS, and VBS; three-terminal FET conditions use VDS and VGS.`)
-      const targetKey = `${elementCondition ? currentCondition ? 'L' : 'C' : transistorCondition ? 'Q' : fetCondition ? `${fetNeedsBulk ? 'M' : 'F'}` : 'V'}:${target?.toLowerCase()}`
-      const quantities = transistorCondition && 'transistor' in condition ? [condition.vbe, condition.vce] : fetCondition && 'fet' in condition ? [condition.vds, condition.vgs, ...(condition.vbs === undefined ? [] : [condition.vbs])] : [quantity]
-      if (!condition || typeof target !== 'string' || !validTarget || initialTargets.has(targetKey) || quantities.some((value) => typeof value !== 'string' || !value.trim())) throw new Error('Initial conditions need unique labeled nodes, capacitor voltages, inductor currents, BJT VBE/VCE, or FET terminal voltages with valid values.')
+      const targetKey = `${elementCondition ? currentCondition ? 'L' : 'C' : diodeCondition ? 'D' : transistorCondition ? 'Q' : fetCondition ? `${fetNeedsBulk ? 'M' : 'F'}` : 'V'}:${target?.toLowerCase()}`
+      const quantities = diodeCondition && 'diode' in condition ? [condition.voltage] : transistorCondition && 'transistor' in condition ? [condition.vbe, condition.vce] : fetCondition && 'fet' in condition ? [condition.vds, condition.vgs, ...(condition.vbs === undefined ? [] : [condition.vbs])] : [quantity]
+      if (!condition || typeof target !== 'string' || !validTarget || initialTargets.has(targetKey) || quantities.some((value) => typeof value !== 'string' || !value.trim())) throw new Error('Initial conditions need unique labeled nodes, capacitor or diode voltages, inductor currents, BJT VBE/VCE, or FET terminal voltages with valid values.')
       for (const value of quantities) {
         const normalized = (value as string).trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(currentCondition ? /a$/i : /v$/i, '')
         const match = normalized.match(/^([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?)(meg|[tgkmunpf])?$/i)
