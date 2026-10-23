@@ -161,10 +161,6 @@ A second fixture uses a pulsed 5 V source to drive 24 parallel 1 kΩ / diode bra
 
 These are local single-run observations, not budgets. The circuit, engine fixture, point cap, and final cursor interaction passed in both supported browsers. Reliable browser/worker peak-memory measurement remains open.
 
-### Hidden waveform trace sampling (2026-10-23)
-
-Transient and AC/noise plots previously generated extrema indices for every selected trace even when a trace was disabled. They now sample only enabled traces, matching the existing DC plot behavior. A Firefox 40-trace transient benchmark passed before and after: result-ready time was 516/500 ms, and the all-trace hide/show sequence took 1,325/1,329 ms. This single-run workload toggles only one trace at a time, so the total timing does not show a gain; the code path now avoids sample scans and temporary index arrays for disabled traces, with larger hidden-vector sets still needing a focused measurement. The AC frequency-cursor and plot regression also passes.
-
 ## Legacy browser editor timing (2026-10-10)
 
 These are results from the v2 Playwright benchmark in `npm run benchmark:browser` (Chromium and Firefox). The generated project contains one resistor and two net labels per component. `editorReadyMs` measures reload through rendered component count; selection timings include Playwright locator lookup, click/actionability work, and the React update. They are local historical measurements, not CI thresholds, and are not directly comparable to the in-browser v3 input-to-frame timings below.
