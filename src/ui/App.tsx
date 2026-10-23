@@ -2479,6 +2479,8 @@ export default function App() {
     filename: [...new Set(family.models.map((model) => model.filename))].join(', '),
     binCount: family.binCount,
   })), [importedDeviceModels])
+  const importedNmosBsim3BinModels = useMemo(() => importedBsim3BinModels.filter((model) => model.type.toLowerCase() === 'nmos'), [importedBsim3BinModels])
+  const importedPmosBsim3BinModels = useMemo(() => importedBsim3BinModels.filter((model) => model.type.toLowerCase() === 'pmos'), [importedBsim3BinModels])
   const importedDeviceModelsByType = useMemo(() => {
     const byType = new Map<string, typeof importedDeviceModels>()
     for (const model of importedDeviceModels) {
@@ -2492,6 +2494,14 @@ export default function App() {
     }
     return byType
   }, [importedDeviceModels])
+  const compatibleImportedDeviceModelsByType = useMemo(() => {
+    const byType = new Map(importedDeviceModelsByType)
+    for (const [type, bins] of [['nmos', importedNmosBsim3BinModels], ['pmos', importedPmosBsim3BinModels]] as const) {
+      if (!bins.length) continue
+      byType.set(type, [...(byType.get(type) ?? []), ...bins])
+    }
+    return byType
+  }, [importedDeviceModelsByType, importedNmosBsim3BinModels, importedPmosBsim3BinModels])
   const filteredImportedDeviceModels = useMemo(() => {
     const query = importedDeviceModelQuery.trim().toLowerCase()
     if (!query) return importedDeviceModels
@@ -2542,10 +2552,7 @@ export default function App() {
       ?? (kind === 'resistor' ? 'r' : kind === 'capacitor' ? 'c' : kind === 'inductor' ? 'l' : undefined)
     if (!type) return []
     const key = type === 'vdmos' ? `vdmos:${kind === 'pvdmos' ? 'p' : 'n'}` : type
-    const models = importedDeviceModelsByType.get(key) ?? []
-    return type === 'nmos' || type === 'pmos'
-      ? [...models, ...importedBsim3BinModels.filter((model) => model.type.toLowerCase() === type)]
-      : models
+    return compatibleImportedDeviceModelsByType.get(key) ?? []
   }
   const modelAssetInUse = (assetId: string) => {
     return requiredModelAssets.has(assetId)
