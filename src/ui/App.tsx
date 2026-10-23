@@ -588,13 +588,23 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   viewportBottom: number
 }) {
   const focusedPartId = document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId
-  const partMargins = useMemo(() => new Map(parts.map((part) => {
-    const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
-    const bounds = symbol ? importedSymbolBounds(symbol) : null
-    const symbolMargin = bounds ? Math.max(Math.abs(bounds.minX), Math.abs(bounds.minY), Math.abs(bounds.maxX), Math.abs(bounds.maxY)) + 40 : 100
-    const blockMargin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
-    return [part.id, Math.max(symbolMargin, blockMargin)] as const
-  })), [parts, symbolsById])
+  const partMargins = useMemo(() => {
+    const symbolMargins = new Map<string, number>()
+    const marginForSymbol = (assetId: string) => {
+      const cached = symbolMargins.get(assetId)
+      if (cached !== undefined) return cached
+      const symbol = symbolsById.get(assetId)
+      const bounds = symbol ? importedSymbolBounds(symbol) : null
+      const margin = bounds ? Math.max(Math.abs(bounds.minX), Math.abs(bounds.minY), Math.abs(bounds.maxX), Math.abs(bounds.maxY)) + 40 : 100
+      symbolMargins.set(assetId, margin)
+      return margin
+    }
+    return new Map(parts.map((part) => {
+      const symbolMargin = part.symbolAssetId ? marginForSymbol(part.symbolAssetId) : 100
+      const blockMargin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
+      return [part.id, Math.max(symbolMargin, blockMargin)] as const
+    }))
+  }, [parts, symbolsById])
   const partViewportIndex = useMemo(() => createViewportIndex(parts, (part) => {
     const margin = partMargins.get(part.id) ?? 100
     return { left: part.x - margin, top: part.y - margin, right: part.x + margin, bottom: part.y + margin }
