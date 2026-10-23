@@ -261,7 +261,7 @@
           "type": "string",
           "maxLength": 64,
           "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
-          "description": "Optional positive ngspice diode or transistor instance multiplier."
+          "description": "Optional positive ngspice passive-device or semiconductor instance multiplier."
         },
         "deviceModel": {
           "type": "string",

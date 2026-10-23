@@ -597,15 +597,16 @@ test('coupled-line crosstalk example preserves its imported CPL model and probes
 
 test('potentiometer wiper divides total resistance and validates its travel', () => {
   const project = createPotentiometerExampleProject()
+  project.parts.find((part) => part.kind === 'potentiometer').instanceMultiplier = '2'
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^RPOT1_A VIN VOUT 5000(?:\.0+)?$/m)
-  assert.match(artifact.text, /^RPOT1_B VOUT 0 5000(?:\.0+)?$/m)
+  assert.match(artifact.text, /^RPOT1_A VIN VOUT 5000(?:\.0+)? M=2$/m)
+  assert.match(artifact.text, /^RPOT1_B VOUT 0 5000(?:\.0+)? M=2$/m)
   const moved = structuredClone(project)
   moved.parts.find((part) => part.kind === 'potentiometer').wiperPosition = '0.25'
   const movedNetlist = createNetlistArtifact(moved)
-  assert.match(movedNetlist.text, /^RPOT1_A VIN VOUT 2500(?:\.0+)?$/m)
-  assert.match(movedNetlist.text, /^RPOT1_B VOUT 0 7500(?:\.0+)?$/m)
+  assert.match(movedNetlist.text, /^RPOT1_A VIN VOUT 2500(?:\.0+)? M=2$/m)
+  assert.match(movedNetlist.text, /^RPOT1_B VOUT 0 7500(?:\.0+)? M=2$/m)
   const invalid = structuredClone(project)
   invalid.parts.find((part) => part.kind === 'potentiometer').wiperPosition = '1'
   assert.throws(() => validateProject(invalid), /wiper position/i)
@@ -1974,6 +1975,8 @@ test('semiconductor instance multiplier accepts positive numbers only on support
   assert.throws(() => validateProject(project), /invalid device multiplier/i)
   device.instanceMultiplier = '-2'
   assert.throws(() => validateProject(project), /invalid device multiplier/i)
+  device.instanceMultiplier = ' 2 '
+  assert.throws(() => validateProject(project), /invalid device multiplier/i)
   device.instanceMultiplier = '2'
   device.kind = 'diode'
   device.ref = 'D1'
@@ -1982,7 +1985,30 @@ test('semiconductor instance multiplier accepts positive numbers only on support
   device.kind = 'resistor'
   device.ref = 'R2'
   device.componentDefinitionId = undefined
+  assert.doesNotThrow(() => validateProject(project))
+  device.kind = 'source'
+  device.ref = 'V2'
+  device.componentDefinitionId = undefined
   assert.throws(() => validateProject(project), /invalid device multiplier/i)
+})
+
+test('RLC instance multipliers preserve parallel-equivalent values and scale series resistance', () => {
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  resistor.instanceMultiplier = '4'
+  const capacitor = project.parts.find((part) => part.kind === 'capacitor')
+  capacitor.instanceMultiplier = '3'
+  capacitor.seriesResistance = '12 Ω'
+  const inductor = { id: 'l-multiplier', kind: 'inductor', ref: 'L1', value: '2mH', instanceMultiplier: '3', seriesResistance: '9 Ω', x: 700, y: 600, rotation: 0 }
+  project.parts.push(inductor)
+  project.netLabels.push(...componentPins(inductor).map((pin, index) => ({ id: `l-multiplier-net-${index}`, name: `l1pin${index}`, x: pin.x, y: pin.y, visible: false })))
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^R1 .* 1k M=4$/m)
+  assert.match(artifact.text, /^C1 .* 10u M=3$/m)
+  assert.match(artifact.text, /^RC1_ESR .* 4\.00000000000$/m)
+  assert.match(artifact.text, /^L1 .* 2m M=3$/m)
+  assert.match(artifact.text, /^RL1_ESR .* 3\.00000000000$/m)
 })
 
 test('diode and BJT instances emit ngspice parallel-device multipliers', () => {

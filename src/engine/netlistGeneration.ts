@@ -666,8 +666,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
-      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}${modelSuffix}`, part.id, 'component')
-      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}${modelSuffix}`, part.id, 'component')
+      const multiplierSuffix = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''
+      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}`, part.id, 'component')
+      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const elementCondition = part.kind === 'inductor' || part.kind === 'capacitor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined
@@ -694,7 +695,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           const seriesReference = reserveUniqueName(referenceBase, usedReferences)
           const nodeBase = `__ELSIM_${part.id.slice(0, 32).replace(/[^A-Za-z0-9_]/g, '_')}_ESR`
           const internalNode = reserveUniqueName(nodeBase, usedNodes)
-          append(`${seriesReference} ${positive} ${internalNode} ${resistance}`, part.id, 'component')
+          const scaledResistance = part.instanceMultiplier ? (resistanceMagnitude / Number(part.instanceMultiplier)).toPrecision(12) : resistance
+          append(`${seriesReference} ${positive} ${internalNode} ${scaledResistance}`, part.id, 'component')
           elementPositive = internalNode
         }
       }
@@ -706,7 +708,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       const instanceValue = value ?? ''
       const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
-      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
+      const multiplierSuffix = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''
+      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led') {
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
