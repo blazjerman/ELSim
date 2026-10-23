@@ -7415,7 +7415,7 @@ test('built-in educational op-amp uses its supply pins, feedback, and current pr
   })).toEqual({ modelAssets: [], symbolAssets: [], opamp: 'U1' })
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
-  await page.locator('.circuit-part[data-part-id="educational-opamp-u1"]').click({ button: 'right' })
+  await page.locator('.circuit-part[data-part-id="educational-opamp-u1"] .part-hit').click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
   const currentChooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
   await currentChooser.getByRole('button', { name: /New waveform window/ }).click()
