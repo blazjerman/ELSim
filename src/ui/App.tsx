@@ -165,14 +165,17 @@ const CanvasNetLabelLayer = memo(function CanvasNetLabelLayer({ labels, selected
   // Preserve only the focused label across a pan; large multi-selections stay viewport-bounded.
   const focusedLabelId = document.activeElement?.closest<SVGGElement>('[data-net-label-id]')?.dataset.netLabelId
   const margin = 30
-  const labelViewportIndex = useMemo(() => createViewportIndex(labels, (label) => ({
+  // Hidden labels should not take space in the viewport index or get visited
+  // by every pan/zoom query. Filter once when the document labels change.
+  const visibleLabelItems = useMemo(() => labels.filter((label) => label.visible !== false), [labels])
+  const labelViewportIndex = useMemo(() => createViewportIndex(visibleLabelItems, (label) => ({
     left: label.x + 9,
     top: label.y - 9,
     right: label.x + 9 + label.name.length * 9,
     bottom: label.y - 9,
-  })), [labels])
+  })), [visibleLabelItems])
   const visibleLabels = labelViewportIndex({ left: viewportLeft - margin, top: viewportTop - margin, right: viewportRight + margin, bottom: viewportBottom + margin }, focusedLabelId)
-  return <>{visibleLabels.filter((label) => label.visible !== false).map((label) => <CanvasNetLabel key={label.id} label={label} selected={selectedIdSet.has(label.id)} tool={tool} onPointerDown={onPointerDown} onSelect={onSelect}/>)}</>
+  return <>{visibleLabels.map((label) => <CanvasNetLabel key={label.id} label={label} selected={selectedIdSet.has(label.id)} tool={tool} onPointerDown={onPointerDown} onSelect={onSelect}/>)}</>
 })
 
 function focusAfterInspectorRender(selector: string) {

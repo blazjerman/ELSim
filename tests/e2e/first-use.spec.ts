@@ -4975,6 +4975,22 @@ test('fit schematic view frames distant parts, wires, and labels', async ({ page
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).view.panX)).not.toBe(0)
 })
 
+test('hidden net labels stay out of the rendered and keyboard-interactive schematic', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createStarterProject()
+  project.netLabels = [
+    { id: 'hidden-label', name: 'HIDDEN', x: 339, y: 302, visible: false },
+    { id: 'visible-label', name: 'VISIBLE', x: 430, y: 302, visible: true },
+  ]
+  const root = project.sheets.find((sheet) => sheet.id === project.rootSheetId)!
+  project.sheets[project.sheets.indexOf(root)] = { ...root, netLabels: project.netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+
+  await expect(page.getByRole('button', { name: 'Net label HIDDEN' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Net label VISIBLE' })).toBeVisible()
+})
+
 test('schematic grid fills the zoomed and panned view and has no fixed placeholder labels', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
