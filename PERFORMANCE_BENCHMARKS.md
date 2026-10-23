@@ -885,3 +885,7 @@ The Linux process-tree sampler was repeated twice per configuration against the 
 | 8 | 581.0–628.6 / 932.7–981.4 | 1,041.9–1,114.1 / 1,400.5–1,472.0 | 642.1–671.8 / 1,001.4–1,029.7 | 687.3–704.1 / 1,047.9–1,062.1 | 1,041.9–1,114.1 / 1,400.5–1,472.0 |
 
 These are two same-host observations per configuration, not a portable memory budget. PSS/RSS sum Firefox and its descendants, not ELSim-only allocations; Firefox page-heap counters were unavailable. The solve/result-transfer phase dominates both peaks. The one-window overall PSS peak was tightly grouped, while the eight-window peak varied by 72.2 MiB; more repetitions and a second machine are needed before drawing conclusions about a plot-count effect. No WASM rebuild or Pages workflow ran.
+
+### Raw result vector retention (2026-10-23)
+
+The browser worker now uses a trace-only raw parser that identifies displayable vectors from the complete variable-name list, then allocates typed arrays only for those vectors. The general parser still retains every variable by default. ASCII and binary fixtures verify that filtering preserves axes, metadata, and plotted values, including point-major binary alignment. This removes allocations for internal vectors by construction; no before/after browser-memory measurement was made, so no quantitative memory reduction is claimed. The focused Firefox RC simulation passed with the existing local runtime; all 38 unit-test groups and TypeScript passed. No WASM rebuild or Pages workflow ran.

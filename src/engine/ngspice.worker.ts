@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { isTraceVariable, parseRawFile, rawTraceUnit, readRawFileAndRelease } from './raw'
+import { isTraceVariable, parseRawTraces, rawTraceUnit, readRawFileAndRelease } from './raw'
 import { addResultControl } from './resultControl'
 import { parseImportedMeasurementOutput, parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice, firstNgspiceError } from './diagnostics'
@@ -35,7 +35,7 @@ function trackWasmMemoryDuringInitialization(onMemory: (memory: WebAssembly.Memo
 }
 
 function makeTraces(rawData: string | Uint8Array): Trace[] {
-  const parsed = parseRawFile(rawData)
+  const parsed = parseRawTraces(rawData)
   const axis = parsed.axis
   const names = parsed.variables.map((variable) => variable.name)
   return parsed.variables.filter((variable) => isTraceVariable(variable.name, names)).map((variable) => {
