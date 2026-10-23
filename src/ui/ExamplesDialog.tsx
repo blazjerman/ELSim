@@ -30,6 +30,8 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'zener', title: 'Zener voltage reference', description: 'A resistor limits current while a reverse-connected 5.1 V Zener holds the output near its breakdown voltage.' },
   { id: 'transformer', title: 'AC transformer', description: 'Compare the primary and secondary waveforms of a coupled-inductor transformer with a 2:1 turns ratio.' },
   { id: 'transformer-current', title: 'Transformer winding currents', description: 'Run a 50 Hz transient and watch the solved primary and secondary currents animate independently.' },
+  { id: 'transmission-line', title: 'Transmission-line pulse delay', description: 'Compare a 1 V pulse at the input and output of a matched 50 Ω line; the output arrives after the configured 5 ns propagation delay.' },
+  { id: 'coupled-crosstalk', title: 'Crosstalk between coupled lines', description: 'Drive one conductor in a three-line cable model and compare its output with the two neighboring lines to see mutual coupling.' },
   { id: 'educational-opamp', title: 'Idealized op-amp and feedback', description: 'Use the built-in five-pin teaching model to make a 1 V input into about 2 V with negative feedback. No imported model files are needed.' },
   { id: 'imported-opamp', title: 'Imported op-amp IC', description: 'Explore a five-pin user subcircuit, its ordered pins, supply rails, feedback resistors, and solved gain.' },
   { id: 'logic-gates', title: 'Logic gate basics', description: 'Drive ideal NOT, AND, OR, NAND, NOR, XOR, and XNOR gates with two pulse sources and compare their default 0 V / 5 V outputs.' },
@@ -69,7 +71,7 @@ const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, readonly ExampleId[]
   diodes: ['diode-polarity', 'led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'sine-wave', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
   switching: ['voltage-switch', 'current-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
-  advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'educational-opamp', 'imported-opamp', 'inverting-opamp', 'noninverting-opamp', 'common-emitter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier'],
+  advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'educational-opamp', 'imported-opamp', 'inverting-opamp', 'noninverting-opamp', 'common-emitter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier', 'transmission-line', 'coupled-crosstalk'],
 }
 const startOrder = new Map(exampleTopicIds.start.map((id, index) => [id, index]))
 

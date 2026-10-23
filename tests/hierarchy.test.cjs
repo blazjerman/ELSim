@@ -21,6 +21,47 @@ test('current-source probes use ngspice current parameters in root and nested sh
   assert.equal(hierarchyComponentCurrentVector(hierarchical, 'sheet-load', ['root-block'], 'child-current'), 'i(@i.xload.i1[current])')
 })
 
+test('transmission-line port-current probes stay distinct across hierarchy paths', () => {
+  const project = createBlockProject()
+  const line = { id: 'child-line', kind: 'transmissionLine', ref: 'TLINE1', value: '50 Ω', x: 300, y: 300, rotation: 0 }
+  project.sheets[1].parts.push(line)
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', ['root-block'], line.id, project.rootSheetId, undefined, 1), 'v(xload.tline1#i1)')
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', ['root-block'], line.id, project.rootSheetId, undefined, 2), 'v(xload.tline1#i2)')
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', [], line.id, 'sheet-load', undefined, 2), 'v(tline1#i2)')
+
+  const lossyLine = { ...line, id: 'child-lossy-line', ref: 'TLOSSY1', deviceModel: 'LINE50' }
+  project.sheets[1].parts.push(lossyLine)
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', ['root-block'], lossyLine.id, project.rootSheetId, undefined, 1), 'i(v.xload.v__elsim_tlossy1_p1)')
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', ['root-block'], lossyLine.id, project.rootSheetId, undefined, 2), 'i(v.xload.v__elsim_tlossy1_p2)')
+  const txlLine = { ...line, id: 'child-txl-line', ref: 'TTXL1', deviceModel: 'TXL50' }
+  project.sheets[1].parts.push(txlLine)
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', ['root-block'], txlLine.id, project.rootSheetId, undefined, 1), 'i(v.xload.v__elsim_ttxl1_p1)')
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', ['root-block'], txlLine.id, project.rootSheetId, undefined, 2), 'i(v.xload.v__elsim_ttxl1_p2)')
+})
+
+test('hierarchical LTRA and TXL netlists save both nested port currents', () => {
+  const project = createBlockProject()
+  project.simulation = { ...project.simulation, analysis: 'tran' }
+  const lossyLine = { id: 'child-lossy-line', kind: 'transmissionLine', ref: 'TLOSSY1', value: '', deviceModel: 'LINE50', x: 500, y: 300, rotation: 0 }
+  const txlLine = { id: 'child-txl-line', kind: 'transmissionLine', ref: 'TTXL1', value: '', deviceModel: 'TXL50', x: 700, y: 300, rotation: 0 }
+  project.sheets[1].parts.push(lossyLine, txlLine)
+  const txlPins = componentPins(txlLine)
+  project.sheets[1].netLabels.push(...['txl-in', '0', 'txl-out', '0'].map((name, index) => ({ id: `txl-pin-${index}`, name, x: txlPins[index].x, y: txlPins[index].y, visible: false })))
+  project.modelAssets = [
+    { id: 'line-model', filename: 'line.lib', sha256: 'f'.repeat(64), content: '.model LINE50 LTRA(R=10 L=250n G=0 C=100p LEN=1)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'txl-model', filename: 'txl.lib', sha256: 'a'.repeat(64), content: '.model TXL50 TXL(R=10 L=250n G=0 C=100p LENGTH=1)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^\.save i\(v\.xload\.v__elsim_tlossy1_p1\)$/m)
+  assert.match(artifact.text, /^\.save i\(v\.xload\.v__elsim_tlossy1_p2\)$/m)
+  assert.match(artifact.text, /^\.save i\(v\.xload\.v__elsim_ttxl1_p1\)$/m)
+  assert.match(artifact.text, /^\.save i\(v\.xload\.v__elsim_ttxl1_p2\)$/m)
+  assert.match(artifact.text, /^V__ELSIM_TLOSSY1_P1 .* 0$/m)
+  assert.match(artifact.text, /^V__ELSIM_TLOSSY1_P2 .* 0$/m)
+  assert.match(artifact.text, /^YTXL1 __ELSIM_TTXL1_P1 0 __ELSIM_TTXL1_P2 0 TXL50$/m)
+})
+
 function createBlockProject() {
   const project = createStarterProject()
   const root = project.sheets[0]

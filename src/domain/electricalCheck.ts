@@ -3,7 +3,7 @@ import type { Connectivity } from './connectivity'
 import { componentPins } from './geometry'
 import type { Part, Project } from './project'
 import { componentMagnitude, spiceDimensionMagnitude } from './componentValue'
-import { analyzeModelDependencies, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
+import { analyzeModelDependencies, coupledLineConductorCount, inspectCoupledLineMatrices, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionFor, compatibleDeviceModelType, deviceModelTypeMatches } from './componentDefinitions'
 
@@ -279,6 +279,13 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       partId: topLevelInstanceId,
     })
     for (const part of sheet.parts) {
+      if ((part.kind === 'npn' || part.kind === 'pnp') && part.substrateNode && part.substrateNode !== '0' && !sheet.netLabels.some((label) => label.name.toLowerCase() === part.substrateNode!.toLowerCase())) issues.push({
+        id: `missing-bjt-substrate-node:${sheet.id}:${part.id}`,
+        severity: 'warning',
+        title: `${part.ref} substrate node ${part.substrateNode} is not labeled in ${sheet.name}`,
+        detail: 'Add or restore a net label with this name in the same sheet, or return the substrate setting to ngspice’s default ground.',
+        partId: topLevelInstanceId ?? part.id,
+      })
       if (part.kind === 'nmos' || part.kind === 'pmos') {
         const source = sheetConnectivity.pinNets.get(`${part.id}:2`)
         const bulk = sheetConnectivity.pinNets.get(`${part.id}:3`)
@@ -552,6 +559,47 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
           detail: `${dependency.reference} is an ${dependency.reference[0].toUpperCase()} device in ${dependency.filename}:${dependency.sourceLine}, but ${dependency.modelName} is a ${actualType.toUpperCase()} model. This ngspice device requires a ${expectedLabel} model. Review the imported model assignment before running.`,
           partId,
         })
+      }
+      const cplMatrixIssuesByAsset = new Map<string, ReturnType<typeof inspectCoupledLineMatrices>>()
+      const reportedCplMatrixIssues = new Set<string>()
+      for (const dependency of dependencies.resolved) {
+        if (dependency.kind !== 'device' || dependency.targetModelType?.toLowerCase() !== 'cpl') continue
+        const sourceAsset = project.modelAssets.find((candidate) => candidate.id === dependency.assetId)
+        const conductorCount = sourceAsset ? coupledLineConductorCount(sourceAsset.content, dependency.sourceLine, dependency.modelName) : null
+        if (conductorCount === null) continue
+        const matrixKey = `${dependency.targetAssetId}:${conductorCount}`
+        let matrixIssues = cplMatrixIssuesByAsset.get(matrixKey)
+        if (!matrixIssues) {
+          const asset = project.modelAssets.find((candidate) => candidate.id === dependency.targetAssetId)
+          if (!asset) continue
+          matrixIssues = inspectCoupledLineMatrices(asset.content, asset.selectedSections, [conductorCount])
+          cplMatrixIssuesByAsset.set(matrixKey, matrixIssues)
+        }
+        for (const matrixIssue of matrixIssues) {
+          if (matrixIssue.modelName.toLowerCase() !== dependency.modelName.toLowerCase()) continue
+          for (const partId of instancesByDefinition.get(dependency.owner.toLowerCase()) ?? []) {
+            const id = `invalid-cpl-matrix:${dependency.targetAssetId}:${matrixIssue.sourceLine}:${matrixIssue.matrix}:${matrixIssue.conductorCount}:${partId}`
+            if (reportedCplMatrixIssues.has(id)) continue
+            reportedCplMatrixIssues.add(id)
+            const notPositiveDefinite = matrixIssue.problem === 'not-positive-definite'
+            const missingLength = matrixIssue.problem === 'missing-length'
+            issues.push({
+              id,
+              severity: 'warning',
+              title: missingLength
+                ? `${matrixIssue.modelName} has no LENGTH parameter`
+                : notPositiveDefinite
+                  ? `${matrixIssue.modelName} has a C matrix that is not positive definite`
+                  : `${matrixIssue.modelName} has an invalid ${matrixIssue.matrix} matrix for ${matrixIssue.conductorCount} conductors`,
+              detail: missingLength
+                ? `ngspice requires every CPL model to declare LENGTH, even when a P instance supplies its own LEN. Add LENGTH=<value> to ${assets.get(dependency.targetAssetId) ?? 'the imported model'} at line ${matrixIssue.sourceLine}.`
+                : notPositiveDefinite
+                  ? `ngspice requires the numeric capacitance matrix to be positive definite. Check the diagonal and mutual capacitance values in ${assets.get(dependency.targetAssetId) ?? 'the imported model'} at line ${matrixIssue.sourceLine}. Parameterized entries are left for ngspice to evaluate.`
+                  : `${matrixIssue.matrix} contains ${matrixIssue.actualEntries} packed upper-triangle values, but a ${matrixIssue.conductorCount}-conductor model needs ${matrixIssue.expectedEntries}. Check ${assets.get(dependency.targetAssetId) ?? 'the imported model'} at line ${matrixIssue.sourceLine}.`,
+              partId,
+            })
+          }
+        }
       }
       for (const chain of dependencies.recursiveChains) {
         const chainNames = new Set(chain.map((name) => name.toLowerCase()))

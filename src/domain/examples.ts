@@ -673,6 +673,114 @@ export function createTransformerCurrentExampleProject(): Project {
   return project
 }
 
+/** A matched pulse circuit that makes a lossless transmission-line delay visible. */
+export function createTransmissionLineExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'line-lesson-v1', kind: 'source', ref: 'V1', value: '2 V', sourceMode: 'pulse', pulse: { initial: '0 V', delay: '0', rise: '10 ps', fall: '10 ps', width: '2 ns', period: '10 ns' }, x: 200, y: 300, rotation: 0 }
+  const sourceResistance: Part = { id: 'line-lesson-rsource', kind: 'resistor', ref: 'RSOURCE', value: '50 Ω', x: 380, y: 250, rotation: 0 }
+  const line: Part = { id: 'line-lesson-t1', kind: 'transmissionLine', ref: 'T1', value: '50 Ω', transmissionLine: { lengthMode: 'delay', delay: '5 ns' }, x: 600, y: 250, rotation: 0 }
+  const load: Part = { id: 'line-lesson-rload', kind: 'resistor', ref: 'RLOAD', value: '50 Ω', x: 780, y: 250, rotation: 0 }
+  const grounds: Part[] = [
+    { id: 'line-lesson-gnd-source', kind: 'ground', ref: 'GND1', value: '', x: 200, y: 390, rotation: 0 },
+    { id: 'line-lesson-gnd-in', kind: 'ground', ref: 'GND2', value: '', x: 550, y: 310, rotation: 0 },
+    { id: 'line-lesson-gnd-out', kind: 'ground', ref: 'GND3', value: '', x: 650, y: 310, rotation: 0 },
+    { id: 'line-lesson-gnd-load', kind: 'ground', ref: 'GND4', value: '', x: 830, y: 290, rotation: 0 },
+  ]
+  const parts = [source, sourceResistance, line, load, ...grounds]
+  const pin = (part: Part, index: number) => componentPins(part)[index]
+  const label = (id: string, name: string, part: Part, index: number) => ({ id, name, ...pin(part, index), visible: true })
+  project.name = 'Transmission-line pulse delay'
+  project.parts = parts
+  project.wires = [
+    { id: 'line-lesson-source-feed', points: [[200, 250], [330, 250]] },
+    { id: 'line-lesson-input-route', points: [[430, 250], [470, 250]] },
+    { id: 'line-lesson-input-rise', points: [[470, 250], [470, 230]] },
+    { id: 'line-lesson-input-drop', points: [[470, 230], [550, 230]] },
+    { id: 'line-lesson-output-run', points: [[650, 230], [690, 230]] },
+    { id: 'line-lesson-output-drop', points: [[690, 230], [690, 250]] },
+    { id: 'line-lesson-load-feed', points: [[690, 250], [730, 250]] },
+    { id: 'line-lesson-source-return', points: [[200, 350], [200, 370]] },
+    { id: 'line-lesson-input-return', points: [[550, 270], [550, 290]] },
+    { id: 'line-lesson-output-return', points: [[650, 270], [650, 290]] },
+    { id: 'line-lesson-load-return', points: [[830, 250], [830, 270]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    label('line-lesson-input', 'IN', line, 0),
+    label('line-lesson-output', 'OUT', line, 2),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '15 ns', maxStep: '50 ps' }
+  project.plotSettings = { selectedTraceIds: ['V(IN)', 'V(OUT)'], ranges: {} }
+  project.view = { zoom: 0.85, panX: -5, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
+const coupledCrosstalkLibrary = [
+  '.SUBCKT COUPLED_LINE3 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2',
+  'P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL3 LEN=1',
+  '.ENDS COUPLED_LINE3',
+  '.MODEL CPL3 CPL LENGTH=1',
+  '+ R=1 0 0 1 0 1',
+  '+ L=3.83572e-7 8.26253e-8 8e-9 3.83572e-7 8.26253e-8 3.83572e-7',
+  '+ G=0 0 0 0 0 0',
+  '+ C=9.143579e-11 -9.78265e-12 -1e-12 9.143578e-11 -9.78265e-12 9.143578e-11',
+  '',
+].join('\n')
+const coupledCrosstalkLibrarySha256 = 'e2d2d20824a0acb324b2b2a9604f619a64064ee79025c17ce6ed8f476551dbd4'
+
+/** A three-conductor user IC lesson that makes capacitive/inductive crosstalk visible. */
+export function createCoupledLineCrosstalkExampleProject(): Project {
+  const project = createStarterProject()
+  const library = {
+    id: 'example-coupled-crosstalk-library', filename: 'coupled-crosstalk.lib',
+    content: coupledCrosstalkLibrary, sha256: coupledCrosstalkLibrarySha256,
+    licenseStatus: 'unknown' as const, importedAt: '2026-10-23T00:00:00.000Z',
+  }
+  const definition = parseSubcircuitLibrary(library.content).subcircuits.find((candidate) => candidate.name === 'COUPLED_LINE3')
+  if (!definition) throw new Error('The coupled-line example library is missing its subcircuit.')
+  const line: Part = {
+    id: 'cpl-lesson-xline', kind: 'subcircuit', ref: 'XLINE', value: definition.name, modelName: definition.name,
+    componentDefinitionId: importedSubcircuitComponentDefinition(definition, { assetId: library.id, filename: library.filename, sha256: library.sha256 }).id,
+    modelPins: [...definition.pins], modelParameters: {}, x: 650, y: 450, rotation: 0,
+  }
+  const source: Part = { id: 'cpl-lesson-v1', kind: 'source', ref: 'V1', value: '2 V', sourceMode: 'pulse', pulse: { initial: '0 V', delay: '1 ns', rise: '50 ps', fall: '50 ps', width: '8 ns', period: '20 ns' }, x: 180, y: 380, rotation: 0 }
+  const sourceResistance: Part = { id: 'cpl-lesson-rsource', kind: 'resistor', ref: 'RSOURCE', value: '50 Ω', x: 390, y: 330, rotation: 0 }
+  const inputTerminations: Part[] = [
+    { id: 'cpl-lesson-rt2', kind: 'resistor', ref: 'RTERM2', value: '50 Ω', x: 420, y: 510, rotation: 90 },
+    { id: 'cpl-lesson-rt3', kind: 'resistor', ref: 'RTERM3', value: '50 Ω', x: 420, y: 620, rotation: 90 },
+  ]
+  const loads: Part[] = [1, 2, 3].map((index) => ({ id: `cpl-lesson-rload${index}`, kind: 'resistor', ref: `RLOAD${index}`, value: '50 Ω', x: 900, y: 320 + index * 110, rotation: 90 }))
+  const parts = [source, sourceResistance, ...inputTerminations, line, ...loads]
+  const nodeNames: Record<string, string[]> = {
+    'cpl-lesson-v1': ['VDRIVE', '0'],
+    'cpl-lesson-rsource': ['VDRIVE', 'IN1'],
+    'cpl-lesson-rt2': ['IN2', '0'],
+    'cpl-lesson-rt3': ['IN3', '0'],
+    'cpl-lesson-xline': ['IN1', 'IN2', 'IN3', '0', 'OUT1', 'OUT2', 'OUT3', '0'],
+    'cpl-lesson-rload1': ['OUT1', '0'],
+    'cpl-lesson-rload2': ['OUT2', '0'],
+    'cpl-lesson-rload3': ['OUT3', '0'],
+  }
+  const netLabels = parts.flatMap((part) => componentPins(part).map((pin, pinIndex) => ({
+    id: `${part.id}-net-${pinIndex}`, name: nodeNames[part.id][pinIndex], x: pin.x, y: pin.y,
+    visible: part.id === line.id && pinIndex !== 3 && pinIndex !== 7,
+  })))
+  project.name = 'Three-conductor crosstalk'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.modelAssets = [library]
+  project.sheets = [{ ...project.sheets[0], parts, wires: [], junctions: [], netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '12 ns', maxStep: '50 ps' }
+  project.plotSettings = { selectedTraceIds: ['V(IN1)', 'V(OUT1)', 'V(OUT2)', 'V(OUT3)'], ranges: {} }
+  project.view = { zoom: 0.82, panX: -5, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A first voltage-divider lesson with a predictable 5 V midpoint. */
 export function createVoltageDividerExampleProject(): Project {
   const project = createStarterProject()

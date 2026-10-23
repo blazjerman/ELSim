@@ -10,15 +10,24 @@ export function transformerWindingCurrentVector(ref: string, winding: 'P' | 'S')
   return `i(@L${ref}_${winding}[i])`
 }
 
+export function transmissionLinePortCurrentVector(ref: string, port: 1 | 2, lossy = false): string {
+  if (!lossy) return `v(${ref}#i${port})`
+  const segments = ref.toLowerCase().split('.')
+  const partRef = segments.pop() ?? ref.toLowerCase()
+  const hierarchy = segments.length ? `v.${segments.join('.')}.` : ''
+  return `i(${hierarchy}v__elsim_${partRef}_p${port})`
+}
+
 export function mesfetDrainCurrentSenseReference(ref: string): string {
   return `V__ELSIM_${ref}_D`
 }
 
-export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref'>): string {
+export function componentCurrentVector(part: Pick<Part, 'kind' | 'ref' | 'deviceModel'>): string {
   if (part.kind === 'source') return `i(${part.ref})`
   if (part.kind === 'opamp') return `i(@r.x${part.ref}.rout[i])`
   if (part.kind === 'currentSource') return `i(@${part.ref}[current])`
   if (part.kind === 'transformer') return transformerWindingCurrentVector(part.ref, 'P')
+  if (part.kind === 'transmissionLine') return transmissionLinePortCurrentVector(part.ref, 1, Boolean(part.deviceModel))
   if (part.kind === 'nmesfet' || part.kind === 'pmesfet') return `i(${mesfetDrainCurrentSenseReference(part.ref)})`
   if (part.kind === 'potentiometer') return `i(@R${part.ref}_A[i])`
   if (part.kind === 'voltageSwitch') return `i(@${part.ref}[i])`

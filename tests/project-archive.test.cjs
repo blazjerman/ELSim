@@ -379,7 +379,10 @@ test('LTspice source provenance validates its format, filename, and UTF-8 size l
 
 test('plot preferences survive project validation and old projects receive defaults', async () => {
   const project = createStarterProject()
-  project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } }, detachedWindow: { x: 42, y: 54, width: 720, height: 460 }, panels: [{ id: 'plot-a', bounds: { x: 100, y: 80, width: 600, height: 320 }, selectedTraceIds: ['v(vout)'], ranges: { tran: { start: 0.1, end: 0.8 } }, valueRanges: { tran: { V: { min: -5, max: 5 }, A: { min: -0.002, max: 0.002 } }, ac: { magnitude: { min: -40, max: 20 }, phase: { min: -180, max: 180 } } } }] }
+  project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } }, detachedWindow: { x: 42, y: 54, width: 720, height: 460 }, panels: [{ id: 'plot-a', bounds: { x: 100, y: 80, width: 600, height: 320 }, selectedTraceIds: ['v(vout)'], ranges: { tran: { start: 0.1, end: 0.8 } }, traceReferences: {
+    'v(tline1#i1)': { kind: 'part-current', partId: 'line-1', sheetId: project.rootSheetId, scopeSheetId: project.rootSheetId, instancePath: [], port: 1 },
+    'v(tline1#i2)': { kind: 'part-current', partId: 'line-1', sheetId: project.rootSheetId, scopeSheetId: project.rootSheetId, instancePath: [], port: 2 },
+  }, valueRanges: { tran: { V: { min: -5, max: 5 }, A: { min: -0.002, max: 0.002 } }, ac: { magnitude: { min: -40, max: 20 }, phase: { min: -180, max: 180 } } } }] }
   assert.deepEqual(validateProject(structuredClone(project)).plotSettings, project.plotSettings)
   const oldProject = structuredClone(project)
   delete oldProject.plotSettings
@@ -393,6 +396,9 @@ test('plot preferences survive project validation and old projects receive defau
   const malformedPanel = structuredClone(project)
   malformedPanel.plotSettings.panels[0].ranges.tran = { start: 0.8, end: 0.2 }
   assert.throws(() => validateProject(malformedPanel), /Plot panel view range is malformed/)
+  const malformedPort = structuredClone(project)
+  malformedPort.plotSettings.panels[0].traceReferences['v(tline1#i2)'].port = 3
+  assert.throws(() => validateProject(malformedPort), /Plot trace references are malformed/)
   for (const valueRanges of [
     { tran: { V: { min: 2, max: 1 } } },
     { tran: { V: { min: 1, max: 1 } } },

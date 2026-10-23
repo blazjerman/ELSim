@@ -46,7 +46,7 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
     const current = currentForPart(part)
     return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex === 0 ? -current : current }
   }
-  if (part.kind === 'transformer') {
+  if (part.kind === 'transformer' || part.kind === 'transmissionLine') {
     const current = currentForPin?.(part, pinIndex) ?? (pinIndex < 2 ? currentForPart(part) : undefined)
     return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex % 2 === 0 ? -current : current }
   }

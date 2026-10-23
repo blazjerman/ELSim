@@ -10,7 +10,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const artifactDir = path.resolve(process.argv[2] ?? path.join(root, 'public/engine'))
 const nativeNgspice = process.argv[3]
 const moduleUrl = pathToFileURL(path.join(artifactDir, 'ngspice.mjs')).href
-const fixtures = ['bsource-basic-functions-op', 'behavioral-differential-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'rc-lowpass-ac', 'rc-highpass-ac', 'current-source-op', 'current-source-dc-sweep', 'two-source-dc-sweep', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'voltage-divider-op', 'superposition-op', 'thevenin-norton-equivalent-op', 'lc-energy-transient', 'rlc-ac', 'subckt-op', 'transformer-winding-loss-ac', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-bare-params-op', 'imported-subckt-local-param-shadow-op', 'imported-subckt-param-arithmetic-op', 'imported-subckt-math-params-op', 'imported-subckt-log10-params-op', 'imported-subckt-quoted-params-op', 'imported-subckt-user-function-params-op', 'imported-subckt-interpreter-functions-op', 'imported-model-interpreter-functions-op', 'imported-subckt-scale-suffixes-op', 'imported-ako-model-psa', 'stochastic-subckt-override-op', 'stochastic-subckt-hierarchy-override-op', 'numeric-leading-subckt-name-pins-op', 'slash-subckt-pin-identifiers-op', 'punctuated-subckt-pin-names-op', 'lib-section-numeric-dot-op', 'lib-section-dot-op', 'lib-section-slash-op', 'lib-section-dollar-op', 'lib-section-plus-op', 'lib-section-leading-dollar-op', 'lib-section-full-token-op', 'conditional-device-model-op', 'conditional-scoped-device-model-op', 'nested-user-subckt-op', 'nested-named-ends-op', 'hyphen-model-name-op', 'nested-mismatched-ends-names-op', 'scoped-user-function-params-op', 'scoped-model-function-parameter-op', 'scoped-user-device-model-op', 'imported-diode-model-op', 'imported-model-function-parameter-op', 'model-duplicate-parameter-last-wins', 'imported-mosfet-model-op', 'imported-passive-model-defaults-op', 'potentiometer-imported-r-model-op', 'imported-library-temp-default', 'imported-library-temp-override', 'imported-library-ic-nodeset', 'imported-library-csparam-op', 'imported-library-save-vectors-tran', 'imported-library-probe-current-tran', 'imported-library-measurement-tran', 'imported-library-measurement-ac', 'imported-library-measurement-dc', 'imported-library-measurement-duplicate-tran', 'vdmos-power-op', 'jfet-model-op', 'pjfet-model-op', 'mesfet-model-op', 'native-bsim3-binned-model-op', 'jfet-switch', 'current-controlled-switch', 'hierarchical-block-op', 'hierarchical-controlled-source-op', 'hierarchical-user-function-params-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op', 'educational-opamp-op', 'educational-opamp-inverting-op']
+const fixtures = ['bsource-basic-functions-op', 'behavioral-differential-op', 'param-arithmetic-op', 'param-bsource-op', 'rc-transient', 'rc-lowpass-ac', 'rc-highpass-ac', 'current-source-op', 'current-source-dc-sweep', 'two-source-dc-sweep', 'current-source-pwl-repeat', 'pwl-transient', 'pwl-repeat-forever', 'pwl-repeat-finite', 'sine-transient', 'sine-current-transient', 'exp-sources-transient', 'sffm-sources-transient', 'pulse-cycle-count', 'diode-op', 'voltage-divider-op', 'superposition-op', 'thevenin-norton-equivalent-op', 'lc-energy-transient', 'rlc-ac', 'subckt-op', 'transformer-winding-loss-ac', 'transmission-line-delay-tran', 'lossy-transmission-line-tran', 'hierarchical-lossy-transmission-line-tran', 'txl-transmission-line-tran', 'hierarchical-txl-transmission-line-tran', 'coupled-transmission-line-tran', 'coupled-transmission-line-4-tran', 'coupled-transmission-line-5-tran', 'coupled-transmission-line-6-tran', 'coupled-transmission-line-7-tran', 'coupled-transmission-line-8-tran', 'imported-subckt-op', 'imported-subckt-params-op', 'imported-subckt-bare-params-op', 'imported-subckt-local-param-shadow-op', 'imported-subckt-param-arithmetic-op', 'imported-subckt-math-params-op', 'imported-subckt-log10-params-op', 'imported-subckt-quoted-params-op', 'imported-subckt-user-function-params-op', 'imported-subckt-interpreter-functions-op', 'imported-model-interpreter-functions-op', 'imported-subckt-scale-suffixes-op', 'imported-ako-model-psa', 'stochastic-subckt-override-op', 'stochastic-subckt-hierarchy-override-op', 'numeric-leading-subckt-name-pins-op', 'slash-subckt-pin-identifiers-op', 'punctuated-subckt-pin-names-op', 'lib-section-numeric-dot-op', 'lib-section-dot-op', 'lib-section-slash-op', 'lib-section-dollar-op', 'lib-section-plus-op', 'lib-section-leading-dollar-op', 'lib-section-full-token-op', 'conditional-device-model-op', 'conditional-scoped-device-model-op', 'nested-user-subckt-op', 'nested-named-ends-op', 'hyphen-model-name-op', 'nested-mismatched-ends-names-op', 'scoped-user-function-params-op', 'scoped-model-function-parameter-op', 'scoped-user-device-model-op', 'imported-diode-model-op', 'imported-model-function-parameter-op', 'model-duplicate-parameter-last-wins', 'imported-mosfet-model-op', 'imported-passive-model-defaults-op', 'potentiometer-imported-r-model-op', 'imported-library-temp-default', 'imported-library-temp-override', 'imported-library-ic-nodeset', 'imported-library-csparam-op', 'imported-library-save-vectors-tran', 'imported-library-probe-current-tran', 'imported-library-measurement-tran', 'imported-library-measurement-ac', 'imported-library-measurement-dc', 'imported-library-measurement-duplicate-tran', 'vdmos-power-op', 'jfet-model-op', 'pjfet-model-op', 'mesfet-model-op', 'native-bsim3-binned-model-op', 'jfet-switch', 'current-controlled-switch', 'hierarchical-block-op', 'hierarchical-controlled-source-op', 'hierarchical-user-function-params-op', 'hierarchical-repeat-op', 'hierarchical-repeat-flat-op', 'hierarchical-parameter', 'hierarchical-nested-op', 'hierarchical-nested-flat-op', 'hierarchical-walkthrough-op', 'ltspice-uplim-op', 'mosfet-switch', 'user-opamp-op', 'educational-opamp-op', 'educational-opamp-inverting-op']
+fixtures.push('hicum2-bjt-op', 'vbic-bjt-levels-op')
+assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
+assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
 const requestedFixtures = process.env.NGSPICE_WASM_ONLY?.split(',').map((name) => name.trim()).filter(Boolean) ?? []
 const selectedFixtures = requestedFixtures.length ? requestedFixtures : fixtures
 const unknownFixtures = selectedFixtures.filter((name) => !fixtures.includes(name))
@@ -63,13 +66,112 @@ for (const fixture of selectedFixtures) {
     assert.notEqual(defaultMode.status, 0, 'the default browser mode should reject AKO inheritance')
     assert.match(defaultMode.stderr, /model type mismatch/i, 'default mode should identify AKO as an unsupported model type')
   }
-  const wasmResult = await runInWorker(deckPath, fixture === 'current-source-op' || fixture === 'current-controlled-switch' || fixture === 'imported-model-function-parameter-op' || fixture === 'imported-mosfet-model-op' || fixture === 'vdmos-power-op' || fixture === 'jfet-model-op' || fixture === 'pjfet-model-op' || fixture === 'mesfet-model-op' || fixture === 'jfet-switch' || fixture === 'hierarchical-block-op' || fixture === 'hierarchical-controlled-source-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op' || fixture === 'lc-energy-transient' || fixture === 'imported-library-ic-nodeset' || fixture === 'imported-library-save-vectors-tran' || fixture === 'imported-library-probe-current-tran' || fixture === 'imported-library-measurement-tran' || fixture === 'imported-library-measurement-ac' || fixture === 'imported-library-measurement-dc' || fixture === 'imported-library-measurement-duplicate-tran' || fixture === 'model-duplicate-parameter-last-wins' || fixture === 'potentiometer-imported-r-model-op', fixture === 'two-source-dc-sweep' ? ['/result-0.raw', '/result-1.raw', '/result-2.raw'] : undefined, fixture === 'ltspice-uplim-op', fixture === 'imported-ako-model-psa' ? 'psa' : undefined)
+  const wasmResult = await runInWorker(deckPath, fixture === 'current-source-op' || fixture === 'current-controlled-switch' || fixture === 'imported-model-function-parameter-op' || fixture === 'imported-mosfet-model-op' || fixture === 'vdmos-power-op' || fixture === 'jfet-model-op' || fixture === 'pjfet-model-op' || fixture === 'mesfet-model-op' || fixture === 'jfet-switch' || fixture === 'hierarchical-block-op' || fixture === 'hierarchical-controlled-source-op' || fixture.startsWith('hierarchical-repeat-') || fixture.startsWith('hierarchical-nested-') || fixture === 'hierarchical-walkthrough-op' || fixture === 'lc-energy-transient' || fixture === 'imported-library-ic-nodeset' || fixture === 'imported-library-save-vectors-tran' || fixture === 'imported-library-probe-current-tran' || fixture === 'imported-library-measurement-tran' || fixture === 'imported-library-measurement-ac' || fixture === 'imported-library-measurement-dc' || fixture === 'imported-library-measurement-duplicate-tran' || fixture === 'model-duplicate-parameter-last-wins' || fixture === 'potentiometer-imported-r-model-op' || fixture === 'transmission-line-delay-tran' || fixture === 'lossy-transmission-line-tran' || fixture === 'hierarchical-lossy-transmission-line-tran' || fixture === 'txl-transmission-line-tran' || fixture === 'hierarchical-txl-transmission-line-tran' || fixture === 'coupled-transmission-line-tran' || /^coupled-transmission-line-\d+-tran$/.test(fixture), fixture === 'two-source-dc-sweep' ? ['/result-0.raw', '/result-1.raw', '/result-2.raw'] : undefined, fixture === 'ltspice-uplim-op', fixture === 'imported-ako-model-psa' ? 'psa' : undefined)
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status\nstdout:\n${wasmResult.stdout}\nstderr:\n${wasmResult.stderr}`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
   if (fixture === 'imported-library-temp-default') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 125\.000000/, 'an imported library .TEMP card should set the circuit temperature when the project uses its default')
   if (fixture === 'imported-library-temp-override') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 85\.000000/, 'a later non-default project .TEMP directive should override the imported library value')
   if (fixture === 'imported-library-csparam-op') assert.match(wasmResult.stdout, /CSPARAM_VALUE=3(?:\.0+)?\b/, 'an imported library .CSPARAM expression should expose its calculated constant to ngspice control output')
+  if (fixture === 'transmission-line-delay-tran') {
+    assert.match(wasmResult.raw, /^\s*\d+\s+v\(t1#i1\)\s+\w+$/mi, 'the first transmission-line port current should be exposed')
+    assert.match(wasmResult.raw, /^\s*\d+\s+v\(t1#i2\)\s+\w+$/mi, 'the second transmission-line port current should be exposed')
+    const time = realRawVector(wasmResult.raw, 'time')
+    const output = realRawVector(wasmResult.raw, 'v(p2)')
+    const port1 = realRawVector(wasmResult.raw, 'v(t1#i1)')
+    const port2 = realRawVector(wasmResult.raw, 'v(t1#i2)')
+    assert.ok(time.length > 100, 'the transient should have enough samples to inspect the delayed edge')
+    const beforeDelay = output.findIndex((_value, index) => time[index] >= 1.5e-9)
+    const afterDelay = output.findIndex((_value, index) => time[index] >= 2.5e-9)
+    assert.ok(beforeDelay >= 0 && output[beforeDelay] < 0.1, 'the output should remain low before the line delay')
+    assert.ok(afterDelay >= 0 && output[afterDelay] > 0.4, 'the matched output should rise after the line delay')
+    assert.ok(port1.some((value) => Math.abs(value) > 1e-4), 'port 1 current should be nonzero')
+    assert.ok(port2.some((value) => Math.abs(value) > 1e-4), 'port 2 current should be nonzero')
+    assert.notDeepEqual(port1, port2, 'the independently resolved port-current waveforms should not be collapsed')
+  }
+  if (fixture === 'lossy-transmission-line-tran') {
+    assert.match(wasmResult.raw, /^\s*\d+\s+i\(vport1\)\s+current/mi, 'the LTRA first-port current should be exposed through its zero-volt sensor')
+    assert.match(wasmResult.raw, /^\s*\d+\s+i\(vport2\)\s+current/mi, 'the LTRA second-port current should be exposed through its zero-volt sensor')
+    const time = realRawVector(wasmResult.raw, 'time')
+    const input = realRawVector(wasmResult.raw, 'v(input)')
+    const output = realRawVector(wasmResult.raw, 'v(output)')
+    const port1 = realRawVector(wasmResult.raw, 'i(vport1)')
+    const port2 = realRawVector(wasmResult.raw, 'i(vport2)')
+    assert.ok(time.length > 100, 'the transient should contain enough samples to inspect propagation')
+    const beforeDelay = output.findIndex((_value, index) => time[index] >= 5.5e-9)
+    const afterDelay = output.findIndex((_value, index) => time[index] >= 6.5e-9)
+    assert.ok(input.some((value) => value > 0.4), 'the source-side port should receive the pulse')
+    assert.ok(beforeDelay >= 0 && output[beforeDelay] < 0.1, 'the load-side port should remain low before the LTRA delay')
+    assert.ok(afterDelay >= 0 && output[afterDelay] > 0.3, 'the load-side port should rise after the LTRA delay')
+    assert.ok(port1.some((value) => Math.abs(value) > 1e-4), 'LTRA port 1 current should be nonzero')
+    assert.ok(port2.some((value) => Math.abs(value) > 1e-4), 'LTRA port 2 current should be nonzero')
+    assert.notDeepEqual(port1, port2, 'the two LTRA port-current traces should be independently readable')
+  }
+  if (fixture === 'txl-transmission-line-tran') {
+    assert.match(wasmResult.raw, /^\s*\d+\s+i\(vport1\)\s+current$/mi, 'the TXL first-port current should be exposed through its zero-volt sensor')
+    assert.match(wasmResult.raw, /^\s*\d+\s+i\(vport2\)\s+current$/mi, 'the TXL second-port current should be exposed through its zero-volt sensor')
+    const time = realRawVector(wasmResult.raw, 'time')
+    const output = realRawVector(wasmResult.raw, 'v(output)')
+    const port1 = realRawVector(wasmResult.raw, 'i(vport1)')
+    const port2 = realRawVector(wasmResult.raw, 'i(vport2)')
+    const beforeDelay = output.findIndex((_value, index) => time[index] >= 4.5e-9)
+    const afterDelay = output.findIndex((value, index) => time[index] >= 5.5e-9 && value > 0.2)
+    assert.ok(beforeDelay >= 0 && Math.abs(output[beforeDelay]) < 0.1, 'the TXL output should remain low before the line delay')
+    assert.ok(afterDelay >= 0, 'the TXL output should rise after the line delay')
+    assert.ok(port1.some((value) => Math.abs(value) > 1e-4), 'TXL port 1 current should be nonzero')
+    assert.ok(port2.some((value) => Math.abs(value) > 1e-4), 'TXL port 2 current should be nonzero')
+    assert.notDeepEqual(port1, port2, 'the two TXL port-current traces should be independently readable')
+  }
+  if (fixture === 'hierarchical-txl-transmission-line-tran') {
+    assert.match(wasmResult.raw, /^\s*\d+\s+i\(v\.xline\.v__elsim_t1_p1\)\s+current$/mi, 'the nested TXL first-port current should be exposed through its hierarchical sensor')
+    assert.match(wasmResult.raw, /^\s*\d+\s+i\(v\.xline\.v__elsim_t1_p2\)\s+current$/mi, 'the nested TXL second-port current should be exposed through its hierarchical sensor')
+    const time = realRawVector(wasmResult.raw, 'time')
+    const output = realRawVector(wasmResult.raw, 'v(line_output)')
+    const port1 = realRawVector(wasmResult.raw, 'i(v.xline.v__elsim_t1_p1)')
+    const port2 = realRawVector(wasmResult.raw, 'i(v.xline.v__elsim_t1_p2)')
+    const delayedRise = output.findIndex((value, index) => time[index] > 5.5e-9 && value > 0.2)
+    assert.ok(delayedRise >= 0, 'the nested TXL output should rise after its propagation delay')
+    assert.ok(port1.some((value) => Math.abs(value) > 1e-4), 'the nested TXL source-side current should be nonzero')
+    assert.ok(port2.some((value) => Math.abs(value) > 1e-4), 'the nested TXL load-side current should be nonzero')
+    assert.notDeepEqual(port1, port2, 'the nested TXL port-current traces should be independently readable')
+  }
+  if (fixture === 'hierarchical-lossy-transmission-line-tran') {
+    assert.match(wasmResult.raw, /^\s*\d+\s+i\(v\.xline\.v__elsim_t1_p1\)\s+current$/mi, 'the nested LTRA first-port current should be exposed through its hierarchical zero-volt sensor')
+    assert.match(wasmResult.raw, /^\s*\d+\s+i\(v\.xline\.v__elsim_t1_p2\)\s+current$/mi, 'the nested LTRA second-port current should be exposed through its hierarchical zero-volt sensor')
+    const port1 = realRawVector(wasmResult.raw, 'i(v.xline.v__elsim_t1_p1)')
+    const port2 = realRawVector(wasmResult.raw, 'i(v.xline.v__elsim_t1_p2)')
+    assert.ok(port1.some((value) => Math.abs(value) > 1e-4), 'the nested LTRA source-side current should be nonzero')
+    assert.ok(port2.some((value) => Math.abs(value) > 1e-4), 'the nested LTRA load-side current should be nonzero')
+    assert.notDeepEqual(port1, port2, 'the nested LTRA port-current traces should be independently readable')
+  }
+  if (fixture === 'coupled-transmission-line-tran') {
+    assert.ok(wasmResult.raw, 'the coupled-line fixture should return transient vectors')
+    const time = realRawVector(wasmResult.raw, 'time')
+    const input = realRawVector(wasmResult.raw, 'v(line_in1)')
+    const nearEnd = realRawVector(wasmResult.raw, 'v(line_out1)')
+    const coupled2 = realRawVector(wasmResult.raw, 'v(line_out2)')
+    const coupled3 = realRawVector(wasmResult.raw, 'v(line_out3)')
+    assert.ok(time.length > 100, 'the coupled-line transient should contain enough samples')
+    assert.ok(input.some((value) => value > 0.4), 'the driven conductor should receive the pulse')
+    assert.ok(nearEnd.some((value) => value > 0.1), 'the driven conductor should propagate through the coupled line')
+    for (const [index, coupled] of [coupled2, coupled3].entries()) {
+      const crosstalkPeak = Math.max(...coupled.map(Math.abs))
+      assert.ok(crosstalkPeak > 0.01 && crosstalkPeak < 0.5, `adjacent conductor ${index + 2} should show a bounded, measurable coupled response, got ${crosstalkPeak} V`)
+      assert.notDeepEqual(nearEnd, coupled, `conductor ${index + 2} should retain a distinct voltage response`)
+    }
+  }
+  if (/^coupled-transmission-line-\d+-tran$/.test(fixture)) {
+    const conductorCount = Number(fixture.match(/-(\d+)-tran$/)?.[1])
+    assert.ok(wasmResult.raw, `${conductorCount}-conductor coupled-line fixture should return transient vectors`)
+    const time = realRawVector(wasmResult.raw, 'time')
+    assert.ok(time.length > 100, `the ${conductorCount}-conductor transient should contain enough samples`)
+    const outputs = Array.from({ length: conductorCount }, (_, index) => realRawVector(wasmResult.raw, `v(line_out${index + 1})`))
+    assert.ok(outputs[0].some((value) => value > 0.1), 'the driven conductor should propagate through the coupled line')
+    for (const [index, values] of outputs.slice(1).entries()) {
+      assert.ok(values.some((value) => Math.abs(value) > 1e-5), `conductor ${index + 2} should retain its coupled transient response`)
+      assert.notDeepEqual(values, outputs[0], `conductor ${index + 2} should remain a distinct output vector`)
+    }
+  }
   if (fixture === 'imported-library-save-vectors-tran') {
     assert.match(wasmResult.raw, /^\s*\d+\s+v\(vin\)\s+voltage$/mi, 'an imported .SAVE vector should remain present alongside ELSim waveform vectors')
     assert.match(wasmResult.raw, /^\s*\d+\s+v\(out\)\s+voltage$/mi, 'ELSim .SAVE all should preserve the output voltage vector after an imported .SAVE card')
@@ -208,7 +310,7 @@ for (const fixture of selectedFixtures) {
     assert.match(wasmResult.stdout, /out_override\s+3\.000000e\+01/i, 'per-instance SCALE(1.5) override should evaluate to a gain of 3 and produce 30 V')
   }
   if (fixture === 'hierarchical-parameter') { assert.match(wasmResult.stdout, /in\s+5\.000000e\+00/i); assert.match(wasmResult.stdout, /in2\s+1\.000000e\+01/i); assert.match(wasmResult.stdout, /resistance\s+2000\s+1000/i); assert.match(wasmResult.stdout, /\bi\s+0\.005\s+0\.005/i) }
-  if (fixture !== 'hierarchical-parameter' && fixture !== 'hierarchical-controlled-source-op' && fixture !== 'current-source-op' && fixture !== 'current-controlled-switch' && fixture !== 'two-source-dc-sweep' && fixture !== 'lc-energy-transient' && fixture !== 'imported-library-ic-nodeset' && fixture !== 'imported-library-csparam-op' && fixture !== 'imported-library-save-vectors-tran' && fixture !== 'imported-library-probe-current-tran' && fixture !== 'imported-library-measurement-tran' && fixture !== 'imported-library-measurement-ac' && fixture !== 'imported-library-measurement-dc' && fixture !== 'imported-library-measurement-duplicate-tran' && fixture !== 'imported-model-function-parameter-op' && fixture !== 'imported-mosfet-model-op' && fixture !== 'potentiometer-imported-r-model-op' && fixture !== 'vdmos-power-op' && fixture !== 'jfet-model-op' && fixture !== 'pjfet-model-op' && fixture !== 'mesfet-model-op' && fixture !== 'jfet-switch' && fixture !== 'mosfet-switch' && fixture !== 'user-opamp-op' && fixture !== 'educational-opamp-op' && fixture !== 'educational-opamp-inverting-op' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed\nstdout:\n${wasmResult.stdout}\nstderr:\n${wasmResult.stderr}`)
+  if (fixture !== 'hierarchical-parameter' && fixture !== 'hierarchical-controlled-source-op' && fixture !== 'current-source-op' && fixture !== 'current-controlled-switch' && fixture !== 'two-source-dc-sweep' && fixture !== 'lc-energy-transient' && fixture !== 'imported-library-ic-nodeset' && fixture !== 'imported-library-csparam-op' && fixture !== 'imported-library-save-vectors-tran' && fixture !== 'imported-library-probe-current-tran' && fixture !== 'imported-library-measurement-tran' && fixture !== 'imported-library-measurement-ac' && fixture !== 'imported-library-measurement-dc' && fixture !== 'imported-library-measurement-duplicate-tran' && fixture !== 'imported-model-function-parameter-op' && fixture !== 'imported-mosfet-model-op' && fixture !== 'potentiometer-imported-r-model-op' && fixture !== 'transmission-line-delay-tran' && fixture !== 'lossy-transmission-line-tran' && fixture !== 'hierarchical-lossy-transmission-line-tran' && fixture !== 'txl-transmission-line-tran' && fixture !== 'hierarchical-txl-transmission-line-tran' && !/^coupled-transmission-line-(?:\d+-)?tran$/.test(fixture) && fixture !== 'vdmos-power-op' && fixture !== 'jfet-model-op' && fixture !== 'pjfet-model-op' && fixture !== 'mesfet-model-op' && fixture !== 'jfet-switch' && fixture !== 'mosfet-switch' && fixture !== 'user-opamp-op' && fixture !== 'educational-opamp-op' && fixture !== 'educational-opamp-inverting-op' && !fixture.startsWith('hierarchical-nested-')) assert.ok(wasmRows.length > 0, `${fixture}: no numeric result rows were printed\nstdout:\n${wasmResult.stdout}\nstderr:\n${wasmResult.stderr}`)
 
   if (fixture === 'bsource-basic-functions-op') {
     assert.match(wasmResult.stdout, /nmin\s+1\.000000e\+00/i, 'min() should clamp the 2 V input to 1 V')
@@ -376,6 +478,15 @@ for (const fixture of selectedFixtures) {
     if (fixture === 'nested-user-subckt-op') assert.match(wasmResult.stdout, /out\s+2\.500000e\+00/i, 'nested-user-subckt-op: nested CORE and the outer load should divide 5 V to 2.5 V')
     if (fixture === 'scoped-user-device-model-op') assert.match(wasmResult.stdout, /out\s+4\.307070e\+00/i, 'scoped-user-device-model-op: the nested diode must resolve AMP local DFAST and solve the loaded output')
     if (fixture === 'imported-diode-model-op') assert.match(wasmResult.stdout, /out\s+6\.790709e-01/i, 'imported-diode-model-op: 1N4148 model did not produce the expected 0.679 V operating point')
+    if (fixture === 'hicum2-bjt-op') {
+      const collectorCurrent = Number(wasmResult.stdout.match(/vce#branch\s+([-+\d.eE]+)/i)?.[1])
+      assert.ok(Number.isFinite(collectorCurrent) && collectorCurrent < -1e-6, `the ngspice NPN level-8 HICUM2 model should conduct at VBE=0.7 V; got ${collectorCurrent} A`)
+    }
+    if (fixture === 'vbic-bjt-levels-op') {
+      const currents = [...wasmResult.stdout.matchAll(/^[ \t]*vce[49]#branch[ \t]+([-+\d.eE]+)/gim)].map((match) => Number(match[1]))
+      assert.equal(currents.length, 2, 'ngspice should return currents for both VBIC device instances')
+      assert.ok(currents.every((current) => Number.isFinite(current) && current < -1e-6), `both NPN level-4 and level-9 VBIC models should conduct at VBE=0.7 V; got ${currents.join(', ')} A`)
+    }
     if (fixture === 'imported-model-function-parameter-op') {
       const values = new Map([...wasmResult.stdout.matchAll(/^\s*(out|refout)\s+([-+\d.eE]+)/gmi)].map(([, name, value]) => [name.toLowerCase(), Number(value)]))
       assert.ok(values.has('out') && values.has('refout'), 'both function-backed and numeric reference model outputs must be available')
@@ -503,11 +614,11 @@ for (const fixture of selectedFixtures) {
     }
     if (fixture.startsWith('hierarchical-repeat-')) hierarchyRepeatRaws.set(fixture, wasmResult.raw)
     if (fixture.startsWith('hierarchical-nested-')) hierarchyNestedRaws.set(fixture, wasmResult.raw)
-  } else if (fixture !== 'hierarchical-parameter' && fixture !== 'hierarchical-controlled-source-op' && fixture !== 'two-source-dc-sweep' && fixture !== 'lc-energy-transient' && fixture !== 'current-controlled-switch' && fixture !== 'imported-library-ic-nodeset' && fixture !== 'mosfet-switch' && fixture !== 'jfet-switch' && fixture !== 'imported-library-temp-default' && fixture !== 'imported-library-temp-override' && fixture !== 'imported-library-save-vectors-tran' && fixture !== 'imported-library-probe-current-tran' && fixture !== 'imported-library-measurement-tran' && fixture !== 'imported-library-measurement-ac' && fixture !== 'imported-library-measurement-dc' && fixture !== 'imported-library-measurement-duplicate-tran' && fixture !== 'imported-ako-model-psa' && !fixture.startsWith('hierarchical-nested-')) {
+  } else if (fixture !== 'hierarchical-parameter' && fixture !== 'hierarchical-controlled-source-op' && fixture !== 'two-source-dc-sweep' && fixture !== 'lc-energy-transient' && fixture !== 'current-controlled-switch' && fixture !== 'imported-library-ic-nodeset' && fixture !== 'mosfet-switch' && fixture !== 'jfet-switch' && fixture !== 'imported-library-temp-default' && fixture !== 'imported-library-temp-override' && fixture !== 'imported-library-save-vectors-tran' && fixture !== 'imported-library-probe-current-tran' && fixture !== 'imported-library-measurement-tran' && fixture !== 'imported-library-measurement-ac' && fixture !== 'imported-library-measurement-dc' && fixture !== 'imported-library-measurement-duplicate-tran' && fixture !== 'transmission-line-delay-tran' && fixture !== 'lossy-transmission-line-tran' && fixture !== 'hierarchical-lossy-transmission-line-tran' && fixture !== 'txl-transmission-line-tran' && fixture !== 'hierarchical-txl-transmission-line-tran' && !/^coupled-transmission-line-(?:\d+-)?tran$/.test(fixture) && fixture !== 'imported-ako-model-psa' && !fixture.startsWith('hierarchical-nested-')) {
     assert.ok(wasmRows.length > 1, `${fixture}: no numeric analysis rows were printed`)
   }
 
-  if (nativeNgspice && fixture !== 'ltspice-uplim-op' && fixture !== 'current-source-op' && fixture !== 'current-controlled-switch') {
+  if (nativeNgspice && fixture !== 'ltspice-uplim-op' && fixture !== 'current-source-op' && fixture !== 'current-controlled-switch' && !/^coupled-transmission-line-(?:\d+-)?tran$/.test(fixture)) {
     const native = spawnSync(nativeNgspice, ['-b', deckPath], { encoding: 'utf8', timeout: 60_000 })
     assert.equal(native.status, 0, `${fixture}: native ngspice failed: ${native.stderr}`)
     assert.match(native.stdout, /Circuit:/, `${fixture}: native ngspice did not parse the deck`)

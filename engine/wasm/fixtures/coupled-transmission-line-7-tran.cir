@@ -1,0 +1,40 @@
+* 7-conductor coupled-line transient using an imported subcircuit wrapper
+* Exercises all 7 native ngspice P/CPL conductors and 28-entry RLGC upper triangles.
+V1 source 0 PULSE(0 1 1n 50p 50p 8n 20n)
+RSOURCE source line_in1 50
+XLINE line_in1 0 0 0 0 0 0 0 line_out1 line_out2 line_out3 line_out4 line_out5 line_out6 line_out7 0 COUPLED_LINE
+RLOAD1 line_out1 0 50
+RLOAD2 line_out2 0 50
+RLOAD3 line_out3 0 50
+RLOAD4 line_out4 0 50
+RLOAD5 line_out5 0 50
+RLOAD6 line_out6 0 50
+RLOAD7 line_out7 0 50
+.MODEL CPL7 CPL LENGTH=1
++ R=1 0 0 0 0 0 0 1
++ 0 0 0 0 0 1 0 0
++ 0 0 1 0 0 0 1 0
++ 0 1 0 1
++ L=3.83572e-7 6.00000000e-8 3.00000000e-8 2.00000000e-8 1.50000000e-8 1.20000000e-8 1.00000000e-8 3.83572e-7
++ 6.00000000e-8 3.00000000e-8 2.00000000e-8 1.50000000e-8 1.20000000e-8 3.83572e-7 6.00000000e-8 3.00000000e-8
++ 2.00000000e-8 1.50000000e-8 3.83572e-7 6.00000000e-8 3.00000000e-8 2.00000000e-8 3.83572e-7 6.00000000e-8
++ 3.00000000e-8 3.83572e-7 6.00000000e-8 3.83572e-7
++ G=0 0 0 0 0 0 0 0
++ 0 0 0 0 0 0 0 0
++ 0 0 0 0 0 0 0 0
++ 0 0 0 0
++ C=9.143579e-11 -8.00000000e-12 -4.00000000e-12 -2.66666667e-12 -2.00000000e-12 -1.60000000e-12 -1.33333333e-12 9.143579e-11
++ -8.00000000e-12 -4.00000000e-12 -2.66666667e-12 -2.00000000e-12 -1.60000000e-12 9.143579e-11 -8.00000000e-12 -4.00000000e-12
++ -2.66666667e-12 -2.00000000e-12 9.143579e-11 -8.00000000e-12 -4.00000000e-12 -2.66666667e-12 9.143579e-11 -8.00000000e-12
++ -4.00000000e-12 9.143579e-11 -8.00000000e-12 9.143579e-11
+.SUBCKT COUPLED_LINE IN1 IN2 IN3 IN4 IN5 IN6 IN7 GND1 OUT1 OUT2 OUT3 OUT4 OUT5 OUT6 OUT7 GND2
+P1 IN1 IN2 IN3 IN4 IN5 IN6 IN7 GND1 OUT1 OUT2 OUT3 OUT4 OUT5 OUT6 OUT7 GND2 CPL7 LEN=1
+.ENDS COUPLED_LINE
+.save v(line_in1) v(line_out1) v(line_in2) v(line_out2) v(line_in3) v(line_out3) v(line_in4) v(line_out4) v(line_in5) v(line_out5) v(line_in6) v(line_out6) v(line_in7) v(line_out7)
+.control
+set filetype=ascii
+tran 50p 12n
+write /result.raw
+quit
+.endc
+.end

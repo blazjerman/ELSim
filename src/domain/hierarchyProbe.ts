@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from './connectivity'
 import type { Part, Project, ProjectSheet } from './project'
-import { mesfetDrainCurrentSenseReference } from './probe'
+import { mesfetDrainCurrentSenseReference, transmissionLinePortCurrentVector } from './probe'
 
 /** Resolve a sheet-local labeled node to the ngspice vector for one instantiated hierarchy path. */
 export function hierarchyNodeVector(project: Project, sheetId: string, instancePath: string[], nodeName: string, scopeSheetId = project.rootSheetId): string | null {
@@ -37,7 +37,7 @@ export function hierarchyNodeVector(project: Project, sheetId: string, instanceP
 }
 
 /** Resolve a child component's branch-current vector using ngspice's flattened instance names. */
-export function hierarchyComponentCurrentVector(project: Project, sheetId: string, instancePath: string[], partId: string, scopeSheetId = project.rootSheetId, transformerWinding: 'P' | 'S' = 'P'): string | null {
+export function hierarchyComponentCurrentVector(project: Project, sheetId: string, instancePath: string[], partId: string, scopeSheetId = project.rootSheetId, transformerWinding: 'P' | 'S' = 'P', transmissionLinePort: 1 | 2 = 1): string | null {
   let sheet: ProjectSheet | undefined = project.sheets.find((candidate) => candidate.id === scopeSheetId)
   if (!sheet) return null
   const refs: string[] = []
@@ -64,6 +64,7 @@ export function hierarchyComponentCurrentVector(project: Project, sheetId: strin
     const device = [...refs, `${part.ref.toLowerCase()}_${transformerWinding.toLowerCase()}`].join('.')
     return `i(l.${device})`
   }
+  if (part.kind === 'transmissionLine') return transmissionLinePortCurrentVector([...refs, part.ref.toLowerCase()].join('.'), transmissionLinePort, Boolean(part.deviceModel))
   if (part.kind === 'potentiometer') {
     const device = [...refs, `${part.ref.toLowerCase()}_a`].join('.')
     return `i(@r.${device}[i])`

@@ -1,0 +1,20 @@
+Lossy transmission line with nested current probes
+* Verify hierarchical branch-current names for the generated zero-volt port sensors.
+V1 source 0 PULSE(0 1 1n 50p 50p 10n 20n)
+RSOURCE source input 50
+XLINE input 0 line_output 0 LINEBLOCK
+RLOAD line_output 0 50
+.model LINE50 LTRA(R=10 L=250n G=0 C=100p LEN=1)
+.save i(v.xline.v__elsim_t1_p1) i(v.xline.v__elsim_t1_p2)
+.subckt LINEBLOCK P1 N1 P2 N2
+V__ELSIM_T1_P1 P1 __ELSIM_T1_P1 0
+V__ELSIM_T1_P2 P2 __ELSIM_T1_P2 0
+O1 __ELSIM_T1_P1 N1 __ELSIM_T1_P2 N2 LINE50
+.ends LINEBLOCK
+.control
+set filetype=ascii
+tran 50p 12n
+write /result.raw
+quit
+.endc
+.end

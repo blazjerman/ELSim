@@ -1,0 +1,8 @@
+HICUM level 8 BJT model runs through the native ngspice Q device
+VCE c 0 5
+VBE b 0 0.7
+Q1 c b 0 QMOD
+.MODEL QMOD NPN LEVEL=8
+.op
+.print op v(c) i(VCE)
+.end

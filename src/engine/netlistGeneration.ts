@@ -4,7 +4,7 @@ import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunct
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
-import { mesfetDrainCurrentSenseReference } from '../domain/probe'
+import { mesfetDrainCurrentSenseReference, transmissionLinePortCurrentVector } from '../domain/probe'
 import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import type { NetlistArtifact, NetlistSource } from './contract'
 import {
@@ -127,7 +127,10 @@ function hierarchicalSaveVectors(project: Project): string[] {
       if (part.kind === 'ground' || part.kind === 'subcircuit') continue
       const type = part.kind === 'source' ? 'v' : part.kind === 'currentSource' ? 'i' : part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led' ? 'd' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'j' : part.kind === 'nmesfet' || part.kind === 'pmesfet' ? 'z' : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' ? 'm' : part.kind === 'npn' || part.kind === 'pnp' ? 'q' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' || part.kind === 'transformer' ? 'l' : part.kind === 'resistor' || part.kind === 'potentiometer' || part.kind === 'lamp' ? 'r' : part.kind === 'currentSwitch' ? 'w' : (part.kind === 'switch' || part.kind === 'voltageSwitch') ? 's' : part.kind === 'vcvs' ? 'e' : part.kind === 'cccs' ? 'f' : part.kind === 'ccvs' ? 'h' : part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' ? 'b' : 'g'
       const device = [...path, part.ref].join('.').toLowerCase()
-      if (part.kind === 'transformer') {
+      if (part.kind === 'transmissionLine') {
+        saves.add(`.save ${transmissionLinePortCurrentVector(device, 1, Boolean(part.deviceModel))}`)
+        saves.add(`.save ${transmissionLinePortCurrentVector(device, 2, Boolean(part.deviceModel))}`)
+      } else if (part.kind === 'transformer') {
         saves.add(`.save i(l.${device}_p)`)
         saves.add(`.save i(l.${device}_s)`)
       } else if (part.kind === 'opamp') {
@@ -248,11 +251,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const negative = pinNet(connectivity, part, 1)
     const value = part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' || part.kind === 'opamp' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
     const passiveModelType = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined
-    const passiveModel = part.deviceModel ? parsedModelAssets.flatMap((library) => library.models).find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
+    const passiveModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
     const passiveDefaultParameter = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
     const passiveModelSuppliesValue = Boolean(passiveModelType && passiveModel?.type.toLowerCase() === passiveModelType && passiveDefaultParameter && passiveModel.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
     const valueCanBeModelDefault = value === null && part.value.trim() === '' && passiveModelSuppliesValue
-    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'currentSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && value === null && !valueCanBeModelDefault) {
+    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'currentSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && part.kind !== 'transmissionLine' && value === null && !valueCanBeModelDefault) {
       const message = `${part.ref} has an invalid numeric value${passiveDefaultParameter && part.value.trim() === '' ? ` (no compatible model with ${passiveDefaultParameter.toUpperCase()} default)` : ''}.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -450,6 +453,82 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
     }
+    else if (part.kind === 'transmissionLine') {
+      const nodes = [0, 1, 2, 3].map((index) => pinNet(connectivity, part, index))
+      if (part.deviceModel) {
+        const model = importedDeviceModelsByName.get(part.deviceModel.toLowerCase())
+        const modelType = model?.type.toLowerCase()
+        if (!model || (modelType !== 'ltra' && modelType !== 'txl')) {
+          const message = `${part.ref} device model ${part.deviceModel} is missing or is not an LTRA or TXL transmission-line model.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        const requiredLengthParameter = modelType === 'txl' ? 'length' : 'len'
+        if (!model.parameters.some((parameter) => parameter.name.toLowerCase() === requiredLengthParameter)) {
+          const message = `${part.ref} ${modelType.toUpperCase()} model ${part.deviceModel} must declare ${requiredLengthParameter.toUpperCase()} (line length).`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        if (modelType === 'txl' && project.simulation.analysis !== 'tran') {
+          const message = `${part.ref} TXL models support transient analysis only; select transient analysis to simulate this line.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        if (modelType === 'txl' && (nodes[1] !== '0' || nodes[3] !== '0')) {
+          const message = `${part.ref} TXL models have grounded returns; connect pins 2 and 4 to ground.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        const deviceReference = reserveUniqueName(`${modelType === 'txl' ? 'Y' : 'O'}${part.ref.slice(1)}`, usedReferences)
+        const port1Node = reserveUniqueName(`__ELSIM_${part.ref}_P1`, usedNodes)
+        const port2Node = reserveUniqueName(`__ELSIM_${part.ref}_P2`, usedNodes)
+        const port1Sense = `V__ELSIM_${part.ref}_P1`
+        const port2Sense = `V__ELSIM_${part.ref}_P2`
+        if (usedReferences.has(port1Sense.toLowerCase()) || usedReferences.has(port2Sense.toLowerCase())) {
+          const message = `${part.ref} internal current-sense source name conflicts with another component reference.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        usedReferences.add(port1Sense.toLowerCase())
+        usedReferences.add(port2Sense.toLowerCase())
+        append(`${port1Sense} ${nodes[0]} ${port1Node} 0`, part.id, 'component')
+        append(`${port2Sense} ${nodes[2]} ${port2Node} 0`, part.id, 'component')
+        append(modelType === 'txl'
+          ? `${deviceReference} ${port1Node} 0 ${port2Node} 0 ${model.name}`
+          : `${deviceReference} ${port1Node} ${nodes[1]} ${port2Node} ${nodes[3]} ${model.name}`, part.id, 'component')
+        continue
+      }
+      const impedance = value
+      const settings = part.transmissionLine ?? { lengthMode: 'delay' as const, delay: '1 ns' }
+      const delay = settings.lengthMode === 'delay' ? spiceSheetTime(settings.delay ?? '1 ns', sheetParameters) : null
+      const delayMagnitude = settings.lengthMode === 'delay' ? spiceSheetTimeMagnitude(settings.delay ?? '1 ns', sheetParameters) : null
+      const frequency = settings.lengthMode === 'frequency' ? spiceSheetFrequency(settings.frequency ?? '1 kHz', sheetParameters) : null
+      const frequencyMagnitude = settings.lengthMode === 'frequency' ? spiceSheetMagnitude(settings.frequency ?? '1 kHz', 'frequency', sheetParameters) : null
+      const normalizedLengthValue = settings.lengthMode === 'frequency' ? settings.normalizedLength ?? '0.25' : null
+      const normalizedLength = normalizedLengthValue === null ? null : spiceSheetScalar(normalizedLengthValue, sheetParameters)
+      const normalizedLengthMagnitude = normalizedLengthValue === null ? null : spiceValueMagnitude(spiceSheetParameterDefault(normalizedLengthValue, sheetParameters) ?? normalizedLengthValue)
+      const impedanceMagnitude = componentMagnitude(spiceSheetParameterDefault(part.value, sheetParameters) ?? part.value, 'transmissionLine')
+      const invalid = impedance === null || impedanceMagnitude === null || impedanceMagnitude <= 0
+        ? 'needs a positive numeric characteristic impedance.'
+        : settings.lengthMode === 'delay' && (delay === null || delayMagnitude === null || delayMagnitude <= 0)
+          ? 'needs a positive finite propagation delay.'
+          : settings.lengthMode === 'frequency' && (frequency === null || frequencyMagnitude === null || frequencyMagnitude <= 0 || normalizedLength === null || normalizedLengthMagnitude === null || normalizedLengthMagnitude <= 0)
+            ? 'needs a positive reference frequency and positive normalized electrical length.'
+            : null
+      if (invalid) {
+        const message = `${part.ref} ${invalid}`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const length = settings.lengthMode === 'delay' ? `TD=${delay}` : `F=${frequency} NL=${normalizedLength}`
+      append(`${part.ref} ${nodes.join(' ')} Z0=${impedance} ${length}`, part.id, 'component')
+    }
     else if (part.kind === 'transformer') {
       const secondaryPositive = pinNet(connectivity, part, 2)
       const secondaryNegative = pinNet(connectivity, part, 3)
@@ -581,6 +660,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'npn' || part.kind === 'pnp') {
       const base = pinNet(connectivity, part, 1)
       const emitter = pinNet(connectivity, part, 2)
+      const substrateLabel = part.substrateNode ? project.netLabels.find((label) => label.name.toLowerCase() === part.substrateNode!.toLowerCase()) : undefined
+      const substrate = substrateLabel ? connectivity.labelNets.get(substrateLabel.id) : part.substrateNode
       const expectedModelType = part.kind === 'npn' ? 'npn' : 'pnp'
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
       if (part.deviceModel && importedModel?.type.toLowerCase() !== expectedModelType) {
@@ -589,8 +670,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
+      if (part.substrateNode && part.substrateNode !== '0' && !substrateLabel) {
+        const message = `${part.ref} substrate node ${part.substrateNode} needs a matching net label on this sheet.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      append(`${part.ref} ${positive} ${base} ${emitter} ${model}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}`, part.id, 'component')
       if (!part.deviceModel) transistorModels.push({ part, name: model })
     }
     else if (part.kind === 'njfet' || part.kind === 'pjfet') {
@@ -992,7 +1079,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', currentSwitch: 'W', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', transmissionLine: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', currentSwitch: 'W', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 

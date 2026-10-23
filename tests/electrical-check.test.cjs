@@ -564,6 +564,65 @@ test('reports passive and transmission-line references with an incompatible impo
   assert.equal(checkCircuit(project).some((item) => item.id.startsWith('incompatible-model-dependency:')), false)
 })
 
+test('reports a malformed imported CPL matrix on the placed IC that uses it', () => {
+  const project = createStarterProject()
+  const content = [
+    '.SUBCKT COUPLED IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2',
+    'P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL_BAD LEN=1',
+    '.ENDS COUPLED',
+    '.MODEL CPL_BAD CPL LENGTH=1',
+    '+ R=1 0 0 1 0 1',
+    '+ L=3.8e-7 8e-8 1e-8 3.8e-7 8e-8 3.8e-7',
+    '+ G=0 0 0 0 0 0',
+    '+ C=9e-11 -9e-12 9e-11 -9e-12 9e-11',
+    '',
+  ].join('\n')
+  project.modelAssets = [{ id: 'cpl-lib', filename: 'coupled.lib', content, sha256: 'c'.repeat(64), licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
+  const ic = { id: 'coupled-ic', kind: 'subcircuit', ref: 'X1', value: 'COUPLED', modelName: 'COUPLED', modelPins: ['IN1', 'IN2', 'IN3', 'GND1', 'OUT1', 'OUT2', 'OUT3', 'GND2'], x: 760, y: 600, rotation: 0 }
+  project.parts.push(ic)
+  project.sheets[0].parts = project.parts
+
+  const issue = checkCircuit(project).find((item) => item.id.startsWith('invalid-cpl-matrix:'))
+  assert.equal(issue?.partId, ic.id)
+  assert.equal(issue?.title, 'CPL_BAD has an invalid C matrix for 3 conductors')
+  assert.match(issue?.detail ?? '', /C contains 5 packed upper-triangle values, but a 3-conductor model needs 6/)
+  assert.match(issue?.detail ?? '', /coupled\.lib at line 4/)
+
+  const validContent = content.replace('+ C=9e-11 -9e-12 9e-11 -9e-12 9e-11', '+ C=9e-11 -9e-12 -1e-12 9e-11 -9e-12 9e-11')
+  project.modelAssets[0] = { ...project.modelAssets[0], content: validContent }
+  assert.equal(checkCircuit(project).some((item) => item.id.startsWith('invalid-cpl-matrix:')), false)
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: validContent.replace('.MODEL CPL_BAD CPL LENGTH=1', '.MODEL CPL_BAD CPL') }
+  const missingLength = checkCircuit(project).find((item) => item.id.startsWith('invalid-cpl-matrix:'))
+  assert.equal(missingLength?.title, 'CPL_BAD has no LENGTH parameter')
+  assert.match(missingLength?.detail ?? '', /ngspice requires every CPL model to declare LENGTH, even when a P instance supplies its own LEN/)
+  assert.match(missingLength?.detail ?? '', /coupled\.lib at line 4/)
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: validContent.replace(/^\+ C=.*$/m, '') }
+  assert.match(checkCircuit(project).find((item) => item.id.startsWith('invalid-cpl-matrix:'))?.detail ?? '', /C contains 0 packed upper-triangle values/)
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: validContent.replace('+ C=9e-11 -9e-12 -1e-12 9e-11 -9e-12 9e-11', '+ C=9e-11 -9e-12 -1e-12 9e-11 -9e-12 9e-11 1e-12') }
+  assert.match(checkCircuit(project).find((item) => item.id.startsWith('invalid-cpl-matrix:'))?.detail ?? '', /C contains 7 packed upper-triangle values/)
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: validContent.replace('+ C=9e-11 -9e-12 -1e-12 9e-11 -9e-12 9e-11', '+ C=1 -2 0 1 0 1') }
+  const nonPositiveC = checkCircuit(project).find((item) => item.id.startsWith('invalid-cpl-matrix:'))
+  assert.equal(nonPositiveC?.title, 'CPL_BAD has a C matrix that is not positive definite')
+  assert.match(nonPositiveC?.detail ?? '', /ngspice requires the numeric capacitance matrix to be positive definite/)
+
+  project.modelAssets[0] = { ...project.modelAssets[0], content: validContent.replace('+ C=9e-11 -9e-12 -1e-12 9e-11 -9e-12 9e-11', '+ C={C11} -9e-12 -1e-12 9e-11 -9e-12 9e-11') }
+  assert.equal(checkCircuit(project).some((item) => item.id.startsWith('invalid-cpl-matrix:')), false)
+
+  const subcircuitContent = '.SUBCKT COUPLED IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2\nP1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL_BAD LEN=1\n.ENDS COUPLED\n'
+  const modelContent = '.MODEL CPL_BAD CPL LENGTH=1 R=1 0 0 1 0 1 L=3.8e-7 8e-8 1e-8 3.8e-7 8e-8 3.8e-7 G=0 0 0 0 0 0 C=9e-11 -9e-12 9e-11 -9e-12 9e-11\n'
+  project.modelAssets = [
+    { id: 'cpl-subckt-lib', filename: 'coupled-subckt.lib', content: subcircuitContent, sha256: 'd'.repeat(64), licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'cpl-card-lib', filename: 'coupled-device.lib', content: modelContent, sha256: 'e'.repeat(64), licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' },
+  ]
+  const splitLibraryIssue = checkCircuit(project).find((item) => item.id.startsWith('invalid-cpl-matrix:'))
+  assert.equal(splitLibraryIssue?.partId, ic.id)
+  assert.match(splitLibraryIssue?.detail ?? '', /coupled-device\.lib at line 1/)
+})
+
 test('reports incompatible native semiconductor, switch, and MESFET model families inside an imported IC', () => {
   const project = createStarterProject()
   project.modelAssets = [{

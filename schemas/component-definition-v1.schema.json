@@ -36,6 +36,7 @@
         "ground",
         "inductor",
         "transformer",
+        "transmissionLine",
         "diode",
         "zener",
         "led",

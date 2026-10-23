@@ -1,0 +1,17 @@
+Ground-return TXL transmission line pulse response
+* The TXL Y-device is transient-only and grounds both return pins.
+V1 source 0 PULSE(0 1 1n 50p 50p 10n 20n)
+RSOURCE source input 50
+VPORT1 input line_input 0
+VPORT2 output line_output 0
+Y1 line_input 0 line_output 0 TXL50
+RLOAD output 0 50
+.model TXL50 TXL(R=10 L=250n G=0 C=100p LENGTH=1)
+.save v(output) i(vport1) i(vport2)
+.control
+set filetype=ascii
+tran 50p 12n
+write /result.raw
+quit
+.endc
+.end

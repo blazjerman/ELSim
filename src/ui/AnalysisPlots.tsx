@@ -406,10 +406,14 @@ function ticksInRange(min: number, max: number, step: number): number[] {
   return Array.from({ length: last - first + 1 }, (_, index) => (first + index) * step)
 }
 
+const ENGINEERING_PREFIXES: Readonly<Record<number, string>> = {
+  [-12]: 'p', [-9]: 'n', [-6]: 'µ', [-3]: 'm', 0: '', 3: 'k', 6: 'M', 9: 'G',
+}
+
 function formatEngineeringTick(value: number, unit: string): string {
   if (!Number.isFinite(value) || value === 0) return `0 ${unit}`
   const exponent = Math.max(-12, Math.min(9, Math.floor(Math.log10(Math.abs(value)) / 3) * 3))
-  const prefix = ({ '-12': 'p', '-9': 'n', '-6': 'µ', '-3': 'm', '0': '', '3': 'k', '6': 'M', '9': 'G' } as Record<string, string>)[String(exponent)]
+  const prefix = ENGINEERING_PREFIXES[exponent]
   const scaled = Number((value / 10 ** exponent).toPrecision(3)).toString()
   return `${scaled} ${prefix}${unit}`
 }

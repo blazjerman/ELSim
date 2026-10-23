@@ -155,6 +155,7 @@
             "ground",
             "inductor",
             "transformer",
+            "transmissionLine",
             "diode",
             "zener",
             "led",
@@ -258,6 +259,12 @@
         "deviceModel": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"
+        },
+        "substrateNode": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(?:0|[A-Za-z_][A-Za-z0-9_.$]*)$",
+          "description": "Optional labeled substrate node for an ngspice NPN or PNP transistor; omitted means ngspice's default ground substrate."
         },
         "controlSource": {
           "type": "string",
@@ -586,6 +593,18 @@
           "maxLength": 64,
           "pattern": "^(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
           "description": "Potentiometer wiper fraction from upper terminal to lower terminal, from 0.001 to 0.999."
+        },
+        "transmissionLine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["lengthMode"],
+          "properties": {
+            "lengthMode": { "enum": ["delay", "frequency"] },
+            "delay": { "type": "string", "maxLength": 64 },
+            "frequency": { "type": "string", "maxLength": 64 },
+            "normalizedLength": { "type": "string", "maxLength": 64 }
+          },
+          "description": "ngspice lossless T-line length specified by propagation delay or frequency and normalized electrical length."
         },
         "symbolAssetId": {
           "type": "string",

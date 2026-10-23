@@ -98,7 +98,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.deepEqual(componentDefinitionFor('source').pins.map(({ name }) => name), ['positive', 'negative'])
   assert.deepEqual(['vcvs', 'vccs', 'cccs', 'ccvs'].map((kind) => componentDefinitionFor(kind).paletteName), ['VCVS', 'VCCS', 'CCCS', 'CCVS'])
   const paletteMetadata = [
-    ['resistor', 'R', 'r', 'basics'], ['potentiometer', 'POT', 'h', 'basics'], ['lamp', 'R', 'e', 'basics'], ['capacitor', 'C', 'c', 'basics'], ['inductor', 'L', 'L', 'basics'], ['transformer', 'T', 'T', 'basics'],
+    ['resistor', 'R', 'r', 'basics'], ['potentiometer', 'POT', 'h', 'basics'], ['lamp', 'R', 'e', 'basics'], ['capacitor', 'C', 'c', 'basics'], ['inductor', 'L', 'L', 'basics'], ['transformer', 'T', 'T', 'basics'], ['transmissionLine', 'TLINE', 't', 'basics'],
     ['source', 'V', 'v', 'basics'], ['currentSource', 'I', 'i', 'basics'], ['diode', 'D', 'd', 'semiconductors'], ['zener', 'DZ', 'z', 'semiconductors'], ['led', 'D', 'l', 'semiconductors'], ['switch', 's', 's', 'basics'],
     ['voltageSwitch', 'S', 'S', 'controlled'], ['currentSwitch', 'W', 'W', 'controlled'], ['vcvs', 'E', 'E', 'controlled'], ['vccs', 'G', 'G', 'controlled'], ['cccs', 'F', 'F', 'controlled'], ['ccvs', 'H', 'H', 'controlled'], ['behavioral', 'B', 'b', 'controlled'],
     ['inverter', 'NOT', '1', 'basics'], ['logicGate', 'AND', '2', 'basics'], ['npn', 'Q', 'n', 'semiconductors'], ['pnp', 'Q', 'p', 'semiconductors'], ['njfet', 'J', 'j', 'semiconductors'], ['pjfet', 'J', 'J', 'semiconductors'], ['nmesfet', 'Z', '8', 'semiconductors'], ['pmesfet', 'Z', '9', 'semiconductors'],
@@ -117,6 +117,8 @@ test('built-in component definitions have stable identities, ordered unique SPIC
   assert.ok(componentDefinitionFor('inductor').animationChannels.includes('field.current'))
   assert.ok(componentDefinitionFor('voltageSwitch').animationChannels.includes('position.controlVoltage'))
   assert.deepEqual(componentDefinitionFor('transformer').pins.map(({ name }) => name), ['primaryPositive', 'primaryNegative', 'secondaryPositive', 'secondaryNegative'])
+  assert.deepEqual(componentDefinitionFor('transmissionLine').pins.map(({ name }) => name), ['port1Positive', 'port1Negative', 'port2Positive', 'port2Negative'])
+  assert.equal(componentDefaultValue('transmissionLine'), '50 Ω')
   assert.equal(componentDefinitionFor('transformer').properties.find((property) => property.key === 'turnsRatio')?.defaultValue, '2')
   assert.equal(componentDefinitionFor('transformer').properties.find((property) => property.key === 'coupling')?.defaultValue, '1')
   assert.deepEqual(componentDefinitionFor('potentiometer').pins.map(({ name }) => name), ['upper', 'wiper', 'lower'])
@@ -178,7 +180,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
 test('imported device model compatibility has one canonical type per built-in device family', () => {
   const expected = {
     resistor: 'r', capacitor: 'c', inductor: 'l',
-    lamp: 'r', potentiometer: 'r',
+    lamp: 'r', potentiometer: 'r', transmissionLine: 'ltra',
     diode: 'd', zener: 'd', led: 'd',
     npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmesfet: 'nmf', pmesfet: 'pmf', nmos: 'nmos', pmos: 'pmos', nvdmos: 'vdmos', pvdmos: 'vdmos',
     voltageSwitch: 'sw', currentSwitch: 'csw',
@@ -186,6 +188,7 @@ test('imported device model compatibility has one canonical type per built-in de
   for (const [kind, type] of Object.entries(expected)) assert.equal(compatibleDeviceModelType(kind), type, kind)
   assert.equal(deviceModelTypeMatches('resistor', { type: 'R' }), true)
   assert.equal(deviceModelTypeMatches('capacitor', { type: 'C' }), true)
+  assert.equal(deviceModelTypeMatches('transmissionLine', { type: 'TXL' }), true)
   assert.equal(deviceModelTypeMatches('inductor', { type: 'L' }), true)
   assert.equal(deviceModelTypeMatches('potentiometer', { type: 'R' }), true)
   assert.equal(deviceModelTypeMatches('potentiometer', { type: 'C' }), false)

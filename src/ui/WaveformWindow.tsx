@@ -19,25 +19,31 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
   const ref = useRef<HTMLElement>(null)
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const draggedBounds = useRef<PlotPanel['bounds'] | null>(null)
+  const panelBoundsRef = useRef(panel.bounds)
+  panelBoundsRef.current = panel.bounds
+  const onBoundsChangeRef = useRef(onBoundsChange)
+  onBoundsChangeRef.current = onBoundsChange
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   useEffect(() => {
-    const initial = clampToCurrentViewport(panel.bounds)
-    if (!samePlotPanelBounds(initial, panel.bounds)) onBoundsChange(initial)
+    const initialBounds = panelBoundsRef.current
+    const initial = clampToCurrentViewport(initialBounds)
+    if (!samePlotPanelBounds(initial, initialBounds)) onBoundsChangeRef.current(initial)
     let resizeTimer: ReturnType<typeof setTimeout> | undefined
     const saveSize = () => {
       const rect = ref.current?.getBoundingClientRect()
       if (!rect) return
-      const next = clampToCurrentViewport({ ...panel.bounds, width: rect.width, height: rect.height })
-      if (next.width === panel.bounds.width && next.height === panel.bounds.height) return
+      const currentBounds = panelBoundsRef.current
+      const next = clampToCurrentViewport({ ...currentBounds, width: rect.width, height: rect.height })
+      if (next.width === currentBounds.width && next.height === currentBounds.height) return
       clearTimeout(resizeTimer)
-      resizeTimer = setTimeout(() => onBoundsChange(next), 120)
+      resizeTimer = setTimeout(() => onBoundsChangeRef.current(next), 120)
     }
     const observer = new ResizeObserver(saveSize)
     if (ref.current) observer.observe(ref.current)
     const previewPosition = (event: globalThis.PointerEvent) => {
       if (!drag.current) return
       const { x, y, left, top } = drag.current
-      const next = clampToCurrentViewport({ ...panel.bounds, x: left + event.clientX - x, y: top + event.clientY - y })
+      const next = clampToCurrentViewport({ ...panelBoundsRef.current, x: left + event.clientX - x, y: top + event.clientY - y })
       draggedBounds.current = next
       if (ref.current) {
         ref.current.style.left = `${next.x}px`
@@ -50,7 +56,8 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
       const next = draggedBounds.current
       drag.current = null
       draggedBounds.current = null
-      if (next && (next.x !== panel.bounds.x || next.y !== panel.bounds.y)) onBoundsChange(next)
+      const currentBounds = panelBoundsRef.current
+      if (next && (next.x !== currentBounds.x || next.y !== currentBounds.y)) onBoundsChangeRef.current(next)
     }
     const cancelDrag = () => {
       if (!drag.current) return
@@ -60,13 +67,14 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
       // the pointer leaves the active surface. Discard the visual preview and
       // let the saved project bounds remain authoritative.
       if (ref.current) {
-        ref.current.style.left = `${panel.bounds.x}px`
-        ref.current.style.top = `${panel.bounds.y}px`
+        ref.current.style.left = `${panelBoundsRef.current.x}px`
+        ref.current.style.top = `${panelBoundsRef.current.y}px`
       }
     }
     const resize = () => {
-      const next = clampToCurrentViewport(panel.bounds)
-      if (!samePlotPanelBounds(next, panel.bounds)) onBoundsChange(next)
+      const currentBounds = panelBoundsRef.current
+      const next = clampToCurrentViewport(currentBounds)
+      if (!samePlotPanelBounds(next, currentBounds)) onBoundsChangeRef.current(next)
     }
     window.addEventListener('pointermove', previewPosition)
     window.addEventListener('pointerup', finishDrag)
@@ -82,7 +90,7 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
       window.removeEventListener('blur', cancelDrag)
       window.removeEventListener('resize', resize)
     }
-  }, [panel.bounds, onBoundsChange])
+  }, [])
   return <section ref={ref} data-plot-panel-id={panel.id} className="plot-window additional-plot-window" role="dialog" aria-label={title} aria-describedby={`plot-window-instructions-${panel.id}`} title="Middle-click anywhere in this window to close it" style={{ left: panel.bounds.x, top: panel.bounds.y, width: panel.bounds.width, height: panel.bounds.height, zIndex: 9 + index }} onPointerDownCapture={onActivate} onMouseDownCapture={(event) => { if (event.button === 1) { event.preventDefault(); event.stopPropagation(); onClose() } }}>
     <span id={`plot-window-instructions-${panel.id}`} className="sr-only">Drag the title bar or focus it and use arrow keys to move this window. Hold Shift with an arrow key to resize it. Use the Close button, or middle-click anywhere in the window, to close it.</span>
     <div className="plot-window-title" role="group" aria-label={`Move and resize ${title}. Drag or use arrow keys to move; hold Shift with an arrow key to resize.`} aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight" tabIndex={0} title="Drag or use arrow keys to move this waveform window; Shift+arrow keys resize it" onKeyDown={(event) => {

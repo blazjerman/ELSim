@@ -1,0 +1,24 @@
+Three-conductor coupled-line transient using an imported subcircuit wrapper
+* This deck exercises native ngspice P/CPL devices through a user model library.
+V1 source 0 PULSE(0 1 1n 50p 50p 8n 20n)
+RSOURCE source line_in1 50
+XLINE line_in1 0 0 0 line_out1 line_out2 line_out3 0 COUPLED_LINE
+RLOAD1 line_out1 0 50
+RLOAD2 line_out2 0 50
+RLOAD3 line_out3 0 50
+.MODEL CPL50 CPL LENGTH=1
++ R=1 0 0 1 0 1
++ L=3.83572E-7 8.26253E-8 8E-9 3.83572E-7 8.26253E-8 3.83572E-7
++ G=0 0 0 0 0 0
++ C=9.143579E-11 -9.78265E-12 -1E-12 9.143578E-11 -9.78265E-12 9.143578E-11
+.SUBCKT COUPLED_LINE IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2
+P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL50 LEN=1
+.ENDS COUPLED_LINE
+.save v(line_in1) v(line_out1) v(line_out2) v(line_out3)
+.control
+set filetype=ascii
+tran 50p 12n
+write /result.raw
+quit
+.endc
+.end

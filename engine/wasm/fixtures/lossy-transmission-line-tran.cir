@@ -1,0 +1,16 @@
+Lossy 50 ohm transmission line pulse response
+* A model-backed LTRA O-device with zero-volt sources sensing each port's current.
+V1 source 0 PULSE(0 1 1n 50p 50p 10n 20n)
+RSOURCE source input 50
+VPORT1 input line_input 0
+O1 line_input 0 line_output 0 LINE50
+VPORT2 output line_output 0
+RLOAD output 0 50
+.model LINE50 LTRA(R=10 L=250n G=0 C=100p LEN=1)
+.control
+set filetype=ascii
+tran 50p 12n
+write /result.raw v(input) v(output) i(VPORT1) i(VPORT2)
+quit
+.endc
+.end

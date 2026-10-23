@@ -383,12 +383,14 @@ test('editor remains usable when browser local storage access is denied', { tag:
   })
   await page.goto('/')
   await expect(page.locator('svg.schematic')).toBeVisible()
+  await expect(page.locator('.project-recovery-overlay')).toBeHidden()
   await expect(page.getByRole('button', { name: 'Run simulation' })).toBeVisible()
   await page.locator('.circuit-part[data-part-id="p-r1"]').click()
   const value = page.locator('[data-part-setting="p-r1:value"]')
   await value.fill('2k')
   await expect(page.locator('.app-status [role="status"]')).toHaveText('Saved in browser recovery storage')
   await page.reload()
+  await expect(page.locator('.project-recovery-overlay')).toBeHidden()
   await page.locator('.circuit-part[data-part-id="p-r1"]').click()
   await expect(page.locator('[data-part-setting="p-r1:value"]')).toHaveValue('2k')
   expect(pageErrors).toEqual([])
@@ -2416,18 +2418,22 @@ test('potentiometer uses an imported resistor model for both split branches', { 
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
-    name: 'pot-model.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL RPOT R(R=10k TC1=0.01)\n'),
+    name: 'pot-model.lib', mimeType: 'text/plain', buffer: Buffer.from(`.MODEL RPOT R(${['R=10k', 'TC1=0.01', ...Array.from({ length: 17 }, (_, index) => `P${index + 3}=${index + 3}`), 'UNCOMMON_PARAM=42'].join(' ')})\n`),
   })
   await page.locator('.circuit-part[data-part-id="pot-p1"]').click()
   const modelPicker = page.getByLabel('Device model for POT1')
   await expect(modelPicker.locator('option', { hasText: 'RPOT (R)' })).toHaveCount(1)
   await modelPicker.selectOption('RPOT')
-  const modelDetails = page.getByText('RPOT · 2 model parameters', { exact: true })
+  const modelDetails = page.getByText('RPOT · 20 model parameters', { exact: true })
   await expect(modelDetails).toBeVisible()
   await modelDetails.click()
   await expect(page.getByText('R = 10k', { exact: true })).toBeVisible()
+  await expect(page.getByText('UNCOMMON_PARAM = 42', { exact: true })).toHaveCount(0)
+  await page.getByRole('searchbox', { name: 'Search parameters for RPOT' }).fill('UNCOMMON_PARAM')
+  await expect(page.getByText('UNCOMMON_PARAM = 42', { exact: true })).toBeVisible()
+  await page.getByRole('searchbox', { name: 'Search parameters for RPOT' }).fill('')
   await page.getByRole('button', { name: 'Review pot-model.lib:1' }).click()
-  await expect(page.locator('.model-source-viewer li.active-source-line')).toContainText('.MODEL RPOT R(R=10k TC1=0.01)')
+  await expect(page.locator('.model-source-viewer li.active-source-line')).toContainText(/\.MODEL RPOT R\(R=10k TC1=0\.01 P3=3/)
   await page.locator('[data-part-setting="pot-p1:value"]').fill('')
   await expect(page.locator('[data-part-setting="pot-p1:value"]')).toHaveAttribute('placeholder', 'Leave blank to use model default')
   await waitForProjectAutosave(page)
@@ -3076,6 +3082,270 @@ test('batch-imported model libraries resolve included functions regardless of fi
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText(/^\.FUNC SCALE\(x\) \{2k\*x\}$/m)
   await expect(page.locator('.netlist-modal pre')).toContainText(/^\.SUBCKT AMP IN OUT PARAMS: RLOAD=\{SCALE\(2\)\}$/m)
+})
+
+test('transmission-line example opens from Advanced examples and solves its pulse delay', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.getByRole('button', { name: 'Advanced' }).click()
+  const lesson = examples.locator('[data-example-id="transmission-line"]')
+  await expect(lesson).toContainText('matched 50 Ω line')
+  await lesson.getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Transmission-line pulse delay')
+  await expect(page.locator('.circuit-part[aria-label^="T1, Transmission line"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const line = page.locator('.circuit-part[data-part-id="line-lesson-t1"]')
+  await line.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Plot voltage across port 1' }).click()
+  const inputVoltage = page.getByRole('dialog', { name: 'V(T1, port 1)' })
+  await inputVoltage.getByRole('button', { name: /New waveform window/ }).click()
+  const inputPlot = page.locator('.additional-plot-window').filter({ has: page.getByRole('img', { name: 'V(T1, port 1), trace in V' }) })
+  await expect(inputPlot).toBeVisible()
+
+  await line.focus()
+  await line.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Plot voltage across port 2' }).click()
+  const outputVoltage = page.getByRole('dialog', { name: 'V(T1, port 2)' })
+  await outputVoltage.getByRole('button', { name: /New waveform window/ }).click()
+  const outputPlot = page.locator('.additional-plot-window').filter({ has: page.getByRole('img', { name: 'V(T1, port 2), trace in V' }) })
+  await expect(outputPlot).toBeVisible()
+  const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  const maximumSample = Number(await timeSlider.getAttribute('max'))
+  const selectSampleAtFraction = async (fraction: number) => {
+    const index = Math.round(maximumSample * fraction)
+    await timeSlider.evaluate((element, value) => {
+      const input = element as HTMLInputElement
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, String(value))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    }, index)
+    await expect(timeSlider).toHaveValue(String(index))
+  }
+  await selectSampleAtFraction(4 / 15)
+  await expect(outputPlot.locator('.cursor-readout')).toContainText(/V\(T1, port 2\)\s*=\s*0(?:\.0+)?\s*V/)
+  await selectSampleAtFraction(6 / 15)
+  await expect(outputPlot.locator('.cursor-readout')).toContainText(/V\(T1, port 2\)\s*=\s*1(?:\.0+)?\s*V/)
+})
+
+test('coupled-line example opens from Advanced examples and solves crosstalk', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.getByRole('button', { name: 'Advanced' }).click()
+  const lesson = examples.locator('[data-example-id="coupled-crosstalk"]')
+  await expect(lesson).toContainText('three-line cable model')
+  await lesson.getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Three-conductor crosstalk')
+  await expect(page.locator('.circuit-part[data-part-id="cpl-lesson-xline"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('img', { name: /Transient waveforms from/ })).toBeVisible()
+})
+
+test('lossless transmission-line port probes show both currents in amperes', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const project = createStarterProject()
+  const parts = [
+    { id: 'line-source', kind: 'source' as const, ref: 'V1', value: '1 V', sourceMode: 'pulse' as const, pulse: { initial: '0', delay: '0', rise: '1 ps', fall: '1 ps', width: '1 ns', period: '4 ns' }, x: 100, y: 300, rotation: 0 as const },
+    { id: 'line-source-resistor', kind: 'resistor' as const, ref: 'RSOURCE', value: '50 Ω', x: 300, y: 300, rotation: 0 as const },
+    { id: 'line-device', kind: 'transmissionLine' as const, ref: 'T1', value: '50 Ω', transmissionLine: { lengthMode: 'delay' as const, delay: '2 ns' }, x: 500, y: 300, rotation: 0 as const },
+    { id: 'line-load', kind: 'resistor' as const, ref: 'RLOAD', value: '50 Ω', x: 700, y: 300, rotation: 0 as const },
+  ]
+  const nodeNames = [['source', '0'], ['source', 'p1'], ['p1', '0', 'p2', '0'], ['p2', '0']]
+  const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
+    id: `${part.id}-net-${pinIndex}`, name: nodeNames[partIndex][pinIndex], x: pin.x, y: pin.y, visible: false,
+  })))
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '4 ns', maxStep: '10 ps' }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await expect(page.locator('.circuit-part[data-part-id="line-device"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+
+  for (const port of [1, 2] as const) {
+    // A waveform window can cover the schematic after the first probe is added;
+    // invoke the part's accessible keyboard context menu instead of pointer hit testing.
+    const line = page.locator('.circuit-part[data-part-id="line-device"]')
+    await line.focus()
+    await line.press('Shift+F10')
+    await page.getByRole('menuitem', { name: `Plot port ${port} current` }).click()
+    const destination = page.getByRole('dialog', { name: `I(T1, port ${port})` })
+    await destination.getByRole('button', { name: /New waveform window/ }).click()
+    const window = page.locator('.additional-plot-window').filter({ has: page.getByRole('img', { name: `I(T1, port ${port}), trace in A` }) })
+    await expect(window).toBeVisible()
+    await expect(window.getByRole('button', { name: new RegExp(`Disable I\\(T1, port ${port}\\)`) })).toBeVisible()
+  }
+})
+
+test('an imported LTRA model runs as a lossy line and exposes both port currents', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const project = createStarterProject()
+  const modelContent = '.MODEL LINE50 LTRA(R=10 L=250n G=0 C=100p LEN=1)\n'
+  const parts = [
+    { id: 'line-source', kind: 'source' as const, ref: 'V1', value: '1 V', sourceMode: 'pulse' as const, pulse: { initial: '0', delay: '1 ns', rise: '50 ps', fall: '50 ps', width: '10 ns', period: '20 ns' }, x: 100, y: 300, rotation: 0 as const },
+    { id: 'line-source-resistor', kind: 'resistor' as const, ref: 'RSOURCE', value: '50 Ω', x: 300, y: 300, rotation: 0 as const },
+    { id: 'line-device', kind: 'transmissionLine' as const, ref: 'T1', value: '', deviceModel: 'LINE50', x: 500, y: 300, rotation: 0 as const },
+    { id: 'line-load', kind: 'resistor' as const, ref: 'RLOAD', value: '50 Ω', x: 700, y: 300, rotation: 0 as const },
+  ]
+  const nodeNames = [['source', '0'], ['source', 'input'], ['input', '0', 'output', '0'], ['output', '0']]
+  const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
+    id: `${part.id}-net-${pinIndex}`, name: nodeNames[partIndex][pinIndex], x: pin.x, y: pin.y, visible: false,
+  })))
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.modelAssets = [{ id: 'line-model', filename: 'line.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '12 ns', maxStep: '50 ps' }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await page.locator('.circuit-part[data-part-id="line-device"]').click()
+  await page.getByLabel('Device model for T1').selectOption('LINE50')
+  await expect(page.getByLabel('Line length mode')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+
+  for (const port of [1, 2] as const) {
+    const line = page.locator('.circuit-part[data-part-id="line-device"]')
+    await line.focus()
+    await line.press('Shift+F10')
+    await page.getByRole('menuitem', { name: `Plot port ${port} current` }).click()
+    const destination = page.getByRole('dialog', { name: `I(T1, port ${port})` })
+    await destination.getByRole('button', { name: /New waveform window/ }).click()
+    const plot = page.locator('.additional-plot-window').filter({ has: page.getByRole('img', { name: `I(T1, port ${port}), trace in A` }) })
+    await expect(plot).toBeVisible()
+    await expect(plot.getByRole('button', { name: new RegExp(`Disable I\\(T1, port ${port}\\)`) })).toBeVisible()
+  }
+})
+
+test('an imported TXL model runs with grounded returns in the browser engine', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const project = createStarterProject()
+  const modelContent = '.MODEL TXL50 TXL(R=10 L=250n G=0 C=100p LENGTH=1)\n'
+  const parts = [
+    { id: 'txl-source', kind: 'source' as const, ref: 'V1', value: '1 V', sourceMode: 'pulse' as const, pulse: { initial: '0', delay: '1 ns', rise: '50 ps', fall: '50 ps', width: '10 ns', period: '20 ns' }, x: 100, y: 300, rotation: 0 as const },
+    { id: 'txl-source-resistor', kind: 'resistor' as const, ref: 'RSOURCE', value: '50 Ω', x: 300, y: 300, rotation: 0 as const },
+    { id: 'txl-device', kind: 'transmissionLine' as const, ref: 'T1', value: '', deviceModel: 'TXL50', x: 500, y: 300, rotation: 0 as const },
+    { id: 'txl-load', kind: 'resistor' as const, ref: 'RLOAD', value: '50 Ω', x: 700, y: 300, rotation: 0 as const },
+  ]
+  const nodeNames = [['source', '0'], ['source', 'input'], ['input', '0', 'output', '0'], ['output', '0']]
+  const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
+    id: `${part.id}-net-${pinIndex}`, name: nodeNames[partIndex][pinIndex], x: pin.x, y: pin.y, visible: false,
+  })))
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.modelAssets = [{ id: 'txl-model', filename: 'txl.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '12 ns', maxStep: '50 ps' }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await page.locator('.circuit-part[data-part-id="txl-device"]').click()
+  await page.getByLabel('Device model for T1').selectOption('TXL50')
+  await expect(page.getByText(/TXL model uses ngspice’s two-ground-return Y-device/)).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+
+  const line = page.locator('.circuit-part[data-part-id="txl-device"]')
+  await line.focus()
+  await line.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Plot port 2 current' }).click()
+  const destination = page.getByRole('dialog', { name: 'I(T1, port 2)' })
+  await destination.getByRole('button', { name: /New waveform window/ }).click()
+  const plot = page.locator('.additional-plot-window').filter({ has: page.getByRole('img', { name: 'I(T1, port 2), trace in A' }) })
+  await expect(plot).toBeVisible()
+})
+
+test('an imported three-conductor CPL model simulates through a reusable user subcircuit', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const project = createStarterProject()
+  const modelContent = [
+    '.SUBCKT COUPLED_LINE IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2',
+    'P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL50 LEN=1',
+    '.ENDS COUPLED_LINE',
+    '.MODEL CPL50 CPL LENGTH=1',
+    '+ R=1 0 0 1 0 1',
+    '+ L=3.83572E-7 8.26253E-8 8E-9 3.83572E-7 8.26253E-8 3.83572E-7',
+    '+ G=0 0 0 0 0 0',
+    '+ C=9.143579E-11 -9.78265E-12 -1E-12 9.143578E-11 -9.78265E-12 9.143578E-11',
+    '',
+  ].join('\n')
+  const parts = [
+    { id: 'cpl-source', kind: 'source' as const, ref: 'V1', value: '1 V', sourceMode: 'pulse' as const, pulse: { initial: '0', delay: '1 ns', rise: '50 ps', fall: '50 ps', width: '8 ns', period: '20 ns' }, x: 100, y: 350, rotation: 0 as const },
+    { id: 'cpl-source-resistor', kind: 'resistor' as const, ref: 'RSOURCE', value: '50 Ω', x: 300, y: 350, rotation: 0 as const },
+    { id: 'cpl-device', kind: 'subcircuit' as const, ref: 'X1', value: '', modelName: 'COUPLED_LINE', modelPins: ['IN1', 'IN2', 'IN3', 'GND1', 'OUT1', 'OUT2', 'OUT3', 'GND2'], x: 550, y: 350, rotation: 0 as const },
+    { id: 'cpl-load1', kind: 'resistor' as const, ref: 'RLOAD1', value: '50 Ω', x: 850, y: 300, rotation: 0 as const },
+    { id: 'cpl-load2', kind: 'resistor' as const, ref: 'RLOAD2', value: '50 Ω', x: 850, y: 430, rotation: 0 as const },
+    { id: 'cpl-load3', kind: 'resistor' as const, ref: 'RLOAD3', value: '50 Ω', x: 850, y: 560, rotation: 0 as const },
+  ]
+  const nodeNames = [['source', '0'], ['source', 'line_in1'], ['line_in1', '0', '0', '0', 'line_out1', 'line_out2', 'line_out3', '0'], ['line_out1', '0'], ['line_out2', '0'], ['line_out3', '0']]
+  const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
+    id: `${part.id}-net-${pinIndex}`, name: nodeNames[partIndex][pinIndex], x: pin.x, y: pin.y, visible: false,
+  })))
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.modelAssets = [{ id: 'cpl-model', filename: 'coupled-line.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '12 ns', maxStep: '50 ps' }
+  project.plotSettings = { ...project.plotSettings, selectedTraceIds: ['v(line_out1)', 'v(line_out2)'] }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await expect(page.locator('.circuit-part[data-part-id="cpl-device"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  await expect(netlist).toContainText(/^P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL50 LEN=1$/m)
+  await expect(netlist).toContainText(/^\.MODEL CPL50 CPL LENGTH=1$/m)
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+})
+
+test('an imported eight-conductor CPL model simulates through a reusable user subcircuit', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const project = createStarterProject()
+  const fixture = readFileSync(path.resolve('engine/wasm/fixtures/coupled-transmission-line-8-tran.cir'), 'utf8')
+  const modelLines = fixture.split(/\r?\n/)
+  const modelStart = modelLines.findIndex((line) => line.startsWith('.MODEL CPL8'))
+  const modelEnd = modelLines.findIndex((line, index) => index > modelStart && line.startsWith('.SUBCKT COUPLED_LINE'))
+  const subcktEnd = modelLines.findIndex((line, index) => index > modelEnd && line.startsWith('.ENDS COUPLED_LINE'))
+  const modelContent = [...modelLines.slice(modelStart, modelEnd), ...modelLines.slice(modelEnd, subcktEnd + 1)].join('\n')
+  const conductors = Array.from({ length: 8 }, (_, index) => index + 1)
+  const parts = [
+    { id: 'cpl8-source', kind: 'source' as const, ref: 'V1', value: '1 V', sourceMode: 'pulse' as const, pulse: { initial: '0', delay: '1 ns', rise: '50 ps', fall: '50 ps', width: '8 ns', period: '20 ns' }, x: 100, y: 650, rotation: 0 as const },
+    { id: 'cpl8-source-resistor', kind: 'resistor' as const, ref: 'RSOURCE', value: '50 Ω', x: 300, y: 650, rotation: 0 as const },
+    { id: 'cpl8-device', kind: 'subcircuit' as const, ref: 'X1', value: '', modelName: 'COUPLED_LINE', modelPins: [...conductors.map((n) => `IN${n}`), 'GND1', ...conductors.map((n) => `OUT${n}`), 'GND2'], x: 550, y: 650, rotation: 0 as const },
+    ...conductors.map((n) => ({ id: `cpl8-load-${n}`, kind: 'resistor' as const, ref: `RLOAD${n}`, value: '50 Ω', x: 900, y: 300 + n * 90, rotation: 0 as const })),
+  ]
+  const deviceNodes = [...conductors.map((n) => n === 1 ? 'line_in1' : '0'), '0', ...conductors.map((n) => `line_out${n}`), '0']
+  const nodeNames = [['source', '0'], ['source', 'line_in1'], deviceNodes, ...conductors.map((n) => [`line_out${n}`, '0'])]
+  const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
+    id: `${part.id}-net-${pinIndex}`, name: nodeNames[partIndex][pinIndex], x: pin.x, y: pin.y, visible: false,
+  })))
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.modelAssets = [{ id: 'cpl8-model', filename: 'coupled-line-8.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '12 ns', maxStep: '50 ps' }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await expect(page.locator('.circuit-part[data-part-id="cpl8-device"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  await expect(netlist).toContainText(/^P1 IN1 IN2 IN3 IN4 IN5 IN6 IN7 IN8 GND1 OUT1 OUT2 OUT3 OUT4 OUT5 OUT6 OUT7 OUT8 GND2 CPL8 LEN=1$/m)
+  await expect(netlist).toContainText(/^\.MODEL CPL8 CPL LENGTH=1$/m)
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
 })
 
 test('native VDMOS power MOSFET imports, selects, and runs its ngspice model', { tag: '@ngspice' }, async ({ page }) => {
@@ -10527,6 +10797,42 @@ test('circuit checks identify incompatible native semiconductor and switch model
   await expect(page.locator('.circuit-part[data-part-id="mixed-family-instance"].selected')).toHaveCount(1)
 })
 
+test('circuit checks explain a short CPL matrix and select its imported IC', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.evaluate(async () => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const content = [
+      '.SUBCKT COUPLED IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2',
+      'P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL_BAD LEN=1',
+      '.ENDS COUPLED',
+      '.MODEL CPL_BAD CPL',
+      '+ R=1 0 0 1 0 1',
+      '+ L=3.8e-7 8e-8 1e-8 3.8e-7 8e-8 3.8e-7',
+      '+ G=0 0 0 0 0 0',
+      '+ C=9e-11 -9e-12 9e-11 -9e-12 9e-11',
+      '',
+    ].join('\n')
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content))
+    const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    project.modelAssets = [{ id: 'bad-cpl-library', filename: 'coupled.lib', sha256, content, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+    project.parts.push({ id: 'bad-cpl-instance', kind: 'subcircuit', ref: 'XCOUPLED', value: 'COUPLED', modelName: 'COUPLED', modelPins: ['IN1', 'IN2', 'IN3', 'GND1', 'OUT1', 'OUT2', 'OUT3', 'GND2'], x: 760, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: /Check circuit/ }).click()
+  const report = page.getByRole('dialog', { name: 'Circuit checks' })
+  const issue = report.getByRole('listitem').filter({ hasText: 'CPL_BAD has an invalid C matrix for 3 conductors' })
+  await expect(issue).toContainText('5 packed upper-triangle values, but a 3-conductor model needs 6')
+  await expect(issue).toContainText('coupled.lib at line 4')
+  const missingLength = report.getByRole('listitem').filter({ hasText: 'CPL_BAD has no LENGTH parameter' })
+  await expect(missingLength).toContainText('even when a P instance supplies its own LEN')
+  await expect(missingLength).toContainText('coupled.lib at line 4')
+  await issue.getByRole('button', { name: 'Select affected component' }).click()
+  await expect(page.locator('.circuit-part.selected .part-ref')).toHaveText('XCOUPLED · COUPLED')
+})
+
 test('circuit checks select the component with an ambiguous imported model name', async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
@@ -11780,6 +12086,32 @@ test('imported device model parameters can be stepped through the browser ngspic
   const labels = await page.locator('.trace-toggles button').allTextContents()
   expect(labels.some((label) => label.includes('Q1.BF=10'))).toBe(true)
   expect(labels.some((label) => label.includes('Q1.BF=200'))).toBe(true)
+})
+
+test('an imported NPN level-8 HICUM2 model runs in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const modelLibrary = '.MODEL USER_HICUM NPN LEVEL=8\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'user-hicum.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from user-hicum\.lib/)).toBeVisible()
+  await page.locator('.circuit-part[aria-label^="Q1,"]').click()
+  const modelPicker = page.getByLabel('Device model for Q1')
+  await expect(modelPicker.locator('option', { hasText: 'USER_HICUM · NPN' })).toHaveCount(1)
+  await modelPicker.selectOption('USER_HICUM')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(COLLECTOR)')
 })
 
 test('imported CSW threshold can be stepped in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {

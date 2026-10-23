@@ -16,6 +16,7 @@ export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missing
 export type NgspiceBsim3BinFamily<T extends SpiceModelDefinition = SpiceModelDefinition> = { name: string; displayName: string; type: string; binCount: number; models: T[] }
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
 export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInput> = { assets: { asset: T; parsed: ParsedSubcircuitLibrary }[]; dependencies: ModelDependencyAnalysis }
+export type CoupledLineMatrixIssue = { modelName: string; matrix: 'R' | 'L' | 'G' | 'C' | 'LENGTH'; expectedEntries: number; actualEntries: number; conductorCount: number; sourceLine: number; problem?: 'not-positive-definite' | 'missing-length' }
 
 /** Keep source/rights notes only when a replacement contains identical model text. */
 export function modelProvenanceForReplacement(
@@ -1193,6 +1194,115 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   const modelRecords = [...retained].sort((a, b) => a - b).map((sourceLine) => ({ sourceLine, text: physical[sourceLine - 1] }))
   const modelText = modelRecords.map(({ text }) => text).join('\n')
   return { subcircuits, models, functions, dependencies, includes, modelText, modelRecords }
+}
+
+/** Check the packed upper-triangle matrix sizes for imported CPL models used by P devices. */
+export function coupledLineConductorCount(source: string, sourceLine: number, modelName: string): number | null {
+  const line = logicalLines(source).find((candidate) => candidate.start === sourceLine)
+  if (!line) return null
+  const tokens = withoutInlineComment(line.text).trim().split(/\s+/)
+  if (!/^p\S*$/i.test(tokens[0] ?? '')) return null
+  const modelIndex = tokens.findIndex((token, index) => index > 0 && token.toLowerCase() === modelName.toLowerCase())
+  if (modelIndex < 0) return null
+  const conductorCount = (modelIndex - 3) / 2
+  return Number.isInteger(conductorCount) && conductorCount >= 1 && conductorCount <= 8 ? conductorCount : null
+}
+
+function spiceNumericLiteral(value: string): number | null {
+  const match = value.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|mil|t|g|k|m|u|n|p|f)?$/i)
+  if (!match) return null
+  const multiplier = ({ t: 1e12, g: 1e9, meg: 1e6, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15, mil: 25.4e-6 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
+  const numeric = Number(match[1]) * multiplier
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function isPositiveDefiniteUpperTriangle(values: readonly number[], dimension: number): boolean {
+  const matrix = Array.from({ length: dimension }, () => Array<number>(dimension).fill(0))
+  let cursor = 0
+  let scale = 0
+  for (let row = 0; row < dimension; row += 1) for (let column = row; column < dimension; column += 1) {
+    const value = values[cursor++]
+    matrix[row][column] = value
+    matrix[column][row] = value
+    scale = Math.max(scale, Math.abs(value))
+  }
+  if (!scale) return false
+  const lower = Array.from({ length: dimension }, () => Array<number>(dimension).fill(0))
+  const tolerance = scale * Number.EPSILON * dimension * 8
+  for (let row = 0; row < dimension; row += 1) for (let column = 0; column <= row; column += 1) {
+    let value = matrix[row][column]
+    for (let k = 0; k < column; k += 1) value -= lower[row][k] * lower[column][k]
+    if (row === column) {
+      if (value <= tolerance) return false
+      lower[row][column] = Math.sqrt(value)
+    } else lower[row][column] = value / lower[column][column]
+  }
+  return true
+}
+
+export function inspectCoupledLineMatrices(source: string, selectedSections?: string[], referencedConductorCounts?: readonly number[]): CoupledLineMatrixIssue[] {
+  const parsed = parseSubcircuitLibrary(source, selectedSections)
+  const cplModels = new Map(parsed.models.filter((model) => model.type.toLowerCase() === 'cpl').map((model) => [model.name.toLowerCase(), model.name]))
+  if (!cplModels.size) return []
+  const inspected = inspectLibrarySections(source)
+  const selected = selectedSections ?? (inspected.sections.length === 1 ? inspected.sections : [])
+  const activeLines = inspected.lines
+    .filter(({ section }) => section === null || selected.some((name) => name.toLowerCase() === section?.toLowerCase()))
+    .map(({ line }) => ({ ...line, text: withoutInlineComment(line.text).trim() }))
+  const widthsByModel = new Map<string, Set<number>>()
+  if (referencedConductorCounts?.length) {
+    for (const name of cplModels.keys()) widthsByModel.set(name, new Set(referencedConductorCounts.filter((count) => Number.isInteger(count) && count >= 1 && count <= 8)))
+  } else {
+    for (const line of activeLines) {
+      if (!/^p\S+\s+/i.test(line.text)) continue
+      const tokens = line.text.split(/\s+/)
+      const modelIndex = tokens.findIndex((token, index) => index > 0 && cplModels.has(token.toLowerCase()))
+      if (modelIndex < 0) continue
+      const pinCount = modelIndex - 1
+      const conductorCount = (pinCount - 2) / 2
+      if (!Number.isInteger(conductorCount) || conductorCount < 1 || conductorCount > 8) continue
+      const name = tokens[modelIndex].toLowerCase()
+      const widths = widthsByModel.get(name) ?? new Set<number>()
+      widths.add(conductorCount)
+      widthsByModel.set(name, widths)
+    }
+  }
+  const modelCards = new Map<string, { name: string; line: number; text: string }>()
+  for (const line of inspected.lines) {
+    if (line.section !== null && !selected.some((name) => name.toLowerCase() === line.section?.toLowerCase())) continue
+    const match = withoutInlineComment(line.line.text).trim().match(/^\.model\s+(\S+)\s+cpl\b([\s\S]*)$/i)
+    if (match) modelCards.set(match[1].toLowerCase(), { name: match[1], line: line.line.start, text: match[2] })
+  }
+  const issues: CoupledLineMatrixIssue[] = []
+  for (const [modelKey, widths] of widthsByModel) {
+    const card = modelCards.get(modelKey)
+    if (!card) continue
+    const assignments = [...card.text.matchAll(/\b(R|L|G|C|LENGTH|LEN)\s*=\s*/ig)]
+    if (!assignments.some((assignment) => assignment[1].toUpperCase() === 'LENGTH')) {
+      for (const conductorCount of widths) issues.push({ modelName: card.name, matrix: 'LENGTH', expectedEntries: 1, actualEntries: 0, conductorCount, sourceLine: card.line, problem: 'missing-length' })
+    }
+    const matrixEntries = new Map<string, string[]>()
+    for (let index = 0; index < assignments.length; index += 1) {
+      const assignment = assignments[index]
+      const matrix = assignment[1].toUpperCase()
+      if (!['R', 'L', 'G', 'C'].includes(matrix)) continue
+      const start = assignment.index! + assignment[0].length
+      const end = assignments[index + 1]?.index ?? card.text.length
+      matrixEntries.set(matrix, card.text.slice(start, end).replace(/[(),]/g, ' ').trim().split(/\s+/).filter(Boolean))
+    }
+    for (const conductorCount of widths) for (const matrix of ['R', 'L', 'G', 'C'] as const) {
+      const entries = matrixEntries.get(matrix) ?? []
+      const expectedEntries = conductorCount * (conductorCount + 1) / 2
+      if (entries.length !== expectedEntries) issues.push({ modelName: card.name, matrix, expectedEntries, actualEntries: entries.length, conductorCount, sourceLine: card.line })
+      else if (matrix === 'C') {
+        const numericEntries = entries.map(spiceNumericLiteral)
+        if (numericEntries.every((entry): entry is number => entry !== null) && !isPositiveDefiniteUpperTriangle(numericEntries, conductorCount)) {
+          issues.push({ modelName: card.name, matrix, expectedEntries, actualEntries: entries.length, conductorCount, sourceLine: card.line, problem: 'not-positive-definite' })
+        }
+      }
+    }
+  }
+  return issues
 }
 
 /** Build indexed, memoized function lookups for a parsed set of model libraries. */

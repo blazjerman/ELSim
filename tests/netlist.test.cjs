@@ -8,7 +8,7 @@ if (!build) throw new Error('Run this suite through `npm test`.')
 
 const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(path.join(build, 'engine/netlist.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
-const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createSineWaveExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSwitchExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createEducationalOpampExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createNonInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPnpSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSuperpositionExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTheveninNortonExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createSineWaveExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSwitchExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createEducationalOpampExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createNonInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPnpSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSuperpositionExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTheveninNortonExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createTransmissionLineExampleProject, createCoupledLineCrosstalkExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
@@ -49,6 +49,92 @@ test('standalone R C and L parts can use imported models and model defaults', ()
   const modelDefaultArtifact = createNetlistArtifact(project)
   assert.deepEqual(modelDefaultArtifact.diagnostics, [], modelDefaultArtifact.text)
   assert.match(modelDefaultArtifact.text, /^R2 \S+ \S+ R_CUSTOM$/m)
+})
+
+test('native lossless transmission lines emit propagation delay or frequency-length syntax', () => {
+  const project = createStarterProject()
+  const line = { id: 'line-1', kind: 'transmissionLine', ref: 'T1', value: '75 Ω', x: 700, y: 500, rotation: 0, transmissionLine: { lengthMode: 'delay', delay: '25 ns' } }
+  project.parts.push(line)
+  const names = ['line1p', 'line1n', 'line2p', 'line2n']
+  const pins = componentPins(line)
+  const labels = names.map((name, index) => ({ id: `line-net-${index}`, name, x: pins[index].x, y: pins[index].y, visible: true }))
+  project.netLabels.push(...labels)
+  project.sheets[0].parts = project.parts
+  project.sheets[0].netLabels = project.netLabels
+
+  const delayed = createNetlistArtifact(project)
+  assert.deepEqual(delayed.diagnostics, [], delayed.text)
+  assert.match(delayed.text, /^T1 line1p line1n line2p line2n Z0=75 TD=25n$/m)
+
+  line.transmissionLine = { lengthMode: 'frequency', frequency: '1 GHz', normalizedLength: '0.25' }
+  const frequencyDefined = createNetlistArtifact(project)
+  assert.deepEqual(frequencyDefined.diagnostics, [], frequencyDefined.text)
+  assert.match(frequencyDefined.text, /^T1 line1p line1n line2p line2n Z0=75 F=1g NL=0\.25$/m)
+
+  line.transmissionLine = { lengthMode: 'delay', delay: '0' }
+  const invalid = createNetlistArtifact(project)
+  assert.ok(invalid.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /positive finite propagation delay/.test(message)))
+})
+
+test('transmission lines use imported LTRA cards and reject incompatible or incomplete models', () => {
+  const project = createStarterProject()
+  const line = { id: 'line-ltra', kind: 'transmissionLine', ref: 'T1', value: '', deviceModel: 'LINE50', x: 700, y: 500, rotation: 0 }
+  project.parts.push(line)
+  project.modelAssets = [{ id: 'ltra-model', filename: 'lines.lib', sha256: 'f'.repeat(64), content: '.MODEL LINE50 LTRA(R=10 L=250n G=0 C=100p LEN=1)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const names = ['line1p', 'line1n', 'line2p', 'line2n']
+  const pins = componentPins(line)
+  project.netLabels.push(...names.map((name, index) => ({ id: `ltra-net-${index}`, name, x: pins[index].x, y: pins[index].y, visible: true })))
+  project.sheets[0].parts = project.parts
+  project.sheets[0].netLabels = project.netLabels
+
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^V__ELSIM_T1_P1 line1p __ELSIM_T1_P1 0$/m)
+  assert.match(artifact.text, /^V__ELSIM_T1_P2 line2p __ELSIM_T1_P2 0$/m)
+  assert.match(artifact.text, /^O1 __ELSIM_T1_P1 line1n __ELSIM_T1_P2 line2n LINE50$/m)
+  assert.match(artifact.text, /^\.MODEL LINE50 LTRA\(R=10 L=250n G=0 C=100p LEN=1\)$/m)
+  assert.doesNotMatch(artifact.text, /^T1 /m)
+
+  project.modelAssets[0].content = '.MODEL LINE50 R(R=50)\n'
+  const incompatible = createNetlistArtifact(project)
+  assert.ok(incompatible.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /not an LTRA or TXL transmission-line model/.test(message)))
+
+  project.modelAssets[0].content = '.MODEL LINE50 LTRA(R=10 L=250n G=0 C=100p)\n'
+  const missingLength = createNetlistArtifact(project)
+  assert.ok(missingLength.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /must declare LEN/.test(message)))
+})
+
+test('transmission lines use imported TXL cards only with grounded returns and transient analysis', () => {
+  const project = createStarterProject()
+  const line = { id: 'line-txl', kind: 'transmissionLine', ref: 'T1', value: '', deviceModel: 'TXL50', x: 700, y: 500, rotation: 0 }
+  project.parts.push(line)
+  project.modelAssets = [{ id: 'txl-model', filename: 'txl.lib', sha256: 'a'.repeat(64), content: '.MODEL TXL50 TXL(R=10 L=250n G=0 C=100p LENGTH=1)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const pins = componentPins(line)
+  project.netLabels.push(...['line1p', '0', 'line2p', '0'].map((name, index) => ({ id: `txl-net-${index}`, name, x: pins[index].x, y: pins[index].y, visible: true })))
+  project.sheets[0].parts = project.parts
+  project.sheets[0].netLabels = project.netLabels
+
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^V__ELSIM_T1_P1 line1p __ELSIM_T1_P1 0$/m)
+  assert.match(artifact.text, /^V__ELSIM_T1_P2 line2p __ELSIM_T1_P2 0$/m)
+  assert.match(artifact.text, /^Y1 __ELSIM_T1_P1 0 __ELSIM_T1_P2 0 TXL50$/m)
+
+  project.modelAssets[0].content = '.MODEL TXL50 TXL(R=10 L=250n G=0 C=100p)\n'
+  const missingLength = createNetlistArtifact(project)
+  assert.ok(missingLength.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /TXL model TXL50 must declare LENGTH/.test(message)))
+  project.modelAssets[0].content = '.MODEL TXL50 TXL(R=10 L=250n G=0 C=100p LENGTH=1)\n'
+
+  project.netLabels.find((label) => label.id === 'txl-net-1').name = 'line1return'
+  project.sheets[0].netLabels = project.netLabels
+  const floatingReturn = createNetlistArtifact(project)
+  assert.ok(floatingReturn.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /grounded returns/.test(message)))
+
+  project.netLabels.find((label) => label.id === 'txl-net-1').name = '0'
+  project.sheets[0].netLabels = project.netLabels
+  project.simulation = { ...project.simulation, analysis: 'ac' }
+  const unsupportedAnalysis = createNetlistArtifact(project)
+  assert.ok(unsupportedAnalysis.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /transient analysis only/.test(message)))
 })
 
 test('passive model defaults require a matching card and declared nominal parameter', () => {
@@ -402,6 +488,36 @@ test('transformer-current example is ready for transient winding animation', () 
   assert.equal(source.sourceMode, 'sine')
   assert.equal(source.sine.frequency, '50 Hz')
   assert.deepEqual(createNetlistArtifact(project).diagnostics, [])
+})
+
+test('transmission-line example demonstrates the configured 5 ns propagation delay', () => {
+  const project = validateProject(createTransmissionLineExampleProject())
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal(project.name, 'Transmission-line pulse delay')
+  assert.equal(project.simulation.analysis, 'tran')
+  assert.equal(project.simulation.stopTime, '15 ns')
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(IN)', 'V(OUT)'])
+  assert.match(artifact.text, /^V1 .* PULSE\(0 2 0 10p 10p 2n 10n\)$/m)
+  assert.match(artifact.text, /^V1 \S+ 0 PULSE\(/m)
+  assert.match(artifact.text, /^T1 IN 0 OUT 0 Z0=50 TD=5n$/m)
+  assert.match(artifact.text, /^RSOURCE .* 50$/m)
+  assert.match(artifact.text, /^RLOAD OUT 0 50$/m)
+  assert.equal(project.parts.filter((part) => part.kind === 'ground').length, 4)
+})
+
+test('coupled-line crosstalk example preserves its imported CPL model and probes', () => {
+  const project = validateProject(createCoupledLineCrosstalkExampleProject())
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.equal(project.name, 'Three-conductor crosstalk')
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(IN1)', 'V(OUT1)', 'V(OUT2)', 'V(OUT3)'])
+  assert.equal(project.modelAssets.length, 1)
+  assert.equal(project.modelAssets[0].sha256, createHash('sha256').update(project.modelAssets[0].content).digest('hex'))
+  assert.match(artifact.text, /^\.SUBCKT COUPLED_LINE3 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2$/m)
+  assert.match(artifact.text, /^P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL3 LEN=1$/m)
+  assert.match(artifact.text, /^\.MODEL CPL3 CPL LENGTH=1$/m)
+  assert.match(artifact.text, /^\.tran 50p 12n$/m)
 })
 
 test('potentiometer wiper divides total resistance and validates its travel', () => {
@@ -1683,6 +1799,30 @@ test('NPN and PNP parts create separate educational BJT models in C-B-E pin orde
   assert.throws(() => validateProject(project), /integer from 1 to 1000/)
 })
 
+test('BJT substrate nodes use an explicitly labeled net and default to ngspice ground when unset', () => {
+  const project = createStarterProject()
+  const transistor = { id: 'p-q1', kind: 'npn', ref: 'Q1', value: '100', substrateNode: 'vsubstrate', x: 700, y: 300, rotation: 0 }
+  project.parts.push(transistor)
+  project.netLabels.push({ id: 'bjt-substrate', name: 'Vsubstrate', x: 900, y: 300, visible: false })
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^Q1 \S+ \S+ \S+ Vsubstrate ELSIM_MODEL_Q1$/mi)
+
+  transistor.substrateNode = undefined
+  const defaultArtifact = createNetlistArtifact(validateProject(project))
+  assert.match(defaultArtifact.text, /^Q1 \S+ \S+ \S+ ELSIM_MODEL_Q1$/m)
+
+  transistor.substrateNode = 'missing_net'
+  const missing = createNetlistArtifact(validateProject(project))
+  assert.match(missing.diagnostics.map(({ message }) => message).join('\n'), /needs a matching net label/i)
+  assert.doesNotMatch(missing.text, /^Q1 .*missing_net/m)
+  transistor.substrateNode = 'bad node'
+  assert.throws(() => validateProject(project), /invalid BJT substrate node/i)
+  const nonBjt = project.parts.find((part) => part.kind === 'resistor')
+  nonBjt.substrateNode = 'valid_node'
+  assert.throws(() => validateProject(project), /invalid BJT substrate node/i)
+})
+
 test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin order', () => {
   const project = createStarterProject()
   project.parts.push(
@@ -1817,13 +1957,16 @@ test('imported subcircuits preserve declared .FUNC expressions in validated para
 
 test('imported diode, BJT, and MOSFET .MODEL cards connect to compatible devices while defaults remain available', () => {
   const project = createStarterProject()
-  const content = 'Original primitive model fixtures\n.MODEL 1N4148 D(Is=2n N=1.8)\n.MODEL BUSER NPN(IS=1e-14 BF=125)\n.MODEL MUSER NMOS(LEVEL=1 VTO=1.5 KP=800u LAMBDA=0.02)\n'
+  const content = 'Original primitive model fixtures\n.MODEL 1N4148 D(Is=2n N=1.8)\n.MODEL BUSER NPN(IS=1e-14 BF=125)\n.MODEL HICUM NPN LEVEL=8\n.MODEL VBIC4 NPN LEVEL=4\n.MODEL VBIC9 NPN LEVEL=9\n.MODEL MUSER NMOS(LEVEL=1 VTO=1.5 KP=800u LAMBDA=0.02)\n'
   project.modelAssets = [{ id: 'model-devices', filename: 'devices.lib', content, sha256: 'f843fca3f6a3e028859934fc0a51c5eb8bc192a726bbb2f65c4381b98a1d5d81', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push(
     { id: 'p-d1', kind: 'diode', ref: 'D1', value: 'Default diode', deviceModel: '1N4148', x: 700, y: 300, rotation: 0 },
     { id: 'p-d2', kind: 'diode', ref: 'D2', value: 'Default diode', x: 820, y: 300, rotation: 0 },
     { id: 'p-q1', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'BUSER', x: 700, y: 450, rotation: 0 },
     { id: 'p-q2', kind: 'npn', ref: 'Q2', value: '100', x: 820, y: 450, rotation: 0 },
+    { id: 'p-q3', kind: 'npn', ref: 'Q3', value: '100', deviceModel: 'HICUM', x: 940, y: 450, rotation: 0 },
+    { id: 'p-q4', kind: 'npn', ref: 'Q4', value: '100', deviceModel: 'VBIC4', x: 1060, y: 450, rotation: 0 },
+    { id: 'p-q5', kind: 'npn', ref: 'Q5', value: '100', deviceModel: 'VBIC9', x: 1180, y: 450, rotation: 0 },
     { id: 'p-m1', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'MUSER', x: 700, y: 600, rotation: 0 },
   )
   const validated = validateProject(project)
@@ -1833,8 +1976,14 @@ test('imported diode, BJT, and MOSFET .MODEL cards connect to compatible devices
   assert.match(artifact.text, /^D2 n\d+ n\d+ DDEFAULT$/m)
   assert.match(artifact.text, /^Q1 n\d+ n\d+ n\d+ BUSER$/m)
   assert.match(artifact.text, /^Q2 n\d+ n\d+ n\d+ ELSIM_MODEL_Q2$/m)
+  assert.match(artifact.text, /^Q3 n\d+ n\d+ n\d+ HICUM$/m)
+  assert.match(artifact.text, /^Q4 n\d+ n\d+ n\d+ VBIC4$/m)
+  assert.match(artifact.text, /^Q5 n\d+ n\d+ n\d+ VBIC9$/m)
   assert.match(artifact.text, /^M1 n\d+ n\d+ n\d+ n\d+ MUSER$/m)
   assert.match(artifact.text, /^\.MODEL MUSER NMOS\(LEVEL=1 VTO=1.5 KP=800u LAMBDA=0.02\)$/m)
+  assert.match(artifact.text, /^\.MODEL HICUM NPN LEVEL=8$/m)
+  assert.match(artifact.text, /^\.MODEL VBIC4 NPN LEVEL=4$/m)
+  assert.match(artifact.text, /^\.MODEL VBIC9 NPN LEVEL=9$/m)
   assert.doesNotMatch(artifact.text, /^\.model ELSIM_MODEL_M1/m)
   assert.match(artifact.text, /^\.MODEL 1N4148 D\(Is=2n N=1\.8\)$/m)
   assert.match(artifact.text, /^\.model DDEFAULT D$/m)

@@ -7,7 +7,7 @@ import { componentDefinitionByKind, importedSubcircuitComponentDefinition, isLeg
 import { componentMagnitude, timeMagnitude } from './componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from './measurementSettings'
 
-export type PartKind = 'source' | 'currentSource' | 'resistor' | 'potentiometer' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'transformer' | 'diode' | 'zener' | 'led' | 'switch' | 'voltageSwitch' | 'currentSwitch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'inverter' | 'logicGate' | 'opamp' | 'npn' | 'pnp' | 'njfet' | 'pjfet' | 'nmesfet' | 'pmesfet' | 'nmos' | 'pmos' | 'nvdmos' | 'pvdmos' | 'subcircuit'
+export type PartKind = 'source' | 'currentSource' | 'resistor' | 'potentiometer' | 'lamp' | 'capacitor' | 'ground' | 'inductor' | 'transformer' | 'transmissionLine' | 'diode' | 'zener' | 'led' | 'switch' | 'voltageSwitch' | 'currentSwitch' | 'vcvs' | 'vccs' | 'cccs' | 'ccvs' | 'behavioral' | 'inverter' | 'logicGate' | 'opamp' | 'npn' | 'pnp' | 'njfet' | 'pjfet' | 'nmesfet' | 'pmesfet' | 'nmos' | 'pmos' | 'nvdmos' | 'pvdmos' | 'subcircuit'
 export type Rotation = 0 | 90 | 180 | 270
 export type SourcePulse = { initial: string; delay: string; rise: string; fall: string; width: string; period: string; cycleCount?: string }
 export type SourceSine = { offset: string; amplitude: string; frequency: string; delay: string; damping: string; phase: string }
@@ -33,6 +33,8 @@ export type Part = {
   mosfetGeometry?: { length?: string; width?: string }
   sheetParameters?: Record<string, string>
   deviceModel?: string
+  /** Optional labeled substrate node for ngspice's four-node BJT instance form. */
+  substrateNode?: string
   controlSource?: string
   voltageSwitch?: { onResistance?: string; offResistance?: string; hysteresis?: string }
   currentSwitch?: { onResistance?: string; offResistance?: string; hysteresis?: string }
@@ -66,6 +68,8 @@ export type Part = {
   /** Optional transformer primary and secondary copper-loss resistances in ohms. */
   primaryWindingResistance?: string
   secondaryWindingResistance?: string
+  /** Lossless ngspice T-line propagation settings. */
+  transmissionLine?: { lengthMode: 'delay' | 'frequency'; delay?: string; frequency?: string; normalizedLength?: string }
   /** Wiper position from the upper terminal (0) to the lower terminal (1). */
   wiperPosition?: string
   symbolAssetId?: string
@@ -81,7 +85,7 @@ export type PlotValueRange = { min: number; max: number }
 export type ComponentVoltageProbe = { partId: string; positivePin: number; negativePin: number; positiveNet: string; negativeNet: string; positiveVector: string; negativeVector: string; ref: string; vectorRef: string; sheetId?: string; scopeSheetId?: string; instancePath?: string[] }
 export type PlotTraceReference =
   | { kind: 'node'; name: string; sheetId: string; scopeSheetId: string; instancePath: string[]; wireId?: string; labelId?: string }
-  | { kind: 'part-current'; partId: string; sheetId: string; scopeSheetId: string; instancePath: string[]; winding?: 'P' | 'S' }
+  | { kind: 'part-current'; partId: string; sheetId: string; scopeSheetId: string; instancePath: string[]; winding?: 'P' | 'S'; port?: 1 | 2 }
   | { kind: 'component-voltage'; partId: string; positivePin: number; negativePin: number; sheetId: string; scopeSheetId: string; instancePath: string[] }
 export const PLOT_TRACE_COLORS = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d'] as const
 export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; componentVoltageProbes?: Record<string, ComponentVoltageProbe>; traceReferences?: Record<string, PlotTraceReference>; traceColors?: Record<string, string>; ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>>; valueRanges?: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', Record<string, PlotValueRange>>> }
@@ -339,7 +343,7 @@ export function validateProject(input: unknown): Project {
   data.wires = splitWirePaths(data.wires)
   if (Array.isArray(data.sheets)) data.sheets = data.sheets.map((sheet) => sheet && typeof sheet === 'object' ? { ...sheet, wires: splitWirePaths((sheet as Record<string, unknown>).wires) } : sheet)
   snapProjectGeometryToGrid(data)
-    const allowed = new Set<PartKind>(['source', 'currentSource', 'resistor', 'potentiometer', 'lamp', 'capacitor', 'ground', 'inductor', 'transformer', 'diode', 'zener', 'led', 'switch', 'voltageSwitch', 'currentSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'inverter', 'logicGate', 'opamp', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos', 'subcircuit'])
+    const allowed = new Set<PartKind>(['source', 'currentSource', 'resistor', 'potentiometer', 'lamp', 'capacitor', 'ground', 'inductor', 'transformer', 'transmissionLine', 'diode', 'zener', 'led', 'switch', 'voltageSwitch', 'currentSwitch', 'vcvs', 'vccs', 'cccs', 'ccvs', 'behavioral', 'inverter', 'logicGate', 'opamp', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos', 'subcircuit'])
   if (allowed.size !== Object.keys(componentDefinitionByKind).length || [...allowed].some((kind) => componentDefinitionByKind[kind]?.kind !== kind)) throw new Error('Built-in component definition registry does not match supported component kinds.')
   const rootSheetRaw = Array.isArray(data.sheets) ? (data.sheets as { id?: unknown; parameters?: unknown }[]).find((sheet) => sheet?.id === data.rootSheetId) : undefined
   const rootParameterNames = Array.isArray(rootSheetRaw?.parameters) ? (rootSheetRaw.parameters as { name?: unknown }[]).flatMap((parameter) => typeof parameter?.name === 'string' ? [parameter.name] : []) : []
@@ -356,7 +360,8 @@ export function validateProject(input: unknown): Project {
       throw new Error('Project contains a malformed component.')
     }
     partIds.add(candidate.id)
-    const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', currentSwitch: 'W', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[candidate.kind]
+    const prefix = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', transmissionLine: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', currentSwitch: 'W', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[candidate.kind]
+    if (candidate.transmissionLine !== undefined && (candidate.kind !== 'transmissionLine' || !candidate.transmissionLine || typeof candidate.transmissionLine !== 'object' || Array.isArray(candidate.transmissionLine) || Object.keys(candidate.transmissionLine).some((key) => !['lengthMode', 'delay', 'frequency', 'normalizedLength'].includes(key)) || !['delay', 'frequency'].includes(candidate.transmissionLine.lengthMode) || ['delay', 'frequency', 'normalizedLength'].some((key) => candidate.transmissionLine?.[key as 'delay' | 'frequency' | 'normalizedLength'] !== undefined && (typeof candidate.transmissionLine[key as 'delay' | 'frequency' | 'normalizedLength'] !== 'string' || candidate.transmissionLine[key as 'delay' | 'frequency' | 'normalizedLength']!.length > 64)))) throw new Error(`${candidate.ref} has malformed transmission-line settings.`)
     if (candidate.sourceMode !== undefined && ((candidate.kind !== 'source' && candidate.kind !== 'currentSource') || !['pulse', 'dc', 'pwl', 'sine', 'exp', 'sffm'].includes(candidate.sourceMode))) throw new Error(`${candidate.ref} has an invalid source waveform mode.`)
     if ((candidate.acMagnitude !== undefined && (candidate.kind !== 'source' && candidate.kind !== 'currentSource' || typeof candidate.acMagnitude !== 'string' || candidate.acMagnitude.length > 64)) || (candidate.acPhase !== undefined && (candidate.kind !== 'source' && candidate.kind !== 'currentSource' || typeof candidate.acPhase !== 'string' || candidate.acPhase.length > 64))) throw new Error(`${candidate.ref} has malformed AC source settings.`)
     if (candidate.pulse !== undefined && ((candidate.kind !== 'source' && candidate.kind !== 'currentSource') || !candidate.pulse || Object.keys(candidate.pulse).some((key) => !['initial', 'delay', 'rise', 'fall', 'width', 'period', 'cycleCount'].includes(key)) || ['initial', 'delay', 'rise', 'fall', 'width', 'period'].some((key) => typeof candidate.pulse?.[key as keyof typeof candidate.pulse] !== 'string') || candidate.pulse.cycleCount !== undefined && (typeof candidate.pulse.cycleCount !== 'string' || candidate.pulse.cycleCount.length > 64))) throw new Error(`${candidate.ref} has malformed pulse settings.`)
@@ -581,7 +586,7 @@ export function validateProject(input: unknown): Project {
       const symbolAsset = (data.symbolAssets as SymbolAsset[] | undefined)?.find((asset) => asset.id === part.symbolAssetId)
       if (!symbolAsset) throw new Error(`${part.ref} refers to a missing imported symbol.`)
       const symbol = parseSymbolAsset(symbolAsset.content, symbolAsset.filename)
-    const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, currentSource: 2, resistor: 2, potentiometer: 3, lamp: 2, capacitor: 2, ground: 1, inductor: 2, transformer: 4, diode: 2, zener: 2, led: 2, switch: 2, voltageSwitch: 4, currentSwitch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, inverter: 2, logicGate: 3, opamp: 5, npn: 3, pnp: 3, njfet: 3, pjfet: 3, nmesfet: 3, pmesfet: 3, nmos: 4, pmos: 4, nvdmos: 3, pvdmos: 3 } as const)[part.kind]
+    const expectedPinCount = part.kind === 'subcircuit' ? part.modelPins?.length : ({ source: 2, currentSource: 2, resistor: 2, potentiometer: 3, lamp: 2, capacitor: 2, ground: 1, inductor: 2, transformer: 4, transmissionLine: 4, diode: 2, zener: 2, led: 2, switch: 2, voltageSwitch: 4, currentSwitch: 2, vcvs: 4, vccs: 4, cccs: 2, ccvs: 2, behavioral: 2, inverter: 2, logicGate: 3, opamp: 5, npn: 3, pnp: 3, njfet: 3, pjfet: 3, nmesfet: 3, pmesfet: 3, nmos: 4, pmos: 4, nvdmos: 3, pvdmos: 3 } as const)[part.kind]
       if (!part.symbolPinOffsets || symbol.pins.length !== expectedPinCount || part.symbolPinOffsets.length !== symbol.pins.length || part.symbolPinOffsets.some(([x, y], index) => x !== symbol.pins[index].x || y !== symbol.pins[index].y)) throw new Error(`${part.ref} symbol pin order or coordinates do not match its component.`)
     }
     if (part.kind === 'subcircuit' && !part.sheetId) {
@@ -614,6 +619,7 @@ export function validateProject(input: unknown): Project {
       // and device-family compatibility before emitting a device line.
       if (!isValidSpiceModelName(part.deviceModel, true)) throw new Error(`${part.ref} has an invalid imported device model name.`)
     }
+    if (part.substrateNode !== undefined && ((part.kind !== 'npn' && part.kind !== 'pnp') || typeof part.substrateNode !== 'string' || part.substrateNode.length > 64 || !isValidSpiceNodeName(part.substrateNode))) throw new Error(`${part.ref} has an invalid BJT substrate node.`)
   }
   const simulation = data.simulation as Project['simulation'] | undefined
   const view = data.view as Project['view'] | undefined
@@ -770,7 +776,7 @@ export function validateProject(input: unknown): Project {
             const validPath = Array.isArray(reference?.instancePath) && reference.instancePath.length <= 32 && reference.instancePath.every((id) => typeof id === 'string')
             const validBase = typeof reference?.sheetId === 'string' && typeof reference?.scopeSheetId === 'string' && validPath
             const validNode = reference?.kind === 'node' && validBase && typeof reference.name === 'string' && (reference.wireId === undefined || typeof reference.wireId === 'string') && (reference.labelId === undefined || typeof reference.labelId === 'string')
-            const validCurrent = reference?.kind === 'part-current' && validBase && typeof reference.partId === 'string' && (reference.winding === undefined || reference.winding === 'P' || reference.winding === 'S')
+            const validCurrent = reference?.kind === 'part-current' && validBase && typeof reference.partId === 'string' && (reference.winding === undefined || reference.winding === 'P' || reference.winding === 'S') && (reference.port === undefined || reference.port === 1 || reference.port === 2)
             const validVoltage = reference?.kind === 'component-voltage' && validBase && typeof reference.partId === 'string' && Number.isInteger(reference.positivePin) && reference.positivePin >= 0 && Number.isInteger(reference.negativePin) && reference.negativePin >= -1
             if (!validNode && !validCurrent && !validVoltage) throw new Error('Plot trace references are malformed.')
           }

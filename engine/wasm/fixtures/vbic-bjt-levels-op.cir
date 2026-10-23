@@ -1,0 +1,12 @@
+VBIC BJT model levels four and nine run through the native ngspice Q device
+VCE4 c4 0 5
+VBE4 b4 0 0.7
+Q4 c4 b4 0 VBIC4
+VCE9 c9 0 5
+VBE9 b9 0 0.7
+Q9 c9 b9 0 VBIC9
+.MODEL VBIC4 NPN LEVEL=4
+.MODEL VBIC9 NPN LEVEL=9
+.op
+.print op i(VCE4) i(VCE9)
+.end

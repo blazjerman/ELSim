@@ -1,0 +1,12 @@
+* Matched 50 ohm source and load on a lossless 2 ns transmission line.
+V1 source 0 PULSE(0 1 0 1p 1p 1n 4n)
+RSOURCE source p1 50
+T1 p1 0 p2 0 Z0=50 TD=2n
+RLOAD p2 0 50
+.control
+set filetype=ascii
+tran 10p 4n
+write /result.raw v(p2) v(t1#i1) v(t1#i2)
+quit
+.endc
+.end
