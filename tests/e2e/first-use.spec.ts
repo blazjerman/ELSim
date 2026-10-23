@@ -9979,7 +9979,7 @@ test('inspector rejects a duplicate case-insensitive SPICE reference before savi
   await expect.poll(() => page.evaluate((id) => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === id).ref, newPartId)).toBe('R3')
 })
 
-test('circuit checks distinguish a behavioral node from a same-named component', async ({ page }) => {
+test('circuit checks distinguish a behavioral node from a same-named component', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   await page.evaluate(() => {
@@ -9996,6 +9996,7 @@ test('circuit checks distinguish a behavioral node from a same-named component',
   const behavioralPart = page.getByRole('button', { name: /^B1, Behavioral source/ })
   await behavioralPart.focus()
   await page.keyboard.press('Enter')
+  await expect(page.getByText(/pwl\(V\(vin\), 0, 0, 1, 5\)/)).toBeVisible()
   await page.getByRole('textbox', { name: 'Expression' }).fill('V(R2)')
   await page.getByRole('button', { name: /Check circuit/ }).click()
   const report = page.getByRole('dialog', { name: 'Circuit checks' })
