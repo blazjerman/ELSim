@@ -1,0 +1,18 @@
+Subcircuit-local model parameter function operating point
+V1 supply 0 5
+X1 supply out FUNCTION_STAGE
+XREF supply refout REFERENCE_STAGE
+RLOAD out 0 1k
+RREFLOAD refout 0 1k
+.SUBCKT FUNCTION_STAGE IN OUT
+.FUNC SCALE(x) {1e-15*x}
+.MODEL DLOCAL D(IS={SCALE(1)} N=1)
+D1 IN OUT DLOCAL
+.ENDS FUNCTION_STAGE
+.SUBCKT REFERENCE_STAGE IN OUT
+.MODEL DREFERENCE D(IS=1e-15 N=1)
+D1 IN OUT DREFERENCE
+.ENDS REFERENCE_STAGE
+.op
+.print op v(out) v(refout)
+.end
