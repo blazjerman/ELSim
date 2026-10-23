@@ -5108,6 +5108,8 @@ test('waveforms open from component probes in dedicated resizable windows', { ta
   await page.getByRole('menuitem', { name: /Plot voltage across/ }).click()
   const destination = page.getByRole('dialog', { name: 'V(R1)' })
   await expect(destination).toBeVisible()
+  await expect(destination).toHaveAttribute('aria-describedby', 'waveform-destination-description')
+  await expect(page.locator('#waveform-destination-description')).toHaveText('Choose where this trace should appear. Selecting an option opens it immediately.')
   await expectVisibleKeyboardControlsNamed(page)
   const newWindowOption = destination.getByRole('button', { name: /New waveform window/ })
   await expect(newWindowOption).toBeFocused()
