@@ -830,3 +830,7 @@ All 144 engine-independent Firefox `@ui-smoke` tests and all 14 Chromium/Firefox
 ### Hidden schematic labels (2026-10-23)
 
 Schematic viewport indexing now excludes labels whose `visible` flag is false. Previously these labels were inserted into the spatial index and revisited by viewport queries before being discarded at render time. Filtering is memoized to label-list changes, reducing index storage and candidate processing when projects contain hidden labels. A focused Firefox regression verifies hidden labels stay absent from the visual and keyboard-interactive scene. No before/after timing comparison was run, so no latency gain is claimed.
+
+### Firefox large-editor follow-up (2026-10-23)
+
+A fresh run of the large-project editor benchmark passed in Firefox. At 5,000 parts and 10,000 visible labels, 64 detailed parts and 105 labels were mounted; editor readiness was 661 ms, select-all to frame 25 ms, group drag of 15,000 selected objects to frame 25 ms, and zoom input to two frames was 26 ms median / 32 ms maximum. Selection input-to-frame was 5 ms median / 12 ms p95. These values are consistent with recent same-host runs and do not establish a before/after improvement from hidden-label index filtering. Firefox heap counters are unavailable in this run. No WASM rebuild or Pages workflow ran.
