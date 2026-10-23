@@ -3240,6 +3240,42 @@ test('native distributed RC component simulates and exposes substrate voltages a
   await expect(plot.locator('.cursor-readout')).toContainText(/I\(URC1, output\)\s*=\s*[-\d.e+]+ A/i)
 })
 
+test('distributed RC component selects and simulates an imported native URC model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  const project = createStarterProject()
+  const modelContent = '.MODEL URC50 URC(RPERL=50k CPERL=10p K=1.5 FMAX=1G)\n'
+  const parts = [
+    { id: 'urc-model-source', kind: 'source' as const, ref: 'V1', value: '1 V', sourceMode: 'pulse' as const, pulse: { initial: '0', delay: '0', rise: '1 ps', fall: '1 ps', width: '1 ns', period: '4 ns' }, x: 100, y: 300, rotation: 0 as const },
+    { id: 'urc-model-rsource', kind: 'resistor' as const, ref: 'R1', value: '50 Ω', x: 300, y: 300, rotation: 0 as const },
+    { id: 'urc-model-line', kind: 'urcLine' as const, ref: 'URC1', value: '1', deviceModel: 'URC50', urcLine: { sections: '8' }, x: 500, y: 300, rotation: 0 as const },
+    { id: 'urc-model-load', kind: 'resistor' as const, ref: 'RLOAD', value: '1 kΩ', x: 700, y: 300, rotation: 0 as const },
+  ]
+  const nodeNames = [['source', '0'], ['source', 'input'], ['input', 'output', '0'], ['output', '0']]
+  const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
+    id: `${part.id}-net-${pinIndex}`, name: nodeNames[partIndex][pinIndex], x: pin.x, y: pin.y, visible: false,
+  })))
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
+  project.modelAssets = [{ id: 'urc-model', filename: 'urc.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '4 ns', maxStep: '10 ps' }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  const line = page.locator('.circuit-part[data-part-id="urc-model-line"]')
+  await line.click()
+  await page.getByLabel('Device model for URC1').selectOption('URC50')
+  await expect(page.getByLabel('URC resistance per length for URC1')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  await expect(netlist).toContainText(/^\.MODEL URC50 URC\(RPERL=50k CPERL=10p K=1\.5 FMAX=1G\)$/m)
+  await expect(netlist).toContainText(/^URC1 .* URC50 L=1 N=8$/m)
+  await expect(netlist).not.toContainText(/\.MODEL URCMOD_URC1/)
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+})
+
 test('imported IC parameters can be swept across solved browser runs', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')

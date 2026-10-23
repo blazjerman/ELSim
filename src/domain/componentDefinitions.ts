@@ -336,6 +336,7 @@ export function compatibleDeviceModelType(kind: PartKind): string | undefined {
     case 'capacitor': return 'c'
     case 'inductor': return 'l'
     case 'transmissionLine': return 'ltra'
+    case 'urcLine': return 'urc'
     case 'lamp': case 'potentiometer': return 'r'
     case 'diode': case 'zener': case 'led': return 'd'
     case 'npn': return 'npn'

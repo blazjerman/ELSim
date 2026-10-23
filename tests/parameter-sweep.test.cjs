@@ -315,6 +315,24 @@ test('imported device model parameters are validated and emitted with altermod',
   assert.throws(() => validateProject(project), /numeric parameters on selected imported devices, ICs, or reusable blocks/)
 })
 
+test('imported URC model parameters can be stepped', () => {
+  const project = createStarterProject()
+  const line = { id: 'sweep-urc', kind: 'urcLine', ref: 'URC1', value: '1m', x: 700, y: 400, rotation: 0, deviceModel: 'USER_URC' }
+  project.parts.push(line)
+  project.sheets[0].parts = project.parts
+  project.modelAssets = [{ id: 'sweep-urc-model', filename: 'urc.lib', sha256: 'b'.repeat(64), content: '.MODEL USER_URC URC(RPERL=10 CPERL=100p K=2 FMAX=1G)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.simulation.parameterSweeps = [{ component: 'URC1', parameter: 'RPERL', start: '10', stop: '30', points: 3 }]
+
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => run.values[0]), [
+    { component: 'URC1', value: '1.00000000e+1', parameter: 'RPERL', model: 'USER_URC' },
+    { component: 'URC1', value: '2.00000000e+1', parameter: 'RPERL', model: 'USER_URC' },
+    { component: 'URC1', value: '3.00000000e+1', parameter: 'RPERL', model: 'USER_URC' },
+  ])
+  assert.match(addResultControl(createNetlistArtifact(validated).text, runs), /altermod USER_URC RPERL=2\.00000000e\+1\nrun/)
+})
+
 test('imported IC instance parameters become alterparam-driven sweep cases', () => {
   const project = createUrcLineExampleProject()
   project.simulation.parameterSweeps = [{ component: 'XLINE', parameter: 'LENGTH', instanceParameter: true, start: '1m', stop: '3m', points: 3 }]

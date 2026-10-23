@@ -514,6 +514,21 @@ test('reports missing imported device models on the affected component', () => {
   assert.match(issue?.detail, /import the library/i)
 })
 
+test('checks imported URC models on distributed RC line components', () => {
+  const project = createStarterProject()
+  const line = { id: 'user-urc', kind: 'urcLine', ref: 'URC1', value: '1', deviceModel: 'LINE_RC', x: 760, y: 600, rotation: 0 }
+  project.parts.push(line)
+  project.sheets[0].parts = project.parts
+  project.modelAssets = [{ id: 'urc-lib', filename: 'urc.lib', sha256: 'f'.repeat(64), content: '.MODEL LINE_RC R(R=1k)\n', licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' }]
+  const issue = checkCircuit(project).find((item) => item.id === 'incompatible-device-model:user-urc')
+  assert.equal(issue?.severity, 'warning')
+  assert.equal(issue?.partId, line.id)
+  assert.match(issue?.detail, /requires a URC model/i)
+
+  project.modelAssets[0].content = '.MODEL LINE_RC URC(RPERL=1k CPERL=10p)\n'
+  assert.equal(checkCircuit(project).some((item) => item.id === 'incompatible-device-model:user-urc'), false)
+})
+
 test('reports recursive model chains used by a placed subcircuit', () => {
   const project = createStarterProject()
   const asset = (id, filename, content) => ({ id, filename, sha256: '0'.repeat(64), content, licenseStatus: 'unknown', importedAt: '2026-01-01T00:00:00.000Z' })

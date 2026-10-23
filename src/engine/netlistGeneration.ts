@@ -459,33 +459,41 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'urcLine') {
       const nodes = [0, 1, 2].map((index) => pinNet(connectivity, part, index))
       const settings = { resistancePerLength: '1 kΩ/m', capacitancePerLength: '100 pF/m', sections: '6', k: '2', fmax: '1 GHz', ...part.urcLine }
+      const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
+      if (part.deviceModel && importedModel?.type.toLowerCase() !== 'urc') {
+        const message = `${part.ref} device model ${part.deviceModel} is missing or is not a URC model.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
       const length = spiceSheetScalar(part.value, sheetParameters)
       const lengthMagnitude = spiceValueMagnitude((spiceSheetParameterDefault(part.value, sheetParameters) ?? part.value).replace(/\s+/g, ''))
+      const sectionCount = /^\d+$/.test(settings.sections.trim()) ? Number(settings.sections.trim()) : NaN
+      let invalid = !length || lengthMagnitude === null || lengthMagnitude <= 0
+        ? 'needs a positive line length.'
+        : !Number.isInteger(sectionCount) || sectionCount < 1 || sectionCount > 128
+          ? 'needs an integer section count from 1 to 128.'
+          : null
       const perLength = (raw: string, suffix: string) => spiceScalar(raw.trim().replace(new RegExp(`${suffix}\\s*$`, 'i'), ''), '')
       const resistance = perLength(settings.resistancePerLength, '(?:ohms?|[ΩΩ])\\s*\\/\\s*m')
       const capacitance = perLength(settings.capacitancePerLength, '(?:f)\\s*\\/\\s*m')
       const k = spiceScalar(settings.k, '')
       const fmax = spiceFrequency(settings.fmax)
-      const sectionCount = /^\d+$/.test(settings.sections.trim()) ? Number(settings.sections.trim()) : NaN
       const optionalCurrent = settings.currentPerLength?.trim() ? perLength(settings.currentPerLength, '(?:a)\\s*\\/\\s*m') : null
       const optionalSeriesResistance = settings.seriesResistancePerLength?.trim() ? perLength(settings.seriesResistancePerLength, '(?:ohms?|[ΩΩ])\\s*\\/\\s*m') : null
-      const invalid = !length || lengthMagnitude === null || lengthMagnitude <= 0
-        ? 'needs a positive line length.'
-        : !resistance || spiceValueMagnitude(resistance) === null || spiceValueMagnitude(resistance)! <= 0
-          ? 'needs a positive resistance per length.'
-          : !capacitance || spiceValueMagnitude(capacitance) === null || spiceValueMagnitude(capacitance)! <= 0
-            ? 'needs a positive capacitance per length.'
-            : !Number.isInteger(sectionCount) || sectionCount < 1 || sectionCount > 128
-              ? 'needs an integer section count from 1 to 128.'
-              : !k || spiceValueMagnitude(k) === null || spiceValueMagnitude(k)! <= 0
-                ? 'needs a positive K factor.'
-                : !fmax || spiceMagnitude(settings.fmax, 'frequency') === null || spiceMagnitude(settings.fmax, 'frequency')! <= 0
-                  ? 'needs a positive maximum frequency.'
-                  : settings.currentPerLength?.trim() && (!optionalCurrent || spiceValueMagnitude(optionalCurrent) === null || spiceValueMagnitude(optionalCurrent)! < 0)
-                    ? 'has an invalid optional substrate-current parameter.'
-                    : settings.seriesResistancePerLength?.trim() && (!optionalSeriesResistance || spiceValueMagnitude(optionalSeriesResistance) === null || spiceValueMagnitude(optionalSeriesResistance)! < 0)
-                      ? 'has an invalid optional series resistance per length.'
-                      : null
+      if (!invalid && !importedModel) invalid = !resistance || spiceValueMagnitude(resistance) === null || spiceValueMagnitude(resistance)! <= 0
+        ? 'needs a positive resistance per length.'
+        : !capacitance || spiceValueMagnitude(capacitance) === null || spiceValueMagnitude(capacitance)! <= 0
+          ? 'needs a positive capacitance per length.'
+          : !k || spiceValueMagnitude(k) === null || spiceValueMagnitude(k)! <= 0
+            ? 'needs a positive K factor.'
+            : !fmax || spiceMagnitude(settings.fmax, 'frequency') === null || spiceMagnitude(settings.fmax, 'frequency')! <= 0
+              ? 'needs a positive maximum frequency.'
+              : settings.currentPerLength?.trim() && (!optionalCurrent || spiceValueMagnitude(optionalCurrent) === null || spiceValueMagnitude(optionalCurrent)! < 0)
+                ? 'has an invalid optional substrate-current parameter.'
+                : settings.seriesResistancePerLength?.trim() && (!optionalSeriesResistance || spiceValueMagnitude(optionalSeriesResistance) === null || spiceValueMagnitude(optionalSeriesResistance)! < 0)
+                  ? 'has an invalid optional series resistance per length.'
+                  : null
       if (invalid) {
         const message = `${part.ref} ${invalid}`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
@@ -496,11 +504,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const outputSensor = reserveUniqueName(urcLineCurrentSenseReference(part.ref, 'OUT'), usedReferences)
       const internalInput = reserveUniqueName(`__ELSIM_${part.ref}_URC_IN`, usedNodes)
       const internalOutput = reserveUniqueName(`__ELSIM_${part.ref}_URC_OUT`, usedNodes)
-      const modelName = reserveUniqueName(`URCMOD_${part.ref}`, usedModelNames)
+      const modelName = importedModel?.name ?? reserveUniqueName(`URCMOD_${part.ref}`, usedModelNames)
       const optionalParameters = `${optionalCurrent ? ` ISPERL=${optionalCurrent}` : ''}${optionalSeriesResistance ? ` RSPERL=${optionalSeriesResistance}` : ''}`
       append(`${sensor} ${nodes[0]} ${internalInput} 0`, part.id, 'component')
       append(`${outputSensor} ${internalOutput} ${nodes[1]} 0`, part.id, 'component')
-      append(`.MODEL ${modelName} URC (RPERL=${resistance} CPERL=${capacitance} K=${k} FMAX=${fmax}${optionalParameters})`, part.id, 'component')
+      if (!importedModel) append(`.MODEL ${modelName} URC (RPERL=${resistance} CPERL=${capacitance} K=${k} FMAX=${fmax}${optionalParameters})`, part.id, 'component')
       append(`${part.ref} ${internalInput} ${internalOutput} ${nodes[2]} ${modelName} L=${length} N=${sectionCount}`, part.id, 'component')
       append(`.save i(${sensor})`, part.id, 'generated')
       append(`.save i(${outputSensor})`, part.id, 'generated')

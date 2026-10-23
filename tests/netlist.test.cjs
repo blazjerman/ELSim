@@ -96,6 +96,26 @@ test('native URC line parts emit a sensed ngspice distributed-RC model and valid
   assert.ok(invalid.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /section count from 1 to 128/.test(message)))
 })
 
+test('URC line parts use imported native URC cards and reject an incompatible model', () => {
+  const project = createStarterProject()
+  const line = { id: 'urc-imported', kind: 'urcLine', ref: 'URC1', value: '2 m', deviceModel: 'URC50', urcLine: { sections: '8' }, x: 700, y: 500, rotation: 0 }
+  const modelContent = '.MODEL URC50 URC(RPERL=50k CPERL=10p K=1.5 FMAX=1G)\n'
+  project.parts.push(line)
+  project.modelAssets = [{ id: 'urc-model', filename: 'urc.lib', sha256: 'f'.repeat(64), content: modelContent, licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics.filter(({ sourceId }) => sourceId === line.id), [])
+  assert.match(artifact.text, /^\.MODEL URC50 URC\(RPERL=50k CPERL=10p K=1\.5 FMAX=1G\)$/mi)
+  assert.match(artifact.text, /^URC1 .* URC50 L=2m N=8$/m)
+  assert.doesNotMatch(artifact.text, /^\.MODEL URCMOD_URC1/m)
+  assert.match(artifact.text, /^\.save i\(V__ELSIM_URC1_IN\)$/m)
+  assert.match(artifact.text, /^\.save i\(V__ELSIM_URC1_OUT\)$/m)
+
+  project.modelAssets[0].content = '.MODEL URC50 R(R=1k)\n'
+  const incompatible = createNetlistArtifact(project)
+  assert.ok(incompatible.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /not a URC model/.test(message)))
+})
+
 test('transmission lines use imported LTRA cards and reject incompatible or incomplete models', () => {
   const project = createStarterProject()
   const line = { id: 'line-ltra', kind: 'transmissionLine', ref: 'T1', value: '', deviceModel: 'LINE50', x: 700, y: 500, rotation: 0 }

@@ -180,7 +180,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
 test('imported device model compatibility has one canonical type per built-in device family', () => {
   const expected = {
     resistor: 'r', capacitor: 'c', inductor: 'l',
-    lamp: 'r', potentiometer: 'r', transmissionLine: 'ltra',
+    lamp: 'r', potentiometer: 'r', transmissionLine: 'ltra', urcLine: 'urc',
     diode: 'd', zener: 'd', led: 'd',
     npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmesfet: 'nmf', pmesfet: 'pmf', nmos: 'nmos', pmos: 'pmos', nvdmos: 'vdmos', pvdmos: 'vdmos',
     voltageSwitch: 'sw', currentSwitch: 'csw',
@@ -189,6 +189,7 @@ test('imported device model compatibility has one canonical type per built-in de
   assert.equal(deviceModelTypeMatches('resistor', { type: 'R' }), true)
   assert.equal(deviceModelTypeMatches('capacitor', { type: 'C' }), true)
   assert.equal(deviceModelTypeMatches('transmissionLine', { type: 'TXL' }), true)
+  assert.equal(deviceModelTypeMatches('urcLine', { type: 'URC' }), true)
   assert.equal(deviceModelTypeMatches('inductor', { type: 'L' }), true)
   assert.equal(deviceModelTypeMatches('potentiometer', { type: 'R' }), true)
   assert.equal(deviceModelTypeMatches('potentiometer', { type: 'C' }), false)
