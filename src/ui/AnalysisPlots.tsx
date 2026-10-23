@@ -640,28 +640,51 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     const imaginary = trace.imaginaryValues?.[index] ?? 0
     return mode === 'noise' ? real : mode === 'magnitude' ? 20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE) : Math.atan2(imaginary, real) * 180 / Math.PI
   }
-  const sampledIndicesById = useMemo(() => new Map(shown.map((trace) => [
-    trace.id,
-    extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, index) => valueFor(trace, index), `ac:${trace.id}:${mode}`),
-  ])), [shown, first, last, mode])
+  const sampledTraceById = useMemo(() => {
+    const sampled = new Map<string, { indices: number[]; dataRange: [number, number] | null; noiseRange: [number, number] | null }>()
+    for (const id of selectedIds) {
+      const index = traceIndexById.get(id)
+      if (index === undefined) continue
+      const trace = traces[index]
+      const indices = extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, sampleIndex) => valueFor(trace, sampleIndex), `ac:${trace.id}:${mode}`)
+      let dataRange: [number, number] | null = null
+      if (mode !== 'noise') {
+        let min = Infinity, max = -Infinity
+        for (const sampleIndex of indices) {
+          const value = valueFor(trace, sampleIndex)
+          if (Number.isFinite(value)) { min = Math.min(min, value); max = Math.max(max, value) }
+        }
+        if (min !== Infinity) dataRange = [min, max]
+      }
+      const noiseRange = mode === 'noise' ? valueRangeAtIndices(trace.values, indices) : null
+      sampled.set(trace.id, { indices, dataRange, noiseRange })
+    }
+    return sampled
+  }, [selectedIds, traceIndexById, traces, first, last, mode])
+  const sampledIndicesById = useMemo(() => {
+    const indicesById = new Map<string, number[]>()
+    for (const trace of shown) {
+      const sampled = sampledTraceById.get(trace.id)
+      if (sampled) indicesById.set(trace.id, sampled.indices)
+    }
+    return indicesById
+  }, [shown, sampledTraceById])
   const [dataMin, dataMax] = useMemo(() => {
     if (mode === 'noise') return [0, 1] as [number, number]
     let min = Infinity, max = -Infinity
     for (const trace of shown) {
-      for (const index of sampledIndicesById.get(trace.id) ?? []) {
-        const value = valueFor(trace, index)
-        if (Number.isFinite(value)) { min = Math.min(min, value); max = Math.max(max, value) }
-      }
+      const range = sampledTraceById.get(trace.id)?.dataRange
+      if (range) { min = Math.min(min, range[0]); max = Math.max(max, range[1]) }
     }
     if (min === Infinity) { min = mode === 'magnitude' ? -60 : mode === 'phase' ? -180 : 0; max = mode === 'magnitude' ? 20 : mode === 'phase' ? 180 : 1 }
     if (min === max) { min -= 1; max += 1 }
     return [Math.min(0, min), Math.max(0, max)] as [number, number]
-  }, [shown, mode, sampledIndicesById])
+  }, [shown, mode, sampledTraceById])
   const noiseAutoRanges = useMemo(() => {
     const ranges = new Map<string, [number, number]>()
     if (!isNoise) return ranges
     for (const trace of shown) {
-      const rawRange = valueRangeAtIndices(trace.values, sampledIndicesById.get(trace.id) ?? [])
+      const rawRange = sampledTraceById.get(trace.id)?.noiseRange
       if (!rawRange) continue
       const current = ranges.get(trace.unit)
       const min = Math.min(current?.[0] ?? 0, rawRange[0], 0)
@@ -669,7 +692,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       ranges.set(trace.unit, symmetricZeroRange([min, max]))
     }
     return ranges
-  }, [isNoise, shown, sampledIndicesById])
+  }, [isNoise, shown, sampledTraceById])
   const noiseWindows = useUnitValueWindows(noiseAutoRanges, valueRanges, onValueRangeChange)
   const updateValueRange = useCallback((next: PlotValueRange | undefined) => onValueRangeChange(next ? { ...valueRanges, [mode]: next } : undefined), [onValueRangeChange, valueRanges, mode])
   const valueAxis = useValueWindow([dataMin, dataMax], valueRanges?.[mode], updateValueRange)
