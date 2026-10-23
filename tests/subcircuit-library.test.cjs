@@ -552,6 +552,30 @@ test('preserves ngspice conditional model variants as one selectable device mode
   assert.equal(scoped.subcircuits[0].dependencies[0].modelName, 'DLOCAL')
   assert.match(scoped.modelText, /\.MODEL dlocal D\(Is=10n\)/)
 
+  const nested = parseSubcircuitLibrary([
+    '.PARAM OUTER=0 INNER=1',
+    '.SUBCKT NESTED_STAGE IN OUT',
+    'VDRIVE IN 0 1',
+    'D1 IN OUT DLOCAL',
+    'RLOAD OUT 0 1k',
+    '.IF (OUTER == 0)',
+    '.IF (INNER == 0)',
+    '.MODEL DLOCAL D(IS=1e-12 N=1)',
+    '.ELSE',
+    '.MODEL dlocal D(IS=1e-9 N=1)',
+    '.ENDIF',
+    '.ELSE',
+    '.MODEL DLOCAL D(IS=1e-14 N=1)',
+    '.ENDIF',
+    '.ENDS NESTED_STAGE',
+  ].join('\n'))
+  assert.equal(nested.models.length, 1)
+  assert.equal(nested.models[0].scope, 'NESTED_STAGE')
+  assert.deepEqual(nested.models[0].parameters, [
+    { name: 'IS', defaultValue: '1e-12', defaultVariesByCondition: true },
+    { name: 'N', defaultValue: '1' },
+  ])
+
   assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL D1 D(Is=1n)\n.MODEL D1 D(Is=2n)\n.ENDIF'), /declared more than once/)
   assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL D1 D(Is=1n)\n.ELSE\n.MODEL D1 NMOS(Level=1)\n.ENDIF'), /same device type/)
   assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.ELSE\n.ELSEIF (B == 1)\n.ENDIF'), /no open \.IF branch/)
