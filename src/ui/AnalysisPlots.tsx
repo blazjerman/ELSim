@@ -461,7 +461,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const voltageRange: [number, number] = [voltageAxis.range.min, voltageAxis.range.max]
   const currentRange: [number, number] = [currentAxis.range.min, currentAxis.range.max]
   const rangeForUnit = (unit: string): [number, number] => unit === 'A' ? currentRange : voltageRange
-  const resetView = () => { navigation.reset(); voltageAxis.reset(); currentAxis.reset() }
+  const resetView = () => { navigation.reset(); voltageAxis.reset(); currentAxis.reset(); onValueRangeChange(undefined) }
   const zoomValue = (factor: number) => { voltageAxis.zoom(factor); currentAxis.zoom(factor) }
   const panValue = (direction: -1 | 1) => { voltageAxis.pan(direction); currentAxis.pan(direction) }
   const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta), navigation.getRange, navigation.restore)
@@ -658,7 +658,6 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const noiseWindows = useUnitValueWindows(noiseAutoRanges, valueRanges, onValueRangeChange)
   const updateValueRange = useCallback((next: PlotValueRange | undefined) => onValueRangeChange(next ? { ...valueRanges, [mode]: next } : undefined), [onValueRangeChange, valueRanges, mode])
   const valueAxis = useValueWindow([dataMin, dataMax], valueRanges?.[mode], updateValueRange)
-  useEffect(() => { valueAxis.reset(); noiseWindows.reset() }, [mode])
   const primaryNoiseUnit = visibleNoiseUnits[0] ?? ''
   const noiseAxisRange = noiseWindows.ranges.get(primaryNoiseUnit)
   const minValue = isNoise ? noiseAxisRange?.min ?? 0 : valueAxis.range.min

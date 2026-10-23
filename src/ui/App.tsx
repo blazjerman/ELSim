@@ -790,7 +790,7 @@ const AdditionalPlotWindow = memo(function AdditionalPlotWindow({ panel, index, 
   const changeRange = useCallback((analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => onRangeChange(panel.id, analysis, range), [onRangeChange, panel.id])
   const changeValueRanges = useCallback((analysis: 'tran' | 'ac' | 'dc' | 'noise', ranges: Record<string, { min: number; max: number }> | undefined) => onUpdate(panel.id, (current) => {
     const valueRanges = { ...current.valueRanges }
-    if (ranges && Object.keys(ranges).length) valueRanges[analysis] = ranges
+    if (ranges && Object.keys(ranges).length) valueRanges[analysis] = { ...(valueRanges[analysis] ?? {}), ...ranges }
     else delete valueRanges[analysis]
     return { ...current, valueRanges: Object.keys(valueRanges).length ? valueRanges : undefined }
   }), [onUpdate, panel.id])
@@ -2150,6 +2150,7 @@ export default function App() {
   const [parameterFormError, setParameterFormError] = useState('')
   const [additionalPlotPanels, setAdditionalPlotPanels] = useState<PlotPanel[]>(() => project.plotSettings?.panels ?? [])
   const additionalPlotPanelsRef = useRef(additionalPlotPanels)
+  const pendingPlotPanelsRef = useRef<PlotPanel[] | null>(null)
   additionalPlotPanelsRef.current = additionalPlotPanels
   const [pendingWaveformTrace, setPendingWaveformTrace] = useState<{ traceIds: string[]; label: string; reference?: PlotTraceReference; componentVoltageProbe?: ComponentVoltageProbe } | null>(null)
   const waveformReturnFocusRef = useRef<HTMLElement | SVGElement | null>(null)
@@ -2210,10 +2211,19 @@ export default function App() {
   const activeWorkerRef = useRef<Worker | null>(null)
   const pendingViewRef = useRef<{ rootSheetId: string; sheetId: string; view: Project['view'] } | null>(null)
   const projectRef = useRef(project)
+  const pendingPlotPanelsRootRef = useRef(project.rootSheetId)
+  if (pendingPlotPanelsRootRef.current !== project.rootSheetId) {
+    pendingPlotPanelsRef.current = null
+    pendingPlotPanelsRootRef.current = project.rootSheetId
+  }
   if (pendingViewRef.current && pendingViewRef.current.rootSheetId !== project.rootSheetId) pendingViewRef.current = null
-  projectRef.current = pendingViewRef.current
+  const committedProject = pendingViewRef.current
     ? projectWithSheetView(project, pendingViewRef.current.sheetId, pendingViewRef.current.view)
     : project
+  if (pendingPlotPanelsRef.current && JSON.stringify(committedProject.plotSettings?.panels ?? []) === JSON.stringify(pendingPlotPanelsRef.current)) pendingPlotPanelsRef.current = null
+  projectRef.current = pendingPlotPanelsRef.current
+    ? { ...committedProject, plotSettings: { ...(committedProject.plotSettings ?? { selectedTraceIds: [], ranges: {} }), panels: pendingPlotPanelsRef.current } }
+    : committedProject
   const autosaveTimerRef = useRef<number | null>(null)
   const autosaveTimestampRef = useRef(0)
   const autosaveGenerationRef = useRef(0)
@@ -2645,12 +2655,20 @@ export default function App() {
   })
   const saveAdditionalPlotPanels = useCallback((panels: PlotPanel[]) => {
     additionalPlotPanelsRef.current = panels
+    pendingPlotPanelsRef.current = panels
     setAdditionalPlotPanels(panels)
+    const settings = projectRef.current.plotSettings ?? { selectedTraceIds: [], ranges: {} }
+    projectRef.current = { ...projectRef.current, plotSettings: { ...settings, panels } }
     setProjectState((current) => {
       const settings = current.plotSettings ?? { selectedTraceIds: [], ranges: {} }
       if (JSON.stringify(settings.panels ?? []) === JSON.stringify(panels)) return current
       return { ...current, plotSettings: { ...settings, panels } }
     })
+    if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null
+      persistProjectAutosaveRef.current(false)
+    }, 200)
   }, [])
   useEffect(() => { setAdditionalPlotPanels(project.plotSettings?.panels ?? []) }, [project.rootSheetId, project.plotSettings?.panels])
   const layoutWaveformPanels = (windows: PlotPanel[]) => {
