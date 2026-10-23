@@ -1373,10 +1373,11 @@ test('behavioral table lookups become clamped ngspice PWL expressions', () => {
 
 test('native behavioral pwl() reaches ngspice unchanged with its unbounded segment slopes', () => {
   const project = createStarterProject()
-  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'pwl(V(vin), 0, 0, 1, 2, 3, 8)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  project.sheets[0].parameters = [{ id: 'pwl-x1', name: 'X1', defaultValue: '1' }, { id: 'pwl-y1', name: 'Y1', defaultValue: '2' }]
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'pwl(V(vin), 0, 0, X1, Y1, 3, 8)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^B1 n\d+ n\d+ V=\{pwl\(V\(vin\), 0, 0, 1, 2, 3, 8\)\}$/m)
+  assert.match(artifact.text, /^B1 n\d+ n\d+ V=\{pwl\(V\(vin\), 0, 0, X1, Y1, 3, 8\)\}$/m)
 })
 
 test('behavioral if() output preserves LTspice’s condition threshold', () => {
