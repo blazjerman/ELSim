@@ -1,0 +1,16 @@
+ELSim ngspice diode area and perimeter scaling operating point
+V1 in 0 0.65
+D1 in 0 DTEST AREA=1 PJ=1
+D2 in 0 DTEST AREA=2 PJ=1
+D3 in 0 DTEST AREA=1 PJ=3
+D4 in 0 DTEST AREA=1 PJ=1 M=2
+.model DTEST D(IS=1e-14 JSW=1e-14 N=1)
+.save all @d1[id] @d2[id] @d3[id] @d4[id]
+.op
+.control
+set filetype=ascii
+run
+write /result.raw all
+quit
+.endc
+.end

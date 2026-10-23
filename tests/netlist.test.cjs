@@ -2011,6 +2011,25 @@ test('semiconductor instance multiplier accepts positive numbers only on support
   assert.throws(() => validateProject(project), /invalid device multiplier/i)
 })
 
+test('diode area and perimeter scales accept positive values only on diode-family parts', () => {
+  const project = createStarterProject()
+  const device = { id: 'd-scale', kind: 'diode', ref: 'D1', value: '', diodeArea: '2', diodePerimeter: '3', x: 700, y: 500, rotation: 0 }
+  project.parts.push(device)
+  assert.doesNotThrow(() => validateProject(project))
+  device.diodeArea = '0'
+  assert.throws(() => validateProject(project), /junction area scale must be a positive numeric value/i)
+  device.diodeArea = '1 Ω'
+  assert.throws(() => validateProject(project), /junction area scale must be a positive numeric value/i)
+  device.diodeArea = '2'
+  device.diodePerimeter = '-1'
+  assert.throws(() => validateProject(project), /junction perimeter scale must be a positive numeric value/i)
+  device.diodePerimeter = '3'
+  device.kind = 'resistor'
+  device.ref = 'R2'
+  device.componentDefinitionId = undefined
+  assert.throws(() => validateProject(project), /junction (?:area|perimeter) scale must be a positive numeric value and is available only for diodes/i)
+})
+
 test('RLC instance multipliers preserve parallel-equivalent values and scale series resistance', () => {
   const project = createStarterProject()
   const resistor = project.parts.find((part) => part.kind === 'resistor')
@@ -2033,13 +2052,13 @@ test('RLC instance multipliers preserve parallel-equivalent values and scale ser
 test('diode and BJT instances emit ngspice parallel-device multipliers', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'device-models', filename: 'devices.lib', sha256: 'c'.repeat(64), content: '.model DUSER D(Is=1n)\n.model QUSER NPN(BF=100)', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-  const diode = { id: 'd-multiplier', kind: 'diode', ref: 'D1', value: '', deviceModel: 'DUSER', instanceMultiplier: '2', x: 700, y: 300, rotation: 0 }
+  const diode = { id: 'd-multiplier', kind: 'diode', ref: 'D1', value: '', deviceModel: 'DUSER', diodeArea: '2', diodePerimeter: '3', instanceMultiplier: '2', x: 700, y: 300, rotation: 0 }
   const transistor = { id: 'q-multiplier', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'QUSER', instanceMultiplier: '3', x: 900, y: 300, rotation: 0 }
   project.parts.push(diode, transistor)
   project.netLabels.push(...[diode, transistor].flatMap((part) => componentPins(part).map((pin, index) => ({ id: `${part.id}-net-${index}`, name: `${part.ref.toLowerCase()}pin${index}`, x: pin.x, y: pin.y, visible: false }))))
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^D1 d1pin0 d1pin1 DUSER M=2$/m)
+  assert.match(artifact.text, /^D1 d1pin0 d1pin1 DUSER AREA=2 M=2 PJ=3$/m)
   assert.match(artifact.text, /^Q1 q1pin0 q1pin1 q1pin2 QUSER M=3$/m)
 })
 

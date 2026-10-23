@@ -720,7 +720,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? (part.kind === 'zener' ? 'DZENER' : 'DDEFAULT')
-      append(`${part.ref} ${positive} ${negative} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
+      const instanceOptions = [part.diodeArea && `AREA=${part.diodeArea}`, part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.diodePerimeter && `PJ=${part.diodePerimeter}`].filter(Boolean).join(' ')
+      append(`${part.ref} ${positive} ${negative} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
       if (!part.deviceModel) {
         if (part.kind === 'zener') usesZener = true
         else usesDiode = true

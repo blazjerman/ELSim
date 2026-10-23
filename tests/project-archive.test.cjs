@@ -289,6 +289,13 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const dimensionPattern = new RegExp(schema.$defs.part.properties.mosfetGeometry.properties.length.pattern, 'u')
   for (const dimension of ['1u', '500n', '1MEG', '1M', '2µ', '3μ', '1e-6']) assert.equal(dimensionPattern.test(dimension), true, dimension)
   for (const dimension of ['-1u', '1 Ω', '1mm', '1e']) assert.equal(dimensionPattern.test(dimension), false, dimension)
+  for (const field of ['diodeArea', 'diodePerimeter']) {
+    const scale = schema.$defs.part.properties[field]
+    assert.equal(scale.maxLength, 64)
+    const scalePattern = new RegExp(scale.pattern, 'u')
+    for (const value of ['1', '2.5', '1e-3', '2u', '1MEG']) assert.equal(scalePattern.test(value), true, `v8 ${field} ${value}`)
+    for (const value of ['-1', '1 Ω', '1e', 'NaN']) assert.equal(scalePattern.test(value), false, `v8 ${field} ${value}`)
+  }
   const legacySchema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v7.schema.json'), 'utf8'))
   assert.equal(legacySchema.$defs.part.properties.modelPins.items.pattern, schema.$defs.part.properties.modelPins.items.pattern)
   assert.equal(legacySchema.$defs.modelAsset.properties.selectedSections.items.pattern, schema.$defs.modelAsset.properties.selectedSections.items.pattern)

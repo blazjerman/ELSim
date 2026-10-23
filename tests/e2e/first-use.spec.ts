@@ -6452,9 +6452,11 @@ test('imports a hyphenated native ngspice device-model name', { tag: '@ui-smoke'
   const modelPicker = page.getByLabel('Device model for D1')
   await expect(modelPicker.locator('option', { hasText: 'D-FAST (D)' })).toHaveCount(1)
   await modelPicker.selectOption('D-FAST')
+  await page.getByLabel('Junction area scale for D1').fill('2')
+  await page.getByLabel('Junction perimeter scale for D1').fill('3')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
-  await expect(netlist).toContainText(/^D1 .* D-FAST$/m)
+  await expect(netlist).toContainText(/^D1 .* D-FAST AREA=2 PJ=3$/m)
   await expect(netlist).toContainText('.MODEL D-FAST D(IS=1e-14)')
 })
 

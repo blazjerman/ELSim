@@ -263,6 +263,18 @@
           "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
           "description": "Optional positive ngspice passive-device, semiconductor, or subcircuit instance multiplier."
         },
+        "diodeArea": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional positive ngspice diode junction-area scale; combines multiplicatively with M."
+        },
+        "diodePerimeter": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional positive ngspice diode junction-perimeter scale; combines multiplicatively with M."
+        },
         "deviceModel": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"

@@ -34,6 +34,10 @@ export type Part = {
   mosfetGeometry?: { length?: string; width?: string }
   /** Optional ngspice instance multiplier for supported passive and semiconductor devices. */
   instanceMultiplier?: string
+  /** Optional ngspice diode junction-area scale; combines with M for bottom-junction parameters. */
+  diodeArea?: string
+  /** Optional ngspice diode junction-perimeter scale; combines with M for sidewall parameters. */
+  diodePerimeter?: string
   sheetParameters?: Record<string, string>
   deviceModel?: string
   /** Optional labeled substrate node for ngspice's four-node BJT instance form. */
@@ -404,6 +408,10 @@ export function validateProject(input: unknown): Project {
       }
     }
     if (candidate.instanceMultiplier !== undefined && (!['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'currentSource', 'diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos', 'cccs', 'vccs', 'subcircuit'].includes(candidate.kind) || typeof candidate.instanceMultiplier !== 'string' || candidate.instanceMultiplier.length > 64 || candidate.instanceMultiplier !== candidate.instanceMultiplier.trim() || !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(candidate.instanceMultiplier) || !Number.isFinite(Number(candidate.instanceMultiplier)) || Number(candidate.instanceMultiplier) <= 0)) throw new Error(`${candidate.ref} has an invalid device multiplier.`)
+    for (const key of ['diodeArea', 'diodePerimeter'] as const) {
+      const scale = candidate[key]
+      if (scale !== undefined && (!['diode', 'zener', 'led'].includes(candidate.kind) || typeof scale !== 'string' || scale.length > 64 || !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:(?:meg)|[tgkmunpfµμ])?$/i.test(scale) || componentMagnitude(scale, 'resistor') === null || componentMagnitude(scale, 'resistor')! <= 0)) throw new Error(`${candidate.ref} ${key === 'diodeArea' ? 'junction area' : 'junction perimeter'} scale must be a positive numeric value and is available only for diodes.`)
+    }
     for (const key of ['primaryWindingResistance', 'secondaryWindingResistance'] as const) {
       const resistance = candidate[key]
       if (resistance !== undefined && (candidate.kind !== 'transformer' || typeof resistance !== 'string' || resistance.length > 64)) throw new Error(`${candidate.ref} has invalid ${key} metadata.`)
