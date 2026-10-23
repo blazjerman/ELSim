@@ -1517,7 +1517,8 @@ test('schematic context menu preserves native keyboard selection for transistor 
 
   const transistor = page.locator('.circuit-part[aria-label^="Q1,"]')
   await expect(transistor).toBeVisible()
-  await transistor.click({ button: 'right' })
+  await transistor.focus()
+  await page.keyboard.press('Shift+F10')
   const menu = page.getByRole('menu', { name: 'Options for Q1' })
   await expect(menu).toBeVisible()
   await expect(menu.getByRole('combobox')).toHaveCount(0)
