@@ -47,6 +47,38 @@ test('current-source example uses explicit rails and animates its one-milliamp l
   }
 })
 
+test('native URC input, output, and substrate wire currents balance at three terminals', () => {
+  const project = createStarterProject()
+  const line = { id: 'urc', kind: 'urcLine', ref: 'URC1', value: '1m', x: 500, y: 300, rotation: 0 }
+  const linePins = componentPins(line)
+  const terminalCurrents = [0.002, 0.001, -0.001]
+  const sourceCurrents = [-0.002, 0.001, 0.001]
+  const sources = linePins.map((pin, index) => ({
+    id: `source-${index}`, kind: 'currentSource', ref: `I${index + 1}`, value: '1 mA',
+    x: pin.x + 150, y: pin.y + 100 + index * 200, rotation: 0,
+  }))
+  project.parts = [line, ...sources]
+  project.wires = sources.map((source, index) => {
+    const sourcePin = componentPins(source)[0]
+    return { id: `urc-terminal-${index}`, points: [[linePins[index].x, linePins[index].y], [sourcePin.x, sourcePin.y]] }
+  })
+  project.junctions = []
+  project.netLabels = []
+
+  const connectivity = analyzeConnectivity(project)
+  const flows = wireCurrentFlowSegments(
+    project,
+    connectivity,
+    (part) => part.kind === 'currentSource' ? sourceCurrents[sources.indexOf(part)] : undefined,
+    (part, pinIndex) => part.kind === 'urcLine' ? terminalCurrents[pinIndex] : undefined,
+  )
+
+  assert.equal(flows.get('urc-terminal-0')[0].forward, false, 'input current flows into the URC input pin')
+  assert.equal(flows.get('urc-terminal-1')[0].forward, true, 'output current flows out of the URC output pin')
+  assert.equal(flows.get('urc-terminal-2')[0].forward, true, 'substrate return current balances the charging current')
+  for (let pin = 0; pin < 3; pin += 1) assert.equal(flows.get(`urc-terminal-${pin}`)[0].magnitude, Math.abs(terminalCurrents[pin]))
+})
+
 test('a precomputed wire sampler updates flow values across playback samples', () => {
   const project = createStarterProject()
   const connectivity = analyzeConnectivity(project)

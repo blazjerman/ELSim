@@ -39,7 +39,12 @@ function knownPinInjection(part: Part, pinIndex: number, currentForPart: (part: 
   if (part.kind === 'ground') return { ignored: true }
   if (part.kind === 'urcLine') {
     const current = currentForPin?.(part, pinIndex)
-    return current === undefined || !Number.isFinite(current) ? {} : { value: pinIndex === 0 ? -current : current }
+    if (current === undefined || !Number.isFinite(current)) return {}
+    // The input sensor is oriented into the device, the output sensor out of
+    // it, and substrate current is derived as the output-minus-input device
+    // terminal current. Convert each device terminal current to its opposite
+    // wire-node injection so all three sum to zero.
+    return { value: pinIndex === 1 ? current : -current }
   }
   if (PIN_CURRENT_KINDS.has(part.kind)) {
     const current = currentForPin?.(part, pinIndex)
