@@ -940,6 +940,27 @@ test('warns when ngspice E-source logic gates require unavailable XSPICE models'
   assert.equal(source.includes('EAND OUT 0 AND(2)'), true)
 })
 
+test('warns when ngspice digital U-device primitives need PS compatibility mode', () => {
+  const source = [
+    '* U1 AND(2) is only a comment',
+    '.SUBCKT digital IN1 IN2 OUT',
+    'U1 AND(2) $G_DPWR $G_DGND IN1 IN2 OUT M1 IOM1',
+    'U2 DFF $G_DPWR $G_DGND CLK D Q QB M2 IOM2',
+    'U3 LOGICEXP $G_DPWR $G_DGND IN1 IN2 OUT M3 IOM3',
+    'U4 N1 N2 URC_MODEL L=1u',
+    '.ENDS digital',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [3, 'ngspice digital U-device needs PSpice compatibility mode'],
+    [4, 'ngspice digital U-device needs PSpice compatibility mode'],
+    [5, 'ngspice digital U-device needs PSpice compatibility mode'],
+  ])
+  assert.match(warnings[0].impact, /only inside a \.SUBCKT with ngbehavior=ps/)
+  assert.match(warnings[0].suggestion, /preserves the original source/)
+  assert.equal(source.includes('U1 AND(2)'), true)
+})
+
 test('pinpoints LTspice behavioral forms and options, including continuation records', () => {
   const source = [
     '.SUBCKT compat IN OUT',

@@ -6099,6 +6099,25 @@ test('imported ngspice E-source logic warning identifies missing XSPICE and open
   await expect(reviewedLine).toContainText('EAND OUT 0 AND(2)')
 })
 
+test('imported ngspice digital U-device warning explains PS mode and opens its source line', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const source = '.SUBCKT digital IN1 IN2 OUT\nU1 AND(2) $G_DPWR $G_DGND IN1 IN2 OUT M1 IOM1\nU2 DFF $G_DPWR $G_DGND CLK D Q QB M2 IOM2\nU3 N1 N2 URC_MODEL L=1u\n.MODEL M1 UGATE ()\n.MODEL IOM1 UIO ()\n.ENDS digital'
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'digital-primitives.lib', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice digital U-device needs PSpice compatibility mode')
+  await expect(warnings).toContainText('only inside a .SUBCKT with ngbehavior=ps')
+  await expect(warnings).toContainText('does not select PS mode')
+  await expect(warnings).toContainText('digital-primitives.lib:2')
+  await expect(warnings).toContainText('digital-primitives.lib:3')
+  await expect(warnings).not.toContainText('digital-primitives.lib:4')
+  await warnings.getByRole('button', { name: 'Review source line 2' }).click()
+  const sourceViewer = page.locator('.model-source-viewer')
+  const reviewedLine = sourceViewer.locator('li').nth(1)
+  await expect(reviewedLine).toBeFocused()
+  await expect(reviewedLine).toContainText('U1 AND(2)')
+})
+
 test('compatibility report reveals model warnings beyond its initial page', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const lines = ['.SUBCKT MANY IN OUT', ...Array.from({ length: 21 }, (_, index) => `B${index + 1} OUT 0 V=mc(1,0.1)`), '.ENDS MANY']
