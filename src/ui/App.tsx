@@ -485,6 +485,11 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const customHeight = Math.max(80, (verticalPins - 1) * 20 + 50)
   const customWidth = Math.max(120, (horizontalPins - 1) * 20 + 50)
   const symbolBounds = symbol ? importedSymbolBounds(symbol) : null
+  const hitBounds = symbol
+    ? { x: -10, y: -10, width: 20, height: 20 }
+    : part.kind === 'subcircuit'
+      ? { x: -customWidth / 2 - 20, y: -customHeight / 2 - 22, width: customWidth + 40, height: customHeight + 44 }
+      : { x: -24, y: -24, width: 48, height: 48 }
   const labelBounds = useMemo(() => {
     const angle = part.rotation * Math.PI / 180
     const cosine = Math.cos(angle), sine = Math.sin(angle)
@@ -548,7 +553,7 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     if (tool === 'select') { onSelect(part.id); if (isInteractiveSwitch) onSwitchToggle(part.id) }
   }} onPointerDown={(event) => onPointerDown(event, part.id)} onClick={(event) => { if (tool === 'probe') { event.stopPropagation(); if (part.kind === 'ground') return; onProbe(part.id) } else if (tool === 'select') { event.stopPropagation(); const additive = event.shiftKey || event.ctrlKey || event.metaKey; onSelect(part.id, additive); if (isInteractiveSwitch && !additive) onSwitchToggle(part.id) } }}>
     {(voltage !== undefined || current !== undefined || logicOutput !== undefined) && <title>{`${part.ref}: ${logicOutput === undefined ? '' : `output ${logicState} (${logicOutput.toPrecision(4)} V); `}${part.kind === 'lamp' ? `illustrative brightness follows solved electrical power; nominal ${part.animationNominalPower ?? 10} W; ` : part.kind === 'led' ? 'illustrative brightness follows forward current; ' : part.kind === 'zener' ? 'reverse breakdown follows the selected Zener model; ' : part.kind === 'njfet' || part.kind === 'pjfet' ? 'illustrative channel indicator follows solved drain current; ' : part.kind === 'capacitor' ? `plate charge animation follows solved charge; ${Number.isFinite(capacitorCharge) ? `Q = C × V = ${capacitorCharge!.toPrecision(4)} C; ` : ''}` : part.kind === 'inductor' ? `illustrative coil glow follows current; ${Number.isFinite(inductorEnergy) ? `magnetic field energy E = ½ L I² = ${inductorEnergy!.toPrecision(4)} J; ` : ''}` : ''}${voltage === undefined || logicOutput !== undefined ? '' : `${voltage.toPrecision(4)} V across pins; `}${current === undefined ? '' : `${current.toPrecision(4)} A, ${currentDescription}`}`}</title>}
-    <rect x={symbolBounds ? symbolBounds.minX - 14 : part.kind === 'subcircuit' ? -customWidth / 2 - 20 : -40} y={symbolBounds ? symbolBounds.minY - 24 : part.kind === 'subcircuit' ? -customHeight / 2 - 22 : -38} width={symbolBounds ? Math.max(80, symbolBounds.maxX - symbolBounds.minX + 28) : part.kind === 'subcircuit' ? customWidth + 40 : 80} height={symbolBounds ? Math.max(76, symbolBounds.maxY - symbolBounds.minY + 48) : part.kind === 'subcircuit' ? customHeight + 44 : 76} rx="9" className="part-hit" />
+    <rect x={hitBounds.x} y={hitBounds.y} width={hitBounds.width} height={hitBounds.height} rx="9" className="part-hit" />
     {detailed || symbol ? <><g transform={part.flipX ? 'scale(-1 1)' : undefined}>
     <ComponentSymbolGeometry geometry={symbolGeometry} stroke={common.stroke} animation={symbolAnimation}/>
     {part.kind === 'potentiometer' && <title>{`Potentiometer ${part.value}, wiper at ${(potentiometerPosition * 100).toFixed(1)}% from upper terminal`}</title>}

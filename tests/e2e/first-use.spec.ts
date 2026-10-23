@@ -5498,10 +5498,10 @@ test('import, place, and simulate a user-supplied IC with its symbol', { tag: ['
   const source = [
     'Version 4',
     'FLAG -16 0 IN', 'FLAG 16 0 0',
-    'FLAG 48 0 IN', 'FLAG 80 0 OUT', 'FLAG 64 16 0', 'FLAG 112 0 0',
+    'FLAG 48 0 IN', 'FLAG 80 0 OUT', 'FLAG 64 16 0', 'FLAG 128 0 0',
     'SYMBOL voltage 0 0 R0', 'SYMATTR InstName V1', 'SYMATTR Value 1',
     'SYMBOL user_double 64 0 R0', 'SYMATTR InstName X1', 'SYMATTR Value USER_DOUBLE',
-    'SYMBOL res 96 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
+    'SYMBOL res 112 0 R0', 'SYMATTR InstName R1', 'SYMATTR Value 1k',
     'TEXT 0 80 Left 2 !.op',
     'TEXT 0 100 Left 2 !.save V(out) I(R1)',
   ].join('\n')
@@ -5523,7 +5523,9 @@ test('import, place, and simulate a user-supplied IC with its symbol', { tag: ['
   await expect(importedDefinition).toBeVisible()
   await expect(importedDefinition).toContainText('Add to schematic')
   await expect(page.locator('.imported-model').filter({ has: importedDefinition })).toContainText('Parameters: gain=2')
-  await page.locator('.circuit-part[aria-label^="X1,"]').click()
+  const importedIc = page.locator('.circuit-part[aria-label^="X1,"]')
+  await importedIc.click({ position: { x: 10, y: 10 } })
+  await expect(importedIc).toHaveAttribute('aria-pressed', 'true')
   const gainOverride = page.getByRole('textbox', { name: 'gain model value' })
   await gainOverride.fill('.end')
   await gainOverride.blur()
