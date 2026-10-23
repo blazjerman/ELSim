@@ -430,14 +430,20 @@ test('ngspice single-argument .LIB file references resolve as project-local incl
   assert.equal(unsafe.dependencies.missingIncludes[0].reason, 'unsafe')
 })
 
-test('preserves ngspice .OPTIONS cards in user model libraries', () => {
-  const source = '.OPTIONS reltol=.005 trtol=8\n.MODEL DFAST D(Is=1n)'
+test('preserves native ngspice .OPTION and .OPTIONS cards in user model libraries', () => {
+  const source = '.OPTION rshunt=1e12\n.OPTIONS reltol=.005 trtol=8\n.MODEL DFAST D(Is=1n)'
   const parsed = parseSubcircuitLibrary(source)
   assert.equal(parsed.modelText, source)
   assert.deepEqual(parsed.modelRecords.map(({ sourceLine, text }) => ({ sourceLine, text })), [
-    { sourceLine: 1, text: '.OPTIONS reltol=.005 trtol=8' },
-    { sourceLine: 2, text: '.MODEL DFAST D(Is=1n)' },
+    { sourceLine: 1, text: '.OPTION rshunt=1e12' },
+    { sourceLine: 2, text: '.OPTIONS reltol=.005 trtol=8' },
+    { sourceLine: 3, text: '.MODEL DFAST D(Is=1n)' },
   ])
+  assert.deepEqual(analyzeLtspiceModelDialect(source).filter(({ feature }) => feature.includes('solver settings')).map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [1, 'ngspice .OPTION/.OPTIONS changes circuit-wide solver settings'],
+    [2, 'ngspice .OPTION/.OPTIONS changes circuit-wide solver settings'],
+  ])
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE A B\n.OPTION reltol=.005\n.ENDS CORE'), /\.OPTION sets circuit-wide solver options and cannot appear inside a \.SUBCKT/)
 })
 
 test('preserves native ngspice .TITLE cards and explains their circuit-wide heading effect', () => {
@@ -556,7 +562,7 @@ test('preserves native ngspice .IC and .NODESET cards with circuit-wide guidance
     { sourceLine: 4, text: '.MODEL DFAST D(Is=1n)' },
   ])
   assert.deepEqual(analyzeLtspiceModelDialect(source).map(({ sourceLine, feature }) => [sourceLine, feature]), [
-    [1, 'ngspice .OPTIONS changes circuit-wide solver settings'],
+    [1, 'ngspice .OPTION/.OPTIONS changes circuit-wide solver settings'],
     [2, 'ngspice .IC sets circuit-wide transient initial conditions'],
     [3, 'ngspice .NODESET changes circuit-wide initial voltage guesses'],
   ])
