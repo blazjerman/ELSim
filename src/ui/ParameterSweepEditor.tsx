@@ -49,13 +49,13 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
   }
   const eligible = useMemo(() => eligibleParameterSweepParts({ parts, analysis, dcSweepSource, models, subcircuits, sheets }), [analysis, dcSweepSource, models, parts, sheets, subcircuits])
   const unusedEligible = useMemo(() => unusedSweepTargets(eligible, sweeps), [eligible, sweeps])
-  const numericParameters = useMemo(() => analysis === 'tran' ? globalParameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) : [], [analysis, globalParameters])
+  const numericParameters = useMemo(() => analysis === 'dc' ? [] : globalParameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null), [analysis, globalParameters])
   const targetCount = unusedEligible.length + numericParameters.filter((parameter) => !sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase())).length
   const parameterOptions = useMemo(() => globalParameters.filter((parameter) => numericParameters.includes(parameter) || sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase())), [globalParameters, numericParameters, sweeps])
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">
     <div className="form-section-title">PARAMETER STEPPING</div>
-    <p className="field-hint">{analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : 'Compare up to 10 transient cases while changing passive values, scalar DC or waveform amplitude, PWL amplitude scales, or numeric parameters from imported device models, ICs, and reusable blocks.'}</p>
+    <p className="field-hint">{analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : analysis === 'op' ? 'Compare up to 10 DC operating points while varying supported circuit or model parameters.' : analysis === 'ac' ? 'Compare up to 10 AC response curves while varying supported circuit or model parameters.' : analysis === 'noise' ? 'Compare up to 10 noise spectra while varying supported circuit or model parameters.' : 'Compare up to 10 transient cases while changing passive values, scalar DC or waveform amplitude, PWL amplitude scales, or numeric parameters from imported device models, ICs, and reusable blocks.'}</p>
     {sweeps.map((sweep, index) => {
       const otherPoints = sweeps.filter((_, item) => item !== index).reduce((total, item) => total * item.points, 1)
       const maxPoints = Math.max(2, Math.floor(10 / otherPoints))
@@ -124,7 +124,7 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
       </div>
     })}
     {!(analysis === 'dc' && sweeps.length > 0) && <button type="button" className="add-parameter-sweep" onClick={onAdd} disabled={sweeps.length >= (analysis === 'dc' ? 1 : 3) || targetCount === 0 || combinations * 2 > 10}>{analysis === 'dc' ? 'Add secondary DC source' : sweeps.length ? 'Add another parameter' : 'Add parameter stepping'}</button>}
-    <div className="field-hint">{combinations} simulation case{combinations === 1 ? '' : 's'} selected · maximum 10 · each result is plotted as a separate trace.</div>
+    <div className="field-hint">{combinations} simulation case{combinations === 1 ? '' : 's'} selected · maximum 10 · each result is shown separately.</div>
   </div>
 }
 

@@ -11741,6 +11741,7 @@ test('AC analysis keeps imported parameter sweep cases as separate response curv
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 AC response curves')
   await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 AC response curves')
   await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('R1')
   await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 kΩ')
   await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2 kΩ')
@@ -11865,6 +11866,7 @@ test('noise analysis retains separate parameter-sweep spectra and case labels', 
   await page.locator('svg.schematic').click({ position: { x: 8, y: 8 } })
   await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 noise spectra')
   await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 noise spectra')
   await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('R1')
   await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 kΩ')
   await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2 kΩ')
@@ -11887,6 +11889,8 @@ test('operating-point parameter sweep compares labeled bias values for a selecte
   const project = createStarterProject()
   const source = project.parts.find((part) => part.ref === 'V1')!
   source.sourceMode = 'dc'
+  source.value = '{DRIVE}'
+  project.sheets[0] = { ...project.sheets[0], parameters: [{ id: 'param-drive', name: 'DRIVE', defaultValue: '1' }] }
   project.simulation = {
     ...project.simulation,
     analysis: 'op',
@@ -11899,12 +11903,13 @@ test('operating-point parameter sweep compares labeled bias values for a selecte
   await page.locator('svg.schematic').click({ position: { x: 8, y: 8 } })
   await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 DC operating points')
   await page.getByRole('button', { name: 'Add parameter stepping' }).click()
-  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('V1')
-  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 V')
-  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2 V')
+  await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 DC operating points')
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('$param:DRIVE')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2')
   await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.parameterSweeps)).toEqual([
-    { component: 'V1', start: '1 V', stop: '2 V', points: 2 },
+    { component: '$param:DRIVE', globalParameter: 'DRIVE', start: '1', stop: '2', points: 2 },
   ])
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
@@ -11914,8 +11919,8 @@ test('operating-point parameter sweep compares labeled bias values for a selecte
   const chooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
   await chooser.getByRole('button', { name: /New waveform window/ }).click()
   const table = page.locator('.plot-window').last().locator('.op-table')
-  await expect(table.getByRole('row', { name: /V\(vin\).*V1=1 V.*1\.000000 V/ })).toBeVisible()
-  await expect(table.getByRole('row', { name: /V\(vin\).*V1=2 V.*2\.000000 V/ })).toBeVisible()
+  await expect(table.getByRole('row', { name: /V\(vin\).*DRIVE=1.*1\.000000 V/ })).toBeVisible()
+  await expect(table.getByRole('row', { name: /V\(vin\).*DRIVE=2.*2\.000000 V/ })).toBeVisible()
   await expect(page.locator('.plot-window').last().locator('.op-table tbody tr').filter({ hasText: 'V(vin)' })).toHaveCount(2)
 })
 
