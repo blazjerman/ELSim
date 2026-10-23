@@ -806,3 +806,7 @@ Single-file and batch model-section selection now lives in a lazy-loaded compone
 ### Shared active-sheet object indexes (2026-10-23)
 
 The app-level inspector and memoized schematic now share the memoized parts-by-ID and net-labels-by-ID maps for the same immutable scene arrays, removing duplicate full-array map allocations on scene edits. The wire map remains local to the schematic. Focused Firefox net-label context and full-circuit paste-selection workflows pass, as does the 5,000-part/4,900-wire benchmark (779 ms render; 6/11 ms selection median/p95; 74 ms select-all; 37/55 ms zoom median/max; 19/24 ms navigation median/max). The build reports 236.0 KiB initial JS+CSS gzip and a 574.73 kB raw main entry. The benchmark is within prior same-host variance, so this is an allocation reduction without a claimed frame-time gain. No WASM build or Pages workflow ran.
+
+### Analysis settings source indexing (2026-10-23)
+
+`validateAnalysisSettings` now filters the schematic part list once to collect voltage/current sources, then reuses that list for transient pulse/SINE/EXP/SFFM/PWL checks and AC, noise, and DC source validation. For transient analysis this replaces five full-array source filters with one full-array collection plus filters over the smaller source list; operating-point analysis avoids collecting sources. All 38 unit-test groups, focused Firefox invalid-pulse and voltage-source waveform workflows, TypeScript, and production build pass. This is a reduction in array passes, not a measured wall-time claim. No WASM build or Pages workflow ran.

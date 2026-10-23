@@ -13,6 +13,11 @@ export type AnalysisSettingError = { field: AnalysisSettingField; message: strin
 
 export function validateAnalysisSettings(project: Project, connectivity?: Connectivity): AnalysisSettingError[] {
   const errors: AnalysisSettingError[] = []
+  // Source checks below use the same list in several analyses. Collect it once
+  // instead of rescanning every schematic part for each waveform field group.
+  const independentSources = project.simulation.analysis === 'op'
+    ? []
+    : project.parts.filter((part) => part.kind === 'source' || part.kind === 'currentSource')
   const add = (field: AnalysisSettingField, message: string, sourceId?: string, settingPath?: string) => errors.push({ field, message, ...(sourceId ? { sourceId } : {}), ...(settingPath ? { settingPath } : {}) })
   const temperature = Number(project.simulation.temperature ?? '27')
   if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test((project.simulation.temperature ?? '27').trim()) || !Number.isFinite(temperature) || temperature < -273.15 || temperature > 10000) add('temperature', 'Enter a temperature from −273.15 °C to 10000 °C.')
@@ -27,7 +32,7 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
       const startSaving = spiceMagnitude(startSavingText, 'time')
       if (startSaving === null || startSaving < 0 || stop === null || startSaving >= stop) add('startSavingTime', 'Enter a nonnegative time earlier than the stop time, or leave this blank to save from time zero.')
     }
-    for (const part of project.parts.filter((item) => item.kind === 'source' || (item.kind === 'currentSource' && item.sourceMode === 'pulse'))) {
+    for (const part of independentSources.filter((item) => item.kind === 'source' || item.sourceMode === 'pulse')) {
       if (part.kind === 'source' && part.sourceMode !== undefined && part.sourceMode !== 'pulse') continue
       const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
       const level = spiceSheetValue(pulse.initial, part.kind, sourceParameters)
@@ -39,7 +44,7 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
       }
       if (pulse.cycleCount !== undefined && pulse.cycleCount.trim() !== '' && !/^(?:0|[1-9]\d*)$/.test(pulse.cycleCount.trim())) add('pulse.cycleCount', `${part.ref} pulse cycle count must be a nonnegative whole number; zero repeats indefinitely.`, part.id, 'pulse.cycleCount')
     }
-    for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'sine')) {
+    for (const part of independentSources.filter((item) => item.sourceMode === 'sine')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
       const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
       if (spiceSheetValue(sine.offset, part.kind, sourceParameters) === null) add('sine.offset', `${part.ref} sine offset must be a valid ${quantity} or a declared parameter.`, part.id, 'sine.offset')
@@ -52,7 +57,7 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
       if (damping === null || Number(damping) < 0) add('sine.damping', `${part.ref} sine damping must be nonnegative.`, part.id, 'sine.damping')
       if (spiceSheetScalar(sine.phase, sourceParameters) === null) add('sine.phase', `${part.ref} sine phase must be a numeric angle in degrees or a declared parameter.`, part.id, 'sine.phase')
     }
-    for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'exp')) {
+    for (const part of independentSources.filter((item) => item.sourceMode === 'exp')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
       const exp = { initial: '0', pulsed: part.value, riseDelay: '0', riseTau: '1u', fallDelay: '10m', fallTau: '1u', ...part.exp }
       if (spiceSheetValue(exp.initial, part.kind, sourceParameters) === null) add('exp.initial', `${part.ref} EXP initial level must be a valid ${quantity} or a declared parameter.`, part.id, 'exp.initial')
@@ -63,7 +68,7 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
       if (fallDelay === null || fallDelay < 0 || riseDelay !== null && fallDelay < riseDelay) add('exp.fallDelay', `${part.ref} EXP fall delay must be nonnegative and no earlier than its rise delay.`, part.id, 'exp.fallDelay')
       if (fallTau === null || fallTau <= 0) add('exp.fallTau', `${part.ref} EXP fall time constant must be positive.`, part.id, 'exp.fallTau')
     }
-    for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'sffm')) {
+    for (const part of independentSources.filter((item) => item.sourceMode === 'sffm')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
       const sffm = { offset: '0', amplitude: part.value, carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100', ...part.sffm }
       if (spiceSheetValue(sffm.offset, part.kind, sourceParameters) === null) add('sffm.offset', `${part.ref} SFFM offset must be a valid ${quantity} or a declared parameter.`, part.id, 'sffm.offset')
@@ -74,7 +79,7 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
       const modulationIndex = index === null ? null : Number(index)
       if (modulationIndex === null || !Number.isFinite(modulationIndex) || modulationIndex < 0 || carrier !== null && carrier > 0 && signal !== null && signal > 0 && modulationIndex > carrier / signal) add('sffm.modulationIndex', `${part.ref} SFFM modulation index must be from zero through carrier/modulating frequency.`, part.id, 'sffm.modulationIndex')
     }
-    for (const part of project.parts.filter((item) => (item.kind === 'source' || item.kind === 'currentSource') && item.sourceMode === 'pwl')) {
+    for (const part of independentSources.filter((item) => item.sourceMode === 'pwl')) {
       const quantity = part.kind === 'source' ? 'voltage' : 'current'
       const points = part.kind === 'source' ? part.pwl : part.currentPwl
       if (!points || points.length < 2 || points.length > MAX_SOURCE_PWL_POINTS) {
@@ -108,14 +113,14 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     const resolved = connectivity ?? analyzeConnectivity(project)
     const output = project.netLabels.find((label) => label.name.toLowerCase() === sweep.outputNode.trim().toLowerCase())
     if (!output || resolved.labelNets.get(output.id) === '0') add('noiseOutput', 'Choose a labeled non-ground output node for noise analysis.')
-    if (!project.parts.some((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.inputSource.trim().toLowerCase())) add('noiseSource', 'Choose an independent voltage or current source as the noise input.')
+    if (!independentSources.some((part) => part.ref.toLowerCase() === sweep.inputSource.trim().toLowerCase())) add('noiseSource', 'Choose an independent voltage or current source as the noise input.')
     if (!['dec', 'oct', 'lin'].includes(sweep.scale)) add('noiseScale', 'Choose a decade, octave, or linear noise sweep.')
     if (!Number.isInteger(sweep.points) || sweep.points < 1 || sweep.points > 10000) add('noisePoints', 'Enter from 1 to 10,000 noise points per decade/octave or total linear points.')
     const start = spiceMagnitude(sweep.startFrequency, 'frequency'), stop = spiceMagnitude(sweep.stopFrequency, 'frequency')
     if (start === null || start <= 0) add('noiseStartFrequency', 'Enter a positive start frequency, such as 1 Hz.')
     if (stop === null || stop <= 0 || start !== null && stop <= start) add('noiseStopFrequency', 'Stop frequency must be greater than the start frequency.')
   } else if (project.simulation.analysis === 'ac') {
-    for (const part of project.parts.filter((item) => item.kind === 'source' || item.kind === 'currentSource')) {
+    for (const part of independentSources) {
       const unit = part.kind === 'source' ? 'source' : 'currentSource'
       const magnitudeText = part.acMagnitude ?? (part.kind === 'source' ? project.simulation.sourceAcMagnitude ?? '1 V' : part.value)
       const magnitude = spiceNumber(magnitudeText, unit)
@@ -134,7 +139,7 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
     if (stop === null || stop <= 0 || (start !== null && stop <= start)) add('acStopFrequency', 'Stop frequency must be greater than the start frequency.')
   } else if (project.simulation.analysis === 'dc') {
     const sweep = project.simulation.dcSweep ?? { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }
-    const source = project.parts.find((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.ref.toLowerCase() === sweep.source.toLowerCase())
+    const source = independentSources.find((part) => part.ref.toLowerCase() === sweep.source.toLowerCase())
     if (!source) add('dcSource', 'Choose an existing independent voltage or current source.')
     const quantity = source?.kind === 'currentSource' ? 'current' : 'voltage'
     const quantityName = quantity === 'current' ? 'current' : 'voltage'
