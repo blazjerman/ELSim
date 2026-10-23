@@ -11739,6 +11739,7 @@ test('AC analysis keeps imported parameter sweep cases as separate response curv
   await waitForProjectAutosave(page)
   await page.getByLabel('Analysis type').selectOption('ac')
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 AC response curves')
   await page.getByRole('button', { name: 'Add parameter stepping' }).click()
   await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('R1')
   await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 kΩ')
