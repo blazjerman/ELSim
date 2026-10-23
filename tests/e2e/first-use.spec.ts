@@ -3314,6 +3314,7 @@ test('pointer cancellation rolls back schematic drags and wire creation', { tag:
     return { x: part.x, y: part.y, wires: project.wires }
   })).toEqual(before)
   await expect(resistor).toHaveAttribute('transform', 'translate(360 290) rotate(0)')
+  await expect(page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })).toBeDisabled()
 
   await page.getByRole('button', { name: 'Draw wire (W)' }).click()
   const svg = page.locator('svg.schematic')

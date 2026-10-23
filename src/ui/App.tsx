@@ -774,7 +774,7 @@ function CurrentSourceWaveformEditor({ part, onChange, analysisSettingError, pwl
   </>
 }
 
-function Schematic({ project, documentSessionId, symbolsById, deviceModels, connectivity, setSelection, setHoveredSchematicObject, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, simulationResultIsCurrent, currentAnimationEnabled, currentDotSize, currentDotSpacing }: { project: SchematicProject; documentSessionId: number; connectivity: Connectivity; setSelection: (selection: Selection) => void; setHoveredSchematicObject: (target: HoveredSchematicObject | ((current: HoveredSchematicObject) => HoveredSchematicObject)) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingRotation: Part['rotation']; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: () => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; simulationResultIsCurrent: boolean; currentAnimationEnabled: boolean; currentDotSize: number; currentDotSpacing: number; symbolsById: Map<string, ImportedSymbol>; deviceModels: SpiceModelDefinition[] }) {
+function Schematic({ project, documentSessionId, symbolsById, deviceModels, connectivity, setSelection, setHoveredSchematicObject, setSelectedWireId, selectedWireIds, setSelectedWireIds, selectedPartIds, setSelectedPartIds, selectedNetLabelIds, setSelectedNetLabelIds, setProject, commitView, recordViewDraft, spacePan, tool, setTool, pendingComponent, pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation, onPlaceComponent, onClearPendingComponent, setNotice, beginEdit, endEdit, onProbe, onProbeVoltage, onSwitchChanged, simulationResult, simulationResultIsCurrent, currentAnimationEnabled, currentDotSize, currentDotSpacing }: { project: SchematicProject; documentSessionId: number; connectivity: Connectivity; setSelection: (selection: Selection) => void; setHoveredSchematicObject: (target: HoveredSchematicObject | ((current: HoveredSchematicObject) => HoveredSchematicObject)) => void; setSelectedWireId: (id: string | null) => void; selectedWireIds: string[]; setSelectedWireIds: (ids: string[]) => void; selectedPartIds: string[]; setSelectedPartIds: (ids: string[] | ((current: string[]) => string[])) => void; selectedNetLabelIds: string[]; setSelectedNetLabelIds: (ids: string[] | ((current: string[]) => string[])) => void; setProject: (fn: (current: Project) => Project) => void; commitView: (sheetId: string, view: Project['view']) => void; recordViewDraft: (sheetId: string, view: Project['view']) => void; spacePan: boolean; tool: ToolMode; setTool: (tool: ToolMode) => void; pendingComponent: PartKind | null; pendingRotation: Part['rotation']; pendingPolarizedCapacitor: boolean; pendingLogicOperation?: Part['logicOperation']; onPlaceComponent: (kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => void; onClearPendingComponent: () => void; setNotice: (message: string) => void; beginEdit: () => void; endEdit: (cancelled?: boolean) => void; onProbe: (target: ProbeRequest) => void; onProbeVoltage: (id: string, positivePin?: number, negativePin?: number) => void; onSwitchChanged: () => boolean; simulationResult: SimulationResult | null; simulationResultIsCurrent: boolean; currentAnimationEnabled: boolean; currentDotSize: number; currentDotSpacing: number; symbolsById: Map<string, ImportedSymbol>; deviceModels: SpiceModelDefinition[] }) {
   const selectedWireIdSet = useMemo(() => new Set(selectedWireIds), [selectedWireIds])
   const selectedPartIdSet = useMemo(() => new Set(selectedPartIds), [selectedPartIds])
   const selectedNetLabelIdSet = useMemo(() => new Set(selectedNetLabelIds), [selectedNetLabelIds])
@@ -1665,7 +1665,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
       }
     }
     wirePointPreview.current = null
-    if (cancelledDrag.kind !== 'pan' && cancelledDrag.kind !== 'box-select' && cancelledDrag.kind !== 'wire-create') endEdit()
+    if (cancelledDrag.kind !== 'pan' && cancelledDrag.kind !== 'box-select' && cancelledDrag.kind !== 'wire-create') endEdit(true)
     svg.current?.querySelectorAll('.wire-current-flow-layer, .wire-connection-dot, .wire-endpoint-handles').forEach((overlay) => overlay.removeAttribute('visibility'))
     if (cancelledDrag.kind === 'box-select') setSelectionBox(null)
     if (cancelledDrag.kind === 'wire-create') {
@@ -1882,7 +1882,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
           const directions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' } as const
           setWireEndpointAnnouncement(`Wire endpoint ${index + 1} moved ${directions[event.key as keyof typeof directions]} to grid position ${x + offset[0]}, ${y + offset[1]}.`)
           setProject((current) => ({ ...current, wires: current.wires.map((wire) => wire.id === hoveredWire.id ? { ...wire, points: wire.points.map(([pointX, pointY], pointIndex) => pointIndex === index ? [pointX + offset[0], pointY + offset[1]] as [number, number] : [pointX, pointY]) as [[number, number], [number, number]] } : wire) }))
-        }} onKeyUp={(event) => { if (event.key.startsWith('Arrow')) endEdit() }} onBlur={endEdit} onPointerDown={(event) => beginWirePointDrag(event, hoveredWire.id, index)} onClick={(event) => event.stopPropagation()}><title>Drag this wire endpoint or focus it and use arrow keys</title></circle>
+        }} onKeyUp={(event) => { if (event.key.startsWith('Arrow')) endEdit() }} onBlur={() => endEdit()} onPointerDown={(event) => beginWirePointDrag(event, hoveredWire.id, index)} onClick={(event) => event.stopPropagation()}><title>Drag this wire endpoint or focus it and use arrow keys</title></circle>
       })}</g>}
     </svg>
     <div className="sr-only wire-endpoint-announcement" role="status" aria-live="polite" aria-atomic="true">{wireEndpointAnnouncement}</div>
@@ -2920,12 +2920,21 @@ export default function App() {
     history.current = { past: [...history.current.past, snapshot].slice(-100), future: [] }
   }
   const editGroup = useRef(false)
+  const editGroupStartProject = useRef<Project | null>(null)
+  const editGroupHistory = useRef<{ past: Project[]; future: Project[] } | null>(null)
   const beginEdit = () => {
     if (editGroup.current) return
     editGroup.current = true
+    editGroupStartProject.current = projectRef.current
+    editGroupHistory.current = history.current
     recordUndoSnapshot(projectRef.current)
   }
-  const endEdit = () => { editGroup.current = false }
+  const endEdit = (cancelled = false) => {
+    if (cancelled && editGroupStartProject.current === projectRef.current && editGroupHistory.current) history.current = editGroupHistory.current
+    editGroup.current = false
+    editGroupStartProject.current = null
+    editGroupHistory.current = null
+  }
   const capacitorInitialCondition = project.simulation.initialConditions?.find((condition) =>
     'element' in condition && 'voltage' in condition && condition.element.toLowerCase() === 'c1',
   )
@@ -4589,7 +4598,7 @@ export default function App() {
   const schematicSetProject = useCallback((fn: (current: Project) => Project) => schematicActionsRef.current.setProject(fn), [])
   const schematicRecordViewDraft = useCallback((sheetId: string, view: Project['view']) => schematicActionsRef.current.recordViewDraft(sheetId, view), [])
   const schematicBeginEdit = useCallback(() => schematicActionsRef.current.beginEdit(), [])
-  const schematicEndEdit = useCallback(() => schematicActionsRef.current.endEdit(), [])
+  const schematicEndEdit = useCallback((cancelled = false) => schematicActionsRef.current.endEdit(cancelled), [])
   const schematicPlaceComponent = useCallback((kind: PartKind, x: number, y: number, rotation: Part['rotation'], polarized?: boolean, logicOperation?: Part['logicOperation']) => schematicActionsRef.current.addPart(kind, x, y, rotation, polarized, logicOperation), [])
   const schematicClearPending = useCallback(() => schematicActionsRef.current.clearPending(), [])
   const schematicProbe = useCallback((target: ProbeRequest) => schematicActionsRef.current.addProbe(target), [])
