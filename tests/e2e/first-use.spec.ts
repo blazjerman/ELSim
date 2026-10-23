@@ -11733,6 +11733,28 @@ test('waveform cursor, zoom, and drag-pan preserve the view and selected traces 
   await expect.poll(readSavedTransientValueRanges).toBeNull()
 })
 
+test('AC analysis keeps imported parameter sweep cases as separate response curves', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByLabel('Analysis type').selectOption('ac')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('R1')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 kΩ')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2 kΩ')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+
+  const plot = await openComponentVoltagePlot(page)
+  await expect(plot.getByRole('group', { name: /AC magnitude from/ })).toBeVisible()
+  await expect(plot.getByRole('img', { name: /V\(R1\).*AC magnitude in decibels/ })).toHaveCount(2)
+  const traces = await plot.locator('.trace-toggles button').allTextContents()
+  expect(traces.some((trace) => trace.includes('R1=1000 Ω'))).toBe(true)
+  expect(traces.some((trace) => trace.includes('R1=2000 Ω'))).toBe(true)
+})
+
 test('AC waveform supports frequency cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
