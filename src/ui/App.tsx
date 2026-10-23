@@ -3980,10 +3980,10 @@ export default function App() {
         relatedTraces.push(candidate)
       }
     }
-    if (transmissionLinePort && targetPart?.kind === 'transmissionLine' && relatedTraces.length) {
+    if (((transmissionLinePort && targetPart?.kind === 'transmissionLine') || targetPart?.kind === 'urcLine') && relatedTraces.length) {
       const matchingIds = new Set(relatedTraces.map((candidate) => candidate.id))
       availableTraces = availableTraces.map((candidate) => matchingIds.has(candidate.id)
-        ? { ...candidate, label: `I(${targetPart.ref}, port ${transmissionLinePort})${candidate.sweep ? ` · ${candidate.sweep.label}` : ''}`, unit: 'A' }
+        ? { ...candidate, label: `I(${targetPart.ref}${targetPart.kind === 'transmissionLine' ? `, port ${transmissionLinePort}` : ''})${candidate.sweep ? ` · ${candidate.sweep.label}` : ''}`, unit: 'A' }
         : candidate)
       relatedTraces.splice(0, relatedTraces.length, ...availableTraces.filter((candidate) => matchingIds.has(candidate.id)))
       trace = relatedTraces[0]

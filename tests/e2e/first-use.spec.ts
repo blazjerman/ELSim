@@ -3229,11 +3229,11 @@ test('native distributed RC component simulates and exposes its port currents', 
   const urc = page.locator('.circuit-part[data-part-id="urc-u1"]')
   await urc.click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
-  const chooser = page.getByRole('dialog', { name: /I\(v__elsim_urc1_in\)/i })
+  const chooser = page.getByRole('dialog', { name: 'I(URC1)' })
   await chooser.getByRole('button', { name: /New waveform window/ }).click()
   const plot = page.locator('.plot-window').last()
-  await expect(plot.locator('.trace-toggles button', { hasText: 'I(v__elsim_urc1_in)' })).toBeVisible()
-  await expect(plot.locator('.cursor-readout')).toContainText(/I\(v__elsim_urc1_in\)\s*=\s*[-\d.e+]+ A/i)
+  await expect(plot.locator('.trace-toggles button', { hasText: 'I(URC1)' })).toBeVisible()
+  await expect(plot.locator('.cursor-readout')).toContainText(/I\(URC1\)\s*=\s*[-\d.e+]+ A/i)
 })
 
 test('imported IC parameters can be swept across solved browser runs', { tag: '@ngspice' }, async ({ page }) => {
