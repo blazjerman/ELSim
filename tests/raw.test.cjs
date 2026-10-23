@@ -269,6 +269,29 @@ test('binary raw parser reads interleaved real and imaginary AC values', () => {
   assert.deepEqual([...parsed.variables[1].imaginaryValues], [-0.002, -0.003])
 })
 
+test('trace-only binary AC parsing preserves complex visible traces and the frequency axis', () => {
+  const header = validAcRaw.replace(/Values:[\s\S]*$/, 'Values:')
+  const values = [1000, 0, 1, 0, 0.001, -0.002, 10000, 0, 0.5, -0.5, 0.002, -0.003]
+  const traces = parseRawTraces(binaryRaw(header, values))
+  assert.deepEqual(traces.variables.map(({ name }) => name), ['v(in)', 'i(r1)'])
+  assert.deepEqual([...traces.axis], [1000, 10000])
+  assert.deepEqual([...traces.variables[0].values], [1, 0.5])
+  assert.deepEqual([...traces.variables[0].imaginaryValues], [0, -0.5])
+  assert.deepEqual([...traces.variables[1].values], [0.001, 0.002])
+  assert.deepEqual([...traces.variables[1].imaginaryValues], [-0.002, -0.003])
+})
+
+test('trace-only binary DC parsing keeps source values on the axis while dropping hidden vectors', () => {
+  const header = validDcRaw.replace(/Values:[\s\S]*$/, 'Values:')
+  const values = [0, 0, 0, 1, 0.5, -0.0005, 2, 1, -0.001]
+  const traces = parseRawTraces(binaryRaw(header, values))
+  assert.equal(traces.axisLabel, 'v(v-sweep)')
+  assert.deepEqual([...traces.axis], [0, 1, 2])
+  assert.deepEqual(traces.variables.map(({ name }) => name), ['v(out)', 'i(v1)'])
+  assert.deepEqual([...traces.variables[0].values], [0, 0.5, 1])
+  assert.deepEqual([...traces.variables[1].values], [0, -0.0005, -0.001])
+})
+
 test('binary raw parser rejects truncated payloads', () => {
   const data = binaryRaw(validRaw.replace(/Values:[\s\S]*$/, 'Values:'), [0, 5, -0.001])
   assert.throws(() => parseBinaryRawFile(data), /ended before all numeric points/)

@@ -229,14 +229,17 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
   if (!Number.isSafeInteger(expectedBytes) || bytes.length - payloadStart < expectedBytes) throw new Error('ngspice binary raw data ended before all numeric points were read.')
   const view = new DataView(bytes.buffer, bytes.byteOffset + payloadStart, expectedBytes)
   const axis = new Float64Array(pointCount)
+  const retainedVariables = variables.flatMap((variable, index) => variable ? [{ index, variable }] : [])
+  const pointStrideBytes = valuesPerPoint * Float64Array.BYTES_PER_ELEMENT
+  const variableStrideBytes = (isComplex ? 2 : 1) * Float64Array.BYTES_PER_ELEMENT
   for (let point = 0; point < pointCount; point += 1) {
-    for (let variable = 0; variable < variableCount; variable += 1) {
-      const valueIndex = (point * valuesPerPoint) + variable * (isComplex ? 2 : 1)
-      const valueOffset = valueIndex * Float64Array.BYTES_PER_ELEMENT
-      const value = view.getFloat64(valueOffset, true)
-      if (variable === 0 && !isOperatingPoint) axis[point] = value
-      else if (variables[variable]) variables[variable]!.values[point] = value
-      if (isComplex && variables[variable]) variables[variable]!.imaginaryValues![point] = view.getFloat64(valueOffset + Float64Array.BYTES_PER_ELEMENT, true)
+    const pointOffset = point * pointStrideBytes
+    if (!isOperatingPoint) axis[point] = view.getFloat64(pointOffset, true)
+    for (const { index, variable } of retainedVariables) {
+      if (index === 0 && !isOperatingPoint) continue
+      const valueOffset = pointOffset + index * variableStrideBytes
+      variable.values[point] = view.getFloat64(valueOffset, true)
+      if (isComplex) variable.imaginaryValues![point] = view.getFloat64(valueOffset + Float64Array.BYTES_PER_ELEMENT, true)
     }
   }
   const axisVector = isDcSweep ? variableRecords[0].name : ''
@@ -244,8 +247,8 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
   const sweepType = variableRecords[0].type.toLowerCase()
   const axisUnit = hasTimeAxis ? 's' : isFrequency || isNoise ? 'Hz' : isDcSweep && sweepType === 'voltage' ? 'V' : isDcSweep && sweepType === 'current' ? 'A' : ''
   if (isDcSweep && variables[0]) variables[0].values.set(axis)
-  const retainedVariables = variables.filter((variable): variable is RawVariable => variable !== undefined)
-  return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : 'op', axis, variables: tracesOnly ? retainedVariables : retainedVariables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }
+  const parsedVariables = variables.filter((variable): variable is RawVariable => variable !== undefined)
+  return { title, plotName, axisLabel, axisUnit, axisVector, isComplex, analysis: hasTimeAxis ? 'tran' : isFrequency ? 'ac' : isDcSweep ? 'dc' : isNoise ? 'noise' : 'op', axis, variables: tracesOnly ? parsedVariables : parsedVariables.slice(hasTimeAxis || isFrequency || isDcSweep || isNoise ? 1 : 0) }
 }
 
 export function parseRawFile(data: string | Uint8Array, tracesOnly = false): ParsedRawFile {
