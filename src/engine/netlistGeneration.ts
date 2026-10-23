@@ -18,6 +18,11 @@ function cleanComment(value: string): string {
   return value.replace(/[\r\n\u0000-\u001f]/g, ' ').trim()
 }
 
+function isResistorModelType(type: string): boolean {
+  const normalized = type.toLowerCase()
+  return normalized === 'r' || normalized === 'res'
+}
+
 function reserveUniqueName(base: string, used: Set<string>): string {
   let name = base
   let suffix = 2
@@ -256,7 +261,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const passiveModelType = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined
     const passiveModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
     const passiveDefaultParameter = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
-    const passiveModelSuppliesValue = Boolean(passiveModelType && passiveModel?.type.toLowerCase() === passiveModelType && passiveDefaultParameter && passiveModel.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
+    const passiveModelMatches = Boolean(passiveModel && (passiveModelType === 'r' ? isResistorModelType(passiveModel.type) : passiveModel.type.toLowerCase() === passiveModelType))
+    const passiveModelSuppliesValue = Boolean(passiveModelMatches && passiveDefaultParameter && passiveModel?.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
     const valueCanBeModelDefault = value === null && part.value.trim() === '' && passiveModelSuppliesValue
     if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'currentSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && part.kind !== 'transmissionLine' && part.kind !== 'urcLine' && value === null && !valueCanBeModelDefault) {
       const message = `${part.ref} has an invalid numeric value${passiveDefaultParameter && part.value.trim() === '' ? ` (no compatible model with ${passiveDefaultParameter.toUpperCase()} default)` : ''}.`
@@ -635,7 +641,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'potentiometer') {
       const wiper = pinNet(connectivity, part, 1)
       const lower = pinNet(connectivity, part, 2)
-      const modelResistance = passiveModel?.type.toLowerCase() === 'r'
+      const modelResistance = passiveModel && isResistorModelType(passiveModel.type)
         ? passiveModel.parameters.find((parameter) => parameter.name.toLowerCase() === 'r')?.defaultValue
         : undefined
       const savedResistance = componentMagnitude(spiceSheetParameterDefault(part.value, sheetParameters) ?? part.value, 'potentiometer')
@@ -647,7 +653,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const upperResistance = (totalResistance ?? 0) * position
       const lowerResistance = (totalResistance ?? 0) * (1 - position)
       const internalNameConflict = project.parts.some((other) => other.id !== part.id && [`R${part.ref}_A`, `R${part.ref}_B`].some((name) => name.toLowerCase() === other.ref.toLowerCase()))
-      if (part.deviceModel && (!passiveModel || passiveModel.type.toLowerCase() !== 'r')) {
+      if (part.deviceModel && (!passiveModel || !isResistorModelType(passiveModel.type))) {
         const message = `${part.ref} device model ${part.deviceModel} is missing or is not an R model.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -692,7 +698,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           elementPositive = internalNode
         }
       }
-      if (part.deviceModel && (!passiveModel || passiveModel.type.toLowerCase() !== passiveModelType)) {
+      if (part.deviceModel && (!passiveModelMatches || !passiveModelType)) {
         const message = `${part.ref} device model ${part.deviceModel} is missing or is not a ${passiveModelType?.toUpperCase()} model.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })

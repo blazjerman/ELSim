@@ -27,7 +27,7 @@ test('starter RC example generates a valid transient netlist without diagnostics
 
 test('standalone R C and L parts can use imported models and model defaults', () => {
   const project = createStarterProject()
-  project.modelAssets = [{ id: 'passive-models', filename: 'passives.lib', sha256: 'd'.repeat(64), content: ['.MODEL R_CUSTOM R(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.modelAssets = [{ id: 'passive-models', filename: 'passives.lib', sha256: 'd'.repeat(64), content: ['.MODEL R_CUSTOM RES(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
   const resistor = project.parts.find((part) => part.kind === 'resistor')
   const capacitor = project.parts.find((part) => part.kind === 'capacitor')
   const inductor = { ...capacitor, id: 'l1', ref: 'L1', kind: 'inductor', value: '' }

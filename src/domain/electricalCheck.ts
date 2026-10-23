@@ -144,7 +144,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
   const importedDeviceModelCards = []
   for (const asset of project.modelAssets ?? []) {
     try {
-      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope || ['r', 'c', 'l'].includes(model.type.toLowerCase())) {
+      for (const model of parseSubcircuitLibrary(asset.content, asset.selectedSections).models) if (!model.scope || ['r', 'res', 'c', 'l'].includes(model.type.toLowerCase())) {
         importedDeviceModels.set(model.name.toLowerCase(), { type: model.type.toLowerCase(), channel: model.channel, parameters: model.parameters })
         if (!model.scope) importedDeviceModelCards.push(model)
       }

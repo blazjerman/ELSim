@@ -187,7 +187,11 @@ test('imported device model compatibility has one canonical type per built-in de
   }
   for (const [kind, type] of Object.entries(expected)) assert.equal(compatibleDeviceModelType(kind), type, kind)
   assert.equal(deviceModelTypeMatches('resistor', { type: 'R' }), true)
+  assert.equal(deviceModelTypeMatches('resistor', { type: 'RES' }), true)
+  assert.equal(deviceModelTypeMatches('lamp', { type: 'RES' }), true)
+  assert.equal(deviceModelTypeMatches('potentiometer', { type: 'RES' }), true)
   assert.equal(deviceModelTypeMatches('capacitor', { type: 'C' }), true)
+  assert.equal(deviceModelTypeMatches('capacitor', { type: 'RES' }), false)
   assert.equal(deviceModelTypeMatches('transmissionLine', { type: 'TXL' }), true)
   assert.equal(deviceModelTypeMatches('urcLine', { type: 'URC' }), true)
   assert.equal(deviceModelTypeMatches('inductor', { type: 'L' }), true)

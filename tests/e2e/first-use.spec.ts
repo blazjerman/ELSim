@@ -2395,12 +2395,12 @@ test('standalone resistor capacitor and inductor can select imported native mode
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
-  const library = ['.MODEL R_CUSTOM R(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n')
+  const library = ['.MODEL R_CUSTOM RES(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n')
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'passives.lib', mimeType: 'text/plain', buffer: Buffer.from(library) })
   for (const [id, modelName, modelType] of [['p-r1', 'R_CUSTOM', 'R'], ['p-c1', 'C_CUSTOM', 'C']]) {
     await page.locator(`.circuit-part[data-part-id="${id}"]`).click()
     const model = page.getByLabel(`Device model for ${id === 'p-r1' ? 'R1' : 'C1'}`)
-    await expect(model.locator('option', { hasText: `${modelName} (${modelType})` })).toHaveCount(1)
+    await expect(model.locator('option', { hasText: `${modelName} (${modelType === 'R' ? 'RES' : modelType})` })).toHaveCount(1)
     await model.selectOption(modelName)
     await expect(page.locator(`.circuit-part[data-part-id="${id}"]`)).toBeVisible()
   }
@@ -12514,7 +12514,7 @@ test('imported passive R, C, and L model parameters sweep through the browser ng
   const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
     id: `${part.id}-net-${pinIndex}`, name: nodeNames[partIndex][pinIndex], x: pin.x, y: pin.y, visible: false,
   })))
-  const modelContent = '.MODEL USER_R R(R=100)\n.MODEL USER_C C(CAP=1u)\n.MODEL USER_L L(IND=10u)\n'
+  const modelContent = '.MODEL USER_R RES(R=100)\n.MODEL USER_C C(CAP=1u)\n.MODEL USER_L L(IND=10u)\n'
   project.parts = parts
   project.wires = []
   project.junctions = []

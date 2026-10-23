@@ -797,7 +797,7 @@ export default function App() {
     const byType = new Map<string, typeof importedDeviceModels>()
     for (const model of importedDeviceModels) {
       const type = model.type.toLowerCase()
-      const keys = type === 'vdmos' ? [`vdmos:${model.channel ?? 'n'}`] : [type]
+      const keys = type === 'vdmos' ? [`vdmos:${model.channel ?? 'n'}`] : type === 'res' ? ['res', 'r'] : [type]
       for (const key of keys) {
         const group = byType.get(key)
         if (group) group.push(model)

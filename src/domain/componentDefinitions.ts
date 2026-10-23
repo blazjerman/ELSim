@@ -357,6 +357,8 @@ export function compatibleDeviceModelType(kind: PartKind): string | undefined {
 export function deviceModelTypeMatches(kind: PartKind, model: { type: string; channel?: 'n' | 'p' }): boolean {
   if (kind === 'transmissionLine' && ['ltra', 'txl'].includes(model.type.toLowerCase())) return true
   const expectedType = compatibleDeviceModelType(kind)
+  // ngspice libraries commonly spell the resistor model family as RES.
+  if (expectedType === 'r' && model.type.toLowerCase() === 'res') return true
   if (!expectedType || model.type.toLowerCase() !== expectedType) return false
   if (kind === 'nvdmos') return (model.channel ?? 'n') === 'n'
   if (kind === 'pvdmos') return model.channel === 'p'
