@@ -434,9 +434,10 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const minTime = axis?.[first] ?? 0, maxTime = axis?.[Math.min(last, (axis?.length ?? 1) - 1)] ?? 1
   const sampledTraceById = useMemo(() => {
     const sampled = new Map<string, { indices: number[]; range: [number, number] | null }>()
-    // Disabled traces stay selected so users can re-enable them, but they
-    // should not pay the sampling and range-scan cost until they are visible.
-    for (const trace of shown) {
+    for (const id of selectedIds) {
+      const index = traceIndexById.get(id)
+      if (index === undefined) continue
+      const trace = traces[index]
       const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
       const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
       const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
@@ -445,7 +446,7 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
       sampled.set(trace.id, { indices, range })
     }
     return sampled
-  }, [shown, minTime, maxTime])
+  }, [selectedIds, traceIndexById, traces, minTime, maxTime])
   const sampledTraceData = useMemo(() => {
     const indicesById = new Map<string, number[]>()
     const rangeByUnit = new Map<string, [number, number]>()
@@ -641,9 +642,10 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   }
   const sampledTraceById = useMemo(() => {
     const sampled = new Map<string, { indices: number[]; dataRange: [number, number] | null; noiseRange: [number, number] | null }>()
-    // Hidden traces remain selected, but only visible traces need transformed
-    // samples and ranges for drawing the current AC/noise view.
-    for (const trace of shown) {
+    for (const id of selectedIds) {
+      const index = traceIndexById.get(id)
+      if (index === undefined) continue
+      const trace = traces[index]
       const indices = extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, sampleIndex) => valueFor(trace, sampleIndex), `ac:${trace.id}:${mode}`)
       let dataRange: [number, number] | null = null
       if (mode !== 'noise') {
@@ -658,7 +660,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       sampled.set(trace.id, { indices, dataRange, noiseRange })
     }
     return sampled
-  }, [shown, first, last, mode])
+  }, [selectedIds, traceIndexById, traces, first, last, mode])
   const sampledIndicesById = useMemo(() => {
     const indicesById = new Map<string, number[]>()
     for (const trace of shown) {
