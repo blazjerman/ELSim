@@ -10,6 +10,7 @@ const { createNetlistArtifact, nextRef, validateAnalysisSettings } = require(pat
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { create3v3LogicGatesExampleProject, createAcHighPassExampleProject, createAcLowPassExampleProject, createSineWaveExampleProject, createBridgeRectifierExampleProject, createCommonEmitterExampleProject, createControlledSourceExampleProject, createCurrentControlledSourcesExampleProject, createCurrentSwitchExampleProject, createCurrentSourceExampleProject, createDiodePolarityExampleProject, createDiodeRectifierExampleProject, createEducationalOpampExampleProject, createFlybackDiodeExampleProject, createImportedOpampExampleProject, createInvertingOpampExampleProject, createNonInvertingOpampExampleProject, createJfetSwitchExampleProject, createLcEnergyExampleProject, createLedCurrentLimiterExampleProject, createLedExampleProject, createLogicGatesExampleProject, createLoadedVoltageDividerExampleProject, createLampPowerExampleProject, createMosfetHighSideExampleProject, createMosfetSwitchExampleProject, createOhmsLawExampleProject, createParallelResistorsExampleProject, createPnpSwitchExampleProject, createPwlExampleProject, createPotentiometerExampleProject, createResistorPowerExampleProject, createSeriesResistorsExampleProject, createSuperpositionExampleProject, createSupplyDroopExampleProject, createRlStepExampleProject, createRlcExampleProject, createRlcResonanceExampleProject, createSwitchLampExampleProject, createTheveninNortonExampleProject, createTransistorSwitchExampleProject, createTransformerExampleProject, createTransformerCurrentExampleProject, createTransmissionLineExampleProject, createUrcLineExampleProject, createCoupledLineCrosstalkExampleProject, createVoltageDividerExampleProject, createVoltageSwitchExampleProject, createWheatstoneBridgeExampleProject, createZenerRegulatorExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
+const { createNativeUrcLineExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
 const { dcSweepPointCount, MAX_DC_SWEEP_POINTS } = require(path.join(build, 'domain/dcSweep.js'))
@@ -348,7 +349,7 @@ test('built-in educational op-amp expands as a finite-gain X instance with rail 
   const project = validateProject(createEducationalOpampExampleProject())
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
-  assert.equal(project.modelAssets.length, 0)
+  assert.equal(project.modelAssets?.length ?? 0, 0)
   assert.equal(project.symbolAssets.length, 0)
   assert.equal(project.parts.find((part) => part.kind === 'opamp').componentDefinitionId, 'elsim.educational-opamp')
   assert.match(artifact.text, /^XU1 VIN FB VPOS VNEG VOUT ELSIM_EDUCATIONAL_OPAMP$/m)
@@ -544,6 +545,20 @@ test('distributed RC line example imports and solves an ngspice URC model inside
   const tunedNetlist = createNetlistArtifact(tuned)
   assert.deepEqual(tunedNetlist.diagnostics, [])
   assert.match(tunedNetlist.text, /^XLINE IN OUT 0 URC_LINE PARAMS: LENGTH=2m SECTIONS=8$/m)
+})
+
+test('native distributed RC example uses the palette part without imported model assets', () => {
+  const project = validateProject(createNativeUrcLineExampleProject())
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.equal(project.name, 'Native distributed RC line')
+  assert.equal(project.modelAssets?.length ?? 0, 0)
+  assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(IN)', 'V(OUT)'])
+  assert.match(artifact.text, /^V1 .* PULSE\(0 1 1n 1n 1n 40n 80n\)$/m)
+  assert.match(artifact.text, /^\.MODEL URCMOD_URC1 URC \(RPERL=1k CPERL=100p K=2 FMAX=1g\)$/m)
+  assert.match(artifact.text, /^URC1 __ELSIM_URC1_URC_IN __ELSIM_URC1_URC_OUT 0 URCMOD_URC1 L=1m N=6$/m)
+  assert.match(artifact.text, /^\.tran 1n 500n$/m)
+  assert.equal(project.wires.length, 9)
 })
 
 test('coupled-line crosstalk example preserves its imported CPL model and probes', () => {

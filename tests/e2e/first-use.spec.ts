@@ -3197,36 +3197,18 @@ test('distributed RC line example imports its URC IC and solves in the browser e
 test('native distributed RC component simulates and exposes its port currents', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
-  const project = createStarterProject()
-  const parts = [
-    { id: 'urc-v1', kind: 'source', ref: 'V1', value: '0', x: 200, y: 200, rotation: 0, sourceMode: 'pulse', pulse: { initial: '0', delay: '1n', rise: '1n', fall: '1n', width: '40n', period: '80n' } },
-    { id: 'urc-u1', kind: 'urcLine', ref: 'URC1', value: '1m', x: 400, y: 200, rotation: 0, urcLine: { resistancePerLength: '1 kΩ/m', capacitancePerLength: '100 pF/m', sections: '6', k: '2', fmax: '1 GHz' } },
-    { id: 'urc-r1', kind: 'resistor', ref: 'R1', value: '1k', x: 600, y: 200, rotation: 0 },
-    { id: 'urc-gnd', kind: 'ground', ref: 'GND1', value: '', x: 200, y: 300, rotation: 0 },
-  ] satisfies typeof project.parts
-  const labels = [
-    { id: 'urc-in-v', name: 'urc_in', x: 200, y: 150, visible: false },
-    { id: 'urc-in-u', name: 'urc_in', x: 350, y: 200, visible: false },
-    { id: 'urc-out-u', name: 'urc_out', x: 450, y: 200, visible: false },
-    { id: 'urc-out-r', name: 'urc_out', x: 550, y: 200, visible: false },
-    { id: 'urc-ground-v', name: '0', x: 200, y: 250, visible: false },
-    { id: 'urc-ground-u', name: '0', x: 400, y: 250, visible: false },
-    { id: 'urc-ground-r', name: '0', x: 650, y: 200, visible: false },
-    { id: 'urc-ground-symbol', name: '0', x: 200, y: 280, visible: false },
-  ]
-  project.parts = parts
-  project.wires = []
-  project.junctions = []
-  project.netLabels = labels
-  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '500n', maxStep: '1n' }
-  const root = project.sheets.find((sheet) => sheet.id === project.rootSheetId)!
-  project.sheets[project.sheets.indexOf(root)] = { ...root, parts, wires: [], junctions: [], netLabels: labels }
-  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
   await page.goto('/')
-  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.getByRole('button', { name: 'Advanced' }).click()
+  const lesson = examples.locator('[data-example-id="urc-line-native"]')
+  await expect(lesson).toContainText('built-in three-terminal URC line')
+  await lesson.getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
+  const urc = page.locator('.circuit-part[data-part-id="urc-native-u1"]')
+  await expect(urc).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
-  const urc = page.locator('.circuit-part[data-part-id="urc-u1"]')
   await urc.click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Plot current through component' }).click()
   const chooser = page.getByRole('dialog', { name: 'I(URC1)' })

@@ -785,6 +785,53 @@ export function createUrcLineExampleProject(): Project {
   return project
 }
 
+/** A reusable, project-asset-free lesson using the native three-terminal URC palette part. */
+export function createNativeUrcLineExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = {
+    id: 'urc-native-v1', kind: 'source', ref: 'V1', value: '1 V', sourceMode: 'pulse',
+    pulse: { initial: '0', delay: '1 ns', rise: '1 ns', fall: '1 ns', width: '40 ns', period: '80 ns' },
+    x: 180, y: 350, rotation: 0,
+  }
+  const sourceResistance: Part = { id: 'urc-native-rsource', kind: 'resistor', ref: 'RSOURCE', value: '50 Ω', x: 380, y: 300, rotation: 0 }
+  const line: Part = {
+    id: 'urc-native-u1', kind: 'urcLine', ref: 'URC1', value: '1m', x: 520, y: 300, rotation: 0,
+    urcLine: { resistancePerLength: '1 kΩ/m', capacitancePerLength: '100 pF/m', sections: '6', k: '2', fmax: '1 GHz' },
+  }
+  const load: Part = { id: 'urc-native-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 760, y: 300, rotation: 90 }
+  const ground: Part = { id: 'urc-native-ground', kind: 'ground', ref: 'GND1', value: '', x: 180, y: 440, rotation: 0 }
+  const parts = [source, sourceResistance, line, load, ground]
+  const pins = new Map(parts.map((part) => [part.id, componentPins(part)]))
+  const wire = (id: string, start: [number, number], end: [number, number]) => ({ id, points: [start, end] as [[number, number], [number, number]] })
+  const v = pins.get(source.id)!, rs = pins.get(sourceResistance.id)!, u = pins.get(line.id)!, rload = pins.get(load.id)!, gnd = pins.get(ground.id)!
+  const wires = [
+    wire('urc-native-source-feed', [v[0].x, v[0].y], [rs[0].x, rs[0].y]),
+    wire('urc-native-series-feed', [rs[1].x, rs[1].y], [u[0].x, u[0].y]),
+    wire('urc-native-output-a', [u[1].x, u[1].y], [650, u[1].y]),
+    wire('urc-native-output-b', [650, u[1].y], [650, rload[0].y]),
+    wire('urc-native-load-feed', [650, rload[0].y], [rload[0].x, rload[0].y]),
+    wire('urc-native-load-return', [rload[1].x, rload[1].y], [rload[1].x, 390]),
+    wire('urc-native-substrate-return', [u[2].x, u[2].y], [u[2].x, 390]),
+    wire('urc-native-ground-bus', [gnd[0].x, 390], [rload[1].x, 390]),
+    wire('urc-native-ground-symbol', [gnd[0].x, 390], [gnd[0].x, gnd[0].y]),
+  ]
+  const netLabels = [
+    { id: 'urc-native-input', name: 'IN', x: u[0].x, y: u[0].y, visible: true },
+    { id: 'urc-native-output', name: 'OUT', x: u[1].x, y: u[1].y, visible: true },
+  ]
+  project.name = 'Native distributed RC line'
+  project.parts = parts
+  project.wires = wires
+  project.junctions = [{ x: u[2].x, y: 390 }, { x: gnd[0].x, y: v[1].y }]
+  project.netLabels = netLabels
+  project.sheets = [{ ...project.sheets[0], parts, wires, junctions: project.junctions, netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '500 ns', maxStep: '1 ns' }
+  project.plotSettings = { selectedTraceIds: ['V(IN)', 'V(OUT)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -5, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 const coupledCrosstalkLibrary = [
   '.SUBCKT COUPLED_LINE3 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2',
   'P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL3 LEN=1',
