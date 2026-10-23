@@ -10570,6 +10570,7 @@ test('waveform cursor, zoom, and drag-pan preserve the view and selected traces 
 test('AC waveform supports frequency cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.getByLabel('Analysis type').selectOption('ac')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
