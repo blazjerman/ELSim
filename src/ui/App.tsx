@@ -1518,7 +1518,6 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
   }
   const endDrag = (event: PointerEvent<SVGSVGElement>) => {
     const endedDrag = drag.current
-    if (event.type === 'pointercancel') suppressCanvasClick.current = false
     const activeGroupDrag = endedDrag?.group ? endedDrag : null
     if (activeGroupDrag?.group) {
       const point = pointFromEvent(event, activeGroupDrag.transform)
@@ -1647,6 +1646,35 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     drag.current = null
     if (svg.current) svg.current.style.cursor = ''
   }
+  const cancelDrag = (event: PointerEvent<SVGSVGElement>) => {
+    const cancelledDrag = drag.current
+    if (!cancelledDrag || cancelledDrag.pointer !== event.pointerId) return
+    suppressCanvasClick.current = false
+    if (cancelledDrag.kind === 'pan') {
+      setView((current) => ({ ...current, panX: cancelledDrag.originX, panY: cancelledDrag.originY }))
+    }
+    for (const { element, transform } of dragPreviewElements.current) {
+      if (transform === null) element.removeAttribute('transform')
+      else element.setAttribute('transform', transform)
+    }
+    dragPreviewElements.current = []
+    for (const { element, values } of wirePointPreview.current?.attributes ?? []) {
+      for (const [name, value] of values) {
+        if (value === null) element.removeAttribute(name)
+        else element.setAttribute(name, value)
+      }
+    }
+    wirePointPreview.current = null
+    if (cancelledDrag.kind !== 'pan' && cancelledDrag.kind !== 'box-select' && cancelledDrag.kind !== 'wire-create') endEdit()
+    svg.current?.querySelectorAll('.wire-current-flow-layer, .wire-connection-dot, .wire-endpoint-handles').forEach((overlay) => overlay.removeAttribute('visibility'))
+    if (cancelledDrag.kind === 'box-select') setSelectionBox(null)
+    if (cancelledDrag.kind === 'wire-create') {
+      setWireStart(null)
+      setWirePreviewEnd(null)
+    }
+    drag.current = null
+    if (svg.current) svg.current.style.cursor = ''
+  }
   const saveLabel = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!labelDraft) return
@@ -1753,7 +1781,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
       <div className="canvas-toolset"><IconButton title="Select and move (M)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => { onClearPendingComponent(); setSelectedWireId(null); setTool('wire'); setNotice('Wire selected. Drag anywhere on the grid to place one segment.') }}><Cable size={16}/></IconButton><IconButton title="Place or edit net label on the schematic toolbar (;)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (?)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (=)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize, 100, symbolsById))}><Scan size={15}/></IconButton></div>
       <div className="canvas-status" role="status" aria-live="polite" title={statusDetails}><span className="status-dot"/><span className="canvas-status-copy">{statusInstruction}</span><span className="status-separator">·</span><span className="canvas-grid-status">Grid 10 px</span></div>
     </div>
-    <svg key={documentSessionId} ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}${pendingComponent ? ' component-placement-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire segments and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onClickCapture={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; event.preventDefault(); event.stopPropagation(); return } if (!pendingComponent || tool !== 'select') return; const point = pointFromEvent(event); onPlaceComponent(pendingComponent, snapToEditorGrid(point.x), snapToEditorGrid(point.y), pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation); event.preventDefault(); event.stopPropagation() }} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event); beginBoxSelection(event) }} onPointerMove={(event) => { updatePlacementPreview(event); moveDrag(event); updateSchematicHover(event.target) }} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onKeyDown={(event) => {
+    <svg key={documentSessionId} ref={svg} className={`schematic${tool !== 'select' ? ' wire-mode' : ''}${pendingComponent ? ' component-placement-mode' : ''}`} role="group" aria-label="Schematic editor. Tab through wire segments and net labels. Focus a component and use arrow keys to move between components. Press Enter or Space to select an object." viewBox={viewBox} onClickCapture={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; event.preventDefault(); event.stopPropagation(); return } if (!pendingComponent || tool !== 'select') return; const point = pointFromEvent(event); onPlaceComponent(pendingComponent, snapToEditorGrid(point.x), snapToEditorGrid(point.y), pendingRotation, pendingPolarizedCapacitor, pendingLogicOperation); event.preventDefault(); event.stopPropagation() }} onPointerDown={(event) => { setContextMenu(null); beginWireCreation(event); beginPan(event); beginBoxSelection(event) }} onPointerMove={(event) => { updatePlacementPreview(event); moveDrag(event); updateSchematicHover(event.target) }} onPointerUp={endDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag} onClick={(event) => { if (suppressCanvasClick.current) { suppressCanvasClick.current = false; return } canvasClick(event) }} onKeyDown={(event) => {
       const target = event.target instanceof Element ? event.target.closest<SVGElement>('[data-part-id], [data-wire-id], [data-net-label-id]') : null
       if (!target || !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) return
       event.preventDefault()

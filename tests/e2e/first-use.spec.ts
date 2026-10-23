@@ -3281,6 +3281,66 @@ test('Ctrl+A selects components and wires; drag boxes use window and crossing se
   await expect(resistor).toHaveClass(/selected/)
 })
 
+test('pointer cancellation rolls back schematic drags and wire creation', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const before = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const part = project.parts.find((candidate: { id: string }) => candidate.id === 'p-r1')
+    return { x: part.x, y: part.y, wires: project.wires }
+  })
+  const bounds = await resistor.boundingBox()
+  expect(bounds).not.toBeNull()
+  const origin = { x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 }
+  await page.evaluate(() => {
+    document.addEventListener('pointerdown', (event) => {
+      document.documentElement.dataset.cancelledPointer = String(event.pointerId)
+    }, { capture: true, once: true })
+  })
+  await page.mouse.move(origin.x, origin.y)
+  await page.mouse.down()
+  await page.mouse.move(origin.x + 40, origin.y, { steps: 2 })
+  const pointerId = await page.locator('html').getAttribute('data-cancelled-pointer')
+  expect(pointerId).not.toBeNull()
+  await page.evaluate((id) => {
+    const target = document.querySelector('.schematic')!
+    target.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: Number(id), pointerType: 'mouse' }))
+  }, pointerId)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const part = project.parts.find((candidate: { id: string }) => candidate.id === 'p-r1')
+    return { x: part.x, y: part.y, wires: project.wires }
+  })).toEqual(before)
+  await expect(resistor).toHaveAttribute('transform', 'translate(360 290) rotate(0)')
+
+  await page.getByRole('button', { name: 'Draw wire (W)' }).click()
+  const svg = page.locator('svg.schematic')
+  const matrix = await svg.evaluate((element) => {
+    const { a, b, c, d, e, f } = element.getScreenCTM()!
+    return { a, b, c, d, e, f }
+  })
+  const toScreen = (x: number, y: number) => ({ x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f })
+  const start = toScreen(700, 500), end = toScreen(800, 500)
+  await page.evaluate(() => {
+    document.addEventListener('pointerdown', (event) => {
+      document.documentElement.dataset.cancelledPointer = String(event.pointerId)
+    }, { capture: true, once: true })
+  })
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 2 })
+  const wirePointerId = await page.locator('html').getAttribute('data-cancelled-pointer')
+  expect(wirePointerId).not.toBeNull()
+  await page.evaluate((id) => {
+    document.querySelector('.schematic')!.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: Number(id), pointerType: 'mouse' }))
+  }, wirePointerId)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)).toEqual(before.wires)
+  await expect(svg.locator('line[stroke-dasharray="5 4"]')).toHaveCount(0)
+})
+
 test('copying the whole schematic selects and moves only the pasted wires with pasted parts', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
