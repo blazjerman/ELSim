@@ -1587,6 +1587,17 @@ test('keyboard focus remains visible in search, analysis, inspector, expandable 
     expect(outline.color).not.toBe('rgba(0, 0, 0, 0)')
     expect(outline.contrast).toBeGreaterThanOrEqual(3)
   }
+  const focusSvgControlByKeyboard = async (locator: import('@playwright/test').Locator) => {
+    await locator.evaluate((target) => {
+      const candidates = [...document.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]')]
+        .filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden' && !element.closest('[aria-hidden="true"]'))
+      const index = candidates.indexOf(target as HTMLElement)
+      if (index <= 0) throw new Error('SVG control has no preceding keyboard stop')
+      candidates[index - 1].focus()
+    })
+    await page.keyboard.press('Tab')
+    await expect(locator).toBeFocused()
+  }
 
   await page.goto('/')
   const componentCard = page.locator('.component-card').first()
@@ -1603,6 +1614,40 @@ test('keyboard focus remains visible in search, analysis, inspector, expandable 
   const resistance = page.locator('[data-part-setting="p-r1:value"]')
   await resistance.focus()
   await expectFocusRing(resistance)
+
+  // The schematic's SVG controls use painted focus markers rather than CSS
+  // outlines. Cover the keyboard-operated wire, endpoint, and net-label path
+  // directly so a future style or SVG refactor cannot make focus invisible.
+  const wire = page.locator('.wire-line').first()
+  await focusSvgControlByKeyboard(wire)
+  const wireFocus = await wire.locator('line').last().evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { stroke: style.stroke, width: Number.parseFloat(style.strokeWidth), filter: style.filter }
+  })
+  expect(wireFocus.stroke).toBe('rgb(184, 240, 200)')
+  expect(wireFocus.width).toBeGreaterThanOrEqual(3)
+  expect(wireFocus.filter).not.toBe('none')
+
+  const label = page.locator('.canvas-label').first()
+  await focusSvgControlByKeyboard(label)
+  const labelFocus = await label.locator('text').evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { stroke: style.stroke, width: Number.parseFloat(style.strokeWidth), dash: style.strokeDasharray }
+  })
+  expect(labelFocus.stroke).toBe('rgb(167, 237, 191)')
+  expect(labelFocus.width).toBeGreaterThanOrEqual(2)
+  expect(labelFocus.dash).not.toBe('none')
+
+  await wire.hover()
+  const endpoint = page.locator('.wire-endpoint-handles circle').first()
+  await focusSvgControlByKeyboard(endpoint)
+  const endpointFocus = await endpoint.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { stroke: style.stroke, width: Number.parseFloat(style.strokeWidth), filter: style.filter }
+  })
+  expect(endpointFocus.stroke).toBe('rgb(255, 242, 188)')
+  expect(endpointFocus.width).toBeGreaterThanOrEqual(3)
+  expect(endpointFocus.filter).not.toBe('none')
 
   await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
   await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('pwl')
