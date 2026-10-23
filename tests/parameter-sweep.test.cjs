@@ -8,7 +8,7 @@ const { createStarterProject, validateProject } = require(path.join(build, 'doma
 const { componentMagnitude, createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { prepareParameterSweep } = require(path.join(build, 'engine/sweep.js'))
 const { addResultControl } = require(path.join(build, 'engine/resultControl.js'))
-const { createUrcLineExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { createUrcLineExampleProject, createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 
 test('engineering units parse to base magnitudes for resistor, capacitor, and inductor values', () => {
   assert.equal(componentMagnitude('1 kΩ', 'resistor'), 1000)
@@ -296,7 +296,7 @@ test('imported device model parameters are validated and emitted with altermod',
   const control = addResultControl(createNetlistArtifact(validated).text, runs)
   assert.match(control, /altermod USER_NPN BF=8\.00000000e\+1\nrun/)
   project.simulation.parameterSweeps[0].parameter = 'UNSAFE'
-  assert.throws(() => validateProject(project), /numeric parameters on selected imported devices or ICs/)
+  assert.throws(() => validateProject(project), /numeric parameters on selected imported devices, ICs, or reusable blocks/)
 })
 
 test('imported IC instance parameters become alterparam-driven sweep cases', () => {
@@ -316,9 +316,31 @@ test('imported IC instance parameters become alterparam-driven sweep cases', () 
   assert.match(control, /alterparam ELSIM_SWEEP_IC_XLINE_LENGTH=1\.00000000e-3\nreset\nrun/)
   assert.equal((control.match(/write \/result-\d+\.raw all/g) ?? []).length, 3)
   project.simulation.parameterSweeps[0].parameter = 'UNKNOWN'
-  assert.throws(() => validateProject(project), /including numeric parameters on selected imported devices or ICs/)
+  assert.throws(() => validateProject(project), /including numeric parameters on selected imported devices, ICs, or reusable blocks/)
   project.simulation.parameterSweeps[0] = { component: 'XLINE', parameter: 'LENGTH', instanceParameter: true, start: 'one', stop: '3m', points: 3 }
   assert.throws(() => validateProject(project), /valid, different parameter start and stop values/)
+})
+
+test('reusable child-sheet block parameters can be swept independently per instance', () => {
+  const project = createHierarchicalExampleProject()
+  project.simulation.analysis = 'tran'
+  project.simulation.parameterSweeps = [{ component: 'X2', parameter: 'RINPUT', instanceParameter: true, start: '1k', stop: '4k', points: 3 }]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => run.label), ['X2.RINPUT=1000', 'X2.RINPUT=2500', 'X2.RINPUT=4000'])
+  assert.deepEqual(runs.map((run) => run.values[0]), [
+    { component: 'X2', value: '1.00000000e+3', parameter: 'RINPUT', model: 'ELSIM_SHEET_sheet_divider', instanceParameter: true },
+    { component: 'X2', value: '2.50000000e+3', parameter: 'RINPUT', model: 'ELSIM_SHEET_sheet_divider', instanceParameter: true },
+    { component: 'X2', value: '4.00000000e+3', parameter: 'RINPUT', model: 'ELSIM_SHEET_sheet_divider', instanceParameter: true },
+  ])
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /^\.param ELSIM_SWEEP_IC_X2_RINPUT=1\.00000000e\+3$/m)
+  assert.match(control, /^X2 .* PARAMS: RINPUT=\{ELSIM_SWEEP_IC_X2_RINPUT\}$/m)
+  assert.match(control, /alterparam ELSIM_SWEEP_IC_X2_RINPUT=2\.50000000e\+3\nreset\nrun/)
+  const otherInstance = control.match(/^X1 .* PARAMS: RINPUT=([^\s]+)$/m)?.[1]
+  assert.equal(otherInstance, '1k')
+  project.simulation.parameterSweeps[0].parameter = 'MISSING'
+  assert.throws(() => validateProject(project), /including numeric parameters on selected imported devices, ICs, or reusable blocks/)
 })
 
 test('imported SW and CSW model parameters can be stepped on their matching switches', () => {

@@ -5075,6 +5075,34 @@ test('nested reusable divider solves match an equivalent flattened circuit', { t
   await expect(flattenedTable.getByRole('row', { name: /V\(out10\).*3\.333333 V/i })).toBeVisible()
 })
 
+test('reusable child-sheet parameters can be swept per block instance', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  await page.locator('.example-list article').filter({ hasText: 'Nested reusable divider' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: 'Close walkthrough' }).click()
+  await page.getByLabel('Analysis type').selectOption('tran')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  const component = page.getByRole('combobox', { name: 'Parameter 1 component' })
+  await component.selectOption('X2')
+  const blockParameter = page.getByRole('combobox', { name: 'Parameter 1 block parameter' })
+  await expect(blockParameter).toHaveValue('RINPUT')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1k')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('4k')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('3')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 3 cases/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(OUT10)')
+  const labels = await page.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('X2.RINPUT=1000'))).toBe(true)
+  expect(labels.some((label) => label.includes('X2.RINPUT=2500'))).toBe(true)
+  expect(labels.some((label) => label.includes('X2.RINPUT=4000'))).toBe(true)
+  const plottedCases = await page.locator('.plot-window polyline[role="img"]').evaluateAll((lines) => lines.map((line) => line.getAttribute('points')))
+  expect(new Set(plottedCases).size).toBe(3)
+})
+
 test('native ELSim symbol files can be imported and placed on a user model', { tag: '@ui-smoke' }, async ({ page }) => {
   const modelSource = '.SUBCKT USER_AMP INP INM VCC VEE OUT\nEOUT OUT 0 INP INM 100k\n.ENDS USER_AMP\n'
   const modelAsset = { id: 'model-native-amp', filename: 'user-amp.lib', content: modelSource, sha256: createHash('sha256').update(modelSource).digest('hex'), licenseStatus: 'unknown' as const, importedAt: '2026-01-01T00:00:00.000Z' }

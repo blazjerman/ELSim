@@ -4503,17 +4503,28 @@ export default function App() {
     const configured = project.simulation.parameterSweeps ?? []
     if (project.simulation.analysis === 'dc' && configured.length > 0) { setNotice('A two-source DC sweep supports one secondary source. Remove the current secondary sweep before choosing another.'); return }
     if (configured.reduce((total, sweep) => total * sweep.points, 1) * 2 > 10) { setNotice('Reduce the number of values before adding another parameter. A sweep can run at most 10 cases.'); return }
+    const supportedSourceModes = ['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm']
+    const hasNumericInstanceParameter = (part: Part) => {
+      if (part.kind !== 'subcircuit') return false
+      const parameters = part.sheetId
+        ? project.sheets.find((sheet) => sheet.id === part.sheetId)?.parameters ?? []
+        : importedModels.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())?.parameters ?? []
+      const overrides = part.sheetId ? part.sheetParameters : part.modelParameters
+      return parameters.some((parameter) => componentMagnitude(Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1] ?? parameter.defaultValue, 'resistor') !== null)
+    }
     const parts = project.parts.filter((part) => project.simulation.analysis === 'dc'
       ? (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'dc' && part.ref.toLowerCase() !== project.simulation.dcSweep?.source.toLowerCase()
       : ['resistor', 'capacitor', 'inductor'].includes(part.kind)
-      || (part.kind === 'source' && part.sourceMode === 'dc')
-      || (part.kind === 'currentSource' && (part.sourceMode === 'dc' || part.sourceMode === undefined))
-      || importedDeviceModels.some((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)))
+        || ((part.kind === 'source' || part.kind === 'currentSource') && supportedSourceModes.includes(part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')))
+        || importedDeviceModels.some((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null))
+        || hasNumericInstanceParameter(part))
       .filter((part) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase()))
     const parameters = project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []
     const availableParameter = parameters.find((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null && !configured.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase()))
-    const part = parts.find((candidate) => importedDeviceModels.some((model) => model.name.toLowerCase() === candidate.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null))) ?? parts[0]
-    if ((!part && !availableParameter) || configured.length >= (project.simulation.analysis === 'dc' ? 1 : 3)) { setNotice(project.simulation.analysis === 'dc' ? 'A two-source DC sweep needs another scalar DC voltage or current source.' : 'Parameter stepping supports up to three distinct project parameters, R/C/L values, scalar DC sources, or numeric parameters on imported device models.'); return }
+    const part = parts.find(hasNumericInstanceParameter)
+      ?? parts.find((candidate) => importedDeviceModels.some((model) => model.name.toLowerCase() === candidate.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)))
+      ?? parts[0]
+    if ((!part && !availableParameter) || configured.length >= (project.simulation.analysis === 'dc' ? 1 : 3)) { setNotice(project.simulation.analysis === 'dc' ? 'A two-source DC sweep needs another scalar DC voltage or current source.' : 'Parameter stepping supports up to three distinct project parameters, R/C/L values, sources, imported device models, ICs, or reusable blocks.'); return }
     if (!part && availableParameter) {
       const magnitude = componentMagnitude(availableParameter.defaultValue, 'resistor')
       const sweep: ParameterSweep = { component: `$param:${availableParameter.name}`, globalParameter: availableParameter.name, start: availableParameter.defaultValue, stop: magnitude === null ? availableParameter.defaultValue : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}`, points: 3 }
@@ -4521,6 +4532,20 @@ export default function App() {
       return
     }
     if (!part) return
+    if (hasNumericInstanceParameter(part) && part.kind === 'subcircuit') {
+      const parameters = part.sheetId
+        ? project.sheets.find((sheet) => sheet.id === part.sheetId)?.parameters ?? []
+        : importedModels.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())?.parameters ?? []
+      const overrides = part.sheetId ? part.sheetParameters : part.modelParameters
+      const parameter = parameters.find((candidate) => componentMagnitude(Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === candidate.name.toLowerCase())?.[1] ?? candidate.defaultValue, 'resistor') !== null)
+      if (parameter) {
+        const initial = Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1] ?? parameter.defaultValue
+        const magnitude = componentMagnitude(initial, 'resistor')
+        const sweep: ParameterSweep = { component: part.ref, parameter: parameter.name, instanceParameter: true, start: initial, stop: `${((magnitude ?? 0) === 0 ? 1 : (magnitude ?? 0) * 2).toExponential(5)}`, points: 3 }
+        setProject((current) => ({ ...current, simulation: { ...current.simulation, parameterSweeps: [...(current.simulation.parameterSweeps ?? []), sweep] } }))
+        return
+      }
+    }
     const model = importedDeviceModels.find((candidate) => candidate.name.toLowerCase() === part.deviceModel?.toLowerCase())
     const modelParameter = model?.parameters.find((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)
     if (modelParameter) {
@@ -5059,7 +5084,7 @@ export default function App() {
             </>}
           </div>
     {(project.simulation.parameterSweeps?.length ?? 0) > 0
-      ? <Suspense fallback={<div className="field-hint">Loading parameter controls…</div>}><ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} models={importedDeviceModels} subcircuits={importedModels.map((model) => ({ name: model.name, parameters: model.parameters }))} parameters={project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []} analysis={project.simulation.analysis} dcSweepSource={project.simulation.dcSweep?.source} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/></Suspense>
+      ? <Suspense fallback={<div className="field-hint">Loading parameter controls…</div>}><ParameterSweepEditor parts={project.parts} sweeps={project.simulation.parameterSweeps ?? []} models={importedDeviceModels} subcircuits={importedModels.map((model) => ({ name: model.name, parameters: model.parameters }))} sheets={project.sheets} parameters={project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []} analysis={project.simulation.analysis} dcSweepSource={project.simulation.dcSweep?.source} onAdd={addParameterSweep} onChange={updateParameterSweep} onRemove={removeParameterSweep}/></Suspense>
       : <div className="form-section parameter-sweep-section"><div className="form-section-title">PARAMETER STEPPING</div><p className="field-hint">{project.simulation.analysis === 'dc' ? 'Compare a two-source DC sweep by running the primary source range for each selected value of a second scalar DC source.' : 'Compare up to 10 transient cases while changing passive values, scalar DC or waveform amplitude, PWL amplitude scales, or numeric parameters from imported device models.'}</p><button type="button" className="add-parameter-sweep" onClick={addParameterSweep}>{project.simulation.analysis === 'dc' ? 'Add secondary DC source' : 'Add parameter stepping'}</button><div className="field-hint">1 simulation case selected · maximum 10 · each result is plotted as a separate trace.</div></div>}
     {project.simulation.analysis === 'tran' && ((project.simulation.transientMeasurements?.length ?? 0) > 0 || (project.simulation.initialConditions?.length ?? 0) > 0
       ? <Suspense fallback={<div className="field-hint">Loading transient analysis controls…</div>}><TransientEditors project={project} measurements={project.simulation.transientMeasurements ?? []} conditions={project.simulation.initialConditions ?? []} nodes={labeledNodeNames} inductors={inductorParts.map((part) => part.ref)} capacitors={capacitorParts.map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAddMeasurement={addMeasurement} onChangeMeasurement={updateMeasurement} onRemoveMeasurement={removeMeasurement} onAddCondition={addInitialCondition} onAddInductorCurrent={addInductorInitialCondition} onAddCapacitorVoltage={addCapacitorInitialCondition} onChangeCondition={updateInitialCondition} onRemoveCondition={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/></Suspense>

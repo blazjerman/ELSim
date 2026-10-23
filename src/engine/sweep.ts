@@ -41,15 +41,21 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (sweep.parameter && sweep.instanceParameter) {
-    if (!part || part.kind !== 'subcircuit' || part.sheetId || !part.modelName) throw new Error(`${sweep.component} is not an imported IC with editable model parameters.`)
-    const definition = project.modelAssets?.flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).subcircuits)
-      .find((candidate) => candidate.name.toLowerCase() === part.modelName!.toLowerCase())
-    const parameter = definition?.parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
-    const override = Object.entries(part.modelParameters ?? {}).find(([name]) => name.toLowerCase() === parameter?.name.toLowerCase())?.[1]
+    if (!part || part.kind !== 'subcircuit') throw new Error(`${sweep.component} is not an imported IC or reusable block with editable parameters.`)
+    const parameters = part.sheetId
+      ? project.sheets.find((sheet) => sheet.id === part.sheetId)?.parameters ?? []
+      : part.modelName
+        ? project.modelAssets?.flatMap((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections).subcircuits)
+          .find((candidate) => candidate.name.toLowerCase() === part.modelName!.toLowerCase())?.parameters ?? []
+        : []
+    const parameter = parameters.find((candidate) => candidate.name.toLowerCase() === sweep.parameter!.toLowerCase())
+    const overrides = part.sheetId ? part.sheetParameters : part.modelParameters
+    const override = Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter?.name.toLowerCase())?.[1]
     const initial = override ?? parameter?.defaultValue
-    const start = initial === undefined ? null : scalarMagnitude(initial)
+    const nominal = initial === undefined ? null : scalarMagnitude(initial)
+    const start = scalarMagnitude(sweep.start)
     const stop = scalarMagnitude(sweep.stop)
-    if (!parameter || start === null || stop === null || start === stop) throw new Error(`${sweep.component}.${sweep.parameter} must be a numeric imported IC parameter with different valid endpoints.`)
+    if (!parameter || nominal === null || start === null || stop === null || start === stop) throw new Error(`${sweep.component}.${sweep.parameter} must be a numeric IC or reusable-block parameter with different valid endpoints.`)
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (sweep.parameter) {
