@@ -35,6 +35,42 @@ async function stopDomMutationCapture(page: import('@playwright/test').Page) {
   })
 }
 
+async function startScrubFrameCapture(page: import('@playwright/test').Page, slider: import('@playwright/test').Locator) {
+  await slider.evaluate((element) => {
+    type Capture = { inputAt: number | null; mutationAt: number | null; frame1At: number | null; frame2At: number | null; observer: MutationObserver }
+    const captureWindow = window as Window & { __elsimScrubCapture?: Capture }
+    const capture: Capture = { inputAt: null, mutationAt: null, frame1At: null, frame2At: null, observer: new MutationObserver(() => {
+      if (capture.inputAt !== null && capture.mutationAt === null) capture.mutationAt = performance.now()
+    }) }
+    capture.observer.observe(document.body, { attributes: true, childList: true, characterData: true, subtree: true })
+    element.addEventListener('input', () => {
+      capture.inputAt = performance.now()
+      requestAnimationFrame(() => {
+        capture.frame1At = performance.now()
+        requestAnimationFrame(() => { capture.frame2At = performance.now() })
+      })
+    }, { once: true })
+    captureWindow.__elsimScrubCapture = capture
+  })
+}
+
+async function stopScrubFrameCapture(page: import('@playwright/test').Page) {
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  return page.evaluate(() => {
+    type Capture = { inputAt: number | null; mutationAt: number | null; frame1At: number | null; frame2At: number | null; observer: MutationObserver }
+    const captureWindow = window as Window & { __elsimScrubCapture?: Capture }
+    const capture = captureWindow.__elsimScrubCapture
+    if (!capture) return null
+    capture.observer.disconnect()
+    delete captureWindow.__elsimScrubCapture
+    return {
+      inputToMutationMs: capture.inputAt === null || capture.mutationAt === null ? null : Number((capture.mutationAt - capture.inputAt).toFixed(2)),
+      inputToNextFrameMs: capture.inputAt === null || capture.frame1At === null ? null : Number((capture.frame1At - capture.inputAt).toFixed(2)),
+      inputToSecondFrameMs: capture.inputAt === null || capture.frame2At === null ? null : Number((capture.frame2At - capture.inputAt).toFixed(2)),
+    }
+  })
+}
+
 test('measure result animation scrubbing for 500 components and 1,000 vectors', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
@@ -112,6 +148,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   await expect(slider).toHaveValue('0')
   const initialReading = await visibleResistorTitle.textContent()
   await startDomMutationCapture(page)
+  await startScrubFrameCapture(page, slider)
   const started = performance.now()
   await slider.press('End')
   await expect(slider).toHaveValue(await slider.getAttribute('max') ?? '')
@@ -119,6 +156,7 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   await expect(offscreenResistorTitle).toHaveCount(0)
   const scrubMs = performance.now() - started
   const viewportMutations = await stopDomMutationCapture(page)
+  const viewportFrames = await stopScrubFrameCapture(page)
   await page.getByRole('button', { name: 'Fit all circuit content in view' }).click()
   await page.locator('g.circuit-part[data-part-id="animation-bench-r-500"]').hover()
   await expect(offscreenResistorTitle).toContainText('R500')
@@ -128,13 +166,15 @@ test('measure result animation scrubbing for 500 components and 1,000 vectors', 
   await slider.press('Home')
   const fittedInitialReading = await visibleResistorTitle.textContent()
   await startDomMutationCapture(page)
+  await startScrubFrameCapture(page, slider)
   const fullCanvasStarted = performance.now()
   await slider.press('End')
   await expect(visibleResistorTitle).not.toHaveText(fittedInitialReading ?? '')
   const fullCanvasScrubMs = performance.now() - fullCanvasStarted
   const fullCanvasMutations = await stopDomMutationCapture(page)
+  const fullCanvasFrames = await stopScrubFrameCapture(page)
   expect(pageErrors).toEqual([])
-  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v5', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, sampledComponentsInInitialViewport: visibleAnimationCount, componentsAfterFit: fittedComponentCount, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'browser-500-component-animation-scrub-v6', browser: browserName, componentCount: 501, vectorCount: 1001, sampleCount: Number(await slider.getAttribute('max')) + 1, sampledComponentsInInitialViewport: visibleAnimationCount, componentsAfterFit: fittedComponentCount, offscreenAnimationSkipped: true, currentSampleAppliedAfterFit: true, viewportScrubMs: Number(scrubMs.toFixed(2)), viewportMutations, viewportFrames, fullCanvasScrubMs: Number(fullCanvasScrubMs.toFixed(2)), fullCanvasMutations, fullCanvasFrames }, null, 2))
 })
 
 test('measure rendering and solve time for a 500-instance nested circuit in browser', async ({ page, browserName }) => {
