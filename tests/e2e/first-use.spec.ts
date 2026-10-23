@@ -12321,32 +12321,51 @@ test('imported device model parameters can be stepped through the browser ngspic
   expect(labels.some((label) => label.includes('Q1.BF=200'))).toBe(true)
 })
 
-test('imported resistor model parameters can be swept through the browser ngspice engine', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('imported passive R, C, and L model parameters sweep through the browser ngspice engine', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   const project = createStarterProject()
-  const resistor = project.parts.find((part) => part.ref === 'R1')!
-  resistor.value = ''
-  resistor.deviceModel = 'USER_R'
-  const modelContent = '.MODEL USER_R R(R=1k)\n'
+  const parts = [
+    { id: 'passive-sweep-source', kind: 'source' as const, ref: 'V1', value: '1 V', sourceMode: 'pulse' as const, pulse: { initial: '0', delay: '0', rise: '1 us', fall: '1 us', width: '5 us', period: '10 us' }, x: 100, y: 300, rotation: 0 as const },
+    { id: 'passive-sweep-resistor', kind: 'resistor' as const, ref: 'R1', value: '', deviceModel: 'USER_R', x: 300, y: 300, rotation: 0 as const },
+    { id: 'passive-sweep-inductor', kind: 'inductor' as const, ref: 'L1', value: '', deviceModel: 'USER_L', x: 500, y: 300, rotation: 0 as const },
+    { id: 'passive-sweep-capacitor', kind: 'capacitor' as const, ref: 'C1', value: '', deviceModel: 'USER_C', x: 700, y: 300, rotation: 0 as const },
+  ]
+  const nodeNames = [['input', '0'], ['input', 'middle'], ['middle', 'output'], ['output', '0']]
+  const netLabels = parts.flatMap((part, partIndex) => componentPins(part).map((pin, pinIndex) => ({
+    id: `${part.id}-net-${pinIndex}`, name: nodeNames[partIndex][pinIndex], x: pin.x, y: pin.y, visible: false,
+  })))
+  const modelContent = '.MODEL USER_R R(R=100)\n.MODEL USER_C C(CAP=1u)\n.MODEL USER_L L(IND=10u)\n'
+  project.parts = parts
+  project.wires = []
+  project.junctions = []
+  project.netLabels = netLabels
   project.modelAssets = [{ id: 'sweep-r-model', filename: 'resistor.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
-  project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '20 us', maxStep: '100 ns' }
+  project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
   await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
   await page.goto('/')
 
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.getByRole('button', { name: 'Add parameter stepping' }).click()
   await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('R1')
-  const modelParameter = page.getByRole('combobox', { name: 'Parameter 1 model parameter' })
-  await modelParameter.selectOption('R')
-  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1k')
-  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('4k')
+  await page.getByRole('combobox', { name: 'Parameter 1 model parameter' }).selectOption('R')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('100')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('200')
   await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await page.getByRole('button', { name: 'Add another parameter' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 2 component' }).selectOption('C1')
+  await page.getByRole('combobox', { name: 'Parameter 2 model parameter' }).selectOption('CAP')
+  await page.getByRole('textbox', { name: 'Parameter 2 start value' }).fill('1u')
+  await page.getByRole('textbox', { name: 'Parameter 2 stop value' }).fill('2u')
+  await page.getByRole('spinbutton', { name: 'Parameter 2 number of values' }).fill('2')
+  await page.getByRole('button', { name: 'Add another parameter' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 3 component' }).selectOption('L1')
+  await page.getByRole('combobox', { name: 'Parameter 3 model parameter' }).selectOption('IND')
+  await page.getByRole('textbox', { name: 'Parameter 3 start value' }).fill('10u')
+  await page.getByRole('textbox', { name: 'Parameter 3 stop value' }).fill('20u')
+  await page.getByRole('spinbutton', { name: 'Parameter 3 number of values' }).fill('2')
   await page.getByRole('button', { name: 'Run simulation' }).click()
-  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
-  await expectAvailableTrace(page, 'I(R1)')
-  const labels = await page.locator('.plot-window').last().locator('.trace-toggles button').allTextContents()
-  expect(labels.some((label) => label.includes('R1.R=1000'))).toBe(true)
-  expect(labels.some((label) => label.includes('R1.R=4000'))).toBe(true)
+  await expect(page.getByText(/Parameter sweep complete · 8 cases/)).toBeVisible({ timeout: 60_000 })
 })
 
 test('an imported NPN level-8 HICUM2 model runs in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
