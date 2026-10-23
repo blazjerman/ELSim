@@ -4085,7 +4085,7 @@ test('schematic parts, wire segments, and net labels show keyboard focus and can
   await expect.poll(async () => Number(await label.locator('text').getAttribute('y'))).toBe(labelY + 10)
 })
 
-test('wire selection stays separate from the inspector and active tool', async ({ page }) => {
+test('wire selection stays separate from the inspector and active tool', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const selectTool = page.getByRole('button', { name: 'Select and move (M)' })
   await selectTool.click()
@@ -4105,15 +4105,19 @@ test('wire selection stays separate from the inspector and active tool', async (
   })
   expect(target).not.toBeNull()
   const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  await resistor.evaluate((element) => { (window as Window & { __stableSelectionNode?: Element }).__stableSelectionNode = element })
+  const selectionNodeIsStable = () => page.evaluate(() => (window as Window & { __stableSelectionNode?: Element }).__stableSelectionNode === document.querySelector('.circuit-part[data-part-id="p-r1"]'))
   await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
   await page.mouse.click(target!.x, target!.y)
   const wire = page.locator(`.wire-line[data-wire-id="${target!.id}"]`)
   await expect(selectTool).toHaveClass(/active/)
   await expect(wire).toHaveAttribute('aria-pressed', 'true')
   await expect(wire).toHaveClass(/selected/)
+  expect(await selectionNodeIsStable()).toBe(true)
   await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
   await resistor.click()
   await expect(wire).not.toHaveClass(/selected/)
+  expect(await selectionNodeIsStable()).toBe(true)
   await expect(page.locator('.inspector-heading h2')).toHaveText('R1')
   await expect(resistor).toHaveClass(/selected/)
   const before = await resistor.getAttribute('transform')
