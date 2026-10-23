@@ -9630,6 +9630,27 @@ test('PWL waveform example opens with editable points and solves the RC response
   await expectAvailableTrace(page, 'V(vout)')
 })
 
+test('saved voltage PWL tables retain and simulate all 256 supported points', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser test').toEqual([])
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.ref === 'V1')!
+  source.sourceMode = 'pwl'
+  source.pwl = Array.from({ length: 256 }, (_, index) => ({ time: `${index * 10}u`, voltage: index % 2 ? '5 V' : '0 V' }))
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+  await page.evaluate((projectJson) => localStorage.setItem('elsim:project:v7', projectJson), JSON.stringify(project))
+  await page.reload()
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await expect(page.getByLabel('PWL point 256 voltage')).toHaveValue('5 V')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 PWL\(0u 0 10u 5/)
+  await expect(page.locator('.netlist-modal pre')).toContainText('2550u 5')
+})
+
 test('PWL source can repeat forever in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser test').toEqual([])

@@ -1199,6 +1199,7 @@ test('native PWL source accepts 256 points and rejects more', () => {
   const source = project.parts.find((part) => part.ref === 'V1')
   source.sourceMode = 'pwl'
   source.pwl = Array.from({ length: 256 }, (_, index) => ({ time: `${index}u`, voltage: `${index % 2} V` }))
+  assert.doesNotThrow(() => validateProject(project), 'a saved native voltage PWL table may use the full 256-point editor limit')
   let artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^V1 .* PWL\(0u 0 1u 1/m)
@@ -1206,8 +1207,14 @@ test('native PWL source accepts 256 points and rejects more', () => {
   assert.match(validateAnalysisSettings(project)[0].message, /32-point expanded-table limit/)
   delete source.pwlRepeatCount
   source.pwl.push({ time: '256u', voltage: '0 V' })
+  assert.throws(() => validateProject(project), /malformed PWL source points/)
   artifact = createNetlistArtifact(project)
   assert.match(artifact.diagnostics[0].message, /2–256 points/)
+
+  const currentProject = createStarterProject()
+  currentProject.parts.push({ id: 'i-pwl-1', kind: 'currentSource', ref: 'I1', value: '5 mA', x: 800, y: 500, rotation: 0, sourceMode: 'pwl', currentPwl: Array.from({ length: 256 }, (_, index) => ({ time: `${index}u`, current: `${index % 2} mA` })) })
+  currentProject.sheets[0].parts = currentProject.parts
+  assert.doesNotThrow(() => validateProject(currentProject), 'a saved native current PWL table may use the full 256-point editor limit')
 })
 
 test('finite PWL voltage repeats report boundaries that do not join smoothly', () => {
