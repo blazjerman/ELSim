@@ -3194,7 +3194,7 @@ test('distributed RC line example imports its URC IC and solves in the browser e
   await expect(plot.getByRole('img', { name: /V\(XLINE/ })).toBeVisible()
 })
 
-test('native distributed RC component simulates and exposes its port currents', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('native distributed RC component simulates and exposes substrate voltages and port currents', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
@@ -3209,6 +3209,17 @@ test('native distributed RC component simulates and exposes its port currents', 
   await expect(urc).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await urc.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Plot input voltage to substrate' }).click()
+  const inputVoltageChooser = page.getByRole('dialog', { name: 'V(URC1, input to substrate)' })
+  await inputVoltageChooser.getByRole('button', { name: /New waveform window/ }).click()
+  const voltagePlot = page.locator('.plot-window').last()
+  await expect(voltagePlot.locator('.trace-toggles button', { hasText: 'V(URC1, input to substrate)' })).toBeVisible()
+  await urc.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Plot output voltage to substrate' }).click()
+  const outputVoltageChooser = page.getByRole('dialog', { name: 'V(URC1, output to substrate)' })
+  await outputVoltageChooser.getByRole('button', { name: /Add to current window/ }).click()
+  await expect(voltagePlot.locator('.trace-toggles button', { hasText: 'V(URC1, output to substrate)' })).toBeVisible()
   await urc.press('Shift+F10')
   await page.getByRole('menuitem', { name: 'Plot input current' }).click()
   const chooser = page.getByRole('dialog', { name: 'I(URC1, input)' })

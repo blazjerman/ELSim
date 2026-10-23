@@ -1980,7 +1980,11 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
           <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id, winding: 'P' }); setContextMenu(null) }}>Plot primary winding current</button>
           <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id, winding: 'S' }); setContextMenu(null) }}>Plot secondary winding current</button>
         </>}
-        {contextPart.kind === 'urcLine' && <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 0, 1); setContextMenu(null) }}>Plot input-to-output voltage</button>}
+        {contextPart.kind === 'urcLine' && <>
+          <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 0, 2); setContextMenu(null) }}>Plot input voltage to substrate</button>
+          <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 1, 2); setContextMenu(null) }}>Plot output voltage to substrate</button>
+          <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 0, 1); setContextMenu(null) }}>Plot input-to-output voltage</button>
+        </>}
         {contextPart.kind === 'transmissionLine' && <>
           <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 0, 1); setContextMenu(null) }}>Plot voltage across port 1</button>
           <button role="menuitem" onClick={() => { onProbeVoltage(contextPart.id, 2, 3); setContextMenu(null) }}>Plot voltage across port 2</button>
@@ -4034,7 +4038,10 @@ export default function App() {
     const ref = [...activePath.map((id) => byId.get(id)?.ref).filter((value): value is string => Boolean(value)), part.ref].join('.')
     const vectorRef = negativePin < 0 ? `${ref}.p${positivePin + 1}-gnd` : positivePin === 0 && negativePin === 1 ? ref : `${ref}.p${positivePin + 1}-${negativePin + 1}`
     const linePort = part.kind === 'transmissionLine' && negativePin === positivePin + 1 && (positivePin === 0 || positivePin === 2) ? positivePin / 2 + 1 : undefined
-    const traceRef = linePort ? `${ref}, port ${linePort}` : ref
+    const urcPortLabel = part.kind === 'urcLine' && negativePin === 2 && (positivePin === 0 || positivePin === 1)
+      ? `${ref}, ${positivePin === 0 ? 'input' : 'output'} to substrate`
+      : undefined
+    const traceRef = linePort ? `${ref}, port ${linePort}` : urcPortLabel ?? ref
     const derived = deriveComponentVoltageTraces(simulationResult.traces, positiveVector, negativeVector, traceRef, vectorRef)
     if (!derived.length) { setNotice(`Could not find both solved pin voltages for ${ref}. Run the simulation again and try the probe.`); return }
     const existingIds = new Set(simulationResult.traces.map((trace) => trace.id))
