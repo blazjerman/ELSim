@@ -8,6 +8,7 @@ const { formatEngineeringValue, parsePredictionValue, spiceDimensionMagnitude, s
 
 test('effective component values use readable engineering prefixes', () => {
   assert.equal(formatEngineeringValue(250, 'Ω'), '250 Ω')
+  assert.equal(formatEngineeringValue(4, 'Ω'), '4 Ω')
   assert.equal(formatEngineeringValue(30e-6, 'F'), '30 µF')
   assert.equal(formatEngineeringValue(2e-3 / 3, 'H'), '666.7 µH')
   assert.equal(formatEngineeringValue(Number.POSITIVE_INFINITY, 'V'), null)

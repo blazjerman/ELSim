@@ -10002,8 +10002,9 @@ test('current-source inspector edits its multiplier and finite-cycle waveforms',
     const source = { id: 'ui-pulse-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', instanceMultiplier: '3', x: 450, y: 350, rotation: 0 }
     const resistor = { id: 'ui-multiplier-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', instanceMultiplier: '4', x: 700, y: 350, rotation: 0 }
     const modeledResistor = { id: 'ui-multiplier-r3', kind: 'resistor', ref: 'R3', value: '', deviceModel: 'RUSER', instanceMultiplier: '4', x: 700, y: 500, rotation: 0 }
+    const capacitor = { id: 'ui-multiplier-c2', kind: 'capacitor', ref: 'C2', value: '10 µF', instanceMultiplier: '3', seriesResistance: '12 Ω', x: 700, y: 550, rotation: 0 }
     project.modelAssets = [{ id: 'ui-passive-model', filename: 'passive.lib', content: passiveModelContent, sha256: passiveModelHash, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-    project.parts.push(source, resistor, modeledResistor)
+    project.parts.push(source, resistor, modeledResistor, capacitor)
     project.sheets[0].parts = project.parts
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   }, { passiveModelContent, passiveModelHash })
@@ -10046,6 +10047,11 @@ test('current-source inspector edits its multiplier and finite-cycle waveforms',
   await modeledResistorPart.focus()
   await modeledResistorPart.press('Enter')
   await expect(page.getByText('Effective parallel value: 500 Ω')).toBeVisible()
+  const capacitorPart = page.getByRole('button', { name: /^C2, Capacitor/ })
+  await capacitorPart.focus()
+  await capacitorPart.press('Enter')
+  await expect(page.getByText('Effective parallel value: 30 µF')).toBeVisible()
+  await expect(page.getByText('Equivalent series resistance: 4 Ω')).toBeVisible()
 })
 
 test('stop terminates an active ngspice run and leaves the workspace responsive', { tag: '@ngspice' }, async ({ page }) => {
