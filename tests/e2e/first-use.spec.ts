@@ -2179,6 +2179,37 @@ test('model dependency report offers a direct import action for referenced libra
   await expect(page.getByText('CORE', { exact: true })).toBeVisible()
 })
 
+test('large model source viewer paginates lines and jumps directly to a requested source line', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const sourceLines = [
+    ...Array.from({ length: 1_200 }, (_, index) => `* source comment ${index + 1}`),
+    '.SUBCKT LARGE_SOURCE IN OUT',
+    'R1 IN OUT 1k',
+    '.ENDS LARGE_SOURCE',
+  ]
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'large-source.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(sourceLines.join('\n')),
+  })
+
+  const card = page.locator('.asset-provenance-card').filter({ hasText: 'large-source.lib' })
+  const viewer = card.locator('.model-source-viewer')
+  await viewer.locator('summary').click()
+  await expect(viewer.locator('output')).toHaveText('Lines 1–80 of 1203')
+  await expect(viewer.locator('li')).toHaveCount(80)
+
+  await viewer.getByRole('spinbutton', { name: 'Go to model source line' }).fill('1201')
+  await viewer.getByRole('button', { name: 'Go', exact: true }).click()
+  await expect(viewer.locator('output')).toHaveText('Lines 1124–1203 of 1203')
+  await expect(viewer.locator('li')).toHaveCount(80)
+  const sourceLine = viewer.locator('li.active-source-line')
+  await expect(sourceLine).toHaveClass(/active-source-line/)
+  await expect(sourceLine).toBeFocused()
+  await expect(sourceLine).toContainText('.SUBCKT LARGE_SOURCE IN OUT')
+})
+
 test('model importer reports a ground pin in an imported subcircuit header', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
