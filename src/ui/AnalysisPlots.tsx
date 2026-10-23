@@ -159,7 +159,7 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void, getRange: () =
   const onHorizontalPanRef = useRef(onHorizontalPan)
   const getRangeRef = useRef(getRange)
   const restoreRangeRef = useRef(restoreRange)
-  const listeners = useRef<{ move: (event: globalThis.PointerEvent) => void; end: (event: globalThis.PointerEvent) => void; cancel: (event: globalThis.PointerEvent) => void } | null>(null)
+  const listeners = useRef<{ move: (event: globalThis.PointerEvent) => void; end: (event: globalThis.PointerEvent) => void; cancel: (event: globalThis.PointerEvent) => void; blur: () => void } | null>(null)
   onHorizontalPanRef.current = onHorizontalPan
   getRangeRef.current = getRange
   restoreRangeRef.current = restoreRange
@@ -168,6 +168,7 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void, getRange: () =
     window.removeEventListener('pointermove', listeners.current.move)
     window.removeEventListener('pointerup', listeners.current.end)
     window.removeEventListener('pointercancel', listeners.current.cancel)
+    window.removeEventListener('blur', listeners.current.blur)
     listeners.current = null
   }
   const cancelPendingPan = () => {
@@ -182,8 +183,24 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void, getRange: () =
     pendingPan.current = 0
     if (delta) onHorizontalPanRef.current(delta)
   }
+  const finishDrag = (pointerId?: number) => {
+    if (pointerId !== undefined && drag.current?.pointerId !== pointerId) return
+    flushPan()
+    drag.current = null
+    removeWindowListeners()
+  }
+  const cancelDrag = (pointerId?: number) => {
+    if (pointerId !== undefined && drag.current?.pointerId !== pointerId) return
+    const initialRange = drag.current?.initialRange
+    cancelPendingPan()
+    if (initialRange) restoreRangeRef.current(initialRange)
+    drag.current = null
+    suppressClick.current = false
+    removeWindowListeners()
+  }
   useEffect(() => () => {
     cancelPendingPan()
+    drag.current = null
     removeWindowListeners()
   }, [])
   const start = (event: PointerEvent<SVGSVGElement>) => {
@@ -216,26 +233,21 @@ function usePlotDragPan(onHorizontalPan: (delta: number) => void, getRange: () =
     }
     const end = (pointerEvent: globalThis.PointerEvent) => {
       if (drag.current?.pointerId !== pointerEvent.pointerId) return
-      flushPan()
       suppressClick.current = drag.current.moved
-      drag.current = null
-      removeWindowListeners()
+      finishDrag(pointerEvent.pointerId)
     }
     const cancel = (pointerEvent: globalThis.PointerEvent) => {
       if (drag.current?.pointerId !== pointerEvent.pointerId) return
-      const initialRange = drag.current.initialRange
       // Pointer cancellation aborts the whole gesture, including deltas already
       // flushed during earlier animation frames.
-      cancelPendingPan()
-      restoreRangeRef.current(initialRange)
-      drag.current = null
-      suppressClick.current = false
-      removeWindowListeners()
+      cancelDrag(pointerEvent.pointerId)
     }
-    listeners.current = { move, end, cancel }
+    const blur = () => cancelDrag()
+    listeners.current = { move, end, cancel, blur }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', end)
     window.addEventListener('pointercancel', cancel)
+    window.addEventListener('blur', blur)
   }
   const shouldSuppressClick = () => {
     const shouldSuppress = suppressClick.current

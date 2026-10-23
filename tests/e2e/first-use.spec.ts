@@ -10481,6 +10481,22 @@ test('waveform cursor, zoom, and drag-pan preserve the view and selected traces 
   await page.mouse.up()
   await expect.poll(readSavedTransientRange).toEqual(draggedRange)
 
+  // Losing browser focus while dragging must cancel the gesture and remove its
+  // global pointer listeners, so a later drag starts from a clean state.
+  await page.mouse.move(box!.x + box!.width * 0.68, box!.y + box!.height * 0.55)
+  await page.mouse.down()
+  await page.mouse.move(box!.x + box!.width * 0.48, box!.y + box!.height * 0.55, { steps: 3 })
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+  await page.mouse.up()
+  await expect.poll(readSavedTransientRange).toEqual(draggedRange)
+
+  await page.mouse.move(box!.x + box!.width * 0.68, box!.y + box!.height * 0.55)
+  await page.mouse.down()
+  await page.mouse.move(box!.x + box!.width * 0.58, box!.y + box!.height * 0.55, { steps: 3 })
+  await page.mouse.up()
+  await expect.poll(readSavedTransientRange).not.toEqual(draggedRange)
+  const rangeAfterFocusRecovery = await readSavedTransientRange()
+
   await chart.click({ position: { x: box!.width * 0.5, y: box!.height * 0.45 } })
   const timeReadout = page.getByText(/^t = /)
   await expect(timeReadout).toBeVisible()
@@ -10496,7 +10512,7 @@ test('waveform cursor, zoom, and drag-pan preserve the view and selected traces 
   const plotSettingsBeforeRerun = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings)
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
-  await expect.poll(readSavedTransientRange).toEqual(draggedRange)
+  await expect.poll(readSavedTransientRange).toEqual(rangeAfterFocusRecovery)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels?.at(-1)?.selectedTraceIds as string[])).toEqual(plotSettingsBeforeRerun.panels.at(-1).selectedTraceIds)
 })
 
