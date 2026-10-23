@@ -1,0 +1,12 @@
+Uniform distributed RC line propagates a transient through the native ngspice U device
+V1 in 0 PULSE(0 1 1n 1n 1n 40n 80n)
+U1 in out 0 URCMOD L=1m N=6
+RLOAD out 0 1k
+.MODEL URCMOD URC (RPERL=1k CPERL=100p K=2 FMAX=1G)
+.control
+set filetype=ascii
+tran 1n 500n
+write /result.raw v(in) v(out)
+quit
+.endc
+.end
