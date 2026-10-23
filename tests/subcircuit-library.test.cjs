@@ -28,6 +28,9 @@ test('replacement keeps provenance only for byte-identical model contents', () =
 test('accepts bounded ngspice parameter operators and expression functions', () => {
   for (const value of ['1k', '1mil', '1a', '10kOhm', '"input table.csv"', '"C:/models/my table.txt"', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{var(foo)}', '{var("foo")}', '{vec(pi)}', '{vec("pi")}', '{vec("v(out)") + 1}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
   for (const value of ['"unterminated', '"two"quotes"', '"line\nbreak"', '"' + 'A'.repeat(63) + '"', '{"foo"}', '{sqrt("1")}', '{var()}', '{var(foo, bar)}', '{vec(foo, bar)}', '{vec("pi", 1)}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', '{RLOAD and 1}', '{not RLOAD}', '{RLOAD mod 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+  // ngspice exposes u/u2/uramp in behavioral-source expressions, but the
+  // bundled runtime does not accept them in subcircuit parameter defaults.
+  for (const value of ['{u(1)}', '{u2(0.5)}', '{uramp(1)}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
   const functions = new Map([['double', 1], ['blend', 2]])
   assert.equal(isSafeSubcircuitParameterValue('{DOUBLE(RLOAD)}', functions), true)
   assert.equal(isSafeSubcircuitParameterValue('{blend(1, 2)}', functions), true)
