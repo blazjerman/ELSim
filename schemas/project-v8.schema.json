@@ -1339,8 +1339,20 @@
             "additionalProperties": false,
             "required": [
               "id",
-              "operation",
-              "vector"
+              "operation"
+            ],
+            "oneOf": [
+              {
+                "required": ["vector"],
+                "not": { "required": ["expression"] }
+              },
+              {
+                "required": ["expression"],
+                "not": { "required": ["vector"] },
+                "properties": {
+                  "operation": { "enum": ["max", "min", "pp", "avg", "rms", "integ"] }
+                }
+              }
             ],
             "properties": {
               "id": {
@@ -1361,6 +1373,11 @@
               "vector": {
                 "type": "string",
                 "pattern": "^(?:v\\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\\)|i\\([RCLDS][A-Za-z0-9_]*\\))$"
+              },
+              "expression": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
               },
               "from": {
                 "type": "string",

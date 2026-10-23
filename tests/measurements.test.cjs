@@ -247,6 +247,19 @@ test('project measurements validate, persist in project JSON, and enter the gene
   assert.throws(() => validateProject(reloaded), /require transient analysis/)
 })
 
+test('expression measurements validate references and generate native ngspice measurement syntax', () => {
+  const project = createStarterProject()
+  project.simulation.transientMeasurements = [{ id: 'PeakPower', operation: 'max', expression: 'abs(V(vin) * I(V1))', from: '1m', to: '40m' }]
+  const reloaded = validateProject(JSON.parse(JSON.stringify(project)))
+  const deck = createNetlistArtifact(reloaded).text
+  assert.match(deck, /\.meas tran ELSIM_PeakPower max par\('abs\(V\(vin\) \* I\(V1\)\)'\) FROM=1m TO=40m/i)
+  const controlled = addResultControl(deck, [], reloaded.simulation.transientMeasurements)
+  assert.match(controlled, /let ELSIM_EXPR_PeakPower = abs\(V\(vin\) \* I\(V1\)\)\nmeas tran ELSIM_PeakPower max ELSIM_EXPR_PeakPower FROM=1m TO=40m/i)
+  assert.throws(() => validateProject({ ...reloaded, simulation: { ...reloaded.simulation, transientMeasurements: [{ id: 'Bad', operation: 'max', expression: 'V(missing)' }] } }), /unknown node/i)
+  assert.throws(() => validateProject({ ...reloaded, simulation: { ...reloaded.simulation, transientMeasurements: [{ id: 'Bad', operation: 'max', expression: 'V(vin) * I(R1)' }] } }), /I\(R1\).*voltage-source reference/i)
+  assert.throws(() => validateProject({ ...reloaded, simulation: { ...reloaded.simulation, transientMeasurements: [{ id: 'Bad', operation: 'max', expression: 'V(vin); quit' }] } }), /expression is invalid/i)
+})
+
 test('measurement time windows require nonnegative SPICE times in ascending order', () => {
   const project = createStarterProject()
   project.simulation.transientMeasurements = [{ id: 'Peak', operation: 'max', vector: 'V(vout)', from: '-1m', to: '2m' }]

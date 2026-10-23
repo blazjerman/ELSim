@@ -112,6 +112,15 @@ test('current sources export and reimport as I devices with ampere values', asyn
   assert.deepEqual(sineRestored.sine, { offset: '1m', amplitude: '3m', frequency: '2k', delay: '4u', damping: '5', phase: '90' })
 })
 
+test('expression measurements block LTspice export instead of producing an invalid vector name', async () => {
+  const project = createStarterProject()
+  project.simulation.transientMeasurements = [{ id: 'PeakPower', operation: 'max', expression: 'V(vin) * V(vout)' }]
+  const exported = await exportLtspiceProject(project)
+  assert.ok(exported.blockers.some(({ sourceId, message }) => sourceId === 'measurement:PeakPower' && /expression-based measurements.*cannot be exported/i.test(message)))
+  assert.ok(exported.blockers.length > 0)
+  assert.ok(exported.files.every(({ content }) => !content.includes('undefined')))
+})
+
 test('voltage SINE sources export and reimport with all waveform fields', async () => {
   const project = createStarterProject()
   const source = project.parts.find((part) => part.kind === 'source')

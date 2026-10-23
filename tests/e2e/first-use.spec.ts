@@ -5885,6 +5885,27 @@ test('RC starter measures average, peak-to-peak, and transferred charge with ngs
   expect(transferredCharge).toBeLessThan(55e-6)
 })
 
+test('ngspice evaluates expression-based transient measurements', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before testing expression measurements').toEqual([])
+  await page.goto('/')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add measurement', exact: true }).click()
+  await page.locator('.measurement-card').first().getByLabel('Name').fill('PeakPower')
+  await page.getByLabel('Measurement 1 target type').selectOption('expression')
+  const expression = page.getByLabel('Measurement 1 signal expression')
+  await expect(expression).toHaveValue('time')
+  await expression.fill('abs(V(vin) * I(V1))')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const plot = await openWireVoltagePlot(page, 430, 290)
+  const result = plot.locator('.measurement-results tbody tr').filter({ hasText: 'PeakPower' })
+  await expect(result).toContainText("MAX par('abs(V(vin) * I(V1))')")
+  const value = Number((await result.locator('td').nth(2).textContent())?.trim().split(/\\s+/)[0])
+  expect(Number.isFinite(value)).toBe(true)
+  expect(value).toBeGreaterThan(0)
+})
+
 test('RC lesson predicts the time constant and checks a slower resistor against ngspice', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser lesson').toEqual([])

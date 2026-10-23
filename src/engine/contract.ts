@@ -1,6 +1,7 @@
 import { timeMagnitude } from '../domain/componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from '../domain/measurementSettings'
 import { isValidSpiceModelName } from '../domain/subcircuitLibrary'
+import { parseBehavioralExpression } from '../domain/behavioralExpression'
 
 export type EngineState = 'not-integrated' | 'loading' | 'ready' | 'running' | 'error'
 
@@ -56,6 +57,7 @@ export type Trace = {
 }
 
 export type MeasurementResult = { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ' | 'delay'; vector: string; targetVector?: string; from?: string; to?: string; value: number; unit: 'V' | 'A' | 'C' | 'V·s' | 's'; sweep?: { label: string; index: number } }
+  | { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ'; vector: string; from?: string; to?: string; value: number; unit: ''; sweep?: { label: string; index: number } }
   | { id: string; operation: 'native'; vector: string; directive: string; value: number; unit: ''; sourceAssetId: string; sourceLine: number; sweep?: { label: string; index: number } }
 
 export type SimulationResult = {
@@ -194,9 +196,10 @@ function isMeasurementResult(value: unknown): value is MeasurementResult {
     && (value.from === undefined || typeof value.from === 'string')
     && (value.to === undefined || typeof value.to === 'string')
     && typeof value.value === 'number' && Number.isFinite(value.value)
-    && ['V', 'A', 'C', 'V·s', 's'].includes(String(value.unit))
+    && ['V', 'A', 'C', 'V·s', 's', ''].includes(String(value.unit))
     && (value.sweep === undefined || (isRecord(value.sweep) && typeof value.sweep.label === 'string' && Number.isInteger(value.sweep.index) && Number(value.sweep.index) >= 0))
   if (!basic) return false
+  if (value.unit === '') return ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(String(value.operation)) && /^par\('[^\r\n]*'\)$/.test(String(value.vector))
   if (value.operation === 'delay') return typeof value.targetVector === 'string' && value.unit === 's' && value.from === undefined && value.to === undefined
   if (value.operation === 'integ') return value.unit === (String(value.vector).trim().toLowerCase().startsWith('i(') ? 'C' : 'V·s') && validRange
   return (value.unit === 'V' || value.unit === 'A') && validRange
@@ -206,8 +209,17 @@ const measurementVectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RC
 const measurementIdPattern = /^[A-Za-z][A-Za-z0-9_]{0,23}$/
 
 function isTransientMeasurement(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.id !== 'string' || !measurementIdPattern.test(value.id)
-    || typeof value.vector !== 'string' || !measurementVectorPattern.test(value.vector.trim())) return false
+  if (!isRecord(value) || typeof value.id !== 'string' || !measurementIdPattern.test(value.id)) return false
+  const scalarOperation = ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(String(value.operation))
+  if (scalarOperation && typeof value.expression === 'string' && value.vector === undefined) {
+    try {
+      parseBehavioralExpression(value.expression)
+      const from = value.from === undefined ? null : typeof value.from === 'string' ? timeMagnitude(value.from) ?? Number.NaN : Number.NaN
+      const to = value.to === undefined ? null : typeof value.to === 'string' ? timeMagnitude(value.to) ?? Number.NaN : Number.NaN
+      return !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)
+    } catch { return false }
+  }
+  if (typeof value.vector !== 'string' || !measurementVectorPattern.test(value.vector.trim()) || value.expression !== undefined) return false
   if (['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(String(value.operation))) {
     const from = value.from === undefined ? null : typeof value.from === 'string' ? timeMagnitude(value.from) ?? Number.NaN : Number.NaN
     const to = value.to === undefined ? null : typeof value.to === 'string' ? timeMagnitude(value.to) ?? Number.NaN : Number.NaN

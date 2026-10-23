@@ -86,6 +86,13 @@ test('result control runs uniquely named measurements in each parameter case', (
   assert.doesNotMatch(stepped, /^\.meas tran ELSIM_peak /m)
 })
 
+test('result control computes expression measurements in each sweep case', () => {
+  const netlist = 'V1 in 0 1\nR1 in out 1k\nC1 out 0 1u\n.tran 1u 1m\n.end'
+  const measurement = { id: 'power', operation: 'max', expression: 'V(in) * I(V1)' }
+  const stepped = addResultControl(netlist, [{ values: [{ component: 'R1', value: '1e3' }], label: 'R1=1kΩ' }], [measurement])
+  assert.match(stepped, /let ELSIM_EXPR_power_0 = V\(in\) \* I\(V1\)\nmeas tran ELSIM_power_0 max ELSIM_EXPR_power_0\nwrite \/result-0\.raw all/i)
+})
+
 test('controlled sources have their branch currents saved for probing', () => {
   const control = addResultControl('E1 out 0 cp cn 2\nG1 g 0 cp cn 1m\n.tran 1u 1m\n.end')
   assert.match(control, /^\.save all @E1\[i\] @G1\[i\]$/m)

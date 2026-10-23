@@ -2,6 +2,11 @@ export type BehavioralReferences = { nodes: string[]; differentialNodes: string[
 export type BehavioralFunctionDefinition = { name: string; arguments: string[]; expression: string }
 export type BehavioralDialect = 'ngspice' | 'ltspice'
 
+/** ngspice B-source and par() expressions expose branch current through voltage sources via I(Vname). */
+export function behavioralCurrentReferences(expression: string): string[] {
+  return [...expression.matchAll(/\bi\s*\(\s*([A-Za-z_][A-Za-z0-9_.$]*)\s*\)/gi)].map((match) => match[1])
+}
+
 const ngspiceFunctions = new Map<string, { min: number; max: number }>([
   ...['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'arctan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh', 'exp', 'ln', 'log', 'log10', 'abs', 'sqrt', 'floor', 'ceil', 'u', 'u2', 'uramp'].map((name) => [name, { min: 1, max: 1 }] as const),
   ...['min', 'max', 'pow', 'pwr'].map((name) => [name, { min: 2, max: 2 }] as const),

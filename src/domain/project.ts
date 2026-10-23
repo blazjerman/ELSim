@@ -2,7 +2,7 @@ import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
 import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
-import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
+import { behavioralCurrentReferences, parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId } from './componentDefinitions'
 import { componentMagnitude, timeMagnitude } from './componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from './measurementSettings'
@@ -93,7 +93,10 @@ export type PlotSettings = {
 }
 export type SourceSweepParameter = 'pulse.initial' | 'pulse.high' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pwl.scale' | `pwl.point.${number}` | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency'
 export type ParameterSweep = { component: string; parameter?: string; sourceParameter?: SourceSweepParameter; globalParameter?: string; listValues?: string[]; start: string; stop: string; points: number }
-export type TransientMeasurement = { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ'; vector: string; from?: string; to?: string } | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either'; triggerCount?: number; targetCount?: number }
+type ScalarMeasurementOperation = 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ'
+type ScalarMeasurementRange = { id: string; operation: ScalarMeasurementOperation; vector?: string; expression?: string; from?: string; to?: string }
+export type TransientMeasurement = ScalarMeasurementRange | { id: string; operation: 'delay'; vector: string; threshold: string; targetVector: string; targetThreshold: string; edge: 'rise' | 'fall' | 'either'; targetEdge: 'rise' | 'fall' | 'either'; triggerCount?: number; targetCount?: number; expression?: never; from?: never; to?: never }
+export type TransientMeasurementPatch = { id?: string; operation?: ScalarMeasurementOperation | 'delay'; vector?: string; expression?: string; from?: string; to?: string; threshold?: string; targetVector?: string; targetThreshold?: string; edge?: 'rise' | 'fall' | 'either'; targetEdge?: 'rise' | 'fall' | 'either'; triggerCount?: number; targetCount?: number }
 export type InitialCondition = { node: string; voltage: string } | { element: string; current: string } | { element: string; voltage: string }
 export type AssetProvenance = { sourceUrl?: string; licenseReference?: string; rightsNotes?: string }
 export type ModelLibraryAsset = { id: string; filename: string; sha256: string; content: string; selectedSections?: string[]; licenseStatus: 'unknown'; importedAt: string } & AssetProvenance
@@ -692,7 +695,21 @@ export function validateProject(input: unknown): Project {
       const from = measurement?.operation === 'delay' ? null : measurement?.from === undefined ? null : typeof measurement.from === 'string' ? timeMagnitude(measurement.from) ?? Number.NaN : Number.NaN
       const to = measurement?.operation === 'delay' ? null : measurement?.to === undefined ? null : typeof measurement.to === 'string' ? timeMagnitude(measurement.to) ?? Number.NaN : Number.NaN
       const validRange = !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)
-      const validScalar = measurement && ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(measurement.operation) && typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && validRange
+      let validExpression = false
+      if (measurement && ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(measurement.operation) && typeof measurement.expression === 'string' && measurement.vector === undefined) {
+        try {
+          const parsed = parseBehavioralExpression(measurement.expression)
+          const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
+          const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
+          validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
+          const unsupportedCurrent = behavioralCurrentReferences(measurement.expression).find((ref) => !(data.parts as Part[]).some((part) => part.kind === 'source' && part.ref.toLowerCase() === ref.toLowerCase()))
+          if (unsupportedCurrent) throw new Error(`I(${unsupportedCurrent}) is not a supported ngspice expression current; use I() with a voltage-source reference.`)
+          validExpression = true
+        } catch (error) {
+          throw new Error(`Transient measurement ${measurement.id} expression is invalid: ${error instanceof Error ? error.message : 'unsupported expression.'}`)
+        }
+      }
+      const validScalar = measurement && ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(measurement.operation) && ((typeof measurement.vector === 'string' && typeof measurement.expression !== 'string' && vectorPattern.test(measurement.vector.trim())) || validExpression) && validRange
       if (!measurement || typeof measurement.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) || measurementIds.has(measurement.id.toLowerCase()) || !(validDelay || validScalar)) throw new Error('Transient measurements require a unique name, supported operation, and valid voltage or device-current vectors and thresholds.')
       measurementIds.add(measurement.id.toLowerCase())
     }

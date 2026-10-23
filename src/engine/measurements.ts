@@ -22,6 +22,7 @@ function interpolateCrossing(axis: Float64Array, values: Float64Array, threshold
 }
 
 function calculateFromTraces(measurement: TransientMeasurement, traces: readonly Trace[]): number | null {
+  if (typeof measurement.vector !== 'string') return null
   const traceFor = (vector: string) => {
     const normalized = vector.trim().toLowerCase()
     const component = normalized.match(/^i\(([rcldsegfhqbjm][a-z0-9_]*)\)$/i)?.[1]
@@ -100,13 +101,14 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
   for (let index = 0; index < Math.max(1, caseCount); index++) {
     for (const measurement of measurements) {
       const name = `elsim_${measurement.id}${caseCount ? `_${index}` : ''}`
-      const expression = new RegExp(`^\\s*${name}\\s*=\\s*([-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[-+]?\\d+)?)`, 'im')
-      const match = output.match(expression)
-      const sourceCurrent = currentSourceVector.test(measurement.vector.trim()) || (measurement.operation === 'delay' && currentSourceVector.test(measurement.targetVector.trim()))
-      const calculateWithTraces = measurement.operation === 'delay' || measurement.operation === 'integ' || (!match && sourceCurrent)
-      const calculated = calculateWithTraces ? calculateFromTraces(measurement, traceSets[index] ?? traceSets[0] ?? []) : null
+      const resultPattern = new RegExp(`^\\s*${name}\\s*=\\s*([-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[-+]?\\d+)?)`, 'im')
+      const match = output.match(resultPattern)
+      const isExpression = typeof measurement.expression === 'string'
+      const sourceCurrent = !isExpression && 'vector' in measurement && currentSourceVector.test(measurement.vector?.trim() ?? '') || (measurement.operation === 'delay' && currentSourceVector.test(measurement.targetVector.trim()))
+      const calculateWithTraces = measurement.operation === 'delay' || (measurement.operation === 'integ' && !isExpression) || (!match && sourceCurrent)
+      const calculated = calculateWithTraces && !isExpression ? calculateFromTraces(measurement, traceSets[index] ?? traceSets[0] ?? []) : null
       if ((!match || measurement.operation === 'delay') && calculated === null) {
-        diagnostics.push({ severity: 'warning', message: `ngspice did not return the ${measurement.operation.toUpperCase()} measurement for ${measurement.vector}. Check that the vector exists and the transient run covers enough data.`, sourceId: 'analysis:tran' })
+        diagnostics.push({ severity: 'warning', message: `ngspice did not return the ${measurement.operation.toUpperCase()} measurement for ${measurement.expression ?? measurement.vector}. Check that the signal exists and the transient run covers enough data.`, sourceId: 'analysis:tran' })
         continue
       }
       const value = calculated ?? Number(match![1])
@@ -114,9 +116,14 @@ export function parseMeasurementOutput(output: string, measurements: TransientMe
         diagnostics.push({ severity: 'warning', message: `ngspice returned a non-finite result for measurement ${measurement.id}.`, sourceId: 'analysis:tran' })
         continue
       }
-      const isCurrent = measurement.vector.trim().toLowerCase().startsWith('i(')
-      const unit = measurement.operation === 'delay' ? 's' : measurement.operation === 'integ' ? isCurrent ? 'C' : 'V·s' : isCurrent ? 'A' : 'V'
-      results.push({ id: measurement.id, operation: measurement.operation, vector: measurement.vector, ...(measurement.operation === 'delay' ? { targetVector: measurement.targetVector } : { ...(measurement.from ? { from: measurement.from } : {}), ...(measurement.to ? { to: measurement.to } : {}) }), value, unit, ...(caseCount ? { sweep: { label: sweepLabels[index], index: index } } : {}) })
+      const sweep = caseCount ? { sweep: { label: sweepLabels[index], index } } : {}
+      if (measurement.operation === 'delay') results.push({ id: measurement.id, operation: 'delay', vector: measurement.vector, targetVector: measurement.targetVector, value, unit: 's', ...sweep })
+      else if (isExpression) results.push({ id: measurement.id, operation: measurement.operation, vector: `par('${measurement.expression}')`, ...(measurement.from ? { from: measurement.from } : {}), ...(measurement.to ? { to: measurement.to } : {}), value, unit: '', ...sweep })
+      else {
+        const isCurrent = measurement.vector?.trim().toLowerCase().startsWith('i(') ?? false
+        const unit = measurement.operation === 'integ' ? isCurrent ? 'C' : 'V·s' : isCurrent ? 'A' : 'V'
+        results.push({ id: measurement.id, operation: measurement.operation, vector: measurement.vector ?? '', ...(measurement.from ? { from: measurement.from } : {}), ...(measurement.to ? { to: measurement.to } : {}), value, unit, ...sweep })
+      }
     }
   }
   return { results, diagnostics }

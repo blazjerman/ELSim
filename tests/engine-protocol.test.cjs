@@ -20,6 +20,8 @@ test('independent request producer satisfies run and control request contracts',
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, modelAssets: Array.from({ length: 17 }, (_, index) => ({ id: `model-${index}`, filename: `${index}.lib`, sha256: 'a'.repeat(64) })) } }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'riseDelay', operation: 'delay', vector: 'v(in)', threshold: '0.5', targetVector: 'v(out)', targetThreshold: '4.5', edge: 'rise', targetEdge: 'rise' }] }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '2m', to: '8m' }] }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'power', operation: 'max', expression: 'V(in) * I(R1)' }] }), true)
+  assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, measurements: [{ id: 'power', operation: 'max', expression: 'V(in); quit' }] }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata: { ...metadata, settings: { analysis: 'ac', acSweep: { scale: 'dec' } } } }), false)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '1000' }], label: 'R1=1 kΩ' }], measurements: [{ id: 'peak', operation: 'max', vector: 'v(out)' }] }), true)
   assert.equal(isEngineRequest({ type: 'run', requestId: 'run-1', artifact, metadata, parameterSweep: [{ values: [{ component: 'R1', value: '1000' }, { component: 'C1', value: '1e-5' }, { component: 'V1', value: '5' }], label: 'R1=1 kΩ, C1=10 µF, V1=5 V' }] }), true)
@@ -51,6 +53,7 @@ test('independent worker response producer satisfies response contract', () => {
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { metadata: completedMetadata, netlist: artifact.text, sourceMap: [{ line: 1, sourceId: 'part-r1', role: 'component' }], traces: [trace], diagnostics: [], analysis: 'tran', measurements: [{ id: 'riseDelay', operation: 'delay', vector: 'v(in)', targetVector: 'v(out)', value: 0.0004, unit: 's' }] } }), true)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { metadata: completedMetadata, netlist: artifact.text, sourceMap: [], traces: [trace], diagnostics: [], analysis: 'tran', measurements: [{ id: 'window', operation: 'avg', vector: 'v(out)', from: '2m', to: '8m', value: 2.5, unit: 'V' }] } }), true)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { metadata: completedMetadata, netlist: artifact.text, sourceMap: [], traces: [trace], diagnostics: [], analysis: 'tran', measurements: [{ id: 'charge', operation: 'integ', vector: 'i(r1)', value: 0.00005, unit: 'C' }] } }), true)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { metadata: completedMetadata, netlist: artifact.text, sourceMap: [], traces: [trace], diagnostics: [], analysis: 'tran', measurements: [{ id: 'power', operation: 'max', vector: "par('V(in) * I(R1)')", value: 0.025, unit: '' }] } }), true)
 })
 
 test('standalone protocol peer produces and consumes messages independently of the app contract code', async () => {
@@ -139,7 +142,7 @@ test('published JSON schema describes delay measurements and seconds', () => {
   const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'engine-protocol.schema.json'), 'utf8'))
   assert.equal(schema.$defs.parameterSweepRun.properties.values.maxItems, 3)
   assert.deepEqual(schema.$defs.measurement.properties.operation.enum, ['max', 'min', 'pp', 'avg', 'rms', 'integ', 'delay'])
-  assert.deepEqual(schema.$defs.measurement.properties.unit.enum, ['V', 'A', 'C', 'V·s', 's'])
+  assert.deepEqual(schema.$defs.measurement.properties.unit.enum, ['V', 'A', 'C', 'V·s', 's', ''])
   const variants = schema.$defs.transientMeasurement.oneOf
   assert.equal(variants.some((variant) => variant.properties?.operation?.const === 'delay'), true)
   const scalar = variants.find((variant) => variant.properties?.operation?.enum?.includes('avg'))

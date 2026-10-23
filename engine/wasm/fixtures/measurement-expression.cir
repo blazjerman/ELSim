@@ -1,0 +1,15 @@
+* Expression-based transient measurements use ngspice's par() operator.
+V1 vin 0 PULSE(0 5 0 1u 1u 50m 100m)
+R1 vin vout 1k
+C1 vout 0 10u
+.meas tran ELSIM_PeakPower max par('abs(V(vin) * I(V1))') FROM=1m TO=40m
+.tran 100u 50m
+.control
+set filetype=ascii
+tran 100u 50m
+let ELSIM_EXPR_PeakPower = abs(V(vin) * I(V1))
+meas tran ELSIM_PeakPower max ELSIM_EXPR_PeakPower FROM=1m TO=40m
+write /result.raw all
+quit
+.endc
+.end

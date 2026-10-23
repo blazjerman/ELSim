@@ -794,6 +794,10 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
     if (unsupportedSweeps.length) losses.push({ severity: 'warning', sourceId: 'analysis:parameter-sweep', title: 'Component parameter sweeps omitted', explanation: `The export retains nominal values for component-targeted sweeps that do not have a tested LTspice mapping: ${unsupportedSweeps.join(', ')}.` })
     for (const measurement of simulation.transientMeasurements ?? []) {
       if (measurement.operation !== 'delay') {
+        if (typeof measurement.expression === 'string') {
+          blockers.push({ sourceId: `measurement:${measurement.id}`, message: 'Expression-based measurements are native ELSim/ngspice features and cannot be exported to LTspice yet.' })
+          continue
+        }
         const from = measurement.from === undefined ? undefined : scalar(measurement.from, 's')
         const to = measurement.to === undefined ? undefined : scalar(measurement.to, 's')
         if ((measurement.from !== undefined && from === null) || (measurement.to !== undefined && to === null)) {

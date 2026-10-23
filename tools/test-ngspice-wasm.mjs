@@ -772,6 +772,14 @@ assert.ok(Math.abs(windowValues.avg - 2) < 1e-5, `window average should be 2 V, 
 assert.ok(Math.abs(windowValues.rms - Math.sqrt(16 / 3)) < 2e-3, `window RMS should be within 2 mV of ${Math.sqrt(16 / 3)}, received ${windowValues.rms}`)
 process.stdout.write('PASS transient-measurement-window\n')
 
+const expressionMeasurementPath = path.join(root, 'engine/wasm/fixtures/measurement-expression.cir')
+const expressionMeasurementResult = await runInWorker(expressionMeasurementPath)
+assert.equal(expressionMeasurementResult.status, 0, `expression measurement: ngspice exited with a nonzero status: ${expressionMeasurementResult.stderr}`)
+const expressionPower = expressionMeasurementResult.stdout.match(/elsim_peakpower\s*=\s*([-+\d.eE]+)/i)
+assert.ok(expressionPower, `expression measurement did not return a numeric result:\n${expressionMeasurementResult.stdout}\n${expressionMeasurementResult.stderr}`)
+assert.ok(Number(expressionPower[1]) > 0, `absolute power expression should be positive, received ${expressionPower[1]}`)
+process.stdout.write('PASS transient-expression-measurement\n')
+
 const delayMeasurementPath = path.join(root, 'engine/wasm/fixtures', 'measurement-delay.cir')
 const delayMeasurementResult = await runInWorker(delayMeasurementPath)
 assert.equal(delayMeasurementResult.status, 0, `measurement-delay: ngspice exited with a nonzero status: ${delayMeasurementResult.stderr}`)

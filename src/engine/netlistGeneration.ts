@@ -1,7 +1,7 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
 import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit } from '../domain/subcircuitLibrary'
-import { parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
+import { behavioralCurrentReferences, parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
 import { mesfetDrainCurrentSenseReference } from '../domain/probe'
@@ -936,25 +936,36 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const vectorPattern = /^(?:v\((?:0|[A-Za-z_][A-Za-z0-9_.$]*)\)|i\([RCLDSEGFHQBJ][A-Za-z0-9_]*\)|i\(@I[A-Za-z0-9_]+\[current\]\))$/i
     const delay = measurement.operation === 'delay' ? measurement : undefined
     const scalarMeasurement = measurement.operation === 'delay' ? undefined : measurement
-    const sourceCurrent = /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.vector.trim()) || (delay && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(delay.targetVector.trim()))
+    const sourceCurrent = (typeof measurement.vector === 'string' && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(measurement.vector.trim())) || (delay && /^i\(@I[A-Za-z0-9_]+\[current\]\)$/i.test(delay.targetVector.trim()))
     const from = scalarMeasurement?.from === undefined ? null : timeMagnitude(scalarMeasurement.from) ?? Number.NaN
     const to = scalarMeasurement?.to === undefined ? null : timeMagnitude(scalarMeasurement.to) ?? Number.NaN
     const rangeValid = !Number.isNaN(from) && !Number.isNaN(to) && (from === null || from >= 0) && (to === null || to >= 0) && (from === null || to === null || from < to)
     const triggerThreshold = delay ? spiceScalar(delay.threshold, delay.vector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v') : null
     const targetThreshold = delay ? spiceScalar(delay.targetThreshold, delay.targetVector.trim().toLowerCase().startsWith('i(') ? 'a' : 'v') : null
+    let validExpression = false
+    if (!delay && typeof measurement.expression === 'string') {
+      try {
+        const parsed = parseBehavioralExpression(measurement.expression)
+        validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((part) => part.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        const unsupportedCurrent = behavioralCurrentReferences(measurement.expression).find((ref) => !project.parts.some((part) => part.kind === 'source' && part.ref.toLowerCase() === ref.toLowerCase()))
+        if (unsupportedCurrent) throw new Error(`I(${unsupportedCurrent}) is not a supported ngspice expression current; use I() with a voltage-source reference.`)
+        validExpression = true
+      } catch { validExpression = false }
+    }
     const valid = /^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(measurement.id) && (delay
-      ? vectorPattern.test(measurement.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && triggerThreshold !== null && targetThreshold !== null && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
-      : ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(measurement.operation) && vectorPattern.test(measurement.vector.trim()) && rangeValid)
+      ? vectorPattern.test(delay.vector.trim()) && vectorPattern.test(delay.targetVector.trim()) && triggerThreshold !== null && targetThreshold !== null && ['rise', 'fall', 'either'].includes(delay.edge) && ['rise', 'fall', 'either'].includes(delay.targetEdge)
+      : ['max', 'min', 'pp', 'avg', 'rms', 'integ'].includes(measurement.operation) && ((typeof measurement.vector === 'string' && vectorPattern.test(measurement.vector.trim()) && typeof measurement.expression !== 'string') || validExpression) && rangeValid)
     if (!valid) {
       const message = `Transient measurement ${cleanComment(measurement.id)} has an unsupported name, operation, or vector.`
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:tran', line: rows.length })
       continue
     }
-    if (sourceCurrent || measurement.operation === 'integ') append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id}${scalarMeasurement ? `${scalarMeasurement.from ? ` from ${scalarMeasurement.from}` : ''}${scalarMeasurement.to ? ` to ${scalarMeasurement.to}` : ''}` : ''} from solved waveform samples.`, 'analysis:tran', 'analysis')
+    if ((sourceCurrent || measurement.operation === 'integ') && typeof measurement.expression !== 'string') append(`* ELSim calculates ${measurement.operation.toUpperCase()} measurement ${measurement.id}${scalarMeasurement ? `${scalarMeasurement.from ? ` from ${scalarMeasurement.from}` : ''}${scalarMeasurement.to ? ` to ${scalarMeasurement.to}` : ''}` : ''} from solved waveform samples.`, 'analysis:tran', 'analysis')
     else if (delay) append(`.meas tran ELSIM_${delay.id} TRIG ${delay.vector.trim()} VAL=${triggerThreshold} ${delay.edge === 'either' ? 'CROSS' : delay.edge.toUpperCase()}=${delay.triggerCount ?? 1} TARG ${delay.targetVector.trim()} VAL=${targetThreshold} ${delay.targetEdge === 'either' ? 'CROSS' : delay.targetEdge.toUpperCase()}=${delay.targetCount ?? 1}`, 'analysis:tran', 'analysis')
     else {
       const scalarMeasure = scalarMeasurement!
-      append(`.meas tran ELSIM_${scalarMeasure.id} ${scalarMeasure.operation} ${scalarMeasure.vector.trim()}${scalarMeasure.from ? ` FROM=${scalarMeasure.from}` : ''}${scalarMeasure.to ? ` TO=${scalarMeasure.to}` : ''}`, 'analysis:tran', 'analysis')
+      const vector = typeof scalarMeasure.expression === 'string' ? `par('${scalarMeasure.expression}')` : scalarMeasure.vector?.trim() ?? ''
+      append(`.meas tran ELSIM_${scalarMeasure.id} ${scalarMeasure.operation} ${vector}${scalarMeasure.from ? ` FROM=${scalarMeasure.from}` : ''}${scalarMeasure.to ? ` TO=${scalarMeasure.to}` : ''}`, 'analysis:tran', 'analysis')
     }
   }
   rows.push('.end')

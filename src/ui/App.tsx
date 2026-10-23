@@ -39,7 +39,7 @@ import { nextRef, referencePrefixForKind } from '../domain/referenceDesignator'
 import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
 import type { LtspiceExportResult } from '../domain/ltspiceExport'
-import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type PlotTraceReference, type Project, type SymbolAsset, type TransientMeasurement, type Wire } from '../domain/project'
+import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetModelName, validateProject, type ComponentVoltageProbe, type InitialCondition, type ModelLibraryAsset, type ParameterSweep, type Part, type PartKind, type PlotPanel, type PlotRange, type PlotTraceReference, type Project, type SymbolAsset, type TransientMeasurement, type TransientMeasurementPatch, type Wire } from '../domain/project'
 import { validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlistValidation'
 import { partUiState, subscribePartUiState, updatePartUiState } from './partUiState'
 import { COMPONENT_SHORTCUTS_HELP, EDITOR_SHORTCUTS, exampleSelection, FUTURE_COMPONENT_SHORTCUTS, LOGIC_GATE_SHORTCUTS, LOGIC_GATE_SHORTCUTS_HELP, RESULT_ANIMATED_PART_KINDS } from './editorMetadata'
@@ -679,9 +679,13 @@ function TransientEditorLaunchers({ nodes, inductors, capacitors, skipOp, onAddM
   </>
 }
 
-function patchMeasurement(current: TransientMeasurement, patch: Partial<TransientMeasurement>): TransientMeasurement {
-  if (patch.operation === 'delay') return { id: current.id, operation: 'delay', vector: current.vector, threshold: '2.5', targetVector: 'V(vout)', targetThreshold: '2.5', edge: 'rise', targetEdge: 'rise' }
-  if ((current as { operation: string }).operation === 'delay' && patch.operation) return { id: current.id, operation: patch.operation as 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ', vector: current.vector }
+function patchMeasurement(current: TransientMeasurement, patch: TransientMeasurementPatch): TransientMeasurement {
+  if (patch.operation === 'delay') return { id: current.id, operation: 'delay', vector: current.vector ?? 'V(vout)', threshold: '2.5', targetVector: 'V(vout)', targetThreshold: '2.5', edge: 'rise', targetEdge: 'rise' }
+  const range = current.operation === 'delay' ? {} : { ...(current.from === undefined ? {} : { from: current.from }), ...(current.to === undefined ? {} : { to: current.to }) }
+  if (typeof patch.expression === 'string') return { id: patch.id ?? current.id, operation: patch.operation ?? (current.operation === 'delay' ? 'max' : current.operation), expression: patch.expression, ...range }
+  if (typeof patch.vector === 'string' && typeof current.expression === 'string') return { id: patch.id ?? current.id, operation: patch.operation ?? current.operation, vector: patch.vector, ...range }
+  if (current.operation === 'delay' && patch.operation) return { id: current.id, operation: patch.operation as 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ', vector: current.vector }
+  if (typeof current.expression === 'string' && patch.operation) return { ...current, ...patch, operation: patch.operation }
   return { ...current, ...patch } as TransientMeasurement
 }
 
@@ -4395,7 +4399,7 @@ export default function App() {
     delete simulation.parameterSweeps
     return { ...current, simulation: next.length ? { ...simulation, parameterSweeps: next } : simulation }
   })
-  const updateMeasurement = (index: number, patch: Partial<TransientMeasurement>) => setProject((current) => ({ ...current, simulation: { ...current.simulation, transientMeasurements: (current.simulation.transientMeasurements ?? []).map((measurement, item) => item === index ? patchMeasurement(measurement, patch) : measurement) } }))
+  const updateMeasurement = (index: number, patch: TransientMeasurementPatch) => setProject((current) => ({ ...current, simulation: { ...current.simulation, transientMeasurements: (current.simulation.transientMeasurements ?? []).map((measurement, item) => item === index ? patchMeasurement(measurement, patch) : measurement) } }))
   const addMeasurement = () => setProject((current) => {
     const measurements = current.simulation.transientMeasurements ?? []
     if (measurements.length >= 12) return current
