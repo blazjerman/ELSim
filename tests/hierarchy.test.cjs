@@ -39,6 +39,15 @@ test('transmission-line port-current probes stay distinct across hierarchy paths
   assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', ['root-block'], txlLine.id, project.rootSheetId, undefined, 2), 'i(v.xload.v__elsim_ttxl1_p2)')
 })
 
+test('native URC input and output current probes retain their terminal through hierarchy', () => {
+  const project = createBlockProject()
+  const line = { id: 'child-urc-line', kind: 'urcLine', ref: 'URC1', value: '1m', x: 300, y: 300, rotation: 0 }
+  project.sheets[1].parts.push(line)
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', ['root-block'], line.id, project.rootSheetId, undefined, 1), 'i(v.xload.v__elsim_urc1_in)')
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', ['root-block'], line.id, project.rootSheetId, undefined, 2), 'i(v.xload.v__elsim_urc1_out)')
+  assert.equal(hierarchyComponentCurrentVector(project, 'sheet-load', [], line.id, 'sheet-load', undefined, 2), 'i(v.v__elsim_urc1_out)')
+})
+
 test('hierarchical LTRA and TXL netlists save both nested port currents', () => {
   const project = createBlockProject()
   project.simulation = { ...project.simulation, analysis: 'tran' }

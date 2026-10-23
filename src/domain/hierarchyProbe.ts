@@ -65,7 +65,7 @@ export function hierarchyComponentCurrentVector(project: Project, sheetId: strin
     return `i(l.${device})`
   }
   if (part.kind === 'transmissionLine') return transmissionLinePortCurrentVector([...refs, part.ref.toLowerCase()].join('.'), transmissionLinePort, Boolean(part.deviceModel))
-  if (part.kind === 'urcLine') return `i(v.${[...refs, urcLineCurrentSenseReference(part.ref).toLowerCase()].join('.')})`
+  if (part.kind === 'urcLine') return `i(v.${[...refs, urcLineCurrentSenseReference(part.ref, transmissionLinePort === 2 ? 'OUT' : 'IN').toLowerCase()].join('.')})`
   if (part.kind === 'potentiometer') {
     const device = [...refs, `${part.ref.toLowerCase()}_a`].join('.')
     return `i(@r.${device}[i])`

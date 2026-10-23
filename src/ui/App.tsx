@@ -20,7 +20,7 @@ import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { importedSymbolBounds, parseSymbolAsset } from '../domain/symbolAsset'
 import { createDefaultElsimSymbol, defaultElsimPinSides, type ElsimPinSide } from '../domain/elsimSymbol'
 import { componentPins, createPartNavigationIndex, createPointViewportIndex, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, retainConnectedJunctions, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
-import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector, transmissionLinePortCurrentVector, urcLineCurrentSenseReference } from '../domain/probe'
+import { componentCurrentVector, deriveComponentVoltageTraces, groundVoltageTrace, resolveProbeTarget, transformerWindingCurrentVector, transmissionLinePortCurrentVector, urcLineCurrentSenseReference, urcLinePortCurrentVector } from '../domain/probe'
 import { hierarchyComponentCurrentVector, hierarchyNodeVector } from '../domain/hierarchyProbe'
 import { preferredSheetInstancePath } from '../domain/hierarchyNavigation'
 import { deleteSheetDefinition, duplicateSheetDefinition, nextBlockSheetName, renameSheetDefinition, sheetDefinitionSubtreeIds, updateSheetDefinition } from '../domain/sheetDefinition'
@@ -1989,7 +1989,11 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
           <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id, port: 1 }); setContextMenu(null) }}>Plot port 1 current</button>
           <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id, port: 2 }); setContextMenu(null) }}>Plot port 2 current</button>
         </>}
-        {contextPart.kind !== 'transformer' && contextPart.kind !== 'transmissionLine' && contextPart.kind !== 'ground' && !currentProbesUnavailable && <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id }); setContextMenu(null) }}>{contextPart.kind === 'potentiometer' ? 'Plot upper-to-wiper current' : 'Plot current through component'}</button>}
+        {contextPart.kind === 'urcLine' && !currentProbesUnavailable && <>
+          <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id, port: 1 }); setContextMenu(null) }}>Plot input current</button>
+          <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id, port: 2 }); setContextMenu(null) }}>Plot output current</button>
+        </>}
+        {contextPart.kind !== 'transformer' && contextPart.kind !== 'transmissionLine' && contextPart.kind !== 'urcLine' && contextPart.kind !== 'ground' && !currentProbesUnavailable && <button role="menuitem" onClick={() => { onProbe({ kind: 'part', id: contextPart.id }); setContextMenu(null) }}>{contextPart.kind === 'potentiometer' ? 'Plot upper-to-wiper current' : 'Plot current through component'}</button>}
         {contextPart.kind === 'switch' && <button role="menuitem" onClick={() => { togglePart(contextPart.id); setContextMenu(null) }}>Switch {contextPart.value.toLowerCase() === 'on' ? 'off' : 'on'}</button>}
       </> : contextMenu.kind === 'label' ? <>
         <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node, labelId: contextMenu.id }); setContextMenu(null) }}>Plot voltage to ground</button>
@@ -3934,12 +3938,13 @@ export default function App() {
       ? sheetInstancePath.slice(scopePath.length)
       : findSheetInstancePath(projectRef.current.activeSheetId, scopeSheetId) ?? []
     const targetPart = target.kind === 'part' ? projectRef.current.parts.find((item) => item.id === target.id) : undefined
-    const transmissionLinePort = target.kind === 'part' && targetPart?.kind === 'transmissionLine' ? target.port ?? 1 : undefined
+    const currentPort = target.kind === 'part' && (targetPart?.kind === 'transmissionLine' || targetPart?.kind === 'urcLine') ? target.port ?? 1 : undefined
     const rawName = target.kind === 'node'
       ? hierarchyNodeVector(projectRef.current, projectRef.current.activeSheetId, activePath, target.name, scopeSheetId)
       : targetPart ? activePath.length
-        ? hierarchyComponentCurrentVector(projectRef.current, projectRef.current.activeSheetId, activePath, target.id, scopeSheetId, target.winding, transmissionLinePort)
-        : transmissionLinePort ? transmissionLinePortCurrentVector(targetPart.ref, transmissionLinePort, Boolean(targetPart.deviceModel))
+        ? hierarchyComponentCurrentVector(projectRef.current, projectRef.current.activeSheetId, activePath, target.id, scopeSheetId, target.winding, currentPort)
+        : currentPort && targetPart.kind === 'transmissionLine' ? transmissionLinePortCurrentVector(targetPart.ref, currentPort, Boolean(targetPart.deviceModel))
+          : currentPort && targetPart.kind === 'urcLine' ? urcLinePortCurrentVector(targetPart.ref, currentPort)
           : targetPart.kind === 'transformer' && target.winding ? transformerWindingCurrentVector(targetPart.ref, target.winding) : componentCurrentVector(targetPart)
         : ''
     if (!rawName) { setNotice('This sheet is not open through a block instance. Open it from the parent block to cross-probe its internal nodes.'); return }
@@ -3980,10 +3985,10 @@ export default function App() {
         relatedTraces.push(candidate)
       }
     }
-    if (((transmissionLinePort && targetPart?.kind === 'transmissionLine') || targetPart?.kind === 'urcLine') && relatedTraces.length) {
+    if (currentPort && (targetPart?.kind === 'transmissionLine' || targetPart?.kind === 'urcLine') && relatedTraces.length) {
       const matchingIds = new Set(relatedTraces.map((candidate) => candidate.id))
       availableTraces = availableTraces.map((candidate) => matchingIds.has(candidate.id)
-        ? { ...candidate, label: `I(${targetPart.ref}${targetPart.kind === 'transmissionLine' ? `, port ${transmissionLinePort}` : ''})${candidate.sweep ? ` · ${candidate.sweep.label}` : ''}`, unit: 'A' }
+        ? { ...candidate, label: `I(${targetPart.ref}${targetPart.kind === 'transmissionLine' ? `, port ${currentPort}` : `, ${currentPort === 1 ? 'input' : 'output'}`})${candidate.sweep ? ` · ${candidate.sweep.label}` : ''}`, unit: 'A' }
         : candidate)
       relatedTraces.splice(0, relatedTraces.length, ...availableTraces.filter((candidate) => matchingIds.has(candidate.id)))
       trace = relatedTraces[0]
@@ -4005,7 +4010,7 @@ export default function App() {
     waveformReturnFocusRef.current = focusTarget
     const reference: PlotTraceReference = target.kind === 'node'
       ? { kind: 'node', name: target.name, sheetId: projectRef.current.activeSheetId, scopeSheetId, instancePath: activePath, ...(target.wireId ? { wireId: target.wireId } : {}), ...(target.labelId ? { labelId: target.labelId } : {}) }
-      : { kind: 'part-current', partId: target.id, sheetId: projectRef.current.activeSheetId, scopeSheetId, instancePath: activePath, ...(target.winding ? { winding: target.winding } : {}), ...(transmissionLinePort ? { port: transmissionLinePort } : {}) }
+      : { kind: 'part-current', partId: target.id, sheetId: projectRef.current.activeSheetId, scopeSheetId, instancePath: activePath, ...(target.winding ? { winding: target.winding } : {}), ...(currentPort ? { port: currentPort } : {}) }
     setPendingWaveformTrace({ traceIds: relatedIds, label: trace.label, reference })
   }
   const addComponentVoltageProbe = (partId: string, positivePin = 0, negativePin = 1) => {
@@ -4263,11 +4268,12 @@ export default function App() {
               for (const sheet of currentProject.sheets) for (const part of sheet.parts) {
                 if (part.kind === 'ground' || part.kind === 'subcircuit') continue
                 const instancePath = findSheetInstancePath(sheet.id, currentProject.rootSheetId) ?? []
-                const ports = part.kind === 'transmissionLine' ? [1, 2] as const : [undefined]
+                const ports = part.kind === 'transmissionLine' || part.kind === 'urcLine' ? [1, 2] as const : [undefined]
                 for (const port of ports) {
                   const vector = instancePath.length
                     ? hierarchyComponentCurrentVector(currentProject, sheet.id, instancePath, part.id, currentProject.rootSheetId, undefined, port)
-                    : port ? transmissionLinePortCurrentVector(part.ref, port, Boolean(part.deviceModel)) : componentCurrentVector(part)
+                    : port && part.kind === 'transmissionLine' ? transmissionLinePortCurrentVector(part.ref, port, Boolean(part.deviceModel))
+                      : port && part.kind === 'urcLine' ? urcLinePortCurrentVector(part.ref, port) : componentCurrentVector(part)
                   if (vector && !currentReferencesByVector.has(vector.toLowerCase())) currentReferencesByVector.set(vector.toLowerCase(), { kind: 'part-current', partId: part.id, sheetId: sheet.id, scopeSheetId: currentProject.rootSheetId, instancePath, ...(port ? { port } : {}) })
                 }
               }
@@ -4366,6 +4372,7 @@ export default function App() {
                 const vector = part ? reference.instancePath.length
                   ? hierarchyComponentCurrentVector(currentProject, reference.sheetId, reference.instancePath, part.id, reference.scopeSheetId, reference.winding, reference.port)
                   : part.kind === 'transmissionLine' && reference.port ? transmissionLinePortCurrentVector(part.ref, reference.port, Boolean(part.deviceModel))
+                    : part.kind === 'urcLine' && reference.port ? urcLinePortCurrentVector(part.ref, reference.port)
                     : part.kind === 'transformer' && reference.winding ? transformerWindingCurrentVector(part.ref, reference.winding) : componentCurrentVector(part)
                   : null
                 if (vector) matches = matchVector(vector)
