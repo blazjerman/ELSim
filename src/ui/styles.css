@@ -186,3 +186,4 @@
 .tour-dialog .modal-heading .subtle-icon:focus,.netlist-modal .modal-heading .subtle-icon:focus,.erc-modal .modal-heading .subtle-icon:focus{outline:2px solid #80d9a7;outline-offset:2px}
 
 @media(max-width:800px){.main-toolbar>.result-stale-warning{display:none}}
+.example-path-progress{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px;color:#91a398;font-size:9px}.example-path-progress>span:first-child{font-size:8px;letter-spacing:.08em}.example-path-progress button{padding:4px 7px;border:1px solid #42664b;border-radius:5px;background:#203529;color:#c8f1d0;font:inherit;cursor:pointer}.example-path-progress button:hover{background:#294432}.example-path-progress button:focus-visible{outline:2px solid #8fe0af;outline-offset:2px}.example-path-complete{color:#a9e7b8}

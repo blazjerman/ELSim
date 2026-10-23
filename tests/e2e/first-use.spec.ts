@@ -609,6 +609,34 @@ test('example picker offers a short beginner path before the full catalog', { ta
   await expect(cards).toHaveCount(allExampleCount)
 })
 
+test('guided starter lessons continue in order and confirm before replacing the current circuit', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.getByRole('group', { name: 'Filter examples by topic' }).getByRole('button', { name: 'Start here' }).click()
+  await examples.locator('[data-example-id="switch-lamp"]').getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
+
+  const lesson = page.locator('aside[aria-label="Guided example"]')
+  await expect(lesson).toContainText('START HERE · STEP 1 OF 7')
+  await lesson.getByRole('button', { name: 'Continue to next lesson' }).click()
+  const confirmation = page.getByRole('alertdialog', { name: 'Replace the current circuit?' })
+  await expect(confirmation).toContainText("Ohm's law: voltage, current, resistance will replace the circuit")
+  await confirmation.getByRole('button', { name: 'Cancel' }).click()
+  await expect(lesson).toContainText('START HERE · STEP 1 OF 7')
+  await expect(page.locator('.circuit-part[data-part-id="switch-lamp-s1"]')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Close examples' }).click()
+  await lesson.getByRole('button', { name: 'Continue to next lesson' }).click()
+  await page.getByRole('alertdialog', { name: 'Replace the current circuit?' }).getByRole('button', { name: 'Replace and open' }).click()
+  const secondLesson = page.locator('aside[aria-label="Guided example"]')
+  await expect(secondLesson).toContainText('START HERE · STEP 2 OF 7')
+  await expect(page.locator('.circuit-part[data-part-id="ohms-law-r1"]')).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(secondLesson.getByRole('button', { name: 'Continue to next lesson' })).toBeVisible()
+  await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 390)
+})
+
 test('opening an example replaces stale multi-selection with its lesson component', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)

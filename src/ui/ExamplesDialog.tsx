@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
+import { START_HERE_EXAMPLES } from './examplePath'
 
 export type ExampleId = 'ohms-law' | 'potentiometer' | 'wheatstone-bridge' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'sine-wave' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'diode-polarity' | 'parallel-resistors' | 'resistor-power' | 'lamp-power' | 'switch-lamp' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'current-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'educational-opamp' | 'imported-opamp' | 'inverting-opamp' | 'noninverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
 type ExampleTopic = 'start' | 'all' | 'basics' | 'diodes' | 'ac' | 'switching' | 'advanced'
@@ -62,8 +63,8 @@ const exampleTopicOptions: { id: ExampleTopic; label: string }[] = [
   { id: 'start', label: 'Start here' }, { id: 'all', label: 'All' }, { id: 'basics', label: 'Basics' }, { id: 'diodes', label: 'Diodes & LEDs' },
   { id: 'ac', label: 'AC & reactive' }, { id: 'switching', label: 'Switching' }, { id: 'advanced', label: 'Advanced' },
 ]
-const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, ExampleId[]> = {
-  start: ['switch-lamp', 'ohms-law', 'rc', 'voltage-divider', 'series-resistors', 'led-current-limiter', 'capacitor-discharge'],
+const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, readonly ExampleId[]> = {
+  start: START_HERE_EXAMPLES,
   basics: ['ohms-law', 'rc', 'capacitor-discharge', 'voltage-divider', 'loaded-voltage-divider', 'superposition', 'thevenin-norton', 'series-resistors', 'parallel-resistors', 'resistor-power', 'lamp-power', 'switch-lamp', 'supply-droop', 'potentiometer', 'wheatstone-bridge', 'current-source', 'led-current-limiter'],
   diodes: ['diode-polarity', 'led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'sine-wave', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
@@ -76,12 +77,14 @@ export function exampleTitle(id: ExampleId | null): string {
   return exampleCatalog.find((example) => example.id === id)?.title ?? 'RC step response'
 }
 
-export function ExamplesDialog({ open, onClose, onOpen, onKeyDown, engineAvailable }: {
+export function ExamplesDialog({ open, onClose, onOpen, onKeyDown, engineAvailable, pendingExample, onPendingExampleHandled }: {
   open: boolean
   onClose: () => void
   onOpen: (id: ExampleId) => void
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void
   engineAvailable: boolean | null
+  pendingExample: ExampleId | null
+  onPendingExampleHandled: () => void
 }) {
   const [query, setQuery] = useState('')
   const [topic, setTopic] = useState<ExampleTopic>('all')
@@ -105,6 +108,14 @@ export function ExamplesDialog({ open, onClose, onOpen, onKeyDown, engineAvailab
       setRestoreExampleFocus(null)
     }
   }, [pending, restoreExampleFocus])
+  useEffect(() => {
+    if (!open || !pendingExample) return
+    setTopic('start')
+    setQuery('')
+    setRestoreExampleFocus(null)
+    setPending(pendingExample)
+    onPendingExampleHandled()
+  }, [open, pendingExample, onPendingExampleHandled])
   const close = () => { setPending(null); onClose() }
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') { event.stopPropagation(); close(); return }
