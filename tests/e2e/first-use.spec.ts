@@ -1444,8 +1444,9 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await page.keyboard.press('Escape')
   await expect(sheetSettings).toHaveCount(0)
   const importModelButton = page.getByRole('button', { name: 'Import SPICE model library' })
+  const modelImportFileInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
   await importModelButton.click()
-  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+  await modelImportFileInput.setInputFiles({
     name: 'accessibility-sections.lib',
     mimeType: 'text/plain',
     buffer: Buffer.from('.LIB slow\n.MODEL D_SLOW D(IS=2n)\n.ENDL slow\n.LIB fast\n.MODEL D_FAST D(IS=1n)\n.ENDL fast'),
@@ -1465,6 +1466,36 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await expect(closeModelSectionsButton).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(modelSections).toHaveCount(0)
+  await expect(importModelButton).toBeFocused()
+  await importModelButton.click()
+  await modelImportFileInput.setInputFiles([
+    {
+      name: 'accessibility-parent.lib',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('.include accessibility-devices.lib\n.SUBCKT PARENT IN OUT\nD1 IN OUT D_FAST\n.ENDS PARENT'),
+    },
+    {
+      name: 'accessibility-devices.lib',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('.LIB slow\n.MODEL D_SLOW D(IS=2n)\n.ENDL slow\n.LIB fast\n.MODEL D_FAST D(IS=1n)\n.ENDL fast'),
+    },
+  ])
+  const batchModelSections = page.getByRole('dialog', { name: 'Choose model sections' })
+  await expect(batchModelSections).toBeVisible()
+  await expectNamedButtons()
+  await expectNamedFormControls()
+  await expectVisibleKeyboardControlsNamed(page)
+  const batchSection = batchModelSections.getByRole('checkbox', { name: 'Include accessibility-devices.lib section fast' })
+  await batchSection.check()
+  const importLibrariesButton = batchModelSections.getByRole('button', { name: 'Import selected libraries' })
+  const closeBatchModelSectionsButton = batchModelSections.getByRole('button', { name: 'Cancel model section selection' })
+  await closeBatchModelSectionsButton.focus()
+  await page.keyboard.press('Shift+Tab')
+  await expect(importLibrariesButton).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(closeBatchModelSectionsButton).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(batchModelSections).toHaveCount(0)
   await expect(importModelButton).toBeFocused()
   await page.setViewportSize({ width: 390, height: 844 })
   await expectVisibleKeyboardControlsNamed(page)
