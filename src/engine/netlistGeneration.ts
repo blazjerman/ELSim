@@ -784,11 +784,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const inputB = `V(${pinNet(connectivity, part, 1)}) > ${threshold}`
       const operation = part.logicOperation ?? 'and'
       const booleanExpression = part.kind === 'inverter' ? `inv(${inputA})`
-        : operation === 'and' ? `(${inputA}) & (${inputB})`
-          : operation === 'nand' ? `!(${inputA} & ${inputB})`
-            : operation === 'or' ? `(${inputA}) | (${inputB})`
-              : operation === 'nor' ? `!(${inputA} | ${inputB})`
-                : operation === 'xor' ? `xor(${inputA}, ${inputB})` : `!xor(${inputA}, ${inputB})`
+        : operation === 'and' ? `(${inputA}) && (${inputB})`
+          : operation === 'nand' ? `!((${inputA}) && (${inputB}))`
+            : operation === 'or' ? `(${inputA}) || (${inputB})`
+              : operation === 'nor' ? `!((${inputA}) || (${inputB}))`
+                : operation === 'xor' ? `(((${inputA}) && !(${inputB})) || (!(${inputA}) && (${inputB})))` : `!(((${inputA}) && !(${inputB})) || (!(${inputA}) && (${inputB})))`
       const expression = `${low} + (${high} - ${low}) * (${booleanExpression})`
       try {
         const parsed = parseBehavioralExpression(expression)

@@ -3,13 +3,12 @@ import type { ReactNode } from 'react'
 import { Activity, X } from 'lucide-react'
 import type { PlotPanel, PlotRange } from '../domain/project'
 import type { SimulationResult } from '../engine/contract'
+import { clampPlotPanelBounds } from './plotPanelGeometry'
 
 const ResultPlot = lazy(() => import('./AnalysisPlots').then((module) => ({ default: module.ResultPlot })))
 
-function clampPlotPanelBounds(bounds: PlotPanel['bounds']): PlotPanel['bounds'] {
-  const width = Math.max(280, Math.min(bounds.width, window.innerWidth - 16))
-  const height = Math.max(160, Math.min(bounds.height, window.innerHeight - 16))
-  return { x: Math.max(8 - width, Math.min(window.innerWidth - 48, bounds.x)), y: Math.max(8, Math.min(window.innerHeight - 48, bounds.y)), width, height }
+function clampToCurrentViewport(bounds: PlotPanel['bounds']): PlotPanel['bounds'] {
+  return clampPlotPanelBounds(bounds, { width: window.innerWidth, height: window.innerHeight })
 }
 
 function samePlotPanelBounds(left: PlotPanel['bounds'], right: PlotPanel['bounds']): boolean {
@@ -22,13 +21,13 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
   const draggedBounds = useRef<PlotPanel['bounds'] | null>(null)
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   useEffect(() => {
-    const initial = clampPlotPanelBounds(panel.bounds)
+    const initial = clampToCurrentViewport(panel.bounds)
     if (!samePlotPanelBounds(initial, panel.bounds)) onBoundsChange(initial)
     let resizeTimer: ReturnType<typeof setTimeout> | undefined
     const saveSize = () => {
       const rect = ref.current?.getBoundingClientRect()
       if (!rect) return
-      const next = clampPlotPanelBounds({ ...panel.bounds, width: rect.width, height: rect.height })
+      const next = clampToCurrentViewport({ ...panel.bounds, width: rect.width, height: rect.height })
       if (next.width === panel.bounds.width && next.height === panel.bounds.height) return
       clearTimeout(resizeTimer)
       resizeTimer = setTimeout(() => onBoundsChange(next), 120)
@@ -38,7 +37,7 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
     const previewPosition = (event: globalThis.PointerEvent) => {
       if (!drag.current) return
       const { x, y, left, top } = drag.current
-      const next = clampPlotPanelBounds({ ...panel.bounds, x: left + event.clientX - x, y: top + event.clientY - y })
+      const next = clampToCurrentViewport({ ...panel.bounds, x: left + event.clientX - x, y: top + event.clientY - y })
       draggedBounds.current = next
       if (ref.current) {
         ref.current.style.left = `${next.x}px`
@@ -66,7 +65,7 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
       }
     }
     const resize = () => {
-      const next = clampPlotPanelBounds(panel.bounds)
+      const next = clampToCurrentViewport(panel.bounds)
       if (!samePlotPanelBounds(next, panel.bounds)) onBoundsChange(next)
     }
     window.addEventListener('pointermove', previewPosition)
@@ -102,7 +101,7 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
         else if (event.key === 'ArrowDown') bounds.y += step
         else bounds.y -= step
       }
-      const next = clampPlotPanelBounds(bounds)
+      const next = clampToCurrentViewport(bounds)
       onBoundsChange(next)
       setKeyboardAnnouncement(event.shiftKey
         ? `${title} resized to ${Math.round(next.width)} by ${Math.round(next.height)} pixels.`

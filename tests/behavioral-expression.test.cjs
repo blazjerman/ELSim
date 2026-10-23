@@ -49,11 +49,11 @@ test('LTspice buf() and inv() translate with the strict greater-than-half thresh
 test('LTspice unary ! and ~ translate with the greater-than-half inversion threshold', () => {
   for (const operator of ['!', '~']) {
     const expression = `${operator}V(in)`
-    assert.deepEqual(parseBehavioralExpression(expression).references, { nodes: ['in'], differentialNodes: [], components: [] })
-    assert.equal(translateBehavioralExpression(expression), '(((V(in)) - 0.5) > 1e-12 ? 0 : 1)')
+    assert.deepEqual(parseBehavioralExpression(expression, 'ltspice').references, { nodes: ['in'], differentialNodes: [], components: [] })
+    assert.equal(translateBehavioralExpression(expression, 'ltspice'), '(((V(in)) - 0.5) > 1e-12 ? 0 : 1)')
   }
-  assert.equal(translateBehavioralExpression('!(V(in) + 1)'), '((((V(in) + 1)) - 0.5) > 1e-12 ? 0 : 1)')
-  assert.equal(translateBehavioralExpression('V(in) != 0'), 'V(in) != 0')
+  assert.equal(translateBehavioralExpression('!(V(in) + 1)', 'ltspice'), '((((V(in) + 1)) - 0.5) > 1e-12 ? 0 : 1)')
+  assert.equal(translateBehavioralExpression('V(in) != 0', 'ltspice'), 'V(in) != 0')
 })
 
 test('LTspice u() returns zero at zero while native ngspice u() remains unchanged', () => {
@@ -64,10 +64,20 @@ test('LTspice u() returns zero at zero while native ngspice u() remains unchange
 
 test('LTspice single-character Boolean AND and OR use the strict greater-than-half threshold', () => {
   const expression = 'V(enable) & (V(a) > 1 | V(b) > 1)'
-  assert.deepEqual(parseBehavioralExpression(expression).references, { nodes: ['enable', 'a', 'b'], differentialNodes: [], components: [] })
-  assert.equal(translateBehavioralExpression(expression), '(((V(enable)) - 0.5) > 1e-12 && (((((V(a) > 1) - 0.5) > 1e-12 || ((V(b) > 1) - 0.5) > 1e-12)) - 0.5) > 1e-12)')
-  assert.equal(translateBehavioralExpression('(V(a) & V(b)) | V(c)'), '((((((V(a)) - 0.5) > 1e-12 && ((V(b)) - 0.5) > 1e-12))) - 0.5) > 1e-12 || ((V(c)) - 0.5) > 1e-12')
-  assert.throws(() => parseBehavioralExpression('V(a) && V(b)'), /Expected|Unexpected/)
+  assert.deepEqual(parseBehavioralExpression(expression, 'ltspice').references, { nodes: ['enable', 'a', 'b'], differentialNodes: [], components: [] })
+  assert.equal(translateBehavioralExpression(expression, 'ltspice'), '(((V(enable)) - 0.5) > 1e-12 && ((((((V(a) > 1) - 0.5) > 1e-12 || ((V(b) > 1) - 0.5) > 1e-12))) - 0.5) > 1e-12)')
+  assert.equal(translateBehavioralExpression('(V(a) & V(b)) | V(c)', 'ltspice'), '(((((((V(a)) - 0.5) > 1e-12 && ((V(b)) - 0.5) > 1e-12))) - 0.5) > 1e-12 || ((V(c)) - 0.5) > 1e-12)')
+  assert.throws(() => parseBehavioralExpression('V(a) & V(b)'), /Expected|Unexpected/)
+})
+
+test('native ngspice &&, ||, and ! preserve zero/nonzero Boolean semantics', () => {
+  const expression = 'V(low) && !V(zero) || V(high)'
+  assert.deepEqual(parseBehavioralExpression(expression).references, { nodes: ['low', 'zero', 'high'], differentialNodes: [], components: [] })
+  assert.equal(translateBehavioralExpression(expression), expression)
+  assert.deepEqual(parseBehavioralExpression('!V(low)').references, { nodes: ['low'], differentialNodes: [], components: [] })
+  assert.equal(translateBehavioralExpression('!V(low)'), '!V(low)')
+  assert.throws(() => parseBehavioralExpression('V(low) & V(high)'), /Expected|Unexpected/)
+  assert.throws(() => parseBehavioralExpression('~V(low)'), /supported only in the LTspice/)
 })
 
 test('LTspice behavioral XOR is dialect-specific while native ngspice caret remains exponentiation', () => {

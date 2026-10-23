@@ -1908,6 +1908,11 @@ test('closing floating waveform windows restores keyboard focus', { tag: '@ui-sm
   await expect.poll(async () => (await windows.first().boundingBox())?.x).toBe(initialBounds!.x + 10)
   await page.keyboard.press('Shift+ArrowDown')
   await expect.poll(async () => (await windows.first().boundingBox())?.height).toBe(initialBounds!.height + 20)
+  await page.setViewportSize({ width: 240, height: 150 })
+  await expect.poll(() => windows.first().evaluate((element) => {
+    const bounds = element.getBoundingClientRect()
+    return bounds.left >= 0 && bounds.top >= 0 && bounds.right <= window.innerWidth && bounds.bottom <= window.innerHeight
+  })).toBe(true)
   const firstClose = windows.first().getByRole('button', { name: /Close/ })
   await firstClose.focus()
   await page.keyboard.press('Enter')

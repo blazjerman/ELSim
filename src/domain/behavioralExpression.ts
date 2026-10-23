@@ -53,14 +53,6 @@ function translateBooleanBinaryOperators(expression: string, dialect: Behavioral
       return `(${booleans.join(operator === '&' ? ' && ' : ' || ')})`
     }
   }
-  const disjunction = splitTopLevelBoolean(expression, '|')
-  if (disjunction.length > 1) return disjunction.map((term) => {
-    const conjunction = splitTopLevelBoolean(term, '&')
-    const translated = (conjunction.length ? conjunction : [term]).map((operand) => ltspiceBooleanCondition(translateBehavioralExpression(operand, dialect)))
-    return translated.length === 1 ? translated[0] : `(${translated.join(' && ')})`
-  }).join(' || ')
-  const conjunction = splitTopLevelBoolean(expression, '&')
-  if (conjunction.length > 1) return `(${conjunction.map((operand) => ltspiceBooleanCondition(translateBehavioralExpression(operand, dialect))).join(' && ')})`
   let output = ''
   let changed = false
   for (let index = 0; index < expression.length; index += 1) {
@@ -73,7 +65,7 @@ function translateBooleanBinaryOperators(expression: string, dialect: Behavioral
     }
     if (depth !== 0) return null
     const inner = expression.slice(index + 1, close - 1)
-    if (!(dialect === 'ltspice' ? /[&|^]/ : /[&|]/).test(inner)) { output += expression.slice(index, close); index = close - 1; continue }
+    if (!/[&|^]/.test(inner)) { output += expression.slice(index, close); index = close - 1; continue }
     const translatedInner = translateBooleanBinaryOperators(inner, dialect)
     if (translatedInner === null) output += expression.slice(index, close)
     else { output += `(${translatedInner})`; changed = true }
@@ -84,6 +76,7 @@ function translateBooleanBinaryOperators(expression: string, dialect: Behavioral
 }
 
 function translateBooleanInversions(expression: string, dialect: BehavioralDialect): string {
+  if (dialect === 'ngspice') return expression
   let output = expression
   for (let index = 0; index < output.length; index += 1) {
     const operator = output[index]
@@ -242,7 +235,7 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
   if (expression.length === 0 || expression.length > 256 || /[\r\n;{}'"`\\#]/.test(expression)) throw new Error('Use one expression up to 256 characters. Newlines, directives, quotes, braces, and comments are not allowed.')
   const tokens: Token[] = []
   let offset = 0
-  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?|[A-Za-z_][A-Za-z0-9_.$]*|<=|>=|==|!=|<>|\*\*|[()+\-*/%^<>,?:!~&|]/iy
+  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|[tgkmunpf])?|[A-Za-z_][A-Za-z0-9_.$]*|<=|>=|==|!=|<>|\*\*|&&|\|\||[()+\-*/%^<>,?:!~&|]/iy
   while (offset < expression.length) {
     tokenPattern.lastIndex = offset
     const match = tokenPattern.exec(expression)
@@ -321,13 +314,18 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
     }
     if (count < signature.min || count > signature.max) throw new Error(`${token.text}() expects ${signature.min === signature.max ? signature.min : `${signature.min} or ${signature.max}`} argument${signature.max === 1 ? '' : 's'}.`)
   }
-  const parseUnary = (): void => { if (peek('+') || peek('-') || peek('!') || peek('~')) { take(); parseUnary() } else parsePrimary() }
+  const parseUnary = (): void => {
+    if (peek('~') && dialect === 'ngspice') throw new Error('The unary ~ operator is supported only in the LTspice behavioral dialect; use ! for native ngspice.')
+    if (peek('+') || peek('-') || peek('!') || peek('~')) { take(); parseUnary() } else parsePrimary()
+  }
   const parsePower = (): void => { parseUnary(); if (peek('^') || peek('**')) { take(); parsePower() } }
   const parseProduct = (): void => { parsePower(); while (peek('*') || peek('/') || peek('%')) { take(); parsePower() } }
   const parseSum = (): void => { parseProduct(); while (peek('+') || peek('-')) { take(); parseProduct() } }
   const parseCompare = (): void => { parseSum(); while (['<', '>', '<=', '>=', '==', '!=', '<>'].some((op) => peek(op))) { take(); parseSum() } }
-  const parseLogicalAnd = (): void => { parseCompare(); while (peek('&')) { take('&'); parseCompare() } }
-  const parseLogical = (): void => { parseLogicalAnd(); while (peek('|')) { take('|'); parseLogicalAnd() } }
+  const andOperator = dialect === 'ltspice' ? '&' : '&&'
+  const orOperator = dialect === 'ltspice' ? '|' : '||'
+  const parseLogicalAnd = (): void => { parseCompare(); while (peek(andOperator)) { take(andOperator); parseCompare() } }
+  const parseLogical = (): void => { parseLogicalAnd(); while (peek(orOperator)) { take(orOperator); parseLogicalAnd() } }
   const parseConditional = (): void => { parseLogical(); if (peek('?')) { take('?'); parseConditional(); take(':'); parseConditional() } }
   parseConditional()
   if (cursor !== tokens.length) throw new Error(`Unexpected token “${tokens[cursor].text}”.`)

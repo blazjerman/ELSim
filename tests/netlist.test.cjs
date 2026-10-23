@@ -1388,11 +1388,11 @@ test('behavioral if() output preserves LTspice’s condition threshold', () => {
   assert.match(artifact.text, /> 1e-12 \? 5 : 0/)
 })
 
-test('LTspice buf() and inv() outputs preserve threshold behavior', () => {
+test('imported LTspice buf() and inv() outputs preserve threshold behavior', () => {
   const project = createStarterProject()
   project.parts.push(
-    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'buf(V(vin))', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 },
-    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: 'inv(V(vin))', behavioralOutput: 'voltage', x: 700, y: 420, rotation: 0 },
+    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'buf(V(vin))', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 300, rotation: 0 },
+    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: 'inv(V(vin))', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 420, rotation: 0 },
   )
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [])
@@ -1400,11 +1400,11 @@ test('LTspice buf() and inv() outputs preserve threshold behavior', () => {
   assert.match(artifact.text, /> 1e-12 \? 0 : 1/)
 })
 
-test('LTspice unary Boolean inversion outputs are translated in native B sources', () => {
+test('imported LTspice unary Boolean inversion retains its dialect in the native netlist', () => {
   const project = createStarterProject()
   project.parts.push(
-    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: '!V(vin)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 },
-    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: '~V(vin)', behavioralOutput: 'voltage', x: 700, y: 420, rotation: 0 },
+    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: '!V(vin)', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 300, rotation: 0 },
+    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: '~V(vin)', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 420, rotation: 0 },
   )
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [])
