@@ -38,7 +38,8 @@
     "build:release": "npm run check:npm-licenses && npm run check:ngspice-release && npm run typecheck && vite build --mode release",
     "preview": "vite preview",
     "check:npm-licenses": "node tools/check-npm-license-inventory.mjs",
-    "test:e2e:ui:full": "playwright test --grep-invert \"@ngspice|@ltspice\""
+    "test:e2e:ui:full": "playwright test --grep-invert \"@ngspice|@ltspice\"",
+    "build:ngspice:native": "./tools/build-ngspice-native.sh"
   },
   "dependencies": {
     "react": "19.1.0",

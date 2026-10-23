@@ -17,7 +17,14 @@ The build copies the ignored WASM runtime into `public/engine/` for the local br
 NGSPICE_NATIVE=/path/to/pinned/native/ngspice npm run test:wasm:parity
 ```
 
-Build the native executable from the exact commit in `UPSTREAM_COMMIT` before comparing. The gate checks the executable and compares numeric analysis rows for RC transient, diode operating point, RLC AC, and a small `.SUBCKT`. `npm run test:wasm` remains the broader WASM-only fixture suite; neither command compiles the runtime.
+When a clean checkout of the pinned source is available, the optional native build helper creates an isolated build under ignored `build/ngspice-native/` and writes the executable to `build/ngspice-native/bin/ngspice`:
+
+```sh
+NGSPICE_SOURCE=/path/to/pinned/ngspice JOBS=2 npm run build:ngspice:native
+NGSPICE_NATIVE="$PWD/build/ngspice-native/bin/ngspice" npm run test:wasm:parity
+```
+
+This native build is only for the explicit parity check. It does not build or replace the browser WASM runtime. The gate compares numeric analysis rows for RC transient, diode operating point, RLC AC, and a small `.SUBCKT`. `npm run test:wasm` remains the broader WASM-only fixture suite; neither test command compiles the runtime.
 
 The link uses a 2 MiB WASM stack. A checked build showed that ngspice's `inp_fix_inst_calls_for_numparam` routine reserves four 10,000-entry local arrays, which do not fit Emscripten's 64 KiB default stack. The configure step enables XSPICE, skips its optional Verilog/VHDL adapters, and excludes the `table` ICM because its upstream license is GPL-2.0-or-later. Other XSPICE analog modules are compiled. The browser worker runs one transient analysis per worker; Stop terminates that worker. Firefox passes the 17 ngspice-backed workflows locally. Cancellation is covered by the long-run browser test; broader performance measurements still need verification.
 
