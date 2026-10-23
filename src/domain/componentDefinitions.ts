@@ -328,6 +328,9 @@ export function componentDefinitionFor(kind: PartKind): ComponentDefinition {
 /** Return the required imported SPICE `.MODEL` type for a built-in device. */
 export function compatibleDeviceModelType(kind: PartKind): string | undefined {
   switch (kind) {
+    case 'resistor': return 'r'
+    case 'capacitor': return 'c'
+    case 'inductor': return 'l'
     case 'lamp': case 'potentiometer': return 'r'
     case 'diode': case 'zener': case 'led': return 'd'
     case 'npn': return 'npn'
@@ -346,7 +349,7 @@ export function compatibleDeviceModelType(kind: PartKind): string | undefined {
 }
 
 export function deviceModelTypeMatches(kind: PartKind, model: { type: string; channel?: 'n' | 'p' }): boolean {
-  const expectedType = compatibleDeviceModelType(kind) ?? (kind === 'resistor' ? 'r' : kind === 'capacitor' ? 'c' : kind === 'inductor' ? 'l' : undefined)
+  const expectedType = compatibleDeviceModelType(kind)
   if (!expectedType || model.type.toLowerCase() !== expectedType) return false
   if (kind === 'nvdmos') return (model.channel ?? 'n') === 'n'
   if (kind === 'pvdmos') return model.channel === 'p'

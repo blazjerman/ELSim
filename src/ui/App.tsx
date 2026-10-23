@@ -2548,7 +2548,6 @@ export default function App() {
   }, [project.sheets])
   const compatibleDeviceModels = (kind: PartKind) => {
     const type = compatibleDeviceModelType(kind)
-      ?? (kind === 'resistor' ? 'r' : kind === 'capacitor' ? 'c' : kind === 'inductor' ? 'l' : undefined)
     if (!type) return []
     const key = type === 'vdmos' ? `vdmos:${kind === 'pvdmos' ? 'p' : 'n'}` : type
     return compatibleImportedDeviceModelsByType.get(key) ?? []

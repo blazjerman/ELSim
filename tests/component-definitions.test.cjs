@@ -5,7 +5,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { componentDefinitions, componentDefinitionFor, componentDefaultValue, componentPropertyDefault, compatibleDeviceModelType, importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
+const { componentDefinitions, componentDefinitionFor, componentDefaultValue, componentPropertyDefault, compatibleDeviceModelType, deviceModelTypeMatches, importedSubcircuitComponentDefinition } = require(path.join(build, 'domain/componentDefinitions.js'))
 const { createStarterProject, kindNames, kindPrefix, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { parseSubcircuitLibrary } = require(path.join(build, 'domain/subcircuitLibrary.js'))
@@ -177,13 +177,18 @@ test('built-in component definitions have stable identities, ordered unique SPIC
 
 test('imported device model compatibility has one canonical type per built-in device family', () => {
   const expected = {
+    resistor: 'r', capacitor: 'c', inductor: 'l',
     lamp: 'r', potentiometer: 'r',
     diode: 'd', zener: 'd', led: 'd',
     npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmesfet: 'nmf', pmesfet: 'pmf', nmos: 'nmos', pmos: 'pmos', nvdmos: 'vdmos', pvdmos: 'vdmos',
     voltageSwitch: 'sw', currentSwitch: 'csw',
   }
   for (const [kind, type] of Object.entries(expected)) assert.equal(compatibleDeviceModelType(kind), type, kind)
-  for (const kind of ['resistor', 'capacitor', 'inductor']) assert.equal(compatibleDeviceModelType(kind), undefined, kind)
+  assert.equal(deviceModelTypeMatches('resistor', { type: 'R' }), true)
+  assert.equal(deviceModelTypeMatches('capacitor', { type: 'C' }), true)
+  assert.equal(deviceModelTypeMatches('inductor', { type: 'L' }), true)
+  assert.equal(deviceModelTypeMatches('potentiometer', { type: 'R' }), true)
+  assert.equal(deviceModelTypeMatches('potentiometer', { type: 'C' }), false)
   for (const definition of componentDefinitions) {
     if (!(definition.kind in expected)) assert.equal(compatibleDeviceModelType(definition.kind), undefined, definition.kind)
   }
