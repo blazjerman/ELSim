@@ -1,0 +1,10 @@
+ELSim ngspice transient current source multiplier
+I1 0 out PULSE(0 1m 0 1u 1u 0.5m 1m) M=3
+R1 out 0 1k
+.control
+set filetype=ascii
+tran 10u 1m
+write /result.raw all
+quit
+.endc
+.end
