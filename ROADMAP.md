@@ -314,7 +314,9 @@ Native global solver cards in imported libraries (2026-10-14): Project-local mod
 
 Native lossy transmission-line dependencies (2026-10-14): Imported-IC dependency analysis now resolves ngspice `Y` single-lossy transmission-line references to `TXL` cards and variable-width `P` coupled-line references to `CPL` cards, including optional `LEN` instance syntax. Circuit Checks reports wrong model families for both prefixes. Unit tests cover fixed and variable conductor counts, missing and cross-library resolution, family mismatches, and the Firefox UI report selects the affected IC. This extends M2.4 native model-library coverage; solver support and user-authored model semantics remain ngspice’s responsibility.
 
-### M3 — LTspice interoperability
+### M3 — LTspice interoperability (deferred by owner)
+
+**Status: paused for a separate future goal.** Do not count M3 items as active development work or resume LTspice-specific import/export changes during the current app goal. Preserve the existing compatibility notes, fixtures, and matrix for the later goal. Continue general native ngspice support under M2.4 when it benefits ELSim independently of LTspice compatibility.
 
 **M3.1 Compatibility matrix and fixtures.** Catalog supported `.asc`, `.asy`, directives, primitives, parameters, and model dialect features. Use original hand-written fixtures or files whose redistribution is permitted. Acceptance: every supported syntax item has a fixture; known unsupported items have a diagnostic.
 
