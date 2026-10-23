@@ -252,6 +252,31 @@ function makeTransientDeck(sampleCount, startSavingTime = '0') {
   ].join('\n')
 }
 
+function makeRawVectorRetentionFixture(pointCount, hiddenVectorCount) {
+  const variableCount = hiddenVectorCount + 2
+  const variables = [
+    '  0 time time',
+    '  1 v(out) voltage',
+    ...Array.from({ length: hiddenVectorCount }, (_, index) => `  ${index + 2} @r${index + 1}[p] power`),
+  ].join('\n')
+  const header = Buffer.from([
+    'Title: Raw vector retention benchmark',
+    'Plotname: Transient Analysis',
+    'Flags: real',
+    `No. Variables: ${variableCount}`,
+    `No. Points: ${pointCount}`,
+    'Variables:',
+    variables,
+    'Binary:',
+    '',
+  ].join('\n'))
+  return new Uint8Array(Buffer.concat([header, Buffer.alloc(pointCount * variableCount * Float64Array.BYTES_PER_ELEMENT)]))
+}
+
+function retainedVectorBytes(parsed) {
+  return parsed.axis.byteLength + parsed.variables.reduce((total, variable) => total + variable.values.byteLength + (variable.imaginaryValues?.byteLength ?? 0), 0)
+}
+
 try {
   const compile = spawnSync(process.execPath, [
     tsc, '--target', 'ES2022', '--module', 'CommonJS', '--moduleResolution', 'Node',
@@ -271,7 +296,7 @@ try {
   const { checkCircuit } = build(path.join(output, 'domain/electricalCheck.js'))
   const { createNetlistArtifact } = build(path.join(output, 'engine/netlist.js'))
   const { extremaIndices } = build(path.join(output, 'engine/plot.js'))
-  const { parseRawFile } = build(path.join(output, 'engine/raw.js'))
+  const { parseRawFile, parseRawTraces } = build(path.join(output, 'engine/raw.js'))
 
   const circuitResults = []
   for (const count of [100, 500, 1_000, 5_000]) {
@@ -523,6 +548,28 @@ try {
     })
   }
 
+  const rawRetentionPointCount = 50_000
+  const rawRetentionHiddenVectorCount = 62
+  const rawRetentionFixture = makeRawVectorRetentionFixture(rawRetentionPointCount, rawRetentionHiddenVectorCount)
+  const allVectorParsing = measure(() => parseRawFile(rawRetentionFixture))
+  const allVectorBytes = retainedVectorBytes(allVectorParsing.value)
+  if (allVectorParsing.value.variables.length !== rawRetentionHiddenVectorCount + 1) throw new Error('The full raw parser failed to retain every fixture vector.')
+  allVectorParsing.value = null
+  const traceOnlyParsing = measure(() => parseRawTraces(rawRetentionFixture))
+  const traceOnlyBytes = retainedVectorBytes(traceOnlyParsing.value)
+  if (traceOnlyParsing.value.variables.length !== 1 || traceOnlyParsing.value.variables[0].name.toLowerCase() !== 'v(out)') throw new Error('The trace-only raw parser failed to retain exactly the displayable fixture vector.')
+  const rawRetentionResults = {
+    points: rawRetentionPointCount,
+    hiddenVectors: rawRetentionHiddenVectorCount,
+    rawBytes: rawRetentionFixture.byteLength,
+    retainedArrays: {
+      allVectors: { bytes: allVectorBytes, parseMs: { medianMs: allVectorParsing.medianMs, p95Ms: allVectorParsing.p95Ms } },
+      displayableTraces: { bytes: traceOnlyBytes, parseMs: { medianMs: traceOnlyParsing.medianMs, p95Ms: traceOnlyParsing.p95Ms } },
+      avoidedBytes: allVectorBytes - traceOnlyBytes,
+      avoidedPercent: Number(((1 - traceOnlyBytes / allVectorBytes) * 100).toFixed(2)),
+    },
+  }
+
   let simulationResults = null
   let transientResults = null
   let transientWindowComparison = null
@@ -606,7 +653,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 11,
+    benchmarkVersion: 12,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
@@ -616,6 +663,7 @@ try {
     importedLibraryAnalysisResults,
     importedDeviceResults,
     plotResults,
+    rawRetentionResults,
     simulationResults: simulationResults ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to include solver, raw parsing, and vector-copy observations'),
     transientResults: transientResults ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to include large transient and process-memory observations'),
     transientWindowComparison: transientWindowComparison ?? (skipEngineBenchmarks ? 'skipped by --skip-engine' : 'skipped: build the optional local ngspice WASM runtime to compare retained waveform data windows'),
