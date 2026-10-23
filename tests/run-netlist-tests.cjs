@@ -44,6 +44,7 @@ try {
     path.join(root, 'src/domain/projectAutosave.ts'),
     path.join(root, 'src/domain/componentDefinitions.ts'),
     path.join(root, 'src/domain/componentValue.ts'),
+    path.join(root, 'src/domain/parameterSweepTargets.ts'),
     path.join(root, 'src/domain/sourcePwl.ts'),
     path.join(root, 'src/domain/examples.ts'),
     path.join(root, 'src/domain/examplePath.ts'),

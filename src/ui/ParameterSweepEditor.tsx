@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { componentMagnitude, spiceModelParameterMagnitude } from '../domain/componentValue'
 import { kindNames, type ParameterSweep, type Part, type Project } from '../domain/project'
+import { eligibleParameterSweepParts, importedModelSweepParameters, subcircuitSweepParameters, sweepParameterValue, unusedSweepTargets } from '../domain/parameterSweepTargets'
 
 const sourceParameterLabels: Record<string, string> = {
   'pulse.initial': 'Initial level', 'pulse.high': 'High level', 'pulse.delay': 'Delay', 'pulse.rise': 'Rise time', 'pulse.fall': 'Fall time', 'pulse.width': 'Pulse width', 'pulse.period': 'Period',
@@ -15,22 +16,10 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
   const [listDrafts, setListDrafts] = useState<Record<number, string>>({})
   const [listErrors, setListErrors] = useState<Record<number, string>>({})
   const [componentSearches, setComponentSearches] = useState<Record<number, string>>({})
-  const modelsByName = useMemo(() => new Map(models.map((model) => [model.name.toLowerCase(), model])), [models])
-  const subcircuitsByName = useMemo(() => new Map(subcircuits.map((model) => [model.name.toLowerCase(), model])), [subcircuits])
-  const sheetsById = useMemo(() => new Map(sheets.map((sheet) => [sheet.id, sheet])), [sheets])
   const partsByRef = useMemo(() => new Map(parts.map((part) => [part.ref.toLowerCase(), part])), [parts])
-  const modelFor = (part?: Part) => part?.deviceModel ? modelsByName.get(part.deviceModel.toLowerCase()) : undefined
-  const numericModelParameters = (part?: Part) => modelFor(part)?.parameters.filter((parameter) => spiceModelParameterMagnitude(parameter.defaultValue) !== null) ?? []
-  const subcircuitFor = (part?: Part) => {
-    if (part?.kind !== 'subcircuit') return undefined
-    if (part.sheetId) {
-      const sheet = sheetsById.get(part.sheetId)
-      return sheet ? { name: sheet.name, parameters: sheet.parameters ?? [] } : undefined
-    }
-    return subcircuitsByName.get(part.modelName?.toLowerCase() ?? '')
-  }
-  const numericSubcircuitParameters = (part?: Part) => subcircuitFor(part)?.parameters.filter((parameter) => spiceModelParameterMagnitude(Object.entries(part?.sheetId ? part.sheetParameters ?? {} : part?.modelParameters ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1] ?? parameter.defaultValue) !== null) ?? []
-  const parameterDefault = (part: Part, name: string, fallback: string) => Object.entries(part.sheetId ? part.sheetParameters ?? {} : part.modelParameters ?? {}).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1] ?? fallback
+  const numericModelParameters = (part?: Part) => importedModelSweepParameters(part, models)
+  const numericSubcircuitParameters = (part?: Part) => subcircuitSweepParameters(part, subcircuits, sheets)
+  const parameterDefault = (part: Part, name: string, fallback: string) => sweepParameterValue(part, { name, defaultValue: fallback })
   const modelRange = (value: string) => { const magnitude = spiceModelParameterMagnitude(value); const unit = value.trim().replaceAll(' ', '').match(/(?:ohms?|hz|[vasfhw])$/i)?.[0]; return { start: value, stop: magnitude === null ? value : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}${unit ? ` ${unit}` : ''}` } }
   const sourceMode = (part: Part) => part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')
   const sourceValue = (part: Part, parameter: string) => {
@@ -58,16 +47,10 @@ export default function ParameterSweepEditor({ parts, sweeps, models, subcircuit
     const next = magnitude === 0 ? (unit === 's' ? 1e-6 : 1) : magnitude * 2
     return { start, stop: Number.isFinite(magnitude) ? `${next.toExponential(5)}${unit ? ` ${unit}` : ''}` : start }
   }
-  const supportedSourceModes = ['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm']
-  const eligible = useMemo(() => {
-    const eligibleModelHasNumericParameter = (part: Part) => modelsByName.get(part.deviceModel?.toLowerCase() ?? '')?.parameters.some((parameter) => spiceModelParameterMagnitude(parameter.defaultValue) !== null) ?? false
-    const eligibleSubcircuitHasNumericParameter = (part: Part) => part.kind === 'subcircuit' && numericSubcircuitParameters(part).length > 0
-    return analysis === 'dc'
-      ? parts.filter((part) => (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'dc' && part.ref.toLowerCase() !== dcSweepSource?.toLowerCase())
-      : parts.filter((part) => ['resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind) || (part.kind === 'currentSource' && (part.sourceMode === undefined || supportedSourceModes.includes(part.sourceMode))) || (part.kind === 'source' && supportedSourceModes.includes(part.sourceMode ?? 'pulse')) || eligibleModelHasNumericParameter(part) || eligibleSubcircuitHasNumericParameter(part))
-  }, [analysis, dcSweepSource, modelsByName, parts, sheetsById, subcircuitsByName])
+  const eligible = useMemo(() => eligibleParameterSweepParts({ parts, analysis, dcSweepSource, models, subcircuits, sheets }), [analysis, dcSweepSource, models, parts, sheets, subcircuits])
+  const unusedEligible = useMemo(() => unusedSweepTargets(eligible, sweeps), [eligible, sweeps])
   const numericParameters = useMemo(() => analysis === 'tran' ? globalParameters.filter((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null) : [], [analysis, globalParameters])
-  const targetCount = eligible.length + numericParameters.length
+  const targetCount = unusedEligible.length + numericParameters.filter((parameter) => !sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase())).length
   const parameterOptions = useMemo(() => globalParameters.filter((parameter) => numericParameters.includes(parameter) || sweeps.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase())), [globalParameters, numericParameters, sweeps])
   const combinations = sweeps.reduce((total, sweep) => total * sweep.points, 1)
   return <div className="form-section parameter-sweep-section">

@@ -9,6 +9,7 @@ const { componentMagnitude, createNetlistArtifact } = require(path.join(build, '
 const { prepareParameterSweep } = require(path.join(build, 'engine/sweep.js'))
 const { addResultControl } = require(path.join(build, 'engine/resultControl.js'))
 const { createUrcLineExampleProject, createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { eligibleParameterSweepParts, importedModelSweepParameters, subcircuitSweepParameters, unusedSweepTargets } = require(path.join(build, 'domain/parameterSweepTargets.js'))
 
 test('engineering units parse to base magnitudes for resistor, capacitor, and inductor values', () => {
   assert.equal(componentMagnitude('1 kΩ', 'resistor'), 1000)
@@ -17,6 +18,21 @@ test('engineering units parse to base magnitudes for resistor, capacitor, and in
   assert.equal(componentMagnitude('-5 V', 'source'), -5)
   assert.equal(componentMagnitude('2 mA', 'currentSource'), 0.002)
   assert.equal(componentMagnitude('not a value', 'resistor'), null)
+})
+
+test('the sweep editor and Add action share eligible source, model, IC, and reusable-block targets', () => {
+  const project = createHierarchicalExampleProject()
+  const subcircuits = []
+  const models = []
+  const targets = eligibleParameterSweepParts({ parts: project.parts, analysis: 'tran', models, subcircuits, sheets: project.sheets })
+  assert.deepEqual(targets.filter((part) => part.kind === 'subcircuit').map((part) => part.ref), ['X1', 'X2'])
+  assert.deepEqual(subcircuitSweepParameters(project.parts.find((part) => part.ref === 'X2'), subcircuits, project.sheets).map((parameter) => parameter.name), ['RINPUT'])
+  assert.ok(targets.some((part) => part.ref === 'V1'))
+  assert.deepEqual(unusedSweepTargets(targets, [{ component: 'X1', start: '1k', stop: '2k', points: 2 }]).filter((part) => part.kind === 'subcircuit').map((part) => part.ref), ['X2'])
+  const diode = { id: 'd1', kind: 'diode', ref: 'D1', value: 'Default diode', deviceModel: 'USER_D', x: 0, y: 0, rotation: 0 }
+  const model = { name: 'USER_D', parameters: [{ name: 'IS', defaultValue: '1e-14' }, { name: 'TNOM', defaultValue: '{temperature}' }] }
+  assert.deepEqual(importedModelSweepParameters(diode, [model]).map((parameter) => parameter.name), ['IS'])
+  assert.ok(eligibleParameterSweepParts({ parts: [diode], analysis: 'tran', models: [model], subcircuits, sheets: project.sheets }).some((part) => part.id === 'd1'))
 })
 
 test('single and nested parameter sweeps produce deterministic, bounded combinations', () => {

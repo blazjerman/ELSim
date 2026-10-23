@@ -35,6 +35,7 @@ import { validateSourcePwlRepeatBoundary } from '../domain/sourcePwl'
 import { compatibleDeviceModelType, componentDefaultValue, componentDefinitionFor, componentPropertyDefault, importedSubcircuitComponentDefinition } from '../domain/componentDefinitions'
 import type { ComponentSymbolPrimitive } from '../domain/componentDefinitions'
 import { componentMagnitude } from '../domain/componentValue'
+import { eligibleParameterSweepParts, importedModelSweepParameters, subcircuitSweepParameters, sweepParameterValue, unusedSweepTargets } from '../domain/parameterSweepTargets'
 import { nextRef, referencePrefixForKind } from '../domain/referenceDesignator'
 import { hasNgspiceRuntimeAssets } from '../engine/runtimeAvailability'
 import { applyTransientResolutionPreset, transientPresetMaxStep } from '../domain/simulationPresets'
@@ -4503,26 +4504,13 @@ export default function App() {
     const configured = project.simulation.parameterSweeps ?? []
     if (project.simulation.analysis === 'dc' && configured.length > 0) { setNotice('A two-source DC sweep supports one secondary source. Remove the current secondary sweep before choosing another.'); return }
     if (configured.reduce((total, sweep) => total * sweep.points, 1) * 2 > 10) { setNotice('Reduce the number of values before adding another parameter. A sweep can run at most 10 cases.'); return }
-    const supportedSourceModes = ['dc', 'pulse', 'pwl', 'sine', 'exp', 'sffm']
-    const hasNumericInstanceParameter = (part: Part) => {
-      if (part.kind !== 'subcircuit') return false
-      const parameters = part.sheetId
-        ? project.sheets.find((sheet) => sheet.id === part.sheetId)?.parameters ?? []
-        : importedModels.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())?.parameters ?? []
-      const overrides = part.sheetId ? part.sheetParameters : part.modelParameters
-      return parameters.some((parameter) => componentMagnitude(Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1] ?? parameter.defaultValue, 'resistor') !== null)
-    }
-    const parts = project.parts.filter((part) => project.simulation.analysis === 'dc'
-      ? (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'dc' && part.ref.toLowerCase() !== project.simulation.dcSweep?.source.toLowerCase()
-      : ['resistor', 'capacitor', 'inductor'].includes(part.kind)
-        || ((part.kind === 'source' || part.kind === 'currentSource') && supportedSourceModes.includes(part.sourceMode ?? (part.kind === 'source' ? 'pulse' : 'dc')))
-        || importedDeviceModels.some((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null))
-        || hasNumericInstanceParameter(part))
-      .filter((part) => !configured.some((sweep) => sweep.component.toLowerCase() === part.ref.toLowerCase()))
+    const eligibleParts = eligibleParameterSweepParts({ parts: project.parts, analysis: project.simulation.analysis, dcSweepSource: project.simulation.dcSweep?.source, models: importedDeviceModels, subcircuits: importedModels, sheets: project.sheets })
+    const parts = unusedSweepTargets(eligibleParts, configured)
+    const hasNumericInstanceParameter = (part: Part) => subcircuitSweepParameters(part, importedModels, project.sheets).length > 0
     const parameters = project.sheets.find((sheet) => sheet.id === project.rootSheetId)?.parameters ?? []
     const availableParameter = parameters.find((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null && !configured.some((sweep) => sweep.globalParameter?.toLowerCase() === parameter.name.toLowerCase()))
     const part = parts.find(hasNumericInstanceParameter)
-      ?? parts.find((candidate) => importedDeviceModels.some((model) => model.name.toLowerCase() === candidate.deviceModel?.toLowerCase() && model.parameters.some((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)))
+      ?? parts.find((candidate) => importedModelSweepParameters(candidate, importedDeviceModels).length > 0)
       ?? parts[0]
     if ((!part && !availableParameter) || configured.length >= (project.simulation.analysis === 'dc' ? 1 : 3)) { setNotice(project.simulation.analysis === 'dc' ? 'A two-source DC sweep needs another scalar DC voltage or current source.' : 'Parameter stepping supports up to three distinct project parameters, R/C/L values, sources, imported device models, ICs, or reusable blocks.'); return }
     if (!part && availableParameter) {
@@ -4533,21 +4521,16 @@ export default function App() {
     }
     if (!part) return
     if (hasNumericInstanceParameter(part) && part.kind === 'subcircuit') {
-      const parameters = part.sheetId
-        ? project.sheets.find((sheet) => sheet.id === part.sheetId)?.parameters ?? []
-        : importedModels.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())?.parameters ?? []
-      const overrides = part.sheetId ? part.sheetParameters : part.modelParameters
-      const parameter = parameters.find((candidate) => componentMagnitude(Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === candidate.name.toLowerCase())?.[1] ?? candidate.defaultValue, 'resistor') !== null)
+      const parameter = subcircuitSweepParameters(part, importedModels, project.sheets)[0]
       if (parameter) {
-        const initial = Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1] ?? parameter.defaultValue
+        const initial = sweepParameterValue(part, parameter)
         const magnitude = componentMagnitude(initial, 'resistor')
         const sweep: ParameterSweep = { component: part.ref, parameter: parameter.name, instanceParameter: true, start: initial, stop: `${((magnitude ?? 0) === 0 ? 1 : (magnitude ?? 0) * 2).toExponential(5)}`, points: 3 }
         setProject((current) => ({ ...current, simulation: { ...current.simulation, parameterSweeps: [...(current.simulation.parameterSweeps ?? []), sweep] } }))
         return
       }
     }
-    const model = importedDeviceModels.find((candidate) => candidate.name.toLowerCase() === part.deviceModel?.toLowerCase())
-    const modelParameter = model?.parameters.find((parameter) => componentMagnitude(parameter.defaultValue, 'resistor') !== null)
+    const modelParameter = importedModelSweepParameters(part, importedDeviceModels)[0]
     if (modelParameter) {
       const magnitude = componentMagnitude(modelParameter.defaultValue, 'resistor')!
       const sweep: ParameterSweep = { component: part.ref, parameter: modelParameter.name, start: modelParameter.defaultValue, stop: `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}`, points: 3 }
