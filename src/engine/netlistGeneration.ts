@@ -843,7 +843,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         return override === undefined ? [] : [`${parameter.name}=${override}`]
       })
       const specializedModelName = stochasticModelNameByPart.get(part.id)
-      append(`${part.ref} ${nodes.join(' ')} ${specializedModelName ?? definition.name}${!specializedModelName && parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}`, part.id, 'component')
+      const multiplier = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''
+      append(`${part.ref} ${nodes.join(' ')} ${specializedModelName ?? definition.name}${multiplier}${!specializedModelName && parameters.length ? ` PARAMS: ${parameters.join(' ')}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'switch') {
       const state = part.value.trim().toLowerCase()

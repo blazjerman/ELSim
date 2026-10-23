@@ -1,0 +1,10 @@
+ELSim imported subcircuit multiplier with parameter override
+V1 IN 0 5
+XAMP IN OUT AMP2 M=3 PARAMS: RVAL=1k
+RLOAD OUT 0 1k
+.SUBCKT AMP2 IN OUT PARAMS: RVAL=2k
+R1 IN OUT {RVAL}
+.ENDS AMP2
+.op
+.print op v(out)
+.end
