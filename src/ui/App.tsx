@@ -98,6 +98,7 @@ const KeyboardShortcuts = lazy(() => import('./KeyboardShortcuts'))
 const ExamplesDialog = lazy(() => import('./ExamplesDialog').then((module) => ({ default: module.ExamplesDialog })))
 const BeginnerPrediction = lazy(() => import('./BeginnerPredictions').then((module) => ({ default: module.BeginnerPrediction })))
 const ModelDependencyReport = lazy(() => import('./ModelDependencyReport').then((module) => ({ default: module.ModelDependencyReport })))
+const EngineSetupDialog = lazy(() => import('./EngineSetupDialog').then((module) => ({ default: module.EngineSetupDialog })))
 const HierarchyWalkthrough = lazy(() => import('./HierarchyWalkthrough').then((module) => ({ default: module.HierarchyWalkthrough })))
 const EMPTY_SYMBOL_GEOMETRY: NonNullable<ReturnType<typeof componentDefinitionFor>['symbolGeometry']> = []
 
@@ -587,21 +588,21 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   viewportBottom: number
 }) {
   const focusedPartId = document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId
-  const marginForPart = (part: Part) => {
+  const partMargins = useMemo(() => new Map(parts.map((part) => {
     const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
     const bounds = symbol ? importedSymbolBounds(symbol) : null
     const symbolMargin = bounds ? Math.max(Math.abs(bounds.minX), Math.abs(bounds.minY), Math.abs(bounds.maxX), Math.abs(bounds.maxY)) + 40 : 100
     const blockMargin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
-    return Math.max(symbolMargin, blockMargin)
-  }
+    return [part.id, Math.max(symbolMargin, blockMargin)] as const
+  })), [parts, symbolsById])
   const partViewportIndex = useMemo(() => createViewportIndex(parts, (part) => {
-    const margin = marginForPart(part)
+    const margin = partMargins.get(part.id) ?? 100
     return { left: part.x - margin, top: part.y - margin, right: part.x + margin, bottom: part.y + margin }
-  }), [parts, symbolsById])
+  }), [parts, partMargins])
   const visibleParts = partViewportIndex({ left: viewportLeft, top: viewportTop, right: viewportRight, bottom: viewportBottom }, focusedPartId)
   return <>{visibleParts.map((part) => {
     const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
-    const margin = marginForPart(part)
+    const margin = partMargins.get(part.id) ?? 100
     const detailed = part.x >= viewportLeft - margin && part.x <= viewportRight + margin && part.y >= viewportTop - margin && part.y <= viewportBottom + margin
     const animate = animationEnabled && part.kind !== 'subcircuit' && part.x >= viewportLeft - 100 && part.x <= viewportRight + 100 && part.y >= viewportTop - 100 && part.y <= viewportBottom + 100
     if (!detailed && part.id !== focusedPartId) return null
@@ -1895,6 +1896,8 @@ const MemoizedSchematic = memo(Schematic)
 
 export default function App() {
   const workspaceMainRef = useRef<HTMLElement>(null)
+  const runButtonRef = useRef<HTMLButtonElement>(null)
+  const engineSetupTriggerRef = useRef<HTMLButtonElement | null>(null)
   const examplesTriggerRef = useRef<HTMLButtonElement>(null)
   const shortcutsTriggerRef = useRef<HTMLButtonElement>(null)
   const electricalCheckTriggerRef = useRef<HTMLButtonElement>(null)
@@ -2063,7 +2066,16 @@ export default function App() {
   const selectedTraceIdsRef = useRef(selectedTraceIds)
   selectedTraceIdsRef.current = selectedTraceIds
   const [engineAssetAvailable, setEngineAssetAvailable] = useState<boolean | null>(null)
+  const [engineSetupOpen, setEngineSetupOpen] = useState(false)
   const [modelAssetsVerified, setModelAssetsVerified] = useState<boolean | null>(null)
+  const openEngineSetup = (event: MouseEvent<HTMLButtonElement>) => {
+    engineSetupTriggerRef.current = event.currentTarget
+    setEngineSetupOpen(true)
+  }
+  const closeEngineSetup = () => {
+    setEngineSetupOpen(false)
+    window.requestAnimationFrame(() => engineSetupTriggerRef.current?.focus())
+  }
   const [componentQuery, setComponentQuery] = useState('')
   const [importedSubcircuitQuery, setImportedSubcircuitQuery] = useState('')
   const [visibleImportedSubcircuits, setVisibleImportedSubcircuits] = useState(50)
@@ -3586,7 +3598,7 @@ export default function App() {
       if (event.code !== 'Space') return
       const target = event.target
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || pendingModelImportBatch !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady || corruptLocalProjectCopies.length > 0
+      const modalOpen = engineSetupOpen || pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || pendingModelImportBatch !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady || corruptLocalProjectCopies.length > 0
       if (editingText || modalOpen) return
       event.preventDefault()
       setSpacePan(true)
@@ -3606,7 +3618,7 @@ export default function App() {
       if (event.key === 'Escape' && ltspiceExport) { closeLtspiceExport(); return }
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
       if (event.key === 'Escape' && saveWarningOpen) { closeSaveWarning(); return }
-      const modalOpen = pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || pendingModelImportBatch !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady || corruptLocalProjectCopies.length > 0
+      const modalOpen = engineSetupOpen || pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || pendingModelImportBatch !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady || corruptLocalProjectCopies.length > 0
       if (event.key === '/' && !modalOpen && !editingText) { event.preventDefault(); componentSearchRef.current?.focus(); return }
       if (editingText) return
       if (modalOpen) return
@@ -3700,7 +3712,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onSpaceKeyDown, true); window.removeEventListener('keyup', onSpaceKeyUp, true); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, corruptLocalProjectCopies.length, modelAssetsVerified, engineAssetAvailable, simulationResult, sheetInstancePath, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingWaveformTrace, pendingModelImport, pendingModelImportBatch, ltspiceExport, ltspiceExportBusy, pendingComponentKind, hasHoveredSchematicObject])
+  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, corruptLocalProjectCopies.length, modelAssetsVerified, engineAssetAvailable, simulationResult, sheetInstancePath, engineSetupOpen, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingWaveformTrace, pendingModelImport, pendingModelImportBatch, ltspiceExport, ltspiceExportBusy, pendingComponentKind, hasHoveredSchematicObject])
   const openGeneratedNetlist = () => {
     netlistReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setNetlistText(null)
@@ -3932,7 +3944,8 @@ export default function App() {
     }
     if (engineAssetAvailable === false) {
       setRunState('error')
-      setNotice('ngspice WASM is not built. Follow engine/wasm/README.md to build the local engine.')
+      engineSetupTriggerRef.current = runButtonRef.current
+      setEngineSetupOpen(true)
       return
     }
     let parameterSweep
@@ -4582,14 +4595,14 @@ export default function App() {
       <div className="menu-group"><details ref={animationTuningRef} className={`animation-tuning${animationTuningAvailable ? '' : ' is-disabled'}`}><summary aria-label="Current animation settings" aria-disabled={!animationTuningAvailable} tabIndex={animationTuningAvailable ? 0 : -1} title={animationTuningAvailable ? 'Current animation options' : 'Run a transient or operating-point simulation to enable animation settings'} onClick={(event) => { if (!animationTuningAvailable) event.preventDefault() }}><SlidersHorizontal size={14}/></summary><div className="animation-tuning-popover"><label className="animation-toggle"><input type="checkbox" aria-label="Show wire current animation" checked={currentAnimationEnabled} disabled={!animationTuningAvailable} onChange={(event) => setCurrentAnimationEnabled(event.target.checked)}/> Show wire current animation</label><label>Dot size <output>{currentDotSize}</output><input type="range" min="4" max="16" step="0.5" aria-label="Current dot size" value={currentDotSize} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentDotSize(Number(event.target.value))}/></label><label>Dot spacing <output>{currentDotSpacing}</output><input type="range" min="10" max="30" step="0.5" aria-label="Current dot spacing" value={currentDotSpacing} disabled={!animationTuningAvailable || !currentAnimationEnabled} onChange={(event) => setCurrentDotSpacing(Number(event.target.value))}/></label><small>Dot motion follows solved current; size sets dot diameter and spacing sets the interval.</small></div></details></div>
       <div className="menu-group waveform-window-actions"><IconButton title="Open generated netlist" aria-label="Netlist" onClick={openGeneratedNetlist}><Command size={14}/></IconButton><IconButton title="Tile waveform windows" aria-label="Tile waveform windows" onClick={tilePlotWindows} disabled={additionalPlotPanels.length < 2}><Grid2X2 size={14}/></IconButton><IconButton title={simulationResult ? 'Download simulation run report' : 'Run a simulation to create a report'} aria-label="Download simulation run report" onClick={downloadRunReport} disabled={!simulationResult}><Download size={14}/></IconButton></div>
       <button ref={electricalCheckTriggerRef} className="erc-button" onClick={() => setElectricalCheckOpen(true)} title="Review common schematic issues before simulation"><AlertTriangle size={14}/> Check circuit {electricalIssues && <span>{electricalIssues.length}</span>}</button>
-      <button className="run-button" onClick={startSimulation} disabled={engineAssetAvailable === null || runState === 'loading' || runState === 'running'} title={engineAssetAvailable === null ? 'Checking for the local ngspice runtime' : undefined}><Play size={15} fill="currentColor"/> Run simulation</button>
+      <button ref={runButtonRef} className="run-button" onClick={startSimulation} disabled={engineAssetAvailable === null || runState === 'loading' || runState === 'running'} title={engineAssetAvailable === null ? 'Checking for the local ngspice runtime' : undefined}><Play size={15} fill="currentColor"/> Run simulation</button>
       <button className="stop-button" title="Stop simulation" onClick={stopSimulation} disabled={runState !== 'loading' && runState !== 'running'}><Square size={12} fill="currentColor"/></button>
       {simulationResultStale && <span className="result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</span>}
     </div>
 
     {(simulationResultStale || engineAssetAvailable === false) && <div className="mobile-app-notices" aria-live="polite">
       {simulationResultStale && <span className="mobile-result-stale-warning" role="status"><AlertTriangle size={13}/> Results are from the previous circuit. Run simulation to refresh them.</span>}
-      {engineAssetAvailable === false && <div className="mobile-engine-missing-notice" role="status"><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={() => setNotice('To enable simulation, follow engine/wasm/README.md and run tools/build-ngspice-wasm.sh.')}>Setup</button></div>}
+      {engineAssetAvailable === false && <div className="mobile-engine-missing-notice" role="status"><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={openEngineSetup}>Setup</button></div>}
     </div>}
 
     <div className={`workspace mobile-pane-${mobilePane}`}>
@@ -4832,7 +4845,7 @@ export default function App() {
     {project.simulation.analysis === 'tran' && ((project.simulation.transientMeasurements?.length ?? 0) > 0 || (project.simulation.initialConditions?.length ?? 0) > 0
       ? <Suspense fallback={<div className="field-hint">Loading transient analysis controls…</div>}><TransientEditors project={project} measurements={project.simulation.transientMeasurements ?? []} conditions={project.simulation.initialConditions ?? []} nodes={labeledNodeNames} inductors={inductorParts.map((part) => part.ref)} capacitors={capacitorParts.map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAddMeasurement={addMeasurement} onChangeMeasurement={updateMeasurement} onRemoveMeasurement={removeMeasurement} onAddCondition={addInitialCondition} onAddInductorCurrent={addInductorInitialCondition} onAddCapacitorVoltage={addCapacitorInitialCondition} onChangeCondition={updateInitialCondition} onRemoveCondition={removeInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/></Suspense>
       : <TransientEditorLaunchers nodes={labeledNodeNames} inductors={inductorParts.map((part) => part.ref)} capacitors={capacitorParts.map((part) => part.ref)} skipOp={project.simulation.skipInitialOperatingPoint ?? false} onAddMeasurement={addMeasurement} onAddCondition={addInitialCondition} onAddInductorCurrent={addInductorInitialCondition} onAddCapacitorVoltage={addCapacitorInitialCondition} onSkipOpChange={(skipInitialOperatingPoint) => setProject((current) => ({ ...current, simulation: { ...current.simulation, skipInitialOperatingPoint } }))}/>)}
-          <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : `${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'dc' ? 'DC source sweep' : project.simulation.analysis === 'ac' ? 'AC frequency-domain' : project.simulation.analysis === 'noise' ? 'Noise spectral-density' : 'Transient'} analysis runs locally in a Web Worker. Results are tied to the circuit revision.`}</p><button onClick={() => setNotice(engineAssetAvailable === false ? 'Build the pinned engine with tools/build-ngspice-wasm.sh; see engine/wasm/README.md.' : 'ngspice 47 · Emscripten WebAssembly · transient, DC operating-point, AC, DC sweep, and noise analyses')}>Engine status <ArrowUp size={13}/></button><a className="engine-notice-link" href={`${import.meta.env.BASE_URL}THIRD_PARTY_NOTICES.md`} target="_blank" rel="noreferrer">Third-party notices</a></div>
+          <div className="engine-info"><div className="engine-info-title"><span className="engine-dot"/> Simulation engine</div><p>{engineAssetAvailable === false ? 'The local ngspice WebAssembly bundle is missing.' : `${project.simulation.analysis === 'op' ? 'DC operating-point' : project.simulation.analysis === 'dc' ? 'DC source sweep' : project.simulation.analysis === 'ac' ? 'AC frequency-domain' : project.simulation.analysis === 'noise' ? 'Noise spectral-density' : 'Transient'} analysis runs locally in a Web Worker. Results are tied to the circuit revision.`}</p><button onClick={(event) => engineAssetAvailable === false ? openEngineSetup(event) : setNotice('ngspice 47 · Emscripten WebAssembly · transient, DC operating-point, AC, DC sweep, and noise analyses')}>{engineAssetAvailable === false ? 'Set up local engine' : 'Engine status'} <ArrowUp size={13}/></button><a className="engine-notice-link" href={`${import.meta.env.BASE_URL}THIRD_PARTY_NOTICES.md`} target="_blank" rel="noreferrer">Third-party notices</a></div>
         </>}
         <div className="inspector-links"><button onClick={startTour}><CircleHelp size={14}/> Help</button><button onClick={() => setNotice('Component library is original ELSim data.')}><Bookmark size={14}/> Library notes</button></div>
       </aside>
@@ -4858,6 +4871,7 @@ export default function App() {
     {pendingWaveformTrace && <div className="waveform-destination-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeWaveformDestination() }}><section className="waveform-destination-dialog" role="dialog" aria-modal="true" aria-labelledby="waveform-destination-title" aria-describedby="waveform-destination-description" onKeyDown={trapDialogTab}><div className="dialog-heading"><div><span className="eyebrow">WAVEFORM PROBE</span><h2 id="waveform-destination-title">{pendingWaveformTrace.label}</h2></div><button className="subtle-icon" aria-label="Close" onClick={closeWaveformDestination}><X size={15}/></button></div><p id="waveform-destination-description">Choose where this trace should appear. Selecting an option opens it immediately.</p><div className="waveform-destination-options" role="group" aria-label="Waveform destination"><button autoFocus type="button" className="waveform-destination-option" disabled={additionalPlotPanels.length >= 8} onClick={() => commitWaveformTrace('new')}><span><strong>New waveform window</strong><small>Open a separate plot with this trace.</small></span></button><button type="button" className="waveform-destination-option" disabled={!additionalPlotPanels.length} onClick={() => commitWaveformTrace('current')}><span><strong>Add to current window</strong><small>{additionalPlotPanels.length ? `Add to ${waveformWindowTitle(additionalPlotPanels.at(-1)!, additionalPlotPanels.length - 1)}.` : 'Open a waveform window first.'}</small></span></button>{additionalPlotPanels.length > 1 && additionalPlotPanels.slice(0, -1).map((panel, index) => <button key={panel.id} type="button" className="waveform-destination-option" onClick={() => commitWaveformTrace(`panel:${panel.id}`)}><span><strong>Add to {waveformWindowTitle(panel, index)}</strong><small>Add this trace to this specific waveform window.</small></span></button>)}</div><div className="dialog-actions"><button className="quiet-button" onClick={closeWaveformDestination}>Cancel</button></div></section></div>}
     {netlistOpen && <div className="netlist-modal-backdrop" onClick={closeNetlist}><section className="netlist-modal" role="dialog" aria-modal="true" aria-labelledby="netlist-dialog-title" aria-describedby="netlist-dialog-description" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SIMULATION INPUT</span><h2 id="netlist-dialog-title">Generated SPICE netlist</h2></div><button autoFocus className="subtle-icon" aria-label="Close netlist" onClick={closeNetlist}><X size={17}/></button></div><p id="netlist-dialog-description" className="sr-only">This is the SPICE input generated from the current schematic. Review it here or copy it to use with another SPICE simulator.</p><pre>{netlistText ?? 'Generating netlist…'}</pre><div className="modal-footer"><span>Generated from this schematic</span><button className="primary-small" onClick={exportNetlist} disabled={netlistText === null}><Copy size={13}/> Copy netlist</button></div></section></div>}
     {electricalCheckOpen && <div className="netlist-modal-backdrop" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><section className="erc-modal" role="dialog" aria-modal="true" aria-labelledby="erc-title" aria-describedby="erc-description" onKeyDown={trapDialogTab} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">SCHEMATIC REVIEW · NON-BLOCKING</span><h2 id="erc-title">Circuit checks</h2></div><button autoFocus className="subtle-icon" aria-label="Close circuit checks" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}><X size={17}/></button></div><p id="erc-description" className="erc-intro">These checks look for common wiring mistakes and missing model references. They do not decide whether ngspice can solve your circuit.</p>{electricalCheckLoading || (!electricalIssues && !electricalCheckError) ? <div className="erc-success" role="status">Checking circuit…</div> : electricalCheckError ? <p className="field-error" role="alert">{electricalCheckError}</p> : electricalIssues?.length ? <ul className="erc-list">{electricalIssues.map((issue) => <li key={issue.id}><span className={'erc-severity ' + issue.severity}><AlertTriangle size={14}/></span><div><strong>{issue.title}</strong><p>{issue.detail}</p>{issue.partId && <button onClick={() => selectCheckedPart(issue.partId!)}>Select affected component</button>}{issue.wireId && <button onClick={() => selectCheckedWire(issue.wireId!)}>Select wire</button>}</div></li>)}</ul> : <div className="erc-success"><Check size={17}/> No common wiring issues found.</div>}<div className="modal-footer"><span>{electricalCheckLoading ? 'Checking…' : electricalCheckError ? 'Check unavailable' : electricalIssues ? electricalIssues.length + ' finding' + (electricalIssues.length === 1 ? '' : 's') : 'Preparing checks'}</span><button className="primary-small" onClick={() => { setElectricalCheckOpen(false); restoreDialogTriggerFocus(electricalCheckTriggerRef) }}>Done</button></div></section></div>}
+    {engineSetupOpen && <Suspense fallback={null}><EngineSetupDialog open={engineSetupOpen} onClose={closeEngineSetup}/></Suspense>}
     {shortcutsOpen && <Suspense fallback={null}><KeyboardShortcuts editing={EDITOR_SHORTCUTS} components={COMPONENT_SHORTCUTS_HELP} logicGates={LOGIC_GATE_SHORTCUTS_HELP} reserved={Object.entries(FUTURE_COMPONENT_SHORTCUTS)} onClose={() => { setShortcutsOpen(false); restoreDialogTriggerFocus(shortcutsTriggerRef) }}/></Suspense>}
     {examplesDialogLoaded && <Suspense fallback={examplesOpen ? <div className="tour-backdrop" role="presentation"><div className="tour-dialog" role="status">Loading examples…</div></div> : null}><ExamplesDialog open={examplesOpen} onClose={() => { setExamplesOpen(false); restoreDialogTriggerFocus(examplesTriggerRef) }} onOpen={loadExample} onKeyDown={trapDialogTab} engineAvailable={engineAssetAvailable} pendingExample={pendingExampleRequest} onPendingExampleHandled={clearPendingExampleRequest}/></Suspense>}
     {tourStep !== null && <div className="tour-backdrop" onClick={() => setTourStep(null)}><section className="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-description" onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogTab}><div className="modal-heading"><div><span className="eyebrow">QUICK TOUR · {tourStep + 1} OF 5</span><h2 id="tour-title" aria-live="polite" aria-atomic="true">{['Understand the workspace', 'Change a component value', 'Run a simulation', 'Explore waveforms and animation', 'Save and reopen your project'][tourStep]}</h2></div><button autoFocus className="subtle-icon" aria-label="Close quick tour" onClick={() => setTourStep(null)}><X size={17}/></button></div><p id="tour-description" className="tour-copy">{[
@@ -4872,7 +4886,7 @@ export default function App() {
     <footer className="app-status" aria-live="polite">
       <div className="app-status-left">
         <span role="status"><span className={`status-dot ${autosaveStatus}`}/>{autosaveStatus === 'saving' ? 'Saving changes locally…' : autosaveStatus === 'recovered' ? 'Saved in browser recovery storage' : autosaveStatus === 'error' ? 'Local save failed. Use Save to download a copy.' : 'All changes saved locally'}</span>
-        {engineAssetAvailable === false && <div className="engine-missing-notice" role="status"><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={() => setNotice('To enable simulation, follow engine/wasm/README.md and run tools/build-ngspice-wasm.sh.')}>Setup</button></div>}
+        {engineAssetAvailable === false && <div className="engine-missing-notice" role="status"><AlertTriangle size={13}/><span>Simulation needs the local ngspice runtime. Editing and saving still work.</span><button onClick={openEngineSetup}>Setup</button></div>}
       </div>
       <span className="app-status-brand">Original ELSim component symbols</span>
     </footer>

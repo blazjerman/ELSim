@@ -20,6 +20,12 @@ export function subscribePartUiState(partId: string, listener: Listener): () => 
 
 /** Update only the part rows whose selected or roving-tab-stop state changed. */
 export function updatePartUiState(nextSelectedPartIds: string[], nextFocusablePartId?: string): void {
+  if (
+    focusablePartId === nextFocusablePartId
+    && nextSelectedPartIds.length === selectedPartIds.size
+    && nextSelectedPartIds.every((id) => selectedPartIds.has(id))
+  ) return
+
   const nextSelected = new Set(nextSelectedPartIds)
   const changed = new Set<string>()
   for (const id of selectedPartIds) if (!nextSelected.has(id)) changed.add(id)
