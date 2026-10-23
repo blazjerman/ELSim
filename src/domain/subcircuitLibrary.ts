@@ -423,7 +423,7 @@ function parseLibraryFunctions(lines: readonly LogicalLine[]): ModelFunction[] {
 
 /** Collect .FUNC declarations by the subcircuit that owns them. */
 function parseScopedLibraryFunctions(lines: readonly LogicalLine[]): Map<string, ModelFunction[]> {
-  const functions = new Map<string, ModelFunction[]>()
+  const functionsByScope = new Map<string, Map<string, ModelFunction>>()
   const scopes: string[] = []
   for (const line of lines) {
     const text = withoutInlineComment(line.text)
@@ -441,15 +441,16 @@ function parseScopedLibraryFunctions(lines: readonly LogicalLine[]): Map<string,
     if (directive !== '.func' || !scopes.length) continue
     const definition = parseFunctionDefinition(text, line.start)
     const key = scopes.at(-1)!
-    const inScope = functions.get(key) ?? []
-    const previous = inScope.find((candidate) => candidate.name.toLowerCase() === definition.name.toLowerCase())
+    const inScope = functionsByScope.get(key) ?? new Map<string, ModelFunction>()
+    const name = definition.name.toLowerCase()
+    const previous = inScope.get(name)
     if (previous && previous.arity !== definition.arity) throw new Error(`Line ${line.start}: .FUNC ${definition.name} is declared with conflicting argument counts in .SUBCKT ${scopes.at(-1)}.`)
     if (!previous) {
-      inScope.push(definition)
-      functions.set(key, inScope)
+      inScope.set(name, definition)
+      functionsByScope.set(key, inScope)
     }
   }
-  return functions
+  return new Map([...functionsByScope].map(([scope, functions]) => [scope, [...functions.values()]]))
 }
 
 function functionAritiesForScopes(globalFunctions: ReadonlyMap<string, number>, scopes: readonly string[], localFunctions: ReadonlyMap<string, readonly ModelFunction[]>): Map<string, number> {

@@ -769,6 +769,22 @@ test('indexes large native model cards and conditional variants without changing
   assert.equal(conditional.models[0].parameters.at(-1)?.defaultVariesByCondition, true)
 })
 
+test('indexes large subcircuit function scopes while preserving forward references and declarations', () => {
+  const count = 1200
+  const declarations = Array.from({ length: count }, (_, index) => `.FUNC F${index}(x) {x}`)
+  const repeated = Array.from({ length: count }, (_, index) => `.FUNC f${index}(value) {value + 1}`)
+  const parsed = parseSubcircuitLibrary([
+    `.SUBCKT LARGE IN OUT PARAMS: GAIN={F${count - 1}(1)}`,
+    ...declarations,
+    ...repeated,
+    '.ENDS LARGE',
+  ].join('\n'))
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: `{F${count - 1}(1)}` }])
+  assert.equal(parsed.subcircuits[0].functions?.length, count)
+  assert.deepEqual(parsed.subcircuits[0].functions?.slice(0, 2).map(({ name, arity }) => [name, arity]), [['F0', 1], ['F1', 1]])
+  assert.deepEqual(parsed.subcircuits[0].functions?.at(-1), { name: `F${count - 1}`, arity: 1, sourceLine: count + 1 })
+})
+
 test('parses native ngspice VDMOS channel polarity with N-channel as the default', () => {
   const parsed = parseSubcircuitLibrary('.MODEL NPOWER VDMOS(VTO=2)\n.MODEL PPOWER VDMOS Pchan VTO=-2')
   assert.deepEqual(parsed.models.map(({ name, type, channel }) => [name, type, channel]), [
