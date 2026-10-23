@@ -1459,6 +1459,7 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   await netlistTrigger.click()
   const generatedNetlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
   await expect(generatedNetlist).toBeVisible()
+  await expect(generatedNetlist).toHaveAccessibleDescription(/SPICE input generated from the current schematic.*copy it to use with another SPICE simulator/i)
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
