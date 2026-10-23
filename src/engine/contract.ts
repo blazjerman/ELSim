@@ -136,8 +136,11 @@ function isFiniteVector(value: unknown, validatedVectors?: WeakSet<Float64Array>
   return true
 }
 
-function isOrderedAxis(value: ArrayLike<number>): boolean {
+function isOrderedAxis(value: ArrayLike<number>, validatedAxes?: WeakSet<Float64Array>): boolean {
+  const cacheable = value instanceof Float64Array
+  if (cacheable && validatedAxes?.has(value)) return true
   for (let index = 1; index < value.length; index += 1) if (value[index] <= value[index - 1]) return false
+  if (cacheable) validatedAxes?.add(value)
   return true
 }
 
@@ -167,10 +170,10 @@ function isCompletedMetadata(value: unknown): value is RunMetadata & { completed
     && isRecord(value.settings) && Object.values(value.settings).every((setting) => typeof setting === 'string' || typeof setting === 'boolean' || (typeof setting === 'number' && Number.isFinite(setting)))
 }
 
-function isTrace(value: unknown, validatedVectors?: WeakSet<Float64Array>): value is Trace {
+function isTrace(value: unknown, validatedVectors?: WeakSet<Float64Array>, validatedAxes?: WeakSet<Float64Array>): value is Trace {
   if (!isRecord(value)) return false
   if (typeof value.id !== 'string' || !value.id || typeof value.label !== 'string' || typeof value.unit !== 'string' || typeof value.axisLabel !== 'string' || typeof value.axisUnit !== 'string') return false
-  if (!isFiniteVector(value.axis, validatedVectors) || !isOrderedAxis(value.axis) || !isFiniteVector(value.values, validatedVectors) || value.axis.length === 0 || value.axis.length !== value.values.length) return false
+  if (!isFiniteVector(value.axis, validatedVectors) || !isOrderedAxis(value.axis, validatedAxes) || !isFiniteVector(value.values, validatedVectors) || value.axis.length === 0 || value.axis.length !== value.values.length) return false
   if (value.imaginaryValues !== undefined && (!isFiniteVector(value.imaginaryValues, validatedVectors) || value.imaginaryValues.length !== value.values.length)) return false
   if (value.baseId !== undefined && typeof value.baseId !== 'string') return false
   if (value.sweep !== undefined && (!isRecord(value.sweep) || typeof value.sweep.label !== 'string' || !Number.isInteger(value.sweep.index) || Number(value.sweep.index) < 0)) return false
@@ -322,7 +325,8 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
       || !['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))
       || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return false
     const validatedVectors = new WeakSet<Float64Array>()
-    return result.traces.every((trace) => isTrace(trace, validatedVectors))
+    const validatedAxes = new WeakSet<Float64Array>()
+    return result.traces.every((trace) => isTrace(trace, validatedVectors, validatedAxes))
   }
   if (candidate.type === 'error') return isDiagnostic(candidate.error)
   return false
