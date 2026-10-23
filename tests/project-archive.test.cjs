@@ -289,6 +289,17 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const dimensionPattern = new RegExp(schema.$defs.part.properties.mosfetGeometry.properties.length.pattern, 'u')
   for (const dimension of ['1u', '500n', '1MEG', '1M', '2µ', '3μ', '1e-6']) assert.equal(dimensionPattern.test(dimension), true, dimension)
   for (const dimension of ['-1u', '1 Ω', '1mm', '1e']) assert.equal(dimensionPattern.test(dimension), false, dimension)
+  assert.equal(schema.$defs.part.properties.mosfetGeometry.maxProperties, 8)
+  for (const field of ['drainArea', 'sourceArea', 'drainPerimeter', 'sourcePerimeter']) {
+    const pattern = new RegExp(schema.$defs.part.properties.mosfetGeometry.properties[field].pattern, 'u')
+    for (const dimension of ['100p', '4u', '1e-6']) assert.equal(pattern.test(dimension), true, `v8 MOSFET ${field} ${dimension}`)
+    assert.equal(pattern.test('-1'), false, `v8 MOSFET ${field} rejects negative dimensions`)
+  }
+  for (const field of ['drainSquares', 'sourceSquares']) {
+    const pattern = new RegExp(schema.$defs.part.properties.mosfetGeometry.properties[field].pattern, 'u')
+    for (const value of ['0', '2', '1.5', '1e2']) assert.equal(pattern.test(value), true, `v8 MOSFET ${field} ${value}`)
+    for (const value of ['-1', '2u', '1e']) assert.equal(pattern.test(value), false, `v8 MOSFET ${field} rejects ${value}`)
+  }
   for (const field of ['diodeArea', 'diodePerimeter']) {
     const scale = schema.$defs.part.properties[field]
     assert.equal(scale.maxLength, 64)

@@ -2,7 +2,7 @@ Original user-supplied NMOS model fixture
 VDD vdd 0 DC 5
 VG gate 0 DC 5
 RLOAD vdd drain 1k
-M1 drain gate 0 0 MUSER
+M1 drain gate 0 0 MUSER AD=100p AS=200p PD=4u PS=5u NRD=2 NRS=3
 .MODEL MUSER NMOS(LEVEL=1 VTO=1.5 KP=800u LAMBDA=0.02)
 .op
 .print op v(drain)

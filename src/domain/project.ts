@@ -30,8 +30,8 @@ export type Part = {
   modelName?: string
   modelPins?: string[]
   modelParameters?: Record<string, string>
-  /** Optional MOSFET channel geometry for native M-device instances. */
-  mosfetGeometry?: { length?: string; width?: string }
+  /** Optional channel and junction geometry for native M-device instances. */
+  mosfetGeometry?: { length?: string; width?: string; drainArea?: string; sourceArea?: string; drainPerimeter?: string; sourcePerimeter?: string; drainSquares?: string; sourceSquares?: string }
   /** Optional ngspice instance multiplier for supported passive and semiconductor devices. */
   instanceMultiplier?: string
   /** Optional ngspice diode junction-area scale; combines with M for bottom-junction parameters. */
@@ -405,8 +405,14 @@ export function validateProject(input: unknown): Project {
     if (candidate.seriesResistance !== undefined && (componentMagnitude(candidate.seriesResistance, 'resistor') === null || componentMagnitude(candidate.seriesResistance, 'resistor')! < 0)) throw new Error(`${candidate.ref} series resistance must be a nonnegative numeric resistance.`)
     if (candidate.mosfetGeometry !== undefined) {
       const geometry = candidate.mosfetGeometry
-      if ((candidate.kind !== 'nmos' && candidate.kind !== 'pmos') || !geometry || typeof geometry !== 'object' || Array.isArray(geometry) || Object.keys(geometry).length < 1 || Object.keys(geometry).length > 2 || Object.keys(geometry).some((key) => key !== 'length' && key !== 'width')) throw new Error(`${candidate.ref} has malformed MOSFET channel geometry.`)
+      const dimensionFields = ['length', 'width', 'drainArea', 'sourceArea', 'drainPerimeter', 'sourcePerimeter']
+      const squareFields = ['drainSquares', 'sourceSquares']
+      if ((candidate.kind !== 'nmos' && candidate.kind !== 'pmos') || !geometry || typeof geometry !== 'object' || Array.isArray(geometry) || Object.keys(geometry).length < 1 || Object.keys(geometry).length > 8 || Object.keys(geometry).some((key) => ![...dimensionFields, ...squareFields].includes(key))) throw new Error(`${candidate.ref} has malformed MOSFET instance geometry.`)
       for (const [dimension, value] of Object.entries(geometry)) {
+        if (squareFields.includes(dimension)) {
+          if (typeof value !== 'string' || value.length > 64 || !/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) || !Number.isFinite(Number(value)) || Number(value) < 0) throw new Error(`${candidate.ref} MOSFET ${dimension} must be a nonnegative number of diffusion squares.`)
+          continue
+        }
         const magnitude = typeof value === 'string' && value.length <= 64 ? componentMagnitude(value, 'resistor') : null
         if (magnitude === null || magnitude <= 0) throw new Error(`${candidate.ref} MOSFET ${dimension} must be a positive numeric SPICE dimension such as 1u.`)
       }

@@ -814,7 +814,19 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      const instanceOptions = [part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.mosfetGeometry?.length && `L=${part.mosfetGeometry.length}`, part.mosfetGeometry?.width && `W=${part.mosfetGeometry.width}`, part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`, part.initialOff && 'OFF'].filter(Boolean).join(' ')
+      const instanceOptions = [
+        part.instanceMultiplier && `M=${part.instanceMultiplier}`,
+        part.mosfetGeometry?.length && `L=${part.mosfetGeometry.length}`,
+        part.mosfetGeometry?.width && `W=${part.mosfetGeometry.width}`,
+        part.mosfetGeometry?.drainArea && `AD=${part.mosfetGeometry.drainArea}`,
+        part.mosfetGeometry?.sourceArea && `AS=${part.mosfetGeometry.sourceArea}`,
+        part.mosfetGeometry?.drainPerimeter && `PD=${part.mosfetGeometry.drainPerimeter}`,
+        part.mosfetGeometry?.sourcePerimeter && `PS=${part.mosfetGeometry.sourcePerimeter}`,
+        part.mosfetGeometry?.drainSquares !== undefined && `NRD=${part.mosfetGeometry.drainSquares}`,
+        part.mosfetGeometry?.sourceSquares !== undefined && `NRS=${part.mosfetGeometry.sourceSquares}`,
+        part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`,
+        part.initialOff && 'OFF',
+      ].filter(Boolean).join(' ')
       append(`${part.ref} ${positive} ${gate} ${source} ${bulk} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
       if (!part.deviceModel) mosfetModels.push({ part, name: model })
     }

@@ -327,6 +327,9 @@ export const componentDefinitions: readonly ComponentDefinition[] = Object.freez
     ...(['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos'].includes(definition.kind)
       ? [Object.freeze({ key: 'initialOff', label: 'Initial operating-point OFF state', unit: '' })]
       : []),
+    ...(['nmos', 'pmos'].includes(definition.kind)
+      ? [Object.freeze({ key: 'mosfetGeometry', label: 'MOSFET channel and junction geometry', unit: '' })]
+      : []),
   ]),
   animationChannels: Object.freeze([...definition.animationChannels]),
 })))

@@ -1996,7 +1996,7 @@ test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin ord
 
 test('standalone MOSFET supports a device multiplier with an imported BSIM3 bin family', () => {
   const project = createStarterProject()
-  const mosfet = { id: 'm-binned', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'NCH', instanceMultiplier: '4', mosfetGeometry: { length: '1u', width: '10u' }, x: 700, y: 500, rotation: 0 }
+  const mosfet = { id: 'm-binned', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'NCH', instanceMultiplier: '4', mosfetGeometry: { length: '1u', width: '10u', drainArea: '100p', sourceArea: '200p', drainPerimeter: '4u', sourcePerimeter: '5u', drainSquares: '2', sourceSquares: '3' }, x: 700, y: 500, rotation: 0 }
   project.parts.push(mosfet)
   project.netLabels.push(...componentPins(mosfet).map((pin, index) => ({
     id: `m-binned-net-${index}`, name: `m1pin${index}`, x: pin.x, y: pin.y, visible: false,
@@ -2007,7 +2007,7 @@ test('standalone MOSFET supports a device multiplier with an imported BSIM3 bin 
   }]
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^M1 m1pin0 m1pin1 m1pin2 m1pin3 NCH M=4 L=1u W=10u$/m)
+  assert.match(artifact.text, /^M1 m1pin0 m1pin1 m1pin2 m1pin3 NCH M=4 L=1u W=10u AD=100p AS=200p PD=4u PS=5u NRD=2 NRS=3$/m)
   assert.match(artifact.text, /^\.MODEL NCH\.1 NMOS/m)
   assert.match(artifact.text, /^\.MODEL NCH\.2 NMOS/m)
   assert.doesNotMatch(artifact.text, /^\.MODEL NCH NMOS/m)
@@ -2020,10 +2020,14 @@ test('MOSFET geometry accepts positive SPICE dimensions only on native MOSFETs',
   assert.doesNotThrow(() => validateProject(project))
   mosfet.mosfetGeometry.length = '0'
   assert.throws(() => validateProject(project), /MOSFET length must be a positive numeric SPICE dimension/i)
+  mosfet.mosfetGeometry = { length: '1u', drainArea: '0' }
+  assert.throws(() => validateProject(project), /MOSFET drainArea must be a positive numeric SPICE dimension/i)
+  mosfet.mosfetGeometry = { drainSquares: '-1' }
+  assert.throws(() => validateProject(project), /MOSFET drainSquares must be a nonnegative number of diffusion squares/i)
   mosfet.mosfetGeometry = { length: '1u' }
   mosfet.kind = 'resistor'
   mosfet.ref = 'R2'
-  assert.throws(() => validateProject(project), /malformed MOSFET channel geometry/i)
+  assert.throws(() => validateProject(project), /malformed MOSFET instance geometry/i)
 })
 
 test('semiconductor instance multiplier accepts positive numbers only on supported devices', () => {
