@@ -1,0 +1,12 @@
+ngspice interpreter functions in imported device model parameters
+.MODEL DFAST D(IS={vec(pi)*1p+var(foo)*1p})
+.MODEL DREF D(IS=3.14159265358979p)
+V1 IN1 0 1
+R1 IN1 OUT1 1k
+D1 OUT1 0 DFAST
+V2 IN2 0 1
+R2 IN2 OUT2 1k
+D2 OUT2 0 DREF
+.op
+.print op v(out1) v(out2)
+.end

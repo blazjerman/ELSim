@@ -190,6 +190,12 @@ test('parses .MODEL parameters that call forward-declared library functions', ()
   assert.deepEqual(parsed.functions.map(({ name, arity }) => ({ name, arity })), [{ name: 'SCALE', arity: 1 }])
 })
 
+test('retains ngspice interpreter functions in imported .MODEL parameters', () => {
+  const expression = 'vec(pi)*1p+var(foo)*1p'
+  const parsed = parseSubcircuitLibrary(`.MODEL DFAST D(IS={${expression}})\n`)
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: expression }])
+})
+
 test('rejects ground node zero as an imported subcircuit external pin', () => {
   const guidance = /ngspice treats both as global ground rather than a connectable IC pin\. Keep ground inside the model or rename the pin if it represents a separate signal\./
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT INVALID 0 OUT\nR1 0 OUT 1k\n.ENDS INVALID'), guidance)

@@ -2855,6 +2855,7 @@ test('native ngspice var and vec expressions are retained in imported IC paramet
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Components', exact: true }).click()
   const library = [
+    '.MODEL DFAST D(IS={vec(pi)*1p+var(foo)*1p})',
     '.SUBCKT USER_INTERPRETER IN OUT RVAL={vec(pi)*1k+var(foo)*1k}',
     'R1 IN OUT {RVAL}',
     '.ENDS USER_INTERPRETER',
@@ -2865,6 +2866,7 @@ test('native ngspice var and vec expressions are retained in imported IC paramet
     mimeType: 'text/plain',
     buffer: Buffer.from(library),
   })
+  await expect(page.getByText(/Imported 1 subcircuit and 1 device model from interpreter-functions\.lib/)).toBeVisible()
   const model = page.locator('.imported-model').filter({ hasText: 'USER_INTERPRETER' })
   await expect(model).toContainText('Parameters: RVAL={vec(pi)*1k+var(foo)*1k}')
   await model.getByRole('button', { name: 'Add to schematic' }).click()
@@ -2882,6 +2884,7 @@ test('native ngspice var and vec expressions are retained in imported IC paramet
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('X1 n1 n2 USER_INTERPRETER PARAMS: RVAL={var(foo)+vec(pi)}')
   await expect(page.locator('.netlist-modal pre')).toContainText('.SUBCKT USER_INTERPRETER IN OUT RVAL={vec(pi)*1k+var(foo)*1k}')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DFAST D(IS={vec(pi)*1p+var(foo)*1p})')
 })
 
 test('native ngspice backslash continuations import and preserve model source records', { tag: '@ui-smoke' }, async ({ page }) => {
