@@ -342,6 +342,15 @@ test('project inspector reports the current project format version', { tag: '@ui
   await expect(page.getByText('ELSim JSON · v8')).toBeVisible()
 })
 
+test('status footer announces only its changing status messages', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const footer = page.locator('.app-status')
+  await expect(footer).not.toHaveAttribute('aria-live')
+  await expect(footer.getByRole('status').first()).toContainText(/All changes saved locally|Saved in browser recovery storage/)
+  const runtimeNotice = footer.locator('.engine-missing-notice')
+  if (await runtimeNotice.count()) await expect(runtimeNotice).toHaveAttribute('role', 'status')
+})
+
 test('editor remains usable when browser local storage access is denied', { tag: '@ui-smoke' }, async ({ page }) => {
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
