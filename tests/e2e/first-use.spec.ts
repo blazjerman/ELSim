@@ -2613,7 +2613,7 @@ test('native ngspice numeric-leading IC names and pins import and generate a val
   expect(netlist).toMatch(/X1 .* 74HC00m/)
 })
 
-test('native ngspice ignores mismatched optional names on nested .ENDS cards', { tag: '@ui-smoke' }, async ({ page }) => {
+test('model-library import rejects mismatched nested .ENDS names at their source line', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
   await page.getByRole('button', { name: 'Components', exact: true }).click()
@@ -2624,9 +2624,7 @@ test('native ngspice ignores mismatched optional names on nested .ENDS cards', {
     mimeType: 'text/plain',
     buffer: Buffer.from(modelLibrary),
   })
-  await expect(page.getByText(/Imported 2 subcircuits and 0 device models from nested\.lib/)).toBeVisible()
-  await expect(page.locator('.imported-model').filter({ hasText: 'TOP' })).toBeVisible()
-  await expect(page.locator('.imported-model').filter({ hasText: 'CORE' })).toBeVisible()
+  await expect(page.getByText('Line 5: .ENDS TOP does not match the open .SUBCKT CORE.')).toBeVisible()
 })
 
 test('subcircuit parameter defaults can call functions from an imported include library', { tag: '@ui-smoke' }, async ({ page }) => {
@@ -5265,7 +5263,14 @@ test('native ngspice .TITLE imports, is explained, and runs in the generated dec
 })
 
 test('imports a hyphenated native ngspice device-model name', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createStarterProject()
+  const diode = { id: 'd-hyphen', kind: 'diode' as const, ref: 'D1', value: '0', x: 500, y: 220, rotation: 0 as const }
+  project.parts.push(diode)
+  const rootSheet = project.sheets.find((sheet) => sheet.id === project.rootSheetId)!
+  project.sheets[project.sheets.indexOf(rootSheet)] = { ...rootSheet, parts: project.parts, netLabels: project.netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
   await page.goto('/')
+  await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'hyphenated-diode.lib',
@@ -5277,6 +5282,14 @@ test('imports a hyphenated native ngspice device-model name', { tag: '@ui-smoke'
   await expect(deviceModel).toBeVisible()
   await expect(subcircuit).toBeVisible()
   await expect(page.getByText(/Imported 1 subcircuit and 1 device model from hyphenated-diode\.lib/)).toBeVisible()
+  await page.locator('.circuit-part[data-part-id="d-hyphen"]').click()
+  const modelPicker = page.getByLabel('Device model for D1')
+  await expect(modelPicker.locator('option', { hasText: 'D-FAST (D)' })).toHaveCount(1)
+  await modelPicker.selectOption('D-FAST')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText(/^D1 .* D-FAST$/m)
+  await expect(netlist).toContainText('.MODEL D-FAST D(IS=1e-14)')
 })
 
 test('ngspice .GLOBAL inside an imported subcircuit is preserved and warns about shared nodes', { tag: '@ngspice' }, async ({ page }) => {
