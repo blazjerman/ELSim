@@ -1860,7 +1860,6 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     {contextMenu && <div ref={contextMenuRef} className="schematic-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
       <div className="context-menu-heading">{contextPart ? `${contextPart.ref} · ${kindNames[contextPart.kind]}` : contextMenu.kind === 'label' ? `Net ${contextMenu.node ?? '0'}` : contextMenu.kind === 'wire' ? contextMenu.node ? `Net ${contextMenu.node}` : 'Wire' : 'Schematic options'}</div>
       <div role="menu" aria-label={contextPart ? 'Options for ' + contextPart.ref : contextMenu.kind === 'label' ? `Options for net ${labelsById.get(contextMenu.id)?.name ?? ''}` : contextMenu.kind === 'wire' ? 'Wire options' : 'Schematic options'} onKeyDown={(event) => {
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setContextMenu(null); contextMenuReturnFocusRef.current?.focus(); return }
         navigateMenuByKeyboard(event)
       }}>
       {contextPart ? <>
