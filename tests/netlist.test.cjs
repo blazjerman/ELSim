@@ -515,11 +515,16 @@ test('distributed RC line example imports and solves an ngspice URC model inside
   assert.deepEqual(project.plotSettings.selectedTraceIds, ['V(IN)', 'V(OUT)'])
   assert.equal(project.modelAssets.length, 1)
   assert.equal(project.modelAssets[0].sha256, createHash('sha256').update(project.modelAssets[0].content).digest('hex'))
-  assert.match(artifact.text, /^\.SUBCKT URC_LINE IN OUT RETURN$/m)
-  assert.match(artifact.text, /^U1 IN OUT RETURN URCMOD L=1m N=6$/m)
+  assert.match(artifact.text, /^\.SUBCKT URC_LINE IN OUT RETURN PARAMS: LENGTH=1m SECTIONS=6$/m)
+  assert.match(artifact.text, /^U1 IN OUT RETURN URCMOD L=\{LENGTH\} N=\{SECTIONS\}$/m)
   assert.match(artifact.text, /^\.MODEL URCMOD URC \(RPERL=1k CPERL=100p K=2 FMAX=1G\)$/m)
   assert.match(artifact.text, /^XLINE IN OUT 0 URC_LINE$/m)
   assert.match(artifact.text, /^\.tran 1n 500n$/m)
+  const tuned = structuredClone(project)
+  tuned.parts.find((part) => part.ref === 'XLINE').modelParameters = { LENGTH: '2m', SECTIONS: '8' }
+  const tunedNetlist = createNetlistArtifact(tuned)
+  assert.deepEqual(tunedNetlist.diagnostics, [])
+  assert.match(tunedNetlist.text, /^XLINE IN OUT 0 URC_LINE PARAMS: LENGTH=2m SECTIONS=8$/m)
 })
 
 test('coupled-line crosstalk example preserves its imported CPL model and probes', () => {

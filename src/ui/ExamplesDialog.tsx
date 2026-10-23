@@ -31,7 +31,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'transformer', title: 'AC transformer', description: 'Compare the primary and secondary waveforms of a coupled-inductor transformer with a 2:1 turns ratio.' },
   { id: 'transformer-current', title: 'Transformer winding currents', description: 'Run a 50 Hz transient and watch the solved primary and secondary currents animate independently.' },
   { id: 'transmission-line', title: 'Transmission-line pulse delay', description: 'Compare a 1 V pulse at the input and output of a matched 50 Ω line; the output arrives after the configured 5 ns propagation delay.' },
-  { id: 'urc-line', title: 'Distributed RC line', description: 'Explore an imported three-pin IC built from ngspice’s URC device and compare the input and the rounded, delayed output pulse.' },
+  { id: 'urc-line', title: 'Distributed RC line', description: 'Explore an imported three-pin IC built from ngspice’s URC device. Edit the line length and RC section count, then compare the rounded, delayed output pulse.' },
   { id: 'coupled-crosstalk', title: 'Crosstalk between coupled lines', description: 'Drive one conductor in a three-line cable model and compare its output with the two neighboring lines to see mutual coupling.' },
   { id: 'educational-opamp', title: 'Idealized op-amp and feedback', description: 'Use the built-in five-pin teaching model to make a 1 V input into about 2 V with negative feedback. No imported model files are needed.' },
   { id: 'imported-opamp', title: 'Imported op-amp IC', description: 'Explore a five-pin user subcircuit, its ordered pins, supply rails, feedback resistors, and solved gain.' },

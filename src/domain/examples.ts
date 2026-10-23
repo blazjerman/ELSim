@@ -718,15 +718,15 @@ export function createTransmissionLineExampleProject(): Project {
 }
 
 const urcLineLibrary = [
-  '.SUBCKT URC_LINE IN OUT RETURN',
-  'U1 IN OUT RETURN URCMOD L=1m N=6',
+  '.SUBCKT URC_LINE IN OUT RETURN PARAMS: LENGTH=1m SECTIONS=6',
+  'U1 IN OUT RETURN URCMOD L={LENGTH} N={SECTIONS}',
   '.ENDS URC_LINE',
   '.MODEL URCMOD URC (RPERL=1k CPERL=100p K=2 FMAX=1G)',
   '',
 ].join('\n')
-const urcLineLibrarySha256 = '89157ff0c2d26e11045e59f53cffa19746beff453795a9d8f3bb1d95bac5f56b'
+const urcLineLibrarySha256 = '53c8d211d180f752f2b647f59178e839bf50ebfae4fb74701e127d2257082bb4'
 
-/** An ELSim-authored imported IC example demonstrating ngspice's distributed RC U-device. */
+/** An ELSim-authored imported IC example demonstrating ngspice's editable distributed RC U-device. */
 export function createUrcLineExampleProject(): Project {
   const project = createStarterProject()
   const library = {
