@@ -874,3 +874,14 @@ The 40-trace, 10,012-sample fixture reached results in 1,008 ms; individual visi
 ### Full local performance benchmark repeat (2026-10-23)
 
 `npm run benchmark:performance` completed using the existing ignored `public/engine/ngspice.mjs` and `.wasm`; it does not build WASM. On the documented i7-12700F host, the 5,000-part/4,900-wire domain fixture measured connectivity at 36.1/43.7 ms median/p95 and netlisting at 44.0/60.6 ms; the 5,000-instance hierarchy measured 79.2/94.3 ms and 114.1/136.8 ms respectively. The 1,000,130-sample transient completed solve/raw writing in 2.67 s, parsed in 17.8 ms, and used 63.2 MB of WASM linear memory (the process RSS increase was about 103 MB). A retained 50 ms-to-100 ms sample window reduced the raw/vector payload by about 50%. These domain/solver measurements do not replace browser interaction or second-hardware profiling. Results are consistent with existing same-host observations and do not reveal a new hotspot requiring code changes.
+
+### Firefox million-sample process-memory comparison (2026-10-23)
+
+The Linux process-tree sampler was run against the existing local WASM runtime with one and eight waveform windows. Both runs solved 1,000,130 samples, used 185,794,560 bytes of WASM linear memory, and reported complete startup, pre-run, worker-profile, and result-ready phase markers. The one-window run rendered four traces and reached results in 10.03 s; its repeated cursor scrubs were 25–36 ms. The eight-window run rendered 32 traces and reached results in 10.00 s; scrubs were 40–62 ms.
+
+| Plot windows | Startup peak PSS / RSS (MiB) | Solve and result-transfer peak PSS / RSS (MiB) | Validation peak PSS / RSS (MiB) | Plot interaction peak PSS / RSS (MiB) | Overall peak PSS / RSS (MiB) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 587.2 / 937.6 | 1,004.8 / 1,362.1 | 651.3 / 1,009.4 | 661.2 / 1,020.2 | 1,004.8 / 1,362.1 |
+| 8 | 581.0 / 932.7 | 1,041.9 / 1,400.5 | 642.1 / 1,001.4 | 687.3 / 1,047.9 | 1,041.9 / 1,400.5 |
+
+These are individual same-host observations, not a causal comparison or portable memory budget. PSS/RSS sum Firefox and its descendants, not ELSim-only allocations; Firefox page-heap counters were unavailable. The solve/result-transfer phase dominates both peaks, and the observed eight-window process peak was 37.1 MiB PSS above the one-window run. Do not attribute that difference to plot windows from one run per configuration. No WASM rebuild or Pages workflow ran.
