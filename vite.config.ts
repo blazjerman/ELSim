@@ -47,6 +47,23 @@ export default defineConfig(({ command, mode }) => {
   return {
     base,
     plugins: [react(), {
+      name: 'preload-first-workspace-schematic',
+      apply: 'build',
+      generateBundle: {
+        order: 'post',
+        handler(_output, bundle) {
+          const schematicChunk = Object.values(bundle).find((output) => output.type === 'chunk' && output.name === 'SchematicEditor')
+          const html = bundle['index.html']
+          if (!schematicChunk || !html || html.type !== 'asset' || typeof html.source !== 'string') {
+            throw new Error('Production build is missing the first-workspace schematic editor chunk or HTML entry.')
+          }
+          const preload = `<link rel="modulepreload" crossorigin href="${base}${schematicChunk.fileName}">`
+          if (!html.source.includes(preload)) {
+            html.source = html.source.replace('</head>', `    ${preload}\n  </head>`)
+          }
+        },
+      },
+    }, {
       name: 'emit-offline-app-shell',
       apply: 'build',
       generateBundle(_output, bundle) {
