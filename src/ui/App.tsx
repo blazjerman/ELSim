@@ -64,11 +64,10 @@ function writeLocalPreference(key: string, value: string): void {
   try { localStorage.setItem(key, value) } catch { /* Preferences are optional; editor operation must not depend on storage access. */ }
 }
 
-function fetThresholdValue(part: Part | undefined, models: SpiceModelDefinition[], fallback: string): string {
+function fetThresholdValue(part: Part | undefined, thresholdsByModelName: ReadonlyMap<string, string | undefined>, fallback: string): string {
   if (!part?.deviceModel) return fallback
-  const model = models.find((candidate) => candidate.name.toLowerCase() === part.deviceModel?.toLowerCase())
   const override = Object.entries(part.modelParameters ?? {}).find(([name]) => name.toLowerCase() === 'vto')?.[1]
-  return override ?? model?.parameters.find((parameter) => parameter.name.toLowerCase() === 'vto')?.defaultValue ?? ''
+  return override ?? thresholdsByModelName.get(part.deviceModel.toLowerCase()) ?? ''
 }
 
 type ImportedDeviceModel = SpiceModelDefinition & { assetId: string; filename: string; binCount?: number }
@@ -2460,6 +2459,14 @@ export default function App() {
   }, [filteredImportedModels])
   const visibleImportedModels = filteredImportedModels.slice(0, visibleImportedSubcircuits)
   const importedDeviceModels = useMemo<ImportedDeviceModel[]>(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => parsed.models.filter((model) => !model.scope || ['r', 'c', 'l'].includes(model.type.toLowerCase())).map((model) => ({ ...model, assetId: asset.id, filename: asset.filename }))), [modelLibraryAnalysis])
+  const importedDeviceModelThresholds = useMemo(() => {
+    const thresholds = new Map<string, string | undefined>()
+    for (const model of importedDeviceModels) {
+      const name = model.name.toLowerCase()
+      if (!thresholds.has(name)) thresholds.set(name, model.parameters.find((parameter) => parameter.name.toLowerCase() === 'vto')?.defaultValue)
+    }
+    return thresholds
+  }, [importedDeviceModels])
   const importedBsim3BinModels = useMemo<ImportedDeviceModel[]>(() => ngspiceBsim3BinFamilies(importedDeviceModels).map((family) => ({
     ...family.models[0],
     name: family.displayName,
@@ -4858,8 +4865,8 @@ export default function App() {
                 {exampleLesson.id === 'bridge-rectifier' && <BeginnerPrediction kind="bridge-ripple" key={['bridge-v1', 'bridge-c1', 'bridge-rload', 'bridge-rref'].map((id) => { const part = partsById.get(id); return `${part?.value ?? ''}:${part?.sine?.offset ?? ''}:${part?.sine?.amplitude ?? ''}:${part?.sine?.frequency ?? ''}` }).join('|')} offsetValue={partsById.get('bridge-v1')?.sine?.offset ?? ''} amplitudeValue={partsById.get('bridge-v1')?.sine?.amplitude ?? ''} frequencyValue={partsById.get('bridge-v1')?.sine?.frequency ?? ''} capacitanceValue={partsById.get('bridge-c1')?.value ?? ''} loadResistanceValue={partsById.get('bridge-rload')?.value ?? ''} referenceResistanceValue={partsById.get('bridge-rref')?.value ?? ''}/>}
                 {exampleLesson.id === 'transistor' && <BeginnerPrediction kind="npn-switch" key={['switch-vdrive', 'switch-rbase', 'switch-q1', 'switch-vcc', 'switch-rload'].map((id) => partsById.get(id)?.value ?? '').join(':')} driveValue={partsById.get('switch-vdrive')?.value ?? ''} resistanceValue={partsById.get('switch-rbase')?.value ?? ''} betaValue={partsById.get('switch-q1')?.value ?? ''} supplyValue={partsById.get('switch-vcc')?.value ?? ''} loadResistanceValue={partsById.get('switch-rload')?.value ?? ''}/>}
                 {exampleLesson.id === 'pnp' && <BeginnerPrediction kind="pnp-switch" key={['pnp-switch-vdrive', 'pnp-switch-rbase', 'pnp-switch-q1', 'pnp-switch-vcc', 'pnp-switch-rload'].map((id) => partsById.get(id)?.value ?? '').join(':')} driveValue={partsById.get('pnp-switch-vdrive')?.value ?? ''} resistanceValue={partsById.get('pnp-switch-rbase')?.value ?? ''} betaValue={partsById.get('pnp-switch-q1')?.value ?? ''} supplyValue={partsById.get('pnp-switch-vcc')?.value ?? ''} loadResistanceValue={partsById.get('pnp-switch-rload')?.value ?? ''}/>}
-                {exampleLesson.id === 'mosfet' && <BeginnerPrediction kind="nmos-switch" key={['mos-switch-vdrive', 'mos-switch-m1'].map((id) => partsById.get(id)?.value ?? '').concat(fetThresholdValue(partsById.get('mos-switch-m1'), importedDeviceModels, '2 V')).join(':')} driveValue={partsById.get('mos-switch-vdrive')?.value ?? ''} supplyValue={partsById.get('mos-switch-vcc')?.value ?? ''} thresholdValue={fetThresholdValue(partsById.get('mos-switch-m1'), importedDeviceModels, '2 V')}/>}
-                {exampleLesson.id === 'pmos' && <BeginnerPrediction kind="pmos-switch" key={['pmos-switch-vdrive', 'pmos-switch-m1'].map((id) => partsById.get(id)?.value ?? '').concat(fetThresholdValue(partsById.get('pmos-switch-m1'), importedDeviceModels, '-2 V')).join(':')} driveValue={partsById.get('pmos-switch-vdrive')?.value ?? ''} supplyValue={partsById.get('pmos-switch-vcc')?.value ?? ''} thresholdValue={fetThresholdValue(partsById.get('pmos-switch-m1'), importedDeviceModels, '-2 V')}/>}
+                {exampleLesson.id === 'mosfet' && <BeginnerPrediction kind="nmos-switch" key={['mos-switch-vdrive', 'mos-switch-m1'].map((id) => partsById.get(id)?.value ?? '').concat(fetThresholdValue(partsById.get('mos-switch-m1'), importedDeviceModelThresholds, '2 V')).join(':')} driveValue={partsById.get('mos-switch-vdrive')?.value ?? ''} supplyValue={partsById.get('mos-switch-vcc')?.value ?? ''} thresholdValue={fetThresholdValue(partsById.get('mos-switch-m1'), importedDeviceModelThresholds, '2 V')}/>}
+                {exampleLesson.id === 'pmos' && <BeginnerPrediction kind="pmos-switch" key={['pmos-switch-vdrive', 'pmos-switch-m1'].map((id) => partsById.get(id)?.value ?? '').concat(fetThresholdValue(partsById.get('pmos-switch-m1'), importedDeviceModelThresholds, '-2 V')).join(':')} driveValue={partsById.get('pmos-switch-vdrive')?.value ?? ''} supplyValue={partsById.get('pmos-switch-vcc')?.value ?? ''} thresholdValue={fetThresholdValue(partsById.get('pmos-switch-m1'), importedDeviceModelThresholds, '-2 V')}/>}
                 {exampleLesson.id === 'voltage-divider' && <BeginnerPrediction kind="voltage-divider" key={`${partsById.get('divider-v1')?.value ?? ''}:${partsById.get('divider-r1')?.value ?? ''}:${partsById.get('divider-r2')?.value ?? ''}`} supplyValue={partsById.get('divider-v1')?.value ?? ''} upperResistanceValue={partsById.get('divider-r1')?.value ?? ''} lowerResistanceValue={partsById.get('divider-r2')?.value ?? ''}/>}
                 {exampleLesson.id === 'potentiometer' && <BeginnerPrediction kind="potentiometer" key={`${partsById.get('pot-v1')?.value ?? ''}:${partsById.get('pot-p1')?.wiperPosition ?? ''}`} supplyValue={partsById.get('pot-v1')?.value ?? ''} wiperPosition={partsById.get('pot-p1')?.wiperPosition ?? '0.5'}/>}
                 {exampleLesson.id === 'wheatstone-bridge' && <BeginnerPrediction kind="wheatstone-bridge" key={`${partsById.get('bridge-v1')?.value ?? ''}:${partsById.get('bridge-r1')?.value ?? ''}:${partsById.get('bridge-r2')?.value ?? ''}:${partsById.get('bridge-r3')?.value ?? ''}:${partsById.get('bridge-r4')?.value ?? ''}`} supplyValue={partsById.get('bridge-v1')?.value ?? ''} leftTopValue={partsById.get('bridge-r1')?.value ?? ''} leftBottomValue={partsById.get('bridge-r2')?.value ?? ''} rightTopValue={partsById.get('bridge-r3')?.value ?? ''} rightBottomValue={partsById.get('bridge-r4')?.value ?? ''}/>}
