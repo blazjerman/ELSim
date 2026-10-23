@@ -8954,6 +8954,36 @@ test('an imported SW model controls a voltage switch and its displayed state', {
   expect(netlist).not.toMatch(/^\.model ELSIM_S1_SW/m)
 })
 
+test('an imported CSW model controls its current threshold and displayed state', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Use the existing ngspice WASM runtime for the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Current-controlled switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'current-switch.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.MODEL USER_CSW CSW (IT=6mA IH=0.2mA RON=1 ROFF=1Meg)\n'),
+  })
+  await page.locator('.circuit-part[aria-label^="W1,"]').click()
+  await page.getByLabel('Device model for W1').selectOption('USER_CSW')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+
+  const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  const switchSymbol = page.locator('.circuit-part[data-part-id="cswitch-w1"] .current-switch-symbol')
+  const finalSample = Number(await timeSlider.getAttribute('max'))
+  await timeSlider.fill(String(Math.floor(finalSample * 0.25)))
+  // The example's sensed current is 5 mA. The imported 6 mA threshold must
+  // keep the switch open; the built-in example threshold is only 2 mA.
+  await expect(switchSymbol).toHaveAttribute('data-state', 'open')
+  await timeSlider.fill(String(Math.floor(finalSample * 0.75)))
+  await expect(switchSymbol).toHaveAttribute('data-state', 'open')
+})
+
 test('transistor switch example demonstrates base drive and collector switching', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
