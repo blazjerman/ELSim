@@ -17,6 +17,13 @@ export type ParsedRawFile = {
   variables: RawVariable[]
 }
 
+/** Read a result file into its own buffer, then release its Emscripten FS copy. */
+export function readRawFileAndRelease(fs: { readFile(path: string): Uint8Array; unlink(path: string): void }, path: string): Uint8Array {
+  const data = fs.readFile(path)
+  fs.unlink(path)
+  return data
+}
+
 export function rawTraceUnit(name: string, type: string): string {
   if (/^onoise_spectrum$/i.test(name)) return 'V/√Hz'
   if (/^inoise_spectrum$/i.test(name)) return /^current-density$/i.test(type) ? 'A/√Hz' : 'V/√Hz'

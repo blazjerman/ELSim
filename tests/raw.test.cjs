@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { isTraceVariable, parseAsciiRawFile, parseBinaryRawFile, parseRawFile, rawTraceUnit } = require(path.join(build, 'engine/raw.js'))
+const { isTraceVariable, parseAsciiRawFile, parseBinaryRawFile, parseRawFile, rawTraceUnit, readRawFileAndRelease } = require(path.join(build, 'engine/raw.js'))
 const { serializeWaveformCsv } = require(path.join(build, 'engine/csv.js'))
 
 const validRaw = `Title: RC fixture
@@ -237,6 +237,19 @@ test('raw-file entry point detects binary payloads and retains ASCII compatibili
   const binary = binaryRaw(validRaw.replace(/Values:[\s\S]*$/, 'Values:'), [0, 5, -0.001, 0.001, 4, -0.002])
   assert.deepEqual([...parseRawFile(binary).variables[0].values], [5, 4])
   assert.deepEqual([...parseRawFile(Buffer.from(validRaw)).variables[0].values], [5, 4])
+})
+
+test('raw result bytes are copied out before the Emscripten filesystem entry is released', () => {
+  const events = []
+  let storedBytes = new Uint8Array([1, 2, 3])
+  const fs = {
+    readFile(name) { events.push(`read:${name}`); return storedBytes.slice() },
+    unlink(name) { events.push(`unlink:${name}`); storedBytes = null },
+  }
+  const result = readRawFileAndRelease(fs, '/result.raw')
+  assert.deepEqual([...result], [1, 2, 3])
+  assert.equal(storedBytes, null)
+  assert.deepEqual(events, ['read:/result.raw', 'unlink:/result.raw'])
 })
 
 test('waveform CSV includes units, quoted labels, and synchronized mixed-unit samples', () => {
