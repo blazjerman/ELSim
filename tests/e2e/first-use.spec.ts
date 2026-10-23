@@ -3112,6 +3112,7 @@ test('copying a full-circuit marquee selection selects only the cloned wire IDs'
   await page.goto('/')
   const canvas = page.locator('svg.schematic')
   await expect(canvas).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('elsim:project:v7'))).not.toBeNull()
   // Exercise the pointer-hover reorder path before marquee selection. This
   // used to leave React's keyed SVG order out of sync with the live DOM.
   await page.locator('.wire-line').first().hover()
@@ -3135,7 +3136,6 @@ test('copying a full-circuit marquee selection selects only the cloned wire IDs'
   await page.mouse.down()
   await page.mouse.move(end.x, end.y, { steps: 4 })
   await page.mouse.up()
-  await waitForProjectAutosave(page)
   const before = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!))
   await expect(page.locator('.circuit-part.selected')).toHaveCount(before.parts.length)
   await expect(page.locator('.wire-line.selected')).toHaveCount(before.wires.length)
