@@ -503,7 +503,11 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
   const parameters: SubcircuitParameter[] = []
   for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|'[^']*'|[^\s,)]+)/g)) {
     const value = match[2].replace(/^\{([\s\S]*)\}$|^'([\s\S]*)'$/, (_whole, braced: string | undefined, quoted: string | undefined) => braced ?? quoted ?? _whole)
-    if (isSafeSubcircuitParameterValue(match[2], functions) && !parameters.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase())) parameters.push({ name: match[1], defaultValue: value })
+    if (!isSafeSubcircuitParameterValue(match[2], functions)) continue
+    const parameter = { name: match[1], defaultValue: value }
+    const existing = parameters.findIndex((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase())
+    if (existing < 0) parameters.push(parameter)
+    else parameters[existing] = parameter
   }
   return { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
 }

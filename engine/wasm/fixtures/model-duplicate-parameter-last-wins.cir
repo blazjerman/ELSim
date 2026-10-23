@@ -1,0 +1,12 @@
+Duplicate .MODEL parameters use the last value, matching imported model metadata
+V1 in1 0 1
+R1 in1 n1 1k
+D1 n1 0 DM
+V2 in2 0 1
+R2 in2 n2 1k
+D2 n2 0 DS
+.MODEL DM D(IS=1n IS=2n)
+.MODEL DS D(IS=2n)
+.tran 1u 1u
+.print tran @d1[id] @d2[id]
+.end
