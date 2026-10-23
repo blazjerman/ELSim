@@ -216,11 +216,17 @@ function hasNgspiceBackslashContinuation(line: string): boolean {
   return !quote
 }
 
-function inspectLibrarySections(source: string): { sections: string[]; lines: { line: LogicalLine; section: string | null }[]; logical: LogicalLine[] } {
+function inspectLibrarySections(source: string): { sections: string[]; lines: { line: LogicalLine; section: string | null }[]; logical: LogicalLine[]; includes: ModelIncludeReference[]; includeLineNumbers: Set<number> } {
   const sourceLines = logicalLines(source)
   if (sourceLines.length > MAX_LIBRARY_LINES) throw new Error('Model libraries are limited to 100,000 lines.')
   const sections: string[] = []
   const lines: { line: LogicalLine; section: string | null }[] = []
+  const includes: ModelIncludeReference[] = []
+  const includeLineNumbers = new Set<number>()
+  const endLibraryNames = new Set(sourceLines.flatMap(({ text }) => {
+    const match = withoutInlineComment(text).match(/^\s*\.endl\s+(\S+)/i)
+    return match ? [match[1].toLowerCase()] : []
+  }))
   let activeSection: string | null = null
   const activeSubcircuits: { name: string; start: number }[] = []
   const conditionals: { line: number; sawElse: boolean }[] = []
@@ -271,6 +277,19 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
       if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .LIB directives are not allowed inside a .SUBCKT.`)
       const external = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([^\s"'`\x00-\x1f]+)$/i)
       if (external) { lines.push({ line, section: activeSection }); continue }
+      // In ngspice PSpice mode, `.LIB filename` is a simplified include.
+      // It is otherwise ambiguous with `.LIB section`, so only recognize a
+      // quoted/path/file-like token when no matching `.ENDL` closes it.
+      const singleArgument = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s*$/i)
+      const singleReference = singleArgument?.[1] ?? singleArgument?.[2] ?? singleArgument?.[3]
+      const quotedReference = singleArgument?.[1] !== undefined || singleArgument?.[2] !== undefined
+      const looksLikeFile = singleReference !== undefined && (quotedReference || /[\\/]/.test(singleReference) || /\.[A-Za-z0-9]{1,8}$/.test(singleReference))
+      if (looksLikeFile && !endLibraryNames.has(singleReference.toLowerCase())) {
+        includes.push({ reference: singleReference, filename: includedAssetBasename(singleReference), sourceLine: line.start })
+        includeLineNumbers.add(line.start)
+        lines.push({ line, section: activeSection })
+        continue
+      }
       if (activeSection) throw new Error(`Line ${line.start}: nested .LIB sections are not supported.`)
       const section = tokens[1]
       if (tokens.length !== 2 || !section || !isValidSpiceLibrarySectionName(section)) throw new Error(`Line ${line.start}: malformed .LIB section or file reference.`)
@@ -311,7 +330,7 @@ function inspectLibrarySections(source: string): { sections: string[]; lines: { 
     throw new Error(`.IF opened on line ${active.line} has no matching .ENDIF.`)
   }
   if (activeSection) throw new Error(`.LIB ${activeSection} has no matching .ENDL.`)
-  return { sections, lines, logical: sourceLines }
+  return { sections, lines, logical: sourceLines, includes, includeLineNumbers }
 }
 
 /** List safe, named .LIB sections without interpreting model contents. */
@@ -968,7 +987,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   const subcircuits: SubcircuitDefinition[] = []
   const models: SpiceModelDefinition[] = []
   const dependencies: ModelDependency[] = []
-  const includes: ModelIncludeReference[] = []
+  const includes: ModelIncludeReference[] = [...inspected.includes]
   const seenNames = new Set<string>()
   const seenModelNames = new Map<string, SeenModelCard>()
   const modelLines: LogicalLine[] = []
@@ -1016,6 +1035,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       continue
     }
     if (directive === '.lib') {
+      if (inspected.includeLineNumbers.has(line.start)) continue
       if (activeSubcircuits.length) throw new Error(`Line ${line.start}: .LIB file references must be outside a .SUBCKT.`)
       const match = text.match(/^\.lib\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|(\S+))\s+([^\s"'`\x00-\x1f]+)$/i)
       if (!match) {

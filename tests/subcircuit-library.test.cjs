@@ -396,6 +396,30 @@ test('project-local .LIB references select named sections and retain their trans
   assert.equal(unsafe.missingIncludes[0].reason, 'unsafe')
 })
 
+test('ngspice single-argument .LIB file references resolve as project-local includes', () => {
+  const wrapper = { id: 'wrapper', filename: 'wrapper.lib', content: '.LIB "shared.lib"\n.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP' }
+  const shared = { id: 'shared', filename: 'shared.lib', content: '.SUBCKT CORE IN OUT\nR1 IN OUT 1k\n.ENDS CORE' }
+  const parsed = parseSubcircuitLibrary(wrapper.content)
+  assert.deepEqual(parsed.includes, [{ reference: 'shared.lib', filename: 'shared.lib', sourceLine: 1 }])
+  assert.doesNotMatch(parsed.modelText, /^\.LIB/im)
+
+  const unresolved = analyzeModelLibraries([wrapper])
+  assert.deepEqual(unresolved.dependencies.missingIncludes.map(({ reference, reason, sourceLine }) => ({ reference, reason, sourceLine })), [
+    { reference: 'shared.lib', reason: 'missing', sourceLine: 1 },
+  ])
+
+  const resolved = analyzeModelLibraries([wrapper, shared])
+  assert.deepEqual(resolved.dependencies.missingIncludes, [])
+  assert.deepEqual(resolved.dependencies.missing, [])
+  assert.deepEqual(resolved.dependencies.resolvedIncludes.map(({ assetId, targetAssetId, reference, sourceLine }) => ({ assetId, targetAssetId, reference, sourceLine })), [
+    { assetId: 'wrapper', targetAssetId: 'shared', reference: 'shared.lib', sourceLine: 1 },
+  ])
+  assert.deepEqual([...requiredModelAssetIds(resolved.dependencies, [{ kind: 'subcircuit', modelName: 'AMP' }])].sort(), ['shared', 'wrapper'])
+
+  const unsafe = analyzeModelLibraries([{ ...wrapper, content: '.LIB "../outside.lib"' }])
+  assert.equal(unsafe.dependencies.missingIncludes[0].reason, 'unsafe')
+})
+
 test('preserves ngspice .OPTIONS cards in user model libraries', () => {
   const source = '.OPTIONS reltol=.005 trtol=8\n.MODEL DFAST D(Is=1n)'
   const parsed = parseSubcircuitLibrary(source)
