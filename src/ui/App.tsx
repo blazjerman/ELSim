@@ -4251,7 +4251,7 @@ export default function App() {
           })[0]
           initialTraces = varying?.map((trace) => trace.id) ?? []
         }
-        if (!initialTraces.length && response.result.analysis === 'noise') initialTraces = response.result.traces.filter((trace) => trace.id === 'onoise_spectrum' || trace.id === 'inoise_spectrum').map((trace) => trace.id)
+        if (!initialTraces.length && response.result.analysis === 'noise') initialTraces = response.result.traces.filter((trace) => /^(?:onoise|inoise)_spectrum$/i.test(trace.baseId ?? trace.id)).map((trace) => trace.id)
         if (!initialTraces.length && response.result.analysis !== 'noise') initialTraces = response.result.traces.filter((trace) => trace.unit === 'V' && /^v\(/i.test(trace.baseId ?? trace.id)).slice(0, response.result.analysis === 'op' ? undefined : response.result.analysis === 'dc' ? undefined : 2).map((trace) => trace.id)
         setSelectedTraceIds(initialTraces)
         savePlotSettings((settings) => ({ ...settings, selectedTraceIds: initialTraces }))

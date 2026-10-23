@@ -11857,6 +11857,31 @@ test('noise analysis runs in browser ngspice and plots output noise density', { 
   expect(netlist).toMatch(/\.noise V\(vout\) V1 dec 10 1 1Meg/i)
 })
 
+test('noise analysis retains separate parameter-sweep spectra and case labels', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByLabel('Analysis type', { exact: true }).selectOption('noise')
+  await page.locator('svg.schematic').click({ position: { x: 8, y: 8 } })
+  await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 noise spectra')
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('R1')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 kΩ')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2 kΩ')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+
+  const plot = page.locator('.plot-window').last()
+  await expect(plot).toContainText('Noise spectral density')
+  await expect(plot).toContainText('Output noise')
+  await expect(plot).toContainText('Input-referred noise')
+  await expect(plot.getByRole('img', { name: /noise density in V\/√Hz/ })).toHaveCount(4)
+  const traces = await plot.locator('.trace-toggles button').allTextContents()
+  expect(traces.filter((trace) => trace.includes('R1=1000 Ω'))).toHaveLength(2)
+  expect(traces.filter((trace) => trace.includes('R1=2000 Ω'))).toHaveLength(2)
+})
+
 test('current-source noise analysis picks the circuit node and labels input noise in amperes', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')

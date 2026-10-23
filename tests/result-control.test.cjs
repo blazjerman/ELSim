@@ -61,6 +61,16 @@ test('noise result control selects the spectral density plot before writing raw 
   assert.doesNotMatch(withInductor, /@L1\[i\]/)
 })
 
+test('noise parameter sweeps write the spectral-density plot for every case', () => {
+  const netlist = 'V1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 10u\n.noise V(out) V1 dec 10 1 100k\n.end'
+  const control = addResultControl(netlist, [
+    { values: [{ component: 'R1', value: '1.0e3' }], label: 'R1=1000 Ω' },
+    { values: [{ component: 'R1', value: '2.0e3' }], label: 'R1=2000 Ω' },
+  ])
+  assert.match(control, /alter R1 1\.0e3\nrun\nsetplot noise1\nwrite \/result-0\.raw all/)
+  assert.match(control, /alter R1 2\.0e3\nrun\nsetplot noise3\nwrite \/result-1\.raw all/)
+})
+
 test('result control rejects netlists with no end directive', () => {
   assert.throws(() => addResultControl('R1 in 0 1k'), /missing its \.end directive/)
 })
