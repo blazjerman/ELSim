@@ -940,7 +940,7 @@ test('warns when ngspice E-source logic gates require unavailable XSPICE models'
   assert.equal(source.includes('EAND OUT 0 AND(2)'), true)
 })
 
-test('warns when ngspice digital U-device primitives need PS compatibility mode', () => {
+test('explains that browser ngspice omits the XSPICE models required by digital U devices', () => {
   const source = [
     '* U1 AND(2) is only a comment',
     '.SUBCKT digital IN1 IN2 OUT',
@@ -952,12 +952,13 @@ test('warns when ngspice digital U-device primitives need PS compatibility mode'
   ].join('\n')
   const warnings = analyzeLtspiceModelDialect(source)
   assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
-    [3, 'ngspice digital U-device needs PSpice compatibility mode'],
-    [4, 'ngspice digital U-device needs PSpice compatibility mode'],
-    [5, 'ngspice digital U-device needs PSpice compatibility mode'],
+    [3, 'ngspice digital U-device needs unavailable XSPICE digital code models'],
+    [4, 'ngspice digital U-device needs unavailable XSPICE digital code models'],
+    [5, 'ngspice digital U-device needs unavailable XSPICE digital code models'],
   ])
-  assert.match(warnings[0].impact, /only inside a \.SUBCKT with ngbehavior=ps/)
-  assert.match(warnings[0].suggestion, /preserves the original source/)
+  assert.match(warnings[0].impact, /translates them to XSPICE digital code models/)
+  assert.match(warnings[0].impact, /enabling ngbehavior=ps alone does not make these devices simulatable/)
+  assert.match(warnings[0].suggestion, /preserves the original library/)
   assert.equal(source.includes('U1 AND(2)'), true)
 })
 

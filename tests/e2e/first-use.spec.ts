@@ -6275,15 +6275,14 @@ test('imported ngspice E-source logic warning identifies missing XSPICE and open
   await expect(reviewedLine).toContainText('EAND OUT 0 AND(2)')
 })
 
-test('imported ngspice digital U-device warning explains PS mode and opens its source line', { tag: '@ui-smoke' }, async ({ page }) => {
+test('imported ngspice digital U-device warning explains missing XSPICE models and opens its source line', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   const source = '.SUBCKT digital IN1 IN2 OUT\nU1 AND(2) $G_DPWR $G_DGND IN1 IN2 OUT M1 IOM1\nU2 DFF $G_DPWR $G_DGND CLK D Q QB M2 IOM2\nU3 N1 N2 URC_MODEL L=1u\n.MODEL M1 UGATE ()\n.MODEL IOM1 UIO ()\n.ENDS digital'
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'digital-primitives.lib', mimeType: 'text/plain', buffer: Buffer.from(source) })
   const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
-  await expect(warnings).toContainText('ngspice digital U-device needs PSpice compatibility mode')
-  await expect(warnings).toContainText('only inside a .SUBCKT with ngbehavior=ps')
-  await expect(warnings).toContainText('does not select PS mode')
+  await expect(warnings).toContainText('ngspice digital U-device needs unavailable XSPICE digital code models')
+  await expect(warnings).toContainText('enabling ngbehavior=ps alone does not make these devices simulatable')
   await expect(warnings).toContainText('digital-primitives.lib:2')
   await expect(warnings).toContainText('digital-primitives.lib:3')
   await expect(warnings).not.toContainText('digital-primitives.lib:4')
