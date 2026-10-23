@@ -10483,6 +10483,11 @@ test('waveform cursor, zoom, and drag-pan preserve the view and selected traces 
   const plotWindow = await openComponentVoltagePlot(page)
   const chart = plotWindow.getByRole('group', { name: /Transient waveforms from/ })
   await expect(chart).toBeVisible()
+  const readSavedTransientValueRanges = () => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels?.at(-1)?.valueRanges?.tran ?? null)
+  await plotWindow.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Zoom vertical axis in' }).click()
+  await expect.poll(readSavedTransientValueRanges).not.toBeNull()
+  const savedValueRanges = await readSavedTransientValueRanges()
+  expect(savedValueRanges.V.max - savedValueRanges.V.min).toBeGreaterThan(0)
   const readSavedTransientRange = () => page.evaluate(() => {
     const settings = JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings
     return settings.panels?.at(-1)?.ranges.tran ?? settings.ranges?.tran ?? null
@@ -10555,6 +10560,9 @@ test('waveform cursor, zoom, and drag-pan preserve the view and selected traces 
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await expect.poll(readSavedTransientRange).toEqual(rangeAfterFocusRecovery)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels?.at(-1)?.selectedTraceIds as string[])).toEqual(plotSettingsBeforeRerun.panels.at(-1).selectedTraceIds)
+  await expect.poll(readSavedTransientValueRanges).toEqual(savedValueRanges)
+  await page.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Reset plot view' }).click()
+  await expect.poll(readSavedTransientValueRanges).toBeNull()
 })
 
 test('AC waveform supports frequency cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

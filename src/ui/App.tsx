@@ -788,8 +788,14 @@ const AdditionalPlotWindow = memo(function AdditionalPlotWindow({ panel, index, 
   const toggleTrace = useCallback((traceId: string) => onToggleTrace(panel.id, traceId), [onToggleTrace, panel.id])
   const exportTraces = useCallback(() => onExport(panel.selectedTraceIds), [onExport, panel.selectedTraceIds])
   const changeRange = useCallback((analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => onRangeChange(panel.id, analysis, range), [onRangeChange, panel.id])
+  const changeValueRanges = useCallback((analysis: 'tran' | 'ac' | 'dc' | 'noise', ranges: Record<string, { min: number; max: number }> | undefined) => onUpdate(panel.id, (current) => {
+    const valueRanges = { ...current.valueRanges }
+    if (ranges && Object.keys(ranges).length) valueRanges[analysis] = ranges
+    else delete valueRanges[analysis]
+    return { ...current, valueRanges: Object.keys(valueRanges).length ? valueRanges : undefined }
+  }), [onUpdate, panel.id])
   return <FloatingPlotPanel panel={panel} index={index} title={title} onBoundsChange={onBoundsChange} onClose={close} onActivate={activate}>
-    {result ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={result} selectedIds={panel.selectedTraceIds} traceColors={panel.traceColors} onToggle={toggleTrace} onExport={exportTraces} ranges={panel.ranges} onRangeChange={changeRange}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
+    {result ? <Suspense fallback={<div className="waveform-empty">Loading waveform…</div>}><ResultPlot result={result} selectedIds={panel.selectedTraceIds} traceColors={panel.traceColors} onToggle={toggleTrace} onExport={exportTraces} ranges={panel.ranges} onRangeChange={changeRange} valueRanges={panel.valueRanges} onValueRangeChange={changeValueRanges}/></Suspense> : <div className="waveform-empty"><div className="waveform-icon"><Activity size={21}/></div><div><strong>No waveform results yet</strong><p>Run a simulation to populate this window.</p></div></div>}
   </FloatingPlotPanel>
 })
 

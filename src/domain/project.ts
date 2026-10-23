@@ -77,13 +77,14 @@ export type Part = {
 export type Wire = { id: string; points: [[number, number], [number, number]] }
 export type NetLabel = { id: string; name: string; x: number; y: number; visible: boolean }
 export type PlotRange = { start: number; end: number }
+export type PlotValueRange = { min: number; max: number }
 export type ComponentVoltageProbe = { partId: string; positivePin: number; negativePin: number; positiveNet: string; negativeNet: string; positiveVector: string; negativeVector: string; ref: string; vectorRef: string; sheetId?: string; scopeSheetId?: string; instancePath?: string[] }
 export type PlotTraceReference =
   | { kind: 'node'; name: string; sheetId: string; scopeSheetId: string; instancePath: string[]; wireId?: string; labelId?: string }
   | { kind: 'part-current'; partId: string; sheetId: string; scopeSheetId: string; instancePath: string[]; winding?: 'P' | 'S' }
   | { kind: 'component-voltage'; partId: string; positivePin: number; negativePin: number; sheetId: string; scopeSheetId: string; instancePath: string[] }
 export const PLOT_TRACE_COLORS = ['#8fe0af', '#74bdf2', '#e9bc70', '#d88bea', '#f18484', '#d4de8d'] as const
-export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; componentVoltageProbes?: Record<string, ComponentVoltageProbe>; traceReferences?: Record<string, PlotTraceReference>; traceColors?: Record<string, string>; ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>> }
+export type PlotPanel = { id: string; bounds: { x: number; y: number; width: number; height: number }; selectedTraceIds: string[]; componentVoltageProbes?: Record<string, ComponentVoltageProbe>; traceReferences?: Record<string, PlotTraceReference>; traceColors?: Record<string, string>; ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>>; valueRanges?: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', Record<string, PlotValueRange>>> }
 export type PlotSettings = {
   selectedTraceIds: string[]
   ranges: Partial<Record<'tran' | 'ac' | 'dc' | 'noise', PlotRange>>

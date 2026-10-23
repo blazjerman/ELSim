@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange } from '../domain/project'
+import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange, type PlotValueRange } from '../domain/project'
 import { extremaIndices, plotPolylinePoints, valueRange, valueRangeAtIndices } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
@@ -87,55 +87,67 @@ function usePlotWindow(savedRange: PlotRange | undefined, onRangeChange: (range:
 }
 
 type ValueWindow = { min: number; max: number }
-function useValueWindow(autoRange: [number, number]) {
-  const [saved, setSaved] = useState<ValueWindow | null>(null)
+function useValueWindow(autoRange: [number, number], savedRange?: PlotValueRange, onRangeChange?: (range: PlotValueRange | undefined) => void) {
+  const [saved, setSaved] = useState<ValueWindow | null>(savedRange ?? null)
+  const savedRef = useRef(saved)
+  savedRef.current = saved
+  useEffect(() => { const next = savedRange ?? null; savedRef.current = next; setSaved(next) }, [savedRange?.min, savedRange?.max])
   const autoSpan = autoRange[1] - autoRange[0]
   const autoPadding = Math.max(Math.abs(autoSpan) * 0.06, Number.EPSILON * Math.max(1, Math.abs(autoRange[0]), Math.abs(autoRange[1])))
   const range = saved ?? { min: autoRange[0] - autoPadding, max: autoRange[1] + autoPadding }
+  const save = (next: ValueWindow | null) => { savedRef.current = next; setSaved(next); onRangeChange?.(next ?? undefined) }
   const zoomAt = (factor: number, anchor: number) => {
     const span = Math.max(Number.EPSILON, range.max - range.min) * factor
     const bounded = Math.max(span, Number.EPSILON * Math.max(1, Math.abs(range.min), Math.abs(range.max)))
     const fraction = Math.max(0, Math.min(1, (anchor - range.min) / (range.max - range.min || 1)))
-    setSaved({ min: anchor - fraction * bounded, max: anchor + (1 - fraction) * bounded })
+    save({ min: anchor - fraction * bounded, max: anchor + (1 - fraction) * bounded })
   }
   const zoom = (factor: number) => zoomAt(factor, (range.min + range.max) / 2)
   const pan = (direction: -1 | 1) => {
     const shift = (range.max - range.min) * 0.22 * direction
-    setSaved({ min: range.min + shift, max: range.max + shift })
+    save({ min: range.min + shift, max: range.max + shift })
   }
   const panBy = (fraction: number) => {
     const shift = (range.max - range.min) * fraction
-    setSaved({ min: range.min + shift, max: range.max + shift })
+    save({ min: range.min + shift, max: range.max + shift })
   }
-  return { range, zoom, zoomAt, pan, panBy, reset: () => setSaved(null) }
+  return { range, zoom, zoomAt, pan, panBy, reset: () => save(null) }
 }
 
-function useUnitValueWindows(autoRanges: ReadonlyMap<string, [number, number]>) {
-  const [saved, setSaved] = useState<Record<string, ValueWindow>>({})
+function useUnitValueWindows(autoRanges: ReadonlyMap<string, [number, number]>, savedRanges?: Record<string, PlotValueRange>, onRangeChange?: (ranges: Record<string, PlotValueRange> | undefined) => void) {
+  const [saved, setSaved] = useState<Record<string, ValueWindow>>(savedRanges ?? {})
+  const savedRef = useRef(saved)
+  savedRef.current = saved
+  useEffect(() => { const next = savedRanges ?? {}; savedRef.current = next; setSaved(next) }, [savedRanges])
   const ranges = useMemo(() => new Map([...autoRanges].map(([unit, [min, max]]) => {
     const stored = saved[unit]
     if (stored) return [unit, { min: stored.min, max: stored.max }] as const
     const padding = Math.max((max - min) * 0.06, Number.EPSILON * Math.max(1, Math.abs(min), Math.abs(max)))
     return [unit, { min: min - padding, max: max + padding }] as const
   })), [autoRanges, saved])
-  const zoom = (factor: number) => setSaved((current) => {
-    const next = { ...current }
+  const commit = (next: Record<string, ValueWindow>) => {
+    savedRef.current = next
+    setSaved(next)
+    onRangeChange?.(Object.keys(next).length ? next : undefined)
+  }
+  const zoom = (factor: number) => {
+    const next = { ...savedRef.current }
     for (const [unit, range] of ranges) {
       const center = (range.min + range.max) / 2
       const span = Math.max(Number.EPSILON, range.max - range.min) * factor
       next[unit] = { min: center - span / 2, max: center + span / 2 }
     }
-    return next
-  })
-  const pan = (direction: -1 | 1) => setSaved((current) => {
-    const next = { ...current }
+    commit(next)
+  }
+  const pan = (direction: -1 | 1) => {
+    const next = { ...savedRef.current }
     for (const [unit, range] of ranges) {
       const shift = (range.max - range.min) * 0.22 * direction
       next[unit] = { min: range.min + shift, max: range.max + shift }
     }
-    return next
-  })
-  return { ranges, zoom, pan, reset: () => setSaved({}) }
+    commit(next)
+  }
+  return { ranges, zoom, pan, reset: () => { savedRef.current = {}; setSaved({}); onRangeChange?.(undefined) } }
 }
 
 function PlotNavigation({ zoom, reset, valueZoom, valuePan, disabled = false }: { zoom: (factor: number) => void; reset: () => void; valueZoom: (factor: number) => void; valuePan: (direction: -1 | 1) => void; disabled?: boolean }) {
@@ -408,7 +420,7 @@ function symmetricZeroRange(range: [number, number] | undefined): [number, numbe
   return [-padded, padded]
 }
 
-function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, savedColors }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; savedColors: Record<string, string> }) {
+function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeChange, valueRanges, onValueRangeChange, savedColors }: { traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; valueRanges?: Record<string, PlotValueRange>; onValueRangeChange: (ranges: Record<string, PlotValueRange> | undefined) => void; savedColors: Record<string, string> }) {
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
@@ -442,8 +454,10 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   }, [sampledTraceData])
   const hasVoltage = shown.some((trace) => trace.unit === 'V'), hasCurrent = shown.some((trace) => trace.unit === 'A')
   const currentDomain = symmetricZeroRange(sampledTraceData.rangeByUnit.get('A'))
-  const voltageAxis = useValueWindow(scopeDomain)
-  const currentAxis = useValueWindow(currentDomain)
+  const updateVoltageRange = useCallback((next: PlotValueRange | undefined) => { const ranges = { ...(valueRanges ?? {}) }; if (next) ranges.V = next; else delete ranges.V; onValueRangeChange(Object.keys(ranges).length ? ranges : undefined) }, [onValueRangeChange, valueRanges])
+  const updateCurrentRange = useCallback((next: PlotValueRange | undefined) => { const ranges = { ...(valueRanges ?? {}) }; if (next) ranges.A = next; else delete ranges.A; onValueRangeChange(Object.keys(ranges).length ? ranges : undefined) }, [onValueRangeChange, valueRanges])
+  const voltageAxis = useValueWindow(scopeDomain, valueRanges?.V, updateVoltageRange)
+  const currentAxis = useValueWindow(currentDomain, valueRanges?.A, updateCurrentRange)
   const voltageRange: [number, number] = [voltageAxis.range.min, voltageAxis.range.max]
   const currentRange: [number, number] = [currentAxis.range.min, currentAxis.range.max]
   const rangeForUnit = (unit: string): [number, number] => unit === 'A' ? currentRange : voltageRange
@@ -587,7 +601,7 @@ function OperatingPointView({ traces, selectedIds, onToggle, onExport, savedColo
   </div>
 }
 
-function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange, savedColors }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; savedColors: Record<string, string> }) {
+function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange, valueRanges, onValueRangeChange, savedColors }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; valueRanges?: Record<string, PlotValueRange>; onValueRangeChange: (ranges: Record<string, PlotValueRange> | undefined) => void; savedColors: Record<string, string> }) {
   const isNoise = result.analysis === 'noise'
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
@@ -641,9 +655,10 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     }
     return ranges
   }, [isNoise, shown, sampledIndicesById])
-  const noiseWindows = useUnitValueWindows(noiseAutoRanges)
-  const valueAxis = useValueWindow([dataMin, dataMax])
-  useEffect(() => valueAxis.reset(), [mode])
+  const noiseWindows = useUnitValueWindows(noiseAutoRanges, valueRanges, onValueRangeChange)
+  const updateValueRange = useCallback((next: PlotValueRange | undefined) => onValueRangeChange(next ? { ...valueRanges, [mode]: next } : undefined), [onValueRangeChange, valueRanges, mode])
+  const valueAxis = useValueWindow([dataMin, dataMax], valueRanges?.[mode], updateValueRange)
+  useEffect(() => { valueAxis.reset(); noiseWindows.reset() }, [mode])
   const primaryNoiseUnit = visibleNoiseUnits[0] ?? ''
   const noiseAxisRange = noiseWindows.ranges.get(primaryNoiseUnit)
   const minValue = isNoise ? noiseAxisRange?.min ?? 0 : valueAxis.range.min
@@ -741,7 +756,7 @@ function DcCursorReadout({ result, axis, axisUnit, first, last, shown, colors, t
   return <div className="cursor-readout" aria-live="polite" aria-atomic="true">{cursorIndex !== null && cursorIndex >= first && cursorIndex <= last && <><span className="sr-only">Sweep value {axis[cursorIndex].toPrecision(5)} {axisUnit}. </span>{shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} = {trace.values[cursorIndex].toPrecision(5)} {trace.unit}</span>)}</>}</div>
 }
 
-function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange, savedColors }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; savedColors: Record<string, string> }) {
+function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, onRangeChange, valueRanges, onValueRangeChange, savedColors }: { result: SimulationResult; traces: Trace[]; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; range?: PlotRange; onRangeChange: (range: PlotRange) => void; valueRanges?: Record<string, PlotValueRange>; onValueRangeChange: (ranges: Record<string, PlotValueRange> | undefined) => void; savedColors: Record<string, string> }) {
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const units = useMemo(() => [...new Set(shown.map((trace) => trace.unit))], [shown])
@@ -765,7 +780,7 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
     if (!ranges.size) ranges.set('', [-1, 1])
     return new Map([...ranges].map(([unit, range]) => [unit, symmetricZeroRange(range)]))
   }, [shown, first, last])
-  const valueAxes = useUnitValueWindows(automaticRanges)
+  const valueAxes = useUnitValueWindows(automaticRanges, valueRanges, onValueRangeChange)
   const primaryUnit = units[0] ?? traces[0]?.unit ?? ''
   const primaryRange = valueAxes.ranges.get(primaryUnit) ?? { min: -1, max: 1 }
   const min = primaryRange.min
@@ -818,16 +833,16 @@ function DcSweepPlot({ result, traces, selectedIds, onToggle, onExport, range, o
   </div>
 }
 
-export const ResultPlot = memo(function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, traceColors = {} }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void; traceColors?: Record<string, string> }) {
+export const ResultPlot = memo(function ResultPlot({ result, selectedIds, onToggle, onExport, ranges, onRangeChange, valueRanges, onValueRangeChange, traceColors = {} }: { result: SimulationResult; selectedIds: string[]; onToggle: (id: string) => void; onExport: () => void; ranges: PlotPanel['ranges']; onRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', range: PlotRange) => void; valueRanges?: PlotPanel['valueRanges']; onValueRangeChange: (analysis: 'tran' | 'ac' | 'dc' | 'noise', ranges: Record<string, PlotValueRange> | undefined) => void; traceColors?: Record<string, string> }) {
   const plot = result.analysis === 'op'
     ? <OperatingPointView traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} onExport={onExport} savedColors={traceColors}/>
     : result.analysis === 'ac'
-      ? <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} onExport={onExport} savedColors={traceColors}/>
+      ? <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.ac} onRangeChange={(range) => onRangeChange('ac', range)} valueRanges={valueRanges?.ac} onValueRangeChange={(ranges) => onValueRangeChange('ac', ranges)} onExport={onExport} savedColors={traceColors}/>
       : result.analysis === 'noise'
-        ? <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.noise} onRangeChange={(range) => onRangeChange('noise', range)} onExport={onExport} savedColors={traceColors}/>
+        ? <AcPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.noise} onRangeChange={(range) => onRangeChange('noise', range)} valueRanges={valueRanges?.noise} onValueRangeChange={(ranges) => onValueRangeChange('noise', ranges)} onExport={onExport} savedColors={traceColors}/>
         : result.analysis === 'dc'
-          ? <DcSweepPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.dc} onRangeChange={(range) => onRangeChange('dc', range)} onExport={onExport} savedColors={traceColors}/>
-          : <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} onExport={onExport} savedColors={traceColors}/>
+          ? <DcSweepPlot result={result} traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.dc} onRangeChange={(range) => onRangeChange('dc', range)} valueRanges={valueRanges?.dc} onValueRangeChange={(ranges) => onValueRangeChange('dc', ranges)} onExport={onExport} savedColors={traceColors}/>
+          : <WaveformPlot traces={result.traces} selectedIds={selectedIds} onToggle={onToggle} range={ranges.tran} onRangeChange={(range) => onRangeChange('tran', range)} valueRanges={valueRanges?.tran} onValueRangeChange={(ranges) => onValueRangeChange('tran', ranges)} onExport={onExport} savedColors={traceColors}/>
   return <>{plot}<MeasurementResults measurements={result.measurements}/></>
 })
 
