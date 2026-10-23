@@ -2426,6 +2426,8 @@ test('potentiometer uses an imported resistor model for both split branches', { 
   await expect(modelDetails).toBeVisible()
   await modelDetails.click()
   await expect(page.getByText('R = 10k', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Review pot-model.lib:1' }).click()
+  await expect(page.locator('.model-source-viewer li.active-source-line')).toContainText('.MODEL RPOT R(R=10k TC1=0.01)')
   await page.locator('[data-part-setting="pot-p1:value"]').fill('')
   await expect(page.locator('[data-part-setting="pot-p1:value"]')).toHaveAttribute('placeholder', 'Leave blank to use model default')
   await waitForProjectAutosave(page)
