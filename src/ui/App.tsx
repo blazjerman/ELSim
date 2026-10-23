@@ -2308,7 +2308,9 @@ export default function App() {
   const playbackAvailable = Boolean(transientAxis && transientAxis.length > 1 && !simulationResultStale)
   const animationTuningAvailable = Boolean((simulationResult?.analysis === 'tran' || simulationResult?.analysis === 'op') && !simulationResultStale)
   const isRlcResonanceLesson = exampleLesson?.id === 'rlc-resonance'
-  const rlcResonanceTrace = simulationResult?.analysis === 'ac' ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)') : undefined
+  const rlcResonanceTrace = useMemo(() => isRlcResonanceLesson && simulationResult?.analysis === 'ac'
+    ? simulationResult.traces.find((trace) => trace.id.toLowerCase() === 'v(vout)')
+    : undefined, [isRlcResonanceLesson, simulationResult])
   const rlcResonancePeak = useMemo(() => {
     if (!isRlcResonanceLesson || !rlcResonanceTrace?.axis.length) return null
     let peakIndex = 0
