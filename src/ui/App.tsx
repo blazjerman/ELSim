@@ -88,6 +88,10 @@ function modelConflictDescription(conflict: ModelDefinitionConflict): string {
 }
 
 const MODEL_DIAGNOSTIC_PAGE_SIZE = 20
+const LOGIC_OUTPUT_PART_KINDS: ReadonlySet<PartKind> = new Set(['inverter', 'logicGate'])
+const TRANSISTOR_CHANNEL_PART_KINDS: ReadonlySet<PartKind> = new Set(['nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet'])
+const DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS: ReadonlySet<PartKind> = new Set(['npn', 'pnp', ...TRANSISTOR_CHANNEL_PART_KINDS])
+const EMPTY_SUBCIRCUIT_PIN_OFFSETS: [number, number][] = []
 
 const ParameterSweepEditor = lazy(() => import('./ParameterSweepEditor'))
 const TransientEditors = lazy(() => import('./TransientEditors'))
@@ -438,8 +442,8 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
   const currentGlow = Math.min(1, Math.sqrt(Math.abs(current ?? 0) / 0.005) * 0.8)
   const secondaryCurrentGlow = Math.min(1, Math.sqrt(Math.abs(secondaryCurrent ?? 0) / 0.005) * 0.8)
   const { logicLow, logicHigh, seriesResistance, componentValueMagnitude, componentDefinition } = useMemo(() => ({
-    logicLow: ['inverter', 'logicGate'].includes(part.kind) ? componentMagnitude(part.logicLow ?? '0 V', 'source') ?? 0 : 0,
-    logicHigh: ['inverter', 'logicGate'].includes(part.kind) ? componentMagnitude(part.logicHigh ?? '5 V', 'source') ?? 5 : 5,
+    logicLow: LOGIC_OUTPUT_PART_KINDS.has(part.kind) ? componentMagnitude(part.logicLow ?? '0 V', 'source') ?? 0 : 0,
+    logicHigh: LOGIC_OUTPUT_PART_KINDS.has(part.kind) ? componentMagnitude(part.logicHigh ?? '5 V', 'source') ?? 5 : 5,
     seriesResistance: part.kind === 'capacitor' || part.kind === 'inductor' ? componentMagnitude(part.seriesResistance ?? '0 Ω', 'resistor') ?? Number.NaN : 0,
     componentValueMagnitude: part.kind === 'capacitor' || part.kind === 'inductor' ? componentMagnitude(part.value, part.kind) ?? Number.NaN : 0,
     componentDefinition: componentDefinitionFor(part.kind),
@@ -457,14 +461,16 @@ const CircuitPart = memo(function CircuitPart({ part, onSelect, onPointerDown, o
     ? 0.5 * componentValueMagnitude * current * current
     : undefined
   const currentDescription = part.kind === 'npn' || part.kind === 'pnp' ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the collector terminal`
-    : part.kind === 'nmos' || part.kind === 'pmos' || part.kind === 'nvdmos' || part.kind === 'pvdmos' || part.kind === 'njfet' || part.kind === 'pjfet' || part.kind === 'nmesfet' || part.kind === 'pmesfet' ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the drain terminal`
+    : TRANSISTOR_CHANNEL_PART_KINDS.has(part.kind) ? `conventional current ${current !== undefined && current < 0 ? 'out of' : 'into'} the drain terminal`
       : `flowing ${current !== undefined && current < 0 ? 'from pin 2 toward pin 1' : 'from pin 1 toward pin 2'}`
   const hasCurrentDirection = current !== undefined && Number.isFinite(current) && Math.abs(current) > 1e-12
   const channelCurrentGlow = currentGlow
-  const customOffsets = part.kind === 'subcircuit' ? subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout) : []
+  const customOffsets = useMemo(() => part.kind === 'subcircuit'
+    ? subcircuitPinOffsets(part.modelPins?.length ?? 0, part.sheetPortLayout)
+    : EMPTY_SUBCIRCUIT_PIN_OFFSETS, [part.kind, part.modelPins?.length, part.sheetPortLayout])
   const potentiometerPosition = Number(part.wiperPosition ?? '0.5')
   const potentiometerWiperY = -24 + potentiometerPosition * 48
-  const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'currentSwitch' ? switchClosed ? 'on' : 'off' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : (part.kind === 'capacitor' || part.kind === 'inductor') && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : ['npn', 'pnp', 'nmos', 'pmos', 'nvdmos', 'pvdmos', 'njfet', 'pjfet', 'nmesfet', 'pmesfet'].includes(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
+  const symbolVariantKey = part.kind === 'logicGate' ? part.logicOperation ?? 'and' : part.kind === 'switch' ? part.value.toLowerCase() : part.kind === 'voltageSwitch' ? switchClosed ? 'closed' : 'open' : part.kind === 'currentSwitch' ? switchClosed ? 'on' : 'off' : part.kind === 'behavioral' ? part.behavioralOutput ?? 'voltage' : (part.kind === 'capacitor' || part.kind === 'inductor') && hasCurrentDirection ? current! < 0 ? 'reverseCurrent' : 'forwardCurrent' : DIRECTIONAL_CURRENT_SYMBOL_PART_KINDS.has(part.kind) && current !== undefined && Number.isFinite(current) ? current < 0 ? 'reverseCurrent' : 'forwardCurrent' : undefined
   const capacitorChargeGeometry = part.kind === 'capacitor' && voltage !== undefined ? componentDefinition.symbolAnimations?.['charge.voltage']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
   const potentiometerWiperGeometry = componentDefinition.symbolAnimations?.['position.wiper']?.active ?? EMPTY_SYMBOL_GEOMETRY
   const lampPowerGeometry = lampGlow > 0 ? componentDefinition.symbolAnimations?.['brightness.power']?.active ?? EMPTY_SYMBOL_GEOMETRY : EMPTY_SYMBOL_GEOMETRY
