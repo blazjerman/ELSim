@@ -745,6 +745,23 @@ test('checks behavioral node and component references in their own namespaces an
   assert.match(issue?.detail, /Function “table” is not supported/)
 })
 
+test('warns when a native behavioral source uses a resistor current ngspice cannot reference', () => {
+  const project = createStarterProject()
+  const behavioral = { id: 'behavioral-resistor-current', kind: 'behavioral', ref: 'B1', value: 'V(vin) + I(R1)', behavioralOutput: 'voltage', x: 760, y: 600, rotation: 0 }
+  project.parts.push(behavioral)
+  project.sheets[0].parts = project.parts
+  const issue = checkCircuit(project).find((item) => item.id === `behavioral-reference:${behavioral.id}`)
+  assert.match(issue?.title, /unsupported current reference/i)
+  assert.match(issue?.detail, /I\(R1\).*voltage-source reference/i)
+
+  behavioral.value = 'V(vin) + I(V1)'
+  assert.equal(checkCircuit(project).some((item) => item.id === `behavioral-reference:${behavioral.id}`), false)
+
+  behavioral.value = 'V(vin) + I(R1)'
+  behavioral.behavioralDialect = 'ltspice'
+  assert.equal(checkCircuit(project).some((item) => item.id === `behavioral-reference:${behavioral.id}`), false)
+})
+
 
 test('hierarchical output-port conflicts are reported on the containing block', () => {
   const project = createStarterProject()

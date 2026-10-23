@@ -4,7 +4,7 @@ import { componentPins } from './geometry'
 import type { Part, Project } from './project'
 import { componentMagnitude, spiceDimensionMagnitude } from './componentValue'
 import { analyzeModelDependencies, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from './subcircuitLibrary'
-import { parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
+import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionFor, compatibleDeviceModelType, deviceModelTypeMatches } from './componentDefinitions'
 
 export type ElectricalIssue = {
@@ -311,13 +311,17 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
           (sheet.parameters ?? []).map((parameter) => parameter.name),
           [...sheetConnectivity.pinNets.values(), ...sheetConnectivity.wireNets.values()],
         )
+        if (part.behavioralDialect !== 'ltspice') {
+          const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceVoltageBranchReferences(sheet.parts))
+          if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+        }
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'The expression is unsupported.'
         const isUnknownReference = /unknown node|unknown component|unknown parameter/i.test(detail)
         issues.push({
           id: `behavioral-reference:${sheet.id}:${part.id}`,
           severity: 'warning',
-          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter in ${sheet.name}` : isUnknownReference ? `${part.ref} references an unknown node or component in ${sheet.name}` : `${part.ref} has an invalid behavioral expression in ${sheet.name}`,
+          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter in ${sheet.name}` : isUnknownReference ? `${part.ref} references an unknown node or component in ${sheet.name}` : /not a supported ngspice expression current/i.test(detail) ? `${part.ref} uses an unsupported current reference in ${sheet.name}` : `${part.ref} has an invalid behavioral expression in ${sheet.name}`,
           detail,
           partId: topLevelInstanceId,
         })
@@ -444,13 +448,17 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
       try {
         const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        if (part.behavioralDialect !== 'ltspice') {
+          const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceVoltageBranchReferences(project.parts))
+          if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+        }
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'The expression is unsupported.'
         const isUnknownReference = /unknown node|unknown component|unknown parameter/i.test(detail)
         issues.push({
           id: `behavioral-reference:${part.id}`,
           severity: 'warning',
-          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter` : isUnknownReference ? `${part.ref} references an unknown node or component` : `${part.ref} has an invalid behavioral expression`,
+          title: /unknown parameter/i.test(detail) ? `${part.ref} references an undeclared parameter` : isUnknownReference ? `${part.ref} references an unknown node or component` : /not a supported ngspice expression current/i.test(detail) ? `${part.ref} uses an unsupported current reference` : `${part.ref} has an invalid behavioral expression`,
           detail,
           partId: part.id,
         })

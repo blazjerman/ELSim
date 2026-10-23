@@ -2,9 +2,23 @@ export type BehavioralReferences = { nodes: string[]; differentialNodes: string[
 export type BehavioralFunctionDefinition = { name: string; arguments: string[]; expression: string }
 export type BehavioralDialect = 'ngspice' | 'ltspice'
 
-/** ngspice B-source and par() expressions expose branch current through voltage sources via I(Vname). */
+/** ngspice B-source and par() expressions expose voltage-source branch current via I(Vname). */
 export function behavioralCurrentReferences(expression: string): string[] {
   return [...expression.matchAll(/\bi\s*\(\s*([A-Za-z_][A-Za-z0-9_.$]*)\s*\)/gi)].map((match) => match[1])
+}
+
+export function ngspiceVoltageBranchReferences(parts: readonly { kind: string; ref: string; behavioralOutput?: string }[]): string[] {
+  return parts.filter((part) => part.kind === 'source' || part.kind === 'vcvs' || part.kind === 'ccvs' || (part.kind === 'behavioral' && part.behavioralOutput === 'voltage')).map((part) => part.ref)
+}
+
+/** Return the first I() reference that ngspice cannot resolve as a branch current. */
+export function unsupportedBehavioralCurrentReference(expression: string, voltageSourceRefs: readonly string[]): string | undefined {
+  const supported = new Set(voltageSourceRefs.map((ref) => ref.toLowerCase()))
+  return behavioralCurrentReferences(expression).find((ref) => !supported.has(ref.toLowerCase()))
+}
+
+export function behavioralCurrentReferenceError(ref: string): string {
+  return `I(${ref}) is not a supported ngspice expression current; use I() with a voltage-source reference.`
 }
 
 const ngspiceFunctions = new Map<string, { min: number; max: number }>([

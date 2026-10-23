@@ -1,7 +1,7 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
 import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit } from '../domain/subcircuitLibrary'
-import { behavioralCurrentReferences, parseBehavioralExpression, translateBehavioralExpression, validateBehavioralReferences } from '../domain/behavioralExpression'
+import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
 import { mesfetDrainCurrentSenseReference } from '../domain/probe'
@@ -805,6 +805,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       try {
         const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
+        if (part.behavioralDialect !== 'ltspice') {
+          const unsupportedCurrent = unsupportedBehavioralCurrentReference(part.value, ngspiceVoltageBranchReferences(project.parts))
+          if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
+        }
         append(`${part.ref} ${positive} ${negative} ${part.behavioralOutput === 'current' ? 'I' : 'V'}={${translateBehavioralExpression(part.value.replace(/[\r\n]/g, ' '), part.behavioralDialect)}}`, part.id, 'component')
       } catch (error) {
         const message = error instanceof Error ? `${part.ref}: ${error.message}` : `${part.ref} has an invalid behavioral expression.`
@@ -947,8 +951,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       try {
         const parsed = parseBehavioralExpression(measurement.expression)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((part) => part.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
-        const unsupportedCurrent = behavioralCurrentReferences(measurement.expression).find((ref) => !project.parts.some((part) => part.kind === 'source' && part.ref.toLowerCase() === ref.toLowerCase()))
-        if (unsupportedCurrent) throw new Error(`I(${unsupportedCurrent}) is not a supported ngspice expression current; use I() with a voltage-source reference.`)
+        const unsupportedCurrent = unsupportedBehavioralCurrentReference(measurement.expression, ngspiceVoltageBranchReferences(project.parts))
+        if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
         validExpression = true
       } catch { validExpression = false }
     }

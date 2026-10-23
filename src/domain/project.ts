@@ -2,7 +2,7 @@ import { componentPins, snapToEditorGrid } from './geometry'
 import { analyzeConnectivity } from './connectivity'
 import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
-import { behavioralCurrentReferences, parseBehavioralExpression, validateBehavioralReferences } from './behavioralExpression'
+import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId } from './componentDefinitions'
 import { componentMagnitude, timeMagnitude } from './componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from './measurementSettings'
@@ -702,8 +702,8 @@ export function validateProject(input: unknown): Project {
           const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
           const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
           validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])
-          const unsupportedCurrent = behavioralCurrentReferences(measurement.expression).find((ref) => !(data.parts as Part[]).some((part) => part.kind === 'source' && part.ref.toLowerCase() === ref.toLowerCase()))
-          if (unsupportedCurrent) throw new Error(`I(${unsupportedCurrent}) is not a supported ngspice expression current; use I() with a voltage-source reference.`)
+          const unsupportedCurrent = unsupportedBehavioralCurrentReference(measurement.expression, ngspiceVoltageBranchReferences(data.parts as Part[]))
+          if (unsupportedCurrent) throw new Error(behavioralCurrentReferenceError(unsupportedCurrent))
           validExpression = true
         } catch (error) {
           throw new Error(`Transient measurement ${measurement.id} expression is invalid: ${error instanceof Error ? error.message : 'unsupported expression.'}`)

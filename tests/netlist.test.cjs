@@ -1373,6 +1373,22 @@ test('native B-source expressions reject unsupported LTspice function names inst
   assert.match(artifact.text, /^\* ERROR: B1: Function “if” is not supported\.$/m)
 })
 
+test('native B-source resistor-current references fail with ngspice-specific guidance', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'native-bsource-resistor-current', kind: 'behavioral', ref: 'B1', value: 'I(R1)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  validateProject(JSON.parse(JSON.stringify(project)))
+  const artifact = createNetlistArtifact(project)
+  assert.match(artifact.diagnostics[0]?.message ?? '', /I\(R1\).*voltage-source reference/i)
+  assert.match(artifact.text, /^\* ERROR: B1: I\(R1\) is not a supported ngspice expression current/m)
+
+  project.parts.find((part) => part.ref === 'B1').value = 'I(V1)'
+  assert.deepEqual(createNetlistArtifact(project).diagnostics, [])
+
+  project.parts.find((part) => part.ref === 'B1').value = 'I(R1)'
+  project.parts.find((part) => part.ref === 'B1').behavioralDialect = 'ltspice'
+  assert.deepEqual(createNetlistArtifact(project).diagnostics, [])
+})
+
 test('behavioral table lookups become clamped ngspice PWL expressions', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'table(V(vin), 0, 0, 1, 5, 2, 10)', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 300, rotation: 0 })
