@@ -641,10 +641,9 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   }
   const sampledTraceById = useMemo(() => {
     const sampled = new Map<string, { indices: number[]; dataRange: [number, number] | null; noiseRange: [number, number] | null }>()
-    for (const id of selectedIds) {
-      const index = traceIndexById.get(id)
-      if (index === undefined) continue
-      const trace = traces[index]
+    // Hidden traces remain selected, but only visible traces need transformed
+    // samples and ranges for drawing the current AC/noise view.
+    for (const trace of shown) {
       const indices = extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, sampleIndex) => valueFor(trace, sampleIndex), `ac:${trace.id}:${mode}`)
       let dataRange: [number, number] | null = null
       if (mode !== 'noise') {
@@ -659,7 +658,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       sampled.set(trace.id, { indices, dataRange, noiseRange })
     }
     return sampled
-  }, [selectedIds, traceIndexById, traces, first, last, mode])
+  }, [shown, first, last, mode])
   const sampledIndicesById = useMemo(() => {
     const indicesById = new Map<string, number[]>()
     for (const trace of shown) {
