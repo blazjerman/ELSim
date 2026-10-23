@@ -364,7 +364,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'tran' ? transientValue : value}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'ac' ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'tran' ? transientValue : value}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'source') {
       const acMagnitude = spiceNumber(part.acMagnitude ?? project.simulation.sourceAcMagnitude ?? '1 V', 'source')
@@ -929,7 +929,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'vcvs' || part.kind === 'vccs') {
       const controlPositive = pinNet(connectivity, part, 2)
       const controlNegative = pinNet(connectivity, part, 3)
-      append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${value}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${value}${part.kind === 'vccs' && part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'cccs' || part.kind === 'ccvs') {
       const source = project.parts.find((candidate) => candidate.kind === 'source' && candidate.ref.toLowerCase() === part.controlSource?.toLowerCase())
@@ -939,7 +939,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${negative} ${source.ref} ${value}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${source.ref} ${value}${part.kind === 'cccs' && part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'logicGate' || part.kind === 'inverter') {
       const low = spiceScalar(part.logicLow ?? '0 V', 'v')

@@ -1,0 +1,6 @@
+ELSim ngspice independent current source multiplier
+I1 0 out 1m M=3
+R1 out 0 1k
+.op
+.print op v(out)
+.end

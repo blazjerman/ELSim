@@ -1580,6 +1580,21 @@ test('CCCS and CCVS netlist records name a voltage source for current control', 
   assert.throws(() => validateProject(project), /existing voltage source/)
 })
 
+test('independent and controlled current sources emit ngspice parallel-device multipliers', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'op'
+  project.parts.push(
+    { id: 'p-i2', kind: 'currentSource', ref: 'I2', value: '1 mA', sourceMode: 'dc', instanceMultiplier: '3', x: 720, y: 260, rotation: 0 },
+    { id: 'p-g2', kind: 'vccs', ref: 'G2', value: '1 mS', instanceMultiplier: '4', x: 840, y: 380, rotation: 0 },
+    { id: 'p-f2', kind: 'cccs', ref: 'F2', value: '2', controlSource: 'V1', instanceMultiplier: '5', x: 940, y: 460, rotation: 0 },
+  )
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^I2 n\d+ n\d+ 1m M=3$/m)
+  assert.match(artifact.text, /^G2 n\d+ n\d+ n\d+ n\d+ 1m M=4$/m)
+  assert.match(artifact.text, /^F2 n\d+ n\d+ V1 2 M=5$/m)
+})
+
 test('behavioral voltage and current sources emit validated B-source expressions', () => {
   const project = createStarterProject()
   project.parts.push(

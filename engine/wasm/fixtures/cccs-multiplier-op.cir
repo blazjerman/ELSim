@@ -1,0 +1,9 @@
+ELSim ngspice CCCS multiplier
+VCTRL drive 0 1
+RSENSE drive sense 1k
+VSENSE sense 0 0
+F1 0 out VSENSE 1 M=3
+R1 out 0 1k
+.op
+.print op v(out)
+.end
