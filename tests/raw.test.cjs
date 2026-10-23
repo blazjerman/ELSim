@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { isTraceVariable, parseAsciiRawFile, parseBinaryRawFile, parseRawFile, rawTraceUnit, readRawFileAndRelease } = require(path.join(build, 'engine/raw.js'))
-const { serializeWaveformCsv } = require(path.join(build, 'engine/csv.js'))
+const { serializeWaveformCsv, waveformCsvChunks } = require(path.join(build, 'engine/csv.js'))
 
 const validRaw = `Title: RC fixture
 Date: Thu Jan  1 00:00:00 1970
@@ -261,9 +261,14 @@ test('waveform CSV includes units, quoted labels, and synchronized mixed-unit sa
   assert.equal(serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0, 0.2) }]), '"V(out) Time (s)","V(out) (V)","I(R""1) Time (s)","I(R""1) (A)"\n0,0,0,0.01\n0.1,5,0.2,0.02')
   assert.throws(() => serializeWaveformCsv([traces[0], { ...traces[1], axis: Float64Array.of(0) }]), /mismatched axis and value lengths/)
   assert.equal(serializeWaveformCsv([{ ...traces[0], axisLabel: 'Operating point', axisUnit: '', axis: Float64Array.of(0), values: Float64Array.of(5) }]), '"Operating point","V(out) (V)"\n0,5')
+  const csv = serializeWaveformCsv(traces)
+  assert.equal([...waveformCsvChunks(traces, 1)].join(''), csv)
+  assert.throws(() => [...waveformCsvChunks(traces, 0)], /chunk size must be a positive integer/)
 })
 
 test('AC CSV preserves real and imaginary sample columns', () => {
-  const csv = serializeWaveformCsv([{ label: 'V(out)', unit: 'V', axisLabel: 'Frequency', axisUnit: 'Hz', axis: Float64Array.of(1000), values: Float64Array.of(0.5), imaginaryValues: Float64Array.of(-0.25) }])
+  const traces = [{ label: 'V(out)', unit: 'V', axisLabel: 'Frequency', axisUnit: 'Hz', axis: Float64Array.of(1000), values: Float64Array.of(0.5), imaginaryValues: Float64Array.of(-0.25) }]
+  const csv = serializeWaveformCsv(traces)
   assert.equal(csv, '"Frequency (Hz)","V(out) real (V)","V(out) imaginary (V)"\n1000,0.5,-0.25')
+  assert.equal([...waveformCsvChunks(traces, 1)].join(''), csv)
 })

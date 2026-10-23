@@ -3929,13 +3929,19 @@ export default function App() {
     if (!result) return
     const ids = traceIds ?? selectedTraceIdsRef.current
     const traces = result.traces.filter((trace) => ids.includes(trace.id))
-    let csv: string
+    if (traces.some((trace) => trace.axis.length > 8192)) setNotice('Preparing large waveform CSV…')
+    let csvParts: string[]
     try {
-      const { serializeWaveformCsv } = await import('../engine/csv')
-      csv = serializeWaveformCsv(traces)
+      const { waveformCsvChunks } = await import('../engine/csv')
+      csvParts = []
+      for (const chunk of waveformCsvChunks(traces)) {
+        csvParts.push(chunk)
+        // Let the browser paint and process input between chunks on large runs.
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
+      }
     }
     catch (error) { setNotice(error instanceof Error ? error.message : 'Could not export waveform data.'); return }
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const url = URL.createObjectURL(new Blob(csvParts, { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a'); link.href = url; link.download = `${projectRef.current.name.replace(/[^A-Za-z0-9_-]+/g, '-')}-waveforms.csv`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     setNotice(`Exported ${traces.length} result vector${traces.length === 1 ? '' : 's'} to CSV.`)
   }, [setNotice])
