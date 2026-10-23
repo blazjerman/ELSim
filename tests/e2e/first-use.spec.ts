@@ -39,6 +39,45 @@ async function expectVisibleKeyboardControlsNamed(page: Page) {
   expect(unnamed).toEqual([])
 }
 
+async function expectDialogTextContrast(dialog: Locator, dialogName: string, selectors: string[]) {
+  const samples = await dialog.evaluate((root, textSelectors) => {
+    const color = (value: string): [number, number, number, number] => {
+      const channels = value.match(/[\d.]+/g)?.map(Number)
+      if (!channels || channels.length < 3) throw new Error(`Cannot parse rendered color: ${value}`)
+      return [channels[0], channels[1], channels[2], channels.length > 3 ? channels[3] : 1]
+    }
+    const over = (foreground: [number, number, number, number], background: [number, number, number, number]): [number, number, number, number] => {
+      const alpha = foreground[3] + background[3] * (1 - foreground[3])
+      if (!alpha) return [0, 0, 0, 0]
+      return [0, 1, 2].map((channel) => (foreground[channel] * foreground[3] + background[channel] * background[3] * (1 - foreground[3])) / alpha).concat(alpha) as [number, number, number, number]
+    }
+    const luminance = (rgb: [number, number, number, number]) => {
+      const linear = rgb.slice(0, 3).map((channel) => {
+        const value = channel / 255
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      })
+      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
+    }
+    const visible = (element: Element) => {
+      const style = getComputedStyle(element)
+      return Boolean(element.textContent?.trim() && element.getClientRects().length && style.visibility !== 'hidden' && style.display !== 'none' && !element.closest('[aria-hidden="true"]'))
+    }
+    const textElements = textSelectors.flatMap((selector) => [...root.querySelectorAll(selector)]).filter(visible)
+    return textElements.map((element) => {
+      const surface = element.closest('.example-list article, .erc-list li, .lt-export-section, .lt-export-license') ?? root
+      let background = color(getComputedStyle(root).backgroundColor)
+      if (surface !== root) background = over(color(getComputedStyle(surface).backgroundColor), background)
+      const foreground = color(getComputedStyle(element).color)
+      const [light, dark] = [luminance(foreground), luminance(background)].sort((left, right) => right - left)
+      const fontSize = Number.parseFloat(getComputedStyle(element).fontSize)
+      const bold = Number.parseInt(getComputedStyle(element).fontWeight, 10) >= 700
+      return { text: element.textContent?.trim().replace(/\s+/g, ' ').slice(0, 70), ratio: Number(((light + 0.05) / (dark + 0.05)).toFixed(2)), minimum: bold && fontSize >= 18.66 || fontSize >= 24 ? 3 : 4.5 }
+    })
+  }, selectors)
+  expect(samples.length, `${dialogName} should expose visible contrast samples`).toBeGreaterThan(0)
+  for (const sample of samples) expect(sample.ratio, `${dialogName}: “${sample.text}” contrast`).toBeGreaterThanOrEqual(sample.minimum)
+}
+
 async function rightClickNetLabel(page: import('@playwright/test').Page, name: string) {
   const labels = page.getByRole('button', { name: `Net label ${name.toUpperCase()}` })
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1501,32 +1540,7 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   const examplesDialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   await expect(examplesDialog).toBeVisible()
   await expectDialogDescription(examplesDialog, 'examples-description')
-  const examplesDialogContrast = await examplesDialog.evaluate((dialog) => {
-    const luminance = (color: string) => {
-      const channels = color.match(/[\d.]+/g)?.slice(0, 3).map(Number)
-      if (!channels || channels.length !== 3) throw new Error(`Cannot parse rendered dialog color: ${color}`)
-      const linear = channels.map((channel) => {
-        const value = channel / 255
-        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-      })
-      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
-    }
-    const ratio = (element: Element | null) => {
-      if (!element) throw new Error('A dialog contrast sample is missing')
-      const foreground = getComputedStyle(element).color
-      const background = getComputedStyle(dialog).backgroundColor
-      const [light, dark] = [luminance(foreground), luminance(background)].sort((left, right) => right - left)
-      return Number(((light + 0.05) / (dark + 0.05)).toFixed(2))
-    }
-    return {
-      heading: ratio(dialog.querySelector('.modal-heading h2')),
-      instructions: ratio(dialog.querySelector('#examples-description')),
-      exampleTitle: ratio(dialog.querySelector('.example-list strong')),
-    }
-  })
-  expect(examplesDialogContrast.heading, 'Examples dialog heading must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
-  expect(examplesDialogContrast.instructions, 'Examples dialog instructions must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
-  expect(examplesDialogContrast.exampleTitle, 'Example titles must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
+  await expectDialogTextContrast(examplesDialog, 'Examples dialog', ['.modal-heading h2', '#examples-description', '.example-list strong', '.example-list article p'])
   await expect(page.locator('.example-list article').first()).toBeVisible()
   await expectNamedButtons()
   await expectNamedFormControls()
@@ -1546,17 +1560,22 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   const replaceExampleDialog = page.getByRole('alertdialog')
   await expect(replaceExampleDialog).toContainText('RC step response')
   await expectDialogDescription(replaceExampleDialog, 'example-confirm-description')
+  await expectDialogTextContrast(replaceExampleDialog, 'Example replacement confirmation', ['.modal-heading h2', '#example-confirm-description', '.example-confirm p', '.example-confirm strong'])
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect(openRcExample).toBeFocused()
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Keyboard shortcuts' }).click()
-  await expectDialogDescription(page.getByRole('dialog', { name: 'Keyboard shortcuts' }), 'shortcuts-description')
+  const shortcutsDialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
+  await expectDialogDescription(shortcutsDialog, 'shortcuts-description')
+  await expectDialogTextContrast(shortcutsDialog, 'Keyboard shortcuts dialog', ['.modal-heading h2', '#shortcuts-description', '.shortcut-columns h3', '.shortcut-columns dt', '.shortcut-columns dd', '.shortcut-note'])
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Open quick tour' }).click()
-  await expectDialogDescription(page.getByRole('dialog', { name: /Understand the workspace/ }), 'tour-description')
+  const tourDialog = page.getByRole('dialog', { name: /Understand the workspace/ })
+  await expectDialogDescription(tourDialog, 'tour-description')
+  await expectDialogTextContrast(tourDialog, 'Quick tour dialog', ['.modal-heading h2', '#tour-description', '.tour-actions span'])
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
@@ -1571,6 +1590,7 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   const generatedNetlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
   await expect(generatedNetlist).toBeVisible()
   await expect(generatedNetlist).toHaveAccessibleDescription(/SPICE input generated from the current schematic.*copy it to use with another SPICE simulator/i)
+  await expectDialogTextContrast(generatedNetlist, 'Generated netlist dialog', ['.modal-heading h2', 'pre', '.modal-footer span'])
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
@@ -1589,6 +1609,7 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   const circuitChecks = page.getByRole('dialog', { name: 'Circuit checks' })
   await expect(circuitChecks).toBeVisible()
   await expectDialogDescription(circuitChecks, 'erc-description')
+  await expectDialogTextContrast(circuitChecks, 'Circuit Checks dialog', ['.modal-heading h2', '.erc-intro', '.erc-list strong', '.erc-list p', '.erc-success'])
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
@@ -1607,6 +1628,7 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   const sheetSettings = page.getByRole('dialog', { name: /ports and parameters/ })
   await expect(sheetSettings).toBeVisible()
   await expectDialogDescription(sheetSettings, 'sheet-settings-description')
+  await expectDialogTextContrast(sheetSettings, 'Block settings dialog', ['.modal-heading h2', '#sheet-settings-description', '.field-label', '.example-list strong', '.example-list p', '.field-hint'])
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
@@ -1623,6 +1645,7 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   const modelSections = page.getByRole('dialog', { name: 'Choose model sections' })
   await expect(modelSections).toBeVisible()
   await expectDialogDescription(modelSections, 'model-sections-description')
+  await expectDialogTextContrast(modelSections, 'Model section dialog', ['.modal-heading h2', '#model-sections-description', '.lt-export-license span'])
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
@@ -1653,6 +1676,7 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   const batchModelSections = page.getByRole('dialog', { name: 'Choose model sections' })
   await expect(batchModelSections).toBeVisible()
   await expectDialogDescription(batchModelSections, 'model-batch-sections-description')
+  await expectDialogTextContrast(batchModelSections, 'Batch model sections dialog', ['.modal-heading h2', '#model-batch-sections-description', '.form-section-title', '.example-list h3', '.lt-export-license span'])
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
@@ -1813,7 +1837,7 @@ test('waveform window title, plot, and navigation retain visible keyboard focus'
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
-  const plotWindow = await openComponentVoltagePlot(page)
+  const plotWindow = await openComponentVoltagePlot(page, 'R1', (chooser) => expectDialogTextContrast(chooser, 'Waveform destination dialog', ['h2', 'p', '.waveform-destination-option strong', '.waveform-destination-option small']))
   const expectFocusRing = async (locator: Locator) => {
     const outline = await locator.evaluate((element) => {
       const style = getComputedStyle(element)
@@ -5158,11 +5182,12 @@ test('current-controlled switch example teaches and exposes its sensing circuit 
   await expect(page.locator('.circuit-part[data-part-id="cswitch-rsense"]')).toBeVisible()
 })
 
-async function openComponentVoltagePlot(page: import('@playwright/test').Page, ref = 'R1') {
+async function openComponentVoltagePlot(page: import('@playwright/test').Page, ref = 'R1', inspectChooser?: (chooser: Locator) => Promise<void>) {
   const hadPlotWindow = (await page.locator('.plot-window').count()) > 0
   await page.locator(`.circuit-part[aria-label^="${ref},"]`).click({ button: 'right' })
   await page.getByRole('menuitem', { name: /Plot (?:pin-to-pin voltage|voltage across (?:pin1|terminal 1))/ }).click()
   const chooser = page.getByRole('dialog', { name: /V\(/ })
+  if (inspectChooser) await inspectChooser(chooser)
   await chooser.getByRole('button', { name: /New waveform window/ }).click()
   const plotWindow = page.locator('.plot-window').last()
   if (!hadPlotWindow) await movePlotWindowLeft(page, plotWindow)
@@ -11505,7 +11530,7 @@ test('imported subcircuit-local .FUNC validates IC defaults and instance overrid
   await expect(netlist).toContainText('DATAFILE="selected data table.csv"')
 })
 
-test('portable export names imported files and asks before including unknown-license material', async ({ page }) => {
+test('portable export names imported files and asks before including unknown-license material', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Examples' }).click()
   await page.locator('.example-list article').filter({ hasText: 'Nested reusable divider' }).getByRole('button', { name: 'Open example' }).click()
@@ -11536,6 +11561,7 @@ test('portable export names imported files and asks before including unknown-lic
   await expect(warning).toContainText('original schematic source · redistribution rights unknown')
   await expect(warning).toContainText('Saving a copy for your own use does not grant permission')
   await expect(warning).toHaveAttribute('aria-describedby', 'export-warning-description')
+  await expectDialogTextContrast(warning, 'Portable project export warning', ['.modal-heading h2', '#export-warning-description', '.export-warning-files strong', '.export-warning-files span'])
   await expectVisibleKeyboardControlsNamed(page)
   const closeWarning = warning.getByRole('button', { name: 'Cancel project export' })
   const cancelWarning = warning.getByRole('button', { name: 'Cancel', exact: true })
