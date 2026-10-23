@@ -89,7 +89,7 @@ export function isValidSpiceSubcircuitPinName(value: string): boolean {
 }
 /** Native SPICE model identifiers may contain slash (for example LF356/NS). */
 export function isValidSpiceModelName(value: string, allowLeadingDigit = false): boolean {
-  return (allowLeadingDigit ? /^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/ : /^[A-Za-z_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*$/).test(value)
+  return (allowLeadingDigit ? /^[A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*$/ : /^[A-Za-z_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*$/).test(value)
 }
 const safeTopLevel = new Set(['.title', '.model', '.param', '.func', '.csparam', '.global', '.options', '.temp', '.ic', '.nodeset', '.save', '.probe', '.meas', '.measure'])
 const forbidden = new Set(['.control', '.endc', '.end', '.exec', '.shell', '.cm'])
@@ -495,8 +495,8 @@ export function modelFunctionSignaturesForLibraries<T extends Pick<ModelLibraryI
 }
 
 function parseModelCard(text: string, line: LogicalLine, scope?: string, functions: ReadonlyMap<string, number> = new Map()): SpiceModelDefinition {
-  const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*)\s+ako\s*:\s*\S+\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
-    ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$]*(?:\/[A-Za-z0-9_.$]+)*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+  const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+ako\s*:\s*\S+\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+    ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
   const name = modelHeader?.[1], type = modelHeader?.[2]
   if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
   const parameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/^\s*\(/, '').replace(/\)\s*$/, '')

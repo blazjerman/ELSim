@@ -1,0 +1,11 @@
+Hyphenated native model identifier operating point
+V1 supply 0 5
+D1 supply output-h D-FAST
+D2 supply output-ref DFAST
+R1 output-h 0 1k
+R2 output-ref 0 1k
+.MODEL D-FAST D(IS=1e-14)
+.MODEL DFAST D(IS=1e-14)
+.op
+.print op v(output-h) v(output-ref)
+.end

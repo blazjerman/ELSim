@@ -689,6 +689,22 @@ test('accepts ngspice slash and numeric-leading subcircuit identifiers and pins'
   assert.deepEqual(validateProject(slashProject).parts.at(-1).modelPins, ['IN/P', 'OUT/P'])
 })
 
+test('accepts hyphens inside ngspice model and subcircuit identifiers', () => {
+  assert.equal(isValidSpiceModelName('D-FAST'), true)
+  assert.equal(isValidSpiceModelName('74HC-FAST/REV-A', true), true)
+  assert.equal(isValidSpiceModelName('-FAST'), false)
+  const core = parseSubcircuitLibrary('.MODEL D-FAST D(IS=1n)\n.SUBCKT AMP-CORE IN OUT\nD1 IN OUT D-FAST\n.ENDS AMP-CORE')
+  assert.equal(core.models[0].name, 'D-FAST')
+  assert.equal(core.subcircuits[0].name, 'AMP-CORE')
+  assert.deepEqual(core.dependencies.map(({ modelName, kind }) => [modelName, kind]), [['D-FAST', 'device']])
+  const dependencies = analyzeModelDependencies([
+    { id: 'wrapper', filename: 'wrapper.lib', content: '.SUBCKT WRAPPER IN OUT\nX1 IN OUT AMP-CORE\n.ENDS WRAPPER' },
+    { id: 'core', filename: 'core.lib', content: '.MODEL D-FAST D(IS=1n)\n.SUBCKT AMP-CORE IN OUT\nD1 IN OUT D-FAST\n.ENDS AMP-CORE' },
+  ])
+  assert.deepEqual(dependencies.missing, [])
+  assert.deepEqual(dependencies.resolved.map(({ modelName, kind }) => [modelName, kind]), [['AMP-CORE', 'subcircuit'], ['D-FAST', 'device']])
+})
+
 test('parses native ngspice subcircuit defaults with and without PARAMS:', () => {
   const source = [
     '.SUBCKT AMP IN OUT gain=2 RLOAD = 10k',

@@ -5264,6 +5264,19 @@ test('native ngspice .TITLE imports, is explained, and runs in the generated dec
   await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' })).toContainText('.TITLE User diode library')
 })
 
+test('imports a hyphenated native ngspice device-model name', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'hyphenated-diode.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.MODEL D-FAST D(IS=1e-14)\n'),
+  })
+  const model = page.locator('.imported-model').filter({ hasText: 'D-FAST' })
+  await expect(model).toBeVisible()
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from hyphenated-diode\.lib/)).toBeVisible()
+})
+
 test('ngspice .GLOBAL inside an imported subcircuit is preserved and warns about shared nodes', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
