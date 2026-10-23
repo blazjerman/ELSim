@@ -64,6 +64,10 @@ function writeLocalPreference(key: string, value: string): void {
   try { localStorage.setItem(key, value) } catch { /* Preferences are optional; editor operation must not depend on storage access. */ }
 }
 
+function sameOrderedIds(left: readonly string[], right: readonly string[]): boolean {
+  return left === right || (left.length === right.length && left.every((id, index) => id === right[index]))
+}
+
 function fetThresholdValue(part: Part | undefined, thresholdsByModelName: ReadonlyMap<string, string | undefined>, fallback: string): string {
   if (!part?.deviceModel) return fallback
   const override = Object.entries(part.modelParameters ?? {}).find(([name]) => name.toLowerCase() === 'vto')?.[1]
@@ -2013,7 +2017,9 @@ export default function App() {
   const [selectedWireIds, setSelectedWireIdsState] = useState<string[]>([])
   const selectedWireIdsRef = useRef(selectedWireIds)
   const setSelectedWireIds = useCallback((next: string[] | ((current: string[]) => string[])) => {
-    const resolved = typeof next === 'function' ? next(selectedWireIdsRef.current) : next
+    const current = selectedWireIdsRef.current
+    const resolved = typeof next === 'function' ? next(current) : next
+    if (sameOrderedIds(current, resolved)) return
     selectedWireIdsRef.current = resolved
     setSelectedWireIdsState(resolved)
   }, [])
@@ -2023,7 +2029,9 @@ export default function App() {
   const [selectedPartIds, setSelectedPartIdsState] = useState<string[]>(() => initialSelectedPartId ? [initialSelectedPartId] : [])
   const selectedPartIdsRef = useRef(selectedPartIds)
   const setSelectedPartIds = useCallback((next: string[] | ((current: string[]) => string[])) => {
-    const resolved = typeof next === 'function' ? next(selectedPartIdsRef.current) : next
+    const current = selectedPartIdsRef.current
+    const resolved = typeof next === 'function' ? next(current) : next
+    if (sameOrderedIds(current, resolved)) return
     selectedPartIdsRef.current = resolved
     setSelectedPartIdsState(resolved)
   }, [])
@@ -2032,7 +2040,9 @@ export default function App() {
   const [selectedNetLabelIds, setSelectedNetLabelIdsState] = useState<string[]>([])
   const selectedNetLabelIdsRef = useRef(selectedNetLabelIds)
   const setSelectedNetLabelIds = useCallback((next: string[] | ((current: string[]) => string[])) => {
-    const resolved = typeof next === 'function' ? next(selectedNetLabelIdsRef.current) : next
+    const current = selectedNetLabelIdsRef.current
+    const resolved = typeof next === 'function' ? next(current) : next
+    if (sameOrderedIds(current, resolved)) return
     selectedNetLabelIdsRef.current = resolved
     setSelectedNetLabelIdsState(resolved)
   }, [])
