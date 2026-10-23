@@ -2456,6 +2456,14 @@ export default function App() {
     const siblingModelNames = parsed.subcircuits.map((subcircuit) => subcircuit.name)
     return parsed.subcircuits.map((subcircuit) => ({ ...subcircuit, assetId: asset.id, filename: asset.filename, functions: modelFunctionResolver.forSubcircuit(asset.id, subcircuit.name), definition: importedSubcircuitComponentDefinition(subcircuit, { assetId: asset.id, filename: asset.filename, sha256: asset.sha256, siblingModelNames }) }))
   }), [modelLibraryAnalysis, modelFunctionResolver])
+  const importedModelsByName = useMemo(() => {
+    const byName = new Map<string, typeof importedModels[number]>()
+    for (const model of importedModels) {
+      const key = model.name.toLowerCase()
+      if (!byName.has(key)) byName.set(key, model)
+    }
+    return byName
+  }, [importedModels])
   const filteredImportedModels = useMemo(() => {
     const query = importedSubcircuitQuery.trim().toLowerCase()
     if (!query) return importedModels
@@ -3009,7 +3017,7 @@ export default function App() {
   const updateNoiseSweep = (patch: Partial<NonNullable<Project['simulation']['noiseSweep']>>) => setProject((current) => ({ ...current, simulation: { ...current.simulation, noiseSweep: { outputNode: 'vout', inputSource: 'V1', scale: 'dec', points: 10, startFrequency: '1 Hz', stopFrequency: '1 MHz', ...current.simulation.noiseSweep, ...patch } } }))
   const selected = selection?.kind === 'part' ? partsById.get(selection.id) ?? null : null
   const selectedImportedModel = selected?.kind === 'subcircuit' && !selected.sheetId
-    ? importedModels.find((model) => model.name.toLowerCase() === selected.modelName?.toLowerCase())
+    ? importedModelsByName.get(selected.modelName?.toLowerCase() ?? '')
     : undefined
   // A selected wire may leave the last component open in the inspector for
   // context, while the canvas selection and edit shortcuts target only the wire.
