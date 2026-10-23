@@ -770,7 +770,7 @@ export default function App() {
     return groups
   }, [filteredImportedModels])
   const visibleImportedModels = filteredImportedModels.slice(0, visibleImportedSubcircuits)
-  const importedDeviceModels = useMemo<ImportedDeviceModel[]>(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => parsed.models.filter((model) => !model.scope || ['r', 'c', 'l'].includes(model.type.toLowerCase())).map((model) => ({ ...model, assetId: asset.id, filename: asset.filename }))), [modelLibraryAnalysis])
+  const importedDeviceModels = useMemo<ImportedDeviceModel[]>(() => modelLibraryAnalysis.assets.flatMap(({ asset, parsed }) => parsed.models.filter((model) => !model.scope || ['r', 'res', 'c', 'l'].includes(model.type.toLowerCase())).map((model) => ({ ...model, assetId: asset.id, filename: asset.filename }))), [modelLibraryAnalysis])
   const importedDeviceModelsByName = useMemo(() => {
     const byName = new Map<string, ImportedDeviceModel>()
     for (const model of importedDeviceModels) if (!byName.has(model.name.toLowerCase())) byName.set(model.name.toLowerCase(), model)
