@@ -6455,9 +6455,10 @@ test('imports a hyphenated native ngspice device-model name', { tag: '@ui-smoke'
   await page.getByLabel('Junction area scale for D1').fill('2')
   await page.getByLabel('Junction perimeter scale for D1').fill('3')
   await page.getByLabel('Device temperature offset for D1').fill('25')
+  await page.getByLabel('Initial operating-point OFF state for D1').check()
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
-  await expect(netlist).toContainText(/^D1 .* D-FAST AREA=2 PJ=3 DTEMP=25$/m)
+  await expect(netlist).toContainText(/^D1 .* D-FAST AREA=2 PJ=3 DTEMP=25 OFF$/m)
   await expect(netlist).toContainText('.MODEL D-FAST D(IS=1e-14)')
 })
 

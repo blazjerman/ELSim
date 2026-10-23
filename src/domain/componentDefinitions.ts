@@ -324,6 +324,9 @@ export const componentDefinitions: readonly ComponentDefinition[] = Object.freez
     ...(['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos'].includes(definition.kind)
       ? [Object.freeze({ key: 'deviceTemperatureDelta', label: 'Device temperature offset', unit: '°C' })]
       : []),
+    ...(['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos'].includes(definition.kind)
+      ? [Object.freeze({ key: 'initialOff', label: 'Initial operating-point OFF state', unit: '' })]
+      : []),
   ]),
   animationChannels: Object.freeze([...definition.animationChannels]),
 })))
@@ -344,6 +347,11 @@ export function supportsDeviceTemperatureDelta(kind: PartKind, model?: { type: s
     return Number.isFinite(level) && [1, 2, 3, 6].includes(level)
   }
   return true
+}
+
+/** ngspice's nonlinear semiconductor instance cards accept the OFF operating-point hint. */
+export function supportsInitialOff(kind: PartKind): boolean {
+  return ['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos'].includes(kind)
 }
 
 /** Return the required imported SPICE `.MODEL` type for a built-in device. */

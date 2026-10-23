@@ -5,8 +5,9 @@ D2 in 0 DTEST AREA=2 PJ=1
 D3 in 0 DTEST AREA=1 PJ=3
 D4 in 0 DTEST AREA=1 PJ=1 M=2
 D5 in 0 DTEST AREA=1 PJ=1 DTEMP=25
+D6 in 0 DTEST AREA=1 PJ=1 OFF
 .model DTEST D(IS=1e-14 JSW=1e-14 N=1)
-.save all @d1[id] @d2[id] @d3[id] @d4[id] @d5[id]
+.save all @d1[id] @d2[id] @d3[id] @d4[id] @d5[id] @d6[id]
 .op
 .control
 set filetype=ascii

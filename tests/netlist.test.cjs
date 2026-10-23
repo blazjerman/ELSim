@@ -355,6 +355,24 @@ test('per-device DTEMP offsets validate against circuit temperature and reach na
   assert.throws(() => validateProject(project), /device temperature offset must be a numeric/)
 })
 
+test('initial OFF is a boolean operating-point hint limited to nonlinear semiconductors', () => {
+  const project = createStarterProject()
+  const diode = { id: 'd-initial-off', kind: 'diode', ref: 'D1', value: '', initialOff: true, x: 700, y: 500, rotation: 0 }
+  project.parts.push(diode)
+  project.netLabels.push(...componentPins(diode).map((pin, index) => ({ id: `d-initial-off-net-${index}`, name: `d1pin${index}`, x: pin.x, y: pin.y, visible: false })))
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^D1 .* DDEFAULT OFF$/m)
+  diode.initialOff = 'yes'
+  assert.throws(() => validateProject(project), /initial OFF is available only for nonlinear semiconductor devices/i)
+  diode.initialOff = true
+  diode.kind = 'resistor'
+  diode.ref = 'R2'
+  diode.value = '1k'
+  diode.componentDefinitionId = undefined
+  assert.throws(() => validateProject(project), /initial OFF is available only for nonlinear semiconductor devices/i)
+})
+
 test('an explicit project temperature follows and overrides imported library temperature cards', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'thermal-models', filename: 'thermal.lib', sha256: 'd'.repeat(64), content: '.TEMP 125\n.MODEL DFAST D(Is=1n)', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
@@ -2075,14 +2093,14 @@ test('RLC instance multipliers preserve parallel-equivalent values and scale ser
 test('diode and BJT instances emit ngspice parallel-device multipliers', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'device-models', filename: 'devices.lib', sha256: 'c'.repeat(64), content: '.model DUSER D(Is=1n)\n.model QUSER NPN(BF=100)', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
-  const diode = { id: 'd-multiplier', kind: 'diode', ref: 'D1', value: '', deviceModel: 'DUSER', diodeArea: '2', diodePerimeter: '3', instanceMultiplier: '2', deviceTemperatureDelta: '15', x: 700, y: 300, rotation: 0 }
-  const transistor = { id: 'q-multiplier', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'QUSER', instanceMultiplier: '3', deviceTemperatureDelta: '-5', x: 900, y: 300, rotation: 0 }
+  const diode = { id: 'd-multiplier', kind: 'diode', ref: 'D1', value: '', deviceModel: 'DUSER', diodeArea: '2', diodePerimeter: '3', instanceMultiplier: '2', deviceTemperatureDelta: '15', initialOff: true, x: 700, y: 300, rotation: 0 }
+  const transistor = { id: 'q-multiplier', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'QUSER', instanceMultiplier: '3', deviceTemperatureDelta: '-5', initialOff: true, x: 900, y: 300, rotation: 0 }
   project.parts.push(diode, transistor)
   project.netLabels.push(...[diode, transistor].flatMap((part) => componentPins(part).map((pin, index) => ({ id: `${part.id}-net-${index}`, name: `${part.ref.toLowerCase()}pin${index}`, x: pin.x, y: pin.y, visible: false }))))
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^D1 d1pin0 d1pin1 DUSER AREA=2 M=2 PJ=3 DTEMP=15$/m)
-  assert.match(artifact.text, /^Q1 q1pin0 q1pin1 q1pin2 QUSER M=3 DTEMP=-5$/m)
+  assert.match(artifact.text, /^D1 d1pin0 d1pin1 DUSER AREA=2 M=2 PJ=3 DTEMP=15 OFF$/m)
+  assert.match(artifact.text, /^Q1 q1pin0 q1pin1 q1pin2 QUSER M=3 DTEMP=-5 OFF$/m)
 })
 
 test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {

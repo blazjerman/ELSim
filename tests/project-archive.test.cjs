@@ -301,6 +301,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const deviceTemperaturePattern = new RegExp(deviceTemperatureDelta.pattern, 'u')
   for (const value of ['0', '25', '-10', '+3.5', '.25']) assert.equal(deviceTemperaturePattern.test(value), true, `v8 DTEMP ${value}`)
   for (const value of ['warm', '1 °C', '1e2', '']) assert.equal(deviceTemperaturePattern.test(value), false, `v8 DTEMP ${value}`)
+  assert.equal(schema.$defs.part.properties.initialOff.type, 'boolean')
   const legacySchema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v7.schema.json'), 'utf8'))
   assert.equal(legacySchema.$defs.part.properties.modelPins.items.pattern, schema.$defs.part.properties.modelPins.items.pattern)
   assert.equal(legacySchema.$defs.modelAsset.properties.selectedSections.items.pattern, schema.$defs.modelAsset.properties.selectedSections.items.pattern)
