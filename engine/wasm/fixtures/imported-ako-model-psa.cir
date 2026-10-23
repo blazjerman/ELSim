@@ -1,0 +1,10 @@
+ngspice PSpice AKO inheritance compatibility probe
+VDD vdd 0 DC 5
+VG gate 0 DC 5
+RLOAD vdd drain 1k
+M1 drain gate 0 0 CHILD
+.MODEL BASE NMOS (LEVEL=1 VTO=1.5 KP=800u)
+.MODEL CHILD AKO:BASE NMOS W=1u L=1u
+.op
+.print op v(drain)
+.end

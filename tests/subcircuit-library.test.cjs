@@ -887,10 +887,11 @@ test('distinguishes unsupported MOSFET bins from native ngspice BSIM3 bins', () 
   assert.equal(parsed.modelText, source)
   const warnings = analyzeLtspiceModelDialect(source)
   assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
-    [1, 'LTspice AKO model inheritance (unsupported by browser ngspice)'],
+    [1, 'PSpice AKO model inheritance (requires ngbehavior=psa)'],
     [2, 'LTspice MOSFET model binning (automatic selection unsupported)'],
   ])
-  assert.match(warnings[0].impact, /model-type mismatch/)
+  assert.match(warnings[0].impact, /default browser runtime rejects this model type/)
+  assert.match(warnings[0].impact, /succeeds with ngbehavior=psa/)
   assert.match(warnings[0].suggestion, /does not expand AKO inheritance/)
   assert.match(warnings[1].impact, /not selected by the unsuffixed base name/)
   assert.match(warnings[1].suggestion, /does not choose one automatically/)

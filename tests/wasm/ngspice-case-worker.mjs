@@ -14,7 +14,11 @@ try {
   for (const assetPath of workerData.assetPaths ?? []) {
     module.FS.writeFile(path.basename(assetPath), new Uint8Array(await readFile(assetPath)))
   }
-  if (workerData.ltspiceMode) module.FS.writeFile('/home/web_user/.spiceinit', 'set ngbehavior=lta\n')
+  const spiceInit = [
+    workerData.ltspiceMode ? 'set ngbehavior=lta' : undefined,
+    workerData.ngspiceBehavior ? `set ngbehavior=${workerData.ngspiceBehavior}` : undefined,
+  ].filter(Boolean)
+  if (spiceInit.length) module.FS.writeFile('/home/web_user/.spiceinit', `${spiceInit.join('\n')}\n`)
   const deck = new Uint8Array(await readFile(workerData.deckPath))
   module.FS.writeFile('/test.cir', deck)
   const status = module.callMain(['-b', '/test.cir'])
