@@ -4,7 +4,14 @@ const test = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('ELSIM_TEST_BUILD is required; run this test through tests/run-netlist-tests.cjs')
-const { parsePredictionValue, spiceDimensionMagnitude, spiceModelParameterMagnitude } = require(path.join(build, 'domain/componentValue.js'))
+const { formatEngineeringValue, parsePredictionValue, spiceDimensionMagnitude, spiceModelParameterMagnitude } = require(path.join(build, 'domain/componentValue.js'))
+
+test('effective component values use readable engineering prefixes', () => {
+  assert.equal(formatEngineeringValue(250, 'Ω'), '250 Ω')
+  assert.equal(formatEngineeringValue(30e-6, 'F'), '30 µF')
+  assert.equal(formatEngineeringValue(2e-3 / 3, 'H'), '666.7 µH')
+  assert.equal(formatEngineeringValue(Number.POSITIVE_INFINITY, 'V'), null)
+})
 
 test('ngspice dimensions use milli for m/M and mega only for meg', () => {
   assert.equal(spiceDimensionMagnitude('1m'), 1e-3)

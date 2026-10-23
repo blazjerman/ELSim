@@ -64,6 +64,16 @@ export function componentMagnitude(value: string, kind: PartKind): number | null
   return Number.isFinite(result) ? result : null
 }
 
+/** Format a base-unit scalar with an engineering prefix and an explicit unit. */
+export function formatEngineeringValue(value: number, unit: string): string | null {
+  if (!Number.isFinite(value) || !unit) return null
+  if (value === 0) return `0 ${unit}`
+  const prefixes: Record<number, string> = { [-15]: 'f', [-12]: 'p', [-9]: 'n', [-6]: 'µ', [-3]: 'm', 0: '', 3: 'k', 6: 'M', 9: 'G', 12: 'T' }
+  const exponent = Math.max(-15, Math.min(12, Math.floor(Math.log10(Math.abs(value)) / 3) * 3))
+  const scaled = Number((value / 10 ** exponent).toPrecision(4))
+  return `${scaled} ${prefixes[exponent]}${unit}`
+}
+
 /** Parse an SI dimension using ngspice suffix semantics (`m` is milli; `meg` is mega). */
 export function spiceDimensionMagnitude(value: string): number | null {
   const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u')

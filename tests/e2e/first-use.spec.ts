@@ -9998,7 +9998,8 @@ test('current-source inspector edits its multiplier and finite-cycle waveforms',
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const source = { id: 'ui-pulse-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', instanceMultiplier: '3', x: 450, y: 350, rotation: 0 }
-    project.parts.push(source)
+    const resistor = { id: 'ui-multiplier-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', instanceMultiplier: '4', x: 700, y: 350, rotation: 0 }
+    project.parts.push(source, resistor)
     project.sheets[0].parts = project.parts
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
@@ -10032,6 +10033,11 @@ test('current-source inspector edits its multiplier and finite-cycle waveforms',
   await page.getByLabel('PWL repeat cycles').fill('2')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 0 20m 0 0\.03 0 0\.04 0\)/)
+  await page.keyboard.press('Escape')
+  const resistorPart = page.getByRole('button', { name: /^R2, Resistor/ })
+  await resistorPart.focus()
+  await resistorPart.press('Enter')
+  await expect(page.getByText('Effective parallel value: 250 Ω')).toBeVisible()
 })
 
 test('stop terminates an active ngspice run and leaves the workspace responsive', { tag: '@ngspice' }, async ({ page }) => {
