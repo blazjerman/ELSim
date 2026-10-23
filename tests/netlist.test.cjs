@@ -1593,6 +1593,10 @@ test('independent and controlled current sources emit ngspice parallel-device mu
   assert.match(artifact.text, /^I2 n\d+ n\d+ 1m M=3$/m)
   assert.match(artifact.text, /^G2 n\d+ n\d+ n\d+ n\d+ 1m M=4$/m)
   assert.match(artifact.text, /^F2 n\d+ n\d+ V1 2 M=5$/m)
+  project.simulation.analysis = 'ac'
+  const acArtifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(acArtifact.diagnostics, [], acArtifact.text)
+  assert.match(acArtifact.text, /^I2 n\d+ n\d+ DC 1m AC 1m 0 M=3$/m)
 })
 
 test('behavioral voltage and current sources emit validated B-source expressions', () => {
