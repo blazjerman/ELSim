@@ -51,6 +51,20 @@ test('transformed AC vectors can cache shared extrema when the caller supplies a
   assert.notStrictEqual(extremaIndices(values, 0, 3, 2, (value) => Math.log10(value), 'ac:phase'), first)
 })
 
+test('transformed extrema samples retain exact full-range bounds for plot axes', () => {
+  const values = Float64Array.from({ length: 10_000 }, (_, index) => 10 ** Math.sin(index / 37))
+  values[2_347] = 1e-8
+  values[8_201] = 1e8
+  const logarithm = (value) => Math.log10(value)
+  const indices = extremaIndices(values, 0, values.length - 1, 900, logarithm, 'ac:magnitude-fixture')
+  const sampledRange = indices.reduce((range, index) => {
+    const value = logarithm(values[index])
+    return [Math.min(range[0], value), Math.max(range[1], value)]
+  }, [Infinity, -Infinity])
+  assert.deepEqual(sampledRange, valueRange(values, 0, values.length - 1, logarithm, 'ac:magnitude-fixture'))
+  assert.deepEqual(sampledRange, [-8, 8])
+})
+
 test('identical waveform windows reuse formatted SVG points for the same immutable trace geometry', () => {
   let reads = 0
   const vector = (items) => Object.defineProperties({ length: items.length }, Object.fromEntries(items.map((value, index) => [index, { get() { reads += 1; return value } }])))
