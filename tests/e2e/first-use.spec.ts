@@ -3419,6 +3419,7 @@ test('an imported LTRA model runs as a lossy line and exposes both port currents
 })
 
 test('an imported TXL model runs with grounded returns in the browser engine', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
   const project = createStarterProject()
   const modelContent = '.MODEL TXL50 TXL(R=10 L=250n G=0 C=100p LENGTH=1)\n'
   const parts = [
@@ -3443,8 +3444,15 @@ test('an imported TXL model runs with grounded returns in the browser engine', {
   await page.locator('.circuit-part[data-part-id="txl-device"]').click()
   await page.getByLabel('Device model for T1').selectOption('TXL50')
   await expect(page.getByText(/TXL model uses ngspice’s two-ground-return Y-device/)).toBeVisible()
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('T1')
+  await page.getByRole('combobox', { name: 'Parameter 1 model parameter' }).selectOption('R')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('10')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('20')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
   await page.getByRole('button', { name: 'Run simulation' }).click()
-  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
 
   const line = page.locator('.circuit-part[data-part-id="txl-device"]')
   await line.focus()
@@ -3452,8 +3460,9 @@ test('an imported TXL model runs with grounded returns in the browser engine', {
   await page.getByRole('menuitem', { name: 'Plot port 2 current' }).click()
   const destination = page.getByRole('dialog', { name: 'I(T1, port 2)' })
   await destination.getByRole('button', { name: /New waveform window/ }).click()
-  const plot = page.locator('.additional-plot-window').filter({ has: page.getByRole('img', { name: 'I(T1, port 2), trace in A' }) })
+  const plot = page.locator('.additional-plot-window').filter({ has: page.getByRole('img', { name: /I\(T1, port 2\).*trace in A/ }) })
   await expect(plot).toBeVisible()
+  await expect(plot.getByRole('button', { name: /Disable I\(T1, port 2\)/ })).toHaveCount(2)
 })
 
 test('an imported three-conductor CPL model simulates through a reusable user subcircuit', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
