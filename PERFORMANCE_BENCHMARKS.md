@@ -877,11 +877,11 @@ The 40-trace, 10,012-sample fixture reached results in 1,008 ms; individual visi
 
 ### Firefox million-sample process-memory comparison (2026-10-23)
 
-The Linux process-tree sampler was run against the existing local WASM runtime with one and eight waveform windows. Both runs solved 1,000,130 samples, used 185,794,560 bytes of WASM linear memory, and reported complete startup, pre-run, worker-profile, and result-ready phase markers. The one-window run rendered four traces and reached results in 10.03 s; its repeated cursor scrubs were 25–36 ms. The eight-window run rendered 32 traces and reached results in 10.00 s; scrubs were 40–62 ms.
+The Linux process-tree sampler was repeated twice per configuration against the existing local WASM runtime, solving 1,000,130 samples each time with 185,794,560 bytes of WASM linear memory and complete startup, pre-run, worker-profile, and result-ready phase markers. One window rendered four traces and reached results in 10.03–10.06 s; repeated cursor scrubs ranged 24–36 ms. Eight windows rendered 32 traces and reached results in 10.00–10.06 s; scrubs ranged 35–62 ms.
 
 | Plot windows | Startup peak PSS / RSS (MiB) | Solve and result-transfer peak PSS / RSS (MiB) | Validation peak PSS / RSS (MiB) | Plot interaction peak PSS / RSS (MiB) | Overall peak PSS / RSS (MiB) |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 587.2 / 937.6 | 1,004.8 / 1,362.1 | 651.3 / 1,009.4 | 661.2 / 1,020.2 | 1,004.8 / 1,362.1 |
-| 8 | 581.0 / 932.7 | 1,041.9 / 1,400.5 | 642.1 / 1,001.4 | 687.3 / 1,047.9 | 1,041.9 / 1,400.5 |
+| 1 | 587.2–592.7 / 937.6–943.5 | 1,004.8–1,005.3 / 1,362.1–1,362.4 | 609.1–651.3 / 966.0–1,009.4 | 661.2–661.3 / 1,019.1–1,020.2 | 1,004.8–1,005.3 / 1,362.1–1,362.4 |
+| 8 | 581.0–628.6 / 932.7–981.4 | 1,041.9–1,114.1 / 1,400.5–1,472.0 | 642.1–671.8 / 1,001.4–1,029.7 | 687.3–704.1 / 1,047.9–1,062.1 | 1,041.9–1,114.1 / 1,400.5–1,472.0 |
 
-These are individual same-host observations, not a causal comparison or portable memory budget. PSS/RSS sum Firefox and its descendants, not ELSim-only allocations; Firefox page-heap counters were unavailable. The solve/result-transfer phase dominates both peaks, and the observed eight-window process peak was 37.1 MiB PSS above the one-window run. Do not attribute that difference to plot windows from one run per configuration. No WASM rebuild or Pages workflow ran.
+These are two same-host observations per configuration, not a portable memory budget. PSS/RSS sum Firefox and its descendants, not ELSim-only allocations; Firefox page-heap counters were unavailable. The solve/result-transfer phase dominates both peaks. The one-window overall PSS peak was tightly grouped, while the eight-window peak varied by 72.2 MiB; more repetitions and a second machine are needed before drawing conclusions about a plot-count effect. No WASM rebuild or Pages workflow ran.
