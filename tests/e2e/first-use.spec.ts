@@ -10558,6 +10558,21 @@ test('@ui-smoke component property edits use stable undo and redo snapshots', as
   await expect(value).toHaveValue('2k')
 })
 
+test('selecting a component after Undo preserves the available Redo action', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const value = page.locator('[data-part-setting="p-r1:value"]')
+  const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })
+  const redo = page.getByRole('button', { name: 'Redo (Ctrl/⌘+Shift+Z)' })
+  await value.fill('2k')
+  await undo.click()
+  await expect(value).toHaveValue('1 kΩ')
+  await expect(redo).toBeEnabled()
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  await expect(redo).toBeEnabled()
+  await redo.click()
+  await expect(value).toHaveValue('2k')
+})
+
 test('voltage source inspector edits DC, pulse, and validated PWL transient behavior', async ({ page }) => {
   await page.goto('/')
   expect(await page.evaluate(() => performance.getEntriesByType('resource').some(({ name }) => name.includes('/src/engine/netlistGeneration.ts')))).toBe(false)
