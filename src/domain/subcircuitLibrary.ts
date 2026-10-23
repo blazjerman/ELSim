@@ -504,13 +504,17 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
     ? /\bpchan\b/i.test(parameterSource) ? 'p' as const : 'n' as const
     : undefined
   const parameters: SubcircuitParameter[] = []
+  const parameterIndex = new Map<string, number>()
   for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|'[^']*'|[^\s,)]+)/g)) {
     const value = match[2].replace(/^\{([\s\S]*)\}$|^'([\s\S]*)'$/, (_whole, braced: string | undefined, quoted: string | undefined) => braced ?? quoted ?? _whole)
     if (!isSafeSubcircuitParameterValue(match[2], functions)) continue
     const parameter = { name: match[1], defaultValue: value }
-    const existing = parameters.findIndex((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase())
-    if (existing < 0) parameters.push(parameter)
-    else parameters[existing] = parameter
+    const key = parameter.name.toLowerCase()
+    const existing = parameterIndex.get(key)
+    if (existing === undefined) {
+      parameterIndex.set(key, parameters.length)
+      parameters.push(parameter)
+    } else parameters[existing] = parameter
   }
   return { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
 }
@@ -575,8 +579,9 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   // A model used in mutually exclusive branches is still one selectable card.
   // Only expose parameters that exist in every variant so parameter stepping
   // cannot offer a setting absent from the active ngspice model.
+  const candidateParameters = new Map(model.parameters.map((parameter) => [parameter.name.toLowerCase(), parameter]))
   previous.model.parameters = previous.model.parameters.filter((parameter) => {
-    const candidate = model.parameters.find((entry) => entry.name.toLowerCase() === parameter.name.toLowerCase())
+    const candidate = candidateParameters.get(parameter.name.toLowerCase())
     if (!candidate) return false
     const priorValue = compatibilityScalar(parameter.defaultValue)
     const nextValue = compatibilityScalar(candidate.defaultValue)

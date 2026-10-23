@@ -744,6 +744,31 @@ test('keeps the last duplicate .MODEL parameter value, matching ngspice', () => 
   assert.equal(parsed.modelText, source, 'retain the original model card unchanged for ngspice')
 })
 
+test('indexes large native model cards and conditional variants without changing parameter order', () => {
+  const count = 1200
+  const defaults = Array.from({ length: count }, (_, index) => `P${index}=${index}`).join(' ')
+  const replacements = Array.from({ length: count }, (_, index) => `p${index}=${index + 1}`).join(' ')
+  const parsed = parseSubcircuitLibrary(`.MODEL LARGE D(${defaults} ${replacements})`)
+  assert.equal(parsed.models[0].parameters.length, count)
+  assert.deepEqual(parsed.models[0].parameters.slice(0, 3), [
+    { name: 'p0', defaultValue: '1' },
+    { name: 'p1', defaultValue: '2' },
+    { name: 'p2', defaultValue: '3' },
+  ])
+  assert.deepEqual(parsed.models[0].parameters.at(-1), { name: 'p1199', defaultValue: '1200' })
+
+  const conditional = parseSubcircuitLibrary([
+    '.IF (variant == 0)',
+    `.MODEL DSELECT D(${defaults})`,
+    '.ELSE',
+    `.MODEL dselect D(${replacements})`,
+    '.ENDIF',
+  ].join('\n'))
+  assert.equal(conditional.models[0].parameters.length, count)
+  assert.equal(conditional.models[0].parameters[0].defaultVariesByCondition, true)
+  assert.equal(conditional.models[0].parameters.at(-1)?.defaultVariesByCondition, true)
+})
+
 test('parses native ngspice VDMOS channel polarity with N-channel as the default', () => {
   const parsed = parseSubcircuitLibrary('.MODEL NPOWER VDMOS(VTO=2)\n.MODEL PPOWER VDMOS Pchan VTO=-2')
   assert.deepEqual(parsed.models.map(({ name, type, channel }) => [name, type, channel]), [
