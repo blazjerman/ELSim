@@ -1,0 +1,14 @@
+Native URC distributed RC line with an ELSim current-sense branch
+V1 in 0 PULSE(0 1 1n 1n 1n 40n 80n)
+V__ELSIM_URC1_IN in __ELSIM_URC1_IN 0
+V__ELSIM_URC1_OUT __ELSIM_URC1_OUT out 0
+.MODEL URCMOD_URC1 URC (RPERL=1k CPERL=100p K=2 FMAX=1G)
+URC1 __ELSIM_URC1_IN __ELSIM_URC1_OUT 0 URCMOD_URC1 L=1m N=6
+RLOAD out 0 1k
+.control
+set filetype=ascii
+tran 1n 500n
+write /result.raw v(in) v(out) i(V__ELSIM_URC1_IN) i(V__ELSIM_URC1_OUT)
+quit
+.endc
+.end

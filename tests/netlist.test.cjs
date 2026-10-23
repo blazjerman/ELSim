@@ -76,6 +76,25 @@ test('native lossless transmission lines emit propagation delay or frequency-len
   assert.ok(invalid.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /positive finite propagation delay/.test(message)))
 })
 
+test('native URC line parts emit a sensed ngspice distributed-RC model and validate sections', () => {
+  const project = createStarterProject()
+  const line = { id: 'urc-native', kind: 'urcLine', ref: 'URC1', value: '1', x: 700, y: 500, rotation: 0, urcLine: { resistancePerLength: '1 kΩ/m', capacitancePerLength: '100 pF/m', sections: '6', k: '2', fmax: '1 GHz', currentPerLength: '1 pA/m', seriesResistancePerLength: '2 Ω/m' } }
+  project.parts.push(line)
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics.filter(({ sourceId }) => sourceId === line.id), [])
+  assert.match(artifact.text, /^V__ELSIM_URC1_IN .* 0$/m)
+  assert.match(artifact.text, /^V__ELSIM_URC1_OUT .* 0$/m)
+  assert.match(artifact.text, /^\.MODEL URCMOD_URC1 URC \(RPERL=1k CPERL=100p K=2 FMAX=1g ISPERL=1p RSPERL=2\)$/m)
+  assert.match(artifact.text, /^URC1 .* URCMOD_URC1 L=1 N=6$/m)
+  assert.match(artifact.text, /^\.save i\(V__ELSIM_URC1_IN\)$/m)
+  assert.match(artifact.text, /^\.save i\(V__ELSIM_URC1_OUT\)$/m)
+
+  line.urcLine.sections = '0'
+  const invalid = createNetlistArtifact(project)
+  assert.ok(invalid.diagnostics.some(({ sourceId, message }) => sourceId === line.id && /section count from 1 to 128/.test(message)))
+})
+
 test('transmission lines use imported LTRA cards and reject incompatible or incomplete models', () => {
   const project = createStarterProject()
   const line = { id: 'line-ltra', kind: 'transmissionLine', ref: 'T1', value: '', deviceModel: 'LINE50', x: 700, y: 500, rotation: 0 }

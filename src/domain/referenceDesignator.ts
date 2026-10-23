@@ -1,7 +1,7 @@
 import type { Part, PartKind } from './project'
 
 export function referencePrefixForKind(kind: PartKind): string {
-  return ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', transmissionLine: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', currentSwitch: 'W', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[kind]
+  return ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', transmissionLine: 'T', urcLine: 'URC', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', currentSwitch: 'W', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[kind]
 }
 
 export function nextRef(parts: Part[], kind: PartKind): string {

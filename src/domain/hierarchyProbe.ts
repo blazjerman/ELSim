@@ -1,6 +1,6 @@
 import { analyzeConnectivity, pinNet } from './connectivity'
 import type { Part, Project, ProjectSheet } from './project'
-import { mesfetDrainCurrentSenseReference, transmissionLinePortCurrentVector } from './probe'
+import { mesfetDrainCurrentSenseReference, transmissionLinePortCurrentVector, urcLineCurrentSenseReference } from './probe'
 
 /** Resolve a sheet-local labeled node to the ngspice vector for one instantiated hierarchy path. */
 export function hierarchyNodeVector(project: Project, sheetId: string, instancePath: string[], nodeName: string, scopeSheetId = project.rootSheetId): string | null {
@@ -65,6 +65,7 @@ export function hierarchyComponentCurrentVector(project: Project, sheetId: strin
     return `i(l.${device})`
   }
   if (part.kind === 'transmissionLine') return transmissionLinePortCurrentVector([...refs, part.ref.toLowerCase()].join('.'), transmissionLinePort, Boolean(part.deviceModel))
+  if (part.kind === 'urcLine') return `i(v.${[...refs, urcLineCurrentSenseReference(part.ref).toLowerCase()].join('.')})`
   if (part.kind === 'potentiometer') {
     const device = [...refs, `${part.ref.toLowerCase()}_a`].join('.')
     return `i(@r.${device}[i])`

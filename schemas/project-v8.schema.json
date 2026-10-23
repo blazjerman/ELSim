@@ -156,6 +156,7 @@
             "inductor",
             "transformer",
             "transmissionLine",
+            "urcLine",
             "diode",
             "zener",
             "led",
@@ -605,6 +606,20 @@
             "normalizedLength": { "type": "string", "maxLength": 64 }
           },
           "description": "ngspice lossless T-line length specified by propagation delay or frequency and normalized electrical length."
+        },
+        "urcLine": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "resistancePerLength": { "type": "string", "maxLength": 64 },
+            "capacitancePerLength": { "type": "string", "maxLength": 64 },
+            "sections": { "type": "string", "maxLength": 64 },
+            "k": { "type": "string", "maxLength": 64 },
+            "fmax": { "type": "string", "maxLength": 64 },
+            "currentPerLength": { "type": "string", "maxLength": 64 },
+            "seriesResistancePerLength": { "type": "string", "maxLength": 64 }
+          },
+          "description": "Per-unit-length parameters and section count for ngspice's native URC distributed RC line."
         },
         "symbolAssetId": {
           "type": "string",

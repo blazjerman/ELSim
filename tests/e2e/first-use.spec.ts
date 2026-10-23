@@ -335,6 +335,35 @@ test('quick tour explains the current workspace and project save flow', { tag: '
   await expect(dialog).toHaveCount(0)
 })
 
+test('native distributed RC line can be placed, configured, and netlisted', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: /^Add Distributed RC line/ }).click()
+  const svg = page.locator('svg.schematic')
+  const target = await svg.evaluate((element) => {
+    const point = (element as SVGSVGElement).createSVGPoint(); point.x = 700; point.y = 200
+    const screen = point.matrixTransform((element as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
+  await page.mouse.click(target.x, target.y)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'urcLine')?.ref)).toBe('URC1')
+  const partId = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'urcLine').id)
+  await page.keyboard.press('Escape')
+  await page.locator(`.circuit-part[data-part-id="${partId}"]`).click()
+  await expect(page.getByLabel('URC resistance per length for URC1')).toHaveValue('1 kΩ/m')
+  await expect(page.getByLabel('URC capacitance per length for URC1')).toHaveValue('100 pF/m')
+  await page.getByLabel('URC ladder sections for URC1').fill('8')
+  await expect.poll(() => page.evaluate((id) => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === id).urcLine.sections, partId)).toBe('8')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlistPanel = page.locator('.netlist-modal pre')
+  await expect.poll(() => netlistPanel.innerText()).not.toBe('Generating netlist…')
+  const netlist = await netlistPanel.innerText()
+  expect(netlist).toMatch(/^\.MODEL URCMOD_URC1 URC \(/m)
+  expect(netlist).toMatch(/^URC1 .* URCMOD_URC1 L=1 N=8$/m)
+  expect(netlist).toMatch(/^\.save i\(V__ELSIM_URC1_IN\)$/m)
+  expect(netlist).toMatch(/^\.save i\(V__ELSIM_URC1_OUT\)$/m)
+})
+
 test('keyboard shortcut reference matches editor controls and restores focus', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')

@@ -4,7 +4,7 @@ import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunct
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
-import { mesfetDrainCurrentSenseReference, transmissionLinePortCurrentVector } from '../domain/probe'
+import { mesfetDrainCurrentSenseReference, transmissionLinePortCurrentVector, urcLineCurrentSenseReference } from '../domain/probe'
 import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import type { NetlistArtifact, NetlistSource } from './contract'
 import {
@@ -130,6 +130,9 @@ function hierarchicalSaveVectors(project: Project): string[] {
       if (part.kind === 'transmissionLine') {
         saves.add(`.save ${transmissionLinePortCurrentVector(device, 1, Boolean(part.deviceModel))}`)
         saves.add(`.save ${transmissionLinePortCurrentVector(device, 2, Boolean(part.deviceModel))}`)
+      } else if (part.kind === 'urcLine') {
+        saves.add(`.save i(v.${[...path, urcLineCurrentSenseReference(part.ref, 'IN').toLowerCase()].join('.')})`)
+        saves.add(`.save i(v.${[...path, urcLineCurrentSenseReference(part.ref, 'OUT').toLowerCase()].join('.')})`)
       } else if (part.kind === 'transformer') {
         saves.add(`.save i(l.${device}_p)`)
         saves.add(`.save i(l.${device}_s)`)
@@ -255,7 +258,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const passiveDefaultParameter = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
     const passiveModelSuppliesValue = Boolean(passiveModelType && passiveModel?.type.toLowerCase() === passiveModelType && passiveDefaultParameter && passiveModel.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
     const valueCanBeModelDefault = value === null && part.value.trim() === '' && passiveModelSuppliesValue
-    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'currentSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && part.kind !== 'transmissionLine' && value === null && !valueCanBeModelDefault) {
+    if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'currentSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && part.kind !== 'transmissionLine' && part.kind !== 'urcLine' && value === null && !valueCanBeModelDefault) {
       const message = `${part.ref} has an invalid numeric value${passiveDefaultParameter && part.value.trim() === '' ? ` (no compatible model with ${passiveDefaultParameter.toUpperCase()} default)` : ''}.`
       append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
       diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -452,6 +455,55 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         transientValue = `PULSE(${initial} ${value} ${delay} ${rise} ${fall} ${width} ${period}${cycleCount ? ` ${cycleCount}` : ''})`
       }
       append(`${part.ref} ${positive} ${negative} ${project.simulation.analysis === 'noise' && project.simulation.noiseSweep?.inputSource.toLowerCase() === part.ref.toLowerCase() ? `DC ${value} AC ${acMagnitude} ${acPhase}` : project.simulation.analysis === 'op' || project.simulation.analysis === 'dc' || project.simulation.analysis === 'noise' ? `DC ${value}` : project.simulation.analysis === 'ac' ? `${part.sourceMode === 'dc' ? `DC ${value} ` : ''}AC ${acMagnitude} ${acPhase}` : transientValue}`, part.id, 'component')
+    }
+    else if (part.kind === 'urcLine') {
+      const nodes = [0, 1, 2].map((index) => pinNet(connectivity, part, index))
+      const settings = { resistancePerLength: '1 kΩ/m', capacitancePerLength: '100 pF/m', sections: '6', k: '2', fmax: '1 GHz', ...part.urcLine }
+      const length = spiceSheetScalar(part.value, sheetParameters)
+      const lengthMagnitude = spiceValueMagnitude((spiceSheetParameterDefault(part.value, sheetParameters) ?? part.value).replace(/\s+/g, ''))
+      const perLength = (raw: string, suffix: string) => spiceScalar(raw.trim().replace(new RegExp(`${suffix}\\s*$`, 'i'), ''), '')
+      const resistance = perLength(settings.resistancePerLength, '(?:ohms?|[ΩΩ])\\s*\\/\\s*m')
+      const capacitance = perLength(settings.capacitancePerLength, '(?:f)\\s*\\/\\s*m')
+      const k = spiceScalar(settings.k, '')
+      const fmax = spiceFrequency(settings.fmax)
+      const sectionCount = /^\d+$/.test(settings.sections.trim()) ? Number(settings.sections.trim()) : NaN
+      const optionalCurrent = settings.currentPerLength?.trim() ? perLength(settings.currentPerLength, '(?:a)\\s*\\/\\s*m') : null
+      const optionalSeriesResistance = settings.seriesResistancePerLength?.trim() ? perLength(settings.seriesResistancePerLength, '(?:ohms?|[ΩΩ])\\s*\\/\\s*m') : null
+      const invalid = !length || lengthMagnitude === null || lengthMagnitude <= 0
+        ? 'needs a positive line length.'
+        : !resistance || spiceValueMagnitude(resistance) === null || spiceValueMagnitude(resistance)! <= 0
+          ? 'needs a positive resistance per length.'
+          : !capacitance || spiceValueMagnitude(capacitance) === null || spiceValueMagnitude(capacitance)! <= 0
+            ? 'needs a positive capacitance per length.'
+            : !Number.isInteger(sectionCount) || sectionCount < 1 || sectionCount > 128
+              ? 'needs an integer section count from 1 to 128.'
+              : !k || spiceValueMagnitude(k) === null || spiceValueMagnitude(k)! <= 0
+                ? 'needs a positive K factor.'
+                : !fmax || spiceMagnitude(settings.fmax, 'frequency') === null || spiceMagnitude(settings.fmax, 'frequency')! <= 0
+                  ? 'needs a positive maximum frequency.'
+                  : settings.currentPerLength?.trim() && (!optionalCurrent || spiceValueMagnitude(optionalCurrent) === null || spiceValueMagnitude(optionalCurrent)! < 0)
+                    ? 'has an invalid optional substrate-current parameter.'
+                    : settings.seriesResistancePerLength?.trim() && (!optionalSeriesResistance || spiceValueMagnitude(optionalSeriesResistance) === null || spiceValueMagnitude(optionalSeriesResistance)! < 0)
+                      ? 'has an invalid optional series resistance per length.'
+                      : null
+      if (invalid) {
+        const message = `${part.ref} ${invalid}`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const sensor = reserveUniqueName(urcLineCurrentSenseReference(part.ref), usedReferences)
+      const outputSensor = reserveUniqueName(urcLineCurrentSenseReference(part.ref, 'OUT'), usedReferences)
+      const internalInput = reserveUniqueName(`__ELSIM_${part.ref}_URC_IN`, usedNodes)
+      const internalOutput = reserveUniqueName(`__ELSIM_${part.ref}_URC_OUT`, usedNodes)
+      const modelName = reserveUniqueName(`URCMOD_${part.ref}`, usedModelNames)
+      const optionalParameters = `${optionalCurrent ? ` ISPERL=${optionalCurrent}` : ''}${optionalSeriesResistance ? ` RSPERL=${optionalSeriesResistance}` : ''}`
+      append(`${sensor} ${nodes[0]} ${internalInput} 0`, part.id, 'component')
+      append(`${outputSensor} ${internalOutput} ${nodes[1]} 0`, part.id, 'component')
+      append(`.MODEL ${modelName} URC (RPERL=${resistance} CPERL=${capacitance} K=${k} FMAX=${fmax}${optionalParameters})`, part.id, 'component')
+      append(`${part.ref} ${internalInput} ${internalOutput} ${nodes[2]} ${modelName} L=${length} N=${sectionCount}`, part.id, 'component')
+      append(`.save i(${sensor})`, part.id, 'generated')
+      append(`.save i(${outputSensor})`, part.id, 'generated')
     }
     else if (part.kind === 'transmissionLine') {
       const nodes = [0, 1, 2, 3].map((index) => pinNet(connectivity, part, index))
@@ -1079,7 +1131,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 
 
 function validReference(part: Part): boolean {
-  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', transmissionLine: 'T', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', currentSwitch: 'W', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
+  const expected = ({ source: 'V', currentSource: 'I', resistor: 'R', potentiometer: 'POT', lamp: 'R', capacitor: 'C', ground: 'GND', inductor: 'L', transformer: 'T', transmissionLine: 'T', urcLine: 'URC', diode: 'D', zener: 'D', led: 'D', switch: 'S', voltageSwitch: 'S', currentSwitch: 'W', vcvs: 'E', vccs: 'G', cccs: 'F', ccvs: 'H', behavioral: 'B', inverter: 'B', logicGate: 'B', opamp: 'U', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmesfet: 'Z', pmesfet: 'Z', nmos: 'M', pmos: 'M', nvdmos: 'M', pvdmos: 'M', subcircuit: 'X' } as const)[part.kind]
   return part.ref.startsWith(expected) && /^[A-Za-z][A-Za-z0-9_]*$/.test(part.ref)
 }
 
