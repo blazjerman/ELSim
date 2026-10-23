@@ -798,3 +798,7 @@ All seven `npm run benchmark:browser -- --project=firefox` workflows passed agai
 ### Lazy reusable-sheet settings dialog (2026-10-23)
 
 The reusable-sheet ports/parameters dialog is now a lazy-loaded UI module, fetched only when its settings action is opened. The production build emitted a separate 7.30 kB / 2.32 KiB gzip `SheetSettingsDialog` chunk. Initial JS+CSS gzip fell from 237.6 to 236.6 KiB; the raw main entry fell from 583.81 to 578.25 kB. Three focused Firefox workflows covering port edits, parameter overrides, and child-sheet undo/redo pass. The user-visible behavior is unchanged except that opening this rarely used dialog may wait for the component chunk on first use; an accessible loading status is shown during that request. No WASM build or Pages workflow ran.
+
+### Lazy multi-section model import dialog (2026-10-23)
+
+Single-file and batch model-section selection now lives in a lazy-loaded component, fetched only when an imported model library needs a section choice or the dependency report requests a section repair. The build emitted a separate 4.24 kB / 1.32 KiB gzip chunk. With both the sheet-settings and model-sections dialogs deferred, initial JS+CSS gzip is 235.9 KiB (down from the prior 237.6 KiB); the raw main entry is 574.82 kB (down from 583.81 kB). Firefox keyboard accessibility, multi-file section selection, and punctuated/numeric section-name workflows pass. The dialogs show an accessible loading status while their chunks load. No WASM build or Pages workflow ran.
