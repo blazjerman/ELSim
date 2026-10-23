@@ -1501,6 +1501,32 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
   const examplesDialog = page.getByRole('dialog', { name: 'Open a working circuit' })
   await expect(examplesDialog).toBeVisible()
   await expectDialogDescription(examplesDialog, 'examples-description')
+  const examplesDialogContrast = await examplesDialog.evaluate((dialog) => {
+    const luminance = (color: string) => {
+      const channels = color.match(/[\d.]+/g)?.slice(0, 3).map(Number)
+      if (!channels || channels.length !== 3) throw new Error(`Cannot parse rendered dialog color: ${color}`)
+      const linear = channels.map((channel) => {
+        const value = channel / 255
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      })
+      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
+    }
+    const ratio = (element: Element | null) => {
+      if (!element) throw new Error('A dialog contrast sample is missing')
+      const foreground = getComputedStyle(element).color
+      const background = getComputedStyle(dialog).backgroundColor
+      const [light, dark] = [luminance(foreground), luminance(background)].sort((left, right) => right - left)
+      return Number(((light + 0.05) / (dark + 0.05)).toFixed(2))
+    }
+    return {
+      heading: ratio(dialog.querySelector('.modal-heading h2')),
+      instructions: ratio(dialog.querySelector('#examples-description')),
+      exampleTitle: ratio(dialog.querySelector('.example-list strong')),
+    }
+  })
+  expect(examplesDialogContrast.heading, 'Examples dialog heading must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
+  expect(examplesDialogContrast.instructions, 'Examples dialog instructions must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
+  expect(examplesDialogContrast.exampleTitle, 'Example titles must meet WCAG AA contrast').toBeGreaterThanOrEqual(4.5)
   await expect(page.locator('.example-list article').first()).toBeVisible()
   await expectNamedButtons()
   await expectNamedFormControls()
