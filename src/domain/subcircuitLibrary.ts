@@ -602,6 +602,11 @@ const alternateBjtModelNames = new WeakMap<ModelDependency, string[]>()
 type ModelConditionPath = { id: number; branch: number }[]
 type SeenModelCard = { model: SpiceModelDefinition; conditionPath: ModelConditionPath }
 
+function canonicalModelType(type: string): string {
+  const normalized = type.toLowerCase()
+  return normalized === 'res' ? 'r' : normalized
+}
+
 function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelConditionPath, seen: Map<string, SeenModelCard>, models: SpiceModelDefinition[]) {
   const key = `${model.scope?.toLowerCase() ?? ''}:${model.name.toLowerCase()}`
   const previous = seen.get(key)
@@ -613,7 +618,7 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   const mutuallyExclusive = previous.conditionPath.some((frame) => conditionPath.some((candidate) => candidate.id === frame.id && candidate.branch !== frame.branch))
   const location = model.scope ? ` in .SUBCKT ${model.scope}` : ''
   if (!mutuallyExclusive) throw new Error(`Line ${model.startLine}: model card ${model.name} is declared more than once${location}.`)
-  if (previous.model.type.toLowerCase() !== model.type.toLowerCase() || previous.model.channel !== model.channel) {
+  if (canonicalModelType(previous.model.type) !== canonicalModelType(model.type) || previous.model.channel !== model.channel) {
     throw new Error(`Line ${model.startLine}: conditional model cards named ${model.name} must keep the same device type and channel.`)
   }
   // A model used in mutually exclusive branches is still one selectable card.

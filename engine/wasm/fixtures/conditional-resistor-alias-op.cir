@@ -1,0 +1,13 @@
+Conditional resistor model aliases
+.param variant=0
+V1 IN 0 5
+R1 IN OUT RSEL
+R2 OUT 0 1k
+.IF (variant == 0)
+.MODEL RSEL R(R=1k TC1=0.01)
+.ELSE
+.MODEL RSEL RES(R=1k TC1=0.01)
+.ENDIF
+.OP
+.PRINT OP V(OUT)
+.END

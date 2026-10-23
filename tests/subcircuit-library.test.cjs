@@ -637,6 +637,23 @@ test('preserves ngspice conditional model variants as one selectable device mode
   assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL D1 D(Is=1n)'), /no matching \.ENDIF/)
 })
 
+test('accepts equivalent R and RES aliases across conditional resistor model variants', () => {
+  const parsed = parseSubcircuitLibrary([
+    'Conditional resistor aliases',
+    '.PARAM variant=0',
+    '.IF (variant == 0)',
+    '.MODEL RSELECT R(R=1k TC1=0.01)',
+    '.ELSE',
+    '.MODEL rselect RES(R=2k TC1=0.02)',
+    '.ENDIF',
+  ].join('\n'))
+  assert.equal(parsed.models.length, 1)
+  assert.equal(parsed.models[0].type, 'R')
+  assert.equal(parsed.models[0].parameters.find(({ name }) => name === 'R').defaultVariesByCondition, true)
+  assert.equal(parsed.models[0].parameters.find(({ name }) => name === 'TC1').defaultVariesByCondition, true)
+  assert.equal(analyzeModelLibraries([{ id: 'conditional-resistors', filename: 'conditional-resistors.lib', content: '.PARAM variant=0\n.IF (variant == 0)\n.MODEL RSELECT R(R=1k)\n.ELSE\n.MODEL RSELECT RES(R=2k)\n.ENDIF' }]).dependencies.conflicts.length, 0)
+})
+
 test('strips a terminal .END from model libraries without accepting trailing circuit records', () => {
   const parsed = parseSubcircuitLibrary('.MODEL DFAST D(Is=1n)\n.END\n* allowed trailing comment\n')
   assert.equal(parsed.modelText, '.MODEL DFAST D(Is=1n)')
