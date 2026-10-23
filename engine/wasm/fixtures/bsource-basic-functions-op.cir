@@ -20,6 +20,7 @@ VPWRS POSPWRS 0 4
 VPWRSNEG NEGPWRS 0 -4
 VINTPOS POSINT 0 2.7
 VINTNEG NEGINT 0 -2.7
+VPWLNEG PWLIN 0 -1
 VSQUAREPOS POSQUARE 0 3
 VSQUARENEG NEGQUARE 0 -3
 BMIN NMIN 0 V=min(V(IN),1)
@@ -69,6 +70,8 @@ BSGN_POS SGN_POS 0 V=sgn(V(IN))
 BSGN_NEG SGN_NEG 0 V=sgn(V(IN)-3)
 BTERNARY_TRUE TERNARY_TRUE 0 V=ternary_fcn(V(IN)>1,7,9)
 BTERNARY_FALSE TERNARY_FALSE 0 V=ternary_fcn(V(IN)>3,7,9)
+BPWL_INTERP PWL_INTERP 0 V=pwl(V(IN),0,0,1,2,3,8)
+BPWL_EXTRAP PWL_EXTRAP 0 V=pwl(V(PWLIN),0,0,1,2,3,8)
 BBOOLAND NBOOLAND 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLLOW) - 0.5) > 1e-12))}
 BBOOLANDTRUE NBOOLANDTRUE 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLHIGH) - 0.5) > 1e-12))}
 BBOOLOR NBOOLOR 0 V={(((V(BOOLHIGH) - 0.5) > 1e-12) || ((V(BOOLLOW) - 0.5) > 1e-12))}
@@ -77,5 +80,5 @@ BBOOLXORSAME NBOOLXORSAME 0 V={((((V(BOOLHIGH) - 0.5) > 1e-12) && !((V(BOOLHIGH)
 BXORFUNCTION NBOOLXORFUNCTION 0 V={((((V(BOOLHIGH) - 0.5) > 1e-12) && !((V(BOOLLOW) - 0.5) > 1e-12)) || (!((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLLOW) - 0.5) > 1e-12)))}
 BXORFUNCTIONSAME NBOOLXORFUNCTIONSAME 0 V={((((V(BOOLHIGH) - 0.5) > 1e-12) && !((V(BOOLHIGH) - 0.5) > 1e-12)) || (!((V(BOOLHIGH) - 0.5) > 1e-12) && ((V(BOOLHIGH) - 0.5) > 1e-12)))}
 .op
-.print op v(nmin) v(nmax) v(nramp) v(nraw) v(nclamp) v(ncaret) v(npow) v(npowstar) v(npospwrs) v(nnegpwrs) v(nposint) v(nnegint) v(nposquare) v(nnegquare) v(nhypot) v(nuraw) v(nult) v(narccos) v(narcsin) v(narctan) v(nposquad) v(nnegquad) v(nnerquad) v(naxis) v(nzeroaxis) v(ncbrtpos) v(ncbrtneg) v(nmodpos) v(nmodneg) v(nbuflow) v(nbufhalf) v(nbufhigh) v(ninvlow) v(ninvhalf) v(ninvhigh) v(nnotlow) v(nnothalf) v(nnothigh) v(ntilde_low) v(ntilde_half) v(ntilde_high) v(nint_even) v(nint_odd) v(sgn_pos) v(sgn_neg) v(ternary_true) v(ternary_false) v(nbooland) v(nboolandtrue) v(nboolor) v(nboolxor) v(nboolxorsame) v(nboolxorfunction) v(nboolxorfunctionsame)
+.print op v(nmin) v(nmax) v(nramp) v(nraw) v(nclamp) v(ncaret) v(npow) v(npowstar) v(npospwrs) v(nnegpwrs) v(nposint) v(nnegint) v(nposquare) v(nnegquare) v(nhypot) v(nuraw) v(nult) v(narccos) v(narcsin) v(narctan) v(nposquad) v(nnegquad) v(nnerquad) v(naxis) v(nzeroaxis) v(ncbrtpos) v(ncbrtneg) v(nmodpos) v(nmodneg) v(nbuflow) v(nbufhalf) v(nbufhigh) v(ninvlow) v(ninvhalf) v(ninvhigh) v(nnotlow) v(nnothalf) v(nnothigh) v(ntilde_low) v(ntilde_half) v(ntilde_high) v(nint_even) v(nint_odd) v(sgn_pos) v(sgn_neg) v(ternary_true) v(ternary_false) v(pwl_interp) v(pwl_extrap) v(nbooland) v(nboolandtrue) v(nboolor) v(nboolxor) v(nboolxorsame) v(nboolxorfunction) v(nboolxorfunctionsame)
 .end

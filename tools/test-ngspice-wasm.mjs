@@ -218,6 +218,8 @@ for (const fixture of selectedFixtures) {
     assert.match(wasmResult.stdout, /sgn_neg\s+-1\.0+e\+00/i, 'ngspice sgn() should return minus one for negative input')
     assert.match(wasmResult.stdout, /ternary_true\s+7\.000000e\+00/i, 'ngspice ternary_fcn() should select its true value')
     assert.match(wasmResult.stdout, /ternary_false\s+9\.000000e\+00/i, 'ngspice ternary_fcn() should select its false value')
+    assert.match(wasmResult.stdout, /pwl_interp\s+5\.000000e\+00/i, 'native pwl() should linearly interpolate between points')
+    assert.match(wasmResult.stdout, /pwl_extrap\s+-2\.0+e\+00/i, 'native pwl() should linearly extrapolate below its first point')
     assert.match(wasmResult.stdout, /nboolxorfunction\s+1\.000000e\+00/i, 'LTspice xor() should recognize high xor low as true')
     assert.match(wasmResult.stdout, /nboolxorfunctionsame\s+0\.000000e\+00/i, 'LTspice xor() should recognize high xor high as false')
     assert.match(wasmResult.stdout, /narccos\s+1\.047198e\+00/i, 'arccos() should translate to ngspice acos()')

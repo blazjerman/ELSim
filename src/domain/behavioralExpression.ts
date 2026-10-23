@@ -288,7 +288,8 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
       take(')')
       return
     }
-    const signature = functions.get(name) ?? (dialect === 'ngspice' ? ngspiceOnlyFunctions.get(name) : undefined) ?? (name === 'table' ? { min: 5, max: 513 } : undefined)
+    const piecewiseSignature = (name === 'table' || (name === 'pwl' && dialect === 'ngspice')) ? { min: 5, max: 513 } : undefined
+    const signature = functions.get(name) ?? (dialect === 'ngspice' ? ngspiceOnlyFunctions.get(name) : undefined) ?? piecewiseSignature
     if (!signature) throw new Error(`Function “${token.text}” is not supported.`)
     let count = 0
     const argumentsTokens: Token[][] = []
@@ -302,15 +303,20 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
       } while (peek(','))
     }
     take(')')
-    if (name === 'table') {
-      if (count % 2 !== 1 || count < 5) throw new Error('table() expects an input followed by at least two x,y point pairs.')
+    if (name === 'table' || name === 'pwl') {
+      const functionName = name
+      if (count % 2 !== 1 || count < 5) throw new Error(`${functionName}() expects an input followed by at least two x,y point pairs.`)
       const points = argumentsTokens.slice(1)
-      if (points.some((argument) => tableArgumentScalar(argument) === null)) throw new Error('table() breakpoints and values must be numeric literals; parameters and expressions are not supported.')
+      const isSingleParameter = (argument: Token[]) => argument.length === 1 && argument[0].kind === 'identifier' && !['pi', 'time', 'temper', 'hertz'].includes(argument[0].text.toLowerCase())
+      if (name === 'table' && points.some((argument) => tableArgumentScalar(argument) === null)) throw new Error('table() breakpoints and values must be numeric literals; parameters and expressions are not supported.')
+      if (name === 'pwl' && points.some((argument) => tableArgumentScalar(argument) === null && !isSingleParameter(argument))) throw new Error('pwl() breakpoints and values must be numeric literals or parameter names.')
       let previous = -Infinity
       for (let index = 0; index < points.length; index += 2) {
         const x = tableArgumentScalar(points[index])
-        if (x === null || x <= previous) throw new Error('table() x breakpoints must be finite and strictly increasing numeric literals.')
-        previous = x
+        if (x !== null) {
+          if (x <= previous) throw new Error(`${functionName}() x breakpoints must be strictly increasing.`)
+          previous = x
+        } else previous = -Infinity
       }
     }
     if (count < signature.min || count > signature.max) throw new Error(`${token.text}() expects ${signature.min === signature.max ? signature.min : `${signature.min} or ${signature.max}`} argument${signature.max === 1 ? '' : 's'}.`)

@@ -164,6 +164,15 @@ test('native ngspice B-source functions are accepted only in the ngspice dialect
   assert.throws(() => parseBehavioralExpression('ternary_fcn(V(in), 1)'), /expects 3/)
 })
 
+test('native ngspice pwl() accepts bounded literal or parameter point lists without LTspice table clamping', () => {
+  const expression = 'pwl(V(in), 0, 0, x1, y1, 2, 4)'
+  const parsed = parseBehavioralExpression(expression)
+  assert.deepEqual(parsed.references, { nodes: ['in'], differentialNodes: [], components: [], parameters: ['x1', 'y1'] })
+  assert.equal(translateBehavioralExpression(expression), expression)
+  assert.throws(() => parseBehavioralExpression(expression, 'ltspice'), /Function “pwl” is not supported/)
+  for (const invalid of ['pwl(V(in), 0, 0, 1)', 'pwl(V(in), 0, 0, 0, 1)', 'pwl(V(in), 1, 0, 0, 1)', 'pwl(V(in), 0, V(other), 1, 2)']) assert.throws(() => parseBehavioralExpression(invalid))
+})
+
 test('bounded user-defined behavioral functions expand recursively without changing argument grouping', () => {
   const definitions = new Map([
     ['twice', { name: 'twice', arguments: ['x'], expression: 'x * 2' }],
