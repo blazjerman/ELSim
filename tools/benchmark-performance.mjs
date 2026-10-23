@@ -253,11 +253,13 @@ function makeTransientDeck(sampleCount, startSavingTime = '0') {
 }
 
 function makeRawVectorRetentionFixture(pointCount, hiddenVectorCount) {
-  const variableCount = hiddenVectorCount + 2
+  const variableCount = hiddenVectorCount + 4
   const variables = [
     '  0 time time',
     '  1 v(out) voltage',
-    ...Array.from({ length: hiddenVectorCount }, (_, index) => `  ${index + 2} @r${index + 1}[p] power`),
+    '  2 i(r1) current',
+    '  3 i(@r1[i]) current',
+    ...Array.from({ length: hiddenVectorCount }, (_, index) => `  ${index + 4} @r${index + 2}[p] power`),
   ].join('\n')
   const header = Buffer.from([
     'Title: Raw vector retention benchmark',
@@ -553,14 +555,15 @@ try {
   const rawRetentionFixture = makeRawVectorRetentionFixture(rawRetentionPointCount, rawRetentionHiddenVectorCount)
   const allVectorParsing = measure(() => parseRawFile(rawRetentionFixture))
   const allVectorBytes = retainedVectorBytes(allVectorParsing.value)
-  if (allVectorParsing.value.variables.length !== rawRetentionHiddenVectorCount + 1) throw new Error('The full raw parser failed to retain every fixture vector.')
+  if (allVectorParsing.value.variables.length !== rawRetentionHiddenVectorCount + 3) throw new Error('The full raw parser failed to retain every fixture vector.')
   allVectorParsing.value = null
   const traceOnlyParsing = measure(() => parseRawTraces(rawRetentionFixture))
   const traceOnlyBytes = retainedVectorBytes(traceOnlyParsing.value)
-  if (traceOnlyParsing.value.variables.length !== 1 || traceOnlyParsing.value.variables[0].name.toLowerCase() !== 'v(out)') throw new Error('The trace-only raw parser failed to retain exactly the displayable fixture vector.')
+  if (traceOnlyParsing.value.variables.length !== 2 || traceOnlyParsing.value.variables[0].name.toLowerCase() !== 'v(out)' || traceOnlyParsing.value.variables[1].name.toLowerCase() !== 'i(@r1[i])') throw new Error('The trace-only raw parser failed to retain exactly the displayable fixture vectors.')
   const rawRetentionResults = {
     points: rawRetentionPointCount,
     hiddenVectors: rawRetentionHiddenVectorCount,
+    duplicateCurrentVectors: 1,
     rawBytes: rawRetentionFixture.byteLength,
     retainedArrays: {
       allVectors: { bytes: allVectorBytes, parseMs: { medianMs: allVectorParsing.medianMs, p95Ms: allVectorParsing.p95Ms } },
@@ -583,12 +586,19 @@ try {
       const solved = await runWasm(pathToFileURL(engineModule).href, deck)
       if (solved.status !== 0) throw new Error(`ngspice failed its ${count}-section benchmark (status ${solved.status}).`)
       const parsing = measure(() => parseRawFile(solved.output))
+      const traceParsing = measure(() => parseRawTraces(solved.output))
       const vectors = parsing.value.variables
+      const traceVectors = traceParsing.value.variables
+      const expectedTraceNames = vectors.map(({ name }) => name)
+      if (JSON.stringify(traceVectors.map(({ name }) => name)) !== JSON.stringify(expectedTraceNames)) throw new Error(`The ${count}-section trace-only parser changed the displayable raw-vector set.`)
       const nodeZero = vectors.find((variable) => variable.name.toLowerCase() === 'v(n0)')?.values[0]
+      const traceNodeZero = traceVectors.find((variable) => variable.name.toLowerCase() === 'v(n0)')?.values[0]
       if (nodeZero === undefined || Math.abs(nodeZero - 5) > 1e-6) throw new Error(`The ${count}-section benchmark no longer solves N0 to 5 V.`)
+      if (traceNodeZero !== nodeZero) throw new Error(`The ${count}-section trace-only parser changed the N0 result.`)
       const transferable = { axis: parsing.value.axis, vectors: vectors.map((variable) => ({ name: variable.name, values: variable.values })) }
       const cloning = measure(() => structuredClone(transferable))
       const vectorBytes = transferable.axis.byteLength + transferable.vectors.reduce((sum, vector) => sum + vector.values.byteLength, 0)
+      const traceOnlyVectorBytes = retainedVectorBytes(traceParsing.value)
       simulationResults.push({
         resistorSections: count,
         nodeZeroVolts: nodeZero,
@@ -597,8 +607,12 @@ try {
         workerRoundTripMs: Number(solved.workerRoundTripMs.toFixed(3)),
         rawBytes: solved.output.byteLength,
         vectors: vectors.length,
+        displayableVectors: traceVectors.length,
         vectorBytes,
+        traceOnlyVectorBytes,
+        avoidedArrayBytes: vectorBytes - traceOnlyVectorBytes,
         rawParsing: { medianMs: parsing.medianMs, p95Ms: parsing.p95Ms },
+        traceOnlyRawParsing: { medianMs: traceParsing.medianMs, p95Ms: traceParsing.p95Ms },
         structuredCloneEstimate: { medianMs: cloning.medianMs, p95Ms: cloning.p95Ms },
       })
     }
@@ -653,7 +667,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 12,
+    benchmarkVersion: 13,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,

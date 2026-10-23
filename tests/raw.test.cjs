@@ -104,21 +104,24 @@ Values:
 const rawWithInternalVectors = `Title: Internal vector filtering
 Plotname: Transient Analysis
 Flags: real
-No. Variables: 4
+No. Variables: 5
 No. Points: 2
 Variables:
   0 time time
   1 v(in) voltage
-  2 @r1[i] current
-  3 @r1[p] power
+  2 i(r1) current
+  3 i(@r1[i]) current
+  4 @r1[p] power
 Values:
  0 0
  1
  0.001
- 0.005
+  0.001
+  0.005
  1 1
  2
  0.002
+  0.002
  0.010
 `
 
@@ -137,13 +140,14 @@ test('ASCII raw parser preserves ngspice time, voltage, and current vectors', ()
 test('trace-only ASCII parsing preserves analysis metadata while skipping internal vectors', () => {
   const full = parseAsciiRawFile(rawWithInternalVectors)
   const traces = parseRawTraces(rawWithInternalVectors)
-  assert.deepEqual(traces.variables.map(({ name }) => name), ['v(in)'])
+  assert.deepEqual(traces.variables.map(({ name }) => name), ['v(in)', 'i(@r1[i])'])
   assert.deepEqual([...traces.axis], [...full.axis])
   assert.equal(traces.analysis, full.analysis)
   assert.equal(traces.axisLabel, full.axisLabel)
   assert.equal(traces.axisUnit, full.axisUnit)
   assert.deepEqual([...traces.variables[0].values], [...full.variables[0].values])
-  assert.equal(full.variables.length, 3, 'the general parser continues to expose every saved variable')
+  assert.deepEqual([...traces.variables[1].values], [0.001, 0.002])
+  assert.equal(full.variables.length, 4, 'the general parser continues to expose every saved variable')
 })
 
 test('ASCII raw parser reads one-point operating-point values without inventing a time vector', () => {
@@ -252,10 +256,11 @@ test('binary raw parser reads interleaved transient vectors without text expansi
 
 test('trace-only binary parsing skips internal vectors without disturbing point-major alignment', () => {
   const header = rawWithInternalVectors.replace(/Values:[\s\S]*$/, 'Values:')
-  const traces = parseRawTraces(binaryRaw(header, [0, 1, 0.001, 0.005, 1, 2, 0.002, 0.01]))
-  assert.deepEqual(traces.variables.map(({ name }) => name), ['v(in)'])
+  const traces = parseRawTraces(binaryRaw(header, [0, 1, 0.001, 0.001, 0.005, 1, 2, 0.002, 0.002, 0.01]))
+  assert.deepEqual(traces.variables.map(({ name }) => name), ['v(in)', 'i(@r1[i])'])
   assert.deepEqual([...traces.axis], [0, 1])
   assert.deepEqual([...traces.variables[0].values], [1, 2])
+  assert.deepEqual([...traces.variables[1].values], [0.001, 0.002])
 })
 
 test('binary raw parser reads interleaved real and imaginary AC values', () => {

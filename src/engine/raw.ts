@@ -30,6 +30,20 @@ export function rawTraceUnit(name: string, type: string): string {
   return /^current$/i.test(type) ? 'A' : 'V'
 }
 
+function createTraceVariablePredicate(names: readonly string[]): (name: string) => boolean {
+  const internalCurrentBranches = new Set<string>()
+  for (const candidate of names) {
+    const internalBranch = candidate.match(/^i\(@(.*)\[i\]\)$/i)?.[1]
+    if (internalBranch) internalCurrentBranches.add(internalBranch.toLowerCase())
+  }
+  return (name) => {
+    if (/^(?:inoise|onoise)_spectrum$/i.test(name)) return true
+    if (/^v\(/i.test(name) || /^i\(@/i.test(name)) return true
+    const branch = name.match(/^i\((.*)\)$/i)?.[1].toLowerCase()
+    return branch !== undefined && !internalCurrentBranches.has(branch)
+  }
+}
+
 export function isTraceVariable(name: string, names: string[]): boolean {
   if (/^(?:inoise|onoise)_spectrum$/i.test(name)) return true
   if (/^v\(/i.test(name) || /^i\(@/i.test(name)) return true
@@ -85,6 +99,7 @@ export function parseAsciiRawFile(text: string, tracesOnly = false): ParsedRawFi
   }).filter((variable): variable is { name: string; type: string } => variable !== null)
   if (variableRecords.length !== variableCount) throw new Error('ngspice raw data variables do not match its declared result data.')
   const names = variableRecords.map((variable) => variable.name)
+  const isDisplayableTrace = tracesOnly ? createTraceVariablePredicate(names) : undefined
   const hasTimeAxis = variableRecords[0]?.name.toLowerCase() === 'time'
   const isOperatingPoint = /operating point/i.test(plotName)
   const isFrequency = /ac analysis/i.test(plotName)
@@ -94,7 +109,7 @@ export function parseAsciiRawFile(text: string, tracesOnly = false): ParsedRawFi
   if (isComplex && !isFrequency) throw new Error(`Complex ngspice raw data is unsupported for ${plotName}.`)
   if (isFrequency && !isComplex) throw new Error('ngspice AC analysis must contain complex frequency-domain vectors.')
   if (isOperatingPoint && pointCount !== 1) throw new Error('ngspice operating-point raw data must contain exactly one sample.')
-  const variables = variableRecords.map((variable, index) => tracesOnly && (!(isOperatingPoint || index > 0) || !isTraceVariable(variable.name, names))
+  const variables = variableRecords.map((variable, index) => tracesOnly && (!(isOperatingPoint || index > 0) || !isDisplayableTrace!(variable.name))
     ? undefined
     : { ...variable, values: new Float64Array(pointCount), ...(isComplex ? { imaginaryValues: new Float64Array(pointCount) } : {}) })
   const axis = new Float64Array(pointCount)
@@ -212,6 +227,7 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
   }).filter((variable): variable is { name: string; type: string } => variable !== null)
   if (variableRecords.length !== variableCount) throw new Error('ngspice raw data variables do not match its declared result data.')
   const names = variableRecords.map((variable) => variable.name)
+  const isDisplayableTrace = tracesOnly ? createTraceVariablePredicate(names) : undefined
   const hasTimeAxis = variableRecords[0]?.name.toLowerCase() === 'time'
   const isOperatingPoint = /operating point/i.test(plotName)
   const isFrequency = /ac analysis/i.test(plotName)
@@ -221,7 +237,10 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
   if (isComplex && !isFrequency) throw new Error(`Complex ngspice raw data is unsupported for ${plotName}.`)
   if (isFrequency && !isComplex) throw new Error('ngspice AC analysis must contain complex frequency-domain vectors.')
   if (isOperatingPoint && pointCount !== 1) throw new Error('ngspice operating-point raw data must contain exactly one sample.')
-  const variables = variableRecords.map((variable, index) => tracesOnly && (!(isOperatingPoint || index > 0) || !isTraceVariable(variable.name, names))
+  const isAxisVariable = (index: number) => index === 0 && !isOperatingPoint
+  const displayableTraces = tracesOnly ? variableRecords.map((variable, index) => !isAxisVariable(index) && isDisplayableTrace!(variable.name)) : undefined
+  const hasHiddenVectors = displayableTraces?.some((displayable, index) => !isAxisVariable(index) && !displayable) ?? false
+  const variables = variableRecords.map((variable, index) => tracesOnly && !displayableTraces![index]
     ? undefined
     : { ...variable, values: new Float64Array(pointCount), ...(isComplex ? { imaginaryValues: new Float64Array(pointCount) } : {}) })
   const valuesPerPoint = variableCount * (isComplex ? 2 : 1)
@@ -229,17 +248,30 @@ export function parseBinaryRawFile(bytes: Uint8Array, tracesOnly = false): Parse
   if (!Number.isSafeInteger(expectedBytes) || bytes.length - payloadStart < expectedBytes) throw new Error('ngspice binary raw data ended before all numeric points were read.')
   const view = new DataView(bytes.buffer, bytes.byteOffset + payloadStart, expectedBytes)
   const axis = new Float64Array(pointCount)
-  const retainedVariables = variables.flatMap((variable, index) => variable ? [{ index, variable }] : [])
-  const pointStrideBytes = valuesPerPoint * Float64Array.BYTES_PER_ELEMENT
-  const variableStrideBytes = (isComplex ? 2 : 1) * Float64Array.BYTES_PER_ELEMENT
-  for (let point = 0; point < pointCount; point += 1) {
-    const pointOffset = point * pointStrideBytes
-    if (!isOperatingPoint) axis[point] = view.getFloat64(pointOffset, true)
-    for (const { index, variable } of retainedVariables) {
-      if (index === 0 && !isOperatingPoint) continue
-      const valueOffset = pointOffset + index * variableStrideBytes
-      variable.values[point] = view.getFloat64(valueOffset, true)
-      if (isComplex) variable.imaginaryValues![point] = view.getFloat64(valueOffset + Float64Array.BYTES_PER_ELEMENT, true)
+  if (hasHiddenVectors) {
+    const retainedVariables = variables.flatMap((variable, index) => variable ? [{ index, variable }] : [])
+    const pointStrideBytes = valuesPerPoint * Float64Array.BYTES_PER_ELEMENT
+    const variableStrideBytes = (isComplex ? 2 : 1) * Float64Array.BYTES_PER_ELEMENT
+    for (let point = 0; point < pointCount; point += 1) {
+      const pointOffset = point * pointStrideBytes
+      if (!isOperatingPoint) axis[point] = view.getFloat64(pointOffset, true)
+      for (const { index, variable } of retainedVariables) {
+        if (index === 0 && !isOperatingPoint) continue
+        const valueOffset = pointOffset + index * variableStrideBytes
+        variable.values[point] = view.getFloat64(valueOffset, true)
+        if (isComplex) variable.imaginaryValues![point] = view.getFloat64(valueOffset + Float64Array.BYTES_PER_ELEMENT, true)
+      }
+    }
+  } else {
+    for (let point = 0; point < pointCount; point += 1) {
+      for (let variable = 0; variable < variableCount; variable += 1) {
+        const valueIndex = (point * valuesPerPoint) + variable * (isComplex ? 2 : 1)
+        const valueOffset = valueIndex * Float64Array.BYTES_PER_ELEMENT
+        const value = view.getFloat64(valueOffset, true)
+        if (variable === 0 && !isOperatingPoint) axis[point] = value
+        else if (variables[variable]) variables[variable]!.values[point] = value
+        if (isComplex && variables[variable]) variables[variable]!.imaginaryValues![point] = view.getFloat64(valueOffset + Float64Array.BYTES_PER_ELEMENT, true)
+      }
     }
   }
   const axisVector = isDcSweep ? variableRecords[0].name : ''
