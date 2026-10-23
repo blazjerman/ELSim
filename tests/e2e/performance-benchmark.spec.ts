@@ -214,7 +214,11 @@ test('measure a million-sample transient through the browser ngspice worker and 
   const workerProfiles: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
-    if (message.text().startsWith('[ELSim worker profile]')) workerProfiles.push(message.text())
+    if (message.text().startsWith('[ELSim worker profile]')) {
+      workerProfiles.push(message.text())
+      if (process.env.ELSIM_PERF_MEMORY_PHASES === '1') console.log(message.text())
+    }
+    if (message.text().startsWith('[ELSim memory phase]')) console.log(message.text())
   })
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
@@ -252,8 +256,10 @@ test('measure a million-sample transient through the browser ngspice worker and 
     return { usedHeapBytes: perf.memory?.usedJSHeapSize ?? null, totalHeapBytes: perf.memory?.totalJSHeapSize ?? null }
   })
   const started = performance.now()
+  if (process.env.ELSIM_PERF_MEMORY_PHASES === '1') await page.evaluate(() => console.log('[ELSim memory phase] beforeRun'))
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 90_000 })
+  if (process.env.ELSIM_PERF_MEMORY_PHASES === '1') await page.evaluate(() => console.log('[ELSim memory phase] resultReady'))
   await page.evaluate(() => { const watch = (window as Window & { __largeTransientWatch?: { phase: string } }).__largeTransientWatch; if (watch) watch.phase = 'plot-validation' })
   const completedMs = performance.now() - started
   const slider = page.getByRole('slider', { name: 'Simulation time' })
@@ -299,7 +305,7 @@ test('measure a million-sample transient through the browser ngspice worker and 
     const workerProfile = JSON.parse(workerProfiles[0].slice('[ELSim worker profile]'.length).trim()) as { wasmLinearMemoryBytes?: number | null }
     wasmLinearMemoryBytes = workerProfile.wasmLinearMemoryBytes ?? null
     expect(wasmLinearMemoryBytes, 'the Emscripten worker should report its WASM linear-memory capacity').toBeGreaterThan(0)
-    console.log(workerProfiles[0])
+    if (process.env.ELSIM_PERF_MEMORY_PHASES !== '1') console.log(workerProfiles[0])
   }
   console.log(JSON.stringify({ benchmark: `browser-million-sample-${plotWindowCount}-window-transient-v5`, browser: browserName, requestedSamples: 1_000_000, solvedSamples: maxSample + 1, plotWindowCount: await plots.count(), tracesPerWindow: 4, plottedTraceCount: selectedTraceCount, resultReadyMs: Number(completedMs.toFixed(2)), repeatedSampleScrubMs: scrubTimes, wasmLinearMemoryBytes, heapBefore: before, heapAfter: after }, null, 2))
   const memoryProfileHoldMs = Number(process.env.ELSIM_PERF_HOLD_MS ?? 0)

@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKER_PROFILE_PREFIX = "[ELSim worker profile] "
+MEMORY_PHASE_PREFIX = "[ELSim memory phase] "
 
 
 def process_table():
@@ -97,6 +98,7 @@ def main():
 
     env = os.environ.copy()
     env["VITE_ELSIM_PROFILE"] = "1"
+    env["ELSIM_PERF_MEMORY_PHASES"] = "1"
     env["ELSIM_PERF_PLOT_WINDOWS"] = str(args.plot_windows)
     env["ELSIM_PERF_HOLD_MS"] = "2000"
     command = [
@@ -117,7 +119,8 @@ def main():
         lines.put(None)
 
     threading.Thread(target=read_output, daemon=True).start()
-    phase = "beforeWorkerProfile"
+    phase = "startup"
+    observed_markers = set()
     peaks = {phase: {"pssMiB": 0.0, "rssMiB": 0.0, "samples": 0}}
     overall = {"pssMiB": 0.0, "rssMiB": 0.0, "samples": 0}
     wasm_bytes = None
@@ -138,7 +141,16 @@ def main():
                         wasm_bytes = json.loads(profile_text).get("wasmLinearMemoryBytes")
                     except (ValueError, TypeError):
                         pass
-                    phase = "afterWorkerProfile"
+                    phase = "resultValidationAndTransfer"
+                    observed_markers.add("workerProfile")
+                    peaks.setdefault(phase, {"pssMiB": 0.0, "rssMiB": 0.0, "samples": 0})
+                elif MEMORY_PHASE_PREFIX in line:
+                    phase_name = line.split(MEMORY_PHASE_PREFIX, 1)[1].strip()
+                    observed_markers.add(phase_name)
+                    phase = {
+                        "beforeRun": "solverAndResultTransfer",
+                        "resultReady": "plotValidationAndInteraction",
+                    }.get(phase_name, phase)
                     peaks.setdefault(phase, {"pssMiB": 0.0, "rssMiB": 0.0, "samples": 0})
         except queue.Empty:
             pass
@@ -153,24 +165,29 @@ def main():
         time.sleep(interval)
 
     return_code = process.wait()
+    missing_markers = {"beforeRun", "workerProfile", "resultReady"} - observed_markers
     print(json.dumps({
-        "benchmark": "firefox-million-sample-process-memory-v1",
+        "benchmark": "firefox-million-sample-process-memory-v2",
         "plotWindows": args.plot_windows,
         "tracesPerWindow": 4,
         "sampleIntervalMs": args.interval_ms,
         "wasmLinearMemoryBytes": wasm_bytes,
         "phasePeaks": peaks,
         "overallPeak": overall,
+        "observedPhaseMarkers": sorted(observed_markers),
+        "missingPhaseMarkers": sorted(missing_markers),
         "limitations": [
             "PSS/RSS sum Firefox and its descendants, not ELSim-only allocations.",
-            "beforeWorkerProfile includes page startup, solve, and result transfer.",
-            "afterWorkerProfile includes result validation, plotting, and cursor checks.",
+            "startup ends when the benchmark page is ready immediately before simulation.",
+            "solverAndResultTransfer ends at the worker's post-solve profile marker.",
+            "resultValidationAndTransfer starts at that marker and ends when the result reaches the page.",
+            "plotValidationAndInteraction starts when results are ready and includes plotting and cursor checks.",
             "WASM linear-memory capacity is not the same as peak process memory.",
             "This local run does not provide a second-hardware baseline.",
         ],
-        "exitCode": return_code,
+        "exitCode": return_code or (3 if missing_markers else 0),
     }, indent=2))
-    return return_code
+    return return_code or (3 if missing_markers else 0)
 
 
 if __name__ == "__main__":
