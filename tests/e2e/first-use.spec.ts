@@ -3248,6 +3248,30 @@ test('component subtitles stay clear of icons in the left library panel', async 
   expect(overlaps).toEqual([])
 })
 
+test('component names do not overlap shortcut badges in a narrow desktop palette', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.setViewportSize({ width: 854, height: 900 })
+  await page.goto('/')
+  const grid = page.locator('.library-panel .component-grid')
+  await expect(grid).toBeVisible()
+  const layout = await grid.evaluate((element) => ({
+    columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
+    collisions: [...element.querySelectorAll('.component-card')].flatMap((card) => {
+      const label = card.querySelector('.component-label')
+      const hotkey = card.querySelector('.component-hotkey')
+      if (!label || !hotkey) return []
+      const textRange = document.createRange()
+      textRange.selectNodeContents(label)
+      const hotkeyBounds = hotkey.getBoundingClientRect()
+      return [...textRange.getClientRects()].some((textBounds) =>
+        textBounds.right > hotkeyBounds.left && textBounds.left < hotkeyBounds.right &&
+        textBounds.bottom > hotkeyBounds.top && textBounds.top < hotkeyBounds.bottom,
+      ) ? [label.textContent?.trim() ?? 'unnamed component'] : []
+    }),
+  }))
+  expect(layout.columns).toBe(1)
+  expect(layout.collisions).toEqual([])
+})
+
 test('AC source validation focuses its inspector field before simulation', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   const source = page.locator('.circuit-part[data-part-id="p-v1"]')

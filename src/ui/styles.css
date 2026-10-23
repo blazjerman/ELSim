@@ -172,6 +172,11 @@
   .playback-rate-control{grid-column:4;gap:4px;font-size:9px}
   .playback-rate-control select{width:92px;min-width:0;padding:0 4px;font-size:9px}
 }
+
+/* A two-column palette leaves too little room for names beside hotkey badges
+   on narrow desktop workspaces. Keep cards full-width until the mobile panel
+   takes over, where the wider, tab-selected pane can use three columns. */
+@media(min-width:801px) and (max-width:1120px){.library-panel .component-grid{grid-template-columns:minmax(0,1fr)}}
 /* Avoid SVG filter repaint flashes while retaining a clear hovered-wire state. */
 .wire-line.hovered{filter:none}.wire-line.hovered line:not(:first-child){stroke:#a4d7b2}
 .plot-window-content>.waveform-view{min-width:0;overflow:hidden}.plot-window-content .waveform-chart{min-width:0}
