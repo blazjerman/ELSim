@@ -231,17 +231,20 @@ test('hierarchical sheet instance emits a native ngspice subcircuit with ordered
 test('sheet block parameters provide defaults, per-instance overrides, and safe component expressions', () => {
   const project = createBlockProject()
   const child = project.sheets[1]
-  child.parameters = [{ id: 'param-load', name: 'RLOAD', defaultValue: '1k' }]
+  child.parameters = [
+    { id: 'param-load', name: 'RLOAD', defaultValue: '1k' },
+    { id: 'param-file', name: 'DATAFILE', defaultValue: '"default table.csv"' },
+  ]
   child.parts[0].value = '{RLOAD}'
-  project.parts.push({ ...project.parts[1], id: 'root-block-2', ref: 'XLOAD2', x: 600, sheetParameters: { RLOAD: '2k' } })
+  project.parts.push({ ...project.parts[1], id: 'root-block-2', ref: 'XLOAD2', x: 600, sheetParameters: { RLOAD: '2k', DATAFILE: '"selected table.csv"' } })
   project.sheets[0].parts = project.parts
   const checked = validateProject(project)
   const artifact = createNetlistArtifact(checked)
   assert.deepEqual(artifact.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), [])
-  assert.match(artifact.text, /^\.SUBCKT ELSIM_SHEET_sheet_load IN OUT PARAMS: RLOAD=1k$/m)
+  assert.match(artifact.text, /^\.SUBCKT ELSIM_SHEET_sheet_load IN OUT PARAMS: RLOAD=1k DATAFILE="default table\.csv"$/m)
   assert.match(artifact.text, /^RLOAD IN OUT \{RLOAD\}$/m)
   assert.match(artifact.text, /^XLOAD\s+\S+\s+\S+\s+ELSIM_SHEET_sheet_load$/m)
-  assert.match(artifact.text, /^XLOAD2\s+\S+\s+\S+\s+ELSIM_SHEET_sheet_load PARAMS: RLOAD=2k$/m)
+  assert.match(artifact.text, /^XLOAD2\s+\S+\s+\S+\s+ELSIM_SHEET_sheet_load PARAMS: RLOAD=2k DATAFILE="selected table\.csv"$/m)
 
   const stale = structuredClone(checked)
   stale.parts[1].sheetParameters = { MISSING: '3k' }

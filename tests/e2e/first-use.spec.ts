@@ -3975,7 +3975,10 @@ test('hierarchical block parameter overrides validate before saving and update t
       netLabels: [{ id: 'parameter-label-in', name: 'IN', x: 248, y: 200, visible: true }, { id: 'parameter-label-out', name: 'OUT', x: 352, y: 200, visible: true }],
       view: { zoom: 1, panX: 0, panY: 0 },
       ports: [{ id: 'parameter-port-in', name: 'IN', side: 'left', direction: 'input' }, { id: 'parameter-port-out', name: 'OUT', side: 'right', direction: 'output' }],
-      parameters: [{ id: 'parameter-rload', name: 'RLOAD', defaultValue: '{DOUBLE(1)}' }],
+      parameters: [
+        { id: 'parameter-rload', name: 'RLOAD', defaultValue: '{DOUBLE(1)}' },
+        { id: 'parameter-file', name: 'DATAFILE', defaultValue: '"default table.csv"' },
+      ],
     }
     const block = { id: 'parameter-block', kind: 'subcircuit', componentDefinitionId: 'elsim.subcircuit', ref: 'XLOAD', value: 'Parameterized load', modelName: 'ELSIM_SHEET_sheet_parameter', modelPins: ['IN', 'OUT'], sheetId: child.id, sheetPortLayout: child.ports.map(({ side, direction }) => ({ side, direction })), x: 420, y: 350, rotation: 0 }
     project.parts.push(block)
@@ -3995,9 +3998,15 @@ test('hierarchical block parameter overrides validate before saving and update t
   await value.blur()
   await expect(value).toHaveAttribute('aria-invalid', 'false')
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'parameter-block').sheetParameters)).toEqual({ RLOAD: '{DOUBLE(3)}' })
+  const filename = page.getByLabel('DATAFILE block value')
+  await expect(filename).toHaveValue('"default table.csv"')
+  await filename.fill('"selected table.csv"')
+  await filename.blur()
+  await expect(filename).toHaveAttribute('aria-invalid', 'false')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { id: string }) => part.id === 'parameter-block').sheetParameters)).toEqual({ RLOAD: '{DOUBLE(3)}', DATAFILE: '"selected table.csv"' })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText(/\.SUBCKT ELSIM_SHEET_sheet_parameter IN OUT PARAMS: RLOAD=\{DOUBLE\(1\)\}/)
-  await expect(page.locator('.netlist-modal pre')).toContainText(/XLOAD \S+ \S+ ELSIM_SHEET_sheet_parameter PARAMS: RLOAD=\{DOUBLE\(3\)\}/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/\.SUBCKT ELSIM_SHEET_sheet_parameter IN OUT PARAMS: RLOAD=\{DOUBLE\(1\)\} DATAFILE="default table\.csv"/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/XLOAD \S+ \S+ ELSIM_SHEET_sheet_parameter PARAMS: RLOAD=\{DOUBLE\(3\)\} DATAFILE="selected table\.csv"/)
 })
 
 test('shift selection moves, copies, pastes, and deletes a group of parts', async ({ page }) => {
