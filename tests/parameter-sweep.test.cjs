@@ -333,6 +333,39 @@ test('imported URC model parameters can be stepped', () => {
   assert.match(addResultControl(createNetlistArtifact(validated).text, runs), /altermod USER_URC RPERL=2\.00000000e\+1\nrun/)
 })
 
+test('imported passive model parameters can be stepped', () => {
+  const modelContent = '.MODEL USER_R R(R=1k)\n.MODEL USER_C C(CAP=1u)\n.MODEL USER_L L(IND=1m)\n'
+  const cases = [
+    { kind: 'resistor', ref: 'R1', model: 'USER_R', parameter: 'R', start: '1k', stop: '3k' },
+    { kind: 'lamp', ref: 'R2', model: 'USER_R', parameter: 'R', start: '1k', stop: '3k' },
+    { kind: 'potentiometer', ref: 'POT1', model: 'USER_R', parameter: 'R', start: '1k', stop: '3k' },
+    { kind: 'capacitor', ref: 'C1', model: 'USER_C', parameter: 'CAP', start: '1u', stop: '3u' },
+    { kind: 'inductor', ref: 'L1', model: 'USER_L', parameter: 'IND', start: '1m', stop: '3m' },
+  ]
+  for (const [index, item] of cases.entries()) {
+    const project = createStarterProject()
+    let part = project.parts.find((candidate) => candidate.ref === item.ref)
+    if (!part) {
+      part = { id: `sweep-passive-${item.ref}`, kind: item.kind, ref: item.ref, value: '', x: 700 + index * 80, y: 400, rotation: 0, ...(item.kind === 'potentiometer' ? { wiperPosition: '0.5' } : {}) }
+      project.parts.push(part)
+    }
+    part.value = ''
+    part.deviceModel = item.model
+    project.sheets[0].parts = project.parts
+    project.modelAssets = [{ id: 'sweep-passive-model', filename: 'passive.lib', sha256: 'c'.repeat(64), content: modelContent, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+    project.simulation.parameterSweeps = [{ component: item.ref, parameter: item.parameter, start: item.start, stop: item.stop, points: 3 }]
+
+    const validated = validateProject(structuredClone(project))
+    const runs = prepareParameterSweep(validated)
+    assert.equal(runs.length, 3, `${item.ref} should generate three sweep cases`)
+    assert.equal(runs[1].values[0].component, item.ref)
+    assert.equal(runs[1].values[0].parameter, item.parameter)
+    assert.equal(runs[1].values[0].model, item.model)
+    const control = addResultControl(createNetlistArtifact(validated).text, runs)
+    assert.ok(control.includes(`altermod ${item.model} ${item.parameter}=${runs[1].values[0].value}\nrun`))
+  }
+})
+
 test('imported IC instance parameters become alterparam-driven sweep cases', () => {
   const project = createUrcLineExampleProject()
   project.simulation.parameterSweeps = [{ component: 'XLINE', parameter: 'LENGTH', instanceParameter: true, start: '1m', stop: '3m', points: 3 }]

@@ -12321,6 +12321,34 @@ test('imported device model parameters can be stepped through the browser ngspic
   expect(labels.some((label) => label.includes('Q1.BF=200'))).toBe(true)
 })
 
+test('imported resistor model parameters can be swept through the browser ngspice engine', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.ref === 'R1')!
+  resistor.value = ''
+  resistor.deviceModel = 'USER_R'
+  const modelContent = '.MODEL USER_R R(R=1k)\n'
+  project.modelAssets = [{ id: 'sweep-r-model', filename: 'resistor.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('R1')
+  const modelParameter = page.getByRole('combobox', { name: 'Parameter 1 model parameter' })
+  await modelParameter.selectOption('R')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1k')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('4k')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'I(R1)')
+  const labels = await page.locator('.plot-window').last().locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('R1.R=1000'))).toBe(true)
+  expect(labels.some((label) => label.includes('R1.R=4000'))).toBe(true)
+})
+
 test('an imported NPN level-8 HICUM2 model runs in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
