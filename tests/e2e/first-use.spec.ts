@@ -412,6 +412,26 @@ test('malformed local project data is downloaded before the recovered copy repla
   })).toBe('Recovered legacy project')
 })
 
+test('Ctrl+Enter uses the current runtime state after runtime detection completes', { tag: '@ngspice' }, async ({ page }) => {
+  let releaseRuntimeDetection!: () => void
+  const runtimeDetection = new Promise<void>((resolve) => { releaseRuntimeDetection = resolve })
+  for (const asset of ['ngspice.mjs', 'ngspice.wasm']) {
+    await page.route(`**/engine/${asset}`, async (route) => {
+      if (route.request().method() === 'HEAD') await runtimeDetection
+      await route.continue()
+    })
+  }
+
+  await page.goto('/')
+  await expect(page.getByRole('main', { name: 'Schematic workspace' })).toBeVisible()
+  await waitForProjectAutosave(page)
+  releaseRuntimeDetection()
+  const runButton = page.getByRole('button', { name: 'Run simulation' })
+  await expect(runButton).toBeEnabled()
+  await page.keyboard.press('Control+Enter')
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+})
+
 test('a newer local project survives a crash between its JSON and timestamp writes', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.app-status [role="status"]')).toHaveText('All changes saved locally')
