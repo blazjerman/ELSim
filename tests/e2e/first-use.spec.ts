@@ -1406,9 +1406,26 @@ test('visible keyboard controls expose accessible names', { tag: '@ui-smoke' }, 
     await expectVisibleKeyboardControlsNamed(page)
   }
   await page.getByRole('button', { name: 'Examples' }).click()
+  await expect(page.getByRole('dialog', { name: 'Open a working circuit' })).toBeVisible()
+  await expect(page.locator('.example-list article').first()).toBeVisible()
   await expectNamedButtons()
   await expectNamedFormControls()
   await expectVisibleKeyboardControlsNamed(page)
+  const exampleActionNames = await page.locator('.example-list article').evaluateAll((articles) => articles.map((article) => {
+    const title = article.querySelector('strong')?.textContent?.trim() ?? ''
+    return { title, action: article.querySelector('button')?.getAttribute('aria-label') ?? '' }
+  }))
+  expect(exampleActionNames.length).toBeGreaterThan(0)
+  expect(exampleActionNames.every(({ title, action }) => action === `Open example: ${title}`)).toBe(true)
+  expect(new Set(exampleActionNames.map(({ action }) => action)).size).toBe(exampleActionNames.length)
+  for (const { title } of exampleActionNames) {
+    await expect(page.getByRole('button', { name: `Open example: ${title}`, exact: true })).toBeVisible()
+  }
+  const openRcExample = page.getByRole('button', { name: 'Open example: RC step response', exact: true })
+  await openRcExample.click()
+  await expect(page.getByRole('alertdialog')).toContainText('RC step response')
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(openRcExample).toBeFocused()
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Keyboard shortcuts' }).click()
   await expectNamedButtons()
