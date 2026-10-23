@@ -127,6 +127,15 @@ def main():
     output_closed = False
     interval = args.interval_ms / 1000
 
+    def record_memory_sample(sample_phase):
+        memory = firefox_memory(process.pid)
+        bucket = peaks.setdefault(sample_phase, {"pssMiB": 0.0, "rssMiB": 0.0, "samples": 0})
+        bucket["samples"] += 1
+        overall["samples"] += 1
+        for key in ("pssMiB", "rssMiB"):
+            bucket[key] = max(bucket[key], memory[key])
+            overall[key] = max(overall[key], memory[key])
+
     while process.poll() is None or not output_closed:
         try:
             while True:
@@ -136,6 +145,10 @@ def main():
                     break
                 print(line, end="", flush=True)
                 if WORKER_PROFILE_PREFIX in line:
+                    # Sample the phase that just ended before changing its
+                    # bucket. Marker lines can arrive together between polling
+                    # intervals, leaving a phase with no periodic sample.
+                    record_memory_sample(phase)
                     try:
                         profile_text = line.split(WORKER_PROFILE_PREFIX, 1)[1]
                         wasm_bytes = json.loads(profile_text).get("wasmLinearMemoryBytes")
@@ -147,6 +160,7 @@ def main():
                 elif MEMORY_PHASE_PREFIX in line:
                     phase_name = line.split(MEMORY_PHASE_PREFIX, 1)[1].strip()
                     observed_markers.add(phase_name)
+                    record_memory_sample(phase)
                     phase = {
                         "beforeRun": "solverAndResultTransfer",
                         "resultReady": "plotValidationAndInteraction",
@@ -155,13 +169,7 @@ def main():
         except queue.Empty:
             pass
 
-        memory = firefox_memory(process.pid)
-        bucket = peaks.setdefault(phase, {"pssMiB": 0.0, "rssMiB": 0.0, "samples": 0})
-        bucket["samples"] += 1
-        overall["samples"] += 1
-        for key in ("pssMiB", "rssMiB"):
-            bucket[key] = max(bucket[key], memory[key])
-            overall[key] = max(overall[key], memory[key])
+        record_memory_sample(phase)
         time.sleep(interval)
 
     return_code = process.wait()
