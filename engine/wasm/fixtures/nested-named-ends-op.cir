@@ -1,0 +1,14 @@
+Nested imported subcircuits with named .ENDS operating point
+V1 supply 0 10
+X1 supply out OUTER
+RLOAD out 0 1k
+.SUBCKT OUTER IN OUT
+R1 IN midpoint 1k
+R2 midpoint OUT 1k
+.SUBCKT INNER A B
+RINNER A B 4k
+.ENDS INNER
+.ENDS OUTER
+.op
+.print op v(out)
+.end

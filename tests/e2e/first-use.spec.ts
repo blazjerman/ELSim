@@ -11045,6 +11045,18 @@ test('a subcircuit-local .FUNC drives its local .MODEL through browser ngspice',
   await expect(page.locator('.plot-window').last().getByRole('button', { name: 'Disable V(X1)' })).toBeVisible()
 })
 
+test('model-library import identifies a .ENDS name mismatch at its source line', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const library = '.SUBCKT OUTER IN OUT\n.SUBCKT INNER A B\n.ENDS OUTER\n.ENDS INNER\n'
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'mismatched-ends.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(library),
+  })
+  await expect(page.getByText('Line 3: .ENDS OUTER does not match the open .SUBCKT INNER.')).toBeVisible()
+})
+
 test('imported subcircuit-local .FUNC validates IC defaults and instance overrides', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
