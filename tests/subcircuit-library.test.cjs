@@ -924,6 +924,15 @@ test('accepts a SPICE title line and CRLF source', () => {
   assert.match(parsed.modelText, /\.SUBCKT amp/)
 })
 
+test('accepts a final standalone-deck .END but omits it from imported model text', () => {
+  const parsed = parseSubcircuitLibrary('.MODEL DFAST D(IS=1n)\n.END\n* trailing comment\n')
+  assert.deepEqual(parsed.models.map(({ name }) => name), ['DFAST'])
+  assert.equal(parsed.modelText, '.MODEL DFAST D(IS=1n)')
+  assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(IS=1n)\n.END\nR1 1 0 1k'), /Line 3: \.END must be the final non-comment line/)
+  assert.throws(() => parseSubcircuitLibrary('.SUBCKT AMP IN OUT\n.END\n.ENDS AMP'), /\.END is not allowed inside a \.SUBCKT/)
+  assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(IS=1n)\n.END extra'), /\.END does not accept arguments/)
+})
+
 test('rejects oversized or empty model libraries and orphan continuation lines', () => {
   assert.throws(() => parseSubcircuitLibrary('   '), /empty/)
   assert.throws(() => parseSubcircuitLibrary('x'.repeat(4 * 1024 * 1024 + 1)), /4 MiB/)

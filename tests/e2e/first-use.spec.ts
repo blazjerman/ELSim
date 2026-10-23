@@ -2884,7 +2884,7 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.getByRole('button', { name: 'Components', exact: true }).click()
-  const modelLibrary = '.FUNC DOUBLE(x) {2*x}\n.PARAM BASE_GAIN=2\n.CSPARAM USER_GAIN={BASE_GAIN}\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={DOUBLE(2)} LOG_GAIN={log10(100)} RVAL=1mil TINY=1a RUNIT=10kOhm MIXED={2mil + 3a} QUOTED=\'BASE_GAIN + 3\'\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n'
+  const modelLibrary = '.FUNC DOUBLE(x) {2*x}\n.PARAM BASE_GAIN=2\n.CSPARAM USER_GAIN={BASE_GAIN}\n.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain={DOUBLE(2)} LOG_GAIN={log10(100)} RVAL=1mil TINY=1a RUNIT=10kOhm MIXED={2mil + 3a} QUOTED=\'BASE_GAIN + 3\'\nE1 OUT VSS IN VSS {gain}\n.ENDS USER_DOUBLE\n.END\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-double.lib',
@@ -2930,6 +2930,8 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect(page.locator('.netlist-modal pre')).toContainText(/QUOTED='BASE_GAIN \+ 4'/)
   await expect(page.locator('.netlist-modal pre')).toContainText(/\.SUBCKT USER_DOUBLE IN OUT VSS PARAMS: gain=\{DOUBLE\(2\)\} LOG_GAIN=\{log10\(100\)\} RVAL=1mil TINY=1a RUNIT=10kOhm MIXED=\{2mil \+ 3a\}/)
   await expect(page.locator('.netlist-modal pre')).toContainText('.CSPARAM USER_GAIN={BASE_GAIN}')
+  const generatedNetlist = await page.locator('.netlist-modal pre').innerText()
+  expect(generatedNetlist.match(/^\.end\s*$/gim)).toHaveLength(1)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
