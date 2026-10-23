@@ -519,6 +519,10 @@ test('preserves top-level ngspice .CSPARAM constants and rejects subcircuit scop
     { sourceLine: 2, text: '.CSPARAM gain_vector={GAIN}' },
     { sourceLine: 3, text: '.MODEL DFAST D(Is=1n)' },
   ])
+  assert.deepEqual(analyzeLtspiceModelDialect(source).map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [2, 'ngspice .CSPARAM creates an experimental constant vector'],
+  ])
+  assert.deepEqual(analyzeLtspiceModelDialect('* .CSPARAM commented_vector=0\n.PARAM GAIN=3'), [])
   assert.throws(() => parseSubcircuitLibrary('.SUBCKT CORE A B\n.CSPARAM gain_vector=3\n.ENDS CORE'), /\.CSPARAM creates a circuit-wide constant vector and cannot appear inside a \.SUBCKT/)
 })
 

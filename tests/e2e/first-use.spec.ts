@@ -5921,16 +5921,24 @@ test('imported ngspice .IC and .NODESET cards are preserved with circuit-wide gu
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'initial-conditions.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.OPTIONS reltol=.005\n.IC V(out)=2.5\n.NODESET V(in)=1\n.MODEL DTEST D(IS=1n)\n'),
+    buffer: Buffer.from('.CSPARAM gain_vector=3\n.OPTIONS reltol=.005\n.IC V(out)=2.5\n.NODESET V(in)=1\n.MODEL DTEST D(IS=1n)\n'),
   })
   await expect(page.getByText(/Imported 0 subcircuits and 1 device model from initial-conditions\.lib/)).toBeVisible()
   const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice .CSPARAM creates an experimental constant vector')
+  await expect(warnings).toContainText('does not expose control-script access to this vector')
   await expect(warnings).toContainText('ngspice .OPTIONS changes circuit-wide solver settings')
   await expect(warnings).toContainText('ngspice .IC sets circuit-wide transient initial conditions')
   await expect(warnings).toContainText('ngspice .NODESET changes circuit-wide initial voltage guesses')
+  await warnings.getByRole('button', { name: 'Review source line 1' }).click()
+  const sourceViewer = page.locator('.model-source-viewer')
+  const reviewedLine = sourceViewer.locator('li').nth(0)
+  await expect(reviewedLine).toBeFocused()
+  await expect(reviewedLine).toContainText('.CSPARAM gain_vector=3')
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist).toContainText(/\.CSPARAM\s+gain_vector=3/i)
   await expect(netlist).toContainText(/\.OPTIONS\s+reltol=\.005/i)
   await expect(netlist).toContainText(/\.IC\s+V\(out\)=2\.5/i)
   await expect(netlist).toContainText(/\.NODESET\s+V\(in\)=1/i)
