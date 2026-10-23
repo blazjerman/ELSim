@@ -953,6 +953,31 @@ test('measure selection and navigation latency in a 5000-part wire schematic', a
   const changedNavigationSamples = navigationSamples.filter((sample) => sample.changed)
   expect(changedNavigationSamples.length).toBeGreaterThanOrEqual(3)
   const navigationTimes = changedNavigationSamples.map((sample) => sample.elapsedMs).sort((a, b) => a - b)
+  const schematic = page.locator('svg.schematic')
+  const schematicBox = await schematic.boundingBox()
+  expect(schematicBox).not.toBeNull()
+  const panMeasurement = await schematic.evaluate((element) => {
+    const view = element.getAttribute('viewBox') ?? ''
+    const samples: number[] = []
+    const win = window as Window & { __panFrameSamples?: number[] }
+    win.__panFrameSamples = samples
+    element.addEventListener('pointermove', (event) => {
+      if (!(event.buttons & 4)) return
+      const started = performance.now()
+      requestAnimationFrame(() => requestAnimationFrame(() => samples.push(performance.now() - started)))
+    }, { capture: true })
+    return view
+  })
+  await page.mouse.move(schematicBox!.x + schematicBox!.width / 2, schematicBox!.y + schematicBox!.height / 2)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(schematicBox!.x + schematicBox!.width / 2 + 80, schematicBox!.y + schematicBox!.height / 2 + 50, { steps: 5 })
+  await page.mouse.up({ button: 'middle' })
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  const afterPanView = await schematic.getAttribute('viewBox')
+  expect(afterPanView).not.toBe(panMeasurement)
+  const panFrameSamples = await page.evaluate(() => (window as Window & { __panFrameSamples?: number[] }).__panFrameSamples ?? [])
+  expect(panFrameSamples.length).toBeGreaterThan(0)
+  panFrameSamples.sort((a, b) => a - b)
   const firstPart = page.locator('svg.schematic .circuit-part').first()
   await firstPart.evaluate((element) => element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window })))
   await expect(page.locator('svg.schematic .circuit-part.selected')).toHaveCount(1)
@@ -973,5 +998,5 @@ test('measure selection and navigation latency in a 5000-part wire schematic', a
   keyboardNavigationSamples.sort((a, b) => a - b)
   await page.getByTitle('Fit all circuit content in view').click()
   await expect.poll(() => mountedPartLocator.count()).toBeGreaterThan(mountedPartCount)
-  console.log(JSON.stringify({ benchmark: 'editor-wire-heavy-navigation-v9', browser: browserName, parts: 5000, wires: 4900, mountedParts: mountedPartCount, mountedWires: mountedWireCount, wireEndpointsPerSegment: 2, renderMs: Number(renderMs.toFixed(2)), selectionMedianMs: Number(samples[3].toFixed(2)), selectionP95Ms: Number(samples[6].toFixed(2)), selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), zoomSamplesChanged: changedNavigationSamples.length, zoomInputToTwoFramesMedianMs: Number(navigationTimes[Math.floor(navigationTimes.length / 2)].toFixed(2)), zoomInputToTwoFramesMaxOfChangedSamplesMs: Number(navigationTimes.at(-1)!.toFixed(2)), arrowNavigationSamples: keyboardNavigationSamples.length, arrowNavigationInputToTwoFramesMedianMs: Number(keyboardNavigationSamples[Math.floor(keyboardNavigationSamples.length / 2)].toFixed(2)), arrowNavigationInputToTwoFramesMaxOfSevenMs: Number(keyboardNavigationSamples.at(-1)!.toFixed(2)) }, null, 2))
+  console.log(JSON.stringify({ benchmark: 'editor-wire-heavy-navigation-v10', browser: browserName, parts: 5000, wires: 4900, mountedParts: mountedPartCount, mountedWires: mountedWireCount, wireEndpointsPerSegment: 2, renderMs: Number(renderMs.toFixed(2)), selectionMedianMs: Number(samples[3].toFixed(2)), selectionP95Ms: Number(samples[6].toFixed(2)), selectAllInputToFrameMs: Number(selectAllInputToFrameMs.toFixed(2)), zoomSamplesChanged: changedNavigationSamples.length, zoomInputToTwoFramesMedianMs: Number(navigationTimes[Math.floor(navigationTimes.length / 2)].toFixed(2)), zoomInputToTwoFramesMaxOfChangedSamplesMs: Number(navigationTimes.at(-1)!.toFixed(2)), panSamples: panFrameSamples.length, panInputToTwoFramesMedianMs: Number(panFrameSamples[Math.floor(panFrameSamples.length / 2)].toFixed(2)), panInputToTwoFramesMaxMs: Number(panFrameSamples.at(-1)!.toFixed(2)), arrowNavigationSamples: keyboardNavigationSamples.length, arrowNavigationInputToTwoFramesMedianMs: Number(keyboardNavigationSamples[Math.floor(keyboardNavigationSamples.length / 2)].toFixed(2)), arrowNavigationInputToTwoFramesMaxOfSevenMs: Number(keyboardNavigationSamples.at(-1)!.toFixed(2)) }, null, 2))
 })
