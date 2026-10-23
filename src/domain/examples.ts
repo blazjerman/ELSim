@@ -717,6 +717,74 @@ export function createTransmissionLineExampleProject(): Project {
   return project
 }
 
+const urcLineLibrary = [
+  '.SUBCKT URC_LINE IN OUT RETURN',
+  'U1 IN OUT RETURN URCMOD L=1m N=6',
+  '.ENDS URC_LINE',
+  '.MODEL URCMOD URC (RPERL=1k CPERL=100p K=2 FMAX=1G)',
+  '',
+].join('\n')
+const urcLineLibrarySha256 = '89157ff0c2d26e11045e59f53cffa19746beff453795a9d8f3bb1d95bac5f56b'
+
+/** An ELSim-authored imported IC example demonstrating ngspice's distributed RC U-device. */
+export function createUrcLineExampleProject(): Project {
+  const project = createStarterProject()
+  const library = {
+    id: 'example-urc-line-library', filename: 'urc-line.lib', content: urcLineLibrary,
+    sha256: urcLineLibrarySha256, licenseStatus: 'unknown' as const, importedAt: '2026-10-23T00:00:00.000Z',
+    rightsNotes: 'Original ELSim teaching model authored for this example and distributed under the project MIT license.',
+  }
+  const model = parseSubcircuitLibrary(library.content).subcircuits.find((candidate) => candidate.name === 'URC_LINE')
+  if (!model) throw new Error('The URC line example library is missing its subcircuit.')
+  const line: Part = {
+    id: 'urc-example-xline', kind: 'subcircuit', ref: 'XLINE', value: model.name, modelName: model.name,
+    componentDefinitionId: importedSubcircuitComponentDefinition(model, { assetId: library.id, filename: library.filename, sha256: library.sha256 }).id,
+    modelPins: [...model.pins], modelParameters: {}, x: 620, y: 300, rotation: 0,
+  }
+  const source: Part = {
+    id: 'urc-example-v1', kind: 'source', ref: 'V1', value: '1 V', sourceMode: 'pulse',
+    pulse: { initial: '0 V', delay: '1 ns', rise: '1 ns', fall: '1 ns', width: '40 ns', period: '80 ns' },
+    x: 180, y: 350, rotation: 0,
+  }
+  const sourceResistance: Part = { id: 'urc-example-rsource', kind: 'resistor', ref: 'RSOURCE', value: '50 Ω', x: 380, y: 300, rotation: 0 }
+  const load: Part = { id: 'urc-example-rload', kind: 'resistor', ref: 'RLOAD', value: '1 kΩ', x: 800, y: 300, rotation: 90 }
+  const sourceGround: Part = { id: 'urc-example-ground-source', kind: 'ground', ref: 'GND1', value: '', x: 180, y: 440, rotation: 0 }
+  const loadGround: Part = { id: 'urc-example-ground-load', kind: 'ground', ref: 'GND2', value: '', x: 800, y: 390, rotation: 0 }
+  const parts = [source, sourceResistance, line, load, sourceGround, loadGround]
+  const pins = new Map(parts.map((part) => [part.id, componentPins(part)]))
+  const wire = (id: string, start: [number, number], end: [number, number]) => ({ id, points: [start, end] as [[number, number], [number, number]] })
+  const label = (id: string, name: string, partId: string, pinIndex: number) => {
+    const pin = pins.get(partId)![pinIndex]
+    return { id, name, x: pin.x, y: pin.y, visible: true }
+  }
+  project.name = 'Distributed RC line'
+  project.parts = parts
+  project.wires = [
+    wire('urc-example-source-feed', [180, 300], [330, 300]),
+    wire('urc-example-series-feed', [430, 300], [500, 300]),
+    wire('urc-example-series-rise', [500, 300], [500, 290]),
+    wire('urc-example-line-input', [500, 290], [540, 290]),
+    wire('urc-example-line-output', [700, 290], [750, 290]),
+    wire('urc-example-load-drop', [750, 290], [750, 250]),
+    wire('urc-example-load-feed', [750, 250], [800, 250]),
+    wire('urc-example-source-return', [180, 400], [180, 420]),
+    wire('urc-example-load-return', [800, 350], [800, 370]),
+  ]
+  project.junctions = []
+  project.netLabels = [
+    label('urc-example-input', 'IN', line.id, 0),
+    label('urc-example-output', 'OUT', line.id, 1),
+    label('urc-example-ground-line', '0', line.id, 2),
+  ]
+  project.modelAssets = [library]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '500 ns', maxStep: '1 ns' }
+  project.plotSettings = { selectedTraceIds: ['V(IN)', 'V(OUT)'], ranges: {} }
+  project.view = { zoom: 0.9, panX: -5, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 const coupledCrosstalkLibrary = [
   '.SUBCKT COUPLED_LINE3 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2',
   'P1 IN1 IN2 IN3 GND1 OUT1 OUT2 OUT3 GND2 CPL3 LEN=1',
