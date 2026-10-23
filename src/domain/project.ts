@@ -763,6 +763,12 @@ export function validateProject(input: unknown): Project {
           const range = panel.ranges[analysis]
           if (range !== undefined && (!range || !Number.isFinite(range.start) || !Number.isFinite(range.end) || range.start < 0 || range.end > 1 || range.end - range.start < 0.03)) throw new Error('Plot panel view range is malformed.')
         }
+        if (panel.valueRanges !== undefined) {
+          if (!panel.valueRanges || typeof panel.valueRanges !== 'object' || Array.isArray(panel.valueRanges) || Object.keys(panel.valueRanges).some((analysis) => !['tran', 'ac', 'dc', 'noise'].includes(analysis))) throw new Error('Plot panel value ranges are malformed.')
+          for (const ranges of Object.values(panel.valueRanges)) {
+            if (!ranges || typeof ranges !== 'object' || Array.isArray(ranges) || Object.keys(ranges).length > 16 || Object.entries(ranges).some(([unit, range]) => unit.length > 32 || !range || !Number.isFinite(range.min) || !Number.isFinite(range.max) || range.min >= range.max || !Number.isFinite(range.max - range.min))) throw new Error('Plot panel value ranges are malformed.')
+          }
+        }
         panelIds.add(panel.id)
       }
     }

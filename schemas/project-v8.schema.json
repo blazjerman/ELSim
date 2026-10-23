@@ -1054,6 +1054,9 @@
         },
         "ranges": {
           "$ref": "#/$defs/plotRanges"
+        },
+        "valueRanges": {
+          "$ref": "#/$defs/plotAnalysisValueRanges"
         }
       }
     },
@@ -1105,6 +1108,31 @@
         "noise": {
           "$ref": "#/$defs/plotRange"
         }
+      }
+    },
+    "plotAnalysisValueRanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tran": { "$ref": "#/$defs/plotUnitValueRanges" },
+        "ac": { "$ref": "#/$defs/plotUnitValueRanges" },
+        "dc": { "$ref": "#/$defs/plotUnitValueRanges" },
+        "noise": { "$ref": "#/$defs/plotUnitValueRanges" }
+      }
+    },
+    "plotUnitValueRanges": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": { "maxLength": 32 },
+      "additionalProperties": { "$ref": "#/$defs/plotValueRange" }
+    },
+    "plotValueRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": { "type": "number" },
+        "max": { "type": "number" }
       }
     },
     "plotRange": {

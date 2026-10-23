@@ -316,6 +316,8 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.match(schema.$defs.simulation.properties.temperature.pattern, /0-9/)
   assert.equal(schema.$defs.plotSettings.properties.panels.maxItems, 8)
   assert.equal(schema.$defs.plotPanel.required.includes('selectedTraceIds'), true)
+  assert.equal(schema.$defs.plotPanel.properties.valueRanges.$ref, '#/$defs/plotAnalysisValueRanges')
+  assert.equal(schema.$defs.plotUnitValueRanges.maxProperties, 16)
   const initialConditions = schema.$defs.simulation.properties.initialConditions.items.oneOf
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('voltage') && condition.properties.element.pattern.startsWith('^C')))
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('current') && condition.properties.element.pattern.startsWith('^L')))
@@ -377,7 +379,7 @@ test('LTspice source provenance validates its format, filename, and UTF-8 size l
 
 test('plot preferences survive project validation and old projects receive defaults', async () => {
   const project = createStarterProject()
-  project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } }, detachedWindow: { x: 42, y: 54, width: 720, height: 460 }, panels: [{ id: 'plot-a', bounds: { x: 100, y: 80, width: 600, height: 320 }, selectedTraceIds: ['v(vout)'], ranges: { tran: { start: 0.1, end: 0.8 } } }] }
+  project.plotSettings = { selectedTraceIds: ['v(vout)', 'i(R1)'], ranges: { tran: { start: 0.25, end: 0.75 }, ac: { start: 0.1, end: 0.9 } }, detachedWindow: { x: 42, y: 54, width: 720, height: 460 }, panels: [{ id: 'plot-a', bounds: { x: 100, y: 80, width: 600, height: 320 }, selectedTraceIds: ['v(vout)'], ranges: { tran: { start: 0.1, end: 0.8 } }, valueRanges: { tran: { V: { min: -5, max: 5 }, A: { min: -0.002, max: 0.002 } }, ac: { magnitude: { min: -40, max: 20 }, phase: { min: -180, max: 180 } } } }] }
   assert.deepEqual(validateProject(structuredClone(project)).plotSettings, project.plotSettings)
   const oldProject = structuredClone(project)
   delete oldProject.plotSettings
@@ -391,6 +393,18 @@ test('plot preferences survive project validation and old projects receive defau
   const malformedPanel = structuredClone(project)
   malformedPanel.plotSettings.panels[0].ranges.tran = { start: 0.8, end: 0.2 }
   assert.throws(() => validateProject(malformedPanel), /Plot panel view range is malformed/)
+  for (const valueRanges of [
+    { tran: { V: { min: 2, max: 1 } } },
+    { tran: { V: { min: 1, max: 1 } } },
+    { tran: { V: { min: Number.NaN, max: 1 } } },
+    { tran: { V: { min: -Number.MAX_VALUE, max: Number.MAX_VALUE } } },
+    { unsupported: { V: { min: -1, max: 1 } } },
+    { tran: Object.fromEntries(Array.from({ length: 17 }, (_, index) => [`unit-${index}`, { min: 0, max: 1 }])) },
+  ]) {
+    const malformedValueRange = structuredClone(project)
+    malformedValueRange.plotSettings.panels[0].valueRanges = valueRanges
+    assert.throws(() => validateProject(malformedValueRange), /Plot panel value ranges are malformed/)
+  }
 })
 
 test('project validation bounds namespaced imported LTspice attributes', async () => {
