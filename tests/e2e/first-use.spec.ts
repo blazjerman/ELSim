@@ -11757,6 +11757,35 @@ test('AC analysis keeps imported parameter sweep cases as separate response curv
   expect(traces.some((trace) => trace.includes('R1=2000 Ω'))).toBe(true)
 })
 
+test('AC analysis sweeps a declared project parameter through the browser UI', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.ref === 'R1')!
+  resistor.value = '{RAC}'
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, parameters: [{ id: 'param-rac', name: 'RAC', defaultValue: '1k' }] }
+  project.simulation = { ...project.simulation, analysis: 'ac' }
+  const validated = validateProject(project)
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.locator('svg.schematic').click({ position: { x: 8, y: 8 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('$param:RAC')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1k')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2k')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.parameterSweeps?.[0]?.globalParameter)).toBe('RAC')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+
+  const plot = await openComponentVoltagePlot(page)
+  await expect(plot.getByRole('group', { name: /AC magnitude from/ })).toBeVisible()
+  const traces = await plot.locator('.trace-toggles button').allTextContents()
+  expect(traces.some((trace) => trace.includes('RAC=1000'))).toBe(true)
+  expect(traces.some((trace) => trace.includes('RAC=2000'))).toBe(true)
+  await expect(plot.getByRole('img', { name: /V\(R1\).*AC magnitude in decibels/ })).toHaveCount(2)
+})
+
 test('AC waveform supports frequency cursor and horizontal wheel zoom without drag-pan', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
@@ -11882,6 +11911,35 @@ test('noise analysis retains separate parameter-sweep spectra and case labels', 
   const traces = await plot.locator('.trace-toggles button').allTextContents()
   expect(traces.filter((trace) => trace.includes('R1=1000 Ω'))).toHaveLength(2)
   expect(traces.filter((trace) => trace.includes('R1=2000 Ω'))).toHaveLength(2)
+})
+
+test('noise analysis sweeps a declared project parameter through the browser UI', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.ref === 'R1')!
+  resistor.value = '{RNOISE}'
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels, parameters: [{ id: 'param-rnoise', name: 'RNOISE', defaultValue: '1k' }] }
+  project.simulation = { ...project.simulation, analysis: 'noise' }
+  const validated = validateProject(project)
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.locator('svg.schematic').click({ position: { x: 8, y: 8 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('$param:RNOISE')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1k')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2k')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.parameterSweeps?.[0]?.globalParameter)).toBe('RNOISE')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+
+  const plot = page.locator('.plot-window').last()
+  await expect(plot).toContainText('Noise spectral density')
+  await expect(plot.getByRole('img', { name: /noise density in V\/√Hz/ })).toHaveCount(4)
+  const traces = await plot.locator('.trace-toggles button').allTextContents()
+  expect(traces.filter((trace) => trace.includes('RNOISE=1000'))).toHaveLength(2)
+  expect(traces.filter((trace) => trace.includes('RNOISE=2000'))).toHaveLength(2)
 })
 
 test('operating-point parameter sweep compares labeled bias values for a selected node', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
