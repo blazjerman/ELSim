@@ -805,7 +805,7 @@ export function parseLtspiceSchematic(source: string, filename: string, symbolAs
       behavioralOutput = behavioralRecord[1].toUpperCase() === 'I' ? 'current' : 'voltage'
       try {
         value = expandBehavioralFunctions(behavioralExpression, importedBehavioralFunctions)
-        const parsed = parseBehavioralExpression(value)
+        const parsed = parseBehavioralExpression(value, 'ltspice')
         validateBehavioralReferences(parsed.references, flags.map((flag) => flag.name), symbols.flatMap((candidate) => candidate.attributes.INSTNAME ? [candidate.attributes.INSTNAME] : []), [...importedParameterNames])
       } catch (error) {
         const message = error instanceof Error ? error.message : 'the expression or one of its references is unsupported.'

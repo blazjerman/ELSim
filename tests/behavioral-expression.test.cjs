@@ -154,6 +154,16 @@ test('LTspice cbrt and atan2 are parsed and translated with sign and quadrant ha
   assert.match(translated, /: pi/)
 })
 
+test('native ngspice B-source functions are accepted only in the ngspice dialect', () => {
+  for (const expression of ['nint(V(in))', 'sgn(V(in))', 'ternary_fcn(V(in) > 1, 7, 9)']) {
+    assert.deepEqual(parseBehavioralExpression(expression).references, { nodes: ['in'], differentialNodes: [], components: [] })
+    assert.equal(translateBehavioralExpression(expression), expression)
+    assert.throws(() => parseBehavioralExpression(expression, 'ltspice'), /not supported/)
+  }
+  assert.throws(() => parseBehavioralExpression('nint(V(in), 0)'), /expects 1/)
+  assert.throws(() => parseBehavioralExpression('ternary_fcn(V(in), 1)'), /expects 3/)
+})
+
 test('bounded user-defined behavioral functions expand recursively without changing argument grouping', () => {
   const definitions = new Map([
     ['twice', { name: 'twice', arguments: ['x'], expression: 'x * 2' }],

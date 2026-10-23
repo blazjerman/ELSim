@@ -895,7 +895,7 @@ export async function exportLtspiceProject(input: unknown): Promise<LtspiceExpor
       if (part.kind === 'behavioral') {
         try {
           if (part.value.includes('^')) throw new Error('uses ^, which LTspice treats as boolean XOR while this ngspice engine treats it as exponentiation; rewrite it explicitly before export.')
-          const parsed = parseBehavioralExpression(part.value)
+          const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
           validateBehavioralReferences(parsed.references, sheet.netLabels.map((label) => label.name), sheet.parts.map((candidate) => candidate.ref), (sheet.parameters ?? []).map((parameter) => parameter.name))
           const renamedSwitchReference = parsed.references.components.find((reference) => sheet.parts.some((candidate) => candidate.kind === 'switch' && candidate.ref.toLowerCase() === reference.toLowerCase()))
           if (renamedSwitchReference) throw new Error(`references current through ${renamedSwitchReference}, but fixed-state switches export under generated resistor references, so that current reference would change.`)

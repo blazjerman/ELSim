@@ -803,7 +803,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     else if (part.kind === 'behavioral') {
       try {
-        const parsed = parseBehavioralExpression(part.value)
+        const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), sheetParameters.map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
         append(`${part.ref} ${positive} ${negative} ${part.behavioralOutput === 'current' ? 'I' : 'V'}={${translateBehavioralExpression(part.value.replace(/[\r\n]/g, ' '), part.behavioralDialect)}}`, part.id, 'component')
       } catch (error) {

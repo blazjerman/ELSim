@@ -422,7 +422,7 @@ export function validateProject(input: unknown): Project {
     if (candidate.kind === 'behavioral') {
       if (!['voltage', 'current'].includes(candidate.behavioralOutput ?? '') || !candidate.value.trim()) throw new Error(`${candidate.ref} needs a voltage/current output mode and an expression.`)
       if (candidate.behavioralDialect !== undefined && candidate.behavioralDialect !== 'ltspice') throw new Error(`${candidate.ref} has an unsupported behavioral expression dialect.`)
-      const parsed = parseBehavioralExpression(candidate.value)
+      const parsed = parseBehavioralExpression(candidate.value, candidate.behavioralDialect)
       const labels = (data.netLabels as NetLabel[]).flatMap((label) => label && typeof label.name === 'string' ? [label.name] : [])
       const references = (data.parts as Part[]).flatMap((part) => part && typeof part.ref === 'string' ? [part.ref] : [])
       validateBehavioralReferences(parsed.references, labels, references, activeParameterNames, [...labels, ...connectedNodeNames])

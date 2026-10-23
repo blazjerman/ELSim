@@ -9,6 +9,13 @@ const functions = new Map<string, { min: number; max: number }>([
   ...['min', 'max', 'pow', 'pwr', 'pwrs', 'atan2', 'mod', 'xor', 'hypot'].map((name) => [name, { min: 2, max: 2 }] as const),
 ])
 
+// These are native ngspice B-source built-ins, not LTspice expression helpers.
+const ngspiceOnlyFunctions = new Map<string, { min: number; max: number }>([
+  ['nint', { min: 1, max: 1 }],
+  ['sgn', { min: 1, max: 1 }],
+  ['ternary_fcn', { min: 3, max: 3 }],
+])
+
 const engineeringScale: Record<string, number> = { meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 }
 // Keep an ideal 0.5 result false despite ngspice solve roundoff at the decision boundary.
 function ltspiceBooleanCondition(value: string): string {
@@ -231,7 +238,7 @@ function tableArgumentScalar(tokens: Token[]): number | null {
 
 type Token = { kind: 'number' | 'identifier' | 'operator'; text: string }
 
-export function parseBehavioralExpression(expression: string): { references: BehavioralReferences } {
+export function parseBehavioralExpression(expression: string, dialect: BehavioralDialect = 'ngspice'): { references: BehavioralReferences } {
   if (expression.length === 0 || expression.length > 256 || /[\r\n;{}'"`\\#]/.test(expression)) throw new Error('Use one expression up to 256 characters. Newlines, directives, quotes, braces, and comments are not allowed.')
   const tokens: Token[] = []
   let offset = 0
@@ -281,7 +288,7 @@ export function parseBehavioralExpression(expression: string): { references: Beh
       take(')')
       return
     }
-    const signature = functions.get(name) ?? (name === 'table' ? { min: 5, max: 513 } : undefined)
+    const signature = functions.get(name) ?? (dialect === 'ngspice' ? ngspiceOnlyFunctions.get(name) : undefined) ?? (name === 'table' ? { min: 5, max: 513 } : undefined)
     if (!signature) throw new Error(`Function “${token.text}” is not supported.`)
     let count = 0
     const argumentsTokens: Token[][] = []

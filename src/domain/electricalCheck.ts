@@ -303,7 +303,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     }
     for (const part of sheet.parts) if (part.kind === 'behavioral') {
       try {
-        const parsed = parseBehavioralExpression(part.value)
+        const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
         validateBehavioralReferences(
           parsed.references,
           sheet.netLabels.map((label) => label.name),
@@ -442,7 +442,7 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
     if (modelIssue) issues.push(modelIssue)
     if (part.kind === 'behavioral') {
       try {
-        const parsed = parseBehavioralExpression(part.value)
+        const parsed = parseBehavioralExpression(part.value, part.behavioralDialect)
         validateBehavioralReferences(parsed.references, project.netLabels.map((label) => label.name), project.parts.map((candidate) => candidate.ref), (project.sheets.find((sheet) => sheet.id === project.activeSheetId)?.parameters ?? []).map((parameter) => parameter.name), [...connectivity.pinNets.values(), ...connectivity.wireNets.values()])
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'The expression is unsupported.'
