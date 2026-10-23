@@ -10985,6 +10985,38 @@ test('imported .MODEL defaults that call .FUNC helpers stay in the generated net
   await expect(netlist).toContainText('.MODEL USER_NPN NPN (IS=1e-14 BF={SCALE(5)} VAF=100)')
 })
 
+test('imported model .FUNC parameter from an included library solves in browser ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+
+  const modelLibrary = '.include helpers.lib\n.MODEL USER_NPN NPN (IS=1e-14 BF={SCALE(5)} VAF=100)\n'
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await modelInput.setInputFiles({ name: 'function-backed-model.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary) })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from function-backed-model\.lib/)).toBeVisible()
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await modelInput.setInputFiles({ name: 'helpers.lib', mimeType: 'text/plain', buffer: Buffer.from('.FUNC SCALE(x) {2*x}\n') })
+  await expect(page.getByRole('region', { name: 'Model dependency report' })).toHaveCount(0)
+
+  await page.locator('.circuit-part[aria-label^="Q1,"]').click()
+  await page.getByLabel('Device model for Q1').selectOption('USER_NPN')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')
+  await expect(netlist).toContainText('.FUNC SCALE(x) {2*x}')
+  await expect(netlist).toContainText('BF={SCALE(5)}')
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByLabel('Analysis type').selectOption('op')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(COLLECTOR)')
+})
+
 test('imported subcircuit-local .FUNC validates IC defaults and instance overrides', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
@@ -10999,7 +11031,7 @@ test('imported subcircuit-local .FUNC validates IC defaults and instance overrid
 
   const part = page.locator('.circuit-part[aria-label^="X1,"]')
   await expect(part).toBeVisible()
-  await part.click()
+  await part.locator('.part-hit').click()
   const parameter = page.getByRole('textbox', { name: 'GAIN model value' })
   await expect(parameter).toHaveValue('{DOUBLE(2)}')
   await parameter.fill('{DOUBLE(4)}')

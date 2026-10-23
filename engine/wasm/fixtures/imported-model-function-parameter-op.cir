@@ -1,0 +1,17 @@
+ELSim imported .MODEL parameter calls a project-local .FUNC helper
+VCC supply 0 5
+RLOAD supply out 1k
+VBASE drive 0 0.7
+RBASE drive base 10k
+Q1 out base 0 USER_NPN
+RREFLOAD supply refout 1k
+QREF refout refbase 0 REFERENCE_NPN
+VREF bias 0 0.7
+RREF bias refbase 10k
+.include imported-model-function-parameter-op.lib
+.MODEL USER_NPN NPN(IS=1e-14 BF={SCALE(5)} VAF=100)
+.MODEL REFERENCE_NPN NPN(IS=1e-14 BF=10 VAF=100)
+.op
+.print op v(out) v(refout)
+.save all @Q1[ib] @Q1[ic]
+.end
