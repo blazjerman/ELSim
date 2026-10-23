@@ -3920,7 +3920,8 @@ export default function App() {
     const result = simulationResultRef.current
     if (!result) return
     const ids = traceIds ?? selectedTraceIdsRef.current
-    const traces = result.traces.filter((trace) => ids.includes(trace.id))
+    const requestedIds = new Set(ids)
+    const traces = result.traces.filter((trace) => requestedIds.has(trace.id))
     if (traces.some((trace) => trace.axis.length > 8192)) setNotice('Preparing large waveform CSV…')
     let csvParts: string[]
     try {
