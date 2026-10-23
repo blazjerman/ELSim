@@ -3327,7 +3327,22 @@ test('coupled-line example opens from Advanced examples and solves crosstalk', {
   await expect(page.locator('.circuit-part[data-part-id="cpl-lesson-xline"]')).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByRole('img', { name: /Transient waveforms from/ })).toBeVisible()
+  const openOutputTrace = async (output: number, destination: 'New waveform window' | 'Add to current window') => {
+    const label = page.locator(`[data-net-label-id="cpl-lesson-xline-net-${output + 3}"]`)
+    await label.focus()
+    await label.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Plot voltage to ground' }).click()
+    const chooser = page.getByRole('dialog', { name: new RegExp(`V\\(OUT${output}\\)`, 'i') })
+    await chooser.getByRole('button', { name: new RegExp(destination, 'i') }).click()
+  }
+  await openOutputTrace(1, 'New waveform window')
+  const plot = page.locator('.plot-window').last()
+  await expect(plot.getByRole('group', { name: /Transient waveforms from/ })).toBeVisible()
+  await expect(plot.locator('.trace-toggles button', { hasText: 'V(OUT1)' })).toBeVisible()
+  await openOutputTrace(2, 'Add to current window')
+  await expect(plot.locator('.trace-toggles button', { hasText: 'V(OUT2)' })).toBeVisible()
+  await openOutputTrace(3, 'Add to current window')
+  await expect(plot.locator('.trace-toggles button', { hasText: 'V(OUT3)' })).toBeVisible()
 })
 
 test('lossless transmission-line port probes show both currents in amperes', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
