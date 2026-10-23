@@ -487,10 +487,11 @@ for (const fixture of selectedFixtures) {
     if (fixture === 'conditional-device-model-op') assert.match(wasmResult.stdout, /out\s+4\.602852e\+00/i, 'conditional model branch should select DSEL Is=1n and solve the expected 4.603 V output')
   if (fixture === 'conditional-resistor-alias-op') assert.match(wasmResult.stdout, /out\s+2\.500000e\+00/i, 'conditional R/RES aliases should resolve as one resistor family and form a 2.5 V divider')
   if (fixture === 'diode-area-perimeter-scaling-op') {
-    const currents = ['d1', 'd2', 'd3', 'd4'].map((ref) => Math.abs(realRawVector(wasmResult.raw, `i(@${ref}[id])`)[0]))
+    const currents = ['d1', 'd2', 'd3', 'd4', 'd5'].map((ref) => Math.abs(realRawVector(wasmResult.raw, `i(@${ref}[id])`)[0]))
     assert.ok(currents[1] > currents[0] * 1.4, `AREA=2 should increase bottom-junction current, got ${currents[0]} A and ${currents[1]} A`)
     assert.ok(currents[2] > currents[0] * 1.9, `PJ=3 should increase sidewall current, got ${currents[0]} A and ${currents[2]} A`)
     assert.ok(currents[3] > currents[0] * 1.9, `M=2 should increase both junction contributions, got ${currents[0]} A and ${currents[3]} A`)
+    assert.ok(currents[4] > currents[0] * 1.2, `DTEMP=25 should change the temperature-dependent diode current, got ${currents[0]} A and ${currents[4]} A`)
   }
     if (fixture === 'conditional-scoped-device-model-op') assert.match(wasmResult.stdout, /out\s+4\.602852e\+00/i, 'conditional subcircuit model branch should select DLOCAL Is=1n and solve the expected 4.603 V output')
     if (fixture === 'nested-user-subckt-op') assert.match(wasmResult.stdout, /out\s+2\.500000e\+00/i, 'nested-user-subckt-op: nested CORE and the outer load should divide 5 V to 2.5 V')

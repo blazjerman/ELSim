@@ -4,6 +4,7 @@ import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunct
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, timeMagnitude } from '../domain/componentValue'
+import { supportsDeviceTemperatureDelta } from '../domain/componentDefinitions'
 import { mesfetDrainCurrentSenseReference, transmissionLinePortCurrentVector, urcLineCurrentSenseReference } from '../domain/probe'
 import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import type { NetlistArtifact, NetlistSource } from './contract'
@@ -260,6 +261,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const value = part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' || part.kind === 'opamp' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
     const passiveModelType = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined
     const passiveModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
+    const temperatureModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
+    const deviceTemperatureSuffix = part.deviceTemperatureDelta !== undefined ? ` DTEMP=${part.deviceTemperatureDelta}` : ''
+    if (part.deviceTemperatureDelta !== undefined && !supportsDeviceTemperatureDelta(part.kind, temperatureModel)) {
+      const message = `${part.ref} device temperature offset (DTEMP) is unsupported for this device or imported model. Select a non-BSIM MOS model that supports DTEMP, or clear the offset.`
+      append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+      diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+      continue
+    }
     const passiveDefaultParameter = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
     const passiveModelMatches = Boolean(passiveModel && (passiveModelType === 'r' ? isResistorModelType(passiveModel.type) : passiveModel.type.toLowerCase() === passiveModelType))
     const passiveModelSuppliesValue = Boolean(passiveModelMatches && passiveDefaultParameter && passiveModel?.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
@@ -667,8 +676,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
       const multiplierSuffix = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''
-      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}`, part.id, 'component')
-      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}`, part.id, 'component')
+      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
+      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const elementCondition = part.kind === 'inductor' || part.kind === 'capacitor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined
@@ -709,7 +718,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const instanceValue = value ?? ''
       const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
       const multiplierSuffix = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''
-      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
+      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${deviceTemperatureSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led') {
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
@@ -720,7 +729,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? (part.kind === 'zener' ? 'DZENER' : 'DDEFAULT')
-      const instanceOptions = [part.diodeArea && `AREA=${part.diodeArea}`, part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.diodePerimeter && `PJ=${part.diodePerimeter}`].filter(Boolean).join(' ')
+      const instanceOptions = [part.diodeArea && `AREA=${part.diodeArea}`, part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.diodePerimeter && `PJ=${part.diodePerimeter}`, part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`].filter(Boolean).join(' ')
       append(`${part.ref} ${positive} ${negative} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
       if (!part.deviceModel) {
         if (part.kind === 'zener') usesZener = true
@@ -747,7 +756,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}`, part.id, 'component')
       if (!part.deviceModel) transistorModels.push({ part, name: model })
     }
     else if (part.kind === 'njfet' || part.kind === 'pjfet') {
@@ -761,7 +770,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      append(`${part.ref} ${positive} ${gate} ${source} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${gate} ${source} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}`, part.id, 'component')
       if (!part.deviceModel) jfetModels.push({ part, name: model })
     }
     else if (part.kind === 'nmesfet' || part.kind === 'pmesfet') {
@@ -785,7 +794,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       usedReferences.add(senseReference.toLowerCase())
       const drainNode = reserveUniqueName(`__ELSIM_${part.id.slice(0, 24).replace(/[^A-Za-z0-9_]/g, '_')}_D`, usedNodes)
       append(`${senseReference} ${positive} ${drainNode} 0`, part.id, 'generated')
-      append(`${part.ref} ${drainNode} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
+      append(`${part.ref} ${drainNode} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}`, part.id, 'component')
     }
     else if (part.kind === 'nmos' || part.kind === 'pmos') {
       const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2), bulk = pinNet(connectivity, part, 3)
@@ -798,7 +807,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      const instanceOptions = [part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.mosfetGeometry?.length && `L=${part.mosfetGeometry.length}`, part.mosfetGeometry?.width && `W=${part.mosfetGeometry.width}`].filter(Boolean).join(' ')
+      const instanceOptions = [part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.mosfetGeometry?.length && `L=${part.mosfetGeometry.length}`, part.mosfetGeometry?.width && `W=${part.mosfetGeometry.width}`, part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`].filter(Boolean).join(' ')
       append(`${part.ref} ${positive} ${gate} ${source} ${bulk} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
       if (!part.deviceModel) mosfetModels.push({ part, name: model })
     }
@@ -814,7 +823,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}`, part.id, 'component')
     }
     else if (part.kind === 'opamp') {
       const nodes = [0, 1, 2, 3, 4].map((pin) => pinNet(connectivity, part, pin))

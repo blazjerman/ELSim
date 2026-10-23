@@ -319,7 +319,12 @@ export const componentDefinitions: readonly ComponentDefinition[] = Object.freez
   symbolGeometry: definition.symbolGeometry ? freezeSymbolPrimitives(definition.symbolGeometry) : undefined,
   symbolVariants: definition.symbolVariants ? Object.freeze(Object.fromEntries(Object.entries(definition.symbolVariants).map(([key, primitives]) => [key, freezeSymbolPrimitives(primitives)]))) : undefined,
   symbolAnimations: freezeSymbolAnimations(definition.symbolAnimations),
-  properties: Object.freeze(definition.properties.map((property) => Object.freeze({ ...property }))),
+  properties: Object.freeze([
+    ...definition.properties.map((property) => Object.freeze({ ...property })),
+    ...(['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos'].includes(definition.kind)
+      ? [Object.freeze({ key: 'deviceTemperatureDelta', label: 'Device temperature offset', unit: '°C' })]
+      : []),
+  ]),
   animationChannels: Object.freeze([...definition.animationChannels]),
 })))
 
@@ -327,6 +332,18 @@ export const componentDefinitionByKind: Readonly<Record<PartKind, ComponentDefin
 
 export function componentDefinitionFor(kind: PartKind): ComponentDefinition {
   return componentDefinitionByKind[kind]
+}
+
+/** ngspice supports DTEMP for these native passive and semiconductor instances. */
+export function supportsDeviceTemperatureDelta(kind: PartKind, model?: { type: string; parameters: readonly { name: string; defaultValue: string }[] }): boolean {
+  if (!['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos'].includes(kind)) return false
+  if ((kind === 'nmos' || kind === 'pmos') && model) {
+    const rawLevel = model.parameters.find((parameter) => parameter.name.toLowerCase() === 'level')?.defaultValue
+    const level = rawLevel === undefined ? 1 : Number(rawLevel)
+    // BSIM and unknown model levels do not accept the MOS instance DTEMP option.
+    return Number.isFinite(level) && [1, 2, 3, 6].includes(level)
+  }
+  return true
 }
 
 /** Return the required imported SPICE `.MODEL` type for a built-in device. */

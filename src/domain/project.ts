@@ -3,7 +3,7 @@ import { analyzeConnectivity } from './connectivity'
 import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, modelFunctionSignaturesForLibraries, modelFunctionsForProject, parseSubcircuitLibrary, type SpiceModelDefinition, type SubcircuitDefinition } from './subcircuitLibrary'
 import { parseSymbolAsset } from './symbolAsset'
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
-import { componentDefinitionByKind, deviceModelTypeMatches, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId } from './componentDefinitions'
+import { componentDefinitionByKind, deviceModelTypeMatches, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId, supportsDeviceTemperatureDelta } from './componentDefinitions'
 import { componentMagnitude, timeMagnitude } from './componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from './measurementSettings'
 import { MAX_SOURCE_PWL_POINTS } from './sourcePwl'
@@ -38,6 +38,8 @@ export type Part = {
   diodeArea?: string
   /** Optional ngspice diode junction-perimeter scale; combines with M for sidewall parameters. */
   diodePerimeter?: string
+  /** Optional ngspice device-temperature offset from the circuit temperature. */
+  deviceTemperatureDelta?: string
   sheetParameters?: Record<string, string>
   deviceModel?: string
   /** Optional labeled substrate node for ngspice's four-node BJT instance form. */
@@ -644,6 +646,17 @@ export function validateProject(input: unknown): Project {
   if (simulation.noiseSweep && (typeof simulation.noiseSweep.outputNode !== 'string' || typeof simulation.noiseSweep.inputSource !== 'string' || !['dec', 'oct', 'lin'].includes(simulation.noiseSweep.scale) || !Number.isInteger(simulation.noiseSweep.points) || simulation.noiseSweep.points < 1 || simulation.noiseSweep.points > 10000 || typeof simulation.noiseSweep.startFrequency !== 'string' || typeof simulation.noiseSweep.stopFrequency !== 'string')) throw new Error('Noise sweep settings are malformed.')
   if (simulation.temperature === undefined) simulation.temperature = '27'
   if (typeof simulation.temperature !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(simulation.temperature.trim()) || !Number.isFinite(Number(simulation.temperature)) || Number(simulation.temperature) < -273.15 || Number(simulation.temperature) > 10000) throw new Error('Simulation temperature must be a number from −273.15 °C to 10000 °C.')
+  const deviceTemperatureParts = [
+    ...(data.parts as Part[]),
+    ...(Array.isArray(data.sheets) ? (data.sheets as Project['sheets']).flatMap((sheet) => Array.isArray(sheet?.parts) ? sheet.parts : []) : []),
+  ]
+  for (const part of deviceTemperatureParts) {
+    const delta = part.deviceTemperatureDelta
+    if (delta === undefined) continue
+    if (!supportsDeviceTemperatureDelta(part.kind) || typeof delta !== 'string' || delta.length > 64 || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(delta) || !Number.isFinite(Number(delta))) throw new Error(`${part.ref} device temperature offset must be a numeric °C value on a passive or semiconductor device.`)
+    const effectiveTemperature = Number(simulation.temperature) + Number(delta)
+    if (effectiveTemperature < -273.15 || effectiveTemperature > 10000) throw new Error(`${part.ref} device temperature must be from −273.15 °C to 10000 °C after applying the circuit temperature offset.`)
+  }
   if (simulation.sourceAcMagnitude === undefined) simulation.sourceAcMagnitude = '1 V'
   if (typeof simulation.sourceAcMagnitude !== 'string' || !simulation.sourceAcMagnitude.trim()) throw new Error('AC source magnitude is malformed.')
   if (simulation.analysis === 'dc' && !simulation.dcSweep) simulation.dcSweep = { source: 'V1', start: '0 V', stop: '5 V', step: '0.1 V' }

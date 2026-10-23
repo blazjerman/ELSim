@@ -275,6 +275,12 @@
           "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
           "description": "Optional positive ngspice diode junction-perimeter scale; combines multiplicatively with M."
         },
+        "deviceTemperatureDelta": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$",
+          "description": "Optional ngspice DTEMP offset in degrees Celsius from the circuit temperature."
+        },
         "deviceModel": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"
