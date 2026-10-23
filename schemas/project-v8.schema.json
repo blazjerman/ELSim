@@ -202,7 +202,7 @@
         },
         "noiseEnabled": {
           "type": "boolean",
-          "description": "Whether this resistor contributes thermal and flicker noise; omitted means enabled."
+          "description": "Whether this resistor-based component contributes thermal and flicker noise; omitted means enabled."
         },
         "x": {
           "type": "number",

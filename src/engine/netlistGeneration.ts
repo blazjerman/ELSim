@@ -696,8 +696,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       }
       const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
       const multiplierSuffix = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''
-      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
-      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
+      const noiseSuffix = part.noiseEnabled === false ? ' NOISY=0' : ''
+      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${noiseSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
+      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}${modelSuffix}${multiplierSuffix}${noiseSuffix}${deviceTemperatureSuffix}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const elementCondition = part.kind === 'inductor' || part.kind === 'capacitor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined
@@ -747,7 +748,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const acResistanceSuffix = acResistanceValue ? ` AC=${acResistanceValue}` : ''
-      const noiseSuffix = part.kind === 'resistor' && part.noiseEnabled === false ? ' NOISY=0' : ''
+      const noiseSuffix = (part.kind === 'resistor' || part.kind === 'lamp') && part.noiseEnabled === false ? ' NOISY=0' : ''
       append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${acResistanceSuffix}${noiseSuffix}${deviceTemperatureSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led') {

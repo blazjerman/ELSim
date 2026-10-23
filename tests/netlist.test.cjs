@@ -59,10 +59,24 @@ test('resistor noise is enabled by default and can be disabled with the native n
   resistor.noiseEnabled = true
   assert.doesNotMatch(createNetlistArtifact(project).text, /NOISY=/)
   resistor.noiseEnabled = 'false'
-  assert.throws(() => validateProject(project), /noise setting is available only for resistors/i)
+  assert.throws(() => validateProject(project), /noise setting is available only for resistor-based components/i)
   delete resistor.noiseEnabled
   project.parts.find((part) => part.kind === 'capacitor').noiseEnabled = false
-  assert.throws(() => validateProject(project), /noise setting is available only for resistors/i)
+  assert.throws(() => validateProject(project), /noise setting is available only for resistor-based components/i)
+})
+
+test('lamp noise and both potentiometer resistor branches use the shared noise setting', () => {
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  const lamp = { ...resistor, id: 'noise-lamp', ref: 'RLP1', kind: 'lamp', componentDefinitionId: 'elsim.lamp', x: 1200, y: 600, noiseEnabled: false, animationNominalPower: 10 }
+  const potentiometer = { ...resistor, id: 'noise-pot', ref: 'POT1', kind: 'potentiometer', componentDefinitionId: 'elsim.potentiometer', x: 1400, y: 600, noiseEnabled: false, wiperPosition: '0.5' }
+  project.parts.push(lamp, potentiometer)
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^RLP1 \S+ \S+ 1k NOISY=0$/m)
+  assert.match(artifact.text, /^RPOT1_A \S+ \S+ 500\.000000000 NOISY=0$/m)
+  assert.match(artifact.text, /^RPOT1_B \S+ \S+ 500\.000000000 NOISY=0$/m)
 })
 
 test('standalone R C and L parts can use imported models and model defaults', () => {

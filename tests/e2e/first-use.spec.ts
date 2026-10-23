@@ -11710,11 +11710,16 @@ test('lamp palette item exposes resistance, nominal animation power, and importe
   await expect(page.getByLabel('Resistance (Ω)')).toHaveValue('12 Ω')
   await expect(page.getByLabel('Nominal lamp power (W)')).toHaveValue('10')
   await expect(page.getByText(/no thermal filament behavior is simulated/i)).toBeVisible()
+  const includeNoise = page.locator('input[aria-label^="Include noise for "]')
+  await expect(includeNoise).toBeChecked()
+  await includeNoise.uncheck()
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'lamp')?.noiseEnabled)).toBe(false)
   const modelSelector = page.getByLabel(/Device model for R/)
   await modelSelector.selectOption('LAMP_RESISTOR')
   await expect(modelSelector).toHaveValue('LAMP_RESISTOR')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText(/R\d+ \S+ \S+ 12 LAMP_RESISTOR/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/R\d+ \S+ \S+ 12 LAMP_RESISTOR NOISY=0/)
 })
 
 test('lamp glow renders from its definition animation at solved electrical power', { tag: '@ngspice' }, async ({ page }) => {

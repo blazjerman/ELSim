@@ -24,7 +24,7 @@ export type Part = {
   value: string
   /** Optional resistor-only value used during AC small-signal analysis. */
   acResistance?: string
-  /** Resistors generate noise by default; false emits ngspice's NOISY=0 instance option. */
+  /** Resistor-based parts generate noise by default; false emits ngspice's NOISY=0 option. */
   noiseEnabled?: boolean
   x: number
   y: number
@@ -412,7 +412,7 @@ export function validateProject(input: unknown): Project {
     if (candidate.seriesResistance !== undefined && ((candidate.kind !== 'capacitor' && candidate.kind !== 'inductor') || typeof candidate.seriesResistance !== 'string' || candidate.seriesResistance.length > 64)) throw new Error(`${candidate.ref} has invalid series-resistance metadata.`)
     if (candidate.seriesResistance !== undefined && (componentMagnitude(candidate.seriesResistance, 'resistor') === null || componentMagnitude(candidate.seriesResistance, 'resistor')! < 0)) throw new Error(`${candidate.ref} series resistance must be a nonnegative numeric resistance.`)
     if (candidate.acResistance !== undefined && (candidate.kind !== 'resistor' || typeof candidate.acResistance !== 'string' || candidate.acResistance.length > 64 || componentMagnitude(candidate.acResistance, 'resistor') === null || componentMagnitude(candidate.acResistance, 'resistor')! <= 0)) throw new Error(`${candidate.ref} AC resistance must be a positive numeric resistance and is available only for resistors.`)
-    if (candidate.noiseEnabled !== undefined && (candidate.kind !== 'resistor' || typeof candidate.noiseEnabled !== 'boolean')) throw new Error(`${candidate.ref} noise setting is available only for resistors.`)
+    if (candidate.noiseEnabled !== undefined && (!['resistor', 'potentiometer', 'lamp'].includes(candidate.kind) || typeof candidate.noiseEnabled !== 'boolean')) throw new Error(`${candidate.ref} noise setting is available only for resistor-based components.`)
     if (candidate.mosfetGeometry !== undefined) {
       const geometry = candidate.mosfetGeometry
       const dimensionFields = ['length', 'width', 'drainArea', 'sourceArea', 'drainPerimeter', 'sourcePerimeter']
