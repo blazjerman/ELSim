@@ -456,6 +456,84 @@ test('measure browser waveform rendering with dozens of solved traces', async ({
   console.log(JSON.stringify({ benchmark: 'browser-24-section-40-trace-transient-v3', browser: browserName, sections: 24, solvedSamples, plottedTraces: selection.selectedCount, maxRenderedPointsPerTrace: Math.max(...plottedPoints), resultReadyMs: Number(resultReadyMs.toFixed(2)), synchronousVisibilityToggleMs: selection.synchronousToggleMs.map((elapsed) => Number(elapsed.toFixed(2))), visibilityToggleToTwoFramesMs: selection.toggleToTwoFramesMs.map((elapsed) => Number(elapsed.toFixed(2))), visibilityToggleAndRenderMs: Number(selection.elapsedMs.toFixed(2)) }, null, 2))
 })
 
+test('measure maximum saved waveform trace selection in Firefox', async ({ page, browserName }) => {
+  test.setTimeout(120_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the optional local ngspice WASM runtime before running the 256-trace benchmark').toEqual([])
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const saved = localStorage.getItem('elsim:project:v7')
+    return saved ? JSON.parse(saved).parts.length : null
+  })).toBe(4)
+  await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
+    const sourceTemplate = project.parts.find((part: { kind: string }) => part.kind === 'source')
+    const resistorTemplate = project.parts.find((part: { kind: string }) => part.kind === 'resistor')
+    const sections = 128
+    const source = { ...sourceTemplate, id: 'trace-256-bench-v1', ref: 'V1', x: 120, y: 360 }
+    const resistors = Array.from({ length: sections }, (_, index) => ({
+      ...resistorTemplate,
+      id: `trace-256-bench-r-${index + 1}`,
+      ref: `R${index + 1}`,
+      value: '1k',
+      x: 240 + index * 120,
+      y: 360,
+    }))
+    const netLabels = [
+      { id: 'trace-256-bench-source-positive', name: 'N0', x: source.x, y: source.y - 52, visible: true },
+      { id: 'trace-256-bench-source-return', name: '0', x: source.x, y: source.y + 52, visible: true },
+    ]
+    resistors.forEach((part, index) => {
+      netLabels.push({ id: `trace-256-bench-label-${index}-left`, name: `N${index}`, x: part.x - 52, y: part.y, visible: true })
+      netLabels.push({ id: `trace-256-bench-label-${index}-right`, name: index === sections - 1 ? '0' : `N${index + 1}`, x: part.x + 52, y: part.y, visible: true })
+    })
+    const parts = [source, ...resistors]
+    project.name = 'Browser benchmark · maximum saved waveform traces'
+    project.parts = parts
+    project.wires = []
+    project.junctions = []
+    project.netLabels = netLabels
+    project.simulation.analysis = 'tran'
+    project.simulation.stopTime = '10 ms'
+    project.simulation.maxStep = '1 µs'
+    project.plotSettings.selectedTraceIds = []
+    const selectedTraceIds = [
+      ...Array.from({ length: sections }, (_, index) => `v(n${index})`),
+      ...Array.from({ length: sections }, (_, index) => `i(@r${index + 1}[i])`),
+    ]
+    project.plotSettings.panels = [{ id: 'benchmark-256-traces', bounds: { x: 24, y: 112, width: 900, height: 560 }, selectedTraceIds, ranges: {} }]
+    project.sheets = project.sheets.map((sheet: { id: string }) => sheet.id === project.rootSheetId
+      ? { ...sheet, parts, wires: [], junctions: [], netLabels }
+      : sheet)
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  })
+  await page.reload()
+  const runStarted = performance.now()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.locator('.toast')).toContainText('Transient analysis complete', { timeout: 90_000 })
+  const resultReadyMs = performance.now() - runStarted
+  const plot = page.locator('.plot-window').first()
+  const selectedTraces = plot.locator('.trace-selected-item')
+  await expect(selectedTraces).toHaveCount(256)
+  const polylines = plot.locator('.waveform-chart polyline')
+  await expect(polylines).toHaveCount(256)
+  const pointCounts = await polylines.evaluateAll((lines) => lines.map((line) => (line as SVGPolylineElement).points.numberOfItems))
+  expect(Math.max(...pointCounts)).toBeLessThanOrEqual(902)
+  const toggle = selectedTraces.first().locator('.trace-visibility')
+  const toggleToTwoFramesMs = await toggle.evaluate(async (button) => {
+    const started = performance.now()
+    ;(button as HTMLButtonElement).click()
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    return Number((performance.now() - started).toFixed(2))
+  })
+  await expect(polylines).toHaveCount(255)
+  expect(pageErrors).toEqual([])
+  console.log(JSON.stringify({ benchmark: 'browser-128-section-256-trace-transient-v1', browser: browserName, sections: 128, solvedSamples: Number(await page.getByRole('slider', { name: 'Simulation time' }).getAttribute('max')) + 1, plottedTraces: 256, maxRenderedPointsPerTrace: Math.max(...pointCounts), resultReadyMs: Number(resultReadyMs.toFixed(2)), oneVisibilityToggleToTwoFramesMs: toggleToTwoFramesMs }, null, 2))
+})
+
 test('measure high-sample multi-trace rendering for a nonlinear diode circuit', async ({ page, browserName }) => {
   test.setTimeout(120_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

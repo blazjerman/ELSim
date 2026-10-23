@@ -432,23 +432,35 @@ function WaveformPlot({ traces, selectedIds, onToggle, onExport, range, onRangeC
   const first = Math.floor(navigation.window.start * Math.max(0, (axis?.length ?? 1) - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, (axis?.length ?? 1) - 1)))
   const minTime = axis?.[first] ?? 0, maxTime = axis?.[Math.min(last, (axis?.length ?? 1) - 1)] ?? 1
+  const sampledTraceById = useMemo(() => {
+    const sampled = new Map<string, { indices: number[]; range: [number, number] | null }>()
+    for (const id of selectedIds) {
+      const index = traceIndexById.get(id)
+      if (index === undefined) continue
+      const trace = traces[index]
+      const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
+      const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
+      const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
+      const range = valueRangeAtIndices(trace.values, indices)
+      if (range && range[0] === range[1]) { range[0] -= 1; range[1] += 1 }
+      sampled.set(trace.id, { indices, range })
+    }
+    return sampled
+  }, [selectedIds, traceIndexById, traces, minTime, maxTime])
   const sampledTraceData = useMemo(() => {
     const indicesById = new Map<string, number[]>()
     const rangeByUnit = new Map<string, [number, number]>()
     for (const trace of shown) {
-      const traceFirst = nearestAxisIndex(trace.axis, minTime, 0, Math.max(0, trace.axis.length - 1))
-      const traceLast = nearestAxisIndex(trace.axis, maxTime, traceFirst, Math.max(traceFirst, trace.axis.length - 1))
-      const indices = extremaIndices(trace.values, traceFirst, traceLast, 900)
-      indicesById.set(trace.id, indices)
-      const range = valueRangeAtIndices(trace.values, indices)
+      const sampled = sampledTraceById.get(trace.id)
+      if (!sampled) continue
+      indicesById.set(trace.id, sampled.indices)
+      const range = sampled.range
       if (!range) continue
-      let [min, max] = range
-      if (min === max) { min -= 1; max += 1 }
       const previous = rangeByUnit.get(trace.unit)
-      rangeByUnit.set(trace.unit, [Math.min(previous?.[0] ?? 0, min, 0), Math.max(previous?.[1] ?? 0, max, 0)])
+      rangeByUnit.set(trace.unit, [Math.min(previous?.[0] ?? 0, range[0], 0), Math.max(previous?.[1] ?? 0, range[1], 0)])
     }
     return { indicesById, rangeByUnit }
-  }, [shown, minTime, maxTime])
+  }, [shown, sampledTraceById])
   const scopeDomain = useMemo<[number, number]>(() => {
     return symmetricZeroRange(sampledTraceData.rangeByUnit.get('V'))
   }, [sampledTraceData])
