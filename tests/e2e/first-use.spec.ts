@@ -2763,16 +2763,19 @@ test('component categories filter the library and search crosses categories', as
   await expect(categories).toBeVisible()
 })
 
-test('imported library provenance notes persist while rights remain unverified', async ({ page }) => {
+test('imported library provenance notes persist while rights remain unverified and load on demand', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 })
   await page.goto('/')
   await waitForProjectAutosave(page)
+  const sourceViewerLoaded = () => page.evaluate(() => performance.getEntriesByType('resource').some((entry) => new URL(entry.name).pathname.endsWith('/src/ui/ModelSourceViewer.tsx')))
+  expect(await sourceViewerLoaded()).toBe(false)
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'provenance-test.lib',
     mimeType: 'text/plain',
     buffer: Buffer.from('.MODEL PROVENANCE_D D(Is=1n)\n'),
   })
+  await expect.poll(sourceViewerLoaded).toBe(true)
   const details = page.locator('.asset-provenance').filter({ has: page.getByText('Record source and license notes') })
   await details.locator('summary').click()
   await page.getByLabel('Source URL for provenance-test.lib').fill('https://models.example.test/provenance-test.lib')
@@ -2856,7 +2859,7 @@ test('native ngspice var and vec expressions are retained in imported IC paramet
   await page.getByRole('button', { name: 'Components', exact: true }).click()
   const library = [
     '.MODEL DFAST D(IS={vec(pi)*1p+var(foo)*1p})',
-    '.SUBCKT USER_INTERPRETER IN OUT RVAL={vec(pi)*1k+var(foo)*1k}',
+    '.SUBCKT USER_INTERPRETER IN OUT RVAL={vec("pi")*1k+var("foo")*1k}',
     'R1 IN OUT {RVAL}',
     '.ENDS USER_INTERPRETER',
   ].join('\n')
@@ -2868,7 +2871,7 @@ test('native ngspice var and vec expressions are retained in imported IC paramet
   })
   await expect(page.getByText(/Imported 1 subcircuit and 1 device model from interpreter-functions\.lib/)).toBeVisible()
   const model = page.locator('.imported-model').filter({ hasText: 'USER_INTERPRETER' })
-  await expect(model).toContainText('Parameters: RVAL={vec(pi)*1k+var(foo)*1k}')
+  await expect(model).toContainText('Parameters: RVAL={vec("pi")*1k+var("foo")*1k}')
   await model.getByRole('button', { name: 'Add to schematic' }).click()
   await page.getByRole('button', { name: 'Schematic', exact: true }).click()
   const instance = page.locator('.circuit-part[aria-label^="X1,"]')
@@ -2876,14 +2879,14 @@ test('native ngspice var and vec expressions are retained in imported IC paramet
   await instance.click()
   await page.getByRole('button', { name: 'Properties', exact: true }).click()
   const parameter = page.getByRole('textbox', { name: 'RVAL model value', exact: true })
-  await expect(parameter).toHaveValue('{vec(pi)*1k+var(foo)*1k}')
-  await parameter.fill('{var(foo)+vec(pi)}')
+  await expect(parameter).toHaveValue('{vec("pi")*1k+var("foo")*1k}')
+  await parameter.fill('{var("foo")+vec("pi")}')
   await parameter.blur()
   await expect(parameter).toHaveAttribute('aria-invalid', 'false')
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets?.[0]?.content)).toContain('var(foo)')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets?.[0]?.content)).toContain('var("foo")')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText('X1 n1 n2 USER_INTERPRETER PARAMS: RVAL={var(foo)+vec(pi)}')
-  await expect(page.locator('.netlist-modal pre')).toContainText('.SUBCKT USER_INTERPRETER IN OUT RVAL={vec(pi)*1k+var(foo)*1k}')
+  await expect(page.locator('.netlist-modal pre')).toContainText('X1 n1 n2 USER_INTERPRETER PARAMS: RVAL={var("foo")+vec("pi")}')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.SUBCKT USER_INTERPRETER IN OUT RVAL={vec("pi")*1k+var("foo")*1k}')
   await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DFAST D(IS={vec(pi)*1p+var(foo)*1p})')
 })
 

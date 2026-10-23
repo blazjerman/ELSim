@@ -26,8 +26,8 @@ test('replacement keeps provenance only for byte-identical model contents', () =
 })
 
 test('accepts bounded ngspice parameter operators and expression functions', () => {
-  for (const value of ['1k', '1mil', '1a', '10kOhm', '"input table.csv"', '"C:/models/my table.txt"', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{var(foo)}', '{vec(pi)}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
-  for (const value of ['"unterminated', '"two"quotes"', '"line\nbreak"', '"' + 'A'.repeat(63) + '"', '{if(RLOAD, 1k, 2k)}', '{system(RLOAD)}', '{sqrt(1, 2)}', '{pow(2)}', '{max(1, 2, 3)}', '{sqrt()}', '{var()}', '{var(foo, bar)}', '{vec(foo, bar)}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', '{RLOAD and 1}', '{not RLOAD}', '{RLOAD mod 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
+  for (const value of ['1k', '1mil', '1a', '10kOhm', '"input table.csv"', '"C:/models/my table.txt"', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{var(foo)}', '{var("foo")}', '{vec(pi)}', '{vec("pi")}', '{vec("v(out)") + 1}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)
+  for (const value of ['"unterminated', '"two"quotes"', '"line\nbreak"', '"' + 'A'.repeat(63) + '"', '{"foo"}', '{sqrt("1")}', '{var()}', '{var(foo, bar)}', '{vec(foo, bar)}', '{vec("pi", 1)}', '{RLOAD; .control}', '{RLOAD + }', '{RLOAD > }', '{RLOAD ? 1k}', '{RLOAD ? : 1k}', '{RLOAD && && 1}', '{RLOAD and 1}', '{not RLOAD}', '{RLOAD mod 2}', "'system(RLOAD)'", "'RLOAD + 2", "RLOAD + 2'", '{' + 'A'.repeat(65) + '}']) assert.equal(isSafeSubcircuitParameterValue(value), false, value)
   const functions = new Map([['double', 1], ['blend', 2]])
   assert.equal(isSafeSubcircuitParameterValue('{DOUBLE(RLOAD)}', functions), true)
   assert.equal(isSafeSubcircuitParameterValue('{blend(1, 2)}', functions), true)
@@ -194,6 +194,7 @@ test('retains ngspice interpreter functions in imported .MODEL parameters', () =
   const expression = 'vec(pi)*1p+var(foo)*1p'
   const parsed = parseSubcircuitLibrary(`.MODEL DFAST D(IS={${expression}})\n`)
   assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: expression }])
+  assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(IS={vec("pi")*1p})\n'), /Line 1: quoted vec\("name"\) references are not supported in \.MODEL values/)
 })
 
 test('rejects ground node zero as an imported subcircuit external pin', () => {

@@ -542,6 +542,9 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
   const parameters: SubcircuitParameter[] = []
   const parameterIndex = new Map<string, number>()
   for (const match of parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g)) {
+    if (/\bvec\s*\(\s*"/i.test(match[2])) {
+      throw new Error(`Line ${line.start}: quoted vec("name") references are not supported in .MODEL values by the browser ngspice engine. Use vec(name) when the vector name is a bare identifier.`)
+    }
     const value = match[2].replace(/^\{([\s\S]*)\}$|^'([\s\S]*)'$/, (_whole, braced: string | undefined, quoted: string | undefined) => braced ?? quoted ?? _whole)
     if (!isSafeSubcircuitParameterValue(match[2], functions)) continue
     const parameter = { name: match[1], defaultValue: value }
@@ -738,7 +741,7 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
   const expression = expressionSource
   if (!expression || expression.length > 64) return false
   const tokens: string[] = []
-  const tokenPattern = /\s+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*|[A-Za-z_][A-Za-z0-9_]*|\*\*|==|!=|<>|<=|>=|&&|\|\||[(),+*/^%\\\-!<>=?:]/iy
+  const tokenPattern = /\s+|"[^"\r\n\u0000-\u001f\u007f]*"|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*|[A-Za-z_][A-Za-z0-9_]*|\*\*|==|!=|<>|<=|>=|&&|\|\||[(),+*/^%\\\-!<>=?:]/iy
   let offset = 0
   while (offset < expression.length) {
     tokenPattern.lastIndex = offset
@@ -769,6 +772,9 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
       depth -= 1
       return valid
     }
+    // ngspice allows string names in var()/vec(), for example vec("pi").
+    // Keep strings out of ordinary expressions and other function calls.
+    if (/^"[^"\r\n\u0000-\u001f\u007f]*"$/.test(token)) return false
     if (token === ')' || token === ',' || token === ':' || token === '?' || /^(?:[+*/^%\\\-!<>=]|\*\*|==|!=|<>|<=|>=|&&|\|\|)$/i.test(token)) return false
     index += 1
     if (/^[A-Za-z_]/.test(token) && tokens[index] === '(') {
@@ -777,6 +783,13 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
       if (arity === undefined) return false
       if (++depth > 16) return false
       index += 1
+      if ((functionName === 'var' || functionName === 'vec') && /^"[^"\r\n\u0000-\u001f\u007f]*"$/.test(tokens[index] ?? '')) {
+        index += 1
+        const valid = tokens[index] === ')' && arity === 1
+        if (tokens[index] === ')') index += 1
+        depth -= 1
+        return valid
+      }
       let argumentCount = 0
       if (tokens[index] !== ')') {
         while (true) {
