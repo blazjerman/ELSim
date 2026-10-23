@@ -14,7 +14,7 @@ import { fitEditorView } from '../domain/editorView'
 import { moveSelectedSceneObjects } from '../domain/sceneEdit'
 import type { ElectricalIssue } from '../domain/electricalCheck'
 import { trapDialogTab } from './dialogKeyboard'
-import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
+import { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, listModelLibrarySections, modelFunctionSignaturesForLibraries, modelProvenanceForReplacement, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, validateModelLibraryReplacement, verifyModelAssetHashes } from '../domain/subcircuitLibrary'
 import type { ModelDefinitionConflict, SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { importedSymbolBounds, parseSymbolAsset } from '../domain/symbolAsset'
@@ -3211,14 +3211,27 @@ export default function App() {
       const currentModelBytes = otherAssets.reduce((sum, asset) => sum + new TextEncoder().encode(asset.content).length, 0)
       if (currentModelBytes + fileSize > 10 * 1024 * 1024) throw new Error('Imported model libraries exceed the 10 MiB project limit.')
       const previousAsset = replaceId ? currentAssets.find((current) => current.id === replaceId) : undefined
-      const asset = { id: replaceId ?? `model-${crypto.randomUUID()}`, filename, content, ...(selectedSections?.length ? { selectedSections } : {}), sha256: await sha256Text(content), licenseStatus: 'unknown' as const, importedAt: new Date().toISOString(), ...(previousAsset ? { sourceUrl: previousAsset.sourceUrl, licenseReference: previousAsset.licenseReference, rightsNotes: previousAsset.rightsNotes } : {}) }
+      const previousNotesWereCleared = Boolean(previousAsset && previousAsset.content !== content && (previousAsset.sourceUrl || previousAsset.licenseReference || previousAsset.rightsNotes))
+      const asset = { id: replaceId ?? `model-${crypto.randomUUID()}`, filename, content, ...(selectedSections?.length ? { selectedSections } : {}), sha256: await sha256Text(content), licenseStatus: 'unknown' as const, importedAt: new Date().toISOString(), ...modelProvenanceForReplacement(previousAsset, content) }
       const nextAssets = replaceId ? currentAssets.map((current) => current.id === replaceId ? asset : current) : [...currentAssets, asset]
-      if (replaceId) validateModelLibraryReplacement(currentAssets, nextAssets, projectRef.current.sheets.flatMap((sheet) => sheet.parts))
-      const validated = validateProject({ ...projectRef.current, modelAssets: nextAssets })
+      let candidate = { ...projectRef.current, modelAssets: nextAssets }
+      if (replaceId) {
+        validateModelLibraryReplacement(currentAssets, nextAssets, projectRef.current.sheets.flatMap((sheet) => sheet.parts))
+        const replacedModelNames = new Set(parsed.subcircuits.map((definition) => definition.name.toLowerCase()))
+        const rebindPart = (part: Part): Part => part.kind === 'subcircuit' && part.modelName && replacedModelNames.has(part.modelName.toLowerCase())
+          ? (({ componentDefinitionId: _oldDefinition, ...current }) => current)(part)
+          : part
+        candidate = {
+          ...candidate,
+          parts: candidate.parts.map(rebindPart),
+          sheets: candidate.sheets.map((sheet) => ({ ...sheet, parts: sheet.parts.map(rebindPart) })),
+        }
+      }
+      const validated = validateProject(candidate)
       setProject(() => validated)
       setCompatibilityDiagnostic(null)
       const subcircuitCount = parsed.subcircuits.length, deviceModelCount = parsed.models.length
-      setNotice(`${replaceId ? 'Replaced' : 'Imported'} ${subcircuitCount} subcircuit${subcircuitCount === 1 ? '' : 's'} and ${deviceModelCount} device model${deviceModelCount === 1 ? '' : 's'} from ${filename}${selectedSections?.length ? ` (${selectedSections.join(', ')})` : ''}. Redistribution rights remain unknown.`)
+      setNotice(`${replaceId ? 'Replaced' : 'Imported'} ${subcircuitCount} subcircuit${subcircuitCount === 1 ? '' : 's'} and ${deviceModelCount} device model${deviceModelCount === 1 ? '' : 's'} from ${filename}${selectedSections?.length ? ` (${selectedSections.join(', ')})` : ''}.${previousNotesWereCleared ? ' The previous source and license notes were cleared because the library contents changed; record the new source details.' : ''} Redistribution rights remain unknown.`)
       return true
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not import this model library.')

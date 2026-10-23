@@ -6,8 +6,24 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelProvenanceForReplacement, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
+
+test('replacement keeps provenance only for byte-identical model contents', () => {
+  const previous = {
+    content: '.MODEL AMP D(Is=1n)',
+    sourceUrl: 'https://models.example.test/amp.lib',
+    licenseReference: 'Supplier terms v2',
+    rightsNotes: 'Permission for this exact version is unverified.',
+  }
+  assert.deepEqual(modelProvenanceForReplacement(previous, previous.content), {
+    sourceUrl: previous.sourceUrl,
+    licenseReference: previous.licenseReference,
+    rightsNotes: previous.rightsNotes,
+  })
+  assert.deepEqual(modelProvenanceForReplacement(previous, '.MODEL AMP D(Is=2n)'), {})
+  assert.deepEqual(modelProvenanceForReplacement(undefined, previous.content), {})
+})
 
 test('accepts bounded ngspice parameter operators and deterministic math functions', () => {
   for (const value of ['1k', '1mil', '1a', '10kOhm', '"input table.csv"', '"C:/models/my table.txt"', '{2mil + 3a}', '{RLOAD * 2}', '{(RLOAD + 10k) / 2}', '{2^-3}', '{RLOAD ** 2}', '{GAIN - 1}', '{sqrt(RLOAD * RLOAD)}', '{log10(100)}', '{max(sqrt(16), 2)}', '{min(max(GAIN, 0), 10)}', '{pow(2, 3)}', '{ternary_fcn(GAIN, 1, 0)}', '{RLOAD > 1k}', '{RLOAD >= 1k && RLOAD < 10k}', '{RLOAD == 1k || RLOAD <> 2k}', '{!(RLOAD <= 0)}', '{RLOAD % 3}', '{RLOAD \\ 2}', '{RLOAD >= 1k ? 2 : 1}', '{SEL ? GAIN > 2 ? 3 : 2 : 1}', "'BASE + 3'", "'sqrt(RLOAD * RLOAD)'", "'1k'"]) assert.equal(isSafeSubcircuitParameterValue(value), true, value)

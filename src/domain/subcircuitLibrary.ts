@@ -17,6 +17,19 @@ export type NgspiceBsim3BinFamily<T extends SpiceModelDefinition = SpiceModelDef
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
 export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInput> = { assets: { asset: T; parsed: ParsedSubcircuitLibrary }[]; dependencies: ModelDependencyAnalysis }
 
+/** Keep source/rights notes only when a replacement contains identical model text. */
+export function modelProvenanceForReplacement(
+  previous: { content: string; sourceUrl?: string; licenseReference?: string; rightsNotes?: string } | undefined,
+  replacementContent: string,
+): { sourceUrl?: string; licenseReference?: string; rightsNotes?: string } {
+  if (!previous || previous.content !== replacementContent) return {}
+  return {
+    ...(previous.sourceUrl ? { sourceUrl: previous.sourceUrl } : {}),
+    ...(previous.licenseReference ? { licenseReference: previous.licenseReference } : {}),
+    ...(previous.rightsNotes ? { rightsNotes: previous.rightsNotes } : {}),
+  }
+}
+
 export type SpecializedSubcircuitLine = { text: string; sourceLine: number }
 
 /** Build an instance-specific copy when a random formal default is explicitly
