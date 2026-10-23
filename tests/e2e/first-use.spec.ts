@@ -3293,6 +3293,8 @@ test('pointer cancellation rolls back schematic drags and wire creation', { tag:
   const bounds = await resistor.boundingBox()
   expect(bounds).not.toBeNull()
   const origin = { x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 }
+  await resistor.click()
+  await expect(page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })).toBeDisabled()
   await page.evaluate(() => {
     document.addEventListener('pointerdown', (event) => {
       document.documentElement.dataset.cancelledPointer = String(event.pointerId)
