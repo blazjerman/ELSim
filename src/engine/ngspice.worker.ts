@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { parseRawTraces, rawTraceUnit, readRawFileAndRelease } from './raw'
 import { addResultControl } from './resultControl'
+import { parseNoiseSummaries } from './noiseSummary'
 import { parseImportedMeasurementOutput, parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice, firstNgspiceError } from './diagnostics'
 import { isEngineRequest, transferableTraceBuffers, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
@@ -134,6 +135,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
         ...measurementOutput.results.filter((measurement) => !ambiguousProjectMeasurementIds.has(measurement.id.toLowerCase())),
         ...importedMeasurementOutput.results,
       ],
+      ...(analysis === 'noise' ? { noiseSummaries: parseNoiseSummaries(output, /^\s*\.noise\s+\S+\s+I[A-Za-z0-9_]+\b/im.test(artifact.text) ? 'A' : 'V', parameterSweep?.map((sweep) => sweep.label) ?? []) } : {}),
     }
     if (profileWorker) {
       resultProcessingMs = performance.now() - resultProcessingStarted

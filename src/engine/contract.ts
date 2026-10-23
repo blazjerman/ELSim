@@ -60,6 +60,8 @@ export type MeasurementResult = { id: string; operation: 'max' | 'min' | 'pp' | 
   | { id: string; operation: 'max' | 'min' | 'pp' | 'avg' | 'rms' | 'integ'; vector: string; from?: string; to?: string; value: number; unit: ''; sweep?: { label: string; index: number } }
   | { id: string; operation: 'native'; vector: string; directive: string; value: number; unit: ''; sourceAssetId: string; sourceLine: number; sweep?: { label: string; index: number } }
 
+export type NoiseSummary = { outputRms: number; inputRms: number; inputUnit: 'V' | 'A'; sweep?: { label: string; index: number } }
+
 export type SimulationResult = {
   metadata: RunMetadata
   netlist: string
@@ -68,6 +70,14 @@ export type SimulationResult = {
   diagnostics: SimulationDiagnostic[]
   analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'
   measurements: MeasurementResult[]
+  noiseSummaries?: NoiseSummary[]
+}
+
+function isNoiseSummary(value: unknown): value is NoiseSummary {
+  return isRecord(value) && typeof value.outputRms === 'number' && Number.isFinite(value.outputRms) && value.outputRms >= 0
+    && typeof value.inputRms === 'number' && Number.isFinite(value.inputRms) && value.inputRms >= 0
+    && (value.inputUnit === 'V' || value.inputUnit === 'A')
+    && (value.sweep === undefined || (isRecord(value.sweep) && typeof value.sweep.label === 'string' && Number.isInteger(value.sweep.index) && Number(value.sweep.index) >= 0))
 }
 
 /** Return each backing ArrayBuffer once so worker results can move without cloning. */
@@ -326,7 +336,8 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
       || !Array.isArray(result.traces) || result.traces.length === 0
       || !Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)
       || !['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))
-      || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return false
+      || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)
+      || (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary)))) return false
     const validatedVectors = new WeakSet<Float64Array>()
     const validatedAxes = new WeakSet<Float64Array>()
     return result.traces.every((trace) => isTrace(trace, validatedVectors, validatedAxes))
@@ -372,6 +383,7 @@ export function engineResponseIssue(value: unknown): string {
     if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
     if (!['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))) return 'analysis type is invalid'
     if (!Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return 'measurement results are malformed'
+    if (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary))) return 'integrated noise results are malformed'
     return 'result message is incomplete'
   }
   return 'message type or required fields are invalid'

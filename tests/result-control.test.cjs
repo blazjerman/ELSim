@@ -53,22 +53,22 @@ test('AC result control removes generated hierarchy current saves so node voltag
   assert.match(ac, /ac dec 20 10 1meg\nwrite \/result\.raw all/)
 })
 
-test('noise result control selects the spectral density plot before writing raw data', () => {
+test('noise result control saves integrated totals and then the spectral density plot', () => {
   const control = addResultControl('V1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 10u\n.noise V(out) V1 dec 10 1 100k\n.end')
   assert.doesNotMatch(control, /^\.save\b/m)
-  assert.match(control, /noise V\(out\) V1 dec 10 1 100k\nsetplot noise1\nwrite \/result\.raw all/)
+  assert.match(control, /noise V\(out\) V1 dec 10 1 100k\nsetplot noise2\nprint onoise_total\nprint inoise_total\nsetplot noise1\nwrite \/result\.raw all/)
   const withInductor = addResultControl('V1 in 0 DC 0 AC 1\nL1 in out 1m\nR1 out 0 1k\n.noise V(out) V1 dec 10 1 100k\n.end')
   assert.doesNotMatch(withInductor, /@L1\[i\]/)
 })
 
-test('noise parameter sweeps write the spectral-density plot for every case', () => {
+test('noise parameter sweeps save integrated totals and spectral density for every case', () => {
   const netlist = 'V1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 10u\n.noise V(out) V1 dec 10 1 100k\n.end'
   const control = addResultControl(netlist, [
     { values: [{ component: 'R1', value: '1.0e3' }], label: 'R1=1000 Ω' },
     { values: [{ component: 'R1', value: '2.0e3' }], label: 'R1=2000 Ω' },
   ])
-  assert.match(control, /alter R1 1\.0e3\nrun\nsetplot noise1\nwrite \/result-0\.raw all/)
-  assert.match(control, /alter R1 2\.0e3\nrun\nsetplot noise3\nwrite \/result-1\.raw all/)
+  assert.match(control, /alter R1 1\.0e3\nrun\nsetplot noise2\nprint onoise_total\nprint inoise_total\nsetplot noise1\nwrite \/result-0\.raw all/)
+  assert.match(control, /alter R1 2\.0e3\nrun\nsetplot noise4\nprint onoise_total\nprint inoise_total\nsetplot noise3\nwrite \/result-1\.raw all/)
 })
 
 test('result control rejects netlists with no end directive', () => {

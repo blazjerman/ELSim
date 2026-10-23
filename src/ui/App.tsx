@@ -2228,7 +2228,7 @@ export default function App() {
     const report = {
       format: 'elsim-run-report', version: 1, projectName: projectRef.current.name, waveformDataIncluded: false,
       metadata: simulationResult.metadata, analysis: simulationResult.analysis, netlist: simulationResult.netlist,
-      sourceMap: simulationResult.sourceMap, diagnostics: simulationResult.diagnostics, measurements: simulationResult.measurements,
+      sourceMap: simulationResult.sourceMap, diagnostics: simulationResult.diagnostics, measurements: simulationResult.measurements, noiseSummaries: simulationResult.noiseSummaries,
       traces: simulationResult.traces.map(({ id, label, unit, axisLabel, axisUnit, axis, sweep }) => ({ id, label, unit, axisLabel, axisUnit, pointCount: axis.length, ...(sweep ? { sweep } : {}) })),
     }
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })

@@ -14,6 +14,19 @@ const { createNativeUrcLineExampleProject } = require(path.join(build, 'domain/e
 const { analyzeConnectivity } = require(path.join(build, 'domain/connectivity.js'))
 const { parseSourcePwlText, sourcePwlPreview, validateSourcePwlPoints, validateSourcePwlRepeatBoundary } = require(path.join(build, 'domain/sourcePwl.js'))
 const { dcSweepPointCount, MAX_DC_SWEEP_POINTS } = require(path.join(build, 'domain/dcSweep.js'))
+const { parseNoiseSummaries } = require(path.join(build, 'engine/noiseSummary.js'))
+
+test('integrated noise totals parse for voltage and current inputs and retain sweep labels', () => {
+  const output = 'onoise_total = 9.099310e-08\ninoise_total = 1.819862e-07\nonoise_total = 1.2e-07\ninoise_total = 2.4e-07'
+  assert.deepEqual(parseNoiseSummaries(output, 'V', ['R1=1k', 'R1=2k']), [
+    { outputRms: 9.09931e-8, inputRms: 1.819862e-7, inputUnit: 'V', sweep: { label: 'R1=1k', index: 0 } },
+    { outputRms: 1.2e-7, inputRms: 2.4e-7, inputUnit: 'V', sweep: { label: 'R1=2k', index: 1 } },
+  ])
+  assert.deepEqual(parseNoiseSummaries('onoise_total = 0\ninoise_total = 0', 'A'), [
+    { outputRms: 0, inputRms: 0, inputUnit: 'A' },
+  ])
+  assert.deepEqual(parseNoiseSummaries('onoise_total = NaN\ninoise_total = 1', 'V'), [])
+})
 
 test('starter RC example generates a valid transient netlist without diagnostics', () => {
   const artifact = createNetlistArtifact(createStarterProject())

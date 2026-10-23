@@ -85,6 +85,8 @@ test('response consumer rejects malformed or incomplete worker messages', () => 
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, metadata: { ...completedMetadata, completedAt: 'not-a-date' } } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, metadata: { ...completedMetadata, modelAssets: [{ id: 'model-1', filename: 'custom.lib', sha256: 'bad' }] } } }), false)
   assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, measurements: [{ id: 'peak', operation: 'delay', vector: 'v(in)', value: 0.1, unit: 'V' }] } }), false)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, analysis: 'noise', noiseSummaries: [{ outputRms: 1e-8, inputRms: 2e-8, inputUnit: 'A', sweep: { label: 'R1=1k', index: 0 } }] } }), true)
+  assert.equal(isEngineResponse({ type: 'result', requestId: 'run-1', result: { ...base, analysis: 'noise', noiseSummaries: [{ outputRms: -1, inputRms: 2e-8, inputUnit: 'A' }] } }), false)
   assert.equal(isEngineResponse({ type: 'unknown', requestId: 'run-1' }), false)
 })
 
