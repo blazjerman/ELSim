@@ -3240,7 +3240,8 @@ test('native distributed RC component simulates and exposes substrate voltages a
   await expect(plot.locator('.cursor-readout')).toContainText(/I\(URC1, output\)\s*=\s*[-\d.e+]+ A/i)
 })
 
-test('distributed RC component selects and simulates an imported native URC model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+test('distributed RC component selects, sweeps, and simulates an imported native URC model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
   const project = createStarterProject()
   const modelContent = '.MODEL URC50 URC(RPERL=50k CPERL=10p K=1.5 FMAX=1G)\n'
   const parts = [
@@ -3272,8 +3273,16 @@ test('distributed RC component selects and simulates an imported native URC mode
   await expect(netlist).toContainText(/^URC1 .* URC50 L=1 N=8$/m)
   await expect(netlist).not.toContainText(/\.MODEL URCMOD_URC1/)
   await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('URC1')
+  const modelParameter = page.getByRole('combobox', { name: 'Parameter 1 model parameter' })
+  await modelParameter.selectOption('RPERL')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('25k')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('50k')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
   await page.getByRole('button', { name: 'Run simulation' }).click()
-  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
 })
 
 test('imported IC parameters can be swept across solved browser runs', { tag: '@ngspice' }, async ({ page }) => {
