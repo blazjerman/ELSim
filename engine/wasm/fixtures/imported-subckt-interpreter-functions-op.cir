@@ -1,0 +1,10 @@
+* ngspice 46+ interpreter helpers in imported IC parameter defaults
+.SUBCKT USER_INTERPRETER IN OUT RVAL={vec(pi)*1k+var(foo)*1k}
+R1 IN OUT {RVAL}
+.ENDS USER_INTERPRETER
+V1 IN 0 1
+X1 IN OUT USER_INTERPRETER
+RLOAD OUT 0 1k
+.op
+.print op v(out) @r.x1.r1[r]
+.end

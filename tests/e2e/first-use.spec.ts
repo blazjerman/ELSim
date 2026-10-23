@@ -2849,6 +2849,41 @@ test('user model library adds a subcircuit with ordered pins and parameter defau
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'X1')?.modelPins)).toEqual(['IN', 'OUT', 'VSS'])
 })
 
+test('native ngspice var and vec expressions are retained in imported IC parameters', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Components', exact: true }).click()
+  const library = [
+    '.SUBCKT USER_INTERPRETER IN OUT RVAL={vec(pi)*1k+var(foo)*1k}',
+    'R1 IN OUT {RVAL}',
+    '.ENDS USER_INTERPRETER',
+  ].join('\n')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'interpreter-functions.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(library),
+  })
+  const model = page.locator('.imported-model').filter({ hasText: 'USER_INTERPRETER' })
+  await expect(model).toContainText('Parameters: RVAL={vec(pi)*1k+var(foo)*1k}')
+  await model.getByRole('button', { name: 'Add to schematic' }).click()
+  await page.getByRole('button', { name: 'Schematic', exact: true }).click()
+  const instance = page.locator('.circuit-part[aria-label^="X1,"]')
+  await expect(instance).toBeVisible()
+  await instance.click()
+  await page.getByRole('button', { name: 'Properties', exact: true }).click()
+  const parameter = page.getByRole('textbox', { name: 'RVAL model value', exact: true })
+  await expect(parameter).toHaveValue('{vec(pi)*1k+var(foo)*1k}')
+  await parameter.fill('{var(foo)+vec(pi)}')
+  await parameter.blur()
+  await expect(parameter).toHaveAttribute('aria-invalid', 'false')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets?.[0]?.content)).toContain('var(foo)')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('X1 n1 n2 USER_INTERPRETER PARAMS: RVAL={var(foo)+vec(pi)}')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.SUBCKT USER_INTERPRETER IN OUT RVAL={vec(pi)*1k+var(foo)*1k}')
+})
+
 test('native ngspice backslash continuations import and preserve model source records', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')

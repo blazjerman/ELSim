@@ -414,6 +414,9 @@ const builtinFunctionArities: Readonly<Record<string, number>> = {
   exp: 1, ln: 1, log: 1, log10: 1, abs: 1,
   nint: 1, int: 1, floor: 1, ceil: 1, sgn: 1,
   pow: 2, pwr: 2, min: 2, max: 2,
+  // ngspice 46+ can read interpreter variables and vectors in expressions.
+  // These are passed through for ngspice to resolve; ELSim does not evaluate them.
+  var: 1, vec: 1,
   // These ngspice Monte Carlo functions are preserved for solver evaluation;
   // ELSim validates their bounded syntax and never evaluates randomness.
   gauss: 3, agauss: 3, unif: 2, aunif: 2, limit: 2,
