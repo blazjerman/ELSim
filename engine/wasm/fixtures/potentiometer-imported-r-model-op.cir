@@ -1,0 +1,14 @@
+Imported resistor model on both potentiometer branches
+V1 vin 0 10
+RPOT1_A vin out 2500 RPOT
+RPOT1_B out 0 7500 RPOT
+RLOAD out 0 2.5k
+.MODEL RPOT R(R=10k TC1=0.01)
+.save all @rpot1_a[i] @rpot1_b[i]
+.control
+set filetype=ascii
+op
+write /result.raw all
+quit
+.endc
+.END
