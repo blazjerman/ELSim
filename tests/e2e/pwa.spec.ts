@@ -1,11 +1,14 @@
 import { test, expect } from '@playwright/test'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 test.use({ baseURL: 'http://127.0.0.1:4183' })
 
 test('production app shell opens offline and preserves local project edits', async ({ page, context }) => {
   test.setTimeout(90_000)
+  for (const fileName of ['ngspice.mjs', 'ngspice.wasm']) {
+    expect(existsSync(path.resolve('dist/engine', fileName)), `PWA simulation coverage needs dist/engine/${fileName}; run npm run build:offline to package the already-built local runtime (this does not compile WASM).`).toBe(true)
+  }
   await page.addInitScript(() => {
     const testWindow = window as Window & { __cspViolations?: string[] }
     const storageKey = 'elsim:test:csp-violations'
