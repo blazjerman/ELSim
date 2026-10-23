@@ -3185,7 +3185,9 @@ test('component shortcuts are case-sensitive and logic-gate keys select their ma
 
 test('native behavioral source inspector explains ngspice and LTspice expression syntax', { tag: '@ui-smoke' }, async ({ page }) => {
   const project = createStarterProject()
-  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'V(vin)', behavioralOutput: 'voltage', x: 700, y: 500, rotation: 0 })
+  // Keep the fixture inside the visible canvas so the inspector overlay cannot
+  // intercept the pointer click used to select the behavioral source.
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'V(vin)', behavioralOutput: 'voltage', x: 500, y: 520, rotation: 0 })
   project.sheets[0].parts = project.parts
   await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
   await page.goto('/')
