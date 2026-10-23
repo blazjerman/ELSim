@@ -77,11 +77,7 @@ test('production app shell opens offline and preserves local project edits', asy
   const navigationCount = await page.evaluate(() => Number(sessionStorage.getItem('elsim:test:pwa-navigation-count')))
   try {
     writeFileSync(serviceWorkerPath, `${originalServiceWorker}\n// trigger the local PWA update workflow`)
-    await page.evaluate(async () => {
-      const registration = await navigator.serviceWorker.getRegistration()
-      if (!registration) throw new Error('The app service worker was not registered.')
-      await registration.update()
-    })
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     const updateNotice = page.getByRole('status', { name: 'App update ready' })
     await expect(updateNotice).toBeVisible({ timeout: 30_000 })
     const updateNavigation = page.waitForEvent('framenavigated', (frame) => frame === page.mainFrame())

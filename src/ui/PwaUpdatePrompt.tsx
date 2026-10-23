@@ -11,6 +11,8 @@ export default function PwaUpdatePrompt({ registrationPromise }: { registrationP
     let active = true
     let registration: ServiceWorkerRegistration | null = null
     let installingWorker: ServiceWorker | null = null
+    let updateCheckRunning = false
+    let updateCheckTimer: number | undefined
 
     const showWaitingWorker = () => {
       if (registration?.waiting && navigator.serviceWorker.controller) setWaitingWorker(registration.waiting)
@@ -21,6 +23,11 @@ export default function PwaUpdatePrompt({ registrationPromise }: { registrationP
       installingWorker = worker
       worker.addEventListener('statechange', showWaitingWorker)
     }
+    const checkForUpdates = () => {
+      if (!registration || !navigator.onLine || document.visibilityState !== 'visible' || updateCheckRunning) return
+      updateCheckRunning = true
+      void registration.update().catch(() => undefined).finally(() => { updateCheckRunning = false })
+    }
     const attach = async () => {
       const resolvedRegistration = await registrationPromise
       if (!active) return
@@ -29,6 +36,10 @@ export default function PwaUpdatePrompt({ registrationPromise }: { registrationP
       registration.addEventListener('updatefound', watchInstallingWorker)
       watchInstallingWorker()
       showWaitingWorker()
+      window.addEventListener('focus', checkForUpdates)
+      window.addEventListener('online', checkForUpdates)
+      document.addEventListener('visibilitychange', checkForUpdates)
+      updateCheckTimer = window.setInterval(checkForUpdates, 60 * 60 * 1000)
     }
     const onControllerChange = () => {
       if (acceptedUpdate.current && !reloading.current) {
@@ -40,6 +51,10 @@ export default function PwaUpdatePrompt({ registrationPromise }: { registrationP
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
     return () => {
       active = false
+      if (updateCheckTimer !== undefined) window.clearInterval(updateCheckTimer)
+      window.removeEventListener('focus', checkForUpdates)
+      window.removeEventListener('online', checkForUpdates)
+      document.removeEventListener('visibilitychange', checkForUpdates)
       registration?.removeEventListener('updatefound', watchInstallingWorker)
       installingWorker?.removeEventListener('statechange', showWaitingWorker)
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
