@@ -10933,8 +10933,10 @@ test('transient measurement time windows persist and appear in the netlist', asy
   await expect(page.locator('.netlist-modal pre')).toContainText('.meas tran ELSIM_WindowPeak max V(vout) FROM=2m TO=8m')
 })
 
-test('lamp palette item exposes resistance and nominal animation power', async ({ page }) => {
+test('lamp palette item exposes resistance, nominal animation power, and imported R models', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'lamp-model.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL LAMP_RESISTOR R(R=12 TC1=0.01)') })
   await page.getByRole('button', { name: /Add Lamp/ }).click()
   const svg = page.locator('svg.schematic')
   const screenPoint = (x: number, y: number) => svg.evaluate((element, position) => {
@@ -10955,6 +10957,11 @@ test('lamp palette item exposes resistance and nominal animation power', async (
   await expect(page.getByLabel('Resistance (Ω)')).toHaveValue('12 Ω')
   await expect(page.getByLabel('Nominal lamp power (W)')).toHaveValue('10')
   await expect(page.getByText(/no thermal filament behavior is simulated/i)).toBeVisible()
+  const modelSelector = page.getByLabel(/Device model for R/)
+  await modelSelector.selectOption('LAMP_RESISTOR')
+  await expect(modelSelector).toHaveValue('LAMP_RESISTOR')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/R\d+ \S+ \S+ 12 LAMP_RESISTOR/)
 })
 
 test('lamp glow renders from its definition animation at solved electrical power', { tag: '@ngspice' }, async ({ page }) => {

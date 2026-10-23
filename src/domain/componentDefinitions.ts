@@ -328,6 +328,7 @@ export function componentDefinitionFor(kind: PartKind): ComponentDefinition {
 /** Return the required imported SPICE `.MODEL` type for a built-in device. */
 export function compatibleDeviceModelType(kind: PartKind): string | undefined {
   switch (kind) {
+    case 'lamp': return 'r'
     case 'diode': case 'zener': case 'led': return 'd'
     case 'npn': return 'npn'
     case 'pnp': return 'pnp'

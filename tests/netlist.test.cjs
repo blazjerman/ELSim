@@ -36,12 +36,19 @@ test('standalone R C and L parts can use imported models and model defaults', ()
   capacitor.value = ''
   inductor.deviceModel = 'L_CUSTOM'
   project.parts.push(inductor)
+  const lamp = { ...resistor, id: 'lamp-r2', ref: 'R2', kind: 'lamp', value: '12 Ω', deviceModel: 'R_CUSTOM', x: 700, y: 300, animationNominalPower: 10 }
+  project.parts.push(lamp)
   project.sheets[0].parts = project.parts
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [], artifact.text)
   assert.match(artifact.text, /^R1 vin vout 1k R_CUSTOM$/m)
   assert.match(artifact.text, /^C1 vout 0 C_CUSTOM$/m)
   assert.match(artifact.text, /^L1 vout 0 L_CUSTOM$/m)
+  assert.match(artifact.text, /^R2 \S+ \S+ 12 R_CUSTOM$/m)
+  lamp.value = ''
+  const modelDefaultArtifact = createNetlistArtifact(project)
+  assert.deepEqual(modelDefaultArtifact.diagnostics, [], modelDefaultArtifact.text)
+  assert.match(modelDefaultArtifact.text, /^R2 \S+ \S+ R_CUSTOM$/m)
 })
 
 test('passive model defaults require a matching card and declared nominal parameter', () => {
