@@ -303,6 +303,10 @@
           "type": "boolean",
           "description": "Ask ngspice to start its DC operating-point iteration with this nonlinear semiconductor device off."
         },
+        "switchInitialState": {
+          "enum": ["on", "off"],
+          "description": "Optional initial state for an ngspice SW/CSW device when its control begins inside the hysteresis band; defaults to off."
+        },
         "deviceModel": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"

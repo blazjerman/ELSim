@@ -1874,6 +1874,29 @@ test('voltage-controlled switch uses an imported SW model card', () => {
   assert.doesNotMatch(artifact.text, /\.model ELSIM_S1_SW/)
 })
 
+test('controlled switches emit their selected ngspice initial state', () => {
+  const voltageProject = createVoltageSwitchExampleProject()
+  voltageProject.parts.find((part) => part.kind === 'voltageSwitch').switchInitialState = 'on'
+  const voltageArtifact = createNetlistArtifact(validateProject(voltageProject))
+  assert.match(voltageArtifact.text, /^S1 VCC VOUT CTRL 0 ELSIM_S1_SW ON$/m)
+
+  const currentProject = createStarterProject()
+  currentProject.parts.push({ id: 'p-w1', kind: 'currentSwitch', ref: 'W1', value: '2 mA', controlSource: 'V1', switchInitialState: 'on', x: 700, y: 300, rotation: 0 })
+  currentProject.sheets[0].parts = currentProject.parts
+  const currentArtifact = createNetlistArtifact(validateProject(currentProject))
+  assert.match(currentArtifact.text, /^W1 \S+ \S+ V1 ELSIM_W1_CSW ON$/m)
+})
+
+test('controlled-switch initial state rejects unrelated parts and unknown values', () => {
+  const project = createStarterProject()
+  project.parts[0].switchInitialState = 'on'
+  assert.throws(() => validateProject(project), /invalid controlled-switch initial state/i)
+  delete project.parts[0].switchInitialState
+  const voltageProject = createVoltageSwitchExampleProject()
+  voltageProject.parts.find((part) => part.kind === 'voltageSwitch').switchInitialState = 'middle'
+  assert.throws(() => validateProject(voltageProject), /invalid controlled-switch initial state/i)
+})
+
 test('voltage-controlled switch preflights an imported model card of the wrong type', () => {
   const project = createVoltageSwitchExampleProject()
   project.parts.find((part) => part.kind === 'voltageSwitch').deviceModel = 'WRONG_TYPE'

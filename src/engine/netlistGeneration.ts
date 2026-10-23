@@ -948,7 +948,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         }
         currentSwitchModels.push({ name: model, onResistance, offResistance, threshold, hysteresis })
       }
-      append(`${part.ref} ${positive} ${negative} ${source.ref} ${model} OFF`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${source.ref} ${model} ${(part.switchInitialState ?? 'off').toUpperCase()}`, part.id, 'component')
     }
     else if (part.kind === 'voltageSwitch') {
       const controlPositive = pinNet(connectivity, part, 2)
@@ -961,7 +961,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       if (importedModel) {
-        append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${importedModel.name} OFF`, part.id, 'component')
+        append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${importedModel.name} ${(part.switchInitialState ?? 'off').toUpperCase()}`, part.id, 'component')
         continue
       }
       const settings = part.voltageSwitch ?? {}
@@ -978,7 +978,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = allocateName(`ELSIM_${part.ref}_SW`, usedModelNames)
-      append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${model} OFF`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${controlPositive} ${controlNegative} ${model} ${(part.switchInitialState ?? 'off').toUpperCase()}`, part.id, 'component')
       voltageSwitchModels.push({ name: model, onResistance, offResistance, threshold: value ?? '0', hysteresis })
     }
     else if (part.kind === 'vcvs' || part.kind === 'vccs') {

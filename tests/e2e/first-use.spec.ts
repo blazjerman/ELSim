@@ -6077,6 +6077,10 @@ test('new voltage-controlled switches use their component definition defaults', 
   await expect(page.getByLabel('Switch on resistance')).toHaveValue('1 Ω')
   await expect(page.getByLabel('Switch off resistance')).toHaveValue('1 GΩ')
   await expect(page.getByLabel('Switch hysteresis')).toHaveValue('0 V')
+  await expect(page.getByLabel('S1 initial state')).toHaveValue('off')
+  await page.getByLabel('S1 initial state').selectOption('on')
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'voltageSwitch')?.switchInitialState)).toBe('on')
 })
 
 test('new current-controlled switches expose their controller and CSW settings @ui-smoke', async ({ page }) => {
@@ -6099,6 +6103,10 @@ test('new current-controlled switches expose their controller and CSW settings @
   await expect(page.getByLabel('Controlling voltage source for W1')).toHaveValue('V1')
   await expect(page.getByLabel('Current switch threshold')).toHaveValue('1 mA')
   await expect(page.getByLabel('Current switch on resistance')).toHaveValue('1 Ω')
+  await expect(page.getByLabel('W1 initial state')).toHaveValue('off')
+  await page.getByLabel('W1 initial state').selectOption('on')
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'currentSwitch')?.switchInitialState)).toBe('on')
 })
 
 test('current-controlled switch example teaches and exposes its sensing circuit @ui-smoke', async ({ page }) => {

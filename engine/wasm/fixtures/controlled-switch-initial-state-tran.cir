@@ -1,0 +1,23 @@
+Controlled SW and CSW initial states inside hysteresis band
+VCTRL ctrl 0 0.5
+VCURRENT 0 sense -0.5
+RSENSE sense 0 1k
+VDRIVE drive 0 5
+RLOADSON drive out_s_on 1k
+RLOADSOFF drive out_s_off 1k
+S_ON out_s_on 0 ctrl 0 SWINIT ON
+S_OFF out_s_off 0 ctrl 0 SWINIT OFF
+.model SWINIT SW(Ron=1 Roff=1Meg Vt=0.5 Vh=1)
+RLOADWON drive out_w_on 1k
+RLOADWOFF drive out_w_off 1k
+W_ON out_w_on 0 VCURRENT CSWINIT ON
+W_OFF out_w_off 0 VCURRENT CSWINIT OFF
+.model CSWINIT CSW(Ron=1 Roff=1Meg It=0.5m Ih=1m)
+.save all
+.control
+set filetype=ascii
+tran 1u 10u uic
+write /result.raw all
+quit
+.endc
+.end

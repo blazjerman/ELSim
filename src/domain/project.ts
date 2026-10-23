@@ -40,6 +40,8 @@ export type Part = {
   diodeArea?: string
   /** Optional ngspice diode junction-perimeter scale; combines with M for sidewall parameters. */
   diodePerimeter?: string
+  /** Initial state for a controlled SW/CSW device when its control starts inside hysteresis. */
+  switchInitialState?: 'on' | 'off'
   /** Optional ngspice device-temperature offset from the circuit temperature. */
   deviceTemperatureDelta?: string
   /** Ask ngspice to initialize this nonlinear device in the OFF state during DC operating-point solving. */
@@ -477,6 +479,7 @@ export function validateProject(input: unknown): Project {
       const settings = candidate.currentSwitch
       if (candidate.kind !== 'currentSwitch' || !settings || typeof settings !== 'object' || Array.isArray(settings) || Object.keys(settings).some((key) => !['onResistance', 'offResistance', 'hysteresis'].includes(key)) || Object.values(settings).some((value) => typeof value !== 'string' || value.length > 64)) throw new Error(`${candidate.ref} has malformed current-switch settings.`)
     }
+    if (candidate.switchInitialState !== undefined && ((candidate.kind !== 'voltageSwitch' && candidate.kind !== 'currentSwitch') || (candidate.switchInitialState !== 'on' && candidate.switchInitialState !== 'off'))) throw new Error(`${candidate.ref} has an invalid controlled-switch initial state.`)
     if (candidate.kind === 'currentSwitch') {
       const settings = candidate.currentSwitch ?? {}
       const onResistance = componentMagnitude(settings.onResistance ?? '1 Ω', 'resistor')

@@ -781,7 +781,8 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
     const threshold = componentMagnitude(thresholdValue, 'source')
     const hysteresis = componentMagnitude(hysteresisValue, 'source')
     if (threshold === null || hysteresis === null) return undefined
-    const stateKey = `${part.id}:${part.deviceModel ?? ''}:${thresholdValue}:${hysteresisValue}`
+    const initialState = part.switchInitialState ?? 'off'
+    const stateKey = `${part.id}:${part.deviceModel ?? ''}:${thresholdValue}:${hysteresisValue}:${initialState}`
     let samples = cache.states.get(stateKey)
     if (!samples) {
       const positiveNode = pinNet(resultConnectivity, part, 2)
@@ -792,7 +793,7 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
       const turnOn = threshold + hysteresis / 2
       const turnOff = threshold - hysteresis / 2
       samples = new Uint8Array(axis.length)
-      let closed = false // The netlist explicitly initializes this device OFF.
+      let closed = initialState === 'on'
       for (let index = 0; index < axis.length; index += 1) {
         const time = axis[index]
         const positiveIndex = positiveTrace ? positiveTrace.axis === axis ? index : nearestAxisIndex(positiveTrace.axis, time, 0, positiveTrace.axis.length - 1) : 0
@@ -822,13 +823,14 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
     if (threshold === null || hysteresis === null || !controlTrace) return undefined
     const cache = voltageSwitchStateCache.current
     if (cache.result !== simulationResult) { cache.result = simulationResult; cache.states.clear() }
-    const stateKey = `current:${part.id}:${part.deviceModel ?? ''}:${part.controlSource}:${thresholdValue}:${hysteresisValue}`
+    const initialState = part.switchInitialState ?? 'off'
+    const stateKey = `current:${part.id}:${part.deviceModel ?? ''}:${part.controlSource}:${thresholdValue}:${hysteresisValue}:${initialState}`
     let samples = cache.states.get(stateKey)
     if (!samples) {
       const turnOn = threshold + hysteresis / 2
       const turnOff = threshold - hysteresis / 2
       samples = new Uint8Array(axis.length)
-      let closed = false // The netlist explicitly initializes this device OFF.
+      let closed = initialState === 'on'
       for (let index = 0; index < axis.length; index += 1) {
         const time = axis[index]
         const controlIndex = controlTrace.axis === axis ? index : nearestAxisIndex(controlTrace.axis, time, 0, controlTrace.axis.length - 1)
