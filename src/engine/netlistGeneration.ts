@@ -763,7 +763,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}`, part.id, 'component')
+      const instanceOptions = [
+        part.bjtArea?.emitter && `AREA=${part.bjtArea.emitter}`,
+        part.bjtArea?.collector && `AREAC=${part.bjtArea.collector}`,
+        part.bjtArea?.base && `AREAB=${part.bjtArea.base}`,
+        part.instanceMultiplier && `M=${part.instanceMultiplier}`,
+        part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`,
+        part.initialOff && 'OFF',
+      ].filter(Boolean).join(' ')
+      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
       if (!part.deviceModel) transistorModels.push({ part, name: model })
     }
     else if (part.kind === 'njfet' || part.kind === 'pjfet') {

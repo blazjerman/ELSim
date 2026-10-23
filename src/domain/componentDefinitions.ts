@@ -330,6 +330,9 @@ export const componentDefinitions: readonly ComponentDefinition[] = Object.freez
     ...(['nmos', 'pmos'].includes(definition.kind)
       ? [Object.freeze({ key: 'mosfetGeometry', label: 'MOSFET channel and junction geometry', unit: '' })]
       : []),
+    ...(['npn', 'pnp'].includes(definition.kind)
+      ? [Object.freeze({ key: 'bjtArea', label: 'BJT junction area factors', unit: '' })]
+      : []),
   ]),
   animationChannels: Object.freeze([...definition.animationChannels]),
 })))

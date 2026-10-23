@@ -3,7 +3,11 @@ VCE c 0 5
 VBE b 0 0.7
 VSUB sub 0 0.1
 Q1 c b 0 sub QMOD
+VCE2 c2 0 5
+VBE2 b2 0 0.7
+VSUB2 sub2 0 0.1
+Q2 c2 b2 0 sub2 QMOD AREA=2 AREAC=3 AREAB=4
 .model QMOD NPN (IS=1e-14 BF=100 BR=1)
 .op
-.print op i(VCE) i(VSUB)
+.print op i(VCE) i(VSUB) i(VCE2)
 .end

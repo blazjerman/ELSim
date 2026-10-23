@@ -32,6 +32,8 @@ export type Part = {
   modelParameters?: Record<string, string>
   /** Optional channel and junction geometry for native M-device instances. */
   mosfetGeometry?: { length?: string; width?: string; drainArea?: string; sourceArea?: string; drainPerimeter?: string; sourcePerimeter?: string; drainSquares?: string; sourceSquares?: string }
+  /** Optional BJT emitter, base, and collector area factors for native Q-device instances. */
+  bjtArea?: { emitter?: string; base?: string; collector?: string }
   /** Optional ngspice instance multiplier for supported passive and semiconductor devices. */
   instanceMultiplier?: string
   /** Optional ngspice diode junction-area scale; combines with M for bottom-junction parameters. */
@@ -415,6 +417,13 @@ export function validateProject(input: unknown): Project {
         }
         const magnitude = typeof value === 'string' && value.length <= 64 ? componentMagnitude(value, 'resistor') : null
         if (magnitude === null || magnitude <= 0) throw new Error(`${candidate.ref} MOSFET ${dimension} must be a positive numeric SPICE dimension such as 1u.`)
+      }
+    }
+    if (candidate.bjtArea !== undefined) {
+      const areas = candidate.bjtArea
+      if ((candidate.kind !== 'npn' && candidate.kind !== 'pnp') || !areas || typeof areas !== 'object' || Array.isArray(areas) || Object.keys(areas).length < 1 || Object.keys(areas).length > 3 || Object.keys(areas).some((key) => !['emitter', 'base', 'collector'].includes(key))) throw new Error(`${candidate.ref} has malformed BJT junction area factors.`)
+      for (const [terminal, value] of Object.entries(areas)) {
+        if (typeof value !== 'string' || value.length > 64 || !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) || !Number.isFinite(Number(value)) || Number(value) <= 0) throw new Error(`${candidate.ref} BJT ${terminal} area factor must be a positive number.`)
       }
     }
     if (candidate.instanceMultiplier !== undefined && (!['resistor', 'potentiometer', 'lamp', 'capacitor', 'inductor', 'currentSource', 'diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos', 'cccs', 'vccs', 'subcircuit'].includes(candidate.kind) || typeof candidate.instanceMultiplier !== 'string' || candidate.instanceMultiplier.length > 64 || candidate.instanceMultiplier !== candidate.instanceMultiplier.trim() || !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(candidate.instanceMultiplier) || !Number.isFinite(Number(candidate.instanceMultiplier)) || Number(candidate.instanceMultiplier) <= 0)) throw new Error(`${candidate.ref} has an invalid device multiplier.`)

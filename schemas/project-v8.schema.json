@@ -263,6 +263,18 @@
           },
           "description": "Optional positive MOSFET channel and junction geometry plus nonnegative drain/source diffusion squares, emitted as native ngspice instance parameters."
         },
+        "bjtArea": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 3,
+          "additionalProperties": false,
+          "properties": {
+            "emitter": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" },
+            "base": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" },
+            "collector": { "type": "string", "maxLength": 64, "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$" }
+          },
+          "description": "Optional positive BJT emitter, base, and collector junction area factors for this transistor instance."
+        },
         "instanceMultiplier": {
           "type": "string",
           "maxLength": 64,

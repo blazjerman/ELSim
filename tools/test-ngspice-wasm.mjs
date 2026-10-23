@@ -503,10 +503,11 @@ for (const fixture of selectedFixtures) {
       assert.ok(Number.isFinite(collectorCurrent) && collectorCurrent < -1e-6, `the ngspice NPN level-8 HICUM2 model should conduct at VBE=0.7 V; got ${collectorCurrent} A`)
     }
     if (fixture === 'bjt-substrate-node-op') {
-      const currents = [...wasmResult.stdout.matchAll(/^\s*v(?:ce|be|sub)#branch\s+([-+\d.eE]+)/gim)].map((match) => Number(match[1]))
-      assert.equal(currents.length, 3, 'the four-terminal BJT deck should report collector, base, and substrate source currents')
-      assert.ok(currents.every(Number.isFinite), `all measured BJT terminal currents should be finite; got ${currents.join(', ')}`)
-      assert.ok(Math.abs(currents[2]) > 1e-12, `the independently biased substrate terminal should carry measurable current; got ${currents[2]} A`)
+      const currents = Object.fromEntries([...wasmResult.stdout.matchAll(/^\s*(v(?:ce|be|sub)2?)#branch\s+([-+\d.eE]+)/gim)].map((match) => [match[1].toLowerCase(), Number(match[2])]))
+      assert.deepEqual(Object.keys(currents).sort(), ['vbe', 'vbe2', 'vce', 'vce2', 'vsub', 'vsub2'])
+      assert.ok(Object.values(currents).every(Number.isFinite), `all measured BJT terminal currents should be finite; got ${JSON.stringify(currents)}`)
+      assert.ok(Math.abs(currents.vsub) > 1e-12, `the independently biased substrate terminal should carry measurable current; got ${currents.vsub} A`)
+      assert.ok(Math.abs(currents.vce2) > Math.abs(currents.vce) * 1.9, `AREA=2 should double the forward collector current while AREAB/AREAC are accepted, got ${currents.vce} A and ${currents.vce2} A`)
     }
     if (fixture === 'urc-line-native-current-tran') {
       assert.match(wasmResult.raw, /^\s*\d+\s+i\(v__elsim_urc1_in\)\s+current$/mi, 'the current-sense source should expose the URC input current')

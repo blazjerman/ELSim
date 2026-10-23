@@ -12632,6 +12632,28 @@ test('an imported NPN level-8 HICUM2 model runs in the browser ngspice engine', 
   await expectAvailableTrace(page, 'V(COLLECTOR)')
 })
 
+test('BJT junction area factors are editable and simulate with the native device model', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.locator('.circuit-part[aria-label^="Q1,"]').click()
+  await page.getByText('Junction area factors (advanced)').click()
+  await page.getByLabel('Emitter area factor for Q1').fill('2')
+  await page.getByLabel('Collector area factor for Q1').fill('3')
+  await page.getByLabel('Base area factor for Q1').fill('4')
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')).toContainText(/^Q1 \S+ \S+ \S+ \S+ AREA=2 AREAC=3 AREAB=4$/m)
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+})
+
 test('imported CSW threshold can be stepped in the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))

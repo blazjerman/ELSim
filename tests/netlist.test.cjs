@@ -2098,13 +2098,29 @@ test('diode and BJT instances emit ngspice parallel-device multipliers', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'device-models', filename: 'devices.lib', sha256: 'c'.repeat(64), content: '.model DUSER D(Is=1n)\n.model QUSER NPN(BF=100)', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   const diode = { id: 'd-multiplier', kind: 'diode', ref: 'D1', value: '', deviceModel: 'DUSER', diodeArea: '2', diodePerimeter: '3', instanceMultiplier: '2', deviceTemperatureDelta: '15', initialOff: true, x: 700, y: 300, rotation: 0 }
-  const transistor = { id: 'q-multiplier', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'QUSER', instanceMultiplier: '3', deviceTemperatureDelta: '-5', initialOff: true, x: 900, y: 300, rotation: 0 }
+  const transistor = { id: 'q-multiplier', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'QUSER', bjtArea: { emitter: '2', base: '4', collector: '3' }, instanceMultiplier: '3', deviceTemperatureDelta: '-5', initialOff: true, x: 900, y: 300, rotation: 0 }
   project.parts.push(diode, transistor)
   project.netLabels.push(...[diode, transistor].flatMap((part) => componentPins(part).map((pin, index) => ({ id: `${part.id}-net-${index}`, name: `${part.ref.toLowerCase()}pin${index}`, x: pin.x, y: pin.y, visible: false }))))
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^D1 d1pin0 d1pin1 DUSER AREA=2 M=2 PJ=3 DTEMP=15 OFF$/m)
-  assert.match(artifact.text, /^Q1 q1pin0 q1pin1 q1pin2 QUSER M=3 DTEMP=-5 OFF$/m)
+  assert.match(artifact.text, /^Q1 q1pin0 q1pin1 q1pin2 QUSER AREA=2 AREAC=3 AREAB=4 M=3 DTEMP=-5 OFF$/m)
+  transistor.bjtArea.emitter = '0'
+  assert.throws(() => validateProject(project), /BJT emitter area factor must be a positive number/i)
+})
+
+test('BJT junction area factors are restricted to positive numeric values and NPN/PNP parts', () => {
+  const project = createStarterProject()
+  const transistor = { id: 'q-area', kind: 'npn', ref: 'Q1', value: '100', bjtArea: { emitter: '1', collector: '2', base: '3' }, x: 700, y: 500, rotation: 0 }
+  project.parts.push(transistor)
+  assert.doesNotThrow(() => validateProject(project))
+  transistor.bjtArea.base = '-1'
+  assert.throws(() => validateProject(project), /BJT base area factor must be a positive number/i)
+  transistor.bjtArea = { emitter: '1' }
+  transistor.kind = 'resistor'
+  transistor.ref = 'R2'
+  transistor.value = '1k'
+  assert.throws(() => validateProject(project), /malformed BJT junction area factors/i)
 })
 
 test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {

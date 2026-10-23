@@ -300,6 +300,12 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
     for (const value of ['0', '2', '1.5', '1e2']) assert.equal(pattern.test(value), true, `v8 MOSFET ${field} ${value}`)
     for (const value of ['-1', '2u', '1e']) assert.equal(pattern.test(value), false, `v8 MOSFET ${field} rejects ${value}`)
   }
+  assert.equal(schema.$defs.part.properties.bjtArea.maxProperties, 3)
+  for (const field of ['emitter', 'base', 'collector']) {
+    const pattern = new RegExp(schema.$defs.part.properties.bjtArea.properties[field].pattern, 'u')
+    for (const value of ['1', '2.5', '1e-3']) assert.equal(pattern.test(value), true, `v8 BJT ${field} ${value}`)
+    for (const value of ['-1', '1u']) assert.equal(pattern.test(value), false, `v8 BJT ${field} rejects ${value}`)
+  }
   for (const field of ['diodeArea', 'diodePerimeter']) {
     const scale = schema.$defs.part.properties[field]
     assert.equal(scale.maxLength, 64)
