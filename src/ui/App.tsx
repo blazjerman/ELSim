@@ -900,6 +900,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
   const partNavigationIndex = useMemo(() => createPartNavigationIndex(project.parts), [project.parts])
   const wiresById = useMemo(() => new Map(project.wires.map((wire) => [wire.id, wire])), [project.wires])
   const labelsById = useMemo(() => new Map(project.netLabels.map((label) => [label.id, label])), [project.netLabels])
+  const labelsNear = useMemo(() => createPointViewportIndex(project.netLabels, 0, 64), [project.netLabels])
   useEffect(() => {
     if (!pendingComponent) { setComponentPreview(null); return }
     setComponentPreview((current) => current ? { ...current, kind: pendingComponent, componentDefinitionId: componentDefinitionFor(pendingComponent).id, rotation: pendingRotation, polarized: pendingPolarizedCapacitor } : current)
@@ -1190,6 +1191,10 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
     const wire = wireNetAt(project, point, tolerance, nearbyWires)
     return wire ? { ...wire.point, distance: wire.distance } : null
   }
+  const labelAtPoint = (point: { x: number; y: number }) => labelsNear({
+    left: point.x - 1, top: point.y - 1, right: point.x + 1, bottom: point.y + 1,
+  }).find((label) => Math.hypot(label.x - point.x, label.y - point.y) < 1)
+  const contextWireLabel = contextMenu?.kind === 'wire' ? labelAtPoint(contextMenu.point) : undefined
   const canvasClick = (event: MouseEvent<SVGSVGElement>) => {
     if (tool === 'probe') {
       const point = pointFromEvent(event)
@@ -1213,7 +1218,7 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
       const point = pointFromEvent(event)
       const target = resolveNode(point)
       if (!target) { setNotice('Place a net label on a component pin or wire.'); return }
-      const existing = project.netLabels.find((label) => Math.hypot(label.x - target.x, label.y - target.y) < 1)
+      const existing = labelAtPoint(target)
       setLabelDraft({ x: target.x, y: target.y, id: existing?.id, name: existing?.name ?? 'net' })
       return
     }
@@ -1923,10 +1928,10 @@ function Schematic({ project, documentSessionId, symbolsById, deviceModels, conn
         {contextPart.kind === 'switch' && <button role="menuitem" onClick={() => { togglePart(contextPart.id); setContextMenu(null) }}>Switch {contextPart.value.toLowerCase() === 'on' ? 'off' : 'on'}</button>}
       </> : contextMenu.kind === 'label' ? <>
         <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node, labelId: contextMenu.id }); setContextMenu(null) }}>Plot voltage to ground</button>
-        <button role="menuitem" onClick={() => { const label = project.netLabels.find((item) => item.id === contextMenu.id); if (label) setLabelDraft({ id: label.id, name: label.name, x: label.x, y: label.y }); setContextMenu(null) }}>Edit net label</button>
+        <button role="menuitem" onClick={() => { const label = labelsById.get(contextMenu.id); if (label) setLabelDraft({ id: label.id, name: label.name, x: label.x, y: label.y }); setContextMenu(null) }}>Edit net label</button>
       </> : contextMenu.kind === 'wire' ? <>
         <button role="menuitem" disabled={!contextMenu.node} onClick={() => { if (contextMenu.node) onProbe({ kind: 'node', name: contextMenu.node, wireId: contextMenu.id }); setContextMenu(null) }}>Plot voltage to ground</button>
-        <button role="menuitem" onClick={() => { const existing = project.netLabels.find((label) => Math.hypot(label.x - contextMenu.point.x, label.y - contextMenu.point.y) < 1); setLabelDraft({ ...contextMenu.point, id: existing?.id, name: existing?.name ?? contextMenu.node ?? 'net' }); setContextMenu(null) }}>{project.netLabels.some((label) => Math.hypot(label.x - contextMenu.point.x, label.y - contextMenu.point.y) < 1) ? 'Edit net label' : 'Add net label'}</button>
+        <button role="menuitem" onClick={() => { setLabelDraft({ ...contextMenu.point, id: contextWireLabel?.id, name: contextWireLabel?.name ?? contextMenu.node ?? 'net' }); setContextMenu(null) }}>{contextWireLabel ? 'Edit net label' : 'Add net label'}</button>
         <button role="menuitem" onClick={() => { setSelectedWireIds([contextMenu.id]); setSelectedPartIds([]); setSelectedNetLabelIds([]); setSelection(null); setContextMenu(null); window.requestAnimationFrame(() => svg.current?.querySelector<SVGGElement>(`.wire-line[data-wire-id="${CSS.escape(contextMenu.id)}"]`)?.focus()) }}>Select wire</button>
       </> : null}
       </div>
