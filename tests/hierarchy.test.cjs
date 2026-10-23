@@ -404,6 +404,10 @@ test('hierarchy probes map internal nodes through an instance path and ports to 
     { id: 'child-r1', kind: 'resistor', ref: 'RLOAD1', value: '500 Ω', x: 300, y: 200, rotation: 0 },
     { id: 'child-r2', kind: 'resistor', ref: 'RLOAD2', value: '500 Ω', x: 404, y: 200, rotation: 0 },
     { id: 'child-vsense', kind: 'source', ref: 'VSENSE', value: '0 V', x: 500, y: 300, rotation: 0 },
+    { id: 'child-vcvs', kind: 'vcvs', ref: 'E1', value: '2', x: 600, y: 300, rotation: 0 },
+    { id: 'child-vccs', kind: 'vccs', ref: 'G1', value: '1 mS', x: 700, y: 300, rotation: 0 },
+    { id: 'child-cccs', kind: 'cccs', ref: 'F1', value: '2', controlSource: 'VSENSE', x: 800, y: 300, rotation: 0 },
+    { id: 'child-ccvs', kind: 'ccvs', ref: 'H1', value: '2 kΩ', controlSource: 'VSENSE', x: 900, y: 300, rotation: 0 },
   ]
   child.netLabels = [
     { id: 'child-in', name: 'IN', x: 248, y: 200, visible: true },
@@ -419,6 +423,10 @@ test('hierarchy probes map internal nodes through an instance path and ports to 
   assert.equal(hierarchyComponentCurrentVector(checked, child.id, [], 'child-r1', child.id), 'i(@rload1[i])')
   assert.equal(hierarchyComponentCurrentVector(checked, child.id, ['root-block'], 'child-vsense'), 'i(v.xload.vsense)')
   assert.equal(hierarchyComponentCurrentVector(checked, child.id, [], 'child-vsense', child.id), 'i(vsense)')
+  assert.equal(hierarchyComponentCurrentVector(checked, child.id, ['root-block'], 'child-vcvs'), 'i(@e.xload.e1[i])')
+  assert.equal(hierarchyComponentCurrentVector(checked, child.id, ['root-block'], 'child-vccs'), 'i(@g.xload.g1[i])')
+  assert.equal(hierarchyComponentCurrentVector(checked, child.id, ['root-block'], 'child-cccs'), 'i(@f.xload.f1[i])')
+  assert.equal(hierarchyComponentCurrentVector(checked, child.id, ['root-block'], 'child-ccvs'), 'i(@h.xload.h1[i])')
   assert.equal(hierarchyNodeVector(checked, child.id, [], 'MID'), null)
   assert.match(createNetlistArtifact(checked).text, /^\.save v\(XLOAD\.MID\)$/mi)
   assert.match(createNetlistArtifact(checked).text, /^\.save @r\.xload\.rload1\[i\]$/mi)

@@ -1,0 +1,26 @@
+ELSim hierarchical controlled-source branch-current regression
+XLOAD vin 0 ELSIM_SHEET_controlled
+V1 vin 0 5
+.SUBCKT ELSIM_SHEET_controlled IN OUT
+VCTRL CTRL 0 1
+E1 OUT_E 0 CTRL 0 2
+R_E OUT_E 0 1k
+G1 OUT_G 0 CTRL 0 1m
+R_G OUT_G 0 1k
+VDRIVE DRIVE 0 1
+RCTRL DRIVE SENSE 1k
+VSENSE SENSE 0 0
+F1 OUT_F 0 VSENSE 2
+R_F OUT_F 0 1k
+H1 OUT_H 0 VSENSE 2k
+R_H OUT_H 0 1k
+.ENDS ELSIM_SHEET_controlled
+.save @e.xload.e1[i] @g.xload.g1[i] @f.xload.f1[i] @h.xload.h1[i]
+.op
+.control
+set filetype=ascii
+op
+write /result.raw all
+quit
+.endc
+.end
