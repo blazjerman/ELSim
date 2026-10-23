@@ -550,7 +550,8 @@ export function checkCircuit(project: Project, connectivity: Connectivity = anal
         if (dependency.kind !== 'device' || !dependency.targetModelType) continue
         const expectedTypes = nativeModelTypesByDevice[dependency.reference[0]?.toLowerCase() ?? '']
         const actualType = dependency.targetModelType.toLowerCase()
-        if (!expectedTypes || expectedTypes.includes(actualType)) continue
+        const normalizedType = actualType === 'res' ? 'r' : actualType
+        if (!expectedTypes || expectedTypes.includes(normalizedType)) continue
         const expectedLabel = expectedModelTypeLabel(expectedTypes)
         for (const partId of instancesByDefinition.get(dependency.owner.toLowerCase()) ?? []) issues.push({
           id: `incompatible-model-dependency:${dependency.assetId}:${dependency.sourceLine}:${dependency.reference.toLowerCase()}:${partId}`,

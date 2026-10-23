@@ -574,7 +574,7 @@ test('reports passive and transmission-line references with an incompatible impo
   assert.ok(issues.every((issue) => issue.severity === 'warning' && issue.partId === instance.id))
   assert.ok(issues.some((issue) => /amp\.lib:2/.test(issue.detail)))
 
-  project.modelAssets[0] = { ...project.modelAssets[0], content: '.SUBCKT AMP IN OUT\nR1 IN OUT R_GOOD\nL1 IN OUT L_GOOD\nY1 IN 0 OUT 0 Y_GOOD\nP1 A1 A2 0 B1 B2 0 P_GOOD\n.MODEL R_GOOD R(RSH=100)\n.ENDS AMP\n' }
+  project.modelAssets[0] = { ...project.modelAssets[0], content: '.SUBCKT AMP IN OUT\nR1 IN OUT R_GOOD\nL1 IN OUT L_GOOD\nY1 IN 0 OUT 0 Y_GOOD\nP1 A1 A2 0 B1 B2 0 P_GOOD\n.MODEL R_GOOD RES(RSH=100)\n.ENDS AMP\n' }
   project.modelAssets[1] = { ...project.modelAssets[1], content: '.MODEL L_GOOD L(IND=1u)\n.MODEL Y_GOOD TXL(LEN=1)\n.MODEL P_GOOD CPL(LEN=1)\n' }
   assert.equal(checkCircuit(project).some((item) => item.id.startsWith('incompatible-model-dependency:')), false)
 })
