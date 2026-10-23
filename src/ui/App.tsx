@@ -3320,10 +3320,18 @@ export default function App() {
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not import this model library.') }
     event.target.value = ''
   }
-  const openModelLibraryPicker = (event: MouseEvent<HTMLButtonElement>) => {
+  const openModelLibraryPicker = (event: MouseEvent<HTMLButtonElement>, replaceId: string | null = null) => {
     modelImportReturnFocusRef.current = event.currentTarget
+    setReplacementModelAssetId(replaceId)
     if (modelFileInput.current) { modelFileInput.current.value = ''; modelFileInput.current.click() }
   }
+  useEffect(() => {
+    const input = modelFileInput.current
+    if (!input) return
+    const cancelReplacement = () => setReplacementModelAssetId(null)
+    input.addEventListener('cancel', cancelReplacement)
+    return () => input.removeEventListener('cancel', cancelReplacement)
+  }, [])
   const chooseSectionForImportedLibrary = (reference: string, requestedSection: string, event: MouseEvent<HTMLButtonElement>) => {
     const filename = reference.replace(/\\/g, '/').split('/').pop()?.toLowerCase()
     const matches = filename ? (projectRef.current.modelAssets ?? []).filter((asset) => asset.filename.replace(/\\/g, '/').split('/').pop()?.toLowerCase() === filename) : []
@@ -4776,7 +4784,7 @@ export default function App() {
         </div>}
         <input ref={modelFileInput} type="file" accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain" multiple hidden onChange={importModelLibrary}/>
         <input ref={symbolFileInput} type="file" accept=".elsym,.asy,application/json,text/plain" hidden onChange={importSymbol}/>
-        <button className="library-import" onClick={openModelLibraryPicker}><Plus size={15}/> Import SPICE model library</button><small className="library-import-hint">Select multiple related files together to resolve model dependencies.</small>
+        <button className="library-import" onClick={(event) => openModelLibraryPicker(event)}><Plus size={15}/> Import SPICE model library</button><small className="library-import-hint">Select multiple related files together to resolve model dependencies.</small>
         <button className="library-import" onClick={() => symbolFileInput.current?.click()}><Plus size={15}/> Import symbol file</button>
         <div className="model-import-note">Imported model and symbol files stay in this project. Import only files you are authorized to use; ELSim does not grant redistribution rights.</div>
         <div className="library-bottom"><div className="tip-card"><span className="tip-icon"><Lightbulb size={17}/></span><div><strong>New to circuits?</strong><p>Start with a resistor, capacitor, and a voltage source.</p><button onClick={startTour}>Take a quick tour <ArrowUp size={12}/></button></div></div><div className="library-version">ELSim Preview <span>·</span> v0.1</div></div>
@@ -4845,7 +4853,7 @@ export default function App() {
 
       <aside aria-label="Properties inspector" className={`inspector-panel${mobilePane === 'properties' ? ' mobile-active' : ''}`}>
         <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : 'Circuit settings'}</h2></div></div>
-        {compatibilityDiagnostic?.assetId && project.modelAssets?.some((asset) => asset.id === compatibilityDiagnostic.assetId) && (() => { const asset = project.modelAssets.find((item) => item.id === compatibilityDiagnostic.assetId)!; return <section className="import-diagnostics engine-model-diagnostic" aria-label="ngspice model compatibility diagnostic"><div><strong>ngspice rejected an imported model card</strong><button onClick={() => setCompatibilityDiagnostic(null)} aria-label="Dismiss model diagnostic"><X size={13}/></button></div><p>{asset.filename}{compatibilityDiagnostic.assetLine ? ` · source line ${compatibilityDiagnostic.assetLine}` : ''}</p><code>{compatibilityDiagnostic.message}</code><p>{compatibilityDiagnostic.hint ?? 'Check the model against ngspice syntax and replace it with a compatible version if needed.'}</p>{compatibilityDiagnostic.assetLine !== undefined && <button className="place-model" onClick={() => setModelSourceReview({ assetId: asset.id, line: compatibilityDiagnostic.assetLine! })}>Review source line {compatibilityDiagnostic.assetLine}</button>}<button className="replace-model" onClick={(event) => { setReplacementModelAssetId(asset.id); openModelLibraryPicker(event) }}><FolderOpen size={13}/> Replace model library</button></section> })()}
+        {compatibilityDiagnostic?.assetId && project.modelAssets?.some((asset) => asset.id === compatibilityDiagnostic.assetId) && (() => { const asset = project.modelAssets.find((item) => item.id === compatibilityDiagnostic.assetId)!; return <section className="import-diagnostics engine-model-diagnostic" aria-label="ngspice model compatibility diagnostic"><div><strong>ngspice rejected an imported model card</strong><button onClick={() => setCompatibilityDiagnostic(null)} aria-label="Dismiss model diagnostic"><X size={13}/></button></div><p>{asset.filename}{compatibilityDiagnostic.assetLine ? ` · source line ${compatibilityDiagnostic.assetLine}` : ''}</p><code>{compatibilityDiagnostic.message}</code><p>{compatibilityDiagnostic.hint ?? 'Check the model against ngspice syntax and replace it with a compatible version if needed.'}</p>{compatibilityDiagnostic.assetLine !== undefined && <button className="place-model" onClick={() => setModelSourceReview({ assetId: asset.id, line: compatibilityDiagnostic.assetLine! })}>Review source line {compatibilityDiagnostic.assetLine}</button>}<button className="replace-model" onClick={(event) => openModelLibraryPicker(event, asset.id)}><FolderOpen size={13}/> Replace model library</button></section> })()}
         {importWarnings.length > 0 && <section className="import-diagnostics" aria-label="LTspice import diagnostics"><div><strong>Import needs review</strong><button onClick={() => setImportWarnings([])} aria-label="Dismiss import diagnostics"><X size={13}/></button></div><p>{importWarnings.length} item{importWarnings.length === 1 ? '' : 's'} could not be fully translated.</p><ul>{importWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul></section>}
         {selected ? <>
           <div className="selected-part-card"><span className={`selected-part-icon icon-${selected.kind}`}>{selected.kind === 'resistor' ? <Minus size={19}/> : selected.kind === 'lamp' ? <Lightbulb size={18}/> : selected.kind === 'capacitor' ? <Activity size={18}/> : selected.kind === 'zener' ? <Waypoints size={18}/> : selected.kind === 'source' ? <Zap size={18}/> : <Grid2X2 size={18}/>}</span><div><strong>{kindNames[selected.kind]}</strong><span>{componentPins(selected).length} pins · SPICE {kindPrefix[selected.kind]}</span></div></div>

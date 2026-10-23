@@ -10399,6 +10399,21 @@ test('ngspice stderr errors identify the imported model line and unsupported fun
   await expect(sourceLine).toBeFocused()
   await page.locator('.model-source-viewer[open] summary').click()
   await modelDiagnostic.getByRole('button', { name: 'Replace model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').dispatchEvent('cancel')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'auxiliary.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.SUBCKT AUXILIARY IN OUT\nR1 IN OUT 2k\n.ENDS AUXILIARY\n'),
+  })
+  await expect.poll(() => page.evaluate(() => {
+    const assets = JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets
+    return assets.find((item: { id: string }) => item.id === 'unsupported-function-library')
+  })).toMatchObject({ filename: 'unsupported-function.lib', sourceUrl: 'https://models.example.test/old-version.lib' })
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).modelAssets.some((item: { filename: string }) => item.filename === 'auxiliary.lib'))).toBe(true)
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(modelDiagnostic).toBeVisible({ timeout: 60_000 })
+  await modelDiagnostic.getByRole('button', { name: 'Replace model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'replacement.lib',
     mimeType: 'text/plain',
