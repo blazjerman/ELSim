@@ -2776,8 +2776,10 @@ test('imported library provenance notes persist while rights remain unverified a
     buffer: Buffer.from('.MODEL PROVENANCE_D D(Is=1n)\n'),
   })
   await expect.poll(sourceViewerLoaded).toBe(true)
+  await expect(page.locator('.model-source-viewer summary')).toBeVisible()
   const details = page.locator('.asset-provenance').filter({ has: page.getByText('Record source and license notes') })
   await details.locator('summary').click()
+  await expect(details).toHaveJSProperty('open', true)
   await page.getByLabel('Source URL for provenance-test.lib').fill('https://models.example.test/provenance-test.lib')
   await page.getByLabel('License reference for provenance-test.lib').fill('Supplier model terms, section 2')
   await page.getByLabel('Rights review notes for provenance-test.lib').fill('Received from supplier; redistribution permission still needs confirmation.')
