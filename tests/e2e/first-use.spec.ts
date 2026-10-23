@@ -7015,6 +7015,28 @@ test('capacitor initial voltage editor starts the transient at the requested vol
   await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 2(?:\.0+)? V/)
 })
 
+test('BJT VBE and VCE initial conditions emit Q-card IC and run with UIC', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add BJT VBE/VCE' }).click()
+  await page.getByLabel('Initial VBE for Q1').fill('0.7 V')
+  await page.getByLabel('Initial VCE for Q1').fill('5 V')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.initialConditions)).toEqual([{ transistor: 'Q1', vbe: '0.7 V', vce: '5 V' }])
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')).toContainText(/^Q1 \S+ \S+ \S+ ELSIM_MODEL_Q1 IC=0\.7,5$/m)
+  await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')).toContainText(/^\.tran \S+ \S+ uic$/m)
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+})
+
 test('schematic tool guidance stays readable without overflowing at desktop and phone widths', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   const status = page.locator('.canvas-status')

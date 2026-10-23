@@ -2123,6 +2123,22 @@ test('BJT junction area factors are restricted to positive numeric values and NP
   assert.throws(() => validateProject(project), /malformed BJT junction area factors/i)
 })
 
+test('BJT VBE/VCE initial conditions emit native Q-card IC values and enable transient UIC', () => {
+  const project = createStarterProject()
+  const transistor = { id: 'q-initial', kind: 'npn', ref: 'Q1', value: '100', x: 700, y: 500, rotation: 0 }
+  project.parts.push(transistor)
+  project.netLabels.push(...componentPins(transistor).map((pin, index) => ({ id: `q-initial-net-${index}`, name: ['COLLECTOR', 'BASE', 'EMITTER'][index], x: pin.x, y: pin.y, visible: false })))
+  project.simulation.initialConditions = [{ transistor: 'Q1', vbe: '0.7 V', vce: '5 V' }]
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^Q1 COLLECTOR BASE EMITTER ELSIM_MODEL_Q1 IC=0\.7,5$/m)
+  assert.match(artifact.text, /^\.tran 100u 100m uic$/m)
+  project.simulation.initialConditions = [{ transistor: 'Q1', vbe: 'bad', vce: '5 V' }]
+  assert.throws(() => validateProject(project), /Initial value for Q1 is malformed/i)
+  project.simulation.initialConditions = [{ transistor: 'Q404', vbe: '0.7 V', vce: '5 V' }]
+  assert.throws(() => validateProject(project), /unique labeled nodes, capacitor voltages, or inductor currents/i)
+})
+
 test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'vdmos-models', filename: 'power-mosfets.lib', content: '.MODEL NPOWER VDMOS(VTO=2)\n.MODEL PPOWER VDMOS Pchan VTO=-2', sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]

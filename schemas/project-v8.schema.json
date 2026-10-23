@@ -1562,6 +1562,29 @@
                     "minLength": 1
                   }
                 }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "transistor",
+                  "vbe",
+                  "vce"
+                ],
+                "properties": {
+                  "transistor": {
+                    "type": "string",
+                    "pattern": "^Q[A-Za-z0-9_]+$"
+                  },
+                  "vbe": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "vce": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
               }
             ]
           }

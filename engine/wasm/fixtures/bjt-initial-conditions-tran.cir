@@ -1,0 +1,6 @@
+Transient BJT initial voltages are passed through the native Q device IC field
+Q1 c b 0 QMOD IC=0.7,5
+.model QMOD NPN (IS=1e-14 BF=100 BR=1)
+.tran 1u 10u uic
+.print tran v(b) v(c)
+.end

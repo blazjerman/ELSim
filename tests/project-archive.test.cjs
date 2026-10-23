@@ -351,6 +351,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const initialConditions = schema.$defs.simulation.properties.initialConditions.items.oneOf
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('voltage') && condition.properties.element.pattern.startsWith('^C')))
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('current') && condition.properties.element.pattern.startsWith('^L')))
+  assert.ok(initialConditions.some((condition) => condition.required.includes('transistor') && condition.required.includes('vbe') && condition.required.includes('vce') && condition.properties.transistor.pattern.startsWith('^Q')))
   assert.deepEqual(schema.$defs.part.properties.sourceMode.enum, ['pulse', 'dc', 'pwl', 'sine', 'exp', 'sffm'])
   assert.deepEqual(schema.$defs.part.properties.sine.required, ['offset', 'amplitude', 'frequency', 'delay', 'damping', 'phase'])
   assert.equal(schema.$defs.part.properties.pwl.maxItems, 256)

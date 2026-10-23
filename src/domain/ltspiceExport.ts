@@ -705,7 +705,10 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       return label
     }
     for (const condition of project.simulation.initialConditions ?? []) {
-      if ('node' in condition) {
+      if ('transistor' in condition) {
+        blockers.push({ sourceId: `initial:${condition.transistor}`, message: 'Per-instance BJT IC=VBE,VCE conditions are not translated by the current LTspice exporter.' })
+      }
+      else if ('node' in condition) {
         const voltage = scalar(condition.voltage, 'v')
         if (voltage) addDirective(`.ic V(${condition.node})=${voltage}`)
         else blockers.push({ sourceId: `initial:${condition.node}`, message: 'Initial node voltage is not a supported scalar.' })
@@ -767,7 +770,7 @@ function sheetContents(project: Project, sheet: ProjectSheet, sheetFiles: Map<st
       else blockers.push({ sourceId: 'analysis:dc', message: 'DC sweep settings are missing.' })
     } else {
       const maxStep = scalar(simulation.maxStep, 's'), stopTime = scalar(simulation.stopTime, 's')
-      if (maxStep && stopTime) addDirective(`.tran ${maxStep} ${stopTime}${simulation.skipInitialOperatingPoint || simulation.initialConditions?.some((condition) => 'element' in condition) ? ' uic' : ''}`)
+      if (maxStep && stopTime) addDirective(`.tran ${maxStep} ${stopTime}${simulation.skipInitialOperatingPoint || simulation.initialConditions?.some((condition) => 'element' in condition || 'transistor' in condition) ? ' uic' : ''}`)
       else blockers.push({ sourceId: 'analysis:tran', message: 'Transient stop time and maximum step must be supported scalar time values.' })
     }
     const unsupportedSweeps: string[] = []

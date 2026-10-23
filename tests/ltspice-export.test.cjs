@@ -324,6 +324,17 @@ test('exports and reimports inductor current initial conditions', async () => {
   assert.deepEqual(restored.simulation.initialConditions, [{ element: 'L1', current: '25m' }])
 })
 
+test('blocks BJT VBE/VCE initial conditions during LTspice export instead of dropping them', async () => {
+  const project = createStarterProject()
+  const transistor = { id: 'export-bjt-ic', kind: 'npn', ref: 'Q1', value: '100', x: 800, y: 600, rotation: 0 }
+  project.parts.push(transistor)
+  project.sheets[0].parts = project.parts
+  project.simulation.initialConditions = [{ transistor: 'Q1', vbe: '0.7 V', vce: '5 V' }]
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.files, [])
+  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'initial:Q1' && /BJT IC=VBE,VCE/.test(blocker.message)))
+})
+
 test('reports retained imported LTspice attributes omitted from generated schematics', async () => {
   const project = createStarterProject()
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'original-value' } } }

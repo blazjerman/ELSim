@@ -763,6 +763,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
+      const bjtInitial = project.simulation.initialConditions?.find((condition) => 'transistor' in condition && condition.transistor.toLowerCase() === part.ref.toLowerCase())
+      const bjtIcSuffix = bjtInitial && 'transistor' in bjtInitial
+        ? ` IC=${bjtInitial.vbe.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/v$/i, '')},${bjtInitial.vce.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/v$/i, '')}`
+        : ''
       const instanceOptions = [
         part.bjtArea?.emitter && `AREA=${part.bjtArea.emitter}`,
         part.bjtArea?.collector && `AREAC=${part.bjtArea.collector}`,
@@ -771,7 +775,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`,
         part.initialOff && 'OFF',
       ].filter(Boolean).join(' ')
-      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}${bjtIcSuffix}`, part.id, 'component')
       if (!part.deviceModel) transistorModels.push({ part, name: model })
     }
     else if (part.kind === 'njfet' || part.kind === 'pjfet') {
@@ -1103,8 +1107,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)
     const startSavingTime = project.simulation.startSavingTime?.trim() ? spiceTime(project.simulation.startSavingTime) : null
-    const hasElementInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition) ?? false
-    if (maxStep && stopTime && (!project.simulation.startSavingTime?.trim() || startSavingTime)) append(`.tran ${maxStep} ${stopTime}${startSavingTime ? ` ${startSavingTime} ${maxStep}` : ''}${project.simulation.skipInitialOperatingPoint || hasElementInitial ? ' uic' : ''}`, 'analysis:tran', 'analysis')
+    const hasDeviceInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition || 'transistor' in condition) ?? false
+    if (maxStep && stopTime && (!project.simulation.startSavingTime?.trim() || startSavingTime)) append(`.tran ${maxStep} ${stopTime}${startSavingTime ? ` ${startSavingTime} ${maxStep}` : ''}${project.simulation.skipInitialOperatingPoint || hasDeviceInitial ? ' uic' : ''}`, 'analysis:tran', 'analysis')
     else {
       const message = 'Transient stop time and maximum step must be valid SPICE time values.'
       append(`* ERROR: ${message}`, 'analysis:tran', 'analysis')
@@ -1112,6 +1116,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   }
   for (const condition of project.simulation.initialConditions ?? []) {
+    if ('transistor' in condition) continue
     if ('element' in condition) {
       const currentCondition = 'current' in condition
       const kind = currentCondition ? 'inductor' : 'capacitor'
