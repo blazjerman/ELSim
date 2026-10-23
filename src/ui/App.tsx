@@ -588,31 +588,24 @@ const CircuitPartLayer = memo(function CircuitPartLayer({ parts, symbolsById, to
   viewportBottom: number
 }) {
   const focusedPartId = document.activeElement?.closest<SVGGElement>('.circuit-part')?.dataset.partId
-  const partMargins = useMemo(() => {
-    const symbolMargins = new Map<string, number>()
-    const marginForSymbol = (assetId: string) => {
-      const cached = symbolMargins.get(assetId)
-      if (cached !== undefined) return cached
-      const symbol = symbolsById.get(assetId)
-      const bounds = symbol ? importedSymbolBounds(symbol) : null
-      const margin = bounds ? Math.max(Math.abs(bounds.minX), Math.abs(bounds.minY), Math.abs(bounds.maxX), Math.abs(bounds.maxY)) + 40 : 100
-      symbolMargins.set(assetId, margin)
-      return margin
-    }
-    return new Map(parts.map((part) => {
-      const symbolMargin = part.symbolAssetId ? marginForSymbol(part.symbolAssetId) : 100
-      const blockMargin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
-      return [part.id, Math.max(symbolMargin, blockMargin)] as const
-    }))
-  }, [parts, symbolsById])
+  const symbolMargins = useMemo(() => new Map([...symbolsById].map(([assetId, symbol]) => {
+    const bounds = importedSymbolBounds(symbol)
+    const margin = bounds ? Math.max(Math.abs(bounds.minX), Math.abs(bounds.minY), Math.abs(bounds.maxX), Math.abs(bounds.maxY)) + 40 : 100
+    return [assetId, margin] as const
+  })), [symbolsById])
+  const marginForPart = useCallback((part: Part) => {
+    const symbolMargin = part.symbolAssetId ? symbolMargins.get(part.symbolAssetId) ?? 100 : 100
+    const blockMargin = part.kind === 'subcircuit' ? Math.max(120, Math.ceil((part.modelPins?.length ?? 0) / 2) * 24 + 60) : 100
+    return Math.max(symbolMargin, blockMargin)
+  }, [symbolMargins])
   const partViewportIndex = useMemo(() => createViewportIndex(parts, (part) => {
-    const margin = partMargins.get(part.id) ?? 100
+    const margin = marginForPart(part)
     return { left: part.x - margin, top: part.y - margin, right: part.x + margin, bottom: part.y + margin }
-  }), [parts, partMargins])
+  }), [parts, marginForPart])
   const visibleParts = partViewportIndex({ left: viewportLeft, top: viewportTop, right: viewportRight, bottom: viewportBottom }, focusedPartId)
   return <>{visibleParts.map((part) => {
     const symbol = part.symbolAssetId ? symbolsById.get(part.symbolAssetId) : undefined
-    const margin = partMargins.get(part.id) ?? 100
+    const margin = marginForPart(part)
     const detailed = part.x >= viewportLeft - margin && part.x <= viewportRight + margin && part.y >= viewportTop - margin && part.y <= viewportBottom + margin
     const animate = animationEnabled && part.kind !== 'subcircuit' && part.x >= viewportLeft - 100 && part.x <= viewportRight + 100 && part.y >= viewportTop - 100 && part.y <= viewportBottom + 100
     if (!detailed && part.id !== focusedPartId) return null
