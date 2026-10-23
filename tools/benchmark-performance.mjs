@@ -494,8 +494,11 @@ try {
       const visibleWireIds = new Set(project.wires.slice(0, 20).map((wire) => wire.id))
       const currentForPart = (part) => part.kind === 'resistor' ? 0.001 : undefined
       const full = measure(() => sampler(currentForPart), 1, 3)
-      const visibleStableSet = measure(() => sampler(currentForPart, undefined, visibleWireIds), 1, 7)
-      const visibleRebuiltSet = measure(() => sampler(currentForPart, undefined, new Set(visibleWireIds)), 1, 7)
+      // Playback samples run many times per second; use enough observations
+      // that the nearest-rank p95 is not simply the maximum of seven samples.
+      const visibleFlowSamples = 31
+      const visibleStableSet = measure(() => sampler(currentForPart, undefined, visibleWireIds), 3, visibleFlowSamples)
+      const visibleRebuiltSet = measure(() => sampler(currentForPart, undefined, new Set(visibleWireIds)), 3, visibleFlowSamples)
       const visible = visibleStableSet
       if (visible.value.size !== visibleWireIds.size) throw new Error('Visible wire-current sampling omitted a requested wire.')
       for (const id of visibleWireIds) {
@@ -508,6 +511,7 @@ try {
       wireFlowSampling = {
         wireNetworks: project.wires.length,
         requestedWires: visibleWireIds.size,
+        visibleFlowSamples,
         allNetworks: { medianMs: full.medianMs, p95Ms: full.p95Ms },
         visibleNetworks: {
           stableSet: { medianMs: visibleStableSet.medianMs, p95Ms: visibleStableSet.p95Ms },
@@ -667,7 +671,7 @@ try {
   }
 
   console.log(JSON.stringify({
-    benchmarkVersion: 13,
+    benchmarkVersion: 14,
     runtime: { node: process.version, platform: process.platform, arch: process.arch, cpuModel: os.cpus()[0]?.model ?? 'unknown', cpus: os.cpus().length },
     measurements: { warmups: 2, runs: 7, statistic: 'median and nearest-rank p95; times are local observations, not CI gates' },
     circuitResults,
