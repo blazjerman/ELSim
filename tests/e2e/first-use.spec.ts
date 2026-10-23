@@ -11890,12 +11890,22 @@ test('operating-point parameter sweep compares labeled bias values for a selecte
   project.simulation = {
     ...project.simulation,
     analysis: 'op',
-    parameterSweeps: [{ component: 'V1', start: '1 V', stop: '2 V', points: 2 }],
   }
   project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels }
   const validated = validateProject(project)
   await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
   await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.locator('svg.schematic').click({ position: { x: 8, y: 8 } })
+  await expect(page.locator('.parameter-sweep-section')).toContainText('Compare up to 10 DC operating points')
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption('V1')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1 V')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('2 V')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).simulation.parameterSweeps)).toEqual([
+    { component: 'V1', start: '1 V', stop: '2 V', points: 2 },
+  ])
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
 
