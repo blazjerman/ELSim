@@ -375,6 +375,7 @@ test('malformed local project data is downloaded before the recovered copy repla
   const recoveryDialog = page.getByRole('alertdialog', { name: 'A saved project copy could not be opened' })
   await expect(recoveryDialog).toBeVisible()
   await expect(recoveryDialog).toHaveAttribute('aria-describedby', 'corrupt-project-description')
+  await expect(recoveryDialog).toContainText('Continuing will let ELSim replace the unreadable local save')
   await expectVisibleKeyboardControlsNamed(page)
   expect(await page.evaluate(() => localStorage.getItem('elsim:project:v7'))).toBe(malformedData)
   const downloadButton = recoveryDialog.getByRole('button', { name: 'Download unreadable local copy 1' })
@@ -385,6 +386,13 @@ test('malformed local project data is downloaded before the recovered copy repla
   await expect(continueButton).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(downloadButton).toBeFocused()
+
+  // Recovery is modal: editor shortcuts must not alter the project underneath.
+  const selectTool = page.getByRole('button', { name: 'Select and move (M)' })
+  await expect(selectTool).toHaveClass(/active/)
+  await page.keyboard.press('r')
+  await expect(recoveryDialog).toBeVisible()
+  await expect(selectTool).toHaveClass(/active/)
 
   const downloadPromise = page.waitForEvent('download')
   await downloadButton.click()
