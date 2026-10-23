@@ -9992,18 +9992,19 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', {
   await expect(currentSweep).toContainText('0.0100 A')
 })
 
-test('current-source inspector edits a finite-cycle PULSE waveform', async ({ page }) => {
+test('current-source inspector edits its multiplier and finite-cycle waveforms', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
   await page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
-    const source = { id: 'ui-pulse-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', x: 450, y: 350, rotation: 0 }
+    const source = { id: 'ui-pulse-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', instanceMultiplier: '3', x: 450, y: 350, rotation: 0 }
     project.parts.push(source)
     project.sheets[0].parts = project.parts
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
   })
   await page.reload()
   await page.getByRole('button', { name: /^I1, Current source/ }).click()
+  await expect(page.getByLabel('Device multiplier for I1')).toHaveValue('3')
   const waveform = page.getByRole('combobox', { name: 'Current source waveform' })
   await expect(waveform).toHaveValue('dc')
   await waveform.selectOption('pulse')
@@ -10011,17 +10012,17 @@ test('current-source inspector edits a finite-cycle PULSE waveform', async ({ pa
   await page.getByLabel('Initial current (A)').fill('-1mA')
   await page.getByLabel('Number of cycles (0 = unlimited)').fill('2')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PULSE\(-1m 2m 0 1u 1u 50m 100m 2\)/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PULSE\(-1m 2m 0 1u 1u 50m 100m 2\) M=3/)
   await page.keyboard.press('Escape')
   await waveform.selectOption('pwl')
   await expect(page.getByText('Current (A)', { exact: true })).toBeVisible()
   await expect(page.getByLabel('PWL point 2 current')).toHaveValue('5m')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\)/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\) M=3/)
   await page.keyboard.press('Escape')
   await page.getByLabel('Repeat PWL waveform forever').check()
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
-  await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\) r=0/)
+  await expect(page.locator('.netlist-modal pre')).toContainText(/I1 \S+ \S+ PWL\(0 0 10m 5m\) r=0 M=3/)
   await page.keyboard.press('Escape')
   await page.getByLabel('Repeat PWL waveform forever').uncheck()
   await page.getByLabel('PWL point 2 current').fill('0')
