@@ -200,6 +200,10 @@
           "maxLength": 64,
           "description": "Optional positive resistor value used only in AC analysis; when omitted, the ordinary resistance applies."
         },
+        "noiseEnabled": {
+          "type": "boolean",
+          "description": "Whether this resistor contributes thermal and flicker noise; omitted means enabled."
+        },
         "x": {
           "type": "number",
           "description": "ELSim-authored scene coordinates are normalized to the 10-unit editor grid. Imported source geometry retains its original coordinates."

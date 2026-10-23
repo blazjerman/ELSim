@@ -16,7 +16,7 @@ fixtures.push('imported-subckt-multiplier-op')
 fixtures.push('current-source-multiplier-op', 'current-source-multiplier-tran', 'current-source-multiplier-ac', 'vccs-multiplier-op', 'cccs-multiplier-op')
 fixtures.push('diode-area-perimeter-scaling-op')
 fixtures.push('controlled-switch-initial-state-tran')
-fixtures.push('resistor-ac-value')
+fixtures.push('resistor-ac-value', 'resistor-noise-disabled')
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
 const requestedFixtures = process.env.NGSPICE_WASM_ONLY?.split(',').map((name) => name.trim()).filter(Boolean) ?? []

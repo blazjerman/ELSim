@@ -6096,6 +6096,19 @@ test('resistor AC value is editable, saved, and generated as an AC-only override
   await expect(page.locator('.netlist-modal pre')).toContainText(/^R1 vin vout 1k AC=2k$/m)
 })
 
+test('resistor noise can be disabled and saved without changing its default behavior @ui-smoke', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Select and move' }).click()
+  await page.locator('.circuit-part[aria-label^="R1,"]').click()
+  const noise = page.getByLabel('Include noise for R1')
+  await expect(noise).toBeChecked()
+  await noise.uncheck()
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1')?.noiseEnabled)).toBe(false)
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/^R1 vin vout 1k NOISY=0$/m)
+})
+
 test('new current-controlled switches expose their controller and CSW settings @ui-smoke', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)

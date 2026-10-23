@@ -320,6 +320,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   for (const value of ['warm', '1 °C', '1e2', '']) assert.equal(deviceTemperaturePattern.test(value), false, `v8 DTEMP ${value}`)
   assert.equal(schema.$defs.part.properties.initialOff.type, 'boolean')
   assert.equal(schema.$defs.part.properties.acResistance.type, 'string')
+  assert.equal(schema.$defs.part.properties.noiseEnabled.type, 'boolean')
   assert.deepEqual(schema.$defs.part.properties.switchInitialState.enum, ['on', 'off'])
   const legacySchema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v7.schema.json'), 'utf8'))
   assert.equal(legacySchema.$defs.part.properties.modelPins.items.pattern, schema.$defs.part.properties.modelPins.items.pattern)

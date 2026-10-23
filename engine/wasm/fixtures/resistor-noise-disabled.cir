@@ -1,0 +1,7 @@
+ELSim verifies the native resistor noise opt-out is accepted by the browser ngspice runtime
+V1 in 0 AC 1
+R1 in out 1k NOISY=0
+R2 out 0 1k NOISY=0
+.noise V(out) V1 dec 10 1 1k
+.print noise onoise_spectrum
+.end

@@ -747,7 +747,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const acResistanceSuffix = acResistanceValue ? ` AC=${acResistanceValue}` : ''
-      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${acResistanceSuffix}${deviceTemperatureSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
+      const noiseSuffix = part.kind === 'resistor' && part.noiseEnabled === false ? ' NOISY=0' : ''
+      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${acResistanceSuffix}${noiseSuffix}${deviceTemperatureSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led') {
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined

@@ -46,6 +46,25 @@ test('resistor AC resistance rejects zero, invalid, and non-resistor values', ()
   assert.throws(() => validateProject(project), /AC resistance must be a positive numeric resistance/i)
 })
 
+test('resistor noise is enabled by default and can be disabled with the native ngspice option', () => {
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  const defaultArtifact = createNetlistArtifact(project)
+  assert.deepEqual(defaultArtifact.diagnostics, [])
+  assert.match(defaultArtifact.text, /^R1 vin vout 1k$/m)
+  resistor.noiseEnabled = false
+  const disabledArtifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(disabledArtifact.diagnostics, [])
+  assert.match(disabledArtifact.text, /^R1 vin vout 1k NOISY=0$/m)
+  resistor.noiseEnabled = true
+  assert.doesNotMatch(createNetlistArtifact(project).text, /NOISY=/)
+  resistor.noiseEnabled = 'false'
+  assert.throws(() => validateProject(project), /noise setting is available only for resistors/i)
+  delete resistor.noiseEnabled
+  project.parts.find((part) => part.kind === 'capacitor').noiseEnabled = false
+  assert.throws(() => validateProject(project), /noise setting is available only for resistors/i)
+})
+
 test('standalone R C and L parts can use imported models and model defaults', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'passive-models', filename: 'passives.lib', sha256: 'd'.repeat(64), content: ['.MODEL R_CUSTOM RES(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
