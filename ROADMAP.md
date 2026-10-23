@@ -476,7 +476,7 @@ Suggested agent ownership once M0 contracts are agreed: engine/WASM; document/ne
 | Browser engine | Single-thread ngspice WASM in Web Worker | M0.3 benchmarks and API viability |
 | Parameter stepping | Generate bounded `alter`/`run` sequences and preserve one result dataset per value combination | Verify output parity and memory use for larger transient cases; ngspice does not offer a native `.step` command |
 | Transient measurements | Named `.meas` scalar operations and delay, optional FROM/TO windows, parameter-sweep labels, source-current raw-sample calculations, and validated native ngspice scalar expressions | Add broader qualifiers only with fixtures; expression measurements are not exported to LTspice yet |
-| Initial conditions | Generate `.ic v(node)=...`; optionally add `uic` to `.tran` | Verify voltage initialization and transient startup behavior against native ngspice; add element current ICs later |
+| Initial conditions | Support labeled-node voltage, capacitor-voltage, and inductor-current conditions. Element conditions emit device `IC=` values and automatically enable `uic` on `.tran`; node conditions emit `.ic` directives. | Existing netlist tests, browser flows, and pinned-WASM transient fixtures verify capacitor voltage and inductor current initialization. Add broader startup-condition cases when expanding analysis support. |
 | Server backend | No required server for MVP | Revisit only if measured workloads require it |
 | Desktop wrapper | Defer choice | M4.2 platform prototype |
 | Plot renderer | Canvas first, internal trace API | Performance/accessibility benchmark |
