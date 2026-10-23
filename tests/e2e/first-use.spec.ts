@@ -9995,14 +9995,18 @@ test('current-source example demonstrates a 1 mA source driving a 1 kΩ load', {
 test('current-source inspector edits its multiplier and finite-cycle waveforms', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)
-  await page.evaluate(() => {
+  const passiveModelContent = '.MODEL RUSER RES(R=2k)'
+  const passiveModelHash = createHash('sha256').update(passiveModelContent).digest('hex')
+  await page.evaluate(({ passiveModelContent, passiveModelHash }) => {
     const project = JSON.parse(localStorage.getItem('elsim:project:v7')!)
     const source = { id: 'ui-pulse-i1', kind: 'currentSource', ref: 'I1', value: '1 mA', instanceMultiplier: '3', x: 450, y: 350, rotation: 0 }
     const resistor = { id: 'ui-multiplier-r2', kind: 'resistor', ref: 'R2', value: '1 kΩ', instanceMultiplier: '4', x: 700, y: 350, rotation: 0 }
-    project.parts.push(source, resistor)
+    const modeledResistor = { id: 'ui-multiplier-r3', kind: 'resistor', ref: 'R3', value: '', deviceModel: 'RUSER', instanceMultiplier: '4', x: 700, y: 500, rotation: 0 }
+    project.modelAssets = [{ id: 'ui-passive-model', filename: 'passive.lib', content: passiveModelContent, sha256: passiveModelHash, licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+    project.parts.push(source, resistor, modeledResistor)
     project.sheets[0].parts = project.parts
     localStorage.setItem('elsim:project:v7', JSON.stringify(project))
-  })
+  }, { passiveModelContent, passiveModelHash })
   await page.reload()
   await page.getByRole('button', { name: /^I1, Current source/ }).click()
   await expect(page.getByLabel('Device multiplier for I1')).toHaveValue('3')
@@ -10038,6 +10042,10 @@ test('current-source inspector edits its multiplier and finite-cycle waveforms',
   await resistorPart.focus()
   await resistorPart.press('Enter')
   await expect(page.getByText('Effective parallel value: 250 Ω')).toBeVisible()
+  const modeledResistorPart = page.getByRole('button', { name: /^R3, Resistor/ })
+  await modeledResistorPart.focus()
+  await modeledResistorPart.press('Enter')
+  await expect(page.getByText('Effective parallel value: 500 Ω')).toBeVisible()
 })
 
 test('stop terminates an active ngspice run and leaves the workspace responsive', { tag: '@ngspice' }, async ({ page }) => {
