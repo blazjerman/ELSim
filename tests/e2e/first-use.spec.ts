@@ -6079,6 +6079,26 @@ test('imported ngspice E-source transfer warning identifies unavailable XSPICE a
   await expect(reviewedLine).toContainText('E1 OUT 0 LAPLACE')
 })
 
+test('imported ngspice E-source logic warning identifies missing XSPICE and opens its source line', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const source = '.SUBCKT gates IN1 IN2 OUT\nEAND OUT 0 AND(2) IN1 0 IN2 0 (0.5,0) (2.8,3.3)\nEOR OUT 0 OR(2) IN1 0 IN2 0 (0.5,0) (2.8,3.3)\nETABLE OUT 0 TABLE {V(IN1)} = (0,0) (1,5)\nEVALUE OUT 0 VALUE={V(IN1)*V(IN2)}\n.ENDS gates'
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'xspice-logic.lib', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice E-source logic gate needs an unavailable XSPICE model')
+  await expect(warnings).toContainText('XSPICE multi_input_pwl code model')
+  await expect(warnings).toContainText('does not replace its logic behavior')
+  await expect(warnings).toContainText('xspice-logic.lib:2')
+  await expect(warnings).toContainText('xspice-logic.lib:3')
+  await expect(warnings).not.toContainText('xspice-logic.lib:4')
+  await expect(warnings).not.toContainText('xspice-logic.lib:5')
+  await warnings.getByRole('button', { name: 'Review source line 2' }).click()
+  const sourceViewer = page.locator('.model-source-viewer')
+  const reviewedLine = sourceViewer.locator('li').nth(1)
+  await expect(reviewedLine).toBeFocused()
+  await expect(reviewedLine).toContainText('EAND OUT 0 AND(2)')
+})
+
 test('compatibility report reveals model warnings beyond its initial page', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const lines = ['.SUBCKT MANY IN OUT', ...Array.from({ length: 21 }, (_, index) => `B${index + 1} OUT 0 V=mc(1,0.1)`), '.ENDS MANY']

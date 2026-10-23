@@ -916,6 +916,30 @@ test('warns when ngspice E-source transfer forms require unavailable XSPICE mode
   assert.equal(source.includes('E1 OUT 0 LAPLACE'), true)
 })
 
+test('warns when ngspice E-source logic gates require unavailable XSPICE models', () => {
+  const source = [
+    '* E1 OUT 0 AND(2) is only a comment',
+    '.SUBCKT gates IN1 IN2 OUT',
+    'EAND OUT 0 AND(2) IN1 0 IN2 0 (0.5,0) (2.8,3.3)',
+    'EOR OUT 0 OR(2) IN1 0 IN2 0 (0.5,0) (2.8,3.3)',
+    'ENAND OUT 0 NAND(2) IN1 0 IN2 0 (0.5,0) (2.8,3.3)',
+    'ENOR OUT 0 NOR(2) IN1 0 IN2 0 (0.5,0) (2.8,3.3)',
+    'ETABLE OUT 0 TABLE {V(IN1)} = (0,0) (1,5)',
+    'EVALUE OUT 0 VALUE={V(IN1)*V(IN2)}',
+    '.ENDS gates',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [3, 'ngspice E-source logic gate needs an unavailable XSPICE model'],
+    [4, 'ngspice E-source logic gate needs an unavailable XSPICE model'],
+    [5, 'ngspice E-source logic gate needs an unavailable XSPICE model'],
+    [6, 'ngspice E-source logic gate needs an unavailable XSPICE model'],
+  ])
+  assert.match(warnings[0].impact, /rewrites E-source AND\/OR\/NAND\/NOR forms to the XSPICE multi_input_pwl code model/)
+  assert.match(warnings[0].suggestion, /does not replace its logic behavior/)
+  assert.equal(source.includes('EAND OUT 0 AND(2)'), true)
+})
+
 test('pinpoints LTspice behavioral forms and options, including continuation records', () => {
   const source = [
     '.SUBCKT compat IN OUT',
