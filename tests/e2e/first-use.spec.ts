@@ -3344,6 +3344,67 @@ test('pointer cancellation rolls back schematic drags and wire creation', { tag:
   await expect(svg.locator('line[stroke-dasharray="5 4"]')).toHaveCount(0)
 })
 
+test('pointer cancellation rolls back wire-endpoint and mixed-group previews', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  const svg = page.locator('svg.schematic')
+  const undo = page.getByRole('button', { name: 'Undo (Ctrl/⌘+Z)' })
+  await expect(undo).toBeDisabled()
+  const wiresBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)
+  const firstWire = page.locator('.wire-line').first()
+  const linePoint = await firstWire.evaluate((element) => {
+    const line = element.querySelector('line:not([stroke="transparent"])')!
+    const x = (Number(line.getAttribute('x1')) + Number(line.getAttribute('x2'))) / 2
+    const y = (Number(line.getAttribute('y1')) + Number(line.getAttribute('y2'))) / 2
+    const screen = new DOMPoint(x, y).matrixTransform((element.ownerSVGElement as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
+  await page.mouse.move(linePoint.x, linePoint.y)
+  const endpoint = page.locator('.wire-endpoint-handles circle').first()
+  await expect(endpoint).toBeVisible()
+  const endpointPoint = await endpoint.evaluate((element) => {
+    const screen = new DOMPoint(Number(element.getAttribute('cx')), Number(element.getAttribute('cy'))).matrixTransform((element.ownerSVGElement as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  })
+  await page.evaluate(() => {
+    document.addEventListener('pointerdown', (event) => {
+      document.documentElement.dataset.cancelledPointer = String(event.pointerId)
+    }, { capture: true, once: true })
+  })
+  await page.mouse.move(endpointPoint.x, endpointPoint.y)
+  await page.mouse.down()
+  await page.mouse.move(endpointPoint.x + 24, endpointPoint.y + 12, { steps: 2 })
+  const endpointPointerId = await page.locator('html').getAttribute('data-cancelled-pointer')
+  expect(endpointPointerId).not.toBeNull()
+  await page.evaluate((id) => { document.querySelector('.schematic')!.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: Number(id), pointerType: 'mouse' })) }, endpointPointerId)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)).toEqual(wiresBefore)
+  await expect(undo).toBeDisabled()
+
+  await svg.focus()
+  await page.keyboard.press('Control+a')
+  const partsBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts)
+  const resistor = page.locator('.circuit-part[data-part-id="p-r1"]')
+  const bounds = await resistor.boundingBox()
+  expect(bounds).not.toBeNull()
+  const start = { x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 }
+  await page.evaluate(() => {
+    document.addEventListener('pointerdown', (event) => {
+      document.documentElement.dataset.cancelledPointer = String(event.pointerId)
+    }, { capture: true, once: true })
+  })
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x + 24, start.y, { steps: 2 })
+  const groupPointerId = await page.locator('html').getAttribute('data-cancelled-pointer')
+  expect(groupPointerId).not.toBeNull()
+  await page.evaluate((id) => { document.querySelector('.schematic')!.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: Number(id), pointerType: 'mouse' })) }, groupPointerId)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts)).toEqual(partsBefore)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).wires)).toEqual(wiresBefore)
+  await expect(undo).toBeDisabled()
+})
+
 test('copying the whole schematic selects and moves only the pasted wires with pasted parts', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)

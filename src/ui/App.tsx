@@ -2921,6 +2921,7 @@ export default function App() {
     setNotice(`Placed ${sheet.name}. Connect its pins in the order shown in the inspector.`)
   }
   const history = useRef<{ past: Project[]; future: Project[] }>({ past: [], future: [] })
+  const [, setHistoryRevision] = useState(0)
   // Project updates are immutable. Share prior project trees in undo history so
   // a gesture does not clone every component and wire before it starts.
   const recordUndoSnapshot = (snapshot: Project) => {
@@ -2938,7 +2939,10 @@ export default function App() {
     recordUndoSnapshot(projectRef.current)
   }
   const endEdit = (cancelled = false) => {
-    if (cancelled && editGroupStartProject.current === projectRef.current && editGroupHistory.current) history.current = editGroupHistory.current
+    if (cancelled && editGroupStartProject.current === projectRef.current && editGroupHistory.current) {
+      history.current = editGroupHistory.current
+      setHistoryRevision((revision) => revision + 1)
+    }
     editGroup.current = false
     editGroupStartProject.current = null
     editGroupHistory.current = null
