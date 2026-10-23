@@ -43,10 +43,9 @@ import { createStarterProject, kindNames, kindPrefix, PLOT_TRACE_COLORS, sheetMo
 import { validateAnalysisSettings, type AnalysisSettingField } from '../engine/netlistValidation'
 import { partUiState, subscribePartUiState, updatePartUiState } from './partUiState'
 import { COMPONENT_SHORTCUTS_HELP, EDITOR_SHORTCUTS, exampleSelection, FUTURE_COMPONENT_SHORTCUTS, LOGIC_GATE_SHORTCUTS, LOGIC_GATE_SHORTCUTS_HELP, RESULT_ANIMATED_PART_KINDS } from './editorMetadata'
-import { getStartHereProgress } from './examplePath'
+import { getStartHereProgress, type ExampleId } from '../domain/examplePath'
 import { clearProjectAutosave, loadStoredProjectCandidates, readProjectAutosave, shouldRestoreProjectAutosave, writeProjectAutosave } from '../domain/projectAutosave'
 import { engineResponseIssue, isEngineResponse, normalizeTraceAxes, type SimulationDiagnostic, type SimulationResult, type Trace } from '../engine/contract'
-import type { ExampleId } from './ExamplesDialog'
 
 type ToolMode = 'select' | 'wire' | 'label' | 'probe' | 'junction'
 type ComponentCategory = ComponentPaletteCategory
@@ -99,6 +98,7 @@ const KeyboardShortcuts = lazy(() => import('./KeyboardShortcuts'))
 const ExamplesDialog = lazy(() => import('./ExamplesDialog').then((module) => ({ default: module.ExamplesDialog })))
 const BeginnerPrediction = lazy(() => import('./BeginnerPredictions').then((module) => ({ default: module.BeginnerPrediction })))
 const ModelDependencyReport = lazy(() => import('./ModelDependencyReport').then((module) => ({ default: module.ModelDependencyReport })))
+const HierarchyWalkthrough = lazy(() => import('./HierarchyWalkthrough').then((module) => ({ default: module.HierarchyWalkthrough })))
 const EMPTY_SYMBOL_GEOMETRY: NonNullable<ReturnType<typeof componentDefinitionFor>['symbolGeometry']> = []
 
 function IconButton({ title, children, onClick, active, disabled = false }: { title: string; children: ReactNode; onClick?: () => void; active?: boolean; disabled?: boolean }) {
@@ -729,6 +729,7 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
         ref.current.style.top = `${panel.bounds.y}px`
       }
     }
+    const blur = () => cancelDrag()
     const resize = () => {
       const next = clampPlotPanelBounds(panel.bounds)
       if (!samePlotPanelBounds(next, panel.bounds)) onBoundsChange(next)
@@ -736,8 +737,9 @@ const FloatingPlotPanel = memo(function FloatingPlotPanel({ panel, index, title,
     window.addEventListener('pointermove', previewPosition)
     window.addEventListener('pointerup', finishDrag)
     window.addEventListener('pointercancel', cancelDrag)
+    window.addEventListener('blur', blur)
     window.addEventListener('resize', resize)
-    return () => { observer.disconnect(); clearTimeout(resizeTimer); window.removeEventListener('pointermove', previewPosition); window.removeEventListener('pointerup', finishDrag); window.removeEventListener('pointercancel', cancelDrag); window.removeEventListener('resize', resize) }
+    return () => { observer.disconnect(); clearTimeout(resizeTimer); window.removeEventListener('pointermove', previewPosition); window.removeEventListener('pointerup', finishDrag); window.removeEventListener('pointercancel', cancelDrag); window.removeEventListener('blur', blur); window.removeEventListener('resize', resize) }
   }, [panel.bounds, onBoundsChange])
   return <section ref={ref} data-plot-panel-id={panel.id} className="plot-window additional-plot-window" role="dialog" aria-label={title} aria-describedby={`plot-window-instructions-${panel.id}`} title="Middle-click anywhere in this window to close it" style={{ left: panel.bounds.x, top: panel.bounds.y, width: panel.bounds.width, height: panel.bounds.height, zIndex: 9 + index }} onPointerDownCapture={onActivate} onMouseDownCapture={(event) => { if (event.button === 1) { event.preventDefault(); event.stopPropagation(); onClose() } }}>
     <span id={`plot-window-instructions-${panel.id}`} className="sr-only">Drag the title bar or focus it and use arrow keys to move this window. Hold Shift with an arrow key to resize it. Use the Close button, or middle-click anywhere in the window, to close it.</span>
@@ -4932,19 +4934,7 @@ export default function App() {
         <div className="inspector-links"><button onClick={startTour}><CircleHelp size={14}/> Help</button><button onClick={() => setNotice('Component library is original ELSim data.')}><Bookmark size={14}/> Library notes</button></div>
       </aside>
     </div>
-    {hierarchyWalkthroughStep !== null && <aside className="hierarchy-walkthrough" role="status" aria-live="polite"><div><span className="eyebrow">GUIDED EXAMPLE · STEP {hierarchyWalkthroughStep + 1} OF 5</span><strong>{[
-      'Run the circuit',
-      'Open the second divider instance',
-      'Open the nested core block',
-      'Probe the core resistor current',
-      'Return to the root sheet',
-    ][hierarchyWalkthroughStep]}</strong><p>{[
-      'Click Run simulation. The two divider instances use different RINPUT values.',
-      'Select X2 and choose “Open sheet definition” in the inspector. Its RINPUT override is 2k.',
-      'Select XCORE and open its sheet definition to inspect the nested reusable core.',
-      'Choose the probe tool and click RCORE. Its current appears as a waveform.',
-      'Click the Root sheet tab to finish. You can keep exploring the project afterward.',
-    ][hierarchyWalkthroughStep]}</p></div><button className="subtle-icon" onClick={() => setHierarchyWalkthroughStep(null)} aria-label="Close walkthrough"><X size={15}/></button></aside>}
+    {hierarchyWalkthroughStep !== null && <Suspense fallback={null}><HierarchyWalkthrough step={hierarchyWalkthroughStep} onClose={() => setHierarchyWalkthroughStep(null)}/></Suspense>}
     {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14}/></button></div>}
     {(ltspiceExportBusy || ltspiceExport) && <div className="tour-backdrop" onClick={() => { if (!ltspiceExportBusy) closeLtspiceExport() }}><section autoFocus tabIndex={-1} className="tour-dialog lt-export-dialog" role="dialog" aria-modal="true" aria-labelledby="lt-export-title" aria-busy={ltspiceExportBusy} onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogTab}>
       <div className="modal-heading"><div><span className="eyebrow">LTSPICE INTEROPERABILITY</span><h2 id="lt-export-title">{ltspiceExportBusy ? 'Preparing export…' : 'Review export'}</h2></div><button className="subtle-icon" aria-label="Close LTspice export preview" disabled={ltspiceExportBusy} onClick={closeLtspiceExport}><X size={17}/></button></div>

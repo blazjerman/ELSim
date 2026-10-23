@@ -1,0 +1,17 @@
+export type ExampleId = 'ohms-law' | 'potentiometer' | 'wheatstone-bridge' | 'rc' | 'ac-lowpass' | 'ac-highpass' | 'sine-wave' | 'rlc-resonance' | 'lc-energy' | 'led' | 'led-current-limiter' | 'led-parallel' | 'diode-polarity' | 'parallel-resistors' | 'resistor-power' | 'lamp-power' | 'switch-lamp' | 'series-resistors' | 'supply-droop' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'capacitor-discharge' | 'rlc' | 'rl-step' | 'flyback' | 'controlled' | 'current-controlled' | 'transistor' | 'voltage-switch' | 'current-switch' | 'pnp' | 'pjfet' | 'mosfet' | 'pmos' | 'jfet' | 'hierarchy' | 'pwl' | 'current-source' | 'rectifier' | 'bridge-rectifier' | 'voltage-divider' | 'zener' | 'transformer' | 'transformer-current' | 'educational-opamp' | 'imported-opamp' | 'inverting-opamp' | 'noninverting-opamp' | 'common-emitter' | 'logic-gates' | 'logic-gates-3v3'
+
+export const START_HERE_EXAMPLES: readonly ExampleId[] = [
+  'switch-lamp',
+  'ohms-law',
+  'rc',
+  'voltage-divider',
+  'series-resistors',
+  'led-current-limiter',
+  'capacitor-discharge',
+]
+
+export function getStartHereProgress(exampleId: ExampleId): { step: number; total: number; next: ExampleId | null } | null {
+  const index = START_HERE_EXAMPLES.indexOf(exampleId)
+  if (index < 0) return null
+  return { step: index + 1, total: START_HERE_EXAMPLES.length, next: START_HERE_EXAMPLES[index + 1] ?? null }
+}
