@@ -1,9 +1,17 @@
 Hyphenated native model identifier operating point
 V1 supply 0 5
-D1 supply output-h D-FAST
-D2 supply output-ref DFAST
+X1 supply output-h AMP-CORE
+XREF supply output-ref AMPREF
 R1 output-h 0 1k
 R2 output-ref 0 1k
+.SUBCKT AMP-CORE IN OUT
+D1 IN midpoint D-FAST
+R3 midpoint OUT 1k
+.ENDS AMP-CORE
+.SUBCKT AMPREF IN OUT
+D1 IN midpoint DFAST
+R3 midpoint OUT 1k
+.ENDS AMPREF
 .MODEL D-FAST D(IS=1e-14)
 .MODEL DFAST D(IS=1e-14)
 .op

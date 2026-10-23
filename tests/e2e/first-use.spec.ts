@@ -5270,11 +5270,13 @@ test('imports a hyphenated native ngspice device-model name', { tag: '@ui-smoke'
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'hyphenated-diode.lib',
     mimeType: 'text/plain',
-    buffer: Buffer.from('.MODEL D-FAST D(IS=1e-14)\n'),
+    buffer: Buffer.from('.MODEL D-FAST D(IS=1e-14)\n.SUBCKT AMP-CORE IN OUT\nD1 IN OUT D-FAST\n.ENDS AMP-CORE\n'),
   })
-  const model = page.locator('.imported-model').filter({ hasText: 'D-FAST' })
-  await expect(model).toBeVisible()
-  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from hyphenated-diode\.lib/)).toBeVisible()
+  const deviceModel = page.locator('.imported-model').filter({ hasText: 'D-FAST' })
+  const subcircuit = page.locator('.imported-model').filter({ hasText: 'AMP-CORE' })
+  await expect(deviceModel).toBeVisible()
+  await expect(subcircuit).toBeVisible()
+  await expect(page.getByText(/Imported 1 subcircuit and 1 device model from hyphenated-diode\.lib/)).toBeVisible()
 })
 
 test('ngspice .GLOBAL inside an imported subcircuit is preserved and warns about shared nodes', { tag: '@ngspice' }, async ({ page }) => {
