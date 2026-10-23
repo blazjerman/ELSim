@@ -1933,9 +1933,9 @@ test('NMOS and PMOS use a generated educational Level 1 model in D-G-S-B pin ord
   assert.match(createNetlistArtifact(project).diagnostics.map(({ message }) => message).join('\n'), /not a NMOS model/i)
 })
 
-test('standalone MOSFET can reference an imported unsuffixed BSIM3 bin family with explicit geometry', () => {
+test('standalone MOSFET supports a device multiplier with an imported BSIM3 bin family', () => {
   const project = createStarterProject()
-  const mosfet = { id: 'm-binned', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'NCH', mosfetGeometry: { length: '1u', width: '10u' }, x: 700, y: 500, rotation: 0 }
+  const mosfet = { id: 'm-binned', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'NCH', instanceMultiplier: '4', mosfetGeometry: { length: '1u', width: '10u' }, x: 700, y: 500, rotation: 0 }
   project.parts.push(mosfet)
   project.netLabels.push(...componentPins(mosfet).map((pin, index) => ({
     id: `m-binned-net-${index}`, name: `m1pin${index}`, x: pin.x, y: pin.y, visible: false,
@@ -1946,7 +1946,7 @@ test('standalone MOSFET can reference an imported unsuffixed BSIM3 bin family wi
   }]
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^M1 m1pin0 m1pin1 m1pin2 m1pin3 NCH L=1u W=10u$/m)
+  assert.match(artifact.text, /^M1 m1pin0 m1pin1 m1pin2 m1pin3 NCH M=4 L=1u W=10u$/m)
   assert.match(artifact.text, /^\.MODEL NCH\.1 NMOS/m)
   assert.match(artifact.text, /^\.MODEL NCH\.2 NMOS/m)
   assert.doesNotMatch(artifact.text, /^\.MODEL NCH NMOS/m)
@@ -1963,6 +1963,21 @@ test('MOSFET geometry accepts positive SPICE dimensions only on native MOSFETs',
   mosfet.kind = 'resistor'
   mosfet.ref = 'R2'
   assert.throws(() => validateProject(project), /malformed MOSFET channel geometry/i)
+})
+
+test('MOSFET instance multiplier accepts positive numbers only on native MOSFETs', () => {
+  const project = createStarterProject()
+  const mosfet = { id: 'm-multiplier', kind: 'nmos', ref: 'M1', value: '0', instanceMultiplier: '2.5', x: 700, y: 500, rotation: 0 }
+  project.parts.push(mosfet)
+  assert.doesNotThrow(() => validateProject(project))
+  mosfet.instanceMultiplier = '0'
+  assert.throws(() => validateProject(project), /invalid device multiplier/i)
+  mosfet.instanceMultiplier = '-2'
+  assert.throws(() => validateProject(project), /invalid device multiplier/i)
+  mosfet.instanceMultiplier = '2'
+  mosfet.kind = 'resistor'
+  mosfet.ref = 'R2'
+  assert.throws(() => validateProject(project), /invalid device multiplier/i)
 })
 
 test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {

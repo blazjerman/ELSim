@@ -257,6 +257,12 @@
           },
           "description": "Optional positive MOSFET channel length and width, expressed as SPICE dimensions."
         },
+        "instanceMultiplier": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "Optional positive ngspice MOSFET instance multiplier."
+        },
         "deviceModel": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.$]*(?:/[A-Za-z0-9_.$]+)*$"

@@ -794,8 +794,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      const geometry = [part.mosfetGeometry?.length && `L=${part.mosfetGeometry.length}`, part.mosfetGeometry?.width && `W=${part.mosfetGeometry.width}`].filter(Boolean).join(' ')
-      append(`${part.ref} ${positive} ${gate} ${source} ${bulk} ${model}${geometry ? ` ${geometry}` : ''}`, part.id, 'component')
+      const instanceOptions = [part.instanceMultiplier && `M=${part.instanceMultiplier}`, part.mosfetGeometry?.length && `L=${part.mosfetGeometry.length}`, part.mosfetGeometry?.width && `W=${part.mosfetGeometry.width}`].filter(Boolean).join(' ')
+      append(`${part.ref} ${positive} ${gate} ${source} ${bulk} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
       if (!part.deviceModel) mosfetModels.push({ part, name: model })
     }
     else if (part.kind === 'nvdmos' || part.kind === 'pvdmos') {
