@@ -11882,6 +11882,33 @@ test('noise analysis retains separate parameter-sweep spectra and case labels', 
   expect(traces.filter((trace) => trace.includes('R1=2000 Ω'))).toHaveLength(2)
 })
 
+test('operating-point parameter sweep compares labeled bias values for a selected node', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const project = createStarterProject()
+  const source = project.parts.find((part) => part.ref === 'V1')!
+  source.sourceMode = 'dc'
+  project.simulation = {
+    ...project.simulation,
+    analysis: 'op',
+    parameterSweeps: [{ component: 'V1', start: '1 V', stop: '2 V', points: 2 }],
+  }
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels }
+  const validated = validateProject(project)
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
+
+  await rightClickNetLabel(page, 'vin')
+  await page.getByRole('menuitem', { name: 'Plot voltage to ground' }).click()
+  const chooser = page.getByRole('dialog').filter({ hasText: 'Choose where this trace should appear.' })
+  await chooser.getByRole('button', { name: /New waveform window/ }).click()
+  const table = page.locator('.plot-window').last().locator('.op-table')
+  await expect(table.getByRole('row', { name: /V\(vin\).*V1=1 V.*1\.000000 V/ })).toBeVisible()
+  await expect(table.getByRole('row', { name: /V\(vin\).*V1=2 V.*2\.000000 V/ })).toBeVisible()
+  await expect(page.locator('.plot-window').last().locator('.op-table tbody tr').filter({ hasText: 'V(vin)' })).toHaveCount(2)
+})
+
 test('current-source noise analysis picks the circuit node and labels input noise in amperes', { tag: '@ngspice' }, async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')

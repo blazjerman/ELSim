@@ -479,9 +479,11 @@ test('parameter sweep rejects duplicate parts, equal endpoints, and more than te
   assert.throws(() => validateProject(project), /10 total combinations/)
   project.simulation.parameterSweeps = [{ component: 'R1', start: 'invalid', stop: '2 kΩ', points: 3 }]
   assert.throws(() => validateProject(project), /passive values, source frequencies, and positive time constants must be positive/)
-  project.simulation.analysis = 'ac'
   project.simulation.parameterSweeps = [{ component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 3 }]
-  assert.throws(() => validateProject(project), /transient analysis only/)
+  for (const analysis of ['op', 'ac', 'noise']) {
+    project.simulation.analysis = analysis
+    assert.deepEqual(validateProject(structuredClone(project)).simulation.parameterSweeps, project.simulation.parameterSweeps, `${analysis} parameter sweeps should survive project validation`)
+  }
   project.simulation.analysis = 'tran'
   project.parts.find((part) => part.ref === 'V1').sourceMode = 'sine'
   project.simulation.parameterSweeps = [{ component: 'V1', start: '1 V', stop: '2 V', points: 3 }]
