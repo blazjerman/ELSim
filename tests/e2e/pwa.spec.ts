@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import { readFileSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
 
 test.use({ baseURL: 'http://127.0.0.1:4183' })
 
@@ -7,7 +9,9 @@ test('production app shell opens offline and preserves local project edits', asy
   await page.addInitScript(() => {
     const testWindow = window as Window & { __cspViolations?: string[] }
     const storageKey = 'elsim:test:csp-violations'
+    const navigationKey = 'elsim:test:pwa-navigation-count'
     testWindow.__cspViolations = JSON.parse(sessionStorage.getItem(storageKey) ?? '[]') as string[]
+    sessionStorage.setItem(navigationKey, String(Number(sessionStorage.getItem(navigationKey) ?? '0') + 1))
     window.addEventListener('securitypolicyviolation', (event) => {
       testWindow.__cspViolations?.push(`${event.effectiveDirective}: ${event.blockedURI}`)
       sessionStorage.setItem(storageKey, JSON.stringify(testWindow.__cspViolations))
@@ -66,4 +70,27 @@ test('production app shell opens offline and preserves local project edits', asy
   await page.getByRole('button', { name: 'Replace and open' }).click()
   await expect(page.locator('.project-title')).toHaveText('RLC ringing')
   expect(await page.evaluate(() => (window as Window & { __cspViolations?: string[] }).__cspViolations)).toEqual([])
+
+  await context.setOffline(false)
+  const serviceWorkerPath = path.resolve('dist/sw.js')
+  const originalServiceWorker = readFileSync(serviceWorkerPath, 'utf8')
+  const navigationCount = await page.evaluate(() => Number(sessionStorage.getItem('elsim:test:pwa-navigation-count')))
+  try {
+    writeFileSync(serviceWorkerPath, `${originalServiceWorker}\n// trigger the local PWA update workflow`)
+    await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.getRegistration()
+      if (!registration) throw new Error('The app service worker was not registered.')
+      await registration.update()
+    })
+    const updateNotice = page.getByRole('status', { name: 'App update ready' })
+    await expect(updateNotice).toBeVisible({ timeout: 30_000 })
+    const updateNavigation = page.waitForEvent('framenavigated', (frame) => frame === page.mainFrame())
+    await page.getByRole('button', { name: 'Reload to update' }).click()
+    await updateNavigation
+    expect(await page.evaluate(() => Number(sessionStorage.getItem('elsim:test:pwa-navigation-count')))).toBeGreaterThan(navigationCount)
+    await expect(page.getByRole('heading', { name: 'Components' })).toBeVisible()
+    await expect(page.locator('.project-title')).toHaveText('RLC ringing')
+  } finally {
+    writeFileSync(serviceWorkerPath, originalServiceWorker)
+  }
 })
