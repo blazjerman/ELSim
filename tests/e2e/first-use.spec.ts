@@ -3133,6 +3133,33 @@ test('batch-importing related model libraries resolves their includes immediatel
   expect(netlistText).not.toMatch(/^\.include/im)
 })
 
+test('single-file ngspice .LIB directives import their project-local asset', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles([
+    {
+      name: 'single-lib-wrapper.lib',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('.LIB "single-lib-shared.lib"\n.SUBCKT SINGLE_LIB_AMP IN OUT\nXCORE IN OUT SINGLE_LIB_CORE\n.ENDS SINGLE_LIB_AMP\n'),
+    },
+    {
+      name: 'single-lib-shared.lib',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('.SUBCKT SINGLE_LIB_CORE IN OUT\nR1 IN OUT 1k\n.ENDS SINGLE_LIB_CORE\n'),
+    },
+  ])
+  await expect(page.getByRole('region', { name: 'Model dependency report' })).toHaveCount(0)
+  await expect(page.getByText('SINGLE_LIB_AMP', { exact: true })).toBeVisible()
+  await expect(page.getByText('SINGLE_LIB_CORE', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' })
+  await expect(netlist.locator('pre')).toContainText('.SUBCKT SINGLE_LIB_AMP IN OUT')
+  const text = await netlist.innerText()
+  expect(text).toContain('.SUBCKT SINGLE_LIB_AMP IN OUT')
+  expect(text).toContain('.SUBCKT SINGLE_LIB_CORE IN OUT')
+  expect(text).not.toMatch(/^\.LIB /im)
+})
+
 test('large imported IC lists can be searched and expanded on demand', async ({ page }) => {
   await page.goto('/')
   const subcircuitSources = Array.from({ length: 52 }, (_, index) => {
