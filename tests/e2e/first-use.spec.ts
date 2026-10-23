@@ -6059,6 +6059,26 @@ test('imported XSPICE A-device warning explains the missing module and opens its
   await expect(reviewedLine).toContainText('A1 IN OUT slew')
 })
 
+test('imported ngspice E-source transfer warning identifies unavailable XSPICE and opens its source line', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const source = '.SUBCKT transfer IN OUT\nE1 OUT 0 LAPLACE {V(IN)} {5/(s+1)}\nE2 OUT 0 FREQ {V(IN)}=DB\nE3 OUT 0 VALUE={V(IN)*2}\n.ENDS transfer'
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'xspice-transfer.lib', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('ngspice E-source transfer function needs an unavailable XSPICE model')
+  await expect(warnings).toContainText('LAPLACE with the XSPICE s_xfer code model')
+  await expect(warnings).toContainText('FREQ with xfer')
+  await expect(warnings).toContainText('does not replace the transfer behavior')
+  await expect(warnings).toContainText('xspice-transfer.lib:2')
+  await expect(warnings).toContainText('xspice-transfer.lib:3')
+  await expect(warnings).not.toContainText('xspice-transfer.lib:4')
+  await warnings.getByRole('button', { name: 'Review source line 2' }).click()
+  const sourceViewer = page.locator('.model-source-viewer')
+  const reviewedLine = sourceViewer.locator('li').nth(1)
+  await expect(reviewedLine).toBeFocused()
+  await expect(reviewedLine).toContainText('E1 OUT 0 LAPLACE')
+})
+
 test('compatibility report reveals model warnings beyond its initial page', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const lines = ['.SUBCKT MANY IN OUT', ...Array.from({ length: 21 }, (_, index) => `B${index + 1} OUT 0 V=mc(1,0.1)`), '.ENDS MANY']

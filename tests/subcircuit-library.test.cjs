@@ -896,6 +896,26 @@ test('explains that imported XSPICE A-devices require unavailable code-model mod
   assert.equal(source.includes('A1 IN OUT slew'), true)
 })
 
+test('warns when ngspice E-source transfer forms require unavailable XSPICE models', () => {
+  const source = [
+    '* E1 OUT 0 LAPLACE {V(IN)} is only a comment',
+    '.SUBCKT transfer IN OUT',
+    'E1 OUT 0 LAPLACE {V(IN)} {5/(s+1)}',
+    'E2 OUT 0 FREQ {V(IN)}=DB',
+    'E3 OUT 0 VALUE={V(IN)*2}',
+    '.ENDS transfer',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [3, 'ngspice E-source transfer function needs an unavailable XSPICE model'],
+    [4, 'ngspice E-source transfer function needs an unavailable XSPICE model'],
+  ])
+  assert.match(warnings[0].impact, /LAPLACE.*s_xfer.*browser runtime omits compiled XSPICE code-model modules/)
+  assert.match(warnings[1].impact, /FREQ.*xfer/)
+  assert.match(warnings[1].suggestion, /preserves the original source/)
+  assert.equal(source.includes('E1 OUT 0 LAPLACE'), true)
+})
+
 test('pinpoints LTspice behavioral forms and options, including continuation records', () => {
   const source = [
     '.SUBCKT compat IN OUT',
