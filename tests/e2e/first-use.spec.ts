@@ -213,12 +213,11 @@ async function scrubToTime(slider: Locator, targetSeconds: number) {
   let high = Number(await slider.getAttribute('max'))
   let bestIndex = 0
   let bestDifference = Number.POSITIVE_INFINITY
-  const output = slider.locator('xpath=following-sibling::output')
   while (low <= high) {
     const index = Math.floor((low + high) / 2)
     await slider.fill(String(index))
     await expect(slider).toHaveValue(String(index))
-    const seconds = parseDisplayedTimeSeconds((await output.textContent()) ?? '')
+    const seconds = parseDisplayedTimeSeconds((await slider.getAttribute('aria-valuetext')) ?? '')
     const difference = Math.abs(seconds - targetSeconds)
     if (difference < bestDifference) { bestDifference = difference; bestIndex = index }
     if (seconds < targetSeconds) low = index + 1
