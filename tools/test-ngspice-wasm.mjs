@@ -16,7 +16,7 @@ fixtures.push('imported-subckt-multiplier-op')
 fixtures.push('current-source-multiplier-op', 'current-source-multiplier-tran', 'current-source-multiplier-ac', 'vccs-multiplier-op', 'cccs-multiplier-op')
 fixtures.push('diode-area-perimeter-scaling-op')
 fixtures.push('controlled-switch-initial-state-tran')
-fixtures.push('resistor-ac-value', 'resistor-noise-disabled')
+fixtures.push('resistor-ac-value', 'resistor-noise-disabled', 'resistor-noise-default')
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
 const requestedFixtures = process.env.NGSPICE_WASM_ONLY?.split(',').map((name) => name.trim()).filter(Boolean) ?? []
@@ -75,6 +75,14 @@ for (const fixture of selectedFixtures) {
   assert.equal(wasmResult.status, 0, `${fixture}: ngspice exited with a nonzero status\nstdout:\n${wasmResult.stdout}\nstderr:\n${wasmResult.stderr}`)
   assert.match(wasmResult.stdout, /Circuit:/, `${fixture}: ngspice did not parse the deck`)
   assert.doesNotMatch(wasmResult.stderr, /RuntimeError|out of bounds|stack overflow|Aborted\(/i, `${fixture}: WASM runtime failed`)
+  if (fixture === 'resistor-noise-disabled' || fixture === 'resistor-noise-default') {
+    const table = wasmResult.stdout.match(/Noise Spectral Density Curves[\s\S]*?Index\s+frequency\s+onoise_spectrum\s*\n-+\s*\n([\s\S]*?)(?:\n\n|Note: Simulation executed)/i)?.[1]
+    assert.ok(table, `${fixture}: ngspice should print its solved output-noise spectrum`)
+    const spectrum = [...table.matchAll(/^\s*\d+\s+[-+\d.eE]+\s+([-+\d.eE]+)\s*$/gm)].map((match) => Number(match[1]))
+    assert.equal(spectrum.length, 31, `${fixture}: expected all 31 logarithmic noise points`)
+    if (fixture === 'resistor-noise-disabled') assert.ok(spectrum.every((value) => value === 0), 'NOISY=0 on both resistors should remove resistor-generated output noise')
+    else assert.ok(spectrum.every((value) => value > 0), 'default resistor noise should remain present')
+  }
   if (fixture === 'imported-library-temp-default') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 125\.000000/, 'an imported library .TEMP card should set the circuit temperature when the project uses its default')
   if (fixture === 'imported-library-temp-override') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 85\.000000/, 'a later non-default project .TEMP directive should override the imported library value')
   if (fixture === 'imported-library-csparam-op') assert.match(wasmResult.stdout, /CSPARAM_VALUE=3(?:\.0+)?\b/, 'an imported library .CSPARAM expression should expose its calculated constant to ngspice control output')
