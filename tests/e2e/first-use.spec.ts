@@ -513,6 +513,12 @@ test('a newer local project survives a crash between its JSON and timestamp writ
 test('engine-free preview explains the local runtime requirement while keeping the editor usable', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.route('**/engine/ngspice.mjs', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))
   await page.route('**/engine/ngspice.wasm', (route) => route.fulfill({ status: 404, body: 'Runtime not built' }))
+  let releaseSetupModule!: () => void
+  const setupModuleGate = new Promise<void>((resolve) => { releaseSetupModule = resolve })
+  await page.route('**/src/ui/EngineSetupDialog.tsx*', async (route) => {
+    await setupModuleGate
+    await route.continue()
+  })
   await page.goto('/')
   const notice = page.locator('.engine-missing-notice')
   await expect(notice).toContainText('Simulation needs the local ngspice runtime.')
@@ -523,6 +529,18 @@ test('engine-free preview explains the local runtime requirement while keeping t
   await expect(examples).toContainText('Simulation requires the local ngspice runtime')
   await expect(examples).not.toContainText('simulated locally')
   await page.getByRole('button', { name: 'Close examples' }).click()
+  const setupModuleRequest = page.waitForRequest((request) => request.url().includes('/src/ui/EngineSetupDialog.tsx'))
+  const setupModuleResponse = page.waitForResponse((response) => response.url().includes('/src/ui/EngineSetupDialog.tsx'))
+  await notice.getByRole('button', { name: 'Setup' }).click()
+  const loadingSetup = page.getByRole('status').filter({ hasText: 'Loading local simulation setup…' })
+  await expect(loadingSetup).toBeVisible()
+  await expect(loadingSetup).toHaveAttribute('aria-busy', 'true')
+  await setupModuleRequest
+  await page.keyboard.press('Escape')
+  await expect(loadingSetup).toHaveCount(0)
+  releaseSetupModule()
+  await expect(notice.getByRole('button', { name: 'Setup' })).toBeFocused()
+  expect((await setupModuleResponse).ok()).toBe(true)
   await notice.getByRole('button', { name: 'Setup' }).click()
   const setup = page.getByRole('dialog', { name: 'Build the ngspice runtime' })
   await expect(setup).toContainText('GitHub Pages preview supports editing and saving')
