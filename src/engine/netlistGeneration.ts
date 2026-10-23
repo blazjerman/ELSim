@@ -247,9 +247,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const positive = pinNet(connectivity, part, 0)
     const negative = pinNet(connectivity, part, 1)
     const value = part.kind === 'behavioral' || part.kind === 'logicGate' || part.kind === 'inverter' || part.kind === 'opamp' ? null : part.kind === 'vccs' ? spiceScalar(part.value.trim().replace(/[sS]$/, ''), '') : part.kind === 'cccs' || part.kind === 'ccvs' ? spiceScalar(part.value.trim().replace(/[ΩΩ]|ohms?$/gi, ''), '') : spiceSheetValue(part.value, part.kind, sheetParameters)
-    const passiveModelType = part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined
+    const passiveModelType = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined
     const passiveModel = part.deviceModel ? parsedModelAssets.flatMap((library) => library.models).find((model) => model.name.toLowerCase() === part.deviceModel?.toLowerCase()) : undefined
-    const passiveDefaultParameter = part.kind === 'resistor' || part.kind === 'lamp' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
+    const passiveDefaultParameter = part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'potentiometer' ? 'r' : part.kind === 'capacitor' ? 'cap' : part.kind === 'inductor' ? 'ind' : undefined
     const passiveModelSuppliesValue = Boolean(passiveModelType && passiveModel?.type.toLowerCase() === passiveModelType && passiveDefaultParameter && passiveModel.parameters.some((parameter) => parameter.name.toLowerCase() === passiveDefaultParameter))
     const valueCanBeModelDefault = value === null && part.value.trim() === '' && passiveModelSuppliesValue
     if (part.kind !== 'diode' && part.kind !== 'zener' && part.kind !== 'led' && part.kind !== 'switch' && part.kind !== 'voltageSwitch' && part.kind !== 'currentSwitch' && part.kind !== 'njfet' && part.kind !== 'pjfet' && part.kind !== 'nmesfet' && part.kind !== 'pmesfet' && part.kind !== 'subcircuit' && part.kind !== 'behavioral' && part.kind !== 'logicGate' && part.kind !== 'inverter' && part.kind !== 'opamp' && value === null && !valueCanBeModelDefault) {
@@ -496,19 +496,33 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     else if (part.kind === 'potentiometer') {
       const wiper = pinNet(connectivity, part, 1)
       const lower = pinNet(connectivity, part, 2)
-      const totalResistance = componentMagnitude(spiceSheetParameterDefault(part.value, sheetParameters) ?? part.value, 'potentiometer')
+      const modelResistance = passiveModel?.type.toLowerCase() === 'r'
+        ? passiveModel.parameters.find((parameter) => parameter.name.toLowerCase() === 'r')?.defaultValue
+        : undefined
+      const savedResistance = componentMagnitude(spiceSheetParameterDefault(part.value, sheetParameters) ?? part.value, 'potentiometer')
+      const modelResistanceValue = part.value.trim() === '' && modelResistance
+        ? componentMagnitude(modelResistance, 'potentiometer')
+        : null
+      const totalResistance = savedResistance ?? modelResistanceValue
       const position = Number(part.wiperPosition ?? '0.5')
       const upperResistance = (totalResistance ?? 0) * position
       const lowerResistance = (totalResistance ?? 0) * (1 - position)
       const internalNameConflict = project.parts.some((other) => other.id !== part.id && [`R${part.ref}_A`, `R${part.ref}_B`].some((name) => name.toLowerCase() === other.ref.toLowerCase()))
-      if (internalNameConflict || totalResistance === null || totalResistance <= 0 || !Number.isFinite(position) || position < 0.001 || position > 0.999 || !Number.isFinite(upperResistance) || !Number.isFinite(lowerResistance) || upperResistance <= 0 || lowerResistance <= 0) {
-        const message = internalNameConflict ? `${part.ref} internal resistor names conflict with another component reference.` : `${part.ref} needs a positive finite total resistance and a wiper position from 0.001 to 0.999.`
+      if (part.deviceModel && (!passiveModel || passiveModel.type.toLowerCase() !== 'r')) {
+        const message = `${part.ref} device model ${part.deviceModel} is missing or is not an R model.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}`, part.id, 'component')
-      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}`, part.id, 'component')
+      if (internalNameConflict || totalResistance === null || totalResistance <= 0 || !Number.isFinite(position) || position < 0.001 || position > 0.999 || !Number.isFinite(upperResistance) || !Number.isFinite(lowerResistance) || upperResistance <= 0 || lowerResistance <= 0) {
+        const message = internalNameConflict ? `${part.ref} internal resistor names conflict with another component reference.` : `${part.ref} needs a positive finite total resistance${part.deviceModel && part.value.trim() === '' ? ` or an R model with a numeric R default (${part.deviceModel})` : ''} and a wiper position from 0.001 to 0.999.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
+      append(`R${part.ref}_A ${positive} ${wiper} ${upperResistance.toPrecision(12)}${modelSuffix}`, part.id, 'component')
+      append(`R${part.ref}_B ${wiper} ${lower} ${lowerResistance.toPrecision(12)}${modelSuffix}`, part.id, 'component')
     }
     else if (part.kind === 'resistor' || part.kind === 'lamp' || part.kind === 'capacitor' || part.kind === 'inductor') {
       const elementCondition = part.kind === 'inductor' || part.kind === 'capacitor' ? project.simulation.initialConditions?.find((condition) => 'element' in condition && condition.element.toLowerCase() === part.ref.toLowerCase()) : undefined

@@ -177,7 +177,7 @@ test('built-in component definitions have stable identities, ordered unique SPIC
 
 test('imported device model compatibility has one canonical type per built-in device family', () => {
   const expected = {
-    lamp: 'r',
+    lamp: 'r', potentiometer: 'r',
     diode: 'd', zener: 'd', led: 'd',
     npn: 'npn', pnp: 'pnp', njfet: 'njf', pjfet: 'pjf', nmesfet: 'nmf', pmesfet: 'pmf', nmos: 'nmos', pmos: 'pmos', nvdmos: 'vdmos', pvdmos: 'vdmos',
     voltageSwitch: 'sw', currentSwitch: 'csw',

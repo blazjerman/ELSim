@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { componentDefinitionFor, importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
-import { createCurrentSourceExampleProject, createHierarchicalExampleProject, createJfetSwitchExampleProject } from '../../src/domain/examples'
+import { createCurrentSourceExampleProject, createHierarchicalExampleProject, createJfetSwitchExampleProject, createPotentiometerExampleProject } from '../../src/domain/examples'
 import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
 import { componentPins } from '../../src/domain/geometry'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
@@ -2407,6 +2407,28 @@ test('standalone resistor capacitor and inductor can select imported native mode
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
     await expect(page.locator('.netlist-modal pre')).toContainText(/^C1 .* C_CUSTOM$/m)
   await expect(page.locator('.netlist-modal pre')).toContainText(/^L1 .* L_CUSTOM$/m)
+})
+
+test('potentiometer uses an imported resistor model for both split branches', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createPotentiometerExampleProject()
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'pot-model.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL RPOT R(R=10k TC1=0.01)\n'),
+  })
+  await page.locator('.circuit-part[data-part-id="pot-p1"]').click()
+  const modelPicker = page.getByLabel('Device model for POT1')
+  await expect(modelPicker.locator('option', { hasText: 'RPOT (R)' })).toHaveCount(1)
+  await modelPicker.selectOption('RPOT')
+  await page.locator('[data-part-setting="pot-p1:value"]').fill('')
+  await expect(page.locator('[data-part-setting="pot-p1:value"]')).toHaveAttribute('placeholder', 'Leave blank to use model default')
+  await waitForProjectAutosave(page)
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.locator('.netlist-modal pre')
+  await expect(netlist).toContainText(/^RPOT1_A VIN VOUT 5000(?:\.0+)? RPOT$/m)
+  await expect(netlist).toContainText(/^RPOT1_B VOUT 0 5000(?:\.0+)? RPOT$/m)
 })
 
 test('standalone MOSFET can select an imported BSIM3 bin family by its base name', { tag: '@ui-smoke' }, async ({ page }) => {

@@ -424,6 +424,29 @@ test('potentiometer wiper divides total resistance and validates its travel', ()
   assert.match(createNetlistArtifact(colliding).text, /ERROR: POT1 internal resistor names conflict/i)
 })
 
+test('potentiometers can use imported R models on both branches and use a numeric model R default', () => {
+  const project = createPotentiometerExampleProject()
+  project.modelAssets = [{ id: 'pot-model', filename: 'pot.lib', sha256: 'f'.repeat(64), content: '.MODEL RPOT R(R=10k TC1=0.01)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const potentiometer = project.parts.find((part) => part.kind === 'potentiometer')
+  potentiometer.deviceModel = 'RPOT'
+  potentiometer.wiperPosition = '0.25'
+  const explicit = createNetlistArtifact(project)
+  assert.deepEqual(explicit.diagnostics, [], explicit.text)
+  assert.match(explicit.text, /^RPOT1_A VIN VOUT 2500(?:\.0+)? RPOT$/m)
+  assert.match(explicit.text, /^RPOT1_B VOUT 0 7500(?:\.0+)? RPOT$/m)
+
+  potentiometer.value = ''
+  const modelDefault = createNetlistArtifact(project)
+  assert.deepEqual(modelDefault.diagnostics, [], modelDefault.text)
+  assert.match(modelDefault.text, /^RPOT1_A VIN VOUT 2500(?:\.0+)? RPOT$/m)
+  assert.match(modelDefault.text, /^RPOT1_B VOUT 0 7500(?:\.0+)? RPOT$/m)
+
+  potentiometer.deviceModel = 'NOT_A_RESISTOR'
+  potentiometer.value = '10k'
+  const incompatible = createNetlistArtifact(project)
+  assert.ok(incompatible.diagnostics.some((diagnostic) => /not an R model/i.test(diagnostic.message)))
+})
+
 test('polarized capacitor metadata changes its symbol but not its simulated netlist', () => {
   const project = createStarterProject()
   const original = createNetlistArtifact(project)
