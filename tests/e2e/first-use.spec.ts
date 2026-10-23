@@ -3370,6 +3370,7 @@ test('lossless transmission-line port probes show both currents in amperes', { t
 })
 
 test('an imported LTRA model runs as a lossy line and exposes both port currents', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
   const project = createStarterProject()
   const modelContent = '.MODEL LINE50 LTRA(R=10 L=250n G=0 C=100p LEN=1)\n'
   const parts = [
@@ -3394,8 +3395,15 @@ test('an imported LTRA model runs as a lossy line and exposes both port currents
   await page.locator('.circuit-part[data-part-id="line-device"]').click()
   await page.getByLabel('Device model for T1').selectOption('LINE50')
   await expect(page.getByLabel('Line length mode')).toHaveCount(0)
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('T1')
+  await page.getByRole('combobox', { name: 'Parameter 1 model parameter' }).selectOption('R')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('10')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('20')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
   await page.getByRole('button', { name: 'Run simulation' }).click()
-  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(/Parameter sweep complete · 2 cases/)).toBeVisible({ timeout: 60_000 })
 
   for (const port of [1, 2] as const) {
     const line = page.locator('.circuit-part[data-part-id="line-device"]')
@@ -3404,9 +3412,9 @@ test('an imported LTRA model runs as a lossy line and exposes both port currents
     await page.getByRole('menuitem', { name: `Plot port ${port} current` }).click()
     const destination = page.getByRole('dialog', { name: `I(T1, port ${port})` })
     await destination.getByRole('button', { name: /New waveform window/ }).click()
-    const plot = page.locator('.additional-plot-window').filter({ has: page.getByRole('img', { name: `I(T1, port ${port}), trace in A` }) })
+    const plot = page.locator('.additional-plot-window').filter({ has: page.getByRole('img', { name: new RegExp(`I\\(T1, port ${port}\\).*trace in A`) }) })
     await expect(plot).toBeVisible()
-    await expect(plot.getByRole('button', { name: new RegExp(`Disable I\\(T1, port ${port}\\)`) })).toBeVisible()
+    await expect(plot.getByRole('button', { name: new RegExp(`Disable I\\(T1, port ${port}\\)`) })).toHaveCount(2)
   }
 })
 

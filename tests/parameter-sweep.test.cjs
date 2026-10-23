@@ -366,6 +366,37 @@ test('imported passive model parameters can be stepped', () => {
   }
 })
 
+test('imported lossy transmission-line model parameters can be stepped', () => {
+  const project = createStarterProject()
+  const line = { id: 'sweep-ltra', kind: 'transmissionLine', ref: 'T1', value: '', x: 700, y: 400, rotation: 0, deviceModel: 'LINE50' }
+  project.parts.push(line)
+  project.sheets[0].parts = project.parts
+  project.modelAssets = [{ id: 'sweep-ltra-model', filename: 'line.lib', sha256: 'd'.repeat(64), content: '.MODEL LINE50 LTRA(R=10 L=250n G=0 C=100p LEN=1)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.simulation.parameterSweeps = [{ component: 'T1', parameter: 'R', start: '10', stop: '20', points: 2 }]
+
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 2)
+  assert.equal(runs[0].values[0].model, 'LINE50')
+  assert.equal(runs[0].values[0].parameter, 'R')
+  const artifact = createNetlistArtifact(validated)
+  assert.match(artifact.text, /^O1 \S+ \S+ \S+ \S+ LINE50$/m)
+  assert.match(addResultControl(artifact.text, runs), /altermod LINE50 R=1\.00000000e\+1\nrun/)
+})
+
+test('imported TXL model parameters are compatible sweep targets', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'sweep-txl', kind: 'transmissionLine', ref: 'T1', value: '', x: 700, y: 400, rotation: 0, deviceModel: 'TXL50' })
+  project.sheets[0].parts = project.parts
+  project.modelAssets = [{ id: 'sweep-txl-model', filename: 'line.lib', sha256: 'e'.repeat(64), content: '.MODEL TXL50 TXL(R=10 L=250n G=0 C=100p LENGTH=1)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.simulation.parameterSweeps = [{ component: 'T1', parameter: 'R', start: '10', stop: '20', points: 2 }]
+
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => run.values[0].model), ['TXL50', 'TXL50'])
+  assert.match(addResultControl(createNetlistArtifact(validated).text, runs), /altermod TXL50 R=2\.00000000e\+1\nrun/)
+})
+
 test('imported IC instance parameters become alterparam-driven sweep cases', () => {
   const project = createUrcLineExampleProject()
   project.simulation.parameterSweeps = [{ component: 'XLINE', parameter: 'LENGTH', instanceParameter: true, start: '1m', stop: '3m', points: 3 }]
