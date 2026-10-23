@@ -742,7 +742,7 @@ test('checks behavioral node and component references in their own namespaces an
   behavioral.value = 'V(vin) + table(V(vin), 0, 1)'
   issue = checkCircuit(project).find((item) => item.id === `behavioral-reference:${behavioral.id}`)
   assert.match(issue?.title, /invalid behavioral expression/)
-  assert.match(issue?.detail, /table\(\) expects an input followed by at least two x,y point pairs/)
+  assert.match(issue?.detail, /Function “table” is not supported/)
 })
 
 

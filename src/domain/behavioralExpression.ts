@@ -2,11 +2,19 @@ export type BehavioralReferences = { nodes: string[]; differentialNodes: string[
 export type BehavioralFunctionDefinition = { name: string; arguments: string[]; expression: string }
 export type BehavioralDialect = 'ngspice' | 'ltspice'
 
-const functions = new Map<string, { min: number; max: number }>([
+const ngspiceFunctions = new Map<string, { min: number; max: number }>([
+  ...['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'arctan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh', 'exp', 'ln', 'log', 'log10', 'abs', 'sqrt', 'floor', 'ceil', 'u', 'u2', 'uramp'].map((name) => [name, { min: 1, max: 1 }] as const),
+  ...['min', 'max', 'pow', 'pwr'].map((name) => [name, { min: 2, max: 2 }] as const),
+])
+
+// LTspice B-source helpers are translated to native ngspice expressions. Do
+// not accept these in the native dialect: several have different semantics or
+// are not ngspice B-source functions at all.
+const ltspiceOnlyFunctions = new Map<string, { min: number; max: number }>([
   ['if', { min: 3, max: 3 }],
   ['limit', { min: 3, max: 3 }],
-  ...['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan', 'cbrt', 'buf', 'inv', 'int', 'square', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh', 'exp', 'ln', 'log', 'log10', 'abs', 'sqrt', 'floor', 'ceil', 'u', 'u2', 'uramp'].map((name) => [name, { min: 1, max: 1 }] as const),
-  ...['min', 'max', 'pow', 'pwr', 'pwrs', 'atan2', 'mod', 'xor', 'hypot'].map((name) => [name, { min: 2, max: 2 }] as const),
+  ...['arcsin', 'arccos', 'cbrt', 'buf', 'inv', 'int', 'square'].map((name) => [name, { min: 1, max: 1 }] as const),
+  ...['pwrs', 'atan2', 'mod', 'xor', 'hypot'].map((name) => [name, { min: 2, max: 2 }] as const),
 ])
 
 // These are native ngspice B-source built-ins, not LTspice expression helpers.
@@ -281,8 +289,10 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
       take(')')
       return
     }
-    const piecewiseSignature = (name === 'table' || (name === 'pwl' && dialect === 'ngspice')) ? { min: 5, max: 513 } : undefined
-    const signature = functions.get(name) ?? (dialect === 'ngspice' ? ngspiceOnlyFunctions.get(name) : undefined) ?? piecewiseSignature
+    const piecewiseSignature = (name === 'pwl' && dialect === 'ngspice') || (name === 'table' && dialect === 'ltspice') ? { min: 5, max: 513 } : undefined
+    const signature = ngspiceFunctions.get(name)
+      ?? (dialect === 'ltspice' ? ltspiceOnlyFunctions.get(name) : ngspiceOnlyFunctions.get(name))
+      ?? piecewiseSignature
     if (!signature) throw new Error(`Function “${token.text}” is not supported.`)
     let count = 0
     const argumentsTokens: Token[][] = []
@@ -296,7 +306,7 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
       } while (peek(','))
     }
     take(')')
-    if (name === 'table' || name === 'pwl') {
+    if ((name === 'table' && dialect === 'ltspice') || (name === 'pwl' && dialect === 'ngspice')) {
       const functionName = name
       if (count % 2 !== 1 || count < 5) throw new Error(`${functionName}() expects an input followed by at least two x,y point pairs.`)
       const points = argumentsTokens.slice(1)
@@ -319,7 +329,7 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
     if (peek('+') || peek('-') || peek('!') || peek('~')) { take(); parseUnary() } else parsePrimary()
   }
   const parsePower = (): void => { parseUnary(); if (peek('^') || peek('**')) { take(); parsePower() } }
-  const parseProduct = (): void => { parsePower(); while (peek('*') || peek('/') || peek('%')) { take(); parsePower() } }
+  const parseProduct = (): void => { parsePower(); while (peek('*') || peek('/') || (dialect === 'ltspice' && peek('%'))) { take(); parsePower() } }
   const parseSum = (): void => { parseProduct(); while (peek('+') || peek('-')) { take(); parseProduct() } }
   const parseCompare = (): void => { parseSum(); while (['<', '>', '<=', '>=', '==', '!=', '<>'].some((op) => peek(op))) { take(); parseSum() } }
   const andOperator = dialect === 'ltspice' ? '&' : '&&'
@@ -334,16 +344,19 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
 
 /** Translate supported LTspice B-source helpers to equivalent ngspice expressions. */
 export function translateBehavioralExpression(expression: string, dialect: BehavioralDialect = 'ngspice'): string {
+  // Native B-source syntax is already ngspice syntax. Preserve it byte-for-byte;
+  // only parsed LTspice expressions need dialect translation.
+  if (dialect === 'ngspice') return expression
   const translatedBoolean = translateBooleanBinaryOperators(expression, dialect)
   if (translatedBoolean !== null) return translatedBoolean
   expression = translateRemainderOperators(expression)
   expression = translateBooleanInversions(expression, dialect)
   let output = ''
   let cursor = 0
+  const translatableFunctionPattern = /\b(table|if|limit|mod|pwrs|xor|int|square|buf|inv|arccos|arcsin|arctan|atan2|cbrt|hypot|u)\s*\(/ig
   while (cursor < expression.length) {
-    const match = /\b(table|if|limit|mod|pwrs|xor|int|square|buf|inv|arccos|arcsin|arctan|atan2|cbrt|hypot|u)\s*\(/ig
-    match.lastIndex = cursor
-    const found = match.exec(expression)
+    translatableFunctionPattern.lastIndex = cursor
+    const found = translatableFunctionPattern.exec(expression)
     if (!found) { output += expression.slice(cursor); break }
     output += expression.slice(cursor, found.index)
     const open = expression.indexOf('(', found.index)

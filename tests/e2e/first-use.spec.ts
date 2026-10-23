@@ -3183,6 +3183,19 @@ test('component shortcuts are case-sensitive and logic-gate keys select their ma
   await expect(page.getByRole('button', { name: 'Select and move (M)' })).toHaveClass(/active/)
 })
 
+test('native behavioral source inspector explains ngspice and LTspice expression syntax', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'V(vin)', behavioralOutput: 'voltage', x: 700, y: 500, rotation: 0 })
+  project.sheets[0].parts = project.parts
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await page.locator('.circuit-part[data-part-id="p-b1"]').click()
+  const inspector = page.locator('.inspector-panel')
+  await expect(inspector).toContainText('Native conditionals use condition ? true_value : false_value')
+  await expect(inspector).toContainText('native ngspice does not define LTspice if(), limit(), or table() helpers')
+  await expect(inspector).toContainText('Imported LTspice expressions retain their dialect, including table() endpoint clamps')
+})
+
 test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)

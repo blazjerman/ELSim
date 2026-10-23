@@ -310,6 +310,8 @@ test('logic gate lesson creates labeled, transient behavioral gates', () => {
   assert.match(artifact.text, /^VB B 0 PULSE\(0 5 0 1u 1u 10m 20m\)$/m)
   assert.match(artifact.text, /^BAND OUT_AND 0 V=\{/m)
   assert.match(artifact.text, /^BNOT OUT_NOT 0 V=\{/m)
+  assert.match(artifact.text, /^BNOT OUT_NOT 0 V=\{0 \+ \(5 - 0\) \* \(!\(V\(A\) > 2\.5\)\)\}$/m)
+  assert.doesNotMatch(artifact.text, /\binv\s*\(/i)
   for (const operation of ['and', 'or', 'nand', 'nor', 'xor', 'xnor']) {
     const gate = { id: `gate-${operation}`, kind: 'logicGate', ref: `B_${operation.toUpperCase()}`, value: operation.toUpperCase(), logicOperation: operation, x: 800, y: 500, rotation: 0 }
     const testProject = structuredClone(project)
@@ -1363,9 +1365,17 @@ test('behavioral voltage and current sources emit validated B-source expressions
   assert.throws(() => validateProject(project), /unknown node/)
 })
 
+test('native B-source expressions reject unsupported LTspice function names instead of rewriting them', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'native-bsource-if', kind: 'behavioral', ref: 'B1', value: 'if(V(vin), 5, 0)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  const artifact = createNetlistArtifact(project)
+  assert.match(artifact.diagnostics[0]?.message ?? '', /B1: Function “if” is not supported/)
+  assert.match(artifact.text, /^\* ERROR: B1: Function “if” is not supported\.$/m)
+})
+
 test('behavioral table lookups become clamped ngspice PWL expressions', () => {
   const project = createStarterProject()
-  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'table(V(vin), 0, 0, 1, 5, 2, 10)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'table(V(vin), 0, 0, 1, 5, 2, 10)', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 300, rotation: 0 })
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^B1 n\d+ n\d+ V=\{\(\(V\(vin\) < 0\) \? 0 : \(\(V\(vin\) > 2\) \? 10 : pwl\(V\(vin\), 0, 0, 1, 5, 2, 10\)\)\)\}$/m)
@@ -1382,7 +1392,7 @@ test('native behavioral pwl() reaches ngspice unchanged with its unbounded segme
 
 test('behavioral if() output preserves LTspice’s condition threshold', () => {
   const project = createStarterProject()
-  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'if(V(vin), 5, 0)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'if(V(vin), 5, 0)', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 300, rotation: 0 })
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /> 1e-12 \? 5 : 0/)
@@ -1413,7 +1423,7 @@ test('imported LTspice unary Boolean inversion retains its dialect in the native
 
 test('LTspice limit() output clamps with ngspice min/max functions', () => {
   const project = createStarterProject()
-  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'limit(V(vin), 0, 3)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'limit(V(vin), 0, 3)', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 300, rotation: 0 })
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^B1 n\d+ n\d+ V=\{min\(max\(V\(vin\), 0\), 3\)\}$/m)
@@ -1422,8 +1432,8 @@ test('LTspice limit() output clamps with ngspice min/max functions', () => {
 test('LTspice mod() output uses ngspice remainder arithmetic', () => {
   const project = createStarterProject()
   project.parts.push(
-    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'mod(V(vin), 2)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 },
-    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: 'V(vin) % 2', behavioralOutput: 'voltage', x: 700, y: 420, rotation: 0 },
+    { id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'mod(V(vin), 2)', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 300, rotation: 0 },
+    { id: 'p-b2', kind: 'behavioral', ref: 'B2', value: 'V(vin) % 2', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 420, rotation: 0 },
   )
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [])
@@ -1435,7 +1445,7 @@ test('LTspice mod() output uses ngspice remainder arithmetic', () => {
 
 test('behavioral inverse-trig aliases produce ngspice function names', () => {
   const project = createStarterProject()
-  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'arccos(V(vin)) + arcsin(V(vin)) + arctan(V(vin))', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  project.parts.push({ id: 'p-b1', kind: 'behavioral', ref: 'B1', value: 'arccos(V(vin)) + arcsin(V(vin)) + arctan(V(vin))', behavioralOutput: 'voltage', behavioralDialect: 'ltspice', x: 700, y: 300, rotation: 0 })
   const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
   assert.deepEqual(artifact.diagnostics, [])
   assert.match(artifact.text, /^B1 n\d+ n\d+ V=\{acos\(V\(vin\)\) \+ asin\(V\(vin\)\) \+ atan\(V\(vin\)\)\}$/m)

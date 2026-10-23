@@ -783,7 +783,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const inputA = `V(${pinNet(connectivity, part, 0)}) > ${threshold}`
       const inputB = `V(${pinNet(connectivity, part, 1)}) > ${threshold}`
       const operation = part.logicOperation ?? 'and'
-      const booleanExpression = part.kind === 'inverter' ? `inv(${inputA})`
+      const booleanExpression = part.kind === 'inverter' ? `!(${inputA})`
         : operation === 'and' ? `(${inputA}) && (${inputB})`
           : operation === 'nand' ? `!((${inputA}) && (${inputB}))`
             : operation === 'or' ? `(${inputA}) || (${inputB})`
