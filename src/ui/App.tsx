@@ -4089,7 +4089,8 @@ export default function App() {
         setSimulationCursor(response.result.analysis === 'tran' ? 0 : null)
         setPlaybackRunning(!prefersReducedMotionRef.current && response.result.analysis === 'tran' && transientSamples > 1)
         const savedTraceIds = projectRef.current.plotSettings?.selectedTraceIds ?? []
-        const restoredTraces = savedTraceIds.filter((id) => response.result.traces.some((trace) => trace.id === id))
+        const availableTraceIds = new Set(response.result.traces.map((trace) => trace.id))
+        const restoredTraces = savedTraceIds.filter((id) => availableTraceIds.has(id))
         let initialTraces = restoredTraces
         if (!initialTraces.length && parameterSweep.length) {
           const groups = new Map<string, Trace[]>()
