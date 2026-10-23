@@ -3854,22 +3854,42 @@ export default function App() {
     const traceId = rawName.toLowerCase()
     if (!simulationResult) { setNotice('Run the circuit first, then add voltage and current probes.'); return }
     let availableTraces = simulationResult.traces
-    if (traceId === 'v(0)' && !availableTraces.some((item) => item.id === traceId || item.baseId === traceId)) {
+    const isRequestedTrace = (candidate: Trace) => candidate.id === traceId || candidate.baseId === traceId
+    let trace: Trace | undefined
+    const relatedTraces: Trace[] = []
+    const groundReferences: Trace[] = []
+    if (traceId === 'v(0)') {
       const seenSweepIndexes = new Set<number | undefined>()
-      const references = availableTraces.filter((trace) => {
-        const sweepIndex = trace.sweep?.index
-        if (seenSweepIndexes.has(sweepIndex)) return false
-        seenSweepIndexes.add(sweepIndex)
-        return true
-      })
-      const groundTraces = references.map(groundVoltageTrace)
-      availableTraces = [...availableTraces, ...groundTraces]
-      setSimulationResult({ ...simulationResult, traces: availableTraces })
+      let hasGroundTrace = false
+      for (const candidate of availableTraces) {
+        if (isRequestedTrace(candidate)) {
+          hasGroundTrace = true
+          trace ??= candidate
+          relatedTraces.push(candidate)
+        }
+        const sweepIndex = candidate.sweep?.index
+        if (!seenSweepIndexes.has(sweepIndex)) {
+          seenSweepIndexes.add(sweepIndex)
+          groundReferences.push(candidate)
+        }
+      }
+      if (!hasGroundTrace) {
+        const groundTraces = groundReferences.map(groundVoltageTrace)
+        availableTraces = [...availableTraces, ...groundTraces]
+        setSimulationResult({ ...simulationResult, traces: availableTraces })
+        for (const candidate of groundTraces) if (isRequestedTrace(candidate)) {
+          trace ??= candidate
+          relatedTraces.push(candidate)
+        }
+      }
+    } else {
+      for (const candidate of availableTraces) if (isRequestedTrace(candidate)) {
+        trace ??= candidate
+        relatedTraces.push(candidate)
+      }
     }
-    const trace = availableTraces.find((item) => item.id === traceId || item.baseId === traceId)
     if (!trace) { setNotice(`No ${target.kind === 'node' ? 'voltage' : 'current'} vector is available for ${target.kind === 'node' ? target.name : projectRef.current.parts.find((item) => item.id === target.id)?.ref ?? 'that component'}. Run again to refresh results.`); return }
-    const relatedIds = availableTraces.filter((item) => item.id === traceId || item.baseId === traceId).map((item) => item.id)
-    if (traceId === 'v(0)') relatedIds.push(...availableTraces.filter((item) => item.baseId === traceId).map((item) => item.id))
+    const relatedIds = [...new Set(relatedTraces.map((candidate) => candidate.id))]
     const nextSelection = [...new Set([...selectedTraceIds, ...relatedIds])]
     setSelectedTraceIds(nextSelection)
     savePlotSettings((settings) => ({ ...settings, selectedTraceIds: nextSelection }))

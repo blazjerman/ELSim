@@ -2558,6 +2558,12 @@ test('right-click probes wire voltage to ground and component voltage across its
   await nodeChooser.getByRole('button', { name: /Add to current window/ }).click()
   await expect(plot.locator('.trace-toggles button', { hasText: 'V(vout)' })).toBeVisible()
   await expect(plot.locator('.cursor-readout')).toContainText(/V\(vout\) =/)
+
+  await rightClickWire(page, '.wire-line[data-wire-id="w-3-seg-2"]')
+  await page.getByRole('menuitem', { name: 'Plot voltage to ground' }).click()
+  const groundChooser = page.getByRole('dialog', { name: /V\(0\)/i })
+  await groundChooser.getByRole('button', { name: /Add to current window/ }).click()
+  await expect(plot.locator('.trace-toggles button', { hasText: 'V(0)' })).toBeVisible()
 })
 
 test('toggling an interactive switch reruns a current circuit automatically', { tag: '@ngspice' }, async ({ page }) => {
