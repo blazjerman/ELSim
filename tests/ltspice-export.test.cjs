@@ -335,6 +335,17 @@ test('blocks BJT VBE/VCE initial conditions during LTspice export instead of dro
   assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'initial:Q1' && /BJT IC=VBE,VCE/.test(blocker.message)))
 })
 
+test('blocks native FET terminal initial conditions during LTspice export instead of dropping them', async () => {
+  const project = createStarterProject()
+  const fet = { id: 'export-fet-ic', kind: 'nmos', ref: 'M1', value: '', x: 800, y: 600, rotation: 0 }
+  project.parts.push(fet)
+  project.sheets[0].parts = project.parts
+  project.simulation.initialConditions = [{ fet: 'M1', vds: '5 V', vgs: '2 V', vbs: '0 V' }]
+  const output = await exportLtspiceProject(project)
+  assert.deepEqual(output.files, [])
+  assert.ok(output.blockers.some((blocker) => blocker.sourceId === 'initial:M1' && /FET IC=VDS,VGS\[,VBS\]/.test(blocker.message)))
+})
+
 test('reports retained imported LTspice attributes omitted from generated schematics', async () => {
   const project = createStarterProject()
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'original-value' } } }

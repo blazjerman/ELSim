@@ -24,6 +24,13 @@ function isResistorModelType(type: string): boolean {
   return normalized === 'r' || normalized === 'res'
 }
 
+function fetInitialConditionSuffix(project: Project, reference: string, includeBulk: boolean): string {
+  const condition = project.simulation.initialConditions?.find((item) => 'fet' in item && item.fet.toLowerCase() === reference.toLowerCase())
+  if (!condition || !('fet' in condition)) return ''
+  const normalize = (value: string) => value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/v$/i, '')
+  return ` IC=${normalize(condition.vds)},${normalize(condition.vgs)}${includeBulk ? `,${normalize(condition.vbs ?? '0')}` : ''}`
+}
+
 function reserveUniqueName(base: string, used: Set<string>): string {
   let name = base
   let suffix = 2
@@ -789,7 +796,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      append(`${part.ref} ${positive} ${gate} ${source} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${gate} ${source} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}${fetInitialConditionSuffix(project, part.ref, false)}`, part.id, 'component')
       if (!part.deviceModel) jfetModels.push({ part, name: model })
     }
     else if (part.kind === 'nmesfet' || part.kind === 'pmesfet') {
@@ -813,7 +820,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       usedReferences.add(senseReference.toLowerCase())
       const drainNode = reserveUniqueName(`__ELSIM_${part.id.slice(0, 24).replace(/[^A-Za-z0-9_]/g, '_')}_D`, usedNodes)
       append(`${senseReference} ${positive} ${drainNode} 0`, part.id, 'generated')
-      append(`${part.ref} ${drainNode} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}`, part.id, 'component')
+      append(`${part.ref} ${drainNode} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}${fetInitialConditionSuffix(project, part.ref, false)}`, part.id, 'component')
     }
     else if (part.kind === 'nmos' || part.kind === 'pmos') {
       const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2), bulk = pinNet(connectivity, part, 3)
@@ -838,6 +845,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         part.mosfetGeometry?.sourceSquares !== undefined && `NRS=${part.mosfetGeometry.sourceSquares}`,
         part.deviceTemperatureDelta !== undefined && `DTEMP=${part.deviceTemperatureDelta}`,
         part.initialOff && 'OFF',
+        fetInitialConditionSuffix(project, part.ref, true).trim(),
       ].filter(Boolean).join(' ')
       append(`${part.ref} ${positive} ${gate} ${source} ${bulk} ${model}${instanceOptions ? ` ${instanceOptions}` : ''}`, part.id, 'component')
       if (!part.deviceModel) mosfetModels.push({ part, name: model })
@@ -854,7 +862,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}${fetInitialConditionSuffix(project, part.ref, false)}`, part.id, 'component')
     }
     else if (part.kind === 'opamp') {
       const nodes = [0, 1, 2, 3, 4].map((pin) => pinNet(connectivity, part, pin))
@@ -1107,7 +1115,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const maxStep = spiceTime(project.simulation.maxStep)
     const stopTime = spiceTime(project.simulation.stopTime)
     const startSavingTime = project.simulation.startSavingTime?.trim() ? spiceTime(project.simulation.startSavingTime) : null
-    const hasDeviceInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition || 'transistor' in condition) ?? false
+    const hasDeviceInitial = project.simulation.initialConditions?.some((condition) => 'element' in condition || 'transistor' in condition || 'fet' in condition) ?? false
     if (maxStep && stopTime && (!project.simulation.startSavingTime?.trim() || startSavingTime)) append(`.tran ${maxStep} ${stopTime}${startSavingTime ? ` ${startSavingTime} ${maxStep}` : ''}${project.simulation.skipInitialOperatingPoint || hasDeviceInitial ? ' uic' : ''}`, 'analysis:tran', 'analysis')
     else {
       const message = 'Transient stop time and maximum step must be valid SPICE time values.'
@@ -1116,7 +1124,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
   }
   for (const condition of project.simulation.initialConditions ?? []) {
-    if ('transistor' in condition) continue
+    if ('transistor' in condition || 'fet' in condition) continue
     if ('element' in condition) {
       const currentCondition = 'current' in condition
       const kind = currentCondition ? 'inductor' : 'capacitor'

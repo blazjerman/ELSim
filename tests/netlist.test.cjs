@@ -2136,7 +2136,30 @@ test('BJT VBE/VCE initial conditions emit native Q-card IC values and enable tra
   project.simulation.initialConditions = [{ transistor: 'Q1', vbe: 'bad', vce: '5 V' }]
   assert.throws(() => validateProject(project), /Initial value for Q1 is malformed/i)
   project.simulation.initialConditions = [{ transistor: 'Q404', vbe: '0.7 V', vce: '5 V' }]
-  assert.throws(() => validateProject(project), /unique labeled nodes, capacitor voltages, or inductor currents/i)
+  assert.throws(() => validateProject(project), /unique labeled nodes, capacitor voltages, inductor currents, BJT VBE\/VCE, or FET terminal voltages/i)
+})
+
+test('FET terminal initial conditions emit native IC values and enable transient UIC', () => {
+  const project = createStarterProject()
+  const mos = { id: 'm-initial', kind: 'nmos', ref: 'M1', value: '', x: 700, y: 300, rotation: 0 }
+  const jfet = { id: 'j-initial', kind: 'njfet', ref: 'J1', value: '', x: 900, y: 300, rotation: 0 }
+  project.parts.push(mos, jfet)
+  project.netLabels.push(...[mos, jfet].flatMap((part) => componentPins(part).map((pin, index) => ({ id: `${part.id}-net-${index}`, name: `${part.ref}N${index}`, x: pin.x, y: pin.y, visible: false }))))
+  project.simulation.initialConditions = [
+    { fet: 'M1', vds: '5 V', vgs: '2 V', vbs: '-0.2 V' },
+    { fet: 'J1', vds: '3 V', vgs: '-0.5 V' },
+  ]
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^M1 M1N0 M1N1 M1N2 M1N3 ELSIM_MODEL_M1 IC=5,2,-0\.2$/m)
+  assert.match(artifact.text, /^J1 J1N0 J1N1 J1N2 ELSIM_MODEL_J1 IC=3,-0\.5$/m)
+  assert.match(artifact.text, /^\.tran 100u 100m uic$/m)
+  project.simulation.initialConditions = [{ fet: 'M1', vds: '5 V', vgs: '2 V' }]
+  assert.throws(() => validateProject(project), /MOSFET initial conditions require VDS, VGS, and VBS/i)
+  project.simulation.initialConditions = [{ fet: 'J1', vds: '3 V', vgs: '-0.5 V', vbs: '0 V' }]
+  assert.throws(() => validateProject(project), /three-terminal FET conditions use VDS and VGS/i)
+  project.simulation.initialConditions = [{ fet: 'J404', vds: '3 V', vgs: '-0.5 V' }]
+  assert.throws(() => validateProject(project), /unique labeled nodes, capacitor voltages, inductor currents, BJT VBE\/VCE, or FET terminal voltages/i)
 })
 
 test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {

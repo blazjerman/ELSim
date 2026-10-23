@@ -1,0 +1,8 @@
+Transient MOSFET terminal initial voltages are passed through native M-device IC values
+VDD d 0 DC 5
+VG g 0 DC 2
+M1 d g 0 0 INITMOS IC=5,2,0
+.model INITMOS NMOS (LEVEL=1 VTO=1 KP=20u LAMBDA=0.02)
+.tran 1u 10u uic
+.print tran v(d) v(g)
+.end

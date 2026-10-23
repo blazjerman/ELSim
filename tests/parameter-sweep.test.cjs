@@ -499,7 +499,7 @@ test('node-voltage initial conditions require labeled nodes and emit optional UI
   assert.match(deck, /\.tran .* uic/)
   assert.match(deck, /\.ic v\(vout\)=2/)
   validated.simulation.initialConditions = [{ node: 'missing', voltage: '2 V' }]
-  assert.throws(() => validateProject(validated), /labeled nodes, capacitor voltages, or inductor currents/)
+  assert.throws(() => validateProject(validated), /labeled nodes, capacitor voltages, inductor currents, BJT VBE\/VCE, or FET terminal voltages/)
   project.simulation.initialConditions = [{ node: 'vout', voltage: 'not volts' }]
   assert.throws(() => validateProject(project), /malformed/)
 })
@@ -512,7 +512,7 @@ test('inductor current initial conditions validate and enable UIC on the inducto
   assert.match(deck, /^L1 n\d+ n\d+ 10m IC=2m$/m)
   assert.match(deck, /^\.tran .* uic$/m)
   project.simulation.initialConditions = [{ element: 'R1', current: '2 mA' }]
-  assert.throws(() => validateProject(project), /labeled nodes, capacitor voltages, or inductor currents/)
+  assert.throws(() => validateProject(project), /labeled nodes, capacitor voltages, inductor currents, BJT VBE\/VCE, or FET terminal voltages/)
   project.simulation.initialConditions = [{ element: 'L1', current: 'bad' }]
   assert.throws(() => validateProject(project), /malformed/)
 })
@@ -525,7 +525,7 @@ test('capacitor voltage initial conditions validate and enable UIC on the capaci
   assert.match(deck, /^C2 n\d+ n\d+ 10u IC=3\.3$/m)
   assert.match(deck, /^\.tran .* uic$/m)
   project.simulation.initialConditions = [{ element: 'L1', voltage: '2 V' }]
-  assert.throws(() => validateProject(project), /labeled nodes, capacitor voltages, or inductor currents/)
+  assert.throws(() => validateProject(project), /labeled nodes, capacitor voltages, inductor currents, BJT VBE\/VCE, or FET terminal voltages/)
   project.simulation.initialConditions = [{ element: 'C2', voltage: 'bad' }]
   assert.throws(() => validateProject(project), /malformed/)
 })
