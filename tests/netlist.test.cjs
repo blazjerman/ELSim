@@ -1965,27 +1965,45 @@ test('MOSFET geometry accepts positive SPICE dimensions only on native MOSFETs',
   assert.throws(() => validateProject(project), /malformed MOSFET channel geometry/i)
 })
 
-test('MOSFET instance multiplier accepts positive numbers only on native MOSFETs', () => {
+test('semiconductor instance multiplier accepts positive numbers only on supported devices', () => {
   const project = createStarterProject()
-  const mosfet = { id: 'm-multiplier', kind: 'nmos', ref: 'M1', value: '0', instanceMultiplier: '2.5', x: 700, y: 500, rotation: 0 }
-  project.parts.push(mosfet)
+  const device = { id: 'm-multiplier', kind: 'nmos', ref: 'M1', value: '0', instanceMultiplier: '2.5', x: 700, y: 500, rotation: 0 }
+  project.parts.push(device)
   assert.doesNotThrow(() => validateProject(project))
-  mosfet.instanceMultiplier = '0'
+  device.instanceMultiplier = '0'
   assert.throws(() => validateProject(project), /invalid device multiplier/i)
-  mosfet.instanceMultiplier = '-2'
+  device.instanceMultiplier = '-2'
   assert.throws(() => validateProject(project), /invalid device multiplier/i)
-  mosfet.instanceMultiplier = '2'
-  mosfet.kind = 'resistor'
-  mosfet.ref = 'R2'
+  device.instanceMultiplier = '2'
+  device.kind = 'diode'
+  device.ref = 'D1'
+  device.componentDefinitionId = undefined
+  assert.doesNotThrow(() => validateProject(project))
+  device.kind = 'resistor'
+  device.ref = 'R2'
+  device.componentDefinitionId = undefined
   assert.throws(() => validateProject(project), /invalid device multiplier/i)
+})
+
+test('diode and BJT instances emit ngspice parallel-device multipliers', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'device-models', filename: 'devices.lib', sha256: 'c'.repeat(64), content: '.model DUSER D(Is=1n)\n.model QUSER NPN(BF=100)', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  const diode = { id: 'd-multiplier', kind: 'diode', ref: 'D1', value: '', deviceModel: 'DUSER', instanceMultiplier: '2', x: 700, y: 300, rotation: 0 }
+  const transistor = { id: 'q-multiplier', kind: 'npn', ref: 'Q1', value: '100', deviceModel: 'QUSER', instanceMultiplier: '3', x: 900, y: 300, rotation: 0 }
+  project.parts.push(diode, transistor)
+  project.netLabels.push(...[diode, transistor].flatMap((part) => componentPins(part).map((pin, index) => ({ id: `${part.id}-net-${index}`, name: `${part.ref.toLowerCase()}pin${index}`, x: pin.x, y: pin.y, visible: false }))))
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^D1 d1pin0 d1pin1 DUSER M=2$/m)
+  assert.match(artifact.text, /^Q1 q1pin0 q1pin1 q1pin2 QUSER M=3$/m)
 })
 
 test('native VDMOS devices require matching imported models and netlist in D-G-S order', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'vdmos-models', filename: 'power-mosfets.lib', content: '.MODEL NPOWER VDMOS(VTO=2)\n.MODEL PPOWER VDMOS Pchan VTO=-2', sha256: '0'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
   project.parts.push(
-    { id: 'n-power', kind: 'nvdmos', ref: 'M1', value: '', deviceModel: 'NPOWER', x: 700, y: 300, rotation: 0 },
-    { id: 'p-power', kind: 'pvdmos', ref: 'M2', value: '', deviceModel: 'PPOWER', x: 850, y: 300, rotation: 0 },
+    { id: 'n-power', kind: 'nvdmos', ref: 'M1', value: '', deviceModel: 'NPOWER', instanceMultiplier: '2', x: 700, y: 300, rotation: 0 },
+    { id: 'p-power', kind: 'pvdmos', ref: 'M2', value: '', deviceModel: 'PPOWER', instanceMultiplier: '3', x: 850, y: 300, rotation: 0 },
   )
   project.netLabels.push(
     { id: 'n-d', name: 'nd', x: 700, y: 250, visible: false },
@@ -1997,8 +2015,8 @@ test('native VDMOS devices require matching imported models and netlist in D-G-S
   )
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^M1 nd ng ns NPOWER$/m)
-  assert.match(artifact.text, /^M2 pd pg ps PPOWER$/m)
+  assert.match(artifact.text, /^M1 nd ng ns NPOWER M=2$/m)
+  assert.match(artifact.text, /^M2 pd pg ps PPOWER M=3$/m)
   project.parts.find((part) => part.ref === 'M1').deviceModel = 'PPOWER'
   assert.match(createNetlistArtifact(project).diagnostics.map(({ message }) => message).join('\n'), /requires an imported N-channel VDMOS model.*not a P-channel VDMOS model/i)
 })
@@ -2006,14 +2024,14 @@ test('native VDMOS devices require matching imported models and netlist in D-G-S
 test('N- and P-channel JFETs generate J devices in D-G-S order and matching teaching models', () => {
   const project = createStarterProject()
   project.parts.push(
-    { id: 'j-n1', kind: 'njfet', ref: 'J1', value: '', x: 700, y: 300, rotation: 0 },
-    { id: 'j-p1', kind: 'pjfet', ref: 'J2', value: '', x: 820, y: 400, rotation: 0 },
+    { id: 'j-n1', kind: 'njfet', ref: 'J1', value: '', instanceMultiplier: '2', x: 700, y: 300, rotation: 0 },
+    { id: 'j-p1', kind: 'pjfet', ref: 'J2', value: '', instanceMultiplier: '3', x: 820, y: 400, rotation: 0 },
   )
   const artifact = createNetlistArtifact(project)
   assert.deepEqual(artifact.diagnostics, [])
-  assert.match(artifact.text, /^J1 .* ELSIM_MODEL_J1$/m)
+  assert.match(artifact.text, /^J1 .* ELSIM_MODEL_J1 M=2$/m)
   assert.match(artifact.text, /^\.model ELSIM_MODEL_J1 NJF \(VTO=-2 BETA=1m LAMBDA=0\.02\)$/m)
-  assert.match(artifact.text, /^J2 .* ELSIM_MODEL_J2$/m)
+  assert.match(artifact.text, /^J2 .* ELSIM_MODEL_J2 M=3$/m)
   assert.match(artifact.text, /^\.model ELSIM_MODEL_J2 PJF \(VTO=2 BETA=1m LAMBDA=0\.02\)$/m)
   assert.deepEqual(componentPins(project.parts.find((part) => part.ref === 'J1')).map(({ x, y }) => [x - 700, y - 300]), [[0, -50], [-50, 0], [0, 50]])
   assert.equal(nextRef(project.parts, 'njfet'), 'J3')
@@ -2096,16 +2114,16 @@ test('imported NMF and PMF MESFET models emit native Z devices in drain-gate-sou
   const project = createStarterProject()
   project.modelAssets = [{ id: 'mesfet-models', filename: 'mesfets.lib', content: '.MODEL NMESH NMF(BETA=1m VTO=-1)\n.MODEL PMESH PMF(BETA=1m VTO=1)\n', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
   project.parts.push(
-    { id: 'p-z1', kind: 'nmesfet', ref: 'Z1', value: '', deviceModel: 'NMESH', x: 700, y: 300, rotation: 0 },
-    { id: 'p-z2', kind: 'pmesfet', ref: 'Z2', value: '', deviceModel: 'PMESH', x: 820, y: 300, rotation: 0 },
+    { id: 'p-z1', kind: 'nmesfet', ref: 'Z1', value: '', deviceModel: 'NMESH', instanceMultiplier: '2', x: 700, y: 300, rotation: 0 },
+    { id: 'p-z2', kind: 'pmesfet', ref: 'Z2', value: '', deviceModel: 'PMESH', instanceMultiplier: '3', x: 820, y: 300, rotation: 0 },
   )
   project.sheets[0].parts = project.parts
   const artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [], artifact.text)
   assert.match(artifact.text, /^V__ELSIM_Z1_D n\d+ __ELSIM_p_z1_D 0$/m)
-  assert.match(artifact.text, /^Z1 __ELSIM_p_z1_D n\d+ n\d+ NMESH$/m)
+  assert.match(artifact.text, /^Z1 __ELSIM_p_z1_D n\d+ n\d+ NMESH M=2$/m)
   assert.match(artifact.text, /^V__ELSIM_Z2_D n\d+ __ELSIM_p_z2_D 0$/m)
-  assert.match(artifact.text, /^Z2 __ELSIM_p_z2_D n\d+ n\d+ PMESH$/m)
+  assert.match(artifact.text, /^Z2 __ELSIM_p_z2_D n\d+ n\d+ PMESH M=3$/m)
   assert.match(artifact.text, /^\.MODEL NMESH NMF\(BETA=1m VTO=-1\)$/m)
   assert.match(artifact.text, /^\.MODEL PMESH PMF\(BETA=1m VTO=1\)$/m)
 

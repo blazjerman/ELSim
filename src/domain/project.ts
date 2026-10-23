@@ -32,7 +32,7 @@ export type Part = {
   modelParameters?: Record<string, string>
   /** Optional MOSFET channel geometry for native M-device instances. */
   mosfetGeometry?: { length?: string; width?: string }
-  /** Optional ngspice instance multiplier for native MOSFET devices. */
+  /** Optional ngspice instance multiplier for diode and transistor devices. */
   instanceMultiplier?: string
   sheetParameters?: Record<string, string>
   deviceModel?: string
@@ -403,7 +403,7 @@ export function validateProject(input: unknown): Project {
         if (magnitude === null || magnitude <= 0) throw new Error(`${candidate.ref} MOSFET ${dimension} must be a positive numeric SPICE dimension such as 1u.`)
       }
     }
-    if (candidate.instanceMultiplier !== undefined && ((candidate.kind !== 'nmos' && candidate.kind !== 'pmos') || typeof candidate.instanceMultiplier !== 'string' || candidate.instanceMultiplier.length > 64 || !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(candidate.instanceMultiplier.trim()) || !Number.isFinite(Number(candidate.instanceMultiplier)) || Number(candidate.instanceMultiplier) <= 0)) throw new Error(`${candidate.ref} has an invalid device multiplier.`)
+    if (candidate.instanceMultiplier !== undefined && (!['diode', 'zener', 'led', 'npn', 'pnp', 'njfet', 'pjfet', 'nmesfet', 'pmesfet', 'nmos', 'pmos', 'nvdmos', 'pvdmos'].includes(candidate.kind) || typeof candidate.instanceMultiplier !== 'string' || candidate.instanceMultiplier.length > 64 || !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(candidate.instanceMultiplier.trim()) || !Number.isFinite(Number(candidate.instanceMultiplier)) || Number(candidate.instanceMultiplier) <= 0)) throw new Error(`${candidate.ref} has an invalid device multiplier.`)
     for (const key of ['primaryWindingResistance', 'secondaryWindingResistance'] as const) {
       const resistance = candidate[key]
       if (resistance !== undefined && (candidate.kind !== 'transformer' || typeof resistance !== 'string' || resistance.length > 64)) throw new Error(`${candidate.ref} has invalid ${key} metadata.`)

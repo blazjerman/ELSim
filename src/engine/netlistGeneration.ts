@@ -717,7 +717,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? (part.kind === 'zener' ? 'DZENER' : 'DDEFAULT')
-      append(`${part.ref} ${positive} ${negative} ${model}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${negative} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
       if (!part.deviceModel) {
         if (part.kind === 'zener') usesZener = true
         else usesDiode = true
@@ -743,7 +743,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${base} ${emitter}${substrate ? ` ${substrate}` : ''} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
       if (!part.deviceModel) transistorModels.push({ part, name: model })
     }
     else if (part.kind === 'njfet' || part.kind === 'pjfet') {
@@ -757,7 +757,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      append(`${part.ref} ${positive} ${gate} ${source} ${model}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${gate} ${source} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
       if (!part.deviceModel) jfetModels.push({ part, name: model })
     }
     else if (part.kind === 'nmesfet' || part.kind === 'pmesfet') {
@@ -781,7 +781,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       usedReferences.add(senseReference.toLowerCase())
       const drainNode = reserveUniqueName(`__ELSIM_${part.id.slice(0, 24).replace(/[^A-Za-z0-9_]/g, '_')}_D`, usedNodes)
       append(`${senseReference} ${positive} ${drainNode} 0`, part.id, 'generated')
-      append(`${part.ref} ${drainNode} ${gate} ${source} ${importedModel.name}`, part.id, 'component')
+      append(`${part.ref} ${drainNode} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'nmos' || part.kind === 'pmos') {
       const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2), bulk = pinNet(connectivity, part, 3)
@@ -810,7 +810,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
         continue
       }
-      append(`${part.ref} ${positive} ${gate} ${source} ${importedModel.name}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'opamp') {
       const nodes = [0, 1, 2, 3, 4].map((pin) => pinNet(connectivity, part, pin))
