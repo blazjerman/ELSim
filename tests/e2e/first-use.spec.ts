@@ -6293,6 +6293,22 @@ test('imported ngspice digital U-device warning explains missing XSPICE models a
   await expect(reviewedLine).toContainText('U1 AND(2)')
 })
 
+test('BSIM4 model import explains the browser runtime limit and opens the model card', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  const source = '.MODEL M54 NMOS\n+ LEVEL=54 VTH0=0.7 U0=0.05\n.MODEL M3 NMOS (LEVEL=49 VTO=0.7)\n.MODEL D54 D (LEVEL=54)\n* .MODEL COMMENTED NMOS LEVEL=54'
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({ name: 'mos-models.lib', mimeType: 'text/plain', buffer: Buffer.from(source) })
+  const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
+  await expect(warnings).toContainText('BSIM4 MOSFET model unavailable in browser ngspice')
+  await expect(warnings).toContainText('mos-models.lib:1')
+  await expect(warnings).not.toContainText('mos-models.lib:3')
+  await expect(warnings).not.toContainText('mos-models.lib:4')
+  await warnings.getByRole('button', { name: 'Review source line 1' }).click()
+  const reviewedLine = page.locator('.model-source-viewer li').nth(0)
+  await expect(reviewedLine).toBeFocused()
+  await expect(reviewedLine).toContainText('.MODEL M54 NMOS')
+})
+
 test('compatibility report reveals model warnings beyond its initial page', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const lines = ['.SUBCKT MANY IN OUT', ...Array.from({ length: 21 }, (_, index) => `B${index + 1} OUT 0 V=mc(1,0.1)`), '.ENDS MANY']

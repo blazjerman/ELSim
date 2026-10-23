@@ -1116,6 +1116,26 @@ test('dialect warnings retain continuation line numbers and ignore dollar signs 
   ])
 })
 
+test('warns on omitted BSIM4 models at the model card line, including LEVEL on a continuation', () => {
+  const source = [
+    '.MODEL M54 NMOS',
+    '+ LEVEL=54 VTH0=0.7 U0=0.05',
+    '.MODEL M3 NMOS (LEVEL=49 VTO=0.7)',
+    '.MODEL D54 D (LEVEL=54)',
+    '.MODEL M540 NMOS (LEVEL=540)',
+    '.MODEL P54 PMOS (VTH0=-0.7)',
+    '+ LEVEL={54.0}',
+    '* .MODEL COMMENTED NMOS LEVEL=54',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [1, 'BSIM4 MOSFET model unavailable in browser ngspice'],
+    [6, 'BSIM4 MOSFET model unavailable in browser ngspice'],
+  ])
+  assert.match(warnings[0].impact, /LEVEL=54.*omitted from ELSim’s browser ngspice build/)
+  assert.match(warnings[0].suggestion, /does not convert BSIM4 parameters/)
+})
+
 test('schematic compatibility checks attribute unresolved dependencies and untranslated directives', () => {
   const source = [
     'Version 4',
