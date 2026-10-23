@@ -738,7 +738,16 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const instanceValue = value ?? ''
       const modelSuffix = passiveModel ? ` ${passiveModel.name}` : ''
       const multiplierSuffix = part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''
-      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${deviceTemperatureSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
+      const acResistanceValue = part.kind === 'resistor' && part.acResistance !== undefined ? spiceScalar(part.acResistance, '') : null
+      const acResistanceMagnitude = part.kind === 'resistor' && part.acResistance !== undefined ? componentMagnitude(part.acResistance, 'resistor') : null
+      if (part.acResistance !== undefined && (!acResistanceValue || acResistanceMagnitude === null || acResistanceMagnitude <= 0)) {
+        const message = `${part.ref} AC resistance must be a positive numeric resistance.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
+      const acResistanceSuffix = acResistanceValue ? ` AC=${acResistanceValue}` : ''
+      append(`${part.ref} ${elementPositive} ${negative}${instanceValue ? ` ${instanceValue}` : ''}${modelSuffix}${multiplierSuffix}${acResistanceSuffix}${deviceTemperatureSuffix}${initialCurrent ? ` IC=${initialCurrent}` : initialVoltage ? ` IC=${initialVoltage}` : ''}`, part.id, 'component')
     }
     else if (part.kind === 'diode' || part.kind === 'zener' || part.kind === 'led') {
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined

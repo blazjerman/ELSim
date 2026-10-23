@@ -1,0 +1,7 @@
+The resistor AC override changes only the small-signal AC divider
+V1 in 0 AC 1
+R1 in out 1k AC=2k
+R2 out 0 1k
+.ac lin 1 1k 1k
+.print ac vm(out)
+.end

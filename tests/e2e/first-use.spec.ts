@@ -6083,6 +6083,19 @@ test('new voltage-controlled switches use their component definition defaults', 
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'voltageSwitch')?.switchInitialState)).toBe('on')
 })
 
+test('resistor AC value is editable, saved, and generated as an AC-only override @ui-smoke', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Select and move' }).click()
+  await page.locator('.circuit-part[aria-label^="R1,"]').click()
+  const acResistance = page.getByLabel('AC resistance for R1')
+  await expect(acResistance).toBeVisible()
+  await acResistance.fill('2 kΩ')
+  await waitForProjectAutosave(page)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1')?.acResistance)).toBe('2 kΩ')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/^R1 vin vout 1k AC=2k$/m)
+})
+
 test('new current-controlled switches expose their controller and CSW settings @ui-smoke', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)

@@ -25,6 +25,27 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('resistor AC resistance is emitted only as the native AC instance option', () => {
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  resistor.acResistance = '2 kΩ'
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^R1 vin vout 1k AC=2k$/m)
+})
+
+test('resistor AC resistance rejects zero, invalid, and non-resistor values', () => {
+  const project = createStarterProject()
+  const resistor = project.parts.find((part) => part.kind === 'resistor')
+  resistor.acResistance = '0 Ω'
+  assert.throws(() => validateProject(project), /AC resistance must be a positive numeric resistance/i)
+  resistor.acResistance = 'invalid'
+  assert.throws(() => validateProject(project), /AC resistance must be a positive numeric resistance/i)
+  delete resistor.acResistance
+  project.parts.find((part) => part.kind === 'capacitor').acResistance = '2 kΩ'
+  assert.throws(() => validateProject(project), /AC resistance must be a positive numeric resistance/i)
+})
+
 test('standalone R C and L parts can use imported models and model defaults', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'passive-models', filename: 'passives.lib', sha256: 'd'.repeat(64), content: ['.MODEL R_CUSTOM RES(R=2k TC1=0.01)', '.MODEL C_CUSTOM C(CAP=22u)', '.MODEL L_CUSTOM L(IND=5m)'].join('\n'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
