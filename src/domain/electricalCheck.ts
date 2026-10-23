@@ -33,7 +33,7 @@ function expectedModelTypeLabel(types: readonly string[]): string {
 }
 
 function importedDeviceModelIssue(part: Part, modelTypes: Map<string, ImportedDeviceModel>, id: string, selectedPartId: string, sheetName?: string): ElectricalIssue | null {
-  const expectedType = compatibleDeviceModelType(part.kind) ?? (part.kind === 'resistor' ? 'r' : part.kind === 'capacitor' ? 'c' : part.kind === 'inductor' ? 'l' : undefined)
+  const expectedType = compatibleDeviceModelType(part.kind)
   if (!expectedType || !part.deviceModel) return null
   const modelType = modelTypes.get(part.deviceModel.toLowerCase())
   const location = sheetName ? ` in ${sheetName}` : ''
