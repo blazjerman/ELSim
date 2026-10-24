@@ -2118,6 +2118,19 @@ test('voltage-controlled switch uses an imported SW model card', () => {
   assert.doesNotMatch(artifact.text, /\.model ELSIM_S1_SW/)
 })
 
+test('numeric imported PSpice VSWITCH model is translated to native ngspice SW', () => {
+  const project = createVoltageSwitchExampleProject()
+  project.parts.find((part) => part.kind === 'voltageSwitch').deviceModel = 'USER_VSW'
+  project.modelAssets = [{ id: 'user-vswitch-model', filename: 'switches.lib', sha256: 'b'.repeat(64), content: '.model USER_VSW VSWITCH(RON=10 ROFF=1Meg VON=4V VOFF=2V)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^S1 VCC VOUT CTRL 0 USER_VSW OFF$/m)
+  assert.match(artifact.text, /^\* ELSim translated numeric PSpice VSWITCH USER_VSW to native ngspice SW$/m)
+  assert.match(artifact.text, /^\.model USER_VSW SW\(RON=10 ROFF=1000000 VT=3 VH=1\)$/m)
+  assert.doesNotMatch(artifact.text, /^\.model USER_VSW VSWITCH/m)
+  assert.equal(artifact.sourceMap.some((entry) => entry.sourceId === 'model-file:user-vswitch-model' && entry.assetLine === 1), true)
+})
+
 test('controlled switches emit their selected ngspice initial state', () => {
   const voltageProject = createVoltageSwitchExampleProject()
   voltageProject.parts.find((part) => part.kind === 'voltageSwitch').switchInitialState = 'on'

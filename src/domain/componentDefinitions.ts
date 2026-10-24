@@ -1,5 +1,6 @@
 import type { PartKind } from './project'
 import type { SubcircuitDefinition } from './subcircuitLibrary'
+import { translateVoltageSwitchModel } from './voltageSwitchModel'
 
 export type ComponentPinDefinition = { name: string; displayName?: string; direction: 'passive' | 'input' | 'output' | 'inout'; spiceOrder: number }
 export type ComponentPropertyDefinition = { key: string; label: string; unit: string; defaultValue?: string; required?: boolean }
@@ -385,7 +386,10 @@ export function compatibleDeviceModelType(kind: PartKind): string | undefined {
   }
 }
 
-export function deviceModelTypeMatches(kind: PartKind, model: { type: string; channel?: 'n' | 'p' }): boolean {
+export function deviceModelTypeMatches(kind: PartKind, model: { type: string; channel?: 'n' | 'p'; conditional?: boolean; parameters?: readonly { name: string; defaultValue: string; defaultIsExpression?: boolean; defaultVariesByCondition?: boolean }[] }): boolean {
+  if (kind === 'voltageSwitch' && model.type.toLowerCase() === 'vswitch') {
+    return Boolean(model.parameters && translateVoltageSwitchModel({ type: model.type, conditional: model.conditional, parameters: model.parameters }))
+  }
   if (kind === 'transmissionLine' && ['ltra', 'txl'].includes(model.type.toLowerCase())) return true
   const expectedType = compatibleDeviceModelType(kind)
   // ngspice libraries commonly spell the resistor model family as RES.

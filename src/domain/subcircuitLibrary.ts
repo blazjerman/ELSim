@@ -1,8 +1,10 @@
+import { translateVoltageSwitchModel } from './voltageSwitchModel'
+
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; parameters: SubcircuitParameter[]; scope?: string; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; parameters: SubcircuitParameter[]; scope?: string; conditional?: boolean; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
@@ -608,6 +610,7 @@ function canonicalModelType(type: string): string {
 }
 
 function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelConditionPath, seen: Map<string, SeenModelCard>, models: SpiceModelDefinition[]) {
+  if (conditionPath.length && model.type.toUpperCase() === 'VSWITCH') model.conditional = true
   const key = `${model.scope?.toLowerCase() ?? ''}:${model.name.toLowerCase()}`
   const previous = seen.get(key)
   if (!previous) {
@@ -904,12 +907,26 @@ export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[
       current.segments.push({ start: current.text.length - continuation.length, end: current.text.length, physicalLine: index + 1 })
     } else logical.push({ sourceLine: index + 1, text: physicalLine, segments: [{ start: 0, end: physicalLine.length, physicalLine: index + 1 }] })
   }
+  const conditionalModelLines = new Set<number>()
+  let conditionalDepth = 0
+  for (const { sourceLine, text } of logical) {
+    const directive = /^\s*\.(if|elseif|else|endif)\b/i.exec(withoutInlineComment(text))?.[1]?.toLowerCase()
+    if (directive === 'endif') conditionalDepth = Math.max(0, conditionalDepth - 1)
+    if (conditionalDepth > 0 && /^\s*\.model\s+\S+\s+vswitch\b/i.test(withoutInlineComment(text))) conditionalModelLines.add(sourceLine)
+    if (directive === 'if') conditionalDepth += 1
+  }
   return logical.flatMap(({ sourceLine, text, segments }) => {
     const line = withoutInlineComment(text)
     if (!line || line.startsWith('*')) return []
     return features.flatMap(({ pattern, name, impact, suggestion }) => {
       const match = pattern.exec(line)
       if (!match) return []
+      if (name === 'VSWITCH model (unsupported by the current WASM engine)' && !conditionalModelLines.has(sourceLine)) {
+        try {
+          const parsedModel = parseModelCard(line, { text: line, start: sourceLine, end: sourceLine })
+          if (translateVoltageSwitchModel(parsedModel)) return []
+        } catch { /* Preserve the diagnostic for any model card that is not in the safe translation subset. */ }
+      }
       const featureOffset = match.index
       const featureLine = segments.find(({ start, end }) => featureOffset >= start && featureOffset < end)?.physicalLine ?? sourceLine
       return [{ sourceLine: featureLine, feature: name, excerpt: line.slice(0, 160), impact, suggestion }]

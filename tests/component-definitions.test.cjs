@@ -9,6 +9,7 @@ const { componentDefinitions, componentDefinitionFor, componentDefaultValue, com
 const { createStarterProject, kindNames, kindPrefix, validateProject } = require(path.join(build, 'domain/project.js'))
 const { componentPins } = require(path.join(build, 'domain/geometry.js'))
 const { parseSubcircuitLibrary } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { translateVoltageSwitchModel } = require(path.join(build, 'domain/voltageSwitchModel.js'))
 
 test('built-in component definitions have stable identities, ordered unique SPICE pins, and instance pin counts', () => {
   const schema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schemas/component-definition-v1.schema.json'), 'utf8'))
@@ -197,6 +198,16 @@ test('imported device model compatibility has one canonical type per built-in de
   assert.equal(deviceModelTypeMatches('inductor', { type: 'L' }), true)
   assert.equal(deviceModelTypeMatches('potentiometer', { type: 'R' }), true)
   assert.equal(deviceModelTypeMatches('potentiometer', { type: 'C' }), false)
+  const voltageSwitchParameters = [
+    { name: 'VON', defaultValue: '4V' }, { name: 'VOFF', defaultValue: '2V' },
+    { name: 'RON', defaultValue: '10' }, { name: 'ROFF', defaultValue: '1Meg' },
+  ]
+  assert.equal(deviceModelTypeMatches('voltageSwitch', { type: 'VSWITCH', parameters: voltageSwitchParameters }), true)
+  assert.equal(deviceModelTypeMatches('voltageSwitch', { type: 'VSWITCH', conditional: true, parameters: voltageSwitchParameters }), false)
+  assert.equal(deviceModelTypeMatches('voltageSwitch', { type: 'VSWITCH', parameters: [...voltageSwitchParameters, { name: 'unknown', defaultValue: '1' }] }), false)
+  assert.deepEqual(translateVoltageSwitchModel({ type: 'VSWITCH', parameters: voltageSwitchParameters }), { ron: '10', roff: '1000000', vt: '3', vh: '1' })
+  assert.equal(translateVoltageSwitchModel({ type: 'VSWITCH', parameters: voltageSwitchParameters.map((parameter) => parameter.name === 'VON' ? { ...parameter, defaultValue: '{4}' } : parameter) }), null)
+  assert.equal(translateVoltageSwitchModel({ type: 'VSWITCH', parameters: voltageSwitchParameters.map((parameter) => parameter.name === 'VOFF' ? { ...parameter, defaultValue: '5' } : parameter) }), null)
   for (const definition of componentDefinitions) {
     if (!(definition.kind in expected)) assert.equal(compatibleDeviceModelType(definition.kind), undefined, definition.kind)
   }

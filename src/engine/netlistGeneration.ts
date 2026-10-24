@@ -4,7 +4,8 @@ import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunct
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, spiceSignedScalarMagnitude, timeMagnitude } from '../domain/componentValue'
-import { supportsDeviceTemperatureDelta, supportsInitialOff } from '../domain/componentDefinitions'
+import { deviceModelTypeMatches, supportsDeviceTemperatureDelta, supportsInitialOff } from '../domain/componentDefinitions'
+import { translateVoltageSwitchModel } from '../domain/voltageSwitchModel'
 import { mesfetDrainCurrentSenseReference, transmissionLinePortCurrentVector, urcLineCurrentSenseReference } from '../domain/probe'
 import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import type { NetlistArtifact, NetlistSource } from './contract'
@@ -997,7 +998,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const controlPositive = pinNet(connectivity, part, 2)
       const controlNegative = pinNet(connectivity, part, 3)
       const importedModel = part.deviceModel ? importedDeviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
-      if (part.deviceModel && importedModel?.type.toLowerCase() !== 'sw') {
+      if (part.deviceModel && (!importedModel || !deviceModelTypeMatches(part.kind, importedModel))) {
         const message = `${part.ref} device model ${part.deviceModel} is missing or is not a SW model.`
         append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
         diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
@@ -1105,8 +1106,27 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
 
   for (let assetIndex = 0; assetIndex < modelAssets.length; assetIndex += 1) {
     const asset = modelAssets[assetIndex]
-    for (const record of parsedModelAssets[assetIndex].modelRecords) {
+    const parsed = parsedModelAssets[assetIndex]
+    const translatedModelsByLine = new Map(parsed.models.flatMap((model) => {
+      const translation = translateVoltageSwitchModel(model)
+      return translation ? [[model.startLine, { model, translation }] as const] : []
+    }))
+    let conditionalDepth = 0
+    let skipModelThroughLine = 0
+    for (const record of parsed.modelRecords) {
+      if (record.sourceLine <= skipModelThroughLine) continue
+      const directive = record.text.trim().split(/\s+/, 1)[0]?.toLowerCase()
+      if (directive === '.endif') conditionalDepth = Math.max(0, conditionalDepth - 1)
+      const translated = conditionalDepth === 0 ? translatedModelsByLine.get(record.sourceLine) : undefined
+      if (translated) {
+        const { model, translation } = translated
+        append(`* ELSim translated numeric PSpice VSWITCH ${model.name} to native ngspice SW`, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: model.startLine })
+        append(`.model ${model.name} SW(RON=${translation.ron} ROFF=${translation.roff} VT=${translation.vt} VH=${translation.vh})`, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: model.startLine })
+        skipModelThroughLine = model.endLine
+        continue
+      }
       if (record.text.trim()) append(record.text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: record.sourceLine })
+      if (directive === '.if') conditionalDepth += 1
     }
   }
   for (const copy of stochasticModelCopies) {

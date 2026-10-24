@@ -10376,6 +10376,42 @@ test('an imported SW model controls a voltage switch and its displayed state', {
   expect(netlist).not.toMatch(/^\.model ELSIM_S1_SW/m)
 })
 
+test('a numeric imported PSpice VSWITCH model translates and runs in browser ngspice', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Use the existing ngspice WASM runtime for the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.locator('.example-list article').filter({ hasText: 'Voltage-controlled switch' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'pspice-switch.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.MODEL USER_VSW VSWITCH(RON=10 ROFF=1Meg VON=4V VOFF=2V)\n'),
+  })
+  await page.locator('.circuit-part[data-part-id="vswitch-s1"]').click()
+  await page.getByLabel('Device model for S1').selectOption('USER_VSW')
+  await expect(page.getByLabel('Device model for S1')).toHaveValue('USER_VSW')
+  await expect(page.locator('.inspector-panel')).toContainText('This numeric PSpice VSWITCH card is translated to ngspice SW')
+  await page.getByRole('button', { name: 'Run this circuit' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(vout)')
+  const timeSlider = page.getByRole('slider', { name: 'Simulation time' })
+  const switchSymbol = page.locator('.circuit-part[data-part-id="vswitch-s1"] .voltage-switch-symbol')
+  const finalSample = Number(await timeSlider.getAttribute('max'))
+  await timeSlider.fill(String(Math.floor(finalSample * 0.25)))
+  await expect(switchSymbol).toHaveAttribute('data-state', 'closed')
+  await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 4\.9/)
+  await timeSlider.fill(String(Math.floor(finalSample * 0.75)))
+  await expect(switchSymbol).toHaveAttribute('data-state', 'open')
+  await expect(page.locator('.plot-window .cursor-readout')).toContainText(/V\(vout\) = 0\.00+/)
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = await page.locator('.netlist-modal pre').innerText()
+  expect(netlist).toMatch(/^\.model USER_VSW SW\(RON=10 ROFF=1000000 VT=3 VH=1\)$/m)
+  expect(netlist).not.toMatch(/^\.model USER_VSW VSWITCH/m)
+})
+
 test('an imported CSW model controls its current threshold and displayed state', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Use the existing ngspice WASM runtime for the browser smoke test').toEqual([])

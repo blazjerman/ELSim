@@ -12,7 +12,8 @@ import { componentCurrentVector, resolveProbeTarget, transformerWindingCurrentVe
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
 import { useSimulationCursor, useSimulationCursorWhen } from './simulationCursor'
-import { componentDefaultValue, componentDefinitionFor } from '../domain/componentDefinitions'
+import { componentDefaultValue, componentDefinitionFor, deviceModelTypeMatches } from '../domain/componentDefinitions'
+import { translateVoltageSwitchModel } from '../domain/voltageSwitchModel'
 import type { ComponentSymbolPrimitive } from '../domain/componentDefinitions'
 import { componentMagnitude } from '../domain/componentValue'
 import { kindNames, type Part, type PartKind, type Project, type Wire } from '../domain/project'
@@ -783,11 +784,12 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
     const cache = voltageSwitchStateCache.current
     if (cache.result !== simulationResult) { cache.result = simulationResult; cache.states.clear() }
     const importedModel = part.deviceModel ? deviceModelsByName.get(part.deviceModel.toLowerCase()) : undefined
-    if (part.deviceModel && importedModel?.type.toLowerCase() !== 'sw') return undefined
+    if (part.deviceModel && (!importedModel || !deviceModelTypeMatches(part.kind, importedModel))) return undefined
     const modelParameters = importedModel ? deviceModelParametersByName.get(importedModel.name.toLowerCase()) : undefined
     const modelParameter = (name: string) => modelParameters?.get(name)
-    const thresholdValue = importedModel ? modelParameter('vt') ?? '0' : part.value
-    const hysteresisValue = importedModel ? modelParameter('vh') ?? '0' : part.voltageSwitch?.hysteresis ?? '0 V'
+    const translatedModel = importedModel ? translateVoltageSwitchModel(importedModel) : null
+    const thresholdValue = translatedModel?.vt ?? (importedModel ? modelParameter('vt') ?? '0' : part.value)
+    const hysteresisValue = translatedModel?.vh ?? (importedModel ? modelParameter('vh') ?? '0' : part.voltageSwitch?.hysteresis ?? '0 V')
     const threshold = componentMagnitude(thresholdValue, 'source')
     const hysteresis = componentMagnitude(hysteresisValue, 'source')
     if (threshold === null || hysteresis === null) return undefined
