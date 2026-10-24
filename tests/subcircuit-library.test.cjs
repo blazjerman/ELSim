@@ -130,6 +130,14 @@ test('parses documented single-quoted ngspice parameter expressions', () => {
   assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'BASE_GAIN + 1n', defaultIsExpression: true }])
 })
 
+test('imports subcircuit string defaults containing escaped double quotes', () => {
+  const source = String.raw`.SUBCKT STRING_ARG IN OUT FILE="file \"rev A\".csv"
+.ENDS STRING_ARG`
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'FILE', defaultValue: String.raw`"file \"rev A\".csv"` }])
+  assert.equal(isSafeSubcircuitParameterValue(String.raw`"file \"rev A\".csv"`), true)
+})
+
 test('parses ngspice mil and atto suffixes in imported subcircuit parameters', () => {
   const parsed = parseSubcircuitLibrary('.SUBCKT AMP IN OUT PARAMS: RVAL=1mil TINY=2a UNIT=10kOhm MIXED={2mil + 3a}\nR1 IN OUT {RVAL}\n.ENDS AMP')
   assert.deepEqual(parsed.subcircuits[0].parameters, [
@@ -914,8 +922,10 @@ test('recognizes ngspice backslash continuation after an escaped quote', () => {
   const source = String.raw`.MODEL DSTRING D(LABEL="embedded \" quote" \\
  IS=1n)`
   const parsed = parseSubcircuitLibrary(source)
-  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: '1n' }])
-  assert.deepEqual(parsed.models[0].unparsedParameters, [{ name: 'LABEL', sourceValue: String.raw`"embedded \" quote"` }])
+  assert.deepEqual(parsed.models[0].parameters, [
+    { name: 'LABEL', defaultValue: String.raw`"embedded \" quote"` },
+    { name: 'IS', defaultValue: '1n' },
+  ])
   assert.equal(parsed.models[0].endLine, 2)
 })
 

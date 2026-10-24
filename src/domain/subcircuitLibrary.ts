@@ -430,7 +430,7 @@ function unsupportedParameterWordOperator(value: string): { operator: string; re
 function parseParameterDefaults(source: string, line: number, functions: ReadonlyMap<string, number>): SubcircuitParameter[] {
   const result: SubcircuitParameter[] = []
   let offset = 0
-  const assignment = /\s*([A-Za-z_][A-Za-z0-9_\[\]]*)\s*=\s*(\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s]+)\s*/gy
+  const assignment = /\s*([A-Za-z_][A-Za-z0-9_\[\]]*)\s*=\s*(\{[^{}]*\}|"(?:\\.|[^"\\\r\n])*"|'[^']*'|[^\s]+)\s*/gy
   while (offset < source.length) {
     assignment.lastIndex = offset
     const match = assignment.exec(source)
@@ -916,7 +916,7 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
   // ngspice permits string-valued formal parameters in subcircuits (for
   // example, a filename passed to a source model). Keep the accepted form
   // narrow: one double-quoted, single-line literal. ELSim never evaluates it.
-  if (trimmed.startsWith('"') || trimmed.endsWith('"')) return /^"[^"\u0000-\u001f\u007f]*"$/.test(trimmed)
+  if (trimmed.startsWith('"') || trimmed.endsWith('"')) return /^"(?:\\.|[^"\\\u0000-\u001f\u007f])*"$/.test(trimmed)
   const quoted = trimmed.startsWith("'") || trimmed.endsWith("'")
   if (quoted && !(trimmed.startsWith("'") && trimmed.endsWith("'"))) return false
   const expressionSource = quoted ? trimmed.slice(1, -1) : trimmed.replace(/^\{(.*)\}$/, '$1')
@@ -932,7 +932,7 @@ export function isSafeSubcircuitParameterValue(value: string, customFunctions: R
   const expression = expressionSource
   if (!expression || expression.length > 64) return false
   const tokens: string[] = []
-  const tokenPattern = /\s+|"[^"\r\n\u0000-\u001f\u007f]*"|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*|[A-Za-z_][A-Za-z0-9!#$%_\[\]]*|\*\*|==|!=|<>|<=|>=|&&|\|\||[(),+*/^%\\\-!<>=?:]/iy
+  const tokenPattern = /\s+|"(?:\\.|[^"\\\r\n\u0000-\u001f\u007f])*"|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:meg|mil|[tgkmunpfa])?[a-z]*|[A-Za-z_][A-Za-z0-9!#$%_\[\]]*|\*\*|==|!=|<>|<=|>=|&&|\|\||[(),+*/^%\\\-!<>=?:]/iy
   let offset = 0
   while (offset < expression.length) {
     tokenPattern.lastIndex = offset
