@@ -381,6 +381,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.simulation.properties.transientErrorTolerance.maxLength, 64)
   assert.equal(schema.$defs.simulation.properties.trapezoidalDampingFactor.maxLength, 64)
   for (const name of ['dcIterationLimit', 'dcTransferIterationLimit', 'transientIterationLimit']) assert.equal(schema.$defs.simulation.properties[name].pattern, '^\\s*[0-9]+\\s*$')
+  assert.equal(schema.$defs.simulation.properties.transientTotalIterationLimit.pattern, '^\\s*[0-9]+\\s*$')
   assert.equal(schema.$defs.simulation.properties.shuntCapacitance.maxLength, 64)
   assert.deepEqual(schema.$defs.simulation.properties.integrationMethod.enum, ['trap', 'gear'])
   assert.equal(schema.$defs.simulation.properties.integrationMaxOrder.minimum, 2)
@@ -435,6 +436,13 @@ test('trapezoidal damping factor survives project archive round-trip', async () 
   project.simulation.trapezoidalDampingFactor = '0.495'
   const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
   assert.equal(restored.simulation.trapezoidalDampingFactor, '0.495')
+})
+
+test('transient total iteration limit survives project archive round-trip', async () => {
+  const project = createStarterProject()
+  project.simulation.transientTotalIterationLimit = '0'
+  const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
+  assert.equal(restored.simulation.transientTotalIterationLimit, '0')
 })
 
 test('current-source SINE settings survive project archive round-trip', async () => {

@@ -865,6 +865,26 @@ test('ngspice iteration limits are analysis-aware positive integers', () => {
   }
 })
 
+test('ngspice transient total iteration limit allows zero to disable the limit', () => {
+  const project = createStarterProject()
+  project.simulation.transientTotalIterationLimit = '10000'
+  let artifact = createNetlistArtifact(validateProject(project))
+  assert.match(artifact.text, /^\.options itl5=10000$/mi)
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:transientTotalIterationLimit' && source.role === 'generated'))
+  project.simulation.analysis = 'ac'
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.doesNotMatch(artifact.text, /^\.options itl5=/mi)
+  project.simulation.analysis = 'tran'
+  project.simulation.transientTotalIterationLimit = '0'
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.match(artifact.text, /^\.options itl5=0$/mi)
+  for (const value of ['-1', '1.5', '1000001']) {
+    project.simulation.transientTotalIterationLimit = value
+    assert.throws(() => validateProject(project), /transient total iteration limit must be an integer from 0 to 1000000/i)
+    assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:transientTotalIterationLimit'))
+  }
+})
+
 test('transient truncation-error tolerance is validated and only emitted for transient analysis', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options trtol=/mi)

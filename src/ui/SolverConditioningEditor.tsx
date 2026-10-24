@@ -10,22 +10,23 @@ type NumericSettingProps = {
   hint: string
   example: string
   integer?: boolean
+  integerMinimum?: number
   maxExclusive?: number
   invalidMessage?: string
   onChange: (value?: string) => void
 }
 
-function NumericSetting({ label, ariaLabel, dataSetting, value, placeholder, hint, example, integer = false, maxExclusive, invalidMessage, onChange }: NumericSettingProps) {
+function NumericSetting({ label, ariaLabel, dataSetting, value, placeholder, hint, example, integer = false, integerMinimum = 1, maxExclusive, invalidMessage, onChange }: NumericSettingProps) {
   const text = value?.trim() ?? ''
   const valid = !text || (integer
-    ? /^\d+$/.test(text) && Number.isSafeInteger(Number(text)) && Number(text) >= 1 && Number(text) <= 1_000_000
+    ? /^\d+$/.test(text) && Number.isSafeInteger(Number(text)) && Number(text) >= integerMinimum && Number(text) <= 1_000_000
     : /^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text) && Number.isFinite(Number(text)) && Number(text) > 0 && (maxExclusive === undefined || Number(text) < maxExclusive))
   const errorId = `error-${dataSetting}`
   const hintId = `hint-${dataSetting}`
   return <label className="field-label">
     {label}
     <input data-analysis-setting={dataSetting} aria-label={ariaLabel} aria-invalid={!valid} aria-describedby={!valid ? errorId : hintId} value={value ?? ''} placeholder={placeholder ?? 'Ngspice default'} onChange={(event) => onChange(event.target.value || undefined)} />
-    {!valid && <small id={errorId} className="field-error" role="alert">{invalidMessage ?? `${integer ? 'Enter an integer from 1 to 1000000' : 'Enter a positive finite number'}, such as ${example}, or leave blank for ngspice’s default.`}</small>}
+    {!valid && <small id={errorId} className="field-error" role="alert">{invalidMessage ?? `${integer ? `Enter an integer from ${integerMinimum} to 1000000` : 'Enter a positive finite number'}, such as ${example}, or leave blank for ngspice’s default.`}</small>}
     <small id={hintId} className="field-hint">{hint}</small>
   </label>
 }
@@ -41,6 +42,7 @@ export default function SolverConditioningEditor({
   dcIterationLimit,
   dcTransferIterationLimit,
   transientIterationLimit,
+  transientTotalIterationLimit,
   transientErrorTolerance,
   trapezoidalDampingFactor,
   integrationMethod,
@@ -57,6 +59,7 @@ export default function SolverConditioningEditor({
   onDcIterationLimitChange,
   onDcTransferIterationLimitChange,
   onTransientIterationLimitChange,
+  onTransientTotalIterationLimitChange,
   onTransientErrorToleranceChange,
   onTrapezoidalDampingFactorChange,
   onIntegrationMethodChange,
@@ -73,6 +76,7 @@ export default function SolverConditioningEditor({
   dcIterationLimit?: string
   dcTransferIterationLimit?: string
   transientIterationLimit?: string
+  transientTotalIterationLimit?: string
   transientErrorTolerance?: string
   trapezoidalDampingFactor?: string
   integrationMethod?: 'trap' | 'gear'
@@ -89,6 +93,7 @@ export default function SolverConditioningEditor({
   onDcIterationLimitChange: (value?: string) => void
   onDcTransferIterationLimitChange: (value?: string) => void
   onTransientIterationLimitChange: (value?: string) => void
+  onTransientTotalIterationLimitChange: (value?: string) => void
   onTransientErrorToleranceChange: (value?: string) => void
   onTrapezoidalDampingFactorChange: (value?: string) => void
   onIntegrationMethodChange: (value?: 'trap' | 'gear') => void
@@ -143,6 +148,7 @@ export default function SolverConditioningEditor({
       <NumericSetting label="DC solution iterations (ITL1)" ariaLabel="DC solution iteration limit" dataSetting="dcIterationLimit" value={dcIterationLimit} example="100" integer hint="Maximum iterations for each operating-point/DC solution. Ngspice default: 100." onChange={onDcIterationLimitChange} />
       {analysis === 'dc' && <NumericSetting label="DC transfer-curve iterations (ITL2)" ariaLabel="DC transfer-curve iteration limit" dataSetting="dcTransferIterationLimit" value={dcTransferIterationLimit} example="50" integer hint="Maximum iterations at each point in a DC source sweep. Ngspice default: 50." onChange={onDcTransferIterationLimitChange} />}
       {analysis === 'tran' && <NumericSetting label="Transient timepoint iterations (ITL4)" ariaLabel="Transient timepoint iteration limit" dataSetting="transientIterationLimit" value={transientIterationLimit} example="10" integer hint="Maximum iterations when solving each transient timepoint. Ngspice default: 10." onChange={onTransientIterationLimitChange} />}
+      {analysis === 'tran' && <NumericSetting label="Transient total iterations (ITL5)" ariaLabel="Transient total iteration limit" dataSetting="transientTotalIterationLimit" value={transientTotalIterationLimit} example="5000" integer integerMinimum={0} invalidMessage="Enter a whole number from 0 to 1000000, or leave blank for ngspice’s default." hint="Maximum total iterations for a transient analysis. Ngspice default: 5000. Set 0 to disable this limit." onChange={onTransientTotalIterationLimitChange} />}
     </details>
 
     <label className="field-label">Floating-node resistance (optional)

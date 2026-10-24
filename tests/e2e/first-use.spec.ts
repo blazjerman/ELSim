@@ -6542,6 +6542,7 @@ test('transient solver options are editable and run in the browser engine', { ta
   await page.getByText('Iteration limits (advanced)').click()
   await page.getByLabel('DC solution iteration limit').fill('120')
   await page.getByLabel('Transient timepoint iteration limit').fill('20')
+  await page.getByLabel('Transient total iteration limit').fill('10000')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
@@ -6555,7 +6556,21 @@ test('transient solver options are editable and run in the browser engine', { ta
   await expect(page.locator('.netlist-modal pre')).toContainText('.options gmin=1e-12')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options itl1=120')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options itl4=20')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options itl5=10000')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options trtol=5')
+})
+
+test('ITL5 zero disables the total transient iteration limit', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
+  await page.getByText('Solver settings (advanced)').click()
+  await page.getByText('Iteration limits (advanced)').click()
+  await page.getByLabel('Transient total iteration limit').fill('0')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options itl5=0')
 })
 
 test('trapezoidal damping setting runs in ngspice', { tag: '@ngspice' }, async ({ page }) => {
