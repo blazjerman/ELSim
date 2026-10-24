@@ -1454,6 +1454,20 @@ test('follows global imported .FUNC helpers across library files and attributes 
   ])
 })
 
+test('follows ngspice punctuation-bearing .FUNC names when reporting reachable incompatibilities', () => {
+  const source = '.SUBCKT helpers IN OUT\nB1 OUT 0 V=helper#name(V(IN))\n.ENDS helpers'
+  const warnings = analyzeLtspiceModelDialect(source, {
+    sourceAssetId: 'device-lib',
+    supportingLibraries: [
+      { assetId: 'device-lib', content: source },
+      { assetId: 'common-functions', content: '.FUNC helper#name(x) {inner!name(x)}\n.FUNC inner!name(x) {sqr(x)}' },
+    ],
+  })
+  assert.deepEqual(warnings.map(({ sourceLine, sourceAssetId, feature }) => [sourceLine, sourceAssetId, feature]), [
+    [2, 'common-functions', 'Imported .FUNC uses B-source sqr()'],
+  ])
+})
+
 test('diagnoses reached LTspice helper limit() and if() constructs at their definition lines', () => {
   const source = [
     '.FUNC clamp_value(x) {limit(x, 0, 1)}',

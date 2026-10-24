@@ -378,6 +378,8 @@ M2.4 large-library section picker (2026-10-24): The single and batch model-libra
 
 M2.4 imported model search work (2026-10-24): The component picker now builds normalized searchable text for imported subcircuits and device models only when their library-derived arrays change; typing filters cached text instead of rebuilding model names, filenames, pin labels, parameter names, and device families on each keystroke. Firefox verifies IC searches by model name, pin name, and parameter name, device-model searches by name, family, and filename, and retains the existing symbol pin-mapping flow. TypeScript passes; no WASM rebuild or Pages workflow ran.
 
+M2.4 punctuation-bearing helper functions (2026-10-24): Imported ngspice `.FUNC` reachability now recognizes the documented identifier characters `!`, `#`, `$`, `%`, `[` and `]` (in addition to letters, digits, `_`, and `.`). A regression follows a B-source call through two helpers named with `#` and `!` and reports an unsupported `sqr()` at the helper source. All 39 unit-test groups and TypeScript pass; no WASM rebuild or Pages workflow ran. Identifier characters follow the [ngspice manual](https://ngspice.sourceforge.net/docs/ngspice-manual.pdf).
+
 ### M3 — LTspice interoperability (deferred by owner)
 
 **Status: paused for a separate future goal.** Do not count M3 items as active development work or resume LTspice-specific import/export changes during the current app goal. Preserve the existing compatibility notes, fixtures, and matrix for the later goal. Continue general native ngspice support under M2.4 when it benefits ELSim independently of LTspice compatibility.

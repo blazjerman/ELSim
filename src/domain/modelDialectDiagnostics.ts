@@ -64,7 +64,7 @@ function globalFunctionsForLibraries(libraries: readonly ModelDialectLibrarySour
       if (directive === '.ends') { scopes.pop(); continue }
       if (directive === '.subckt') { scopes.push(tokens[1]?.toLowerCase() ?? ''); continue }
       if (scopes.length) continue
-      const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
+      const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$!#%\[\]]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
       if (!definition) continue
       const helper: BehavioralHelper = { name: definition[1], body: definition[2], sourceLine, excerpt: line.slice(0, 160), assetId: library.assetId, scope: '' }
       const key = helper.name.toLowerCase()
@@ -76,7 +76,7 @@ function globalFunctionsForLibraries(libraries: readonly ModelDialectLibrarySour
 }
 
 function behavioralFunctionCalls(expression: string): string[] {
-  return [...expression.matchAll(/\b([A-Za-z_][A-Za-z0-9_.$]*)\s*\(/g)].map((match) => match[1].toLowerCase())
+  return [...expression.matchAll(/\b([A-Za-z_][A-Za-z0-9_.$!#%\[\]]*)\s*\(/g)].map((match) => match[1].toLowerCase())
 }
 
 const helperCompatibilityRules = [
@@ -183,7 +183,7 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
     if (directive === '.ends') { sourceScopes.pop(); continue }
     if (directive === '.subckt') { sourceScopes.push(tokens[1]?.toLowerCase() ?? ''); continue }
     const scope = sourceScopes.join('.')
-    const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
+    const definition = line.match(/^\.func\s+([A-Za-z_][A-Za-z0-9_.$!#%\[\]]*)\s*(?:\([^)]*\))?\s*=?\s*\{([\s\S]*)\}\s*$/i)
     if (definition) {
       const helper: BehavioralHelper = { name: definition[1], body: definition[2], sourceLine, excerpt: line.slice(0, 160), assetId: options.sourceAssetId, scope }
       if (scope) {
