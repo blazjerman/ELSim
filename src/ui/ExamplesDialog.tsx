@@ -44,6 +44,7 @@ const exampleCatalog: { id: ExampleId; title: string; description: string }[] = 
   { id: 'noninverting-opamp', title: 'Non-inverting op-amp amplifier', description: 'Use the built-in five-pin teaching model to produce about 1.5 V from a 0.5 V input, then change the feedback ratio and compare.' },
   { id: 'common-emitter', title: 'NPN common-emitter amplifier', description: 'Use a resistor-biased NPN stage to amplify a small AC signal and invert its phase.' },
   { id: 'common-source', title: 'NMOS common-source amplifier', description: 'Bias an NMOS with a resistor divider, then measure the AC gain and phase inversion at its drain.' },
+  { id: 'cmos-inverter', title: 'CMOS inverter: complementary MOSFETs', description: 'Drive a PMOS and NMOS transistor pair with one pulse and see how their shared output switches in the opposite direction.' },
   { id: 'led-current-limiter', title: 'LED current limiter', description: 'See how a series resistor limits current through an LED from a 5 V supply.' },
   { id: 'led-parallel', title: 'Parallel LEDs with separate resistors', description: 'Compare two LED branches and see how each series resistor sets its own branch current.' },
   { id: 'diode-polarity', title: 'Diode direction: forward and reverse bias', description: 'Change a DC source from +5 V to −5 V and compare the diode voltage and current in forward and reverse bias.' },
@@ -76,7 +77,7 @@ const exampleTopicIds: Record<Exclude<ExampleTopic, 'all'>, readonly ExampleId[]
   diodes: ['diode-polarity', 'led', 'led-current-limiter', 'led-parallel', 'rectifier', 'bridge-rectifier', 'zener', 'flyback'],
   ac: ['ac-lowpass', 'ac-highpass', 'sine-wave', 'rlc-resonance', 'lc-energy', 'transformer', 'transformer-current', 'rl-step', 'rlc'],
   switching: ['voltage-switch', 'current-switch', 'transistor', 'pnp', 'mosfet', 'pmos', 'jfet', 'pjfet', 'led'],
-  advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'transient-noise', 'transient-noise-sweep', 'educational-opamp', 'imported-opamp', 'inverting-opamp', 'noninverting-opamp', 'common-emitter', 'common-source', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier', 'transmission-line', 'urc-line', 'urc-line-native', 'coupled-crosstalk'],
+  advanced: ['controlled', 'current-controlled', 'hierarchy', 'pwl', 'transient-noise', 'transient-noise-sweep', 'educational-opamp', 'imported-opamp', 'inverting-opamp', 'noninverting-opamp', 'common-emitter', 'common-source', 'cmos-inverter', 'logic-gates', 'logic-gates-3v3', 'rlc', 'bridge-rectifier', 'transmission-line', 'urc-line', 'urc-line-native', 'coupled-crosstalk'],
 }
 const startOrder = new Map(exampleTopicIds.start.map((id, index) => [id, index]))
 

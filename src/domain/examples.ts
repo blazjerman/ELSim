@@ -362,6 +362,58 @@ export function createCommonSourceExampleProject(): Project {
   return project
 }
 
+/** A transistor-level CMOS inverter using the built-in educational MOSFET models. */
+export function createCmosInverterExampleProject(): Project {
+  const project = createStarterProject()
+  const input: Part = { id: 'cmos-inverter-vin', kind: 'source', ref: 'VIN', value: '5 V', sourceMode: 'pulse', pulse: { initial: '0 V', delay: '0', rise: '10 µs', fall: '10 µs', width: '2 ms', period: '4 ms' }, x: 150, y: 400, rotation: 0 }
+  const supply: Part = { id: 'cmos-inverter-vdd', kind: 'source', ref: 'VDD', value: '5 V', sourceMode: 'dc', acMagnitude: '0 V', x: 500, y: 100, rotation: 0 }
+  const pmos: Part = { id: 'cmos-inverter-mp', kind: 'pmos', ref: 'MP1', value: '0', x: 700, y: 300, rotation: 180 }
+  const nmos: Part = { id: 'cmos-inverter-mn', kind: 'nmos', ref: 'MN1', value: '0', x: 700, y: 600, rotation: 0 }
+  const load: Part = { id: 'cmos-inverter-rload', kind: 'resistor', ref: 'RLOAD', value: '1 MΩ', x: 1100, y: 400, rotation: 90 }
+  const parts = [input, supply, pmos, nmos, load]
+  const atPin = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'CMOS inverter'
+  project.parts = parts
+  project.wires = [
+    { id: 'cmos-input-source-wire', points: [[150, 350], [350, 350]] },
+    { id: 'cmos-input-bus-upper', points: [[350, 200], [350, 350]] },
+    { id: 'cmos-input-bus-lower', points: [[350, 350], [350, 600]] },
+    { id: 'cmos-input-upper-route', points: [[350, 200], [800, 200]] },
+    { id: 'cmos-input-pmos-drop', points: [[800, 200], [800, 300]] },
+    { id: 'cmos-input-pmos-gate', points: [[750, 300], [800, 300]] },
+    { id: 'cmos-input-nmos-gate', points: [[350, 600], [650, 600]] },
+    { id: 'cmos-supply-rail', points: [[500, 50], [1000, 50]] },
+    { id: 'cmos-supply-drop', points: [[1000, 50], [1000, 250]] },
+    { id: 'cmos-pmos-bulk-link', points: [[600, 300], [650, 300]] },
+    { id: 'cmos-pmos-bulk-drop', points: [[600, 250], [600, 300]] },
+    { id: 'cmos-pmos-source-rail', points: [[600, 250], [1000, 250]] },
+    { id: 'cmos-pmos-drain-output', points: [[700, 350], [900, 350]] },
+    { id: 'cmos-output-lower', points: [[900, 350], [900, 550]] },
+    { id: 'cmos-output-nmos-drain', points: [[700, 550], [900, 550]] },
+    { id: 'cmos-output-load', points: [[900, 350], [1100, 350]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    atPin('cmos-input-label', 'VIN', input, 0),
+    atPin('cmos-supply-label', 'VDD', supply, 0),
+    atPin('cmos-ground-input', '0', input, 1),
+    atPin('cmos-ground-supply', '0', supply, 1),
+    atPin('cmos-ground-nmos-source', '0', nmos, 2),
+    atPin('cmos-ground-nmos-bulk', '0', nmos, 3),
+    atPin('cmos-ground-load', '0', load, 1),
+    { id: 'cmos-vout-label', name: 'VOUT', x: 900, y: 400, visible: true },
+  ]
+  project.sheets = [{ ...project.sheets[0], parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '8 ms', maxStep: '20 µs' }
+  project.plotSettings = { selectedTraceIds: ['V(VIN)', 'V(VOUT)', 'I(MP1)', 'I(MN1)'], ranges: {} }
+  project.view = { zoom: 0.8, panX: 0, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A transient truth-table lesson built from the built-in ideal logic gates. */
 export function createLogicGatesExampleProject(): Project {
   const project = createStarterProject()
