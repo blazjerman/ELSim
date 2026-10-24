@@ -1,7 +1,7 @@
 import type { Part } from '../domain/project'
 import type { AnalysisSettingField } from '../engine/netlistValidation'
 
-export type AdvancedSourceMode = 'sine' | 'exp' | 'sffm' | 'am'
+export type AdvancedSourceMode = 'sine' | 'exp' | 'sffm' | 'am' | 'trnoise'
 
 export function AdvancedSourceWaveformEditor({ part, mode, onChange, analysisSettingError }: {
   part: Part
@@ -43,6 +43,17 @@ export function AdvancedSourceWaveformEditor({ part, mode, onChange, analysisSet
       const errorId = `analysis-error-${part.id}-am-${key}`
       return <label className="field-label" key={key}>{label}<input data-part-setting={`${part.id}:${field}`} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={am[key]} onChange={(event) => onChange({ am: { ...am, [key]: event.target.value } })}/>{error && <small id={errorId} className="field-error" role="alert">{error}</small>}</label>
     })}<small className="field-hint">AM(VO, VMO, VMA, FM, FC, TD, PHASEM, PHASEC): amplitude-modulated voltage or current. Frequencies must be positive; delay is nonnegative. Set modulation offset to zero for a suppressed carrier.</small></div>
+  }
+
+  if (mode === 'trnoise') {
+    const noise = { gaussianRms: '10n', timeStep: '1u', flickerExponent: '0', flickerAmplitude: '0', rtsAmplitude: '0', rtsCaptureTime: '1u', rtsEmissionTime: '1u', ...part.trnoise }
+    const fields = [['gaussianRms', 'Gaussian RMS voltage (V)'], ['timeStep', 'Noise sample interval (s)'], ['flickerExponent', '1/f noise exponent'], ['flickerAmplitude', '1/f noise amplitude (V)'], ['rtsAmplitude', 'RTS amplitude (V)'], ['rtsCaptureTime', 'RTS mean capture time (s)'], ['rtsEmissionTime', 'RTS mean emission time (s)']] as const
+    return <div className="sine-source-fields"><div className="field-hint">Experimental ngspice transient noise. It is available for voltage sources only; current-source TRNOISE is not implemented. The source's Voltage field sets the DC level. Noise is random and adds solver breakpoints at the sample interval.</div>{fields.map(([key, label]) => {
+      const field = `trnoise.${key}` as AnalysisSettingField
+      const error = analysisSettingError(field, part.id)
+      const errorId = `analysis-error-${part.id}-${key}`
+      return <label className="field-label" key={key}>{label}<input data-part-setting={`${part.id}:${field}`} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={noise[key]} onChange={(event) => onChange({ trnoise: { ...noise, [key]: event.target.value } })}/>{error && <small id={errorId} className="field-error" role="alert">{error}</small>}</label>
+    })}<small className="field-hint">Set amplitude to zero to disable a noise type. Flicker exponent must be between 0 and 2 when 1/f noise is enabled; RTS needs positive capture and emission times. Smaller noise intervals add more solver breakpoints and can slow simulation.</small></div>
   }
 
   const sffm = { offset: '0', amplitude: part.value.replace(/\s*[va]$/i, '') || (quantity === 'current' ? '5m' : '5'), carrierFrequency: '1k', modulationIndex: '5', signalFrequency: '100', ...part.sffm }

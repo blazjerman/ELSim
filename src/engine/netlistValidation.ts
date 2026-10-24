@@ -5,10 +5,10 @@ import { MAX_FINITE_PWL_POINTS, MAX_SOURCE_PWL_POINTS, validateSourcePwlPoints, 
 import { dcSweepPointCount, MAX_DC_SWEEP_POINTS } from '../domain/dcSweep'
 import {
   spiceMagnitude, spiceNumber, spiceScalar, spiceSheetMagnitude, spiceSheetParameterDefault,
-  spiceSheetScalar, spiceSheetTimeMagnitude, spiceSheetValue,
+  spiceSheetScalar, spiceSheetTimeMagnitude, spiceSheetValue, spiceValueMagnitude,
 } from './spiceValues'
 
-export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency' | 'am.offset' | 'am.modulationOffset' | 'am.modulationAmplitude' | 'am.modulationFrequency' | 'am.carrierFrequency' | 'am.delay' | 'am.modulationPhase' | 'am.carrierPhase'
+export type AnalysisSettingField = 'temperature' | 'noiseOutput' | 'noiseSource' | 'noiseScale' | 'noisePoints' | 'noiseStartFrequency' | 'noiseStopFrequency' | 'stopTime' | 'maxStep' | 'startSavingTime' | 'acScale' | 'acPoints' | 'acStartFrequency' | 'acStopFrequency' | 'dcSource' | 'dcStart' | 'dcStop' | 'dcStep' | 'partAcMagnitude' | 'partAcPhase' | 'pwlPoints' | 'pulse.initial' | 'pulse.delay' | 'pulse.rise' | 'pulse.fall' | 'pulse.width' | 'pulse.period' | 'pulse.cycleCount' | 'sine.offset' | 'sine.amplitude' | 'sine.frequency' | 'sine.delay' | 'sine.damping' | 'sine.phase' | 'exp.initial' | 'exp.pulsed' | 'exp.riseDelay' | 'exp.riseTau' | 'exp.fallDelay' | 'exp.fallTau' | 'sffm.offset' | 'sffm.amplitude' | 'sffm.carrierFrequency' | 'sffm.modulationIndex' | 'sffm.signalFrequency' | 'am.offset' | 'am.modulationOffset' | 'am.modulationAmplitude' | 'am.modulationFrequency' | 'am.carrierFrequency' | 'am.delay' | 'am.modulationPhase' | 'am.carrierPhase' | 'trnoise.gaussianRms' | 'trnoise.timeStep' | 'trnoise.flickerExponent' | 'trnoise.flickerAmplitude' | 'trnoise.rtsAmplitude' | 'trnoise.rtsCaptureTime' | 'trnoise.rtsEmissionTime'
 export type AnalysisSettingError = { field: AnalysisSettingField; message: string; sourceId?: string; settingPath?: string }
 
 export function validateAnalysisSettings(project: Project, connectivity?: Connectivity): AnalysisSettingError[] {
@@ -93,6 +93,32 @@ export function validateAnalysisSettings(project: Project, connectivity?: Connec
       if (delay === null || delay < 0) add('am.delay', `${part.ref} AM delay must be a nonnegative time.`, part.id, 'am.delay')
       for (const field of ['modulationPhase', 'carrierPhase'] as const) {
         if (spiceScalar(spiceSheetParameterDefault(am[field], sourceParameters) ?? am[field], '') === null) add(`am.${field}`, `${part.ref} AM phase must be numeric degrees or a declared parameter.`, part.id, `am.${field}`)
+      }
+    }
+    for (const part of independentSources.filter((item) => item.sourceMode === 'trnoise')) {
+      if (part.kind !== 'source') {
+        add('trnoise.gaussianRms', `${part.ref} transient TRNOISE is supported only on voltage sources by ngspice.`, part.id, 'trnoise.gaussianRms')
+        continue
+      }
+      const settings = { gaussianRms: '10n', timeStep: '1u', flickerExponent: '0', flickerAmplitude: '0', rtsAmplitude: '0', rtsCaptureTime: '1u', rtsEmissionTime: '1u', ...part.trnoise }
+      const amplitudeValues = ['gaussianRms', 'flickerAmplitude', 'rtsAmplitude'] as const
+      const amplitudes = Object.fromEntries(amplitudeValues.map((field) => {
+        const token = spiceSheetValue(settings[field], 'source', sourceParameters)
+        const magnitude = token === null ? null : spiceValueMagnitude(token)
+        if (magnitude === null || magnitude < 0) add(`trnoise.${field}`, `${part.ref} ${field === 'gaussianRms' ? 'Gaussian RMS' : field === 'flickerAmplitude' ? 'flicker' : 'RTS'} noise amplitude must be a nonnegative voltage.`, part.id, `trnoise.${field}`)
+        return [field, magnitude]
+      })) as Record<(typeof amplitudeValues)[number], number | null>
+      const timeStep = spiceSheetTimeMagnitude(settings.timeStep, sourceParameters)
+      if (timeStep === null || timeStep < 0) add('trnoise.timeStep', `${part.ref} transient-noise sample interval must be a nonnegative time.`, part.id, 'trnoise.timeStep')
+      const noiseEnabled = amplitudeValues.some((field) => (amplitudes[field] ?? 0) > 0)
+      if (noiseEnabled && timeStep === 0) add('trnoise.timeStep', `${part.ref} needs a positive transient-noise sample interval when a noise amplitude is nonzero.`, part.id, 'trnoise.timeStep')
+      const exponentText = spiceScalar(spiceSheetParameterDefault(settings.flickerExponent, sourceParameters) ?? settings.flickerExponent, '')
+      const exponent = exponentText === null ? null : Number(exponentText)
+      if (exponent === null || !Number.isFinite(exponent) || exponent < 0 || exponent > 2 || (amplitudes.flickerAmplitude ?? 0) > 0 && (exponent <= 0 || exponent >= 2)) add('trnoise.flickerExponent', `${part.ref} flicker exponent must be from 0 through 2, and strictly between 0 and 2 when flicker noise is enabled.`, part.id, 'trnoise.flickerExponent')
+      for (const [field, value] of [['rtsCaptureTime', settings.rtsCaptureTime], ['rtsEmissionTime', settings.rtsEmissionTime]] as const) {
+        const time = spiceSheetTimeMagnitude(value, sourceParameters)
+        const positiveRequired = (amplitudes.rtsAmplitude ?? 0) > 0
+        if (time === null || time < 0 || positiveRequired && time <= 0) add(`trnoise.${field}`, `${part.ref} RTS ${field === 'rtsCaptureTime' ? 'capture' : 'emission'} time must be ${positiveRequired ? 'positive' : 'nonnegative'}.`, part.id, `trnoise.${field}`)
       }
     }
     for (const part of independentSources.filter((item) => item.sourceMode === 'pwl')) {

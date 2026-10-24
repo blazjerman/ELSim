@@ -87,6 +87,32 @@ function spiceAm(part: Part, parameters: Project['sheets'][number]['parameters']
   return `AM(${offset} ${modulationOffset} ${modulationAmplitude} ${modulationFrequency} ${carrierFrequency} ${delay} ${modulationPhase} ${carrierPhase})`
 }
 
+function spiceTransientNoise(part: Part, parameters: Project['sheets'][number]['parameters'] = []): string | null {
+  if (part.kind !== 'source') return null
+  const noise = { gaussianRms: '10n', timeStep: '1u', flickerExponent: '0', flickerAmplitude: '0', rtsAmplitude: '0', rtsCaptureTime: '1u', rtsEmissionTime: '1u', ...part.trnoise }
+  const gaussian = spiceSheetValue(noise.gaussianRms, 'source', parameters)
+  const timeStep = spiceSheetTime(noise.timeStep, parameters)
+  const flickerAmplitude = spiceSheetValue(noise.flickerAmplitude, 'source', parameters)
+  const rtsAmplitude = spiceSheetValue(noise.rtsAmplitude, 'source', parameters)
+  const flickerExponent = spiceSheetScalar(noise.flickerExponent, parameters)
+  const captureTime = spiceSheetTime(noise.rtsCaptureTime, parameters)
+  const emissionTime = spiceSheetTime(noise.rtsEmissionTime, parameters)
+  const gaussianMagnitude = gaussian === null ? null : spiceValueMagnitude(gaussian)
+  const timeStepMagnitude = spiceSheetTimeMagnitude(noise.timeStep, parameters)
+  const flickerMagnitude = flickerAmplitude === null ? null : spiceValueMagnitude(flickerAmplitude)
+  const rtsMagnitude = rtsAmplitude === null ? null : spiceValueMagnitude(rtsAmplitude)
+  const exponentText = spiceScalar(spiceSheetParameterDefault(noise.flickerExponent, parameters) ?? noise.flickerExponent, '')
+  const exponent = exponentText === null ? null : Number(exponentText)
+  const captureMagnitude = spiceSheetTimeMagnitude(noise.rtsCaptureTime, parameters)
+  const emissionMagnitude = spiceSheetTimeMagnitude(noise.rtsEmissionTime, parameters)
+  if (gaussian === null || gaussianMagnitude === null || gaussianMagnitude < 0 || timeStep === null || timeStepMagnitude === null || timeStepMagnitude < 0 || flickerAmplitude === null || flickerMagnitude === null || flickerMagnitude < 0 || rtsAmplitude === null || rtsMagnitude === null || rtsMagnitude < 0 || flickerExponent === null || exponent === null || !Number.isFinite(exponent) || captureTime === null || captureMagnitude === null || captureMagnitude < 0 || emissionTime === null || emissionMagnitude === null || emissionMagnitude < 0) return null
+  const hasNoise = gaussianMagnitude > 0 || flickerMagnitude > 0 || rtsMagnitude > 0
+  if (hasNoise && timeStepMagnitude <= 0) return null
+  if (flickerMagnitude > 0 && (exponent <= 0 || exponent >= 2)) return null
+  if (rtsMagnitude > 0 && (captureMagnitude <= 0 || emissionMagnitude <= 0)) return null
+  return `TRNOISE(${gaussian} ${timeStep} ${flickerExponent} ${flickerAmplitude} ${rtsAmplitude} ${captureTime} ${emissionTime})`
+}
+
 export function createNetlist(project: Project): string {
   return createNetlistArtifact(project).text
 }
@@ -352,6 +378,12 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     }
     if (part.kind === 'currentSource') {
       let transientValue = value
+      if (project.simulation.analysis === 'tran' && part.sourceMode === 'trnoise') {
+        const message = `${part.ref} TRNOISE is available only on voltage sources in ngspice 47; current-source transient noise is not implemented by the solver.`
+        append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+        diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+        continue
+      }
       if (project.simulation.analysis === 'tran' && part.sourceMode === 'pulse') {
         const pulse = { initial: '0', delay: '0', rise: '1u', fall: '1u', width: '50m', period: '100m', ...part.pulse }
         const initial = spiceSheetValue(pulse.initial, 'currentSource', sheetParameters)
@@ -492,6 +524,15 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
           continue
         }
         transientValue = waveform
+      } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'trnoise') {
+        const waveform = spiceTransientNoise(part, sheetParameters)
+        if (!waveform) {
+          const message = `${part.ref} TRNOISE values must be nonnegative; use a positive noise time step when noise is enabled, a flicker exponent between 0 and 2 when flicker noise is enabled, and positive capture/emission times when RTS noise is enabled.`
+          append(`* ERROR: ${cleanComment(message)}`, part.id, 'component')
+          diagnostics.push({ severity: 'error', message, sourceId: part.id, line: rows.length })
+          continue
+        }
+        transientValue = `DC ${value} ${waveform}`
       } else if (project.simulation.analysis === 'tran' && part.sourceMode === 'sine') {
         const sine = { offset: '0', amplitude: part.value, frequency: '1k', delay: '0', damping: '0', phase: '0', ...part.sine }
         const offset = spiceSheetValue(sine.offset, 'source', sheetParameters), amplitude = spiceSheetValue(sine.amplitude, 'source', sheetParameters)

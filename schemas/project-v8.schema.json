@@ -377,9 +377,10 @@
             "sine",
             "exp",
             "sffm",
-            "am"
+            "am",
+            "trnoise"
           ],
-          "description": "For transient analysis, voltage and independent current sources support pulse, DC, PWL, SINE, EXP, SFFM, and AM. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
+          "description": "For transient analysis, sources support pulse, DC, PWL, SINE, EXP, SFFM, and AM. Experimental TRNOISE is supported on voltage sources only. Omitted voltage-source mode preserves historical pulse behavior; omitted current-source mode means scalar DC."
         },
         "acMagnitude": {
           "type": "string",
@@ -561,6 +562,21 @@
             "modulationPhase": { "type": "string", "maxLength": 64 },
             "carrierPhase": { "type": "string", "maxLength": 64 }
           }
+        },
+        "trnoise": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gaussianRms", "timeStep", "flickerExponent", "flickerAmplitude", "rtsAmplitude", "rtsCaptureTime", "rtsEmissionTime"],
+          "properties": {
+            "gaussianRms": { "type": "string", "maxLength": 64, "description": "Gaussian white-noise RMS voltage." },
+            "timeStep": { "type": "string", "maxLength": 64, "description": "Noise sample interval." },
+            "flickerExponent": { "type": "string", "maxLength": 64, "description": "1/f noise exponent, between 0 and 2 when flicker noise is enabled." },
+            "flickerAmplitude": { "type": "string", "maxLength": 64, "description": "1/f noise amplitude." },
+            "rtsAmplitude": { "type": "string", "maxLength": 64, "description": "Random telegraph signal amplitude." },
+            "rtsCaptureTime": { "type": "string", "maxLength": 64, "description": "Mean trap capture time; required when RTS amplitude is nonzero." },
+            "rtsEmissionTime": { "type": "string", "maxLength": 64, "description": "Mean trap emission time; required when RTS amplitude is nonzero." }
+          },
+          "description": "Experimental ngspice transient-noise source settings for voltage sources only."
         },
         "pwl": {
           "type": "array",

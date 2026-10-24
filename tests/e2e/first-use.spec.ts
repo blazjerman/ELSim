@@ -9963,6 +9963,26 @@ test('voltage AM waveform is editable, saved, and solved by browser ngspice', { 
   await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 AM\(0 5 2 100 1k 0 0 0\)/)
 })
 
+test('experimental TRNOISE voltage source simulates through browser ngspice', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
+  await page.goto('/')
+  await page.getByRole('button', { name: /^V1, Voltage source/ }).click()
+  await page.getByRole('combobox', { name: 'Source waveform' }).selectOption('trnoise')
+  await page.getByLabel('Voltage (V)').fill('0')
+  await page.getByLabel('Gaussian RMS voltage (V)').fill('20mV')
+  await page.getByLabel('Noise sample interval (s)').fill('1m')
+  await page.getByLabel('1/f noise exponent').fill('1.1')
+  await page.getByLabel('1/f noise amplitude').fill('1mV')
+  await page.getByLabel('RTS amplitude').fill('5mV')
+  await page.getByLabel('RTS mean capture time (s)').fill('2m')
+  await page.getByLabel('RTS mean emission time (s)').fill('3m')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText(/V1 vin 0 DC 0 TRNOISE\(20m 1m 1\.1 1m 5m 2m 3m\)/)
+})
+
 test('PWL waveform example opens with editable points and solves the RC response', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
