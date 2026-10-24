@@ -208,6 +208,7 @@ test('imported device model compatibility has one canonical type per built-in de
   assert.deepEqual(translateVoltageSwitchModel({ type: 'VSWITCH', parameters: voltageSwitchParameters }), { ron: '10', roff: '1000000', vt: '3', vh: '1' })
   assert.equal(translateVoltageSwitchModel({ type: 'VSWITCH', parameters: voltageSwitchParameters.map((parameter) => parameter.name === 'VON' ? { ...parameter, defaultValue: '{4}' } : parameter) }), null)
   assert.equal(translateVoltageSwitchModel({ type: 'VSWITCH', parameters: voltageSwitchParameters.map((parameter) => parameter.name === 'VOFF' ? { ...parameter, defaultValue: '5' } : parameter) }), null)
+  assert.equal(translateVoltageSwitchModel({ type: 'VSWITCH', parameters: [voltageSwitchParameters[0], voltageSwitchParameters[2], voltageSwitchParameters[3], { ...voltageSwitchParameters[0], defaultValue: '5' }] }), null)
   for (const definition of componentDefinitions) {
     if (!(definition.kind in expected)) assert.equal(compatibleDeviceModelType(definition.kind), undefined, definition.kind)
   }

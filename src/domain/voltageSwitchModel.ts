@@ -19,7 +19,7 @@ export function translateVoltageSwitchModel(model: VoltageSwitchModelSource): Na
   const values: Record<string, number> = {}
   for (const parameter of model.parameters) {
     const name = parameter.name.toLowerCase()
-    if (!['von', 'voff', 'ron', 'roff'].includes(name) || parameter.defaultIsExpression || parameter.defaultVariesByCondition) return null
+    if (!['von', 'voff', 'ron', 'roff'].includes(name) || Object.hasOwn(values, name) || parameter.defaultIsExpression || parameter.defaultVariesByCondition) return null
     const value = spiceModelParameterMagnitude(parameter.defaultValue)
     if (value === null) return null
     values[name] = value
