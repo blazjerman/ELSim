@@ -6407,6 +6407,27 @@ async function openComponentCurrentPlot(page: import('@playwright/test').Page, r
   return page.locator('.plot-window').last()
 }
 
+test('dragging a floating waveform window does not select text behind it', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
+  const plotWindow = await openComponentVoltagePlot(page)
+  const titleText = plotWindow.locator('.plot-window-title > span').first()
+  const titleBounds = await titleText.boundingBox()
+  const initialWindow = await plotWindow.boundingBox()
+  expect(titleBounds).not.toBeNull()
+  expect(initialWindow).not.toBeNull()
+
+  await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  await page.mouse.move(titleBounds!.x + titleBounds!.width / 2, titleBounds!.y + titleBounds!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(titleBounds!.x + titleBounds!.width / 2 + 90, titleBounds!.y + titleBounds!.height / 2 + 60, { steps: 8 })
+  await page.mouse.up()
+
+  await expect.poll(() => plotWindow.boundingBox()).toMatchObject({ x: initialWindow!.x + 90, y: initialWindow!.y + 60 })
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('')
+})
+
 test('floating waveform windows can be moved and resized from the keyboard', { tag: '@ngspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Run simulation' }).click()
