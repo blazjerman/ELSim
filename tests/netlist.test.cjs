@@ -140,6 +140,17 @@ test('a placed IC cannot call an imported model with an ambiguous global functio
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE! \(helpers\.lib:1, unrelated\.lib:1\)/i.test(diagnostic.message)), true)
 })
 
+test('a behavioral source cannot call an ambiguous imported global function', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'behavioral-output', kind: 'behavioral', ref: 'B1', value: 'SCALE!(V(vin))', behavioralOutput: 'voltage', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'one-argument-function', filename: 'helpers.lib', content: '.FUNC SCALE!(x$) {x$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'two-argument-function', filename: 'unrelated.lib', content: '.FUNC SCALE!(x$, y$) {x$+y$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'behavioral-output' && /B1 uses behavioral source B1 expression that calls ambiguous global \.FUNC SCALE!/i.test(diagnostic.message)), true)
+})
+
 test('a placed IC cannot call an ambiguous global function from its behavioral body', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })

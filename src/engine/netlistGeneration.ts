@@ -408,6 +408,11 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     return result
   }
   for (const part of project.parts) {
+    if (part.kind === 'behavioral') {
+      for (const functionName of ambiguousFunctionCallsInText(part.value)) {
+        reportAmbiguousFunctionCall(part, functionName, `behavioral source ${part.ref} expression that calls`)
+      }
+    }
     if (part.deviceModel) {
       reportAmbiguousDeviceModel(part, part.deviceModel)
       reportAmbiguousModelFunctions(part, part.deviceModel)
