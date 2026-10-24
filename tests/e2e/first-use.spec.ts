@@ -6487,6 +6487,8 @@ test('imported device model inspector shows and searches unparsed source assignm
       '.ELSE',
       '.MODEL DCOND D(IS=10n N={vendor_shape(3)})',
       '.ENDIF',
+      '.MODEL DONLY D(N={vendor_shape(4)})',
+      '.MODEL DONLYAKO AKO:DBASE D()',
     ].join('\n')),
   })
   await page.getByLabel('Device model for D1').selectOption('DUSER')
@@ -6529,6 +6531,17 @@ test('imported device model inspector shows and searches unparsed source assignm
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DBASE D(N={vendor_shape(2)})')
   await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DUSER AKO:DBASE D(IS=1n)')
+  await page.getByRole('button', { name: 'Close netlist' }).click()
+  await page.getByLabel('Device model for D1').selectOption('DONLY')
+  const sourceOnlyDetails = page.getByText('DONLY · 0 model parameters · 1 unparsed', { exact: true })
+  await expect(sourceOnlyDetails).toBeVisible()
+  await sourceOnlyDetails.click()
+  await expect(page.getByLabel('Unparsed model assignments')).toContainText('N = {vendor_shape(4)}')
+  await page.getByLabel('Device model for D1').selectOption('DONLYAKO')
+  const inheritedSourceOnlyDetails = page.getByText('DONLYAKO · AKO:DBASE · 0 model parameters · 1 unparsed', { exact: true })
+  await expect(inheritedSourceOnlyDetails).toBeVisible()
+  await inheritedSourceOnlyDetails.click()
+  await expect(page.getByLabel('Unparsed model assignments')).toContainText('N = {vendor_shape(2)}')
 })
 
 test('resistor AC value is editable, saved, and generated as an AC-only override @ui-smoke', async ({ page }) => {
