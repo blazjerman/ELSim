@@ -4,7 +4,7 @@ export type SubcircuitParameter = { name: string; defaultValue: string; defaultV
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; parameters: SubcircuitParameter[]; scope?: string; conditional?: boolean; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; parameters: SubcircuitParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; scope?: string; conditional?: boolean; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
@@ -534,11 +534,13 @@ export function modelFunctionSignaturesForLibraries<T extends Pick<ModelLibraryI
 }
 
 function parseModelCard(text: string, line: LogicalLine, scope?: string, functions: ReadonlyMap<string, number> = new Map()): SpiceModelDefinition {
-  const modelHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+ako\s*:\s*\S+\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+  const akoHeader = text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+ako\s*:\s*([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
+  const modelHeader = akoHeader
     ?? text.match(/^\.model\s+([A-Za-z0-9_][A-Za-z0-9_.$-]*(?:\/[A-Za-z0-9_.$-]+)*)\s+([A-Za-z][A-Za-z0-9_]*)(?=\s|\(|$)/i)
-  const name = modelHeader?.[1], type = modelHeader?.[2]
+  const name = modelHeader?.[1], type = akoHeader?.[3] ?? modelHeader?.[2]
   if (!name || !type) throw new Error(`Line ${line.start}: .MODEL needs a valid model name and device type.`)
-  const parameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/^\s*\(/, '').replace(/\)\s*$/, '')
+  const rawParameterSource = text.slice((modelHeader?.index ?? 0) + (modelHeader?.[0].length ?? 0)).replace(/\$[^\r\n]*$/, '').trim()
+  const parameterSource = rawParameterSource.replace(/^\s*\(/, '').replace(/\)\s*$/, '')
   const vdmosChannel = type.toLowerCase() === 'vdmos'
     ? /\bpchan\b/i.test(parameterSource) ? 'p' as const : 'n' as const
     : undefined
@@ -558,7 +560,13 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
       parameters.push(parameter)
     } else parameters[existing] = parameter
   }
-  return { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), parameters, ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
+  const rawAssignmentNames = [...parameterSource.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=/g)].map((match) => match[1].toLowerCase())
+  const uniqueAssignments = new Set(rawAssignmentNames).size
+  const safeAkoPayload = rawParameterSource.replace(/[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:\{[^{}]*\}|"[^"\r\n]*"|'[^']*'|[^\s,)]+)/g, '').replace(/[\s(),+]/g, '') === ''
+  const definition: SpiceModelDefinition = { name, type, ...(vdmosChannel ? { channel: vdmosChannel } : {}), parameters, ...(akoHeader ? { akoBaseName: akoHeader[2] } : {}), ...(scope ? { scope } : {}), startLine: line.start, endLine: line.end }
+  Object.defineProperty(definition, 'expansionPayloadSafe', { value: uniqueAssignments === parameters.length && safeAkoPayload })
+  if (akoHeader) Object.defineProperty(definition, 'akoSafeToExpand', { value: uniqueAssignments === parameters.length && safeAkoPayload })
+  return definition
 }
 
 function ngspiceBsim3BinBase(model: SpiceModelDefinition): string | undefined {
@@ -610,6 +618,7 @@ function canonicalModelType(type: string): string {
 }
 
 function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelConditionPath, seen: Map<string, SeenModelCard>, models: SpiceModelDefinition[]) {
+  if (conditionPath.length) Object.defineProperty(model, 'conditionalDefinition', { value: true })
   if (conditionPath.length && model.type.toUpperCase() === 'VSWITCH') model.conditional = true
   const key = `${model.scope?.toLowerCase() ?? ''}:${model.name.toLowerCase()}`
   const previous = seen.get(key)
@@ -877,7 +886,6 @@ export function analyzeLtspiceModelDialect(source: string): ModelDialectWarning[
     { pattern: /^\s*\.save\b/i, name: 'ngspice .SAVE changes circuit-wide saved vectors', impact: 'This imported card affects which simulation vectors ngspice stores for the whole circuit. ELSim adds its own save request for waveform and component-current results; additional imported vectors may increase result memory.', suggestion: 'Check that the vector names are valid in this project and that any extra saved data is needed.' },
     { pattern: /^\s*\.probe\b/i, name: 'ngspice .PROBE instruments circuit-wide device terminals', impact: 'This imported card can add current-sense branches or save differential voltages for the whole circuit. The added vectors and instrumentation can increase memory use and may affect solver behavior.', suggestion: 'Check that each referenced device is a top-level circuit device and that the requested terminal measurements are needed. Avoid broad .PROBE ALL requests on large circuits.' },
     { pattern: /^\s*\.meas(?:ure)?\s+(?:tran|ac|dc)\s+\S+/i, name: 'ngspice .MEAS runs a circuit-wide measurement', impact: 'This imported measurement runs against the selected analysis for the complete circuit and its result is shown with the waveform results. A measurement name must be unique across imported libraries and project measurements.', suggestion: 'Check the analysis type, referenced vectors, and result name. Remove or rename a conflicting measurement if ngspice reports a duplicate.' },
-    { pattern: /^\s*\.model\s+\S+\s+ako\s*:\s*\S+\s+\S+\b/i, name: 'PSpice AKO model inheritance (requires ngbehavior=psa)', impact: 'AKO inheritance requires ngspice PSpice compatibility mode. The default browser runtime rejects this model type; a probe against the pinned runtime succeeds with ngbehavior=psa. ELSim keeps the default mode because compatibility mode changes how the whole deck is interpreted.', suggestion: 'If this library requires AKO inheritance, test it with ngspice PSpice compatibility enabled and review the effects on the complete circuit. For ELSim’s default browser mode, provide a tested standalone ngspice model or subcircuit. ELSim preserves the original card and does not expand AKO inheritance.' },
     { pattern: /^\s*\.model\s+[A-Za-z_][A-Za-z0-9_$-]*\.[A-Za-z0-9_$-]+\s+(?:nmos|pmos)\b(?!(?=.*\blevel\s*=\s*(?:8|49)\b)(?=.*\blmin\s*=)(?=.*\blmax\s*=)(?=.*\bwmin\s*=)(?=.*\bwmax\s*=)).*\b(?:lmin|lmax|wmin|wmax)\s*=/i, name: 'LTspice MOSFET model binning (automatic selection unsupported)', impact: 'Suffixed MOSFET model cards without complete ngspice BSIM3 bin ranges are not selected by the unsuffixed base name in this browser build.', suggestion: 'Use a device-specific model or subcircuit verified for ngspice, or explicitly select and validate a compatible model card for the instance dimensions. ELSim preserves the bins and does not choose one automatically.' },
     { pattern: /\b(?:uplim|dnlim|uplim_tanh|dnlim_tanh)\s*\(/i, name: 'LTspice limit function (ngspice lta mode)', impact: 'ngspice translates this documented subset only when ELSim enables whole-deck lta compatibility. Other LTspice syntax is not covered by that mode.', suggestion: 'If simulation fails, check the mapped model line and simplify or replace the expression with a tested ngspice-compatible form.' },
     { pattern: /\blimit\s*\(/i, name: 'LTspice limit() in imported model library', impact: 'ELSim translates limit() on native schematic B sources to min(max(x, low), high), which provides the expected clamp for ordered bounds. Raw imported model-library text is not rewritten; the pinned browser ngspice engine returns 0 instead of 3 for limit(4,0,3), including in lta mode.', suggestion: 'For ordered bounds, replace limit(x, low, high) in the library with min(max(x, low), high) after checking the model author’s intended behavior. ELSim preserves imported model source unchanged.' },

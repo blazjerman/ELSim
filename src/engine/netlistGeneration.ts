@@ -1,6 +1,7 @@
 import { analyzeConnectivity, pinNet } from '../domain/connectivity'
 import { sheetModelName, type Part, type Project } from '../domain/project'
 import { createModelFunctionResolver, isSafeSubcircuitParameterValue, modelFunctionSignaturesForLibraries, modelFunctionsForProject, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, specializeStochasticSubcircuit } from '../domain/subcircuitLibrary'
+import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, translateBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from '../domain/behavioralExpression'
 import { MAX_SOURCE_PWL_POINTS } from '../domain/sourcePwl'
 import { componentMagnitude, spiceSignedScalarMagnitude, timeMagnitude } from '../domain/componentValue'
@@ -246,6 +247,8 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const availableModelFunctions = modelFunctionSignaturesForLibraries(modelAssets)
   const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections, availableModelFunctions))
   const parsedModelLibraryEntries = modelAssets.map((asset, index) => ({ asset, parsed: parsedModelAssets[index] }))
+  const akoExpansion = expandNgspiceAkoModels(parsedModelLibraryEntries)
+  for (const issue of akoExpansion.issues) diagnostics.push({ severity: 'error', message: issue.message, sourceId: `model-file:${issue.assetId}`, assetId: issue.assetId, assetLine: issue.sourceLine, line: issue.sourceLine })
   const modelFunctionResolver = createModelFunctionResolver(parsedModelLibraryEntries)
   const projectModelFunctions = modelFunctionsForProject(parsedModelLibraryEntries)
   const importedDeviceModels = parsedModelAssets.flatMap((library) => library.models.filter((model) => !model.scope))
@@ -1188,6 +1191,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const translation = translateVoltageSwitchModel(model)
       return translation ? [[model.startLine, { model, translation }] as const] : []
     }))
+    const expandedAkoByLine = new Map(parsed.models.flatMap((model) => {
+      const text = akoExpansion.cards.get(`${asset.id}:${model.startLine}`)
+      return text ? [[model.startLine, { model, text }] as const] : []
+    }))
     let conditionalDepth = 0
     let skipModelThroughLine = 0
     for (const record of parsed.modelRecords) {
@@ -1199,6 +1206,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         const { model, translation } = translated
         append(`* ELSim translated numeric PSpice VSWITCH ${model.name} to native ngspice SW`, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: model.startLine })
         append(`.model ${model.name} SW(RON=${translation.ron} ROFF=${translation.roff} VT=${translation.vt} VH=${translation.vh})`, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: model.startLine })
+        skipModelThroughLine = model.endLine
+        continue
+      }
+      const expandedAko = conditionalDepth === 0 ? expandedAkoByLine.get(record.sourceLine) : undefined
+      if (expandedAko) {
+        const { model, text } = expandedAko
+        append(`* ELSim expanded native ngspice AKO model ${model.name} from ${model.akoBaseName}`, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: model.startLine })
+        append(text, `model-file:${asset.id}`, 'model', { assetId: asset.id, assetLine: model.startLine })
         skipModelThroughLine = model.endLine
         continue
       }

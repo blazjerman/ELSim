@@ -1,0 +1,9 @@
+ELSim expanded native ngspice AKO diode operating point
+V1 IN 0 5
+R1 IN OUT 1k
+D1 OUT 0 DCHILD
+.MODEL DBASE D(Is=1n N=1)
+.MODEL DCHILD D(Is=2n N=1)
+.op
+.print op v(out)
+.end

@@ -7421,7 +7421,7 @@ test('compatibility report reveals model warnings beyond its initial page', { ta
   await expect(warnings.getByRole('button', { name: 'Review source line 22' })).toBeVisible()
 })
 
-test('show source-line guidance for imported AKO models and MOSFET bins', { tag: '@ltspice' }, async ({ page }) => {
+test('model compatibility warning reports unsupported MOSFET bins but not AKO as requiring PSA', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
@@ -7432,10 +7432,8 @@ test('show source-line guidance for imported AKO models and MOSFET bins', { tag:
 
   const warnings = page.getByRole('status', { name: 'Imported model compatibility warnings' })
   await expect(warnings).toBeVisible()
-  await expect(warnings).toContainText('vendor-models.lib:1')
-  await expect(warnings).toContainText('PSpice AKO model inheritance')
-  await expect(warnings).toContainText('requires ngbehavior=psa')
-  await expect(warnings).toContainText('changes how the whole deck is interpreted')
+  await expect(warnings).not.toContainText('PSpice AKO model inheritance')
+  await expect(warnings).not.toContainText('vendor-models.lib:1')
   await expect(warnings).toContainText('vendor-models.lib:2')
   await expect(warnings).toContainText('LTspice MOSFET model binning')
   await expect(warnings).toContainText('does not choose one automatically')

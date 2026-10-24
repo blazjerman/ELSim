@@ -38,6 +38,28 @@ test('starter RC example generates a valid transient netlist without diagnostics
   assert.doesNotMatch(artifact.text, /^\.temp /m)
 })
 
+test('netlist generation expands imported native AKO cards and maps them to the child source line', () => {
+  const project = createStarterProject()
+  project.modelAssets = [
+    { id: 'ako-base', filename: 'base.lib', content: '.MODEL DBAS D(Is=1n N=1)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'ako-child', filename: 'child.lib', content: '.MODEL DCHILD AKO:DBAS D(IS=2n)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.model DCHILD D\(IS=2n N=1\)$/m)
+  assert.doesNotMatch(artifact.text, /AKO:/i)
+  assert.equal(artifact.sourceMap.find((source) => source.assetId === 'ako-child' && source.assetLine === 1)?.role, 'model')
+  assert.match(project.modelAssets[1].content, /AKO:DBAS/, 'the imported asset remains byte-for-byte unchanged')
+})
+
+test('unresolved imported native AKO models stop before an invalid default-mode deck is run', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'ako-missing', filename: 'child.lib', content: '.MODEL DCHILD AKO:UNKNOWN D(Is=2n)', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && /base model UNKNOWN was not found/.test(diagnostic.message)), true)
+  assert.match(artifact.text, /AKO:UNKNOWN/)
+})
+
 test('resistor AC resistance is emitted only as the native AC instance option', () => {
   const project = createStarterProject()
   const resistor = project.parts.find((part) => part.kind === 'resistor')

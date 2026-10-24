@@ -7,6 +7,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeLtspiceModelDialect, analyzeLtspiceSchematicCompatibility, analyzeModelDependencies, analyzeModelLibraries, createModelFunctionResolver, decodeModelLibrary, isSafeSubcircuitParameterValue, isValidSpiceLibrarySectionName, isValidSpiceModelName, isValidSpiceNodeName, isValidSpiceSubcircuitPinName, listModelLibrarySections, modelFunctionsForAsset, modelProvenanceForReplacement, modelFunctionsForProject, modelFunctionsForSubcircuit, needsLtspiceFullDeckTranslation, ngspiceBsim3BinFamilies, parseSubcircuitLibrary, requiredModelAssetIds, sha256Text, specializeStochasticSubcircuit, validateModelLibraryReplacement, verifyModelAssetHashes } = require(path.join(build, 'domain/subcircuitLibrary.js'))
+const { expandNgspiceAkoModels } = require(path.join(build, 'domain/ngspiceAko.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 
 test('replacement keeps provenance only for byte-identical model contents', () => {
@@ -913,15 +914,39 @@ test('distinguishes unsupported MOSFET bins from native ngspice BSIM3 bins', () 
   assert.equal(parsed.modelText, source)
   const warnings = analyzeLtspiceModelDialect(source)
   assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
-    [1, 'PSpice AKO model inheritance (requires ngbehavior=psa)'],
     [2, 'LTspice MOSFET model binning (automatic selection unsupported)'],
   ])
-  assert.match(warnings[0].impact, /default browser runtime rejects this model type/)
-  assert.match(warnings[0].impact, /succeeds with ngbehavior=psa/)
-  assert.match(warnings[0].suggestion, /does not expand AKO inheritance/)
-  assert.match(warnings[1].impact, /not selected by the unsuffixed base name/)
-  assert.match(warnings[1].suggestion, /does not choose one automatically/)
+  assert.match(warnings[0].impact, /not selected by the unsuffixed base name/)
+  assert.match(warnings[0].suggestion, /does not choose one automatically/)
   assert.equal(warnings.some(({ excerpt }) => /N2\.1|N3\.1/i.test(excerpt)), false, 'ngspice-native BSIM3 bins must not be reported as unsupported LTspice bins')
+})
+
+test('expands native AKO model chains across imported libraries without changing source assets', () => {
+  const base = { id: 'base', filename: 'base.lib', content: '.MODEL BASE D(Is=1n N=1)\n' }
+  const child = { id: 'child', filename: 'child.lib', content: '.MODEL CHILD AKO:BASE D(IS=2n)\n.MODEL GRANDCHILD AKO:CHILD D(N=2)\n' }
+  const entries = [base, child].map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) }))
+  const result = expandNgspiceAkoModels(entries)
+  assert.deepEqual(result.issues, [])
+  assert.equal(result.cards.get('child:1'), '.model CHILD D(IS=2n N=1)')
+  assert.equal(result.cards.get('child:2'), '.model GRANDCHILD D(IS=2n N=2)')
+  assert.equal(child.content, '.MODEL CHILD AKO:BASE D(IS=2n)\n.MODEL GRANDCHILD AKO:CHILD D(N=2)\n')
+})
+
+test('reports missing, ambiguous, cyclic, mismatched, conditional, and unsafe AKO inheritance', () => {
+  const makeEntries = (assets) => assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) }))
+  const cases = [
+    [[{ id: 'child', filename: 'child.lib', content: '.MODEL CHILD AKO:MISSING D(Is=1n)' }], /base model MISSING was not found/],
+    [[{ id: 'base1', filename: 'one.lib', content: '.MODEL BASE D(Is=1n)' }, { id: 'base2', filename: 'two.lib', content: '.MODEL BASE D(Is=2n)' }, { id: 'child', filename: 'child.lib', content: '.MODEL CHILD AKO:BASE D(Is=3n)' }], /base model BASE is ambiguous/],
+    [[{ id: 'cycle', filename: 'cycle.lib', content: '.MODEL A AKO:B D(Is=1n)\n.MODEL B AKO:A D(Is=2n)' }], /inheritance cycle/],
+    [[{ id: 'wrong', filename: 'wrong.lib', content: '.MODEL BASE Q(Is=1n)\n.MODEL CHILD AKO:BASE D(Is=2n)' }], /has device type Q, but CHILD declares D/],
+    [[{ id: 'conditional', filename: 'conditional.lib', content: '.if (1)\n.MODEL BASE D(Is=1n)\n.endif\n.MODEL CHILD AKO:BASE D(Is=2n)' }], /conditional and cannot be expanded safely/],
+    [[{ id: 'unsafe', filename: 'unsafe.lib', content: '.MODEL BASE D(Is=1n)\n.MODEL CHILD AKO:BASE D(Is=2n) Pchan' }], /outside the supported assignment-only expansion form/],
+  ]
+  for (const [assets, expected] of cases) {
+    const result = expandNgspiceAkoModels(makeEntries(assets))
+    assert.match(result.issues.map(({ message }) => message).join('\n'), expected)
+    assert.equal(result.cards.size, 0)
+  }
 })
 
 test('accepts a SPICE title line and CRLF source', () => {
