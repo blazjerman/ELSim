@@ -652,6 +652,12 @@ test('imported IC instance parameters become alterparam-driven sweep cases', () 
   assert.throws(() => validateProject(project), /valid, different parameter start and stop values/)
 })
 
+test('direct sweep preparation rejects imported formal names unsupported by browser ngspice', () => {
+  const project = validateProject(createUrcLineExampleProject())
+  project.simulation.parameterSweeps = [{ component: 'XLINE', parameter: 'GAIN#', instanceParameter: true, start: '2', stop: '4', points: 3 }]
+  assert.throws(() => prepareParameterSweep(project), /not supported by the bundled browser ngspice 47 runtime/)
+})
+
 test('imported IC parameters with expression defaults accept explicit numeric sweep bounds', () => {
   const project = createUrcLineExampleProject()
   const library = project.modelAssets[0]

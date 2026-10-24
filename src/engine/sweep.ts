@@ -1,6 +1,6 @@
 import type { ParameterSweep, Project, SourceSweepParameter } from '../domain/project'
 import { componentMagnitude, spiceModelParameterMagnitude } from '../domain/componentValue'
-import { isValidNgspiceSubcircuitParameterName, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { isSupportedBrowserSubcircuitParameterName, ngspiceBsim3BinFamilies, parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
 import { expandNgspiceAkoModels } from '../domain/ngspiceAko'
 import { translateVoltageSwitchModel } from '../domain/voltageSwitchModel'
 
@@ -140,7 +140,7 @@ function buildValues(project: Project, sweep: ParameterSweep) {
   }
   if (sweep.parameter && sweep.instanceParameter) {
     if (!part || part.kind !== 'subcircuit') throw new Error(`${sweep.component} is not an imported IC or reusable block with editable parameters.`)
-    if (!isValidNgspiceSubcircuitParameterName(sweep.parameter)) throw new Error(`${sweep.component}.${sweep.parameter} is not a supported ngspice parameter name.`)
+    if (!isSupportedBrowserSubcircuitParameterName(sweep.parameter)) throw new Error(`${sweep.component}.${sweep.parameter} is not supported by the bundled browser ngspice 47 runtime.`)
     const parameters = part.sheetId
       ? project.sheets.find((sheet) => sheet.id === part.sheetId)?.parameters ?? []
       : part.modelName

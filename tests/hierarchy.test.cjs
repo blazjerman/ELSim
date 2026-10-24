@@ -321,6 +321,12 @@ test('sheet block parameters provide defaults, per-instance overrides, and safe 
   assert.match(createNetlistArtifact(unsafeExpression).diagnostics.find((item) => item.severity === 'error')?.message ?? '', /invalid numeric value/)
 })
 
+test('reusable block declarations reject formal names unsupported by the browser ngspice runtime', () => {
+  const project = createBlockProject()
+  project.sheets[1].parameters = [{ id: 'gain-param', name: 'GAIN#', defaultValue: '2' }]
+  assert.throws(() => validateProject(project), /block parameter GAIN# uses punctuation the bundled browser ngspice 47 runtime cannot parse/i)
+})
+
 test('reusable sheet parameter defaults and overrides preflight ambiguous imported functions', () => {
   const project = createBlockProject()
   const child = project.sheets[1]

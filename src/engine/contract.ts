@@ -1,6 +1,6 @@
 import { timeMagnitude } from '../domain/componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from '../domain/measurementSettings'
-import { isValidNgspiceSubcircuitParameterName, isValidSpiceModelName } from '../domain/subcircuitLibrary'
+import { isSupportedBrowserSubcircuitParameterName, isValidSpiceModelName } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression } from '../domain/behavioralExpression'
 import type { NgspiceFourierAnalysis } from './fourier'
 
@@ -290,7 +290,7 @@ function isParameterSweepRun(value: unknown): boolean {
     const hasModelTarget = entry.parameter !== undefined || entry.model !== undefined
     if (entry.modelTargets !== undefined && (!Array.isArray(entry.modelTargets) || entry.modelTargets.length < 2 || entry.modelTargets.length > 256 || !entry.modelTargets.every((target) => typeof target === 'string' && isValidSpiceModelName(target, true)) || new Set(entry.modelTargets.map((target) => String(target).toLowerCase())).size !== entry.modelTargets.length || !hasModelTarget || hasInstanceParameter)) return false
     if (entry.sourceParameter !== undefined && (!(['pulse.initial', 'pulse.high', 'pulse.delay', 'pulse.rise', 'pulse.fall', 'pulse.width', 'pulse.period', 'pwl.scale', 'sine.offset', 'sine.amplitude', 'sine.frequency', 'sine.delay', 'sine.damping', 'sine.phase', 'exp.initial', 'exp.pulsed', 'exp.riseDelay', 'exp.riseTau', 'exp.fallDelay', 'exp.fallTau', 'sffm.offset', 'sffm.amplitude', 'sffm.carrierFrequency', 'sffm.modulationIndex', 'sffm.signalFrequency', 'am.offset', 'am.modulationOffset', 'am.modulationAmplitude', 'am.modulationFrequency', 'am.carrierFrequency', 'am.delay', 'am.modulationPhase', 'am.carrierPhase', 'trnoise.gaussianRms', 'trnoise.timeStep', 'trnoise.flickerExponent', 'trnoise.flickerAmplitude', 'trnoise.rtsAmplitude', 'trnoise.rtsCaptureTime', 'trnoise.rtsEmissionTime'].includes(String(entry.sourceParameter)) || /^pwl\.point\.(?:[1-9]|[12]\d|3[0-2])$/.test(String(entry.sourceParameter))) || hasModelTarget || hasGlobalParameter)) return false
-    if (hasModelTarget && (typeof entry.parameter !== 'string' || !(hasInstanceParameter ? isValidNgspiceSubcircuitParameterName(entry.parameter) : /^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter))
+    if (hasModelTarget && (typeof entry.parameter !== 'string' || !(hasInstanceParameter ? isSupportedBrowserSubcircuitParameterName(entry.parameter) : /^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter))
       || typeof entry.model !== 'string' || !isValidSpiceModelName(entry.model, true))) return false
     if (entry.altermodParameters !== undefined) {
       const modelParameters = entry.altermodParameters
@@ -298,7 +298,7 @@ function isParameterSweepRun(value: unknown): boolean {
       const parameterNames = Object.keys(modelParameters).sort()
       if (parameterNames.join(',') !== 'ROFF,RON,VH,VT' || parameterNames.some((name) => typeof modelParameters[name] !== 'string' || !Number.isFinite(Number(modelParameters[name])))) return false
     }
-    if (hasInstanceParameter && (!hasModelTarget || typeof entry.parameter !== 'string' || !isValidNgspiceSubcircuitParameterName(entry.parameter) || hasGlobalParameter || entry.sourceParameter !== undefined)) return false
+    if (hasInstanceParameter && (!hasModelTarget || typeof entry.parameter !== 'string' || !isSupportedBrowserSubcircuitParameterName(entry.parameter) || hasGlobalParameter || entry.sourceParameter !== undefined)) return false
     if (entry.pulseHigh !== undefined && (typeof entry.pulseHigh !== 'boolean' || (entry.pulseHigh && (hasModelTarget || hasGlobalParameter)))) return false
     if (entry.pwlScale !== undefined && (typeof entry.pwlScale !== 'boolean' || (entry.pwlScale && (hasModelTarget || hasGlobalParameter)))) return false
     if (entry.waveformAmplitude !== undefined && (typeof entry.waveformAmplitude !== 'boolean' || (entry.waveformAmplitude && (hasModelTarget || hasGlobalParameter)))) return false

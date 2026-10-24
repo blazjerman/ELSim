@@ -1027,7 +1027,8 @@ export function validateProject(input: unknown): Project {
     }
     const parameterNames = new Set<string>(), parameterIds = new Set<string>()
     for (const parameter of sheet.parameters ?? []) {
-      if (!parameter || typeof parameter.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(parameter.id) || parameterIds.has(parameter.id) || typeof parameter.name !== 'string' || !isValidNgspiceSubcircuitParameterName(parameter.name) || ['__proto__', 'constructor', 'prototype'].includes(parameter.name.toLowerCase()) || parameterNames.has(parameter.name.toLowerCase()) || typeof parameter.defaultValue !== 'string' || !isSafeSubcircuitParameterValue(parameter.defaultValue, projectModelFunctions)) throw new Error(`Sheet ${sheet.name} has a malformed block parameter.`)
+      if (parameter && typeof parameter.name === 'string' && isValidNgspiceSubcircuitParameterName(parameter.name) && !isSupportedBrowserSubcircuitParameterName(parameter.name)) throw new Error(`Sheet ${sheet.name} block parameter ${parameter.name} uses punctuation the bundled browser ngspice 47 runtime cannot parse. Use letters, digits, underscores, or bracketed indices.`)
+      if (!parameter || typeof parameter.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(parameter.id) || parameterIds.has(parameter.id) || typeof parameter.name !== 'string' || !isSupportedBrowserSubcircuitParameterName(parameter.name) || ['__proto__', 'constructor', 'prototype'].includes(parameter.name.toLowerCase()) || parameterNames.has(parameter.name.toLowerCase()) || typeof parameter.defaultValue !== 'string' || !isSafeSubcircuitParameterValue(parameter.defaultValue, projectModelFunctions)) throw new Error(`Sheet ${sheet.name} has a malformed block parameter.`)
       parameterIds.add(parameter.id); parameterNames.add(parameter.name.toLowerCase())
     }
   }
