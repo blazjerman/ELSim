@@ -783,11 +783,12 @@ export default function App() {
     }
     return byName
   }, [importedModels])
+  const importedModelSearchText = useMemo(() => importedModels.map((model) => `${model.name} ${model.filename} ${model.definition.pins.map((pin) => pin.name).join(' ')} ${model.definition.modelParameters?.map((parameter) => parameter.name).join(' ') ?? ''}`.toLowerCase()), [importedModels])
   const filteredImportedModels = useMemo(() => {
     const query = importedSubcircuitQuery.trim().toLowerCase()
     if (!query) return importedModels
-    return importedModels.filter((model) => `${model.name} ${model.filename} ${model.definition.pins.map((pin) => pin.name).join(' ')} ${model.definition.modelParameters?.map((parameter) => parameter.name).join(' ') ?? ''}`.toLowerCase().includes(query))
-  }, [importedModels, importedSubcircuitQuery])
+    return importedModels.filter((_, index) => importedModelSearchText[index].includes(query))
+  }, [importedModels, importedModelSearchText, importedSubcircuitQuery])
   const importedModelsByPinCount = useMemo(() => {
     const groups = new Map<number, typeof filteredImportedModels>()
     for (const model of filteredImportedModels) {

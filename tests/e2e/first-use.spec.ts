@@ -3818,7 +3818,8 @@ test('large imported IC lists can be searched and expanded on demand', async ({ 
   await page.goto('/')
   const subcircuitSources = Array.from({ length: 52 }, (_, index) => {
     const name = `USER_${String(index + 1).padStart(3, '0')}`
-    return `.SUBCKT ${name} IN OUT\nR1 IN OUT 1k\n.ENDS ${name}`
+    const pins = index === 50 ? 'SPECIAL_PIN OUT PARAMS: GAIN_051=1k' : 'IN OUT'
+    return `.SUBCKT ${name} ${pins}\nR1 ${index === 50 ? 'SPECIAL_PIN' : 'IN'} OUT 1k\n.ENDS ${name}`
   })
   const deviceModels = Array.from({ length: 52 }, (_, index) => `.MODEL DMOD_${String(index + 1).padStart(3, '0')} D(IS=1n)`)
   const library = [...subcircuitSources, ...deviceModels].join('\n')
@@ -3836,6 +3837,14 @@ test('large imported IC lists can be searched and expanded on demand', async ({ 
   await expect(subcircuits.locator('.imported-model')).toHaveCount(1)
   await expect(subcircuits.locator('.imported-model').first()).toContainText('USER_052')
   await expect(subcircuits.getByRole('button', { name: 'Show 2 more imported ICs' })).toHaveCount(0)
+  const importedIcSearch = subcircuits.getByRole('textbox', { name: 'Find an imported IC' })
+  await importedIcSearch.fill('special_pin')
+  await expect(subcircuits.locator('.imported-model')).toHaveCount(1)
+  await expect(subcircuits.locator('.imported-model').first()).toContainText('USER_051')
+  await expect(subcircuits.locator('.imported-model').first()).toContainText('SPECIAL_PIN')
+  await importedIcSearch.fill('gain_051')
+  await expect(subcircuits.locator('.imported-model')).toHaveCount(1)
+  await expect(subcircuits.locator('.imported-model').first()).toContainText('GAIN_051')
   await subcircuits.getByRole('button', { name: 'Clear imported IC search' }).click()
 
   const devices = page.locator('.imported-models').filter({ has: page.getByRole('textbox', { name: 'Find an imported device model' }) })
