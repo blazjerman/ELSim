@@ -7848,6 +7848,19 @@ test('LTspice import shows skipped records and preserves the original source', {
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).importedSchematicSource.originalText)).toBe(source)
 })
 
+test('browser-incompatible imported subcircuit formal names fail before engine startup with source guidance', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createStarterProject()
+  const content = '.SUBCKT PUNCT IN OUT GAIN#=2\n.ENDS PUNCT\n'
+  project.modelAssets = [{ id: 'formal-punctuation', filename: 'punctuation.lib', content, sha256: createHash('sha256').update(content).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  const notice = page.locator('.toast[role="status"]')
+  await expect(notice).toContainText('bundled browser ngspice 47 runtime cannot parse')
+  await expect(notice).toContainText('punctuation.lib')
+})
+
 test('show source-line guidance for a known unsupported LTspice model construct', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
