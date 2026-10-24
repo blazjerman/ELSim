@@ -6481,6 +6481,12 @@ test('imported device model inspector shows and searches unparsed source assignm
       '.MODEL DBASE D(N={vendor_shape(2)})',
       '.MODEL DUSER AKO:DBASE D(IS=1n)',
       '.MODEL DOVERRIDE AKO:DBASE D(N=2)',
+      '.PARAM branch=0',
+      '.IF (branch == 0)',
+      '.MODEL DCOND D(IS=1n N=2)',
+      '.ELSE',
+      '.MODEL DCOND D(IS=1n N={vendor_shape(3)})',
+      '.ENDIF',
     ].join('\n')),
   })
   await page.getByLabel('Device model for D1').selectOption('DUSER')
@@ -6501,6 +6507,17 @@ test('imported device model inspector shows and searches unparsed source assignm
   await expect(overridingDetails).toBeVisible()
   await overridingDetails.click()
   await expect(page.getByLabel('Unparsed model assignments')).toHaveCount(0)
+  await page.getByLabel('Device model for D1').selectOption('DCOND')
+  const conditionalDetails = page.getByText('DCOND · 1 model parameters · 1 unparsed', { exact: true })
+  await expect(conditionalDetails).toBeVisible()
+  const conditionalDisclosure = conditionalDetails.locator('xpath=..')
+  if (!(await conditionalDisclosure.evaluate((element) => (element as HTMLDetailsElement).open))) await conditionalDetails.click()
+  const conditionalAssignment = page.getByLabel('Unparsed model assignments')
+  await expect(conditionalAssignment).toContainText('conditional branch values; not sweepable')
+  await expect(conditionalAssignment).toContainText('line 6: 2')
+  await expect(conditionalAssignment).toContainText('line 8: {vendor_shape(3)} (source-only)')
+  await page.getByRole('searchbox', { name: 'Search parameters for DCOND' }).fill('vendor_shape')
+  await expect(conditionalAssignment).toBeVisible()
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DBASE D(N={vendor_shape(2)})')
   await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DUSER AKO:DBASE D(IS=1n)')

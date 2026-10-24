@@ -715,6 +715,25 @@ test('preserves ngspice conditional model variants as one selectable device mode
   assert.throws(() => parseSubcircuitLibrary('.IF (A == 1)\n.MODEL D1 D(Is=1n)'), /no matching \.ENDIF/)
 })
 
+test('retains conditional model assignments when only some branches have unparsed values', () => {
+  const parsed = parseSubcircuitLibrary([
+    '.IF (branch == 0)',
+    '.MODEL DCOND D(IS=1n N=2)',
+    '.ELSE',
+    '.MODEL DCOND D(IS=1n N={vendor_shape(3)})',
+    '.ENDIF',
+  ].join('\n'))
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: '1n' }])
+  assert.deepEqual(parsed.models[0].unparsedParameters, [{
+    name: 'N',
+    sourceValue: '{vendor_shape(3)}',
+    conditionalValues: [
+      { sourceLine: 2, sourceValue: '2', parsed: true },
+      { sourceLine: 4, sourceValue: '{vendor_shape(3)}', parsed: false },
+    ],
+  }])
+})
+
 test('accepts equivalent R and RES aliases across conditional resistor model variants', () => {
   const parsed = parseSubcircuitLibrary([
     'Conditional resistor aliases',

@@ -1,5 +1,6 @@
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }
-export type UnparsedModelParameter = { name: string; sourceValue: string }
+export type ConditionalModelParameterValue = { sourceLine: number; sourceValue: string; parsed: boolean }
+export type UnparsedModelParameter = { name: string; sourceValue: string; conditionalValues?: ConditionalModelParameterValue[] }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelConditionFrame = { id: number; branch: number; signature?: string; environmentIndependent?: boolean }
 export type ConditionalModelVariant = { model: SpiceModelDefinition; conditionPath: ModelConditionFrame[] }
@@ -652,7 +653,12 @@ export function ngspiceBsim3BinFamilies<T extends SpiceModelDefinition>(models: 
 const alternateBjtModelNames = new WeakMap<ModelDependency, string[]>()
 
 type ModelConditionPath = ModelConditionFrame[]
-type SeenModelCard = { model: SpiceModelDefinition; conditionPath: ModelConditionPath; variants: ConditionalModelVariant[] }
+type SeenModelCard = {
+  model: SpiceModelDefinition
+  conditionPath: ModelConditionPath
+  variants: ConditionalModelVariant[]
+  assignmentVariants: { model: SpiceModelDefinition; parameters: SubcircuitParameter[]; unparsedParameters: UnparsedModelParameter[] }[]
+}
 
 function canonicalModelType(type: string): string {
   const normalized = type.toLowerCase()
@@ -668,7 +674,12 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   const key = `${model.scope?.toLowerCase() ?? ''}:${model.name.toLowerCase()}`
   const previous = seen.get(key)
   if (!previous) {
-    seen.set(key, { model, conditionPath, variants: [] })
+    seen.set(key, {
+      model,
+      conditionPath,
+      variants: [],
+      assignmentVariants: [{ model, parameters: model.parameters.map((parameter) => ({ ...parameter })), unparsedParameters: (model.unparsedParameters ?? []).map((parameter) => ({ ...parameter })) }],
+    })
     models.push(model)
     return
   }
@@ -676,10 +687,33 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   const location = model.scope ? ` in .SUBCKT ${model.scope}` : ''
   if (!mutuallyExclusive) throw new Error(`Line ${model.startLine}: model card ${model.name} is declared more than once${location}.`)
   previous.variants.push({ model, conditionPath: conditionPath.map((frame) => ({ ...frame })) })
+  previous.assignmentVariants.push({ model, parameters: model.parameters.map((parameter) => ({ ...parameter })), unparsedParameters: (model.unparsedParameters ?? []).map((parameter) => ({ ...parameter })) })
   if (!previous.model.conditionalVariants) Object.defineProperty(previous.model, 'conditionalVariants', { value: previous.variants })
   if (canonicalModelType(previous.model.type) !== canonicalModelType(model.type) || previous.model.channel !== model.channel) {
     throw new Error(`Line ${model.startLine}: conditional model cards named ${model.name} must keep the same device type and channel.`)
   }
+  const parameterNames = new Map<string, string>()
+  for (const { parameters, unparsedParameters } of previous.assignmentVariants) {
+    for (const parameter of parameters) if (!parameterNames.has(parameter.name.toLowerCase())) parameterNames.set(parameter.name.toLowerCase(), parameter.name)
+    for (const parameter of unparsedParameters) if (!parameterNames.has(parameter.name.toLowerCase())) parameterNames.set(parameter.name.toLowerCase(), parameter.name)
+  }
+  const unparsedConditionalParameters: UnparsedModelParameter[] = []
+  for (const [name, displayName] of parameterNames) {
+    const values = previous.assignmentVariants.flatMap(({ model: variant, parameters, unparsedParameters }) => {
+      const parsed = parameters.find((parameter) => parameter.name.toLowerCase() === name)
+      if (parsed) return [{ sourceLine: variant.startLine, sourceValue: parsed.defaultIsExpression ? `{${parsed.defaultValue}}` : parsed.defaultValue, parsed: true }]
+      const sourceOnly = unparsedParameters.find((parameter) => parameter.name.toLowerCase() === name)
+      return sourceOnly ? [{ sourceLine: variant.startLine, sourceValue: sourceOnly.sourceValue, parsed: false }] : []
+    })
+    if (!values.some((value) => !value.parsed)) continue
+    unparsedConditionalParameters.push({
+      name: displayName,
+      sourceValue: values.find((value) => !value.parsed)!.sourceValue,
+      conditionalValues: values,
+    })
+  }
+  if (unparsedConditionalParameters.length) previous.model.unparsedParameters = unparsedConditionalParameters
+  else delete previous.model.unparsedParameters
   // A model used in mutually exclusive branches is still one selectable card.
   // Only expose parameters that exist in every variant so parameter stepping
   // cannot offer a setting absent from the active ngspice model.
