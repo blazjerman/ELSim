@@ -2,6 +2,14 @@ import type { TransientMeasurement } from '../domain/project'
 import { componentMagnitude } from '../domain/componentValue'
 import type { ParameterSweepRun } from './sweep'
 
+function encodeNgspiceIdentifierPart(value: string): string {
+  return [...value].map((character) => character.codePointAt(0)!.toString(16).toUpperCase()).join('_')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export function addResultControl(netlist: string, parameterSweep: ParameterSweepRun[] = [], measurements: TransientMeasurement[] = [], ngspiceFourier?: { fundamentalFrequency: number; traceId: string; vector: string }): string {
   const rows = netlist.trimEnd().split(/\r?\n/)
   const endLine = rows.findIndex((line) => /^\s*\.end\s*$/i.test(line))
@@ -21,7 +29,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const sourceFieldTargets = parameterSweep.flatMap((run) => run.values.filter((value) => value.sourceParameter).map((value) => ({ component: value.component, sourceParameter: value.sourceParameter! })))
   const sourceFieldParameters = new Map(sourceFieldTargets.map(({ component, sourceParameter }) => [`${component.toLowerCase()}.${sourceParameter}`, `ELSIM_SWEEP_SOURCE_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_${sourceParameter.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}`]))
   const instanceParameterTargets = parameterSweep.flatMap((run) => run.values.filter((value) => value.instanceParameter && value.parameter).map((value) => ({ component: value.component, parameter: value.parameter! })))
-  const instanceParameters = new Map(instanceParameterTargets.map(({ component, parameter }) => [`${component.toLowerCase()}.${parameter.toLowerCase()}`, { component, parameter, generated: `ELSIM_SWEEP_IC_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_${parameter.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}` }]))
+  const instanceParameters = new Map(instanceParameterTargets.map(({ component, parameter }) => [`${component.toLowerCase()}.${parameter.toLowerCase()}`, { component, parameter, generated: /^[A-Za-z0-9_]+$/.test(parameter) ? `ELSIM_SWEEP_IC_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_${parameter.toUpperCase()}` : `ELSIM_SWEEP_IC_${encodeNgspiceIdentifierPart(component)}_${encodeNgspiceIdentifierPart(parameter)}` }]))
   const waveformParameterRows = [...pulseParameters].map(([component, parameter]) => {
     const line = rows.findIndex((row) => row.trim().match(new RegExp(`^${component}\\s`, 'i')))
     if (line < 0) throw new Error(`Pulse source ${component} is missing from the generated netlist.`)
@@ -99,7 +107,7 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   waveformParameterRows.push(...[...instanceParameters.values()].map(({ component, parameter, generated }) => {
     const line = rows.findIndex((row) => row.trim().match(new RegExp(`^${component}\\s`, 'i')))
     if (line < 0) throw new Error(`Imported IC ${component} is missing from the generated netlist.`)
-    const parameterPattern = new RegExp(`(^|\\s)${parameter}=\\S+`, 'i')
+    const parameterPattern = new RegExp(`(^|\\s)${escapeRegExp(parameter)}=\\S+`, 'i')
     if (parameterPattern.test(rows[line])) rows[line] = rows[line].replace(parameterPattern, (_match, prefix: string) => `${prefix}${parameter}={${generated}}`)
     else if (/\bPARAMS:/i.test(rows[line])) rows[line] += ` ${parameter}={${generated}}`
     else rows[line] += ` PARAMS: ${parameter}={${generated}}`

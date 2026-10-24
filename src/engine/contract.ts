@@ -1,6 +1,6 @@
 import { timeMagnitude } from '../domain/componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from '../domain/measurementSettings'
-import { isValidSpiceModelName } from '../domain/subcircuitLibrary'
+import { isValidNgspiceSubcircuitParameterName, isValidSpiceModelName } from '../domain/subcircuitLibrary'
 import { parseBehavioralExpression } from '../domain/behavioralExpression'
 import type { NgspiceFourierAnalysis } from './fourier'
 
@@ -297,7 +297,7 @@ function isParameterSweepRun(value: unknown): boolean {
       const parameterNames = Object.keys(modelParameters).sort()
       if (parameterNames.join(',') !== 'ROFF,RON,VH,VT' || parameterNames.some((name) => typeof modelParameters[name] !== 'string' || !Number.isFinite(Number(modelParameters[name])))) return false
     }
-    if (hasInstanceParameter && (!hasModelTarget || typeof entry.parameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter) || hasGlobalParameter || entry.sourceParameter !== undefined)) return false
+    if (hasInstanceParameter && (!hasModelTarget || typeof entry.parameter !== 'string' || !isValidNgspiceSubcircuitParameterName(entry.parameter) || hasGlobalParameter || entry.sourceParameter !== undefined)) return false
     if (entry.pulseHigh !== undefined && (typeof entry.pulseHigh !== 'boolean' || (entry.pulseHigh && (hasModelTarget || hasGlobalParameter)))) return false
     if (entry.pwlScale !== undefined && (typeof entry.pwlScale !== 'boolean' || (entry.pwlScale && (hasModelTarget || hasGlobalParameter)))) return false
     if (entry.waveformAmplitude !== undefined && (typeof entry.waveformAmplitude !== 'boolean' || (entry.waveformAmplitude && (hasModelTarget || hasGlobalParameter)))) return false

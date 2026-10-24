@@ -100,6 +100,15 @@ test('result control alters each parameter combination and writes separate raw d
   assert.doesNotMatch(control, /write \/result\.raw all/)
 })
 
+test('result control safely sweeps bracketed imported IC parameters', () => {
+  const netlist = 'V1 IN 0 1\nXU1 IN OUT AMP GAIN[1]=2\n.SUBCKT AMP IN OUT GAIN[1]=2\nE1 OUT 0 IN 0 {GAIN[1]}\n.ENDS AMP\n.tran 1u 1m\n.end'
+  const control = addResultControl(netlist, [{ values: [{ component: 'XU1', parameter: 'GAIN[1]', instanceParameter: true, value: '2' }], label: 'XU1 GAIN[1]=2' }])
+  const generated = 'ELSIM_SWEEP_IC_58_55_31_47_41_49_4E_5B_31_5D'
+  assert.match(control, new RegExp(`^XU1 IN OUT AMP GAIN\\[1\\]=\\{${generated}\\}$`, 'm'))
+  assert.match(control, new RegExp(`^\\.param ${generated}=2$`, 'm'))
+  assert.match(control, new RegExp(`alterparam ${generated}=2`))
+})
+
 test('result control runs uniquely named measurements in each parameter case', () => {
   const netlist = 'V1 in 0 1\nR1 in out 1k\nC1 out 0 1u\n.tran 1u 1m\n.meas tran ELSIM_peak MAX V(out)\n.end'
   const measurement = { id: 'peak', operation: 'max', vector: 'V(out)' }

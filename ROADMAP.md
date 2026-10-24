@@ -2,6 +2,8 @@
 
 Status: active implementation roadmap, 2026-10-10. The application foundation is being built in this repository.
 
+M2.4 bracketed ngspice parameter identifiers (2026-10-24): Imported subcircuits now retain and allow overrides of bracketed formal parameters such as `GAIN[1]`; project validation, reusable-sheet parameters, protocol validation, and parameter sweeps accept the same supported spelling. Sweep aliases remain unchanged for ordinary identifiers and use collision-safe encoding for bracketed names. Unit coverage plus an existing-WASM fixture verify defaults and instance overrides produce 2 V and 3 V. No WASM rebuild or Pages workflow is needed.
+
 ## 1. Product goal
 
 Build an original, open-source circuit simulator that runs in modern browsers and can later be packaged for Windows, macOS, and Linux. The first experience should be as quick to learn as CircuitJS/Falstad: place parts, connect wires, press Run, see current flow, interact with switches, and probe voltages. It should grow toward LTspice-style schematic capture, hierarchical sheets, imported IC macromodels, and serious waveform analysis.

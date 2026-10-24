@@ -21,6 +21,7 @@ fixtures.push('resistor-ac-value', 'resistor-noise-disabled', 'resistor-noise-de
 fixtures.push('passive-temperature-coefficients-op')
 fixtures.push('imported-subckt-sqr-parameter-op')
 fixtures.push('imported-library-global-node-op')
+fixtures.push('bracketed-subckt-parameter-op')
 assert.equal(Object.keys(fixtures).length, fixtures.length, 'WASM fixture list must not contain sparse entries')
 assert.equal(new Set(fixtures).size, fixtures.length, 'WASM fixture names must be unique')
 const requestedFixtures = process.env.NGSPICE_WASM_ONLY?.split(',').map((name) => name.trim()).filter(Boolean) ?? []
@@ -106,6 +107,10 @@ for (const fixture of selectedFixtures) {
   if (fixture === 'imported-library-temp-default') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 125\.000000/, 'an imported library .TEMP card should set the circuit temperature when the project uses its default')
   if (fixture === 'imported-library-temp-override') assert.match(wasmResult.stdout, /Doing analysis at TEMP = 85\.000000/, 'a later non-default project .TEMP directive should override the imported library value')
   if (fixture === 'imported-library-csparam-op') assert.match(wasmResult.stdout, /CSPARAM_VALUE=3(?:\.0+)?\b/, 'an imported library .CSPARAM expression should expose its calculated constant to ngspice control output')
+  if (fixture === 'bracketed-subckt-parameter-op') {
+    assert.match(wasmResult.stdout, /default_out\s+2\.000000e\+00/i, 'a bracketed formal parameter should retain its declared default value')
+    assert.match(wasmResult.stdout, /override_out\s+3\.000000e\+00/i, 'a bracketed formal parameter should accept an instance override')
+  }
   if (fixture === 'transmission-line-delay-tran') {
     assert.match(wasmResult.raw, /^\s*\d+\s+v\(t1#i1\)\s+\w+$/mi, 'the first transmission-line port current should be exposed')
     assert.match(wasmResult.raw, /^\s*\d+\s+v\(t1#i2\)\s+\w+$/mi, 'the second transmission-line port current should be exposed')

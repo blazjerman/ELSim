@@ -3048,6 +3048,19 @@ test('imported subcircuits preserve declared .FUNC expressions in validated para
   assert.doesNotMatch(unsafeNetlist.text, /^X1 .*\.end/m)
 })
 
+test('imported ICs retain and override bracketed ngspice formal parameters', () => {
+  const project = createStarterProject()
+  const content = 'Bracketed formal parameter fixture\n.SUBCKT GAIN_CELL IN OUT GAIN[1]=2\nE1 OUT 0 IN 0 {GAIN[1]}\n.ENDS GAIN_CELL\n'
+  project.modelAssets = [{ id: 'model-bracket-parameter', filename: 'gain-cell.lib', content, sha256: createHash('sha256').update(content).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.parts.push({ id: 'p-xgain', kind: 'subcircuit', ref: 'XGAIN', value: 'GAIN_CELL', modelName: 'GAIN_CELL', modelPins: ['IN', 'OUT'], modelParameters: { 'GAIN[1]': '3' }, x: 760, y: 350, rotation: 0 })
+  project.simulation.parameterSweeps = [{ component: 'XGAIN', parameter: 'GAIN[1]', instanceParameter: true, start: '2', stop: '3', points: 2 }]
+  const validated = validateProject(project)
+  const artifact = createNetlistArtifact(validated)
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^XGAIN .* GAIN_CELL PARAMS: GAIN\[1\]=3$/m)
+  assert.match(artifact.text, /^\.SUBCKT GAIN_CELL IN OUT GAIN\[1\]=2$/m)
+})
+
 test('imported diode, BJT, and MOSFET .MODEL cards connect to compatible devices while defaults remain available', () => {
   const project = createStarterProject()
   const content = 'Original primitive model fixtures\n.MODEL 1N4148 D(Is=2n N=1.8)\n.MODEL BUSER NPN(IS=1e-14 BF=125)\n.MODEL HICUM NPN LEVEL=8\n.MODEL VBIC4 NPN LEVEL=4\n.MODEL VBIC9 NPN LEVEL=9\n.MODEL MUSER NMOS(LEVEL=1 VTO=1.5 KP=800u LAMBDA=0.02)\n'

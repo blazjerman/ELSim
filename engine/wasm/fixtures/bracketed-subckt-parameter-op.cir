@@ -1,0 +1,10 @@
+Bracketed formal subcircuit parameter defaults and overrides
+V1 in 0 1
+XDEFAULT in default_out AMP
+XOVERRIDE in override_out AMP GAIN[1]=3
+.SUBCKT AMP in out GAIN[1]=2
+E1 out 0 in 0 {GAIN[1]}
+.ENDS AMP
+.op
+.print op v(default_out) v(override_out)
+.end
