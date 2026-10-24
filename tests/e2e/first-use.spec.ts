@@ -15012,6 +15012,14 @@ test('diode intermodulation example opens with guidance and solves in Firefox', 
   await expect(plot.locator('.plot-tick[data-value-unit="V"]').first()).toContainText('V')
   await expect(page.getByRole('group', { name: /Selected ac result vectors/ }).getByRole('button', { name: /Disable IM \(2f1−f2\) · V\(vout\)/i })).toBeVisible()
 
+  const plotWindow = page.locator('.plot-window').last()
+  const panelId = await plotWindow.getAttribute('data-plot-panel-id')
+  const readSavedUnitRanges = () => page.evaluate((id) => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.find((panel: { id: string }) => panel.id === id)?.valueRanges?.ac ?? null, panelId)
+  await plotWindow.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Zoom vertical axis in' }).click()
+  await expect.poll(async () => readSavedUnitRanges()).toEqual(expect.objectContaining({ 'linear-unit:A': expect.any(Object), 'linear-unit:V': expect.any(Object) }))
+  const savedRangesBeforeReload = await readSavedUnitRanges()
+  expect(savedRangesBeforeReload['linear-unit:A']).not.toEqual(savedRangesBeforeReload['linear-unit:V'])
+
   const curveYCoordinates = async (name: RegExp) => (await plot.getByRole('img', { name }).getAttribute('points'))!.split(/\s+/).map((point) => point.split(',')[1])
   const voltageCurveBeforeToggle = await curveYCoordinates(/V\(vout\), intermodulation product magnitude in V/i)
   const currentCurveBeforeToggle = await curveYCoordinates(/I\(D1\), intermodulation product magnitude in A/i)
@@ -15024,13 +15032,6 @@ test('diode intermodulation example opens with guidance and solves in Firefox', 
   expect(await curveYCoordinates(/V\(vout\), intermodulation product magnitude in V/i)).toEqual(voltageCurveBeforeToggle)
   expect(await curveYCoordinates(/I\(D1\), intermodulation product magnitude in A/i)).toEqual(currentCurveBeforeToggle)
 
-  const plotWindow = page.locator('.plot-window').last()
-  const panelId = await plotWindow.getAttribute('data-plot-panel-id')
-  const readSavedUnitRanges = () => page.evaluate((id) => JSON.parse(localStorage.getItem('elsim:project:v7')!).plotSettings.panels.find((panel: { id: string }) => panel.id === id)?.valueRanges?.ac ?? null, panelId)
-  await plotWindow.getByRole('group', { name: 'Plot navigation' }).getByRole('button', { name: 'Zoom vertical axis in' }).click()
-  await expect.poll(async () => readSavedUnitRanges()).toEqual(expect.objectContaining({ 'linear-unit:A': expect.any(Object), 'linear-unit:V': expect.any(Object) }))
-  const savedRangesBeforeReload = await readSavedUnitRanges()
-  expect(savedRangesBeforeReload['linear-unit:A']).not.toEqual(savedRangesBeforeReload['linear-unit:V'])
   await page.reload()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Two-tone intermodulation analysis complete/)).toBeVisible({ timeout: 60_000 })
