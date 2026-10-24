@@ -1730,6 +1730,17 @@ test('reports duplicate imported global .PARAM names but ignores subcircuit-loca
   ])
 })
 
+test('reports repeated global .PARAM assignments on one source line once with the shared location', () => {
+  const report = analyzeModelDependencies([
+    { id: 'same-line-parameters', filename: 'same-line.lib', content: '.param GAIN=1 gain = 2' },
+  ])
+  assert.deepEqual(report.conflicts, [
+    { name: 'GAIN', kind: 'parameter', declarationCount: 2, definitions: [
+      { assetId: 'same-line-parameters', filename: 'same-line.lib', sourceLine: 1 },
+    ] },
+  ])
+})
+
 test('rejects ngspice directives that are not supported in conditional blocks', () => {
   for (const directive of ['.FUNC SCALE(x) {x}', '.MEAS TRAN RESULT MAX V(out)', '.GLOBAL 0', '.OPTIONS reltol=.01']) {
     assert.throws(() => parseSubcircuitLibrary(`.IF (MODE == 1)\n${directive}\n.ENDIF`), /Line 2: .* is not supported inside an ngspice \.IF block/, directive)

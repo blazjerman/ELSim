@@ -15,7 +15,7 @@ export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string; targetModelType?: string }
 export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number; section?: string }
 export type ModelBaseTarget = { assetId: string; modelName: string }
-export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device' | 'measurement' | 'function' | 'parameter'; analysis?: 'tran' | 'ac' | 'dc'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
+export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device' | 'measurement' | 'function' | 'parameter'; analysis?: 'tran' | 'ac' | 'dc'; declarationCount?: number; definitions: { assetId: string; filename: string; sourceLine: number }[] }
 export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; section?: string; reason: 'missing' | 'ambiguous' | 'unsafe' | 'section'; matches?: { assetId: string; filename: string }[] }
 export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string>; deviceModelBinAssets: Map<string, string[]>; modelBaseAssets: Map<string, ModelBaseTarget[]> }
 export type NgspiceBsim3BinFamily<T extends SpiceModelDefinition = SpiceModelDefinition> = { name: string; displayName: string; type: string; binCount: number; models: T[] }
@@ -1583,7 +1583,10 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
         for (const name of topLevelParameterNames(record.text)) {
           const key = `parameter:${name.toLowerCase()}`
           const conflict = definitionLocations.get(key) ?? { name, kind: 'parameter' as const, definitions: [] }
-          if (!conflict.definitions.some((definition) => definition.assetId === asset.id && definition.sourceLine === record.sourceLine)) {
+          const sameSourceDeclaration = conflict.definitions.some((definition) => definition.assetId === asset.id && definition.sourceLine === record.sourceLine)
+          if (sameSourceDeclaration) {
+            conflict.declarationCount = (conflict.declarationCount ?? 1) + 1
+          } else {
             conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: record.sourceLine })
           }
           definitionLocations.set(key, conflict)
@@ -1730,7 +1733,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       visited.add(frame.name)
     }
   }
-  const conflicts = [...definitionLocations.values()].filter((conflict) => conflict.definitions.length > 1)
+  const conflicts = [...definitionLocations.values()].filter((conflict) => conflict.definitions.length > 1 || (conflict.kind === 'parameter' && (conflict.declarationCount ?? 1) > 1))
   const deviceModelBinAssets = new Map<string, string[]>()
   const allBsim3BinCards = [...globalBsim3Bins.values()].flat()
   const deviceModelCandidates = [...globalDeviceModels.values(), ...allBsim3BinCards.map(({ model }) => model)]
