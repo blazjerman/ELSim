@@ -44,6 +44,7 @@ export function ModelLibrarySectionsDialog({ batch, setBatch, single, setSingle,
         <p className="form-section-title">FILES TO IMPORT · {batch.map((item) => item.filename).join(', ')}</p>
         <div className="example-list">{filteredBatch?.filter((item) => item.sections.length > 0).map((item) => <section key={item.filename}>
           <h3>{item.filename}</h3>
+          <p className="form-section-title">{item.selectedSections.length} selected · {item.visibleSections.length} of {item.sections.length} sections shown</p>
           {item.visibleSections.length === 0 && normalizedSectionFilter && <p role="status">No sections in {item.filename} match “{sectionFilter.trim()}”.</p>}
           {item.visibleSections.map((section) => <label className="lt-export-license" key={section}>
             <input type="checkbox" aria-label={`Include ${item.filename} section ${section}`} checked={item.selectedSections.some((selected) => selected.toLowerCase() === section.toLowerCase())} onChange={(event) => setBatch((current) => current?.map((candidate) => candidate.filename !== item.filename ? candidate : ({ ...candidate, selectedSections: event.target.checked ? [...candidate.selectedSections, section] : candidate.selectedSections.filter((selected) => selected.toLowerCase() !== section.toLowerCase()) })) ?? null)}/>
@@ -61,6 +62,7 @@ export function ModelLibrarySectionsDialog({ batch, setBatch, single, setSingle,
         <div className="modal-heading"><div><span className="eyebrow">MODEL LIBRARY · {single.filename}</span><h2 id="model-sections-title">Choose model sections</h2></div><button className="subtle-icon" aria-label="Cancel model section selection" onClick={close}><X size={17}/></button></div>
         <p id="model-sections-description" className="tour-copy">This library has multiple named sections. Select the section or sections your circuit needs. The original file stays intact in your project; only selected sections are loaded for simulation.</p>
         <label className="field-label">Filter sections<input aria-label="Filter model sections" type="search" value={sectionFilter} onChange={(event) => setSectionFilter(event.target.value)} placeholder="Search section names" /></label>
+        <p className="form-section-title">{single.selectedSections.length} selected · {filteredSingleSections.length} of {single.sections.length} sections shown</p>
         <div className="example-list">{filteredSingleSections.length === 0 && normalizedSectionFilter && <p role="status">No sections match “{sectionFilter.trim()}”.</p>}{filteredSingleSections.map((section) => <label className="lt-export-license" key={section}>
           <input type="checkbox" aria-label={`Include section ${section}`} checked={single.selectedSections.some((selected) => selected.toLowerCase() === section.toLowerCase())} onChange={(event) => setSingle((current) => !current ? current : ({ ...current, selectedSections: event.target.checked ? [...current.selectedSections, section] : current.selectedSections.filter((selected) => selected.toLowerCase() !== section.toLowerCase()) }))}/>
           <span>{section}</span>
