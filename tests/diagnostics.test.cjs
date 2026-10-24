@@ -133,6 +133,30 @@ test('strtod fatal output keeps its parameter detail and gives guidance without 
   assert.match(diagnostic.hint, /could not parse a numeric value.*component values and model-card parameters/i)
 })
 
+test('unlocated ngspice numeric parse failures identify one imported library without inventing a source line', () => {
+  const modelArtifact = { ...artifact, sourceMap: [
+    { line: 4, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 18 },
+    { line: 5, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 19 },
+  ] }
+  const diagnostic = diagnosticForNgspice('strtod: Invalid argument\nERROR: fatal error in ngspice, exit(1)', modelArtifact)
+  assert.equal(diagnostic.assetId, 'asset-7')
+  assert.equal(diagnostic.assetLine, undefined)
+  assert.equal(diagnostic.sourceId, undefined)
+  assert.equal(diagnostic.line, undefined)
+  assert.match(diagnostic.hint, /did not report a source line.*exact card could not be identified/i)
+})
+
+test('unlocated ngspice numeric parse failures do not guess between imported libraries', () => {
+  const modelArtifact = { ...artifact, sourceMap: [
+    { line: 4, sourceId: 'model-file:asset-7', role: 'model', assetId: 'asset-7', assetLine: 18 },
+    { line: 5, sourceId: 'model-file:asset-8', role: 'model', assetId: 'asset-8', assetLine: 2 },
+  ] }
+  const diagnostic = diagnosticForNgspice('strtod: Invalid argument', modelArtifact)
+  assert.equal(diagnostic.assetId, undefined)
+  assert.equal(diagnostic.assetLine, undefined)
+  assert.match(diagnostic.hint, /did not report a source line.*exact file and card could not be identified/i)
+})
+
 test('ngspice model warnings preceding generic netlist errors remain actionable', () => {
   const componentSourceMap = [{ line: 5, sourceId: 'part-q1', role: 'component' }]
   const missingModelText = [

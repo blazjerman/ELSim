@@ -25,6 +25,16 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
   const line = lineText ? Number(lineText) : undefined
   const source = line === undefined ? undefined : artifact.sourceMap.find((entry) => entry.line === line)
   const lower = message.toLowerCase()
+  const unlocatedNumericParseError = line === undefined && /strtod:\s*invalid argument/i.test(message)
+  const importedModelAssetIds = [...new Set(artifact.sourceMap
+    .filter((entry) => entry.role === 'model' && entry.assetId)
+    .map((entry) => entry.assetId!))]
+  // Some ngspice parser failures terminate before reporting a generated-netlist
+  // line. Identify a library only when there is exactly one plausible source;
+  // never invent a line or select arbitrarily among multiple imported files.
+  const unlocatedModelAssetId = unlocatedNumericParseError && importedModelAssetIds.length === 1
+    ? importedModelAssetIds[0]
+    : undefined
   let hint: string | undefined
   const missingFunction = message.match(/no such function\s+['"]?([A-Za-z_][A-Za-z0-9_]*)/i)?.[1]
   if (missingFunction && source?.assetId) {
@@ -33,6 +43,10 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
     hint = `${missingFunction}() is not available in this ngspice build. Replace the expression with a supported ngspice function or an equivalent circuit/model.`
   } else if (source?.assetId && /strtod:\s*invalid argument/i.test(message)) {
     hint = 'ngspice could not interpret part of this imported model card as a supported number or parameter. Check parameter names and values for misspellings, missing values, or simulator-specific syntax.'
+  } else if (unlocatedModelAssetId) {
+    hint = 'ngspice stopped while parsing a numeric value but did not report a source line. Review this imported model library’s numeric values and parameter expressions; the exact card could not be identified.'
+  } else if (unlocatedNumericParseError && importedModelAssetIds.length > 1) {
+    hint = 'ngspice stopped while parsing a numeric value but did not report a source line. Review imported model libraries and circuit values; the exact file and card could not be identified.'
   } else if (/strtod:\s*invalid argument/i.test(message)) {
     hint = 'ngspice could not parse a numeric value in the generated circuit. Check component values and model-card parameters for misspellings, missing values, or unsupported expressions.'
   } else if (source?.assetId && /unknown parameter|unrecognized parameter|undefined parameter|parameter .* not found/i.test(message)) {
@@ -73,6 +87,7 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
     ...(line !== undefined ? { line } : {}),
     ...(source ? { sourceId: source.sourceId } : {}),
     ...(source?.assetId ? { assetId: source.assetId, ...(source.assetLine !== undefined ? { assetLine: source.assetLine } : {}) } : {}),
+    ...(!source?.assetId && unlocatedModelAssetId ? { assetId: unlocatedModelAssetId } : {}),
     ...(hint ? { hint } : {}),
   }
 }
