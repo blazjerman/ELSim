@@ -1,5 +1,11 @@
 # ELSim performance benchmarks
 
+## Quick domain benchmark refresh (2026-10-25)
+
+`npm run benchmark:performance:quick` completed with benchmark version 15 on Node 18.20.4, Linux x64, and the documented i7-12700F host. It used two warmups and seven measured runs with `--skip-engine`; no browser, ngspice, WASM build, or Pages workflow ran. The 5,000-part chain measured 44.133 ms connectivity p95 and 61.918 ms netlist p95; the 5,000-part/4,900-wire grid measured 39.670/55.499 ms; and the 5,000-instance hierarchy measured 77.546/133.139 ms. These remain under the existing 500 ms large-circuit working budget.
+
+The million-sample plot reducer returned 902 points at 1.042 ms p95, within the 5 ms target. On the wire-grid fixture, sampling all 4,900 wire networks measured 23.883 ms median, while sampling only the affected visible networks measured 0.035 ms; the existing scoped approach remains important for large schematics. The 1,000-reference/2,000-section library fixture measured 164.543 ms median / 169.461 ms p95. Raw retention experiment values were 47.168 ms median to parse all vectors versus 30.174 ms for the two displayable traces, with the trace-only production parser already avoiding 25.2 MB of arrays. These are local measurements and do not establish browser interaction latency or a cross-device guarantee; they provide no evidence for a broader rewrite.
+
 ## Imported model inspection reuse (2026-10-24)
 
 `analyzeModelLibraries` now inspects each library's logical lines and section structure once, then reuses that inspection while collecting cross-library `.FUNC` signatures and parsing the complete libraries. This preserves forward function references and section validation while removing the second full source scan. The version-14 fixture with 1,000 `.LIB` references to a 2,000-section library resolved all references at 162.654 ms median / 167.593 ms p95, compared with 227.982 / 245.979 ms in the immediately preceding same-host baseline (about 29% lower median and 32% lower p95). A second uncontended run confirmed the result. These are local Node timings, not browser or user-visible latency guarantees. All 39 unit groups, TypeScript, and the focused Firefox multi-file section-import workflow passed. No WASM rebuild or Pages run.
