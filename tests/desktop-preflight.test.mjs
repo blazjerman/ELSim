@@ -2,16 +2,30 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { collectDesktopPreflightProblems } from '../tools/desktop-preflight-checks.mjs'
 
-function collect({ mode = 'dev', rust = '1.90.0', cargo = '1.90.0', missingCommands = [], missingPackages = [], engineFiles = [] } = {}) {
+function collect({
+  mode = 'dev',
+  platform = 'linux',
+  rust = '1.90.0',
+  cargo = '1.90.0',
+  rustHost = 'x86_64-unknown-linux-gnu',
+  missingCommands = [],
+  missingPackages = [],
+  missingWindowsTools = [],
+  xcodeAvailable = true,
+  engineFiles = [],
+} = {}) {
   const versions = { rustc: `rustc ${rust}`, cargo: `cargo ${cargo}` }
   const runCommand = (command, args) => {
     if (command === 'pkg-config' && args[0] === '--exists') return { status: missingPackages.includes(args[1]) ? 1 : 0, stdout: '' }
+    if (command === 'rustc' && args[0] === '-vV') return rustHost ? { status: 0, stdout: `host: ${rustHost}` } : { status: 1, stdout: '' }
+    if (command === 'xcode-select' && args[0] === '-p') return { status: xcodeAvailable ? 0 : 1, stdout: xcodeAvailable ? '/Applications/Xcode.app/Contents/Developer' : '' }
+    if (command === 'where.exe') return { status: missingWindowsTools.includes(args[0]) ? 1 : 0, stdout: 'C:\\BuildTools\\bin' }
     if (missingCommands.includes(command)) return { status: 1, stdout: '' }
     return { status: 0, stdout: versions[command] ?? `${command} 1.0` }
   }
   return collectDesktopPreflightProblems({
     mode,
-    platform: 'linux',
+    platform,
     runCommand,
     hasFile: (filename) => engineFiles.includes(filename),
   })
@@ -49,14 +63,35 @@ test('desktop build preflight passes when local engine files are present', () =>
   }), [])
 })
 
-test('desktop preflight does not require Linux packages on macOS or Windows', () => {
+test('macOS requires Xcode command-line tools and a native Rust target', () => {
+  const problems = collect({ platform: 'darwin', xcodeAvailable: false, rustHost: 'x86_64-unknown-linux-gnu' }).join('\n')
+  assert.match(problems, /Apple command-line developer tools are missing.*xcode-select --install/)
+  assert.match(problems, /not an Apple Darwin/)
+  assert.doesNotMatch(problems, /Linux development libraries/)
+})
+
+test('macOS preflight passes with Xcode command-line tools and an Apple Rust target', () => {
+  assert.deepEqual(collect({ platform: 'darwin', rustHost: 'aarch64-apple-darwin' }), [])
+})
+
+test('Windows requires the MSVC target and C++ compiler/linker', () => {
+  const problems = collect({
+    platform: 'win32',
+    rustHost: 'x86_64-pc-windows-gnu',
+    missingWindowsTools: ['cl.exe', 'link.exe'],
+  }).join('\n')
+  assert.match(problems, /not an MSVC Windows/)
+  assert.match(problems, /missing from PATH: cl\.exe, link\.exe/)
+  assert.match(problems, /Desktop development with C\+\+/)
+  assert.doesNotMatch(problems, /Linux development libraries/)
+})
+
+test('Windows preflight passes with MSVC Rust and C++ build tools', () => {
+  assert.deepEqual(collect({ platform: 'win32', rustHost: 'x86_64-pc-windows-msvc' }), [])
+})
+
+test('macOS and Windows reject an undetectable Rust host target', () => {
   for (const platform of ['darwin', 'win32']) {
-    const problems = collectDesktopPreflightProblems({
-      mode: 'dev',
-      platform,
-      runCommand: (command) => ({ status: 0, stdout: command === 'rustc' ? 'rustc 1.90.0' : 'cargo 1.90.0' }),
-      hasFile: () => false,
-    })
-    assert.deepEqual(problems, [])
+    assert.match(collect({ platform, rustHost: null }).join('\n'), /Could not determine the native Rust target/)
   }
 })

@@ -17,7 +17,32 @@ export function collectDesktopPreflightProblems({ mode, platform, runCommand, ha
   checkToolchain('rustc', 'rustc')
   checkToolchain('cargo', 'cargo')
 
-  if (platform === 'linux') {
+  if (platform === 'darwin' || platform === 'win32') {
+    const rustDetails = runCommand('rustc', ['-vV'])
+    const rustHost = rustDetails.status === 0 ? rustDetails.stdout.match(/^host: (.+)$/m)?.[1] : undefined
+    const expectedHost = platform === 'darwin' ? /apple-darwin$/ : /windows-msvc$/
+    if (!rustHost) {
+      problems.push('Could not determine the native Rust target. Reinstall Rust with rustup and check `rustc -vV`.')
+    } else if (!expectedHost.test(rustHost)) {
+      const expectedToolchain = platform === 'darwin' ? 'an Apple Darwin' : 'an MSVC Windows'
+      const command = platform === 'darwin' ? 'rustup default stable' : 'rustup default stable-msvc'
+      problems.push(`Rust target ${rustHost} is not ${expectedToolchain}; select a matching native toolchain with: ${command}`)
+    }
+  }
+
+  if (platform === 'darwin') {
+    const xcode = runCommand('xcode-select', ['-p'])
+    if (xcode.status !== 0 || !xcode.stdout.trim()) {
+      problems.push('Apple command-line developer tools are missing. Install them with: xcode-select --install')
+      problems.push('For other macOS setup details, follow https://v2.tauri.app/start/prerequisites/#macos')
+    }
+  } else if (platform === 'win32') {
+    const missingTools = ['cl.exe', 'link.exe'].filter((tool) => runCommand('where.exe', [tool]).status !== 0)
+    if (missingTools.length) {
+      problems.push(`Microsoft C++ build tools are missing from PATH: ${missingTools.join(', ')}.`)
+      problems.push('Install Visual Studio Build Tools with the “Desktop development with C++” workload, then restart the terminal: https://v2.tauri.app/start/prerequisites/#windows')
+    }
+  } else if (platform === 'linux') {
     const linuxCommands = [
       ['cc', 'build-essential'],
       ['make', 'build-essential'],
