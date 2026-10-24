@@ -1136,6 +1136,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   // project temperature afterward so the user's non-default setting wins.
   const temperature = Number(project.simulation.temperature ?? '27')
   if (includeHierarchyProbes && Number.isFinite(temperature) && temperature !== 27) append(`.temp ${temperature}`, 'simulation:temperature', 'generated')
+  if (includeHierarchyProbes && project.simulation.nominalTemperature !== undefined) {
+    const nominalTemperature = project.simulation.nominalTemperature.trim()
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(nominalTemperature) || !Number.isFinite(Number(nominalTemperature)) || Number(nominalTemperature) < -273.15 || Number(nominalTemperature) > 10000) {
+      const message = 'Nominal model temperature must be a number from −273.15 °C to 10000 °C.'
+      append(`* ERROR: ${cleanComment(message)}`, 'analysis:nominalTemperature', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:nominalTemperature', line: rows.length })
+    } else append(`.options tnom=${Number(nominalTemperature)}`, 'analysis:nominalTemperature', 'generated')
+  }
   if (includeHierarchyProbes && project.simulation.shuntResistance?.trim()) {
     const shuntResistance = componentMagnitude(project.simulation.shuntResistance, 'resistor')
     if (shuntResistance === null || shuntResistance <= 0) {

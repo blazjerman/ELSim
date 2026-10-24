@@ -444,6 +444,22 @@ test('global temperature emits one top-level SPICE directive and is validated in
   assert.throws(() => validateProject(project), /temperature must be a number/)
 })
 
+test('nominal model temperature is independent from operating temperature and uses native TNOM', () => {
+  const project = createStarterProject()
+  project.simulation.temperature = '85'
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options tnom=/mi)
+  project.simulation.nominalTemperature = '25'
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.temp 85$/mi)
+  assert.equal((artifact.text.match(/^\.options tnom=25$/gim) ?? []).length, 1)
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:nominalTemperature' && source.role === 'generated'))
+  project.simulation.nominalTemperature = '-300'
+  assert.throws(() => validateProject(project), /nominal model temperature must be a number/i)
+  assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:nominalTemperature'))
+  project.simulation.nominalTemperature = undefined
+})
+
 test('optional floating-node RSHUNT and CSHUNT emit native ngspice options and validate units', () => {
   const project = createStarterProject()
   assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options rshunt=/mi)

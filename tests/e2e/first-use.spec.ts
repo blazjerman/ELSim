@@ -6422,10 +6422,13 @@ test('global simulation temperature is passed to ngspice', { tag: '@ngspice' }, 
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.getByLabel('Temperature (°C)').fill('85')
+  await page.getByText('Solver settings (advanced)').click()
+  await page.getByLabel('Model nominal temperature').fill('25')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/Transient analysis complete/)).toBeVisible({ timeout: 60_000 })
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('.temp 85')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options tnom=25')
 })
 
 test('transient solver options are editable and run in the browser engine', { tag: '@ngspice' }, async ({ page }) => {
