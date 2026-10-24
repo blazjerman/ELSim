@@ -1004,6 +1004,25 @@ test('expands a single conditional AKO child against an unconditional base', () 
   assert.equal(result.cards.get('conditional-child:3'), '.model CHILD D(IS=2n N=1)')
 })
 
+test('expands each conditional AKO child against the base in the matching branch', () => {
+  const content = [
+    '.IF (SELECT=1)',
+    '.MODEL BASE D(IS=1n N=1)',
+    '.MODEL CHILD AKO:BASE D(IS=2n)',
+    '.ELSE',
+    '.MODEL BASE D(IS=9n N=2)',
+    '.MODEL CHILD AKO:BASE D(IS=3n)',
+    '.ENDIF',
+  ].join('\n')
+  const asset = { id: 'conditional-branches', filename: 'conditional-branches.lib', content }
+  const result = expandNgspiceAkoModels([{ asset, parsed: parseSubcircuitLibrary(content) }])
+
+  assert.deepEqual(result.issues, [])
+  assert.equal(result.cards.get('conditional-branches:3'), '.model CHILD D(IS=2n N=1)')
+  assert.equal(result.cards.get('conditional-branches:6'), '.model CHILD D(IS=3n N=2)')
+  assert.deepEqual(result.parameters.get('conditional-branches:3').map(({ name, defaultVariesByCondition }) => [name, defaultVariesByCondition]), [['IS', true], ['N', true]])
+})
+
 test('reports missing, ambiguous, cyclic, mismatched, conditional, and unsafe AKO inheritance', () => {
   const makeEntries = (assets) => assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) }))
   const cases = [
@@ -1011,8 +1030,7 @@ test('reports missing, ambiguous, cyclic, mismatched, conditional, and unsafe AK
     [[{ id: 'base1', filename: 'one.lib', content: '.MODEL BASE D(Is=1n)' }, { id: 'base2', filename: 'two.lib', content: '.MODEL BASE D(Is=2n)' }, { id: 'child', filename: 'child.lib', content: '.MODEL CHILD AKO:BASE D(Is=3n)' }], /base model BASE is ambiguous/],
     [[{ id: 'cycle', filename: 'cycle.lib', content: '.MODEL A AKO:B D(Is=1n)\n.MODEL B AKO:A D(Is=2n)' }], /inheritance cycle/],
     [[{ id: 'wrong', filename: 'wrong.lib', content: '.MODEL BASE Q(Is=1n)\n.MODEL CHILD AKO:BASE D(Is=2n)' }], /has device type Q, but CHILD declares D/],
-    [[{ id: 'conditional', filename: 'conditional.lib', content: '.if (1)\n.MODEL BASE D(Is=1n)\n.endif\n.MODEL CHILD AKO:BASE D(Is=2n)' }], /conditional and cannot be expanded safely/],
-    [[{ id: 'conditional-variants', filename: 'conditional-variants.lib', content: '.MODEL BASE D(IS=1n)\n.IF (1)\n.MODEL CHILD AKO:BASE D(IS=2n)\n.ELSE\n.MODEL CHILD AKO:BASE D(IS=3n)\n.ENDIF' }], /multiple conditional variants and cannot be expanded safely/],
+    [[{ id: 'conditional', filename: 'conditional.lib', content: '.if (1)\n.MODEL BASE D(Is=1n)\n.endif\n.MODEL CHILD AKO:BASE D(Is=2n)' }], /conditional branch/],
     [[{ id: 'unsafe', filename: 'unsafe.lib', content: '.MODEL BASE D(Is=1n)\n.MODEL CHILD AKO:BASE D(Is=2n) Pchan' }], /outside the supported assignment-only expansion form/],
   ]
   for (const [assets, expected] of cases) {
@@ -1020,6 +1038,16 @@ test('reports missing, ambiguous, cyclic, mismatched, conditional, and unsafe AK
     assert.match(result.issues.map(({ message }) => message).join('\n'), expected)
     assert.equal(result.cards.size, 0)
   }
+})
+
+test('reports a conditional AKO branch whose base is missing from that branch', () => {
+  const content = '.MODEL BASE D(IS=1n)\n.IF (1)\n.MODEL CHILD AKO:BASE D(IS=2n)\n.ELSE\n.MODEL CHILD AKO:MISSING D(IS=3n)\n.ENDIF'
+  const asset = { id: 'conditional-missing-base', filename: 'conditional-missing-base.lib', content }
+  const result = expandNgspiceAkoModels([{ asset, parsed: parseSubcircuitLibrary(content) }])
+
+  assert.match(result.issues.map(({ message }) => message).join('\n'), /base model MISSING was not found/)
+  assert.equal(result.cards.get('conditional-missing-base:3'), '.model CHILD D(IS=2n)')
+  assert.equal(result.cards.has('conditional-missing-base:5'), false)
 })
 
 test('accepts a SPICE title line and CRLF source', () => {

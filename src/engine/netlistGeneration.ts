@@ -1280,7 +1280,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       const translation = translateVoltageSwitchModel(model)
       return translation ? [[model.startLine, { model, translation }] as const] : []
     }))
-    const expandedAkoByLine = new Map(parsed.models.flatMap((model) => {
+    const expandedAkoByLine = new Map(parsed.models.flatMap((model) => [model, ...(model.conditionalVariants ?? []).map((variant) => variant.model)]).flatMap((model) => {
       const text = akoExpansion.cards.get(`${asset.id}:${model.startLine}`)
       return text ? [[model.startLine, { model, text }] as const] : []
     }))

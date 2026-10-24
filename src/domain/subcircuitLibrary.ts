@@ -2,9 +2,11 @@ import { translateVoltageSwitchModel } from './voltageSwitchModel'
 
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
+export type ModelConditionFrame = { id: number; branch: number }
+export type ConditionalModelVariant = { model: SpiceModelDefinition; conditionPath: ModelConditionFrame[] }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; conditionalVariantCount?: number; scope?: string; conditional?: boolean; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; conditionalPath?: ModelConditionFrame[]; conditionalVariants?: ConditionalModelVariant[]; scope?: string; conditional?: boolean; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
@@ -613,8 +615,8 @@ export function ngspiceBsim3BinFamilies<T extends SpiceModelDefinition>(models: 
 
 const alternateBjtModelNames = new WeakMap<ModelDependency, string[]>()
 
-type ModelConditionPath = { id: number; branch: number }[]
-type SeenModelCard = { model: SpiceModelDefinition; conditionPath: ModelConditionPath }
+type ModelConditionPath = ModelConditionFrame[]
+type SeenModelCard = { model: SpiceModelDefinition; conditionPath: ModelConditionPath; variants: ConditionalModelVariant[] }
 
 function canonicalModelType(type: string): string {
   const normalized = type.toLowerCase()
@@ -624,20 +626,21 @@ function canonicalModelType(type: string): string {
 function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelConditionPath, seen: Map<string, SeenModelCard>, models: SpiceModelDefinition[]) {
   if (conditionPath.length) {
     Object.defineProperty(model, 'conditionalDefinition', { value: true })
-    Object.defineProperty(model, 'conditionalVariantCount', { value: 1, writable: true })
+    Object.defineProperty(model, 'conditionalPath', { value: conditionPath.map((frame) => ({ ...frame })) })
   }
   if (conditionPath.length && model.type.toUpperCase() === 'VSWITCH') model.conditional = true
   const key = `${model.scope?.toLowerCase() ?? ''}:${model.name.toLowerCase()}`
   const previous = seen.get(key)
   if (!previous) {
-    seen.set(key, { model, conditionPath })
+    seen.set(key, { model, conditionPath, variants: [] })
     models.push(model)
     return
   }
   const mutuallyExclusive = previous.conditionPath.some((frame) => conditionPath.some((candidate) => candidate.id === frame.id && candidate.branch !== frame.branch))
   const location = model.scope ? ` in .SUBCKT ${model.scope}` : ''
   if (!mutuallyExclusive) throw new Error(`Line ${model.startLine}: model card ${model.name} is declared more than once${location}.`)
-  previous.model.conditionalVariantCount = (previous.model.conditionalVariantCount ?? 1) + 1
+  previous.variants.push({ model, conditionPath: conditionPath.map((frame) => ({ ...frame })) })
+  if (!previous.model.conditionalVariants) Object.defineProperty(previous.model, 'conditionalVariants', { value: previous.variants })
   if (canonicalModelType(previous.model.type) !== canonicalModelType(model.type) || previous.model.channel !== model.channel) {
     throw new Error(`Line ${model.startLine}: conditional model cards named ${model.name} must keep the same device type and channel.`)
   }
