@@ -3519,7 +3519,7 @@ test('bracketed imported IC parameters sweep through browser ngspice', { tag: '@
   project.junctions = []
   project.netLabels = netLabels
   project.modelAssets = [{ id: 'gain-bracket-model', filename: 'gain-cell.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
-  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.simulation = { ...project.simulation, analysis: 'tran', stopTime: '2 ms', maxStep: '0.1 ms' }
   project.sheets[0] = { ...project.sheets[0], parts, wires: [], junctions: [], netLabels }
   await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
   await page.goto('/')
@@ -3539,6 +3539,9 @@ test('bracketed imported IC parameters sweep through browser ngspice', { tag: '@
   expect(labels.some((label) => label.includes('XGAIN.GAIN[1]=3'))).toBe(true)
   expect(labels.some((label) => label.includes('XGAIN.GAIN[1]=4'))).toBe(true)
   expect(labels.filter((label) => label.includes('XGAIN.GAIN[1]='))).toHaveLength(3)
+  const plottedCases = await page.locator('.plot-window polyline[role="img"]').evaluateAll((lines) => lines.map((line) => line.getAttribute('points')))
+  expect(plottedCases).toHaveLength(3)
+  expect(new Set(plottedCases).size).toBe(3)
 })
 
 test('coupled-line example opens from Advanced examples and solves crosstalk', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

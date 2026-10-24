@@ -2,7 +2,7 @@
 
 Status: active implementation roadmap, 2026-10-10. The application foundation is being built in this repository.
 
-M2.4 bracketed ngspice parameter identifiers (2026-10-24): Imported subcircuits now retain and allow overrides of bracketed formal parameters such as `GAIN[1]`; project validation, reusable-sheet parameters, worker protocol validation, and parameter sweeps accept the same supported spelling. Sweep aliases remain unchanged for ordinary identifiers and use collision-safe encoding for bracketed names. Unit coverage plus an existing-WASM fixture verify defaults and instance overrides produce 2 V and 3 V. Firefox verifies import, inspector editing, autosave, generated netlist output, and a three-case browser ngspice sweep of `GAIN[1]`. No WASM rebuild or Pages workflow is needed.
+M2.4 bracketed ngspice parameter identifiers (2026-10-24): Imported subcircuits now retain and allow overrides of bracketed formal parameters such as `GAIN[1]`; project validation, reusable-sheet parameters, worker protocol validation, and parameter sweeps accept the same supported spelling. Sweep aliases remain unchanged for ordinary identifiers and use collision-safe encoding for bracketed names. Unit coverage plus an existing-WASM fixture verify defaults and instance overrides produce 2 V and 3 V. Firefox verifies import, inspector editing, autosave, generated netlist output, and a three-case browser ngspice transient sweep whose distinct plotted curves confirm the bracketed parameter values affect results. No WASM rebuild or Pages workflow is needed.
 
 ## 1. Product goal
 
