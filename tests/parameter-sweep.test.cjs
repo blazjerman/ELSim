@@ -9,7 +9,8 @@ const { createStarterProject, validateProject } = require(path.join(build, 'doma
 const { componentMagnitude, createNetlistArtifact } = require(path.join(build, 'engine/netlist.js'))
 const { prepareParameterSweep } = require(path.join(build, 'engine/sweep.js'))
 const { addResultControl } = require(path.join(build, 'engine/resultControl.js'))
-const { createUrcLineExampleProject, createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
+const { isEngineRequest } = require(path.join(build, 'engine/contract.js'))
+const { createUrcLineExampleProject, createHierarchicalExampleProject, createVoltageSwitchExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { eligibleParameterSweepParts, importedModelSweepParameters, subcircuitSweepParameters, unusedSweepTargets } = require(path.join(build, 'domain/parameterSweepTargets.js'))
 
 test('engineering units parse to base magnitudes for resistor, capacitor, and inductor values', () => {
@@ -384,6 +385,43 @@ test('imported URC model parameters can be stepped', () => {
     { component: 'URC1', value: '3.00000000e+1', parameter: 'RPERL', model: 'USER_URC' },
   ])
   assert.match(addResultControl(createNetlistArtifact(validated).text, runs), /altermod USER_URC RPERL=2\.00000000e\+1\nrun/)
+})
+
+test('PSpice VSWITCH model sweeps map threshold fields to native SW parameters', () => {
+  const project = createVoltageSwitchExampleProject()
+  const switchPart = project.parts.find((part) => part.kind === 'voltageSwitch')
+  switchPart.deviceModel = 'USER_VSW'
+  project.modelAssets = [{ id: 'sweep-vswitch-model', filename: 'switches.lib', sha256: 'f'.repeat(64), content: '.MODEL USER_VSW VSWITCH(RON=10 ROFF=1Meg VON=4 VOFF=2)\n', licenseStatus: 'unknown', importedAt: new Date().toISOString() }]
+  project.simulation.parameterSweeps = [
+    { component: switchPart.ref, parameter: 'VON', start: '3', stop: '5', points: 2 },
+    { component: switchPart.ref, parameter: 'VOFF', start: '1', stop: '2', points: 2 },
+  ]
+
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => run.label), [
+    'S1.VON=3, S1.VOFF=1', 'S1.VON=3, S1.VOFF=2',
+    'S1.VON=5, S1.VOFF=1', 'S1.VON=5, S1.VOFF=2',
+  ])
+  assert.deepEqual(runs.map((run) => run.values[0].altermodParameters), [
+    { RON: '1.00000000e+1', ROFF: '1.00000000e+6', VT: '2.00000000e+0', VH: '1.00000000e+0' },
+    { RON: '1.00000000e+1', ROFF: '1.00000000e+6', VT: '2.50000000e+0', VH: '5.00000000e-1' },
+    { RON: '1.00000000e+1', ROFF: '1.00000000e+6', VT: '3.00000000e+0', VH: '2.00000000e+0' },
+    { RON: '1.00000000e+1', ROFF: '1.00000000e+6', VT: '3.50000000e+0', VH: '1.50000000e+0' },
+  ])
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.equal(isEngineRequest({
+    type: 'run', requestId: 'vswitch-sweep', artifact: createNetlistArtifact(validated),
+    metadata: { runId: 'vswitch-sweep', startedAt: new Date().toISOString(), engine: 'ngspice-wasm', engineVersion: '47', projectVersion: validated.version, netlistHash: 'test', settings: { analysis: 'tran' } },
+    parameterSweep: runs,
+  }), true, 'the worker accepts translated VSWITCH sweep requests')
+  assert.match(control, /altermod USER_VSW RON=1\.00000000e\+1 ROFF=1\.00000000e\+6 VT=2\.00000000e\+0 VH=1\.00000000e\+0\nrun/)
+  assert.doesNotMatch(control, /altermod USER_VSW (?:VON|VOFF)=/)
+  assert.doesNotMatch(control, /alter S1 /)
+
+  const invalid = structuredClone(project)
+  invalid.simulation.parameterSweeps = [{ component: switchPart.ref, parameter: 'VON', start: '1', stop: '1.5', points: 2 }]
+  assert.throws(() => prepareParameterSweep(validateProject(invalid)), /keep VON ≥ VOFF and ROFF > RON > 0/)
 })
 
 test('imported passive model parameters can be stepped', () => {

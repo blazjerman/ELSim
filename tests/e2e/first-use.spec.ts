@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { componentDefinitionFor, importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
-import { createCurrentSourceExampleProject, createHierarchicalExampleProject, createJfetSwitchExampleProject, createPotentiometerExampleProject, createUrcLineExampleProject } from '../../src/domain/examples'
+import { createCurrentSourceExampleProject, createHierarchicalExampleProject, createJfetSwitchExampleProject, createPotentiometerExampleProject, createUrcLineExampleProject, createVoltageSwitchExampleProject } from '../../src/domain/examples'
 import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
 import { componentPins } from '../../src/domain/geometry'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
@@ -12919,6 +12919,38 @@ test('imported device model parameters can be stepped through the browser ngspic
   await expect(page.getByText(/Parameter sweep complete · 3 cases/)).toBeVisible({ timeout: 60_000 })
   const discreteLabels = await page.locator('.trace-toggles button').allTextContents()
   expect(discreteLabels.some((label) => label.includes('Q1.BF=50'))).toBe(true)
+})
+
+test('PSpice voltage-switch threshold sweeps run as native ngspice model cases', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const project = createVoltageSwitchExampleProject()
+  const switchPart = project.parts.find((part) => part.kind === 'voltageSwitch')!
+  switchPart.deviceModel = 'USER_VSW'
+  const modelContent = '.MODEL USER_VSW VSWITCH(RON=10 ROFF=1Meg VON=4 VOFF=2)\n'
+  project.modelAssets = [{ id: 'sweep-vswitch-model', filename: 'switches.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  const schematicBounds = await page.locator('svg.schematic').boundingBox()
+  await page.locator('svg.schematic').click({ position: { x: schematicBounds!.width - 20, y: schematicBounds!.height - 20 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 1 component' }).selectOption(switchPart.ref)
+  await page.getByRole('combobox', { name: 'Parameter 1 model parameter' }).selectOption('VON')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('3')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('4.5')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')
+  await page.getByRole('button', { name: 'Add another parameter' }).click()
+  await page.getByRole('combobox', { name: 'Parameter 2 component' }).selectOption(switchPart.ref)
+  await page.getByRole('combobox', { name: 'Parameter 2 model parameter' }).selectOption('VOFF')
+  await page.getByRole('textbox', { name: 'Parameter 2 start value' }).fill('1')
+  await page.getByRole('textbox', { name: 'Parameter 2 stop value' }).fill('2')
+  await page.getByRole('spinbutton', { name: 'Parameter 2 number of values' }).fill('2')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 4 cases/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(VOUT)')
+  const labels = await page.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('S1.VON=3') && label.includes('S1.VOFF=1'))).toBe(true)
+  expect(labels.some((label) => label.includes('S1.VON=4.5') && label.includes('S1.VOFF=2'))).toBe(true)
 })
 
 test('imported passive R, C, and L model parameters sweep through the browser ngspice engine', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

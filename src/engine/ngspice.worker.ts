@@ -155,7 +155,16 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
 }
 
 worker.addEventListener('message', (event: MessageEvent<unknown>) => {
-  if (!isEngineRequest(event.data)) return
+  if (!isEngineRequest(event.data)) {
+    if (event.data && typeof event.data === 'object' && 'type' in event.data && event.data.type === 'run'
+      && 'requestId' in event.data && typeof event.data.requestId === 'string') {
+      worker.postMessage({
+        type: 'error', requestId: event.data.requestId,
+        error: { severity: 'error', message: 'The simulation request was rejected because its data did not match the worker protocol.' },
+      } satisfies EngineResponse)
+    }
+    return
+  }
   const request = event.data
   if (request.type === 'run') void run(request.requestId, request.artifact, request.metadata, request.parameterSweep, request.measurements)
   else if (request.type === 'dispose') worker.close()

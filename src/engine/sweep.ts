@@ -1,8 +1,71 @@
 import type { ParameterSweep, Project, SourceSweepParameter } from '../domain/project'
 import { componentMagnitude, spiceModelParameterMagnitude } from '../domain/componentValue'
 import { parseSubcircuitLibrary } from '../domain/subcircuitLibrary'
+import { translateVoltageSwitchModel } from '../domain/voltageSwitchModel'
 
-export type ParameterSweepRun = { values: { component: string; value: string; parameter?: string; model?: string; instanceParameter?: boolean; sourceParameter?: SourceSweepParameter; globalParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean }[]; label: string }
+type VoltageSwitchSweepBase = { von: number; voff: number; ron: number; roff: number }
+type ParameterSweepValue = { component: string; value: string; parameter?: string; model?: string; instanceParameter?: boolean; sourceParameter?: SourceSweepParameter; globalParameter?: string; pulseHigh?: boolean; pwlScale?: boolean; waveformAmplitude?: boolean; voltageSwitch?: { base: VoltageSwitchSweepBase; parameter: keyof VoltageSwitchSweepBase }; altermodParameters?: { RON: string; ROFF: string; VT: string; VH: string } }
+export type ParameterSweepRun = { values: ParameterSweepValue[]; label: string }
+
+
+function voltageSwitchSweepBase(project: Project, part: Project['parts'][number]): { model: string; base: VoltageSwitchSweepBase } | undefined {
+  if (part.kind !== 'voltageSwitch' || !part.deviceModel) return undefined
+  for (const asset of project.modelAssets ?? []) {
+    const model = parseSubcircuitLibrary(asset.content, asset.selectedSections).models.find((candidate) => candidate.name.toLowerCase() === part.deviceModel!.toLowerCase() && candidate.type.toLowerCase() === 'vswitch')
+    if (!model || !translateVoltageSwitchModel(model)) continue
+    const parameters = Object.fromEntries(model.parameters.map((parameter) => [parameter.name.toLowerCase(), spiceModelParameterMagnitude(parameter.defaultValue)]))
+    const { von, voff, ron, roff } = parameters
+    if (von !== undefined && von !== null && voff !== undefined && voff !== null && ron !== undefined && ron !== null && roff !== undefined && roff !== null) {
+      return { model: model.name, base: { von, voff, ron, roff } }
+    }
+  }
+  return undefined
+}
+
+function attachTranslatedVoltageSwitchParameters(runs: ParameterSweepRun[]): ParameterSweepRun[] {
+  return runs.map((run) => {
+    const groups = new Map<string, ParameterSweepValue[]>()
+    for (const value of run.values) {
+      if (!value.voltageSwitch || !value.model) continue
+      const group = groups.get(value.model.toLowerCase()) ?? []
+      group.push(value)
+      groups.set(value.model.toLowerCase(), group)
+    }
+    if (!groups.size) return run
+    const translations = new Map<string, ParameterSweepValue>()
+    for (const [key, group] of groups) {
+      const state = { ...group[0].voltageSwitch!.base }
+      const changed = new Set<keyof VoltageSwitchSweepBase>()
+      for (const value of group) {
+        const target = value.voltageSwitch!.parameter
+        if (changed.has(target)) throw new Error(`Voltage-switch model ${value.model} cannot sweep ${target.toUpperCase()} through multiple instances in the same run.`)
+        changed.add(target)
+        state[target] = Number(value.value)
+      }
+      if (state.von < state.voff || state.ron <= 0 || state.roff <= state.ron) {
+        throw new Error(`Voltage-switch sweep for ${group[0].model} produces invalid model values; keep VON ≥ VOFF and ROFF > RON > 0 for every case.`)
+      }
+      const scalar = (value: number) => value.toExponential(8)
+      translations.set(key, {
+        ...group[0],
+        altermodParameters: {
+          RON: scalar(state.ron), ROFF: scalar(state.roff),
+          VT: scalar(state.von / 2 + state.voff / 2), VH: scalar(state.von / 2 - state.voff / 2),
+        },
+      })
+    }
+    const emitted = new Set<string>()
+    const values = run.values.flatMap((value) => {
+      if (!value.voltageSwitch || !value.model) return [value]
+      const key = value.model.toLowerCase()
+      if (emitted.has(key)) return []
+      emitted.add(key)
+      const { voltageSwitch: _voltageSwitch, ...translated } = translations.get(key)!
+      return [translated]
+    })
+    return { ...run, values }
+  })
+}
 
 function componentUnit(kind: string): string {
   return kind === 'source' ? 'V' : kind === 'currentSource' ? 'A' : kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
@@ -135,6 +198,9 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
     const part = project.parts.find((candidate) => candidate.ref.toLowerCase() === sweep.component.toLowerCase())
     if (!part) throw new Error(`${sweep.component} is no longer in the circuit.`)
     const values = buildValues(project, sweep)
+    const voltageSwitch = sweep.parameter && !sweep.instanceParameter ? voltageSwitchSweepBase(project, part) : undefined
+    const voltageSwitchParameter = sweep.parameter?.toLowerCase() as keyof VoltageSwitchSweepBase | undefined
+    const sweepVoltageSwitchModel = voltageSwitch && ['von', 'voff', 'ron', 'roff'].includes(voltageSwitchParameter ?? '') ? voltageSwitch : undefined
     combinations = combinations.flatMap((combination) => values.map((value) => {
       const parameter = sweep.parameter
       const sourceParameter = sweep.sourceParameter
@@ -146,9 +212,9 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
       const label = combination.label ? `${combination.label}, ${target}=${display}` : `${target}=${display}`
       const model = parameter ? (sweep.instanceParameter ? part.modelName : part.deviceModel) : undefined
       const pulseHigh = !parameter && !sourceParameter && (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
-      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model, ...(sweep.instanceParameter ? { instanceParameter: true } : {}) } : {}), ...(sourceParameter ? { sourceParameter } : {}), ...(!sourceParameter && pulseHigh ? { pulseHigh: true } : {}), ...(!sourceParameter && pwlScale ? { pwlScale: true } : {}), ...(!sourceParameter && waveformAmplitude ? { waveformAmplitude: true } : {}) }], label }
+      return { values: [...combination.values, { component: part.ref, value: value.toExponential(8), ...(parameter ? { parameter, model, ...(sweep.instanceParameter ? { instanceParameter: true } : {}) } : {}), ...(sourceParameter ? { sourceParameter } : {}), ...(!sourceParameter && pulseHigh ? { pulseHigh: true } : {}), ...(!sourceParameter && pwlScale ? { pwlScale: true } : {}), ...(!sourceParameter && waveformAmplitude ? { waveformAmplitude: true } : {}), ...(sweepVoltageSwitchModel && voltageSwitchParameter ? { voltageSwitch: { base: sweepVoltageSwitchModel.base, parameter: voltageSwitchParameter } } : {}) }], label }
     }))
   }
   if (combinations.length > 10) throw new Error('Parameter stepping is limited to 10 total combinations.')
-  return combinations
+  return attachTranslatedVoltageSwitchParameters(combinations)
 }

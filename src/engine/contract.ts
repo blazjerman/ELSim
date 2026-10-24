@@ -263,6 +263,12 @@ function isParameterSweepRun(value: unknown): boolean {
     if (entry.sourceParameter !== undefined && (!(['pulse.initial', 'pulse.high', 'pulse.delay', 'pulse.rise', 'pulse.fall', 'pulse.width', 'pulse.period', 'pwl.scale', 'sine.offset', 'sine.amplitude', 'sine.frequency', 'sine.delay', 'sine.damping', 'sine.phase', 'exp.initial', 'exp.pulsed', 'exp.riseDelay', 'exp.riseTau', 'exp.fallDelay', 'exp.fallTau', 'sffm.offset', 'sffm.amplitude', 'sffm.carrierFrequency', 'sffm.modulationIndex', 'sffm.signalFrequency'].includes(String(entry.sourceParameter)) || /^pwl\.point\.(?:[1-9]|[12]\d|3[0-2])$/.test(String(entry.sourceParameter))) || hasModelTarget || hasGlobalParameter)) return false
     if (hasModelTarget && (typeof entry.parameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter)
       || typeof entry.model !== 'string' || !isValidSpiceModelName(entry.model, true))) return false
+    if (entry.altermodParameters !== undefined) {
+      const modelParameters = entry.altermodParameters
+      if (!hasModelTarget || hasInstanceParameter || !['VON', 'VOFF', 'RON', 'ROFF'].includes(String(entry.parameter).toUpperCase()) || !isRecord(modelParameters)) return false
+      const parameterNames = Object.keys(modelParameters).sort()
+      if (parameterNames.join(',') !== 'ROFF,RON,VH,VT' || parameterNames.some((name) => typeof modelParameters[name] !== 'string' || !Number.isFinite(Number(modelParameters[name])))) return false
+    }
     if (hasInstanceParameter && (!hasModelTarget || typeof entry.parameter !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.parameter) || hasGlobalParameter || entry.sourceParameter !== undefined)) return false
     if (entry.pulseHigh !== undefined && (typeof entry.pulseHigh !== 'boolean' || (entry.pulseHigh && (hasModelTarget || hasGlobalParameter)))) return false
     if (entry.pwlScale !== undefined && (typeof entry.pwlScale !== 'boolean' || (entry.pwlScale && (hasModelTarget || hasGlobalParameter)))) return false
