@@ -6483,7 +6483,7 @@ test('imported device model inspector shows and searches unparsed source assignm
       '.MODEL DOVERRIDE AKO:DBASE D(N=2)',
       '.PARAM branch=0',
       '.IF (branch == 0)',
-      '.MODEL DCOND D(IS=1n N=2)',
+      '.MODEL DCOND D(IS=1n N=2 ONLY=7)',
       '.ELSE',
       '.MODEL DCOND D(IS=10n N={vendor_shape(3)})',
       '.ENDIF',
@@ -6508,12 +6508,15 @@ test('imported device model inspector shows and searches unparsed source assignm
   await overridingDetails.click()
   await expect(page.getByLabel('Unparsed model assignments')).toHaveCount(0)
   await page.getByLabel('Device model for D1').selectOption('DCOND')
-  const conditionalDetails = page.getByText('DCOND · 1 model parameters · 1 unparsed', { exact: true })
+  const conditionalDetails = page.getByText('DCOND · 1 model parameters · 1 branch-only · 1 unparsed', { exact: true })
   await expect(conditionalDetails).toBeVisible()
   const conditionalDisclosure = conditionalDetails.locator('xpath=..')
   if (!(await conditionalDisclosure.evaluate((element) => (element as HTMLDetailsElement).open))) await conditionalDetails.click()
   await expect(page.getByLabel('IS conditional defaults')).toContainText('Conditional default at line 6: 1n')
   await expect(page.getByLabel('IS conditional defaults')).toContainText('Conditional default at line 8: 10n')
+  const branchOnly = page.getByLabel('Branch-only model parameters')
+  await expect(branchOnly).toContainText('ONLY')
+  await expect(branchOnly).toContainText('line 6: 7')
   const conditionalSearch = page.getByRole('searchbox', { name: 'Search parameters for DCOND' })
   await conditionalSearch.fill('vendor_shape')
   const conditionalAssignment = page.getByLabel('Unparsed model assignments')

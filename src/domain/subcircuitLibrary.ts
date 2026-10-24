@@ -1,12 +1,13 @@
 export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; conditionalDefaultValues?: { sourceLine: number; defaultValue: string }[]; defaultIsExpression?: boolean }
 export type ConditionalModelParameterValue = { sourceLine: number; sourceValue: string; parsed: boolean }
 export type UnparsedModelParameter = { name: string; sourceValue: string; conditionalValues?: ConditionalModelParameterValue[] }
+export type ConditionalOnlyModelParameter = { name: string; conditionalValues: { sourceLine: number; sourceValue: string }[] }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelConditionFrame = { id: number; branch: number; signature?: string; environmentIndependent?: boolean }
 export type ConditionalModelVariant = { model: SpiceModelDefinition; conditionPath: ModelConditionFrame[] }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
-export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; unparsedParameters?: UnparsedModelParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; conditionalPath?: ModelConditionFrame[]; conditionalVariants?: ConditionalModelVariant[]; scope?: string; conditional?: boolean; startLine: number; endLine: number }
+export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; unparsedParameters?: UnparsedModelParameter[]; conditionalOnlyParameters?: ConditionalOnlyModelParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; conditionalPath?: ModelConditionFrame[]; conditionalVariants?: ConditionalModelVariant[]; scope?: string; conditional?: boolean; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
 export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[]; topLevelParameterRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
@@ -698,12 +699,19 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
     for (const parameter of unparsedParameters) if (!parameterNames.has(parameter.name.toLowerCase())) parameterNames.set(parameter.name.toLowerCase(), parameter.name)
   }
   const unparsedConditionalParameters: UnparsedModelParameter[] = []
+  const conditionalOnlyParameters: ConditionalOnlyModelParameter[] = []
   for (const [name, displayName] of parameterNames) {
     const values = previous.assignmentVariants.flatMap(({ model: variant, parameters, unparsedParameters }) => {
       const parsed = parameters.find((parameter) => parameter.name.toLowerCase() === name)
       if (parsed) return [{ sourceLine: variant.startLine, sourceValue: parsed.defaultIsExpression ? `{${parsed.defaultValue}}` : parsed.defaultValue, parsed: true }]
       const sourceOnly = unparsedParameters.find((parameter) => parameter.name.toLowerCase() === name)
       return sourceOnly ? [{ sourceLine: variant.startLine, sourceValue: sourceOnly.sourceValue, parsed: false }] : []
+    })
+    const parsedValues = values.filter((value) => value.parsed)
+    const isMissingInBranch = values.length < previous.assignmentVariants.length
+    if (parsedValues.length && isMissingInBranch) conditionalOnlyParameters.push({
+      name: displayName,
+      conditionalValues: parsedValues.map(({ sourceLine, sourceValue }) => ({ sourceLine, sourceValue })),
     })
     if (!values.some((value) => !value.parsed)) continue
     unparsedConditionalParameters.push({
@@ -714,6 +722,8 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
   }
   if (unparsedConditionalParameters.length) previous.model.unparsedParameters = unparsedConditionalParameters
   else delete previous.model.unparsedParameters
+  if (conditionalOnlyParameters.length) previous.model.conditionalOnlyParameters = conditionalOnlyParameters
+  else delete previous.model.conditionalOnlyParameters
   // A model used in mutually exclusive branches is still one selectable card.
   // Only expose parameters that exist in every variant so parameter stepping
   // cannot offer a setting absent from the active ngspice model.

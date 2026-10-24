@@ -760,6 +760,20 @@ test('exposes source lines and values for parsed conditional model defaults', ()
   assert.equal(parsed.models[0].parameters.find(({ name }) => name === 'N').conditionalDefaultValues, undefined)
 })
 
+test('retains parsed model parameters that are present in only some conditional branches', () => {
+  const parsed = parseSubcircuitLibrary([
+    '.IF (branch == 0)',
+    '.MODEL DCOND D(IS=1n N=2)',
+    '.ELSE',
+    '.MODEL DCOND D(IS=1n)',
+    '.ENDIF',
+  ].join('\n'))
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: '1n' }])
+  assert.deepEqual(parsed.models[0].conditionalOnlyParameters, [{
+    name: 'N', conditionalValues: [{ sourceLine: 2, sourceValue: '2' }],
+  }])
+})
+
 test('accepts equivalent R and RES aliases across conditional resistor model variants', () => {
   const parsed = parseSubcircuitLibrary([
     'Conditional resistor aliases',
