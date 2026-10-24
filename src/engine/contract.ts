@@ -91,6 +91,13 @@ function isNgspiceFourierAnalysis(value: unknown): value is NgspiceFourierAnalys
     && (value.sweep === undefined || (isRecord(value.sweep) && typeof value.sweep.label === 'string' && Number.isInteger(value.sweep.index) && Number(value.sweep.index) >= 0))
 }
 
+function isNgspiceFourierReports(value: unknown): value is NgspiceFourierAnalysis[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 10 || !value.every(isNgspiceFourierAnalysis)) return false
+  return value.every((report, index) => report.sweep === undefined
+    ? value.length === 1
+    : report.sweep.index === index && report.sweep.label.length > 0)
+}
+
 function isNoiseSummary(value: unknown): value is NoiseSummary {
   return isRecord(value) && typeof value.outputRms === 'number' && Number.isFinite(value.outputRms) && value.outputRms >= 0
     && typeof value.inputRms === 'number' && Number.isFinite(value.inputRms) && value.inputRms >= 0
@@ -366,7 +373,7 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
       || !Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)
       || !['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))
       || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)
-      || (result.ngspiceFourier !== undefined && (!Array.isArray(result.ngspiceFourier) || result.ngspiceFourier.length < 1 || result.ngspiceFourier.length > 10 || !result.ngspiceFourier.every(isNgspiceFourierAnalysis)))
+      || (result.ngspiceFourier !== undefined && !isNgspiceFourierReports(result.ngspiceFourier))
       || (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary)))) return false
     const validatedVectors = new WeakSet<Float64Array>()
     const validatedAxes = new WeakSet<Float64Array>()
@@ -413,7 +420,7 @@ export function engineResponseIssue(value: unknown): string {
     if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
     if (!['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))) return 'analysis type is invalid'
     if (!Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return 'measurement results are malformed'
-    if (result.ngspiceFourier !== undefined && (!Array.isArray(result.ngspiceFourier) || result.ngspiceFourier.length < 1 || result.ngspiceFourier.length > 10 || !result.ngspiceFourier.every(isNgspiceFourierAnalysis))) return 'ngspice Fourier results are malformed'
+    if (result.ngspiceFourier !== undefined && !isNgspiceFourierReports(result.ngspiceFourier)) return 'ngspice Fourier results are malformed'
     if (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary))) return 'integrated noise results are malformed'
     return 'result message is incomplete'
   }
