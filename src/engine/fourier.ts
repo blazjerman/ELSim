@@ -11,6 +11,9 @@ export type TransientSpectrum = {
 
 export type SpectrumPeak = { bin: number; frequency: number; peakAmplitude: number }
 
+export type HarmonicComponent = { order: number; frequency: number; peakAmplitude: number; phaseDegrees: number }
+export type HarmonicAnalysis = { fundamentalFrequency: number; dc: number; components: HarmonicComponent[]; thdPercent: number }
+
 type TransientVector = { axis: Float64Array; values: Float64Array }
 
 function isPowerOfTwo(value: number): boolean {
@@ -29,6 +32,57 @@ function sampleAt(axis: Float64Array, values: Float64Array, time: number): numbe
   const span = axis[low] - axis[before]
   const fraction = span > 0 ? (time - axis[before]) / span : 0
   return values[before] + (values[low] - values[before]) * fraction
+}
+
+/**
+ * Estimate the DC value and first ten harmonic components over the final
+ * fundamental period in a selected transient interval. This is ELSim
+ * post-processing of ngspice samples, not ngspice's native `.four` command.
+ */
+export function calculateTransientHarmonics(trace: TransientVector, fundamentalFrequency: number, timeRange?: { start: number; end: number }): HarmonicAnalysis {
+  const { axis, values } = trace
+  if (!(axis instanceof Float64Array) || !(values instanceof Float64Array) || axis.length !== values.length || axis.length < 2) {
+    throw new Error('Harmonic analysis needs transient samples on one time axis.')
+  }
+  if (!Number.isFinite(fundamentalFrequency) || fundamentalFrequency <= 0) throw new Error('Enter a positive finite fundamental frequency.')
+  const start = timeRange?.start ?? axis[0]
+  const end = timeRange?.end ?? axis[axis.length - 1]
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < axis[0] || end > axis.at(-1)! || end <= start) {
+    throw new Error('Harmonic time range must be inside the trace and have positive duration.')
+  }
+  const period = 1 / fundamentalFrequency
+  const analysisStart = end - period
+  if (analysisStart < start) throw new Error('The selected time range must include at least one full fundamental period.')
+  const samples = 4096
+  let dc = 0
+  const valuesOnGrid = new Float64Array(samples)
+  for (let index = 0; index < samples; index += 1) {
+    const time = analysisStart + period * index / samples
+    const value = sampleAt(axis, values, time)
+    if (!Number.isFinite(value)) throw new Error('Harmonic analysis needs finite transient samples.')
+    valuesOnGrid[index] = value
+    dc += value
+  }
+  dc /= samples
+  const components: HarmonicComponent[] = []
+  let harmonicPower = 0
+  for (let order = 1; order <= 10; order += 1) {
+    let real = 0, imaginary = 0
+    for (let index = 0; index < samples; index += 1) {
+      const angle = 2 * Math.PI * order * index / samples
+      const centered = valuesOnGrid[index] - dc
+      real += centered * Math.cos(angle)
+      imaginary -= centered * Math.sin(angle)
+    }
+    real *= 2 / samples
+    imaginary *= 2 / samples
+    const peakAmplitude = Math.hypot(real, imaginary)
+    const phaseDegrees = Math.atan2(imaginary, real) * 180 / Math.PI
+    components.push({ order, frequency: order * fundamentalFrequency, peakAmplitude, phaseDegrees })
+    if (order > 1) harmonicPower += peakAmplitude * peakAmplitude
+  }
+  const fundamentalAmplitude = components[0].peakAmplitude
+  return { fundamentalFrequency, dc, components, thdPercent: fundamentalAmplitude > 0 ? Math.sqrt(harmonicPower) / fundamentalAmplitude * 100 : 0 }
 }
 
 function fft(real: Float64Array, imaginary: Float64Array): void {

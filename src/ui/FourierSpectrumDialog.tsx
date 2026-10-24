@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { X } from 'lucide-react'
-import { calculateTransientSpectrum, interpolateSpectrumPeak } from '../engine/fourier'
+import { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak } from '../engine/fourier'
 import type { SpectrumWindow } from '../engine/fourier'
 import type { Trace } from '../engine/contract'
 import { formatTime } from './formatTime'
@@ -37,6 +37,7 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
   const [end, setEnd] = useState(initialRange.end)
   const [windowFunction, setWindowFunction] = useState<SpectrumWindow>('hann')
   const [display, setDisplay] = useState<SpectrumDisplay>('magnitude')
+  const [fundamentalFrequency, setFundamentalFrequency] = useState('')
   const [cursorA, setCursorA] = useState<number | null>(null)
   const [cursorB, setCursorB] = useState<number | null>(null)
   const [activeCursor, setActiveCursor] = useState<'A' | 'B'>('A')
@@ -75,6 +76,14 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
     }
     return { bins, firstFrequency, lastFrequency, minimum, maximum, left, right, top, bottom, x, y, points, values, peak, frequencyTicks, valueTicks }
   }, [spectrum, display])
+  const harmonicCalculation = useMemo(() => {
+    if (!trace || !fundamentalFrequency.trim()) return { result: null, error: null }
+    try {
+      return { result: calculateTransientHarmonics(trace, Number(fundamentalFrequency), { start, end }), error: null }
+    } catch (error) {
+      return { result: null, error: error instanceof Error ? error.message : 'Could not calculate harmonics.' }
+    }
+  }, [trace, fundamentalFrequency, start, end])
   const cursorBinA = useMemo(() => {
     if (!spectrum) return 0
     return nearestFrequencyBin(spectrum, cursorA ?? plot?.peak.frequency ?? spectrum.frequencies[1])
@@ -83,7 +92,10 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
   useEffect(() => {
     if (!spectrum) return
     const peak = interpolateSpectrumPeak(spectrum)
-    if (peak) { setCursorA(peak.frequency); setCursorB(null); setActiveCursor('A') }
+    if (peak) {
+      setCursorA(peak.frequency); setCursorB(null); setActiveCursor('A')
+      setFundamentalFrequency((current) => current || String(Number(peak.frequency.toPrecision(6))))
+    }
   }, [spectrum])
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
@@ -148,6 +160,16 @@ export default function FourierSpectrumDialog({ traces, initialRange, onClose }:
           <text x={(plot.left + plot.right) / 2} y="340" textAnchor="middle" className="plot-tick">{display === 'magnitude' ? `Magnitude (dB${trace.unit}, logarithmic frequency)` : 'Phase (degrees, wrapped; relative to window start)'}</text>
         </svg>
         <small className="field-hint">{display === 'magnitude' ? `Magnitude is peak amplitude relative to 1 ${trace.unit} (dB${trace.unit}).` : 'Phase is wrapped from −180° to +180° and referenced to the selected time window start; it is not ngspice AC phase.'} The finite time window limits frequency resolution; this display is a derived FFT, not ngspice’s `.four` harmonic table.</small>
+        <details className="harmonic-analysis" open>
+          <summary>Harmonic amplitudes and THD</summary>
+          <p>Estimates the DC component and first ten harmonics from the final complete cycle in the selected time interval. The initial frequency comes from the strongest nonzero FFT peak; edit it if that peak is a harmonic. ELSim calculates this from solved ngspice samples; it does not invoke ngspice’s native <code>.four</code> command. Phase is referenced to the start of the analyzed cycle.</p>
+          <label className="field-label">Fundamental frequency (Hz)<input aria-label="Harmonic fundamental frequency in hertz" type="number" min="0" step="any" value={fundamentalFrequency} onChange={(event) => setFundamentalFrequency(event.target.value)}/></label>
+          {harmonicCalculation.error && <p className="field-error" role="alert">{harmonicCalculation.error}</p>}
+          {harmonicCalculation.result && <>
+            <div className="spectrum-summary"><strong>THD: {harmonicCalculation.result.thdPercent.toPrecision(4)}%</strong><span>DC: {harmonicCalculation.result.dc.toPrecision(5)} {trace.unit}</span><span>Analyzed final cycle: {formatTime(end - 1 / harmonicCalculation.result.fundamentalFrequency, trace.axis.at(-1) ?? end)} to {formatTime(end, trace.axis.at(-1) ?? end)}</span></div>
+            <div className="harmonic-table-wrap"><table className="harmonic-table"><thead><tr><th>Harmonic</th><th>Frequency</th><th>Peak amplitude</th><th>Relative to fundamental</th><th>Phase</th></tr></thead><tbody>{harmonicCalculation.result.components.map((component) => <tr key={component.order}><th>{component.order === 1 ? 'Fundamental' : `H${component.order}`}</th><td>{frequencyLabel(component.frequency)}</td><td>{component.peakAmplitude.toPrecision(5)} {trace.unit}</td><td>{harmonicCalculation.result!.components[0].peakAmplitude > 0 ? `${(component.peakAmplitude / harmonicCalculation.result!.components[0].peakAmplitude * 100).toPrecision(4)}%` : '—'}</td><td>{component.phaseDegrees.toFixed(2)}°</td></tr>)}</tbody></table></div>
+          </>}
+        </details>
       </>}
       <div className="modal-footer"><span>{spectrum ? 'Single-sided spectrum' : 'FFT unavailable'}</span><button className="primary-small" onClick={onClose}>Done</button></div>
     </section>

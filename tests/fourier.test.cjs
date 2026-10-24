@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { calculateTransientSpectrum, interpolateSpectrumPeak } = require(path.join(build, 'engine/fourier.js'))
+const { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak } = require(path.join(build, 'engine/fourier.js'))
 
 function strongestNonzeroBin(spectrum) {
   let strongest = 1
@@ -121,4 +121,30 @@ test('transient FFT rejects short, malformed, and non-power-of-two requests', ()
   axis[20] = axis[19]
   assert.throws(() => calculateTransientSpectrum({ axis, values }), /strictly increasing/)
   assert.throws(() => calculateTransientSpectrum({ axis: Float64Array.from({ length: 64 }, (_, index) => index), values: new Float64Array(64) }, 100), /power of two/)
+})
+
+test('transient harmonic analysis reports DC, harmonic amplitudes, phase, and THD from the final cycle', () => {
+  const count = 20001
+  const axis = new Float64Array(count), values = new Float64Array(count)
+  for (let index = 0; index < count; index += 1) {
+    const time = index / 100000
+    axis[index] = time
+    values[index] = 1.5 + 3 * Math.cos(2 * Math.PI * 50 * time) + 0.6 * Math.sin(2 * Math.PI * 150 * time)
+  }
+  const result = calculateTransientHarmonics({ axis, values }, 50, { start: 0.06, end: 0.1 })
+  assert.ok(Math.abs(result.dc - 1.5) < 1e-5)
+  assert.equal(result.components.length, 10)
+  assert.ok(Math.abs(result.components[0].peakAmplitude - 3) < 1e-5)
+  assert.ok(Math.abs(result.components[0].phaseDegrees) < 1e-4)
+  assert.ok(Math.abs(result.components[2].peakAmplitude - 0.6) < 1e-5)
+  assert.ok(Math.abs(result.thdPercent - 20) < 1e-3)
+  assert.equal(result.components[9].frequency, 500)
+})
+
+test('transient harmonic analysis rejects invalid frequencies and intervals shorter than a cycle', () => {
+  const axis = Float64Array.from({ length: 100 }, (_, index) => index / 1000)
+  const values = Float64Array.from(axis, (time) => Math.sin(2 * Math.PI * 50 * time))
+  assert.throws(() => calculateTransientHarmonics({ axis, values }, 0), /positive finite fundamental/)
+  assert.throws(() => calculateTransientHarmonics({ axis, values }, 50, { start: 0.05, end: 0.06 }), /at least one full fundamental period/)
+  assert.throws(() => calculateTransientHarmonics({ axis, values }, 50, { start: -1, end: 0.06 }), /inside the trace/)
 })
