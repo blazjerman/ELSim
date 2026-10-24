@@ -128,6 +128,29 @@ test('duplicate imported models used inside a placed IC stop simulation', () => 
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-amp-2' && /XAMP2 uses ambiguous imported device model D_SHARED/.test(diagnostic.message)), true)
 })
 
+test('a placed IC cannot call an imported model with an ambiguous global function', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'root-function-model', filename: 'root-function-model.lib', content: '.MODEL DLOCAL D(IS={SCALE!(1)*1e-14} N=1)\n.SUBCKT FUNCTION_STAGE IN OUT\nD1 IN OUT DLOCAL\n.ENDS FUNCTION_STAGE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'one-argument-function', filename: 'helpers.lib', content: '.FUNC SCALE!(x$) {x$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'two-argument-function', filename: 'unrelated.lib', content: '.FUNC SCALE!(x$, y$) {x$+y$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported model DLOCAL, whose parameter calls ambiguous global \.FUNC SCALE! \(helpers\.lib:1, unrelated\.lib:1\)/i.test(diagnostic.message)), true)
+})
+
+test('unused imported models that call duplicate global functions do not block simulation', () => {
+  const project = createStarterProject()
+  project.modelAssets = [
+    { id: 'unused-model', filename: 'unused.lib', content: '.MODEL DLOCAL D(IS={SCALE!(1)*1e-14} N=1)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'one-argument-function', filename: 'helpers.lib', content: '.FUNC SCALE!(x$) {x$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'two-argument-function', filename: 'unrelated.lib', content: '.FUNC SCALE!(x$, y$) {x$+y$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.deepEqual(artifact.diagnostics, [])
+})
+
 test('a placed imported IC with duplicate subcircuit definitions cannot be simulated', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'x-amp', kind: 'subcircuit', ref: 'XAMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], value: 'AMP', x: 800, y: 600, rotation: 0 })

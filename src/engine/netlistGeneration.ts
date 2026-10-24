@@ -248,13 +248,30 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   const parsedModelAssets = modelAssets.map((asset) => parseSubcircuitLibrary(asset.content, asset.selectedSections, availableModelFunctions))
   const parsedModelLibraryEntries = modelAssets.map((asset, index) => ({ asset, parsed: parsedModelAssets[index] }))
   const globalDeviceModelDefinitions = new Map<string, { filename: string; sourceLine: number }[]>()
+  const globalDeviceModelsByName = new Map<string, typeof parsedModelAssets[number]['models'][number][]>()
   for (const { asset, parsed } of parsedModelLibraryEntries) for (const model of parsed.models) {
     if (model.scope) continue
     const key = model.name.toLowerCase()
     const definitions = globalDeviceModelDefinitions.get(key) ?? []
     definitions.push({ filename: asset.filename, sourceLine: model.startLine })
     globalDeviceModelDefinitions.set(key, definitions)
+    const models = globalDeviceModelsByName.get(key) ?? []
+    models.push(model)
+    globalDeviceModelsByName.set(key, models)
   }
+  const globalFunctionDefinitions = new Map<string, { filename: string; sourceLine: number }[]>()
+  for (const { asset, parsed } of parsedModelLibraryEntries) for (const definition of parsed.functions) {
+    const key = definition.name.toLowerCase()
+    const definitions = globalFunctionDefinitions.get(key) ?? []
+    definitions.push({ filename: asset.filename, sourceLine: definition.sourceLine })
+    globalFunctionDefinitions.set(key, definitions)
+  }
+  const modelCallsAmbiguousGlobalFunction = (model: typeof parsedModelAssets[number]['models'][number]) => [...globalFunctionDefinitions].some(([functionName, definitions]) => {
+    if (definitions.length < 2) return false
+    const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const callPattern = new RegExp(`(?:^|[^A-Za-z0-9_.$])${escapedName}\\s*\\(`, 'i')
+    return model.parameters.some((parameter) => callPattern.test(parameter.defaultValue))
+  })
   const importedSubcircuitsByName = new Map<string, { assetId: string; definition: ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number] }[]>()
   for (const { asset, parsed } of parsedModelLibraryEntries) for (const definition of parsed.subcircuits) {
     const key = definition.name.toLowerCase()
@@ -276,6 +293,28 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     })
   }
   const reportedAmbiguousModels = new Set<string>()
+  const reportedAmbiguousFunctions = new Set<string>()
+  const reportAmbiguousModelFunctions = (part: Part, modelName: string) => {
+    const models = globalDeviceModelsByName.get(modelName.toLowerCase()) ?? []
+    for (const model of models) {
+      for (const parameter of model.parameters) {
+        for (const [functionName, definitions] of globalFunctionDefinitions) {
+          if (definitions.length < 2) continue
+          const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          if (!new RegExp(`(?:^|[^A-Za-z0-9_.$])${escapedName}\\s*\\(`, 'i').test(parameter.defaultValue)) continue
+          const reportKey = `${part.id}:${modelName.toLowerCase()}:${functionName}`
+          if (reportedAmbiguousFunctions.has(reportKey)) continue
+          reportedAmbiguousFunctions.add(reportKey)
+          diagnostics.push({
+            severity: 'error',
+            message: `${part.ref} uses imported model ${modelName}, whose parameter calls ambiguous global .FUNC ${functionName} (${definitions.map(({ filename, sourceLine }) => `${filename}:${sourceLine}`).join(', ')}). ngspice does not overload global .FUNC names; rename or remove one definition before simulating.`,
+            sourceId: part.id,
+            line: 1,
+          })
+        }
+      }
+    }
+  }
   const reportAmbiguousSubcircuit = (part: Part, modelName: string) => {
     const definitions = importedSubcircuitsByName.get(modelName.toLowerCase())
     if (!definitions || definitions.length < 2) return
@@ -294,13 +333,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     })
   }
   const reportedAmbiguousSubcircuits = new Set<string>()
-  const ambiguousSubcircuitDependencyCache = new Map<string, { deviceModels: string[]; subcircuits: string[] }>()
+  const ambiguousSubcircuitDependencyCache = new Map<string, { deviceModels: string[]; subcircuits: string[]; modelsCallingAmbiguousFunctions: string[] }>()
   const ambiguousSubcircuitDependencies = (rootModelName: string) => {
     const rootKey = rootModelName.toLowerCase()
     const cached = ambiguousSubcircuitDependencyCache.get(rootKey)
     if (cached) return cached
     const deviceModels = new Set<string>()
     const subcircuits = new Set<string>()
+    const modelsCallingAmbiguousFunctions = new Set<string>()
     const queue = [...(importedSubcircuitsByName.get(rootKey) ?? [])]
     const visited = new Set<string>()
     while (queue.length) {
@@ -311,23 +351,29 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       for (const dependency of current.definition.dependencies) {
         if (dependency.kind === 'device') {
           if ((globalDeviceModelDefinitions.get(dependency.modelName.toLowerCase())?.length ?? 0) > 1) deviceModels.add(dependency.modelName)
+          const deviceModelsForName = globalDeviceModelsByName.get(dependency.modelName.toLowerCase()) ?? []
+          if (deviceModelsForName.some(modelCallsAmbiguousGlobalFunction)) modelsCallingAmbiguousFunctions.add(dependency.modelName)
         } else {
           if ((importedSubcircuitsByName.get(dependency.modelName.toLowerCase())?.length ?? 0) > 1) subcircuits.add(dependency.modelName)
           queue.push(...(importedSubcircuitsByName.get(dependency.modelName.toLowerCase()) ?? []))
         }
       }
     }
-    const result = { deviceModels: [...deviceModels], subcircuits: [...subcircuits] }
+    const result = { deviceModels: [...deviceModels], subcircuits: [...subcircuits], modelsCallingAmbiguousFunctions: [...modelsCallingAmbiguousFunctions] }
     ambiguousSubcircuitDependencyCache.set(rootKey, result)
     return result
   }
   for (const part of project.parts) {
-    if (part.deviceModel) reportAmbiguousDeviceModel(part, part.deviceModel)
+    if (part.deviceModel) {
+      reportAmbiguousDeviceModel(part, part.deviceModel)
+      reportAmbiguousModelFunctions(part, part.deviceModel)
+    }
     if (part.kind !== 'subcircuit' || !part.modelName || part.sheetId) continue
     reportAmbiguousSubcircuit(part, part.modelName)
     const dependencies = ambiguousSubcircuitDependencies(part.modelName)
     for (const modelName of dependencies.deviceModels) reportAmbiguousDeviceModel(part, modelName)
     for (const modelName of dependencies.subcircuits) reportAmbiguousSubcircuit(part, modelName)
+    for (const modelName of dependencies.modelsCallingAmbiguousFunctions) reportAmbiguousModelFunctions(part, modelName)
   }
   const akoExpansion = expandNgspiceAkoModels(parsedModelLibraryEntries)
   for (const issue of akoExpansion.issues) diagnostics.push({ severity: 'error', message: issue.message, sourceId: `model-file:${issue.assetId}`, assetId: issue.assetId, assetLine: issue.sourceLine, line: issue.sourceLine })
