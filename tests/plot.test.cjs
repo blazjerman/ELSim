@@ -4,7 +4,32 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { complexPlaneScale, complexPlaneTicks, extremaIndices, panComplexPlane, plotPolylinePoints, valueRange, valueRangeAtIndices, zoomComplexPlaneAt } = require(path.join(build, 'engine/plot.js'))
+const { complexPlaneScale, complexPlaneTicks, extremaIndices, panComplexPlane, plotPolylinePoints, sampleUnwrappedPhase, unwrappedPhaseAt, valueRange, valueRangeAtIndices, zoomComplexPlaneAt } = require(path.join(build, 'engine/plot.js'))
+
+test('unwrapped AC phase remains continuous across the ±180° boundary and retains cursor samples', () => {
+  const degrees = [170, 179, -179, -160]
+  const real = Float64Array.from(degrees, (value) => Math.cos(value * Math.PI / 180))
+  const imaginary = Float64Array.from(degrees, (value) => Math.sin(value * Math.PI / 180))
+  const result = sampleUnwrappedPhase(real, imaginary, 0, 3, 20)
+  assert.deepEqual(result.indices, [0, 1, 2, 3])
+  assert.ok(Math.abs(result.values.get(0) - 170) < 1e-10)
+  assert.ok(Math.abs(result.values.get(1) - 179) < 1e-10)
+  assert.ok(Math.abs(result.values.get(2) - 181) < 1e-10)
+  assert.ok(Math.abs(result.values.get(3) - 200) < 1e-10)
+  assert.deepEqual(result.range, [170, 200])
+  const sparse = sampleUnwrappedPhase(real, imaginary, 0, 3, 2)
+  assert.ok(Math.abs(unwrappedPhaseAt(real, imaginary, sparse, 2) - 181) < 1e-10)
+})
+
+test('unwrapped phase sampling keeps memory bounded for large result vectors', () => {
+  const real = new Float64Array(100_000).fill(1)
+  const imaginary = new Float64Array(100_000)
+  const result = sampleUnwrappedPhase(real, imaginary, 0, real.length - 1, 900)
+  assert.ok(result.indices.length <= 902)
+  assert.equal(result.values.size, result.indices.length)
+  assert.deepEqual(result.range, [0, 0])
+  assert.equal(unwrappedPhaseAt(real, imaginary, result, 50_000), 0)
+})
 
 test('complex-plane plot keeps real and imaginary units at the same pixel scale', () => {
   const scale = complexPlaneScale([-100, 0], [-25, 25], 688, 324)

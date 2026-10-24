@@ -6,6 +6,77 @@ const formattedPolylinePoints = new WeakMap<object, WeakMap<object, WeakMap<obje
 export type ComplexPlaneScale = { xExtent: number; yExtent: number; tickStep: number }
 export type ComplexPlaneView = { centerReal: number; centerImaginary: number; zoom: number }
 
+export type UnwrappedPhaseSamples = { indices: number[]; values: Map<number, number>; range: [number, number] | null }
+
+/** Stream an AC phase range once, retaining only plotted extrema and requested cursor samples. */
+export function sampleUnwrappedPhase(real: ArrayLike<number>, imaginary: ArrayLike<number> | undefined, start: number, end: number, maxPoints: number): UnwrappedPhaseSamples {
+  const first = Math.max(0, Math.min(real.length, Math.floor(start)))
+  const last = Math.max(first - 1, Math.min(real.length - 1, Math.floor(end)))
+  if (first > last) return { indices: [], values: new Map(), range: null }
+
+  const count = last - first + 1
+  const buckets = count <= maxPoints ? count : Math.max(1, Math.floor(maxPoints / 2))
+  const extrema = Array.from({ length: buckets }, () => ({ minIndex: -1, maxIndex: -1, min: Infinity, max: -Infinity }))
+  const values = new Map<number, number>()
+  let adjustment = 0, previousWrapped: number | undefined
+  let firstPhase = 0, lastPhase = 0
+
+  for (let index = first; index <= last; index += 1) {
+    const wrapped = Math.atan2(imaginary?.[index] ?? 0, real[index]) * 180 / Math.PI
+    if (previousWrapped !== undefined) {
+      const jump = wrapped - previousWrapped
+      if (jump > 180) adjustment -= 360
+      else if (jump < -180) adjustment += 360
+    }
+    previousWrapped = wrapped
+    const phase = wrapped + adjustment
+    if (index === first) firstPhase = phase
+    if (index === last) lastPhase = phase
+    const bucket = count <= maxPoints ? index - first : Math.min(buckets - 1, Math.floor((index - first) * buckets / count))
+    const item = extrema[bucket]
+    if (phase < item.min) { item.min = phase; item.minIndex = index }
+    if (phase > item.max) { item.max = phase; item.maxIndex = index }
+  }
+
+  const indices = new Set<number>([first, last])
+  let min = Infinity, max = -Infinity
+  for (const item of extrema) {
+    min = Math.min(min, item.min)
+    max = Math.max(max, item.max)
+    if (item.minIndex >= 0) { indices.add(item.minIndex); values.set(item.minIndex, item.min) }
+    if (item.maxIndex >= 0) { indices.add(item.maxIndex); values.set(item.maxIndex, item.max) }
+  }
+  values.set(first, firstPhase)
+  values.set(last, lastPhase)
+  const ordered = [...indices].sort((left, right) => left - right)
+  return { indices: ordered, values, range: Number.isFinite(min) ? [min, max] : null }
+}
+
+/** Read an exact unwrapped phase at a cursor by extending from the nearest sampled point. */
+export function unwrappedPhaseAt(real: ArrayLike<number>, imaginary: ArrayLike<number> | undefined, samples: UnwrappedPhaseSamples, index: number): number {
+  if (samples.indices.length === 0) return Math.atan2(imaginary?.[index] ?? 0, real[index]) * 180 / Math.PI
+  let low = 0, high = samples.indices.length
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    if (samples.indices[middle] <= index) low = middle + 1
+    else high = middle
+  }
+  const sampleIndex = Math.max(0, low - 1)
+  const start = samples.indices[sampleIndex]
+  let phase = samples.values.get(start) ?? Math.atan2(imaginary?.[start] ?? 0, real[start]) * 180 / Math.PI
+  let previousWrapped = Math.atan2(imaginary?.[start] ?? 0, real[start]) * 180 / Math.PI
+  for (let cursor = start + 1; cursor <= index; cursor += 1) {
+    const wrapped = Math.atan2(imaginary?.[cursor] ?? 0, real[cursor]) * 180 / Math.PI
+    const jump = wrapped - previousWrapped
+    let offset = phase - previousWrapped
+    if (jump > 180) offset -= 360
+    else if (jump < -180) offset += 360
+    phase = wrapped + offset
+    previousWrapped = wrapped
+  }
+  return phase
+}
+
 export function zoomComplexPlaneAt(view: ComplexPlaneView, factor: number, anchorX: number, anchorY: number, base: ComplexPlaneScale): ComplexPlaneView {
   if (!Number.isFinite(factor) || factor <= 0) return view
   const nextZoom = Math.max(0.05, Math.min(100, view.zoom / factor))

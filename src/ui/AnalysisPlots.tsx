@@ -2,7 +2,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { PLOT_TRACE_COLORS, type PlotPanel, type PlotRange, type PlotValueRange } from '../domain/project'
-import { complexPlaneScale, complexPlaneTicks, extremaIndices, panComplexPlane, plotPolylinePoints, valueRangeAtIndices, zoomComplexPlaneAt } from '../engine/plot'
+import { complexPlaneScale, complexPlaneTicks, extremaIndices, panComplexPlane, plotPolylinePoints, sampleUnwrappedPhase, unwrappedPhaseAt, valueRangeAtIndices, zoomComplexPlaneAt } from '../engine/plot'
 import type { MeasurementResult, SimulationResult, Trace } from '../engine/contract'
 import type { NgspiceFourierAnalysis } from '../engine/fourier'
 import { getSimulationCursor, setSimulationCursor, useSimulationCursor, useSimulationCursorAnimation, useSimulationCursorWhen } from './simulationCursor'
@@ -650,7 +650,7 @@ function phaseDifference(valueB: number, valueA: number): number {
   return ((valueB - valueA + 180) % 360 + 360) % 360 - 180
 }
 
-function AcCursorReadout({ result, frequencies, first, last, shown, colors, traceIndexById, mode, secondCursorIndex }: {
+function AcCursorReadout({ result, frequencies, first, last, shown, colors, traceIndexById, mode, secondCursorIndex, unwrapPhase, phaseSamplesById }: {
   result: SimulationResult
   frequencies: Float64Array
   first: number
@@ -660,15 +660,23 @@ function AcCursorReadout({ result, frequencies, first, last, shown, colors, trac
   traceIndexById: Map<string, number>
   mode: 'magnitude' | 'phase' | 'noise' | 'sensitivity'
   secondCursorIndex: number | null
+  unwrapPhase: boolean
+  phaseSamplesById: Map<string, ReturnType<typeof sampleUnwrappedPhase>>
 }) {
   const cursorValue = useAnalysisCursor(result)
   const cursorIndex = cursorValue === null || frequencies.length === 0 ? null : nearestAxisIndex(frequencies, cursorValue, 0, frequencies.length - 1)
   const hasA = cursorIndex !== null && cursorIndex >= first && cursorIndex <= last
   const hasB = secondCursorIndex !== null && secondCursorIndex >= first && secondCursorIndex <= last
   const unit = mode === 'noise' || mode === 'sensitivity' ? shown[0]?.unit ?? '' : mode === 'magnitude' ? 'dB' : '°'
-  return <div className="cursor-readout" aria-live="polite" aria-atomic="true">{hasA && <><span className="sr-only">Frequency A {frequencies[cursorIndex].toPrecision(5)} hertz. </span>{shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} A = {acTraceValue(trace, cursorIndex, mode).toPrecision(5)} {mode === 'noise' ? trace.unit : unit}</span>)}</>}{hasA && hasB && <><span className="cursor-delta-time">Δf = {formatEngineeringTick(frequencies[secondCursorIndex] - frequencies[cursorIndex], 'Hz')}</span>{shown.map((trace) => {
-    const valueA = acTraceValue(trace, cursorIndex, mode), valueB = acTraceValue(trace, secondCursorIndex, mode)
-    const delta = mode === 'phase' ? phaseDifference(valueB, valueA) : valueB - valueA
+  const valueFor = (trace: Trace, index: number) => {
+    const samples = phaseSamplesById.get(trace.id)
+    return unwrapPhase && mode === 'phase' && samples
+      ? unwrappedPhaseAt(trace.values, trace.imaginaryValues, samples, index)
+      : acTraceValue(trace, index, mode)
+  }
+  return <div className="cursor-readout" aria-live="polite" aria-atomic="true">{hasA && <><span className="sr-only">Frequency A {frequencies[cursorIndex].toPrecision(5)} hertz. </span>{shown.map((trace) => <span key={trace.id} style={{ color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length] }}>{trace.label} A = {valueFor(trace, cursorIndex).toPrecision(5)} {mode === 'noise' ? trace.unit : unit}</span>)}</>}{hasA && hasB && <><span className="cursor-delta-time">Δf = {formatEngineeringTick(frequencies[secondCursorIndex] - frequencies[cursorIndex], 'Hz')}</span>{shown.map((trace) => {
+    const valueA = valueFor(trace, cursorIndex), valueB = valueFor(trace, secondCursorIndex)
+    const delta = mode === 'phase' && !unwrapPhase ? phaseDifference(valueB, valueA) : valueB - valueA
     const traceUnit = mode === 'noise' || mode === 'sensitivity' ? trace.unit : unit
     const color = colors[(traceIndexById.get(trace.id) ?? 0) % colors.length]
     return <span key={`delta-${trace.id}`} style={{ color }}>{trace.label} B = {valueB.toPrecision(5)} {traceUnit} · Δ{trace.label} = {delta.toPrecision(5)} {traceUnit}</span>
@@ -802,6 +810,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const traceIndexById = useTraceIndexById(traces)
   const navigation = usePlotWindow(range, onRangeChange)
   const [acMode, setAcMode] = useState<'magnitude' | 'phase'>('magnitude')
+  const [unwrapPhase, setUnwrapPhase] = useState(false)
   const [activeCursor, setActiveCursor] = useState<'A' | 'B'>('A')
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState('')
   // The same component renders AC and noise results. Derive the visible mode
@@ -817,20 +826,29 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, frequencies.length - 1)))
   const minFrequency = frequencies[first] || 1, maxFrequency = frequencies[Math.min(last, frequencies.length - 1)] || 10
   const secondCursorIndex = secondCursorValue === undefined ? null : nearestAxisIndex(frequencies, secondCursorValue, 0, frequencies.length - 1)
+  const phaseSamplesById = useMemo(() => {
+    const samples = new Map<string, ReturnType<typeof sampleUnwrappedPhase>>()
+    if (mode !== 'phase' || !unwrapPhase) return samples
+    for (const trace of shown) {
+      samples.set(trace.id, sampleUnwrappedPhase(trace.values, trace.imaginaryValues, first, Math.min(last, trace.values.length - 1), 900))
+    }
+    return samples
+  }, [mode, unwrapPhase, shown, first, last])
   const valueFor = (trace: Trace, index: number) => {
     const real = trace.values[index]
     const imaginary = trace.imaginaryValues?.[index] ?? 0
+    const phaseSamples = phaseSamplesById.get(trace.id)
+    if (mode === 'phase' && unwrapPhase && phaseSamples) return unwrappedPhaseAt(trace.values, trace.imaginaryValues, phaseSamples, index)
     return mode === 'noise' ? real : mode === 'sensitivity' ? Math.hypot(real, imaginary) : mode === 'magnitude' ? 20 * Math.log10(Math.hypot(real, imaginary) || Number.MIN_VALUE) : Math.atan2(imaginary, real) * 180 / Math.PI
   }
   const sampledTraceById = useMemo(() => {
     const sampled = new Map<string, { indices: number[]; dataRange: [number, number] | null; noiseRange: [number, number] | null }>()
-    for (const id of selectedIds) {
-      const index = traceIndexById.get(id)
-      if (index === undefined) continue
-      const trace = traces[index]
-      const indices = extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, sampleIndex) => valueFor(trace, sampleIndex), `ac:${trace.id}:${mode}`)
+    for (const trace of shown) {
+      const phaseSamples = phaseSamplesById.get(trace.id)
+      const indices = phaseSamples?.indices ?? extremaIndices(trace.values, first, Math.min(last, trace.values.length - 1), 900, (_value, sampleIndex) => valueFor(trace, sampleIndex), `ac:${trace.id}:${mode}`)
       let dataRange: [number, number] | null = null
-      if (mode !== 'noise') {
+      if (phaseSamples) dataRange = phaseSamples.range
+      else if (mode !== 'noise') {
         let min = Infinity, max = -Infinity
         for (const sampleIndex of indices) {
           const value = valueFor(trace, sampleIndex)
@@ -842,7 +860,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       sampled.set(trace.id, { indices, dataRange, noiseRange })
     }
     return sampled
-  }, [selectedIds, traceIndexById, traces, first, last, mode])
+  }, [shown, traceIndexById, first, last, mode, phaseSamplesById])
   const sampledIndicesById = useMemo(() => {
     const indicesById = new Map<string, number[]>()
     for (const trace of shown) {
@@ -860,8 +878,8 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     }
     if (min === Infinity) { min = mode === 'magnitude' ? -60 : mode === 'phase' ? -180 : 0; max = mode === 'magnitude' ? 20 : mode === 'phase' ? 180 : 1 }
     if (min === max) { min -= 1; max += 1 }
-    return [Math.min(0, min), Math.max(0, max)] as [number, number]
-  }, [shown, mode, sampledTraceById])
+    return mode === 'phase' && unwrapPhase ? [min, max] as [number, number] : [Math.min(0, min), Math.max(0, max)] as [number, number]
+  }, [shown, mode, unwrapPhase, sampledTraceById])
   const noiseAutoRanges = useMemo(() => {
     const ranges = new Map<string, [number, number]>()
     if (!isNoise) return ranges
@@ -919,7 +937,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const plotPaths = useMemo(() => shown.map((trace) => {
     const indices = sampledIndicesById.get(trace.id) ?? []
     const range = rangeForTrace(trace)
-    const coordinateKey = `log:${trace.id}:${mode}:${minFrequency}:${maxFrequency}:${left}:${right}:${top}:${bottom}:${range.min}:${range.max}`
+    const coordinateKey = `log:${trace.id}:${mode}:${unwrapPhase}:${minFrequency}:${maxFrequency}:${left}:${right}:${top}:${bottom}:${range.min}:${range.max}`
     const points = plotPolylinePoints(trace.axis, trace.values, indices, coordinateKey,
       (frequency) => left + ((Math.log10(frequency) - Math.log10(minFrequency)) / (Math.log10(maxFrequency) - Math.log10(minFrequency) || 1)) * (right - left),
       (_value, index) => bottom - (valueFor(trace, index) - range.min) / (range.max - range.min || 1) * (bottom - top))
@@ -927,13 +945,13 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       ? `${trace.label}, noise density in ${trace.unit}`
       : mode === 'sensitivity' ? `${trace.label}, AC sensitivity magnitude in ${trace.unit}` : `${trace.label}, AC ${mode === 'magnitude' ? 'magnitude in decibels' : 'phase in degrees'}`
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], accessibleName }
-  }), [traces, shown, first, last, minFrequency, maxFrequency, right, bottom, minValue, maxValue, mode, colors, traceIndexById, sampledIndicesById, noiseWindows.ranges])
+  }), [traces, shown, first, last, minFrequency, maxFrequency, right, bottom, minValue, maxValue, mode, unwrapPhase, phaseSamplesById, colors, traceIndexById, sampledIndicesById, noiseWindows.ranges])
   return <div className="waveform-view ac-view">
     <div className="waveform-title"><strong>{isNoise ? 'Noise spectral density' : isSensitivity ? 'AC sensitivity response' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><AcCursorTime result={result} frequencies={frequencies}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={verticalZoom} valuePan={verticalPan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <MeasurementCursorControls label={isNoise ? 'Noise measurement cursors' : 'AC measurement cursors'} active={activeCursor} hasSecond={secondCursorIndex !== null} onSelect={setActiveCursor} onAdd={() => { const existing = getAnalysisCursor(result); const current = existing ?? minFrequency; if (existing === null) setAnalysisCursor(result, current); const currentIndex = Math.max(first, Math.min(last, nearestAxisIndex(frequencies, current, 0, Math.max(0, frequencies.length - 1)))); const quarter = Math.max(1, Math.floor((last - first) / 4)); const nextIndex = currentIndex <= first + (last - first) / 2 ? Math.min(last, currentIndex + quarter) : Math.max(first, currentIndex - quarter); onSecondCursorChange(frequencies[nextIndex] ?? maxFrequency); setActiveCursor('B') }} onRemove={() => { onSecondCursorChange(null); setActiveCursor('A') }}/>
-    <div className="ac-mode">{isNoise ? <span>Noise density · {noiseAxisUnit}</span> : <><button className={mode === 'magnitude' || mode === 'sensitivity' ? 'active' : ''} onClick={() => setAcMode('magnitude')}>{isSensitivity ? 'Magnitude (linear)' : 'Magnitude (dB)'}</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setAcMode('phase')}>Phase (°)</button></>}</div>
+    <div className="ac-mode">{isNoise ? <span>Noise density · {noiseAxisUnit}</span> : <><button className={mode === 'magnitude' || mode === 'sensitivity' ? 'active' : ''} onClick={() => setAcMode('magnitude')}>{isSensitivity ? 'Magnitude (linear)' : 'Magnitude (dB)'}</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setAcMode('phase')}>Phase (°)</button>{mode === 'phase' && <button type="button" className={unwrapPhase ? 'active' : ''} aria-pressed={unwrapPhase} onClick={() => { setUnwrapPhase((value) => !value); updateValueRange(undefined) }}>Unwrap phase</button>}</>}</div>
     {isNoise && result.noiseSummaries?.length ? <div className="noise-summary" aria-label="Integrated noise results">{result.noiseSummaries.map((summary) => <span key={summary.sweep?.index ?? 'single'}>{summary.sweep ? `${summary.sweep.label}: ` : ''}Output RMS {formatEngineeringTick(summary.outputRms, 'V')} · Input-referred RMS {formatEngineeringTick(summary.inputRms, summary.inputUnit)}</span>)}</div> : null}
-    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`${isNoise ? 'Noise density' : `AC ${mode}`} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz. Cursor ${activeCursor} is selected. Use Left and Right arrows to move it, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handleAcCursorKeys} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={handleAcCursorClick}>
+    <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`${isNoise ? 'Noise density' : `AC ${mode}${mode === 'phase' && unwrapPhase ? ', unwrapped' : ''}`} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz. Cursor ${activeCursor} is selected. Use Left and Right arrows to move it, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handleAcCursorKeys} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={handleAcCursorClick}>
       {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value, primaryNoiseUnit)} y2={yFor(value, primaryNoiseUnit)} className="plot-grid"/><text data-value-unit={isNoise ? primaryNoiseUnit : mode === 'sensitivity' ? traces[0]?.unit ?? '' : mode === 'magnitude' ? 'dB' : '°'} x={left - 6} y={yFor(value, primaryNoiseUnit) + 3} textAnchor="end" className="plot-tick">{isNoise || mode === 'sensitivity' ? formatEngineeringTick(value, mode === 'sensitivity' ? traces[0]?.unit ?? '' : primaryNoiseUnit) : `${value.toPrecision(3)} ${mode === 'magnitude' ? 'dB' : '°'}`}</text></g> })}
       {isNoise && visibleNoiseUnits.filter((unit) => unit !== primaryNoiseUnit).flatMap((unit) => {
         const axisRange = noiseWindows.ranges.get(unit)
@@ -948,7 +966,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       <text x={left} y={height - 5} className="plot-tick">{minFrequency.toPrecision(3)} Hz</text><text x={right} y={height - 5} textAnchor="end" className="plot-tick">{maxFrequency.toPrecision(3)} Hz</text>
     </svg>
     <TraceToggles traces={traces} selectedIds={selectedIds} disabledIds={traceVisibility.disabledIdSet} onToggleVisibility={traceVisibility.toggleVisibility} onRemove={traceVisibility.remove} ariaLabel={isNoise ? 'noise result vectors' : 'AC result vectors'} colorFor={colorFor}/>
-    <AcCursorReadout result={result} frequencies={frequencies} first={first} last={last} shown={shown} colors={colors} traceIndexById={traceIndexById} mode={mode} secondCursorIndex={secondCursorIndex}/>
+    <AcCursorReadout result={result} frequencies={frequencies} first={first} last={last} shown={shown} colors={colors} traceIndexById={traceIndexById} mode={mode} secondCursorIndex={secondCursorIndex} unwrapPhase={unwrapPhase} phaseSamplesById={phaseSamplesById}/>
     <span className="sr-only" aria-live="polite" aria-atomic="true">{keyboardAnnouncement}</span>
   </div>
 }
