@@ -116,6 +116,19 @@ test('parses top-level .FUNC signatures for forward-referenced subcircuit defaul
   assert.throws(() => parseSubcircuitLibrary('.FUNC F(x) {x}\n.FUNC f(x, y) {x+y}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /conflicting argument counts/)
 })
 
+test('parses native punctuation in .FUNC names and arguments and accepts their calls in defaults', () => {
+  const parsed = parseSubcircuitLibrary([
+    '.PARAM BASE$=2',
+    '.FUNC twice!(x$) {x$ * 2}',
+    '.SUBCKT USER_GAIN IN OUT PARAMS: GAIN={twice!(BASE$)}',
+    'R1 IN OUT {GAIN}',
+    '.ENDS USER_GAIN',
+  ].join('\n'))
+  assert.deepEqual(parsed.functions.map(({ name, arity }) => ({ name, arity })), [{ name: 'twice!', arity: 1 }])
+  assert.deepEqual(parsed.subcircuits[0].parameters, [{ name: 'GAIN', defaultValue: '{twice!(BASE$)}' }])
+  assert.equal(isSafeSubcircuitParameterValue('{twice!(BASE$)}', new Map([['twice!', 1]])), true)
+})
+
 test('parses ngspice built-in base-10 logarithm in imported model defaults', () => {
   const source = '.SUBCKT LOG_GAIN IN OUT GAIN={log10(100)}\nE1 OUT 0 IN 0 {GAIN}\n.ENDS LOG_GAIN'
   const parsed = parseSubcircuitLibrary(source)
