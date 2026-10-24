@@ -267,6 +267,27 @@ test('SINE and SFFM frequency fields can be swept in hertz', () => {
   assert.match(control, /alterparam ELSIM_SWEEP_SOURCE_V1_SINE_FREQUENCY=2\.00000000e\+3\nalterparam ELSIM_SWEEP_SOURCE_I1_SFFM_SIGNALFREQUENCY=2\.00000000e\+2\nreset\nrun/)
 })
 
+test('discrete passive and waveform sweeps retain exact values and field units', () => {
+  const project = createStarterProject()
+  const sine = project.parts.find((part) => part.ref === 'V1')
+  sine.sourceMode = 'sine'
+  sine.sine = { offset: '0 V', amplitude: '1 V', frequency: '1 kHz', delay: '0', damping: '0', phase: '0' }
+  project.simulation.parameterSweeps = [
+    { component: 'R1', start: '1k', stop: '10k', listValues: ['1k', '3k', '10k'], points: 3 },
+    { component: 'V1', sourceParameter: 'sine.frequency', start: '1 kHz', stop: '10 kHz', listValues: ['1 kHz', '2 kHz', '10 kHz'], points: 3 },
+  ]
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.equal(runs.length, 9)
+  assert.deepEqual(runs.filter((run) => run.values[0].value === '1.00000000e+3').map((run) => Number(run.values[1].value)), [1000, 2000, 10000])
+  assert.match(runs[1].label, /R1=1000 Ω, V1\.sine\.frequency=2000 Hz/)
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /alter R1 3\.00000000e\+3[\s\S]*alterparam ELSIM_SWEEP_SOURCE_V1_SINE_FREQUENCY=2\.00000000e\+3\nreset\nrun/)
+  const malformed = structuredClone(project)
+  malformed.simulation.parameterSweeps[1].listValues = ['1 kHz', 'invalid', '10 kHz']
+  assert.throws(() => validateProject(malformed), /discrete sweep values must be numeric SPICE scalars/)
+})
+
 test('pulse timing, SINE phase, EXP tau, and SFFM modulation fields are swept independently', () => {
   const project = createStarterProject()
   const pulse = project.parts.find((part) => part.ref === 'V1')

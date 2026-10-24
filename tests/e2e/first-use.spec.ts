@@ -12388,7 +12388,7 @@ test('three-parameter sweep runs all eight bounded cases in the browser engine',
     source.value = '5 V'
     project.sheets[0] = { ...project.sheets[0], parts: project.parts }
     project.simulation.parameterSweeps = [
-      { component: 'R1', start: '1 kΩ', stop: '2 kΩ', points: 2 },
+      { component: 'R1', start: '1 kΩ', stop: '2 kΩ', listValues: ['1 kΩ', '2 kΩ'], points: 2 },
       { component: 'C1', start: '10 µF', stop: '20 µF', points: 2 },
       { component: source.ref, start: '-1 V', stop: '1 V', points: 2 },
     ]

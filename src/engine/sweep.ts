@@ -29,15 +29,18 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     if (!part || (part.kind !== 'source' && part.kind !== 'currentSource') || (sweep.sourceParameter === 'pwl.scale' ? mode !== 'pwl' : !validPwlPoint && (mode === 'pwl' || !sweep.sourceParameter.startsWith(`${mode}.`)))) throw new Error(`${sweep.component}.${sweep.sourceParameter} does not belong to its selected source waveform.`)
     const field = sweep.sourceParameter.split('.').at(-1)!
     const dimensioned = ['frequency', 'carrierFrequency', 'signalFrequency', 'delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
-    const values = [sweep.start, sweep.stop].map((value) => {
+    const parseValue = (value: string) => {
       if (['initial', 'high', 'pulsed', 'offset', 'amplitude'].includes(field) || validPwlPoint) return componentMagnitude(value, part.kind)
       return scalarMagnitude(dimensioned ? value.trim().replace(/(?:hz|s)$/i, '') : field === 'phase' ? value.trim().replace(/°$/i, '') : value)
-    })
+    }
+    const values = sweep.listValues ? sweep.listValues.map(parseValue) : [sweep.start, sweep.stop].map(parseValue)
     const [start, stop] = values
     const frequency = ['frequency', 'carrierFrequency', 'signalFrequency'].includes(field)
     const time = ['delay', 'rise', 'fall', 'width', 'period', 'riseDelay', 'riseTau', 'fallDelay', 'fallTau'].includes(field)
     const positive = ['period', 'riseTau', 'fallTau'].includes(field)
-    if (start === null || stop === null || start === stop || (frequency && (start <= 0 || stop <= 0)) || (time && (start < 0 || stop < 0 || (positive && (start <= 0 || stop <= 0))))) throw new Error(`${part.ref}.${sweep.sourceParameter} needs valid, different endpoints${frequency || positive ? ' (positive values required)' : ''}.`)
+    if (values.some((value) => value === null) || start === null || stop === null || (!sweep.listValues && (start === stop || values.length !== 2)) || (frequency && values.some((value) => value! <= 0)) || (time && values.some((value) => value! < 0 || (positive && value! <= 0)))) throw new Error(`${part.ref}.${sweep.sourceParameter} needs valid, different endpoints${frequency || positive ? ' (positive values required)' : ''}.`)
+    if (sweep.listValues && (values.length !== sweep.points || values.length < 2)) throw new Error(`${part.ref}.${sweep.sourceParameter} needs 2–10 explicit values.`)
+    if (sweep.listValues) return values as number[]
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (sweep.parameter && sweep.instanceParameter) {
@@ -55,7 +58,12 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     const nominal = initial === undefined ? null : scalarMagnitude(initial)
     const start = scalarMagnitude(sweep.start)
     const stop = scalarMagnitude(sweep.stop)
-    if (!parameter || nominal === null || start === null || stop === null || start === stop) throw new Error(`${sweep.component}.${sweep.parameter} must be a numeric IC or reusable-block parameter with different valid endpoints.`)
+    if (!parameter || nominal === null || start === null || stop === null || (!sweep.listValues && start === stop)) throw new Error(`${sweep.component}.${sweep.parameter} must be a numeric IC or reusable-block parameter with different valid endpoints.`)
+    if (sweep.listValues) {
+      const values = sweep.listValues.map(scalarMagnitude)
+      if (values.length !== sweep.points || values.length < 2 || values.some((value) => value === null)) throw new Error(`${sweep.component}.${parameter.name} discrete values must be numeric SPICE scalars.`)
+      return values as number[]
+    }
     return Array.from({ length: sweep.points }, (_, index) => start + (stop - start) * index / (sweep.points - 1))
   }
   if (sweep.parameter) {
@@ -74,9 +82,8 @@ function buildValues(project: Project, sweep: ParameterSweep) {
   }
   if (!part || !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(part.kind)) throw new Error('Choose a scalar DC source, pulse source, resistor, lamp, capacitor, or inductor for parameter stepping.')
   if (sweep.listValues) {
-    if ((part.kind !== 'source' && part.kind !== 'currentSource') || part.sourceMode !== 'dc') throw new Error(`${part.ref} discrete values are supported only for scalar DC source sweeps.`)
     const values = sweep.listValues.map((value) => componentMagnitude(value, part.kind))
-    if (values.some((value) => value === null)) throw new Error(`${part.ref} discrete sweep values must be valid source quantities.`)
+    if (values.length !== sweep.points || values.length < 2 || values.some((value) => value === null) || (!['source', 'currentSource'].includes(part.kind) && values.some((value) => value! <= 0))) throw new Error(`${part.ref} discrete sweep values must be valid quantities${['source', 'currentSource'].includes(part.kind) ? '' : ' and positive'}.`)
     return values as number[]
   }
   const pulseHigh = (part.kind === 'source' || part.kind === 'currentSource') && part.sourceMode === 'pulse'
