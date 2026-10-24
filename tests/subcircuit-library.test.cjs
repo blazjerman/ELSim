@@ -936,6 +936,31 @@ test('expands native AKO model chains across imported libraries without changing
   assert.equal(child.content, '.MODEL CHILD AKO:BASE D(IS=2n)\n.MODEL GRANDCHILD AKO:CHILD D(N=2)\n')
 })
 
+test('expands scoped AKO models locally and through enclosing subcircuit scopes', () => {
+  const content = [
+    '.SUBCKT AMP IN OUT',
+    '.MODEL BASE D(IS=1n N=1)',
+    '.MODEL DERIVED AKO:BASE D(IS=2n)',
+    '.SUBCKT CORE A B',
+    '.MODEL CORE_D AKO:BASE D(N=3)',
+    'D1 A B CORE_D',
+    '.ENDS CORE',
+    '.ENDS AMP',
+    '.SUBCKT OTHER IN OUT',
+    '.MODEL BASE D(IS=9n N=1)',
+    '.MODEL DERIVED AKO:BASE D(N=4)',
+    '.ENDS OTHER',
+  ].join('\n')
+  const asset = { id: 'scoped-ako', filename: 'scoped.lib', content }
+  const result = expandNgspiceAkoModels([{ asset, parsed: parseSubcircuitLibrary(content) }])
+
+  assert.deepEqual(result.issues, [])
+  assert.equal(result.cards.get('scoped-ako:3'), '.model DERIVED D(IS=2n N=1)')
+  assert.equal(result.cards.get('scoped-ako:5'), '.model CORE_D D(IS=1n N=3)')
+  assert.equal(result.cards.get('scoped-ako:11'), '.model DERIVED D(IS=9n N=4)')
+  assert.equal(result.cards.size, 3)
+})
+
 test('VDMOS AKO children inherit or explicitly override base channel polarity', () => {
   const content = [
     '.MODEL PBASE VDMOS Pchan VTO=-2 KP=1',

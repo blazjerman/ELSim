@@ -52,6 +52,37 @@ test('netlist generation expands imported native AKO cards and maps them to the 
   assert.match(project.modelAssets[1].content, /AKO:DBAS/, 'the imported asset remains byte-for-byte unchanged')
 })
 
+test('netlist generation expands scoped AKO cards without leaking models between subcircuits', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'x-amp', kind: 'subcircuit', ref: 'XAMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], value: 'AMP', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [{
+    id: 'scoped-ako', filename: 'scoped.lib', content: [
+      '.SUBCKT AMP IN OUT',
+      '.MODEL BASE D(IS=1n N=1)',
+      '.MODEL DERIVED AKO:BASE D(IS=2n)',
+      'D1 IN OUT DERIVED',
+      '.SUBCKT CORE A B',
+      '.MODEL CORE_D AKO:BASE D(N=3)',
+      'D2 A B CORE_D',
+      '.ENDS CORE',
+      '.ENDS AMP',
+      '.SUBCKT OTHER IN OUT',
+      '.MODEL BASE D(IS=9n N=1)',
+      '.MODEL DERIVED AKO:BASE D(N=4)',
+      'D3 IN OUT DERIVED',
+      '.ENDS OTHER',
+    ].join('\n') + '\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString(),
+  }]
+  const artifact = createNetlistArtifact(project)
+
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.match(artifact.text, /^\.model DERIVED D\(IS=2n N=1\)$/m)
+  assert.match(artifact.text, /^\.model CORE_D D\(IS=1n N=3\)$/m)
+  assert.match(artifact.text, /^\.model DERIVED D\(IS=9n N=4\)$/m)
+  assert.doesNotMatch(artifact.text, /AKO:/i)
+  for (const assetLine of [3, 6, 12]) assert.equal(artifact.sourceMap.some((source) => source.assetId === 'scoped-ako' && source.assetLine === assetLine), true)
+})
+
 test('unresolved imported native AKO models stop before an invalid default-mode deck is run', () => {
   const project = createStarterProject()
   project.modelAssets = [{ id: 'ako-missing', filename: 'child.lib', content: '.MODEL DCHILD AKO:UNKNOWN D(Is=2n)', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]

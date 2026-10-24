@@ -58,6 +58,7 @@ try {
     path.join(root, 'src/domain/projectArchive.ts'),
     path.join(root, 'src/domain/connectivity.ts'),
     path.join(root, 'src/domain/subcircuitLibrary.ts'),
+    path.join(root, 'src/domain/ngspiceAko.ts'),
     path.join(root, 'src/domain/ltspiceSymbol.ts'),
     path.join(root, 'src/domain/elsimSymbol.ts'),
     path.join(root, 'src/domain/symbolAsset.ts'),

@@ -12,7 +12,7 @@ function canonicalType(type: string): string {
   return normalized === 'res' ? 'r' : normalized
 }
 
-/** Expand unconditional global AKO chains without changing imported libraries. */
+/** Expand unconditional AKO chains without changing imported libraries. */
 export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: readonly { asset: T; parsed: ParsedSubcircuitLibrary }[]): NgspiceAkoExpansion {
   const cards = new Map<string, string>()
   const parametersByModel = new Map<string, SubcircuitParameter[]>()
@@ -21,14 +21,32 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
   const issues: NgspiceAkoExpansion['issues'] = []
   const all = assets.flatMap(({ asset, parsed }) => parsed.models.filter((model) => model.akoBaseName).map((model) => ({ asset, model })))
   if (!all.length) return { cards, parameters: parametersByModel, channels: channelsByCard, issues }
-  const byName = new Map<string, { asset: T; model: SpiceModelDefinition }[]>()
-  for (const { asset, parsed } of assets) for (const model of parsed.models) if (!model.scope) {
-    const matches = byName.get(model.name.toLowerCase()) ?? []
-    matches.push({ asset, model })
-    byName.set(model.name.toLowerCase(), matches)
+  const globalsByName = new Map<string, { asset: T; model: SpiceModelDefinition }[]>()
+  const scopedByName = new Map<string, { asset: T; model: SpiceModelDefinition }[]>()
+  const parentsByAssetAndScope = new Map<string, string | undefined>()
+  for (const { asset, parsed } of assets) {
+    for (const subcircuit of parsed.subcircuits) parentsByAssetAndScope.set(`${asset.id}:${subcircuit.name.toLowerCase()}`, subcircuit.parentName?.toLowerCase())
+    for (const model of parsed.models) {
+      const nameIndex = model.scope ? scopedByName : globalsByName
+      const lookupName = model.scope ? `${asset.id}:${model.scope.toLowerCase()}:${model.name.toLowerCase()}` : model.name.toLowerCase()
+      const matches = nameIndex.get(lookupName) ?? []
+      matches.push({ asset, model })
+      nameIndex.set(lookupName, matches)
+    }
+  }
+  const keyFor = (asset: T, model: SpiceModelDefinition) => `${asset.id}:${model.scope?.toLowerCase() ?? ''}:${model.name.toLowerCase()}`
+  const basesFor = (asset: T, model: SpiceModelDefinition, baseName: string) => {
+    let scope = model.scope?.toLowerCase()
+    const visited = new Set<string>()
+    while (scope && !visited.has(scope)) {
+      visited.add(scope)
+      const scoped = scopedByName.get(`${asset.id}:${scope}:${baseName.toLowerCase()}`)
+      if (scoped?.length) return scoped
+      scope = parentsByAssetAndScope.get(`${asset.id}:${scope}`)
+    }
+    return globalsByName.get(baseName.toLowerCase()) ?? []
   }
   const cache = new Map<string, SubcircuitParameter[]>()
-  const keyFor = (asset: T, model: SpiceModelDefinition) => `${asset.id}:${model.name.toLowerCase()}`
   const report = (asset: T, model: SpiceModelDefinition, message: string) => issues.push({ assetId: asset.id, modelName: model.name, sourceLine: model.startLine, message })
   const resolve = (asset: T, model: SpiceModelDefinition): SubcircuitParameter[] | null => {
     const cached = cache.get(keyFor(asset, model))
@@ -48,16 +66,16 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
       if (resolved) { inherited = resolved; inheritedChannel = effectiveChannelsByModel.get(key) ?? currentModel.channel; break }
       const baseName = currentModel.akoBaseName
       if (!baseName) { inherited = currentModel.parameters; inheritedChannel = currentModel.channel; break }
-      if (currentModel.scope || currentModel.conditionalDefinition) { report(currentAsset, currentModel, `AKO model ${currentModel.name} is scoped or conditional and cannot be expanded safely.`); return null }
+      if (currentModel.conditionalDefinition) { report(currentAsset, currentModel, `AKO model ${currentModel.name} is conditional and cannot be expanded safely.`); return null }
       if (!currentModel.akoSafeToExpand) { report(currentAsset, currentModel, `AKO model ${currentModel.name} contains parameters or flags outside the supported assignment-only expansion form.`); return null }
       if (visiting.has(key)) { report(currentAsset, currentModel, `AKO inheritance cycle detected while resolving ${currentModel.name}.`); return null }
       visiting.add(key)
       chain.push({ asset: currentAsset, model: currentModel, key })
 
-      const bases = byName.get(baseName.toLowerCase()) ?? []
+      const bases = basesFor(currentAsset, currentModel, baseName)
       if (bases.length !== 1) { report(currentAsset, currentModel, `AKO base model ${baseName} ${bases.length ? 'is ambiguous across imported libraries' : 'was not found in the imported model libraries'}.`); return null }
       const base = bases[0]
-      if (base.model.scope || base.model.conditionalDefinition) { report(currentAsset, currentModel, `AKO base model ${baseName} is scoped or conditional and cannot be expanded safely.`); return null }
+      if (base.model.conditionalDefinition) { report(currentAsset, currentModel, `AKO base model ${baseName} is conditional and cannot be expanded safely.`); return null }
       if (!base.model.expansionPayloadSafe) { report(currentAsset, currentModel, `AKO base model ${baseName} uses parameters outside the supported assignment-only expansion form.`); return null }
       if (canonicalType(base.model.type) !== canonicalType(currentModel.type)) { report(currentAsset, currentModel, `AKO base model ${baseName} has device type ${base.model.type}, but ${currentModel.name} declares ${currentModel.type}.`); return null }
       currentAsset = base.asset
