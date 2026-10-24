@@ -42,6 +42,20 @@ export function collectDesktopPreflightProblems({ mode, platform, runCommand, ha
       problems.push(`Microsoft C++ build tools are missing from PATH: ${missingTools.join(', ')}.`)
       problems.push('Install Visual Studio Build Tools with the “Desktop development with C++” workload, then restart the terminal: https://v2.tauri.app/start/prerequisites/#windows')
     }
+    const webviewRuntimeId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+    const webviewRegistryKeys = [
+      `HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\${webviewRuntimeId}`,
+      `HKLM\\SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\${webviewRuntimeId}`,
+      `HKCU\\Software\\Microsoft\\EdgeUpdate\\Clients\\${webviewRuntimeId}`,
+    ]
+    const webviewRuntimeAvailable = webviewRegistryKeys.some((key) => {
+      const result = runCommand('reg.exe', ['query', key, '/v', 'pv'])
+      const version = result.status === 0 ? result.stdout.match(/\bpv\s+REG_SZ\s+(\d+(?:\.\d+){3})\b/i)?.[1] : undefined
+      return Boolean(version && version.split('.').some((part) => Number(part) > 0))
+    })
+    if (!webviewRuntimeAvailable) {
+      problems.push('Microsoft Edge WebView2 Runtime is missing. Install the Evergreen Runtime before running the desktop app: https://developer.microsoft.com/microsoft-edge/webview2/')
+    }
   } else if (platform === 'linux') {
     const linuxCommands = [
       ['cc', 'build-essential'],

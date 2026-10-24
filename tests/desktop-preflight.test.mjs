@@ -11,15 +11,21 @@ function collect({
   missingCommands = [],
   missingPackages = [],
   missingWindowsTools = [],
+  webviewRegistryResults = ['123.0.0.0'],
   xcodeAvailable = true,
   engineFiles = [],
 } = {}) {
   const versions = { rustc: `rustc ${rust}`, cargo: `cargo ${cargo}` }
+  let webviewRegistryQuery = 0
   const runCommand = (command, args) => {
     if (command === 'pkg-config' && args[0] === '--exists') return { status: missingPackages.includes(args[1]) ? 1 : 0, stdout: '' }
     if (command === 'rustc' && args[0] === '-vV') return rustHost ? { status: 0, stdout: `host: ${rustHost}` } : { status: 1, stdout: '' }
     if (command === 'xcode-select' && args[0] === '-p') return { status: xcodeAvailable ? 0 : 1, stdout: xcodeAvailable ? '/Applications/Xcode.app/Contents/Developer' : '' }
     if (command === 'where.exe') return { status: missingWindowsTools.includes(args[0]) ? 1 : 0, stdout: 'C:\\BuildTools\\bin' }
+    if (command === 'reg.exe') {
+      const version = webviewRegistryResults[webviewRegistryQuery++]
+      return version ? { status: 0, stdout: `    pv    REG_SZ    ${version}` } : { status: 1, stdout: '' }
+    }
     if (missingCommands.includes(command)) return { status: 1, stdout: '' }
     return { status: 0, stdout: versions[command] ?? `${command} 1.0` }
   }
@@ -79,15 +85,35 @@ test('Windows requires the MSVC target and C++ compiler/linker', () => {
     platform: 'win32',
     rustHost: 'x86_64-pc-windows-gnu',
     missingWindowsTools: ['cl.exe', 'link.exe'],
+    webviewRegistryResults: [null, null, null],
   }).join('\n')
   assert.match(problems, /not an MSVC Windows/)
   assert.match(problems, /missing from PATH: cl\.exe, link\.exe/)
   assert.match(problems, /Desktop development with C\+\+/)
+  assert.match(problems, /WebView2 Runtime is missing/)
+  assert.match(problems, /developer\.microsoft\.com\/microsoft-edge\/webview2/)
   assert.doesNotMatch(problems, /Linux development libraries/)
 })
 
 test('Windows preflight passes with MSVC Rust and C++ build tools', () => {
   assert.deepEqual(collect({ platform: 'win32', rustHost: 'x86_64-pc-windows-msvc' }), [])
+})
+
+test('Windows WebView2 detection accepts a per-user runtime registry entry', () => {
+  assert.deepEqual(collect({
+    platform: 'win32',
+    rustHost: 'x86_64-pc-windows-msvc',
+    webviewRegistryResults: [null, null, '124.0.2478.67'],
+  }), [])
+})
+
+test('Windows WebView2 detection rejects an empty runtime version', () => {
+  const problems = collect({
+    platform: 'win32',
+    rustHost: 'x86_64-pc-windows-msvc',
+    webviewRegistryResults: [null, '0.0.0.0', null],
+  }).join('\n')
+  assert.match(problems, /WebView2 Runtime is missing/)
 })
 
 test('macOS and Windows reject an undetectable Rust host target', () => {
