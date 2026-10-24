@@ -2,6 +2,8 @@
 
 Status: active implementation roadmap, 2026-10-10. The application foundation is being built in this repository.
 
+**Current owner scope (2026-10-24):** Continue the browser simulator and its native ELSim project format using the milestones below. LTspice compatibility is paused for a separate future goal: do not add, extend, repair, or run LTspice import/export work as part of this roadmap, and do not include it in implementation progress estimates. Existing LTspice-related code and notes are historical/reference material; leave them untouched unless the owner explicitly resumes that work.
+
 M2.4 continued model-card comments (2026-10-24): Inline comments on the initial or a physical `+` continuation line are removed before logical-line joining, so they no longer hide later `.MODEL` fields. Regressions check both comment positions and confirm original source text, including comments, stays unchanged. This follows the documented ngspice model-card continuation form. No WASM rebuild or Pages workflow ran.
 
 M2.4 escaped string comments (2026-10-24): The ngspice inline-comment scanner now treats backslash-escaped quote characters as part of a quoted value, preventing `$` and `;` inside valid escaped XSPICE strings from truncating following source. A direct regression covers an escaped double quote, an inline comment marker within the string, and a real trailing comment. This follows the [XSPICE string-literal syntax](https://ngspice.sourceforge.io/xspice/XSpice_CodeModelSubsysInterfaceDesign.pdf). No WASM rebuild or Pages workflow ran.
