@@ -262,7 +262,18 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   }
   const globalFunctionDefinitions = new Map<string, { filename: string; sourceLine: number }[]>()
   const globalFunctionBodies = new Map<string, string[]>()
+  const globalParameterExpressions = new Map<string, string[]>()
   for (const { asset, parsed } of parsedModelLibraryEntries) {
+    for (const record of parsed.topLevelParameterRecords) {
+      const parameterText = record.text.replace(/^\s*\.param\b/i, '')
+      const assignments = [...parameterText.matchAll(/(?:^|\s)([A-Za-z][A-Za-z0-9!#$%_\[\]]*)\s*=\s*(\{[^{}]*\}|"[^"\r\n]*"|'[^'\r\n]*'|[^\s]+)/g)]
+      for (const [, name, value] of assignments) {
+        const key = name.toLowerCase()
+        const expressions = globalParameterExpressions.get(key) ?? []
+        expressions.push(value)
+        globalParameterExpressions.set(key, expressions)
+      }
+    }
     let conditionalDepth = 0
     let subcircuitDepth = 0
     for (let recordIndex = 0; recordIndex < parsed.modelRecords.length; recordIndex += 1) {
@@ -302,32 +313,44 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     return new RegExp(`(?:^|[^A-Za-z0-9_.$])${escapedName}\\s*\\(`, 'i').test(text)
   })
-  const ambiguousFunctionCallsInText = (text: string, shadowedFunctions: ReadonlySet<string> = new Set(), scopedBodies: ReadonlyMap<string, string[]> = new Map()) => {
+  const referencedGlobalParameterNames = (text: string) => [...globalParameterExpressions.keys()].filter((parameterName) => {
+    const escapedName = parameterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`(?:^|[^A-Za-z0-9_])${escapedName}(?![A-Za-z0-9_])`, 'i').test(text)
+  })
+  const ambiguousFunctionCallsInText = (text: string, shadowedFunctions: ReadonlySet<string> = new Set(), scopedBodies: ReadonlyMap<string, string[]> = new Map(), followGlobalParameters = false) => {
     const ambiguous = new Set<string>()
-    const pending = referencedFunctionNames(text, scopedBodies)
+    const pendingTexts = [text]
+    const pendingFunctions: string[] = []
+    const pendingParameters: string[] = []
     const visited = new Set<string>()
-    while (pending.length) {
-      const functionName = pending.pop()!
-      if (visited.has(functionName)) continue
+    const visitedParameters = new Set<string>()
+    while (pendingTexts.length || pendingFunctions.length || pendingParameters.length) {
+      while (pendingTexts.length) {
+        const expression = pendingTexts.pop()!
+        pendingFunctions.push(...referencedFunctionNames(expression, scopedBodies))
+        if (followGlobalParameters) pendingParameters.push(...referencedGlobalParameterNames(expression))
+      }
+      const parameterName = pendingParameters.pop()
+      if (parameterName && !visitedParameters.has(parameterName)) {
+        visitedParameters.add(parameterName)
+        pendingTexts.push(...(globalParameterExpressions.get(parameterName) ?? []))
+        continue
+      }
+      const functionName = pendingFunctions.pop()
+      if (!functionName || visited.has(functionName)) continue
       visited.add(functionName)
       const scopedFunctionBodies = scopedBodies.get(functionName)
-      if (scopedFunctionBodies) {
-        for (const body of scopedFunctionBodies) pending.push(...referencedFunctionNames(body, scopedBodies))
-        continue
-      }
+      if (scopedFunctionBodies) { pendingTexts.push(...scopedFunctionBodies); continue }
       if (shadowedFunctions.has(functionName)) continue
       const definitions = globalFunctionDefinitions.get(functionName) ?? []
-      if (definitions.length > 1) {
-        ambiguous.add(functionName)
-        continue
-      }
+      if (definitions.length > 1) { ambiguous.add(functionName); continue }
       const bodies = globalFunctionBodies.get(functionName) ?? []
-      if (bodies.length === 1) pending.push(...referencedFunctionNames(bodies[0], scopedBodies))
+      if (bodies.length === 1) pendingTexts.push(bodies[0])
     }
     return ambiguousGlobalFunctionNames.filter((functionName) => ambiguous.has(functionName))
   }
   const modelCallsAmbiguousGlobalFunction = (model: typeof parsedModelAssets[number]['models'][number]) =>
-    model.parameters.some((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue).length > 0)
+    model.parameters.some((parameter) => ambiguousFunctionCallsInText(parameter.defaultValue, new Set(), new Map(), true).length > 0)
   const importedSubcircuitsByName = new Map<string, { assetId: string; definition: ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number] }[]>()
   const importedSubcircuitsByAssetAndName = new Map<string, ReturnType<typeof parseSubcircuitLibrary>['subcircuits'][number]>()
   const nestedSubcircuitRangesByParent = new Map<string, (readonly [number, number])[]>()
@@ -376,7 +399,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     const models = globalDeviceModelsByName.get(modelName.toLowerCase()) ?? []
     for (const model of models) {
       for (const parameter of model.parameters) {
-        for (const functionName of ambiguousFunctionCallsInText(parameter.defaultValue)) {
+        for (const functionName of ambiguousFunctionCallsInText(parameter.defaultValue, new Set(), new Map(), true)) {
           reportAmbiguousFunctionCall(part, functionName, `imported model ${modelName} parameter that calls`)
         }
       }

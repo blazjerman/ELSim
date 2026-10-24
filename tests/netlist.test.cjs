@@ -179,6 +179,18 @@ test('preflight follows a used imported function through its helper body', () =>
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-function-stage' && /XSTAGE uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE! \(helpers\.lib:1, unrelated\.lib:1\)/i.test(diagnostic.message)), true)
 })
 
+test('preflight follows a used model parameter through global parameter expressions', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'parameterized-diode', kind: 'diode', ref: 'D1', value: '', deviceModel: 'DLOCAL', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'parameterized-model-library', filename: 'device.lib', content: '.PARAM ISAT={SCALE!(1)*1e-14}\n.MODEL DLOCAL D(IS={ISAT} N=1)\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'one-argument-function', filename: 'helpers.lib', content: '.FUNC SCALE!(x$) {x$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'two-argument-function', filename: 'unrelated.lib', content: '.FUNC SCALE!(x$, y$) {x$+y$}\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'parameterized-diode' && /D1 uses imported model DLOCAL parameter that calls ambiguous global \.FUNC SCALE! \(helpers\.lib:1, unrelated\.lib:1\)/i.test(diagnostic.message)), true)
+})
+
 test('preflight follows a scoped imported function through its helper body', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'x-function-stage', kind: 'subcircuit', ref: 'XSTAGE', modelName: 'FUNCTION_STAGE', modelPins: ['IN', 'OUT'], value: 'FUNCTION_STAGE', x: 800, y: 600, rotation: 0 })
