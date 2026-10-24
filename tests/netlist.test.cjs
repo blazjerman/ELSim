@@ -92,6 +92,29 @@ test('duplicate imported models used inside a placed IC stop simulation', () => 
   assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-amp' && /XAMP uses ambiguous imported device model D_SHARED.*amp\.lib:4, diode\.lib:1/.test(diagnostic.message)), true)
 })
 
+test('a placed imported IC with duplicate subcircuit definitions cannot be simulated', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'x-amp', kind: 'subcircuit', ref: 'XAMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], value: 'AMP', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'amp-a', filename: 'amp-a.lib', content: '.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'amp-b', filename: 'amp-b.lib', content: '.SUBCKT AMP IN OUT\nR1 IN OUT 2k\n.ENDS AMP\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-amp' && /XAMP uses ambiguous imported subcircuit AMP.*amp-a\.lib:1, amp-b\.lib:1/.test(diagnostic.message)), true)
+})
+
+test('a placed imported IC with an ambiguous nested IC dependency cannot be simulated', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'x-amp', kind: 'subcircuit', ref: 'XAMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], value: 'AMP', x: 800, y: 600, rotation: 0 })
+  project.modelAssets = [
+    { id: 'amp-root', filename: 'amp.lib', content: '.SUBCKT AMP IN OUT\nXCORE IN OUT CORE\n.ENDS AMP\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'core-a', filename: 'core-a.lib', content: '.SUBCKT CORE IN OUT\nR1 IN OUT 1k\n.ENDS CORE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+    { id: 'core-b', filename: 'core-b.lib', content: '.SUBCKT CORE IN OUT\nR1 IN OUT 2k\n.ENDS CORE\n', licenseStatus: 'unknown', importedAt: new Date(0).toISOString() },
+  ]
+  const artifact = createNetlistArtifact(project)
+  assert.equal(artifact.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.sourceId === 'x-amp' && /XAMP uses ambiguous imported subcircuit CORE.*core-a\.lib:1, core-b\.lib:1/.test(diagnostic.message)), true)
+})
+
 test('resistor AC resistance is emitted only as the native AC instance option', () => {
   const project = createStarterProject()
   const resistor = project.parts.find((part) => part.kind === 'resistor')

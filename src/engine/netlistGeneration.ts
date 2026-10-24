@@ -276,9 +276,28 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     })
   }
   const reportedAmbiguousModels = new Set<string>()
+  const reportAmbiguousSubcircuit = (part: Part, modelName: string) => {
+    const definitions = importedSubcircuitsByName.get(modelName.toLowerCase())
+    if (!definitions || definitions.length < 2) return
+    const key = `${part.id}:${modelName.toLowerCase()}`
+    if (reportedAmbiguousSubcircuits.has(key)) return
+    reportedAmbiguousSubcircuits.add(key)
+    const locations = definitions.map(({ assetId, definition }) => {
+      const filename = modelAssets.find((asset) => asset.id === assetId)?.filename ?? assetId
+      return `${filename}:${definition.startLine}`
+    }).join(', ')
+    diagnostics.push({
+      severity: 'error',
+      message: `${part.ref} uses ambiguous imported subcircuit ${modelName}, defined more than once (${locations}). Remove or rename one definition before simulating.`,
+      sourceId: part.id,
+      line: 1,
+    })
+  }
+  const reportedAmbiguousSubcircuits = new Set<string>()
   for (const part of project.parts) {
     if (part.deviceModel) reportAmbiguousDeviceModel(part, part.deviceModel)
     if (part.kind !== 'subcircuit' || !part.modelName || part.sheetId) continue
+    reportAmbiguousSubcircuit(part, part.modelName)
     const queue = [...(importedSubcircuitsByName.get(part.modelName.toLowerCase()) ?? [])]
     const visited = new Set<string>()
     while (queue.length) {
@@ -288,7 +307,10 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       visited.add(key)
       for (const dependency of current.definition.dependencies) {
         if (dependency.kind === 'device') reportAmbiguousDeviceModel(part, dependency.modelName)
-        else queue.push(...(importedSubcircuitsByName.get(dependency.modelName.toLowerCase()) ?? []))
+        else {
+          reportAmbiguousSubcircuit(part, dependency.modelName)
+          queue.push(...(importedSubcircuitsByName.get(dependency.modelName.toLowerCase()) ?? []))
+        }
       }
     }
   }
