@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const { createHash } = require('node:crypto')
 const path = require('node:path')
 const { test } = require('node:test')
 
@@ -33,6 +34,13 @@ test('the sweep editor and Add action share eligible source, model, IC, and reus
   const model = { name: 'USER_D', parameters: [{ name: 'IS', defaultValue: '1e-14' }, { name: 'TNOM', defaultValue: 'temperature' }, { name: 'N', defaultValue: 'BASE*2', defaultIsExpression: true }] }
   assert.deepEqual(importedModelSweepParameters(diode, [model]).map((parameter) => parameter.name), ['IS', 'N'])
   assert.ok(eligibleParameterSweepParts({ parts: [diode], analysis: 'tran', models: [model], subcircuits, sheets: project.sheets }).some((part) => part.id === 'd1'))
+
+  const expressionProject = createHierarchicalExampleProject()
+  const divider = expressionProject.sheets.find((sheet) => sheet.id === 'sheet-divider')
+  divider.parameters[0].defaultValue = '{1k + 1k}'
+  for (const part of expressionProject.parts.filter((item) => item.kind === 'subcircuit')) delete part.sheetParameters
+  expressionProject.sheets[0].parts = expressionProject.parts
+  assert.deepEqual(subcircuitSweepParameters(expressionProject.parts.find((part) => part.ref === 'X1'), [], expressionProject.sheets).map((parameter) => parameter.name), ['RINPUT'])
 })
 
 test('single and nested parameter sweeps produce deterministic, bounded combinations', () => {
@@ -449,6 +457,23 @@ test('imported IC instance parameters become alterparam-driven sweep cases', () 
   assert.throws(() => validateProject(project), /valid, different parameter start and stop values/)
 })
 
+test('imported IC parameters with expression defaults accept explicit numeric sweep bounds', () => {
+  const project = createUrcLineExampleProject()
+  const library = project.modelAssets[0]
+  library.content = library.content.replace('LENGTH=1m', 'LENGTH={1m*2}')
+  library.sha256 = createHash('sha256').update(library.content).digest('hex')
+  delete project.parts.find((part) => part.ref === 'XLINE').componentDefinitionId
+  project.simulation.parameterSweeps = [{ component: 'XLINE', parameter: 'LENGTH', instanceParameter: true, start: '1m', stop: '3m', points: 3 }]
+
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => run.label), ['XLINE.LENGTH=0.001', 'XLINE.LENGTH=0.002', 'XLINE.LENGTH=0.003'])
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /^\.param ELSIM_SWEEP_IC_XLINE_LENGTH=1\.00000000e-3$/m)
+  assert.match(control, /^XLINE .* PARAMS: LENGTH=\{ELSIM_SWEEP_IC_XLINE_LENGTH\}$/m)
+  assert.match(control, /alterparam ELSIM_SWEEP_IC_XLINE_LENGTH=2\.00000000e-3\nreset\nrun/)
+})
+
 test('reusable child-sheet block parameters can be swept independently per instance', () => {
   const project = createHierarchicalExampleProject()
   project.simulation.analysis = 'tran'
@@ -469,6 +494,24 @@ test('reusable child-sheet block parameters can be swept independently per insta
   assert.equal(otherInstance, '1k')
   project.simulation.parameterSweeps[0].parameter = 'MISSING'
   assert.throws(() => validateProject(project), /including numeric parameters on selected imported devices, ICs, or reusable blocks/)
+})
+
+test('reusable block parameters with expression defaults accept explicit numeric sweep bounds', () => {
+  const project = createHierarchicalExampleProject()
+  const divider = project.sheets.find((sheet) => sheet.id === 'sheet-divider')
+  divider.parameters[0].defaultValue = '{1k + 1k}'
+  for (const part of project.parts.filter((item) => item.kind === 'subcircuit')) delete part.sheetParameters
+  project.sheets[0].parts = project.parts
+  project.simulation.parameterSweeps = [{ component: 'X2', parameter: 'RINPUT', instanceParameter: true, start: '1k', stop: '3k', points: 3 }]
+
+  const validated = validateProject(structuredClone(project))
+  const runs = prepareParameterSweep(validated)
+  assert.deepEqual(runs.map((run) => run.label), ['X2.RINPUT=1000', 'X2.RINPUT=2000', 'X2.RINPUT=3000'])
+  const control = addResultControl(createNetlistArtifact(validated).text, runs)
+  assert.match(control, /^\.param ELSIM_SWEEP_IC_X2_RINPUT=1\.00000000e\+3$/m)
+  assert.match(control, /^X2 .* PARAMS: RINPUT=\{ELSIM_SWEEP_IC_X2_RINPUT\}$/m)
+  assert.match(control, /alterparam ELSIM_SWEEP_IC_X2_RINPUT=2\.00000000e\+3\nreset\nrun/)
+  assert.match(control, /^\.SUBCKT ELSIM_SHEET_sheet_divider IN OUT GND PARAMS: RINPUT=\{1k \+ 1k\}$/m)
 })
 
 test('imported SW and CSW model parameters can be stepped on their matching switches', () => {

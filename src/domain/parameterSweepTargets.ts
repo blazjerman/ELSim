@@ -9,12 +9,20 @@ function parameterValue(part: Part, parameter: SweepParameter): string {
   return Object.entries(overrides ?? {}).find(([name]) => name.toLowerCase() === parameter.name.toLowerCase())?.[1] ?? parameter.defaultValue
 }
 
+function isExpressionValue(value: string): boolean {
+  const trimmed = value.trim()
+  return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+}
+
 export function subcircuitSweepParameters(part: Part | undefined, subcircuits: SweepDefinition[], sheets: Project['sheets']): SweepParameter[] {
   if (part?.kind !== 'subcircuit') return []
   const parameters = part.sheetId
     ? sheets.find((sheet) => sheet.id === part.sheetId)?.parameters ?? []
     : subcircuits.find((model) => model.name.toLowerCase() === part.modelName?.toLowerCase())?.parameters ?? []
-  return parameters.filter((parameter) => spiceModelParameterMagnitude(parameterValue(part, parameter)) !== null)
+  return parameters.filter((parameter) => {
+    const value = parameterValue(part, parameter)
+    return spiceModelParameterMagnitude(value) !== null || isExpressionValue(value)
+  })
 }
 
 export function importedModelSweepParameters(part: Part | undefined, models: SweepDefinition[]): SweepParameter[] {

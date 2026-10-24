@@ -2870,7 +2870,7 @@ export default function App() {
       if (parameter) {
         const initial = sweepParameterValue(part, parameter)
         const magnitude = componentMagnitude(initial, 'resistor')
-        const sweep: ParameterSweep = { component: part.ref, parameter: parameter.name, instanceParameter: true, start: initial, stop: `${((magnitude ?? 0) === 0 ? 1 : (magnitude ?? 0) * 2).toExponential(5)}`, points: 3 }
+        const sweep: ParameterSweep = { component: part.ref, parameter: parameter.name, instanceParameter: true, start: magnitude === null ? '' : initial, stop: magnitude === null ? '' : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}`, points: 3 }
         setProject((current) => ({ ...current, simulation: { ...current.simulation, parameterSweeps: [...(current.simulation.parameterSweeps ?? []), sweep] } }))
         return
       }

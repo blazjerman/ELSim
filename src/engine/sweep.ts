@@ -58,7 +58,7 @@ function buildValues(project: Project, sweep: ParameterSweep) {
     const nominal = initial === undefined ? null : scalarMagnitude(initial)
     const start = scalarMagnitude(sweep.start)
     const stop = scalarMagnitude(sweep.stop)
-    if (!parameter || nominal === null || start === null || stop === null || (!sweep.listValues && start === stop)) throw new Error(`${sweep.component}.${sweep.parameter} must be a numeric IC or reusable-block parameter with different valid endpoints.`)
+    if (!parameter || (nominal === null && !isExpressionValue(initial ?? '')) || start === null || stop === null || (!sweep.listValues && start === stop)) throw new Error(`${sweep.component}.${sweep.parameter} must be a numeric or expression-default IC or reusable-block parameter with different numeric endpoints.`)
     if (sweep.listValues) {
       const values = sweep.listValues.map(scalarMagnitude)
       if (values.length !== sweep.points || values.length < 2 || values.some((value) => value === null)) throw new Error(`${sweep.component}.${parameter.name} discrete values must be numeric SPICE scalars.`)
@@ -105,6 +105,11 @@ function scalarMagnitude(value: string): number | null {
   const scale = ({ meg: 1e6, t: 1e12, g: 1e9, k: 1e3, m: 1e-3, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15 } as Record<string, number>)[match[2]?.toLowerCase() ?? ''] ?? 1
   const result = Number(match[1]) * scale
   return Number.isFinite(result) ? result : null
+}
+
+function isExpressionValue(value: string): boolean {
+  const trimmed = value.trim()
+  return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))
 }
 
 export function prepareParameterSweep(project: Project): ParameterSweepRun[] {

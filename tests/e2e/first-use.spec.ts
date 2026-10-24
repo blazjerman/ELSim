@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { componentDefinitionFor, importedSubcircuitComponentDefinition } from '../../src/domain/componentDefinitions'
-import { createCurrentSourceExampleProject, createHierarchicalExampleProject, createJfetSwitchExampleProject, createPotentiometerExampleProject } from '../../src/domain/examples'
+import { createCurrentSourceExampleProject, createHierarchicalExampleProject, createJfetSwitchExampleProject, createPotentiometerExampleProject, createUrcLineExampleProject } from '../../src/domain/examples'
 import { createStarterProject, sheetModelName, validateProject } from '../../src/domain/project'
 import { componentPins } from '../../src/domain/geometry'
 import { parseLtspiceSymbol } from '../../src/domain/ltspiceSymbol'
@@ -12285,6 +12285,57 @@ test('operating-point parameter sweep compares labeled bias values for a selecte
   await expect(table.getByRole('row', { name: /V\(vin\).*DRIVE=1.*1\.000000 V/ })).toBeVisible()
   await expect(table.getByRole('row', { name: /V\(vin\).*DRIVE=2.*2\.000000 V/ })).toBeVisible()
   await expect(page.locator('.plot-window').last().locator('.op-table tbody tr').filter({ hasText: 'V(vin)' })).toHaveCount(2)
+})
+
+test('reusable block expression defaults accept explicit numeric sweep bounds in browser ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createHierarchicalExampleProject()
+  const divider = project.sheets.find((sheet) => sheet.id === 'sheet-divider')!
+  divider.parameters![0].defaultValue = '{1k + 1k}'
+  for (const part of project.parts.filter((item) => item.kind === 'subcircuit')) delete part.sheetParameters
+  project.sheets[0].parts = project.parts
+  const validated = validateProject(project)
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.locator('svg.schematic').click({ position: { x: 8, y: 8 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('X1')
+  await expect(page.getByText('This parameter has an expression default. Enter numeric start and stop values for the sweep.')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Parameter 1 start value' })).toHaveValue('')
+  await expect(page.getByRole('textbox', { name: 'Parameter 1 stop value' })).toHaveValue('')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1k')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('3k')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('3')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 3 cases · 30 result vectors/)).toBeVisible({ timeout: 60_000 })
+})
+
+test('imported IC expression defaults accept explicit numeric sweep bounds in browser ngspice', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const project = createUrcLineExampleProject()
+  const library = project.modelAssets![0]
+  library.content = library.content.replace('LENGTH=1m', 'LENGTH={1m*2}')
+  library.sha256 = createHash('sha256').update(library.content).digest('hex')
+  delete project.parts.find((part) => part.ref === 'XLINE')!.componentDefinitionId
+  const validated = validateProject(project)
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validated))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+  await page.locator('svg.schematic').click({ position: { x: 8, y: 8 } })
+  await page.getByRole('button', { name: 'Add parameter stepping' }).click()
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('XLINE')
+  await expect(page.getByRole('combobox', { name: 'Parameter 1 IC parameter' })).toContainText('LENGTH · default {1m*2}')
+  await expect(page.getByText('This parameter has an expression default. Enter numeric start and stop values for the sweep.')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Parameter 1 start value' })).toHaveValue('')
+  await expect(page.getByRole('textbox', { name: 'Parameter 1 stop value' })).toHaveValue('')
+  await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('1m')
+  await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('3m')
+  await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('3')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 3 cases/)).toBeVisible({ timeout: 60_000 })
 })
 
 test('current-source noise analysis picks the circuit node and labels input noise in amperes', { tag: '@ngspice' }, async ({ page }) => {
