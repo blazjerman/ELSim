@@ -172,7 +172,7 @@ export type Project = {
   symbolAssets?: SymbolAsset[]
   importedSchematicSource?: LtspiceSchematicSource
   importedChildSchematicSources?: LtspiceSchematicSource[]
-  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; stopTime: string; maxStep: string; startSavingTime?: string; temperature?: string; shuntResistance?: string; shuntCapacitance?: string; integrationMethod?: 'trap' | 'gear'; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
+  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; stopTime: string; maxStep: string; startSavingTime?: string; temperature?: string; shuntResistance?: string; shuntCapacitance?: string; integrationMethod?: 'trap' | 'gear'; skipAcOperatingPoint?: boolean; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
   rootSheetId: string
   activeSheetId: string
   sheets: ProjectSheet[]
@@ -710,6 +710,7 @@ export function validateProject(input: unknown): Project {
     if (shuntCapacitance === null || shuntCapacitance <= 0) throw new Error('Invalid simulation shunt capacitance.')
   }
   if (simulation.integrationMethod !== undefined && !['trap', 'gear'].includes(simulation.integrationMethod)) throw new Error('Invalid transient integration method.')
+  if (simulation.skipAcOperatingPoint !== undefined && typeof simulation.skipAcOperatingPoint !== 'boolean') throw new Error('Skip AC operating point must be on or off.')
   const deviceInstanceOptionParts = [
     ...(data.parts as Part[]),
     ...(Array.isArray(data.sheets) ? (data.sheets as Project['sheets']).flatMap((sheet) => Array.isArray(sheet?.parts) ? sheet.parts : []) : []),

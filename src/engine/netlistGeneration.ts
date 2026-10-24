@@ -1141,6 +1141,9 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       append(`.options method=${project.simulation.integrationMethod}`, 'analysis:integrationMethod', 'generated')
     }
   }
+  if (includeHierarchyProbes && project.simulation.analysis === 'ac' && project.simulation.skipAcOperatingPoint === true) {
+    append('.options noopac', 'analysis:skipAcOperatingPoint', 'generated')
+  }
   if (includeHierarchyProbes) for (const directive of hierarchicalSaveVectors(project)) append(directive, 'hierarchy:probe', 'generated')
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
   if (usesZener) append('.model DZENER D(BV=5.1 IBV=1m)', 'model:DZENER', 'model')

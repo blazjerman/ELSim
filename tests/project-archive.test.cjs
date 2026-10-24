@@ -365,6 +365,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.simulation.properties.shuntResistance.maxLength, 64)
   assert.equal(schema.$defs.simulation.properties.shuntCapacitance.maxLength, 64)
   assert.deepEqual(schema.$defs.simulation.properties.integrationMethod.enum, ['trap', 'gear'])
+  assert.equal(schema.$defs.simulation.properties.skipAcOperatingPoint.type, 'boolean')
   assert.equal(schema.$defs.plotSettings.properties.panels.maxItems, 8)
   assert.equal(schema.$defs.plotPanel.required.includes('selectedTraceIds'), true)
   assert.equal(schema.$defs.plotPanel.properties.valueRanges.$ref, '#/$defs/plotAnalysisValueRanges')

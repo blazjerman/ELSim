@@ -486,6 +486,21 @@ test('transient integration method defaults to ngspice and can opt into trapezoi
   assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:integrationMethod'))
 })
 
+test('NOOPAC is opt-in and only emitted for AC analysis', () => {
+  const project = createStarterProject()
+  project.simulation.analysis = 'ac'
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options noopac$/mi)
+  project.simulation.skipAcOperatingPoint = true
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [])
+  assert.equal((artifact.text.match(/^\.options noopac$/gim) ?? []).length, 1)
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:skipAcOperatingPoint' && source.role === 'generated'))
+  project.simulation.analysis = 'tran'
+  assert.doesNotMatch(createNetlistArtifact(project).text, /^\.options noopac$/mi)
+  project.simulation.skipAcOperatingPoint = 'yes'
+  assert.throws(() => validateProject(project), /skip ac operating point must be on or off/i)
+})
+
 test('per-device DTEMP offsets and absolute TEMP settings reach native instances exclusively', () => {
   const project = createStarterProject()
   const resistor = project.parts.find((part) => part.kind === 'resistor')
