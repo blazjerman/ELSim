@@ -450,9 +450,10 @@ test('imported URC model parameters can be stepped', () => {
 test('BSIM3 bin-family parameter sweeps update every bin in each case', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'm-bin-sweep', kind: 'nmos', ref: 'M1', value: '0', deviceModel: 'NCH', x: 700, y: 500, rotation: 0 })
+  project.parts.push({ id: 'm-bin-sweep-2', kind: 'nmos', ref: 'M2', value: '0', deviceModel: 'NCH', x: 800, y: 500, rotation: 0 })
   project.modelAssets = [{ id: 'binned-models', filename: 'nch.lib', sha256: 'a'.repeat(64), licenseStatus: 'unknown', importedAt: new Date().toISOString(), content: [
-    '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7',
-    '.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5',
+    '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7 U0=500',
+    '.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5 U0=500',
   ].join('\n') }]
   project.simulation.parameterSweeps = [{ component: 'M1', parameter: 'VTH0', start: '0.7', stop: '1.5', points: 3 }]
 
@@ -473,6 +474,30 @@ test('BSIM3 bin-family parameter sweeps update every bin in each case', () => {
   assert.match(collision, /^\.PARAM ELSIM_SWEEP_BIN_1=42$/m)
   assert.match(collision, /^\.param ELSIM_SWEEP_BIN_2=7\.00000000e-1$/m)
   assert.match(collision, /alterparam ELSIM_SWEEP_BIN_2=1\.50000000e\+0\nreset\nrun/)
+
+  const sameModelParameter = structuredClone(project)
+  sameModelParameter.simulation.parameterSweeps = [
+    { component: 'M1', parameter: 'VTH0', start: '0.7', stop: '1.5', points: 2 },
+    { component: 'M2', parameter: 'VTH0', start: '0.8', stop: '1.6', points: 2 },
+  ]
+  assert.throws(() => validateProject(sameModelParameter), /M2\.VTH0 and M1\.VTH0 change the same imported model parameter/)
+
+  const familyAndBinParameter = structuredClone(project)
+  familyAndBinParameter.parts.find((part) => part.ref === 'M2').deviceModel = 'NCH.1'
+  familyAndBinParameter.simulation.parameterSweeps = [
+    { component: 'M1', parameter: 'VTH0', start: '0.7', stop: '1.5', points: 2 },
+    { component: 'M2', parameter: 'VTH0', start: '0.8', stop: '1.6', points: 2 },
+  ]
+  assert.throws(() => validateProject(familyAndBinParameter), /M2\.VTH0 and M1\.VTH0 change the same imported model parameter/)
+
+  const separateModelParameters = structuredClone(project)
+  separateModelParameters.simulation.parameterSweeps = [
+    { component: 'M1', parameter: 'VTH0', start: '0.7', stop: '1.5', points: 2 },
+    { component: 'M2', parameter: 'U0', start: '300', stop: '500', points: 2 },
+  ]
+  const separateControl = addResultControl(createNetlistArtifact(validateProject(separateModelParameters)).text, prepareParameterSweep(separateModelParameters))
+  assert.match(separateControl, /VTH0=\{ELSIM_SWEEP_BIN_1\}/)
+  assert.match(separateControl, /U0=\{ELSIM_SWEEP_BIN_2\}/)
 })
 
 test('PSpice VSWITCH model sweeps map threshold fields to native SW parameters', () => {

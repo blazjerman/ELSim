@@ -653,7 +653,9 @@ export function validateProject(input: unknown): Project {
       if (!importedDeviceModelByName.has(name)) importedDeviceModelByName.set(name, model)
     }
   }
-  for (const family of ngspiceBsim3BinFamilies([...importedDeviceModelByName.values()])) {
+  const importedBsim3BinFamilies = ngspiceBsim3BinFamilies([...importedDeviceModelByName.values()])
+  const importedBsim3BinFamiliesByName = new Map(importedBsim3BinFamilies.map((family) => [family.name.toLowerCase(), family]))
+  for (const family of importedBsim3BinFamilies) {
     if (importedDeviceModelByName.has(family.name)) continue
     const parameters = family.models[0].parameters.filter((parameter) => family.models.every((model) => model.parameters.some((candidate) => candidate.name.toLowerCase() === parameter.name.toLowerCase())))
     importedDeviceModelByName.set(family.name, { ...family.models[0], name: family.name, parameters })
@@ -792,6 +794,7 @@ export function validateProject(input: unknown): Project {
   if (simulation.parameterSweeps !== undefined) {
     if (!Array.isArray(simulation.parameterSweeps) || simulation.parameterSweeps.length < 1 || simulation.parameterSweeps.length > 3) throw new Error('Parameter stepping supports one to three component values.')
     const sweepTargets = new Set<string>()
+    const modelParameterSweepTargets = new Map<string, string>()
     let combinations = 1
     for (const sweep of simulation.parameterSweeps) {
       if (!sweep || typeof sweep.component !== 'string' || !sweep.component.trim()) throw new Error('Parameter stepping settings are malformed.')
@@ -829,6 +832,14 @@ export function validateProject(input: unknown): Project {
       const validInstanceParameter = instanceParameterSweep && component?.kind === 'subcircuit' && instanceParameter && instanceParameterBase !== undefined && (componentMagnitude(instanceParameterBase, 'resistor') !== null || expressionInstanceParameter)
       const waveformSweep = !modelSweep && (component?.kind === 'source' || component?.kind === 'currentSource') && ['pulse', 'pwl', 'sine', 'exp', 'sffm', 'am', 'trnoise'].includes(component.sourceMode ?? '')
       if ((!globalParameterSweep && !component) || (globalParameterSweep && (modelSweep || instanceParameterSweep || sourceFieldSweep)) || (modelSweep && (instanceParameterSweep || sourceFieldSweep || !compatibleSelectedModel || !selectedModel || !modelParameter || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(sweep.parameter!))) || (instanceParameterSweep && (modelSweep || sourceFieldSweep || !validInstanceParameter || !isValidNgspiceSubcircuitParameterName(sweep.parameter ?? ''))) || (sourceFieldSweep && (modelSweep || instanceParameterSweep || !validSourceTarget)) || (!globalParameterSweep && !modelSweep && !instanceParameterSweep && !sourceFieldSweep && !['source', 'currentSource', 'resistor', 'lamp', 'capacitor', 'inductor'].includes(component!.kind)) || (!globalParameterSweep && !modelSweep && !instanceParameterSweep && !sourceFieldSweep && component!.kind === 'source' && component!.sourceMode !== 'dc' && !waveformSweep) || (!globalParameterSweep && !modelSweep && !instanceParameterSweep && !sourceFieldSweep && component!.kind === 'currentSource' && component!.sourceMode !== 'dc' && component!.sourceMode !== undefined && !waveformSweep) || (simulation.analysis === 'dc' && !dcSourceSweep) || typeof sweep.start !== 'string' || !sweep.start.trim() || typeof sweep.stop !== 'string' || !sweep.stop.trim() || !Number.isInteger(sweep.points) || sweep.points < 2 || sweep.points > 10 || (listSweep && (sweep.listValues!.length !== sweep.points || sweep.listValues!.some((value) => typeof value !== 'string' || !value.trim()))) || sweepTargets.has(sweepTarget)) throw new Error('Parameter stepping settings are malformed. Choose a declared parameter, a distinct scalar DC source for DC analysis, or a supported transient, AC, noise, or operating-point target, including numeric parameters on selected imported devices, ICs, or reusable blocks, with 2–10 steps.')
+      if (modelSweep && component && selectedModel && modelParameter) {
+        const family = importedBsim3BinFamiliesByName.get(selectedModel.name.toLowerCase())
+        const affectedModels = family?.models.map((model) => model.name) ?? [selectedModel.name]
+        const parameterName = modelParameter.name.toLowerCase()
+        const collision = affectedModels.map((name) => modelParameterSweepTargets.get(`${name.toLowerCase()}:${parameterName}`)).find((target) => target !== undefined)
+        if (collision) throw new Error(`${component.ref}.${modelParameter.name} and ${collision}.${modelParameter.name} change the same imported model parameter. Add this model-level sweep only once; it affects every instance using that model.`)
+        for (const name of affectedModels) modelParameterSweepTargets.set(`${name.toLowerCase()}:${parameterName}`, component.ref)
+      }
       const parseComponentValue = (value: string): number | null => {
         const normalized = value.trim().replaceAll('µ', 'u').replaceAll('μ', 'u').replaceAll(' ', '').replace(/[ΩΩ]|ohms?|[vVaAfFhH]$/gi, '')
         const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(meg|[tgkmunpf])?$/i)

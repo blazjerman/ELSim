@@ -2536,9 +2536,10 @@ test('standalone MOSFET can select an imported BSIM3 bin family by its base name
   // Keep this fixture inside the initial visible schematic viewport. This
   // workflow tests imported model selection, not panning to an off-screen part.
   const mosfet = { id: 'm-binned', kind: 'nmos' as const, ref: 'M1', value: '0', x: 500, y: 220, rotation: 0 as const }
-  project.parts.push(mosfet)
-  project.netLabels.push(...componentPins(mosfet).map((pin, index) => ({
-    id: `m-binned-net-${index}`, name: `m1pin${index}`, x: pin.x, y: pin.y, visible: false,
+  const secondMosfet = { ...mosfet, id: 'm-binned-2', ref: 'M2', x: 700, y: 500 }
+  project.parts.push(mosfet, secondMosfet)
+  for (const part of [mosfet, secondMosfet]) project.netLabels.push(...componentPins(part).map((pin, index) => ({
+    id: `${part.id}-net-${index}`, name: `${part.ref.toLowerCase()}pin${index}`, x: pin.x, y: pin.y, visible: false,
   })))
   const root = project.sheets.find((sheet) => sheet.id === project.rootSheetId)!
   project.sheets[project.sheets.indexOf(root)] = { ...root, parts: project.parts, netLabels: project.netLabels }
@@ -2550,9 +2551,11 @@ test('standalone MOSFET can select an imported BSIM3 bin family by its base name
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'nch-bins.lib', mimeType: 'text/plain', buffer: Buffer.from([
       '.MODEL NCH.1 NMOS LEVEL=8 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0=0.7 U0=500',
-      '.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5',
+      '.MODEL NCH.2 NMOS LEVEL=49 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0=1.5 U0=500',
     ].join('\n')),
   })
+  await page.locator('.circuit-part[data-part-id="m-binned-2"]').click()
+  await page.getByLabel('Device model for M2').selectOption('NCH')
   await page.locator('.circuit-part[data-part-id="m-binned"]').click()
   const modelPicker = page.getByLabel('Device model for M1')
   await expect(modelPicker.locator('option', { hasText: 'NCH (NMOS · 2 BSIM3 bins)' })).toHaveCount(1)
@@ -2595,7 +2598,14 @@ test('standalone MOSFET can select an imported BSIM3 bin family by its base name
   await expect(page.getByRole('combobox', { name: 'Parameter 1 component' })).toHaveValue('M1')
   const familySweepParameter = page.getByRole('combobox', { name: 'Parameter 1 model parameter' })
   await expect(familySweepParameter.locator('option[value="VTH0"]')).toContainText('default 0.7')
-  await expect(familySweepParameter.locator('option[value="U0"]')).toHaveCount(0)
+  await expect(familySweepParameter.locator('option[value="U0"]')).toContainText('default 500')
+  await familySweepParameter.selectOption('VTH0')
+  await page.getByRole('button', { name: 'Add another parameter' }).click()
+  const secondSweepComponent = page.getByRole('combobox', { name: 'Parameter 2 component' })
+  await secondSweepComponent.selectOption('M2')
+  const secondFamilySweepParameter = page.getByRole('combobox', { name: 'Parameter 2 model parameter' })
+  await expect(secondFamilySweepParameter.locator('option[value="VTH0"]')).toHaveJSProperty('disabled', true)
+  await expect(secondFamilySweepParameter.locator('option[value="U0"]')).toHaveJSProperty('disabled', false)
 })
 
 test('noise settings omit grounded labels and netlist an output alias canonically', { tag: '@ui-smoke' }, async ({ page }) => {
