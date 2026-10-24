@@ -13092,9 +13092,11 @@ test('imported device model parameters can be stepped through the browser ngspic
   await expect(page.getByText(/Imported 0 subcircuits and 2 device models from user-npn\.lib/)).toBeVisible()
   await page.locator('.circuit-part[aria-label^="Q1,"]').click()
   await page.getByLabel('Device model for Q1').selectOption('USER_NPN')
-  await page.getByText('USER_NPN · 3 model parameters').click()
+  await page.getByText('USER_NPN · AKO:BASE_NPN · 3 model parameters').click()
   await expect(page.getByText('VAF = 100 · inherited')).toBeVisible()
   await expect(page.getByText('BF = 5+5')).toBeVisible()
+  await page.getByRole('button', { name: /Review base BASE_NPN/ }).click()
+  await expect(page.locator('.model-source-viewer code').filter({ hasText: '.MODEL BASE_NPN NPN' })).toBeVisible()
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
 
   await page.getByRole('button', { name: 'Add parameter stepping' }).click()
