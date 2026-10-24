@@ -2467,8 +2467,8 @@ export default function App() {
       parameterSweep = prepareParameterSweep(snapshot)
     }
     catch (error) { setRunState('error'); setNotice(error instanceof Error ? error.message : 'Could not prepare parameter sweep.'); return }
-    if (fourierRequest && (snapshot.simulation.analysis !== 'tran' || parameterSweep.length)) {
-      setNotice('Native ngspice Fourier analysis needs a transient run without parameter stepping.')
+    if (fourierRequest && snapshot.simulation.analysis !== 'tran') {
+      setNotice('Native ngspice Fourier analysis needs a transient run.')
       return
     }
     setPlaybackRunning(false)

@@ -17,6 +17,7 @@ export type NgspiceFourierAnalysis = {
   traceId: string
   vector: string
   fundamentalFrequency: number
+  sweep?: { label: string; index: number }
   thdPercent: number | null
   harmonics: { order: number; frequency: number; magnitude: number; phaseDegrees: number; normalizedMagnitude: number | null; normalizedPhaseDegrees: number | null }[]
 }
@@ -26,15 +27,17 @@ function parsedNumber(token: string): number | null {
   return Number.isFinite(value) ? value : null
 }
 
-/** Parse the stable table shape printed by ngspice's interactive `fourier` command. */
-export function parseNgspiceFourierOutput(output: string, fundamentalFrequency: number, vector: string, traceId = vector): NgspiceFourierAnalysis {
+/** Parse every stable table printed by ngspice's interactive `fourier` command. */
+export function parseNgspiceFourierOutputs(output: string, fundamentalFrequency: number, vector: string, traceId = vector, sweepLabels: string[] = []): NgspiceFourierAnalysis[] {
   if (!Number.isFinite(fundamentalFrequency) || fundamentalFrequency <= 0) throw new Error('Ngspice Fourier frequency must be positive and finite.')
   const escapedVector = vector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const heading = new RegExp(`Fourier analysis for ${escapedVector}:`, 'i').exec(output)
-  if (!heading) throw new Error(`ngspice did not return a Fourier table for ${vector}.`)
-  const tail = output.slice(heading.index + heading[0].length)
-  const end = tail.search(/\nTotal analysis time\b/i)
-  const section = end < 0 ? tail : tail.slice(0, end)
+  const headings = [...output.matchAll(new RegExp(`Fourier analysis for ${escapedVector}:`, 'gi'))]
+  if (!headings.length) throw new Error(`ngspice did not return a Fourier table for ${vector}.`)
+  if (sweepLabels.length && sweepLabels.length !== headings.length) throw new Error(`ngspice returned ${headings.length} Fourier tables for ${sweepLabels.length} sweep cases.`)
+  return headings.map((heading, index) => {
+  const sectionStart = heading.index! + heading[0].length
+  const sectionEnd = headings[index + 1]?.index ?? output.length
+  const section = output.slice(sectionStart, sectionEnd).replace(/\nTotal analysis time\b[\s\S]*$/i, '')
   const thdToken = section.match(/THD:\s*([^\s,]+)/i)?.[1]
   if (thdToken === undefined) throw new Error(`ngspice Fourier output for ${vector} has no THD field.`)
   const harmonics = [...section.matchAll(/^\s*(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$/gm)].map((match) => ({
@@ -43,7 +46,13 @@ export function parseNgspiceFourierOutput(output: string, fundamentalFrequency: 
   if (harmonics.length < 2 || harmonics.some((harmonic, index) => harmonic.order !== index || !Number.isFinite(harmonic.frequency) || !Number.isFinite(harmonic.magnitude) || !Number.isFinite(harmonic.phaseDegrees))) {
     throw new Error(`ngspice Fourier output for ${vector} has an incomplete harmonic table.`)
   }
-  return { traceId, vector, fundamentalFrequency, thdPercent: parsedNumber(thdToken), harmonics }
+  return { traceId, vector, fundamentalFrequency, ...(sweepLabels.length ? { sweep: { label: sweepLabels[index], index } } : {}), thdPercent: parsedNumber(thdToken), harmonics }
+  })
+}
+
+/** Parse the first table printed by ngspice's interactive `fourier` command. */
+export function parseNgspiceFourierOutput(output: string, fundamentalFrequency: number, vector: string, traceId = vector): NgspiceFourierAnalysis {
+  return parseNgspiceFourierOutputs(output, fundamentalFrequency, vector, traceId)[0]
 }
 
 type TransientVector = { axis: Float64Array; values: Float64Array }

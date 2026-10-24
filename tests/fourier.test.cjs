@@ -4,7 +4,7 @@ const { test } = require('node:test')
 
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
-const { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak, parseNgspiceFourierOutput } = require(path.join(build, 'engine/fourier.js'))
+const { calculateTransientHarmonics, calculateTransientSpectrum, interpolateSpectrumPeak, parseNgspiceFourierOutput, parseNgspiceFourierOutputs } = require(path.join(build, 'engine/fourier.js'))
 
 function strongestNonzeroBin(spectrum) {
   let strongest = 1
@@ -163,5 +163,9 @@ test('ngspice Fourier output parser reads the native table and preserves undefin
   assert.equal(zero.harmonics[1].normalizedMagnitude, null)
   const current = parseNgspiceFourierOutput(output.replaceAll('v(out)', '@r1[i]'), 1000, '@r1[i]', 'i(@r1[i])')
   assert.equal(current.traceId, 'i(@r1[i])')
+  const sweep = parseNgspiceFourierOutputs(`${output}\n${output}`, 1000, 'v(out)', 'v(out)', ['R1=1k', 'R1=2k'])
+  assert.equal(sweep.length, 2)
+  assert.deepEqual(sweep.map((report) => report.sweep), [{ label: 'R1=1k', index: 0 }, { label: 'R1=2k', index: 1 }])
+  assert.throws(() => parseNgspiceFourierOutputs(output, 1000, 'v(out)', 'v(out)', ['R1=1k', 'R1=2k']), /returned 1 Fourier tables for 2 sweep cases/)
   assert.throws(() => parseNgspiceFourierOutput('missing', 1000, 'v(out)'), /did not return a Fourier table/)
 })

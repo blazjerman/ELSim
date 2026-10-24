@@ -45,7 +45,12 @@ test('result control can request ngspice native Fourier output after transient s
   assert.match(control, /tran 1u 5m\nfourier 1000 v\(out\)\nwrite \/result\.raw all/)
   assert.throws(() => addResultControl(netlist, [], [], { fundamentalFrequency: 1000, traceId: 'v(out)', vector: 'v(out)\nquit' }), /requires a transient run/)
   assert.match(addResultControl(netlist, [], [], { fundamentalFrequency: 1000, traceId: 'i(@r1[i])', vector: '@r1[i]' }), /fourier 1000 @r1\[i\]/)
-  assert.throws(() => addResultControl(netlist, [{ values: [{ component: 'R1', value: '1e3' }], label: 'R1=1k' }], [], { fundamentalFrequency: 1000, traceId: 'v(out)', vector: 'v(out)' }), /without a parameter sweep/)
+  const stepped = addResultControl(netlist, [
+    { values: [{ component: 'R1', value: '1e3' }], label: 'R1=1k' },
+    { values: [{ component: 'R1', value: '2e3' }], label: 'R1=2k' },
+  ], [], { fundamentalFrequency: 1000, traceId: 'v(out)', vector: 'v(out)' })
+  assert.match(stepped, /alter R1 1e3\nrun\nfourier 1000 v\(out\)\nwrite \/result-0\.raw all/)
+  assert.match(stepped, /alter R1 2e3\nrun\nfourier 1000 v\(out\)\nwrite \/result-1\.raw all/)
 })
 
 test('AC result control avoids unsupported capacitor and inductor branch-current saves', () => {

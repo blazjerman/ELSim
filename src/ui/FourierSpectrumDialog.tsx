@@ -46,7 +46,7 @@ function safeTraceFilename(traceId: string): string {
   return traceId.replace(/[^A-Za-z0-9_-]+/g, '-')
 }
 
-export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFourier, onRunNativeFourier, onClose }: { traces: Trace[]; initialRange: { start: number; end: number }; ngspiceFourier?: NgspiceFourierAnalysis; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void; onClose: () => void }) {
+export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFourier, onRunNativeFourier, onClose }: { traces: Trace[]; initialRange: { start: number; end: number }; ngspiceFourier?: NgspiceFourierAnalysis[]; onRunNativeFourier: (fundamentalFrequency: number, traceId: string, vector: string) => void; onClose: () => void }) {
   const [traceId, setTraceId] = useState(traces[0]?.id ?? '')
   const [start, setStart] = useState(initialRange.start)
   const [end, setEnd] = useState(initialRange.end)
@@ -56,6 +56,7 @@ export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFou
   const [cursorA, setCursorA] = useState<number | null>(null)
   const [cursorB, setCursorB] = useState<number | null>(null)
   const [activeCursor, setActiveCursor] = useState<'A' | 'B'>('A')
+  const [nativeSweepIndex, setNativeSweepIndex] = useState(0)
   const trace = traces.find((candidate) => candidate.id === traceId) ?? traces[0]
   const calculation = useMemo(() => {
     if (!trace) return { spectrum: null, error: 'Select a transient trace to inspect.' }
@@ -99,11 +100,15 @@ export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFou
       return { result: null, error: error instanceof Error ? error.message : 'Could not calculate harmonics.' }
     }
   }, [trace, fundamentalFrequency, start, end])
-  const nativeVectorExpression = trace?.id.match(/^i\((@[^()]+\[(?:i|id|ic|ib|ie|ig|is|current)\])\)$/i)?.[1] ?? trace?.id
+  const nativeTraceId = trace?.id.replace(/::sweep-\d+$/i, '')
+  const nativeVectorExpression = nativeTraceId?.match(/^i\((@[^()]+\[(?:i|id|ic|ib|ie|ig|is|current)\])\)$/i)?.[1] ?? nativeTraceId
   const nativeVectorSupported = Boolean(nativeVectorExpression && /^(?:[vi]\([A-Za-z0-9_.$!#-]+\)|@[A-Za-z0-9_.$!#-]+\[(?:i|id|ic|ib|ie|ig|is|current)\])$/i.test(nativeVectorExpression))
   const nativeFrequency = Number(fundamentalFrequency)
-  const currentNativeFourier = ngspiceFourier && ngspiceFourier.traceId.toLowerCase() === trace?.id.toLowerCase()
-    && ngspiceFourier.fundamentalFrequency === Number(fundamentalFrequency) ? ngspiceFourier : undefined
+  const matchingNativeFourier = ngspiceFourier?.filter((report) => report.traceId.toLowerCase() === nativeTraceId?.toLowerCase()
+    && report.fundamentalFrequency === Number(fundamentalFrequency)) ?? []
+  const traceSweepIndex = Number(trace?.id.match(/::sweep-(\d+)$/i)?.[1] ?? 0)
+  const selectedNativeSweepIndex = matchingNativeFourier.some((report) => (report.sweep?.index ?? 0) === nativeSweepIndex) ? nativeSweepIndex : traceSweepIndex
+  const currentNativeFourier = matchingNativeFourier.find((report) => (report.sweep?.index ?? 0) === selectedNativeSweepIndex) ?? matchingNativeFourier[0]
   const cursorBinA = useMemo(() => {
     if (!spectrum) return 0
     return nearestFrequencyBin(spectrum, cursorA ?? plot?.peak.frequency ?? spectrum.frequencies[1])
@@ -206,11 +211,12 @@ export default function FourierSpectrumDialog({ traces, initialRange, ngspiceFou
         <details className="harmonic-analysis native-fourier-analysis" open>
           <summary>Native ngspice Fourier analysis</summary>
           <p>Runs ngspice’s <code>fourier</code> command on the selected transient vector. Ngspice analyzes the final fundamental period and reports its native harmonic table and THD.</p>
-          <button className="plot-export" type="button" disabled={!nativeVectorSupported || !Number.isFinite(nativeFrequency) || nativeFrequency <= 0} onClick={() => { if (trace && nativeVectorExpression) onRunNativeFourier(nativeFrequency, trace.id, nativeVectorExpression) }}>{currentNativeFourier ? 'Run native Fourier again' : 'Run ngspice Fourier'}</button>
+          <button className="plot-export" type="button" disabled={!nativeVectorSupported || !Number.isFinite(nativeFrequency) || nativeFrequency <= 0} onClick={() => { if (nativeTraceId && nativeVectorExpression) { setNativeSweepIndex(traceSweepIndex); onRunNativeFourier(nativeFrequency, nativeTraceId, nativeVectorExpression) } }}>{currentNativeFourier ? 'Run native Fourier again' : 'Run ngspice Fourier'}</button>
           {!nativeVectorSupported && <small className="field-hint">This trace name is not a simple ngspice voltage/current vector, so the native command is unavailable.</small>}
           {currentNativeFourier && <>
-            <div className="spectrum-summary"><strong>ngspice THD: {currentNativeFourier.thdPercent === null ? 'undefined (zero fundamental)' : `${currentNativeFourier.thdPercent.toPrecision(5)}%`}</strong><span>{currentNativeFourier.vector} · {frequencyLabel(currentNativeFourier.fundamentalFrequency)} fundamental</span></div>
-            <button className="plot-export" type="button" onClick={() => exportCsv(`ngspice-harmonics-${safeTraceFilename(trace.id)}.csv`, [
+            {matchingNativeFourier.length > 1 && <label className="field-label">Parameter-sweep case<select aria-label="Native Fourier parameter-sweep case" value={selectedNativeSweepIndex} onChange={(event) => setNativeSweepIndex(Number(event.target.value))}>{matchingNativeFourier.map((report) => <option key={report.sweep?.index ?? 0} value={report.sweep?.index ?? 0}>{report.sweep?.label ?? `Case ${(report.sweep?.index ?? 0) + 1}`}</option>)}</select></label>}
+            <div className="spectrum-summary"><strong>ngspice THD: {currentNativeFourier.thdPercent === null ? 'undefined (zero fundamental)' : `${currentNativeFourier.thdPercent.toPrecision(5)}%`}</strong><span>{currentNativeFourier.vector} · {frequencyLabel(currentNativeFourier.fundamentalFrequency)} fundamental{currentNativeFourier.sweep ? ` · ${currentNativeFourier.sweep.label}` : ''}</span></div>
+            <button className="plot-export" type="button" onClick={() => exportCsv(`ngspice-harmonics-${safeTraceFilename(nativeTraceId ?? trace.id)}${currentNativeFourier.sweep ? `-case-${currentNativeFourier.sweep.index + 1}` : ''}.csv`, [
               ['Trace', 'ngspice vector', 'Unit', 'Fundamental frequency (Hz)', 'THD (%)', 'Harmonic order', 'Frequency (Hz)', 'Magnitude', 'Phase (degrees)', 'Normalized magnitude', 'Normalized phase (degrees)'],
               ...currentNativeFourier.harmonics.map((harmonic) => [trace.label, currentNativeFourier.vector, trace.unit, currentNativeFourier.fundamentalFrequency, currentNativeFourier.thdPercent, harmonic.order, harmonic.frequency, harmonic.magnitude, harmonic.phaseDegrees, harmonic.normalizedMagnitude, harmonic.normalizedPhaseDegrees]),
             ])}>Export ngspice harmonics CSV</button>

@@ -74,7 +74,7 @@ export type SimulationResult = {
   analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'
   measurements: MeasurementResult[]
   noiseSummaries?: NoiseSummary[]
-  ngspiceFourier?: NgspiceFourierAnalysis
+  ngspiceFourier?: NgspiceFourierAnalysis[]
 }
 
 function isNgspiceFourierAnalysis(value: unknown): value is NgspiceFourierAnalysis {
@@ -88,6 +88,7 @@ function isNgspiceFourierAnalysis(value: unknown): value is NgspiceFourierAnalys
       && typeof harmonic.phaseDegrees === 'number' && Number.isFinite(harmonic.phaseDegrees)
       && (harmonic.normalizedMagnitude === null || (typeof harmonic.normalizedMagnitude === 'number' && Number.isFinite(harmonic.normalizedMagnitude)))
       && (harmonic.normalizedPhaseDegrees === null || (typeof harmonic.normalizedPhaseDegrees === 'number' && Number.isFinite(harmonic.normalizedPhaseDegrees))))
+    && (value.sweep === undefined || (isRecord(value.sweep) && typeof value.sweep.label === 'string' && Number.isInteger(value.sweep.index) && Number(value.sweep.index) >= 0))
 }
 
 function isNoiseSummary(value: unknown): value is NoiseSummary {
@@ -365,7 +366,7 @@ export function isEngineResponse(value: unknown): value is EngineResponse {
       || !Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)
       || !['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))
       || !Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)
-      || (result.ngspiceFourier !== undefined && !isNgspiceFourierAnalysis(result.ngspiceFourier))
+      || (result.ngspiceFourier !== undefined && (!Array.isArray(result.ngspiceFourier) || result.ngspiceFourier.length < 1 || result.ngspiceFourier.length > 10 || !result.ngspiceFourier.every(isNgspiceFourierAnalysis)))
       || (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary)))) return false
     const validatedVectors = new WeakSet<Float64Array>()
     const validatedAxes = new WeakSet<Float64Array>()
@@ -412,7 +413,7 @@ export function engineResponseIssue(value: unknown): string {
     if (!Array.isArray(result.diagnostics) || !result.diagnostics.every(isDiagnostic)) return 'diagnostic list is malformed'
     if (!['tran', 'op', 'ac', 'dc', 'noise'].includes(String(result.analysis))) return 'analysis type is invalid'
     if (!Array.isArray(result.measurements) || !result.measurements.every(isMeasurementResult)) return 'measurement results are malformed'
-    if (result.ngspiceFourier !== undefined && !isNgspiceFourierAnalysis(result.ngspiceFourier)) return 'ngspice Fourier results are malformed'
+    if (result.ngspiceFourier !== undefined && (!Array.isArray(result.ngspiceFourier) || result.ngspiceFourier.length < 1 || result.ngspiceFourier.length > 10 || !result.ngspiceFourier.every(isNgspiceFourierAnalysis))) return 'ngspice Fourier results are malformed'
     if (result.noiseSummaries !== undefined && (!Array.isArray(result.noiseSummaries) || result.noiseSummaries.length > 10 || !result.noiseSummaries.every(isNoiseSummary))) return 'integrated noise results are malformed'
     return 'result message is incomplete'
   }

@@ -2,7 +2,7 @@
 import { parseRawTraces, rawTraceUnit, readRawFileAndRelease } from './raw'
 import { addResultControl } from './resultControl'
 import { parseNoiseSummaries } from './noiseSummary'
-import { parseNgspiceFourierOutput } from './fourier'
+import { parseNgspiceFourierOutputs } from './fourier'
 import { parseImportedMeasurementOutput, parseMeasurementOutput } from './measurements'
 import { diagnosticForNgspice, firstNgspiceError } from './diagnostics'
 import { isEngineRequest, transferableTraceBuffers, type EngineRequest, type EngineResponse, type NetlistArtifact, type RunMetadata, type Trace } from './contract'
@@ -138,7 +138,7 @@ async function run(requestId: string, artifact: NetlistArtifact, metadata: Omit<
         ...measurementOutput.results.filter((measurement) => !ambiguousProjectMeasurementIds.has(measurement.id.toLowerCase())),
         ...importedMeasurementOutput.results,
       ],
-      ...(ngspiceFourier ? { ngspiceFourier: parseNgspiceFourierOutput(output, ngspiceFourier.fundamentalFrequency, ngspiceFourier.vector, ngspiceFourier.traceId) } : {}),
+      ...(ngspiceFourier ? { ngspiceFourier: parseNgspiceFourierOutputs(output, ngspiceFourier.fundamentalFrequency, ngspiceFourier.vector, ngspiceFourier.traceId, parameterSweep?.map((sweep) => sweep.label) ?? []) } : {}),
       ...(analysis === 'noise' ? { noiseSummaries: parseNoiseSummaries(output, /^\s*\.noise\s+\S+\s+I[A-Za-z0-9_]+\b/im.test(artifact.text) ? 'A' : 'V', parameterSweep?.map((sweep) => sweep.label) ?? []) } : {}),
     }
     if (profileWorker) {
