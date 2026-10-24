@@ -6434,6 +6434,7 @@ test('transient solver options are editable and run in the browser engine', { ta
   await page.locator('svg.schematic').click({ position: { x: 10, y: 10 } })
   await page.getByText('Solver settings (advanced)').click()
   await page.getByLabel('Transient integration method').selectOption('gear')
+  await page.getByLabel('Maximum Gear integration order').selectOption('4')
   await page.getByLabel('Floating-node shunt resistance').fill('1 TΩ')
   await page.getByLabel('Node shunt capacitance').fill('0.13 pF')
   await page.getByRole('button', { name: 'Run simulation' }).click()
@@ -6442,6 +6443,7 @@ test('transient solver options are editable and run in the browser engine', { ta
   await expect(page.locator('.netlist-modal pre')).toContainText('.options rshunt=1000000000000')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options cshunt=1.3e-13')
   await expect(page.locator('.netlist-modal pre')).toContainText('.options method=gear')
+  await expect(page.locator('.netlist-modal pre')).toContainText('.options maxord=4')
 })
 
 test('linear AC analysis can opt out of its preliminary operating point', { tag: '@ngspice' }, async ({ page }) => {

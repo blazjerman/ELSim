@@ -1341,6 +1341,11 @@
         "integrationMethod": {
           "enum": ["trap", "gear"]
         },
+        "integrationMaxOrder": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6
+        },
         "skipAcOperatingPoint": {
           "type": "boolean"
         },

@@ -1139,6 +1139,13 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       diagnostics.push({ severity: 'error', message, sourceId: 'analysis:integrationMethod', line: rows.length })
     } else if (project.simulation.analysis === 'tran') {
       append(`.options method=${project.simulation.integrationMethod}`, 'analysis:integrationMethod', 'generated')
+      if (project.simulation.integrationMethod === 'gear' && project.simulation.integrationMaxOrder !== undefined) {
+        if (!Number.isInteger(project.simulation.integrationMaxOrder) || project.simulation.integrationMaxOrder < 2 || project.simulation.integrationMaxOrder > 6) {
+          const message = 'Gear integration order must be an integer from 2 to 6.'
+          append(`* ERROR: ${cleanComment(message)}`, 'analysis:integrationMaxOrder', 'analysis')
+          diagnostics.push({ severity: 'error', message, sourceId: 'analysis:integrationMaxOrder', line: rows.length })
+        } else append(`.options maxord=${project.simulation.integrationMaxOrder}`, 'analysis:integrationMaxOrder', 'generated')
+      }
     }
   }
   if (includeHierarchyProbes && project.simulation.analysis === 'ac' && project.simulation.skipAcOperatingPoint === true) {

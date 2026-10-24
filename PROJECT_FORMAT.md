@@ -32,6 +32,8 @@ An inductor may set `mutualCouplings: [{ "partnerId": "...", "coefficient": "0.9
 
 `simulation.integrationMethod` optionally selects the transient solver method: `trap` for trapezoidal or `gear` for Gear integration. Omission keeps ngspice's default trapezoidal method. Gear integration adds numerical damping that can reduce solver ringing in some circuits, but can also hide real fast behavior; compare results with the default before relying on them. The setting is emitted only for transient analyses.
 
+`simulation.integrationMaxOrder` optionally sets Gear's maximum integration order from 2 through 6. It is valid only with `integrationMethod: "gear"`; omission leaves ngspice's Gear order at its default of 2.
+
 `simulation.skipAcOperatingPoint` optionally enables ngspice's `NOOPAC` behavior before AC analysis. This can help linear circuits with ideal LC loops that fail during an unnecessary DC operating-point solve. Ngspice still performs an operating-point solve when it detects nonlinear devices. The option is off by default and is emitted only for AC analysis.
 
 `simulation.startSavingTime` is an optional transient time string. It maps to ngspice's `.tran` `tstart` argument: the solver still integrates from time zero, but waveform samples before this time are not retained. The value must be nonnegative and earlier than `stopTime`; omitting it or leaving it blank saves data from time zero.

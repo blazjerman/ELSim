@@ -474,7 +474,13 @@ test('transient integration method defaults to ngspice and can opt into trapezoi
   let artifact = createNetlistArtifact(validateProject(project))
   assert.deepEqual(artifact.diagnostics, [])
   assert.equal((artifact.text.match(/^\.options method=gear$/gim) ?? []).length, 1)
+  assert.doesNotMatch(artifact.text, /^\.options maxord=/mi)
   assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:integrationMethod' && source.role === 'generated'))
+  project.simulation.integrationMaxOrder = 4
+  artifact = createNetlistArtifact(validateProject(project))
+  assert.equal((artifact.text.match(/^\.options maxord=4$/gim) ?? []).length, 1)
+  assert.ok(artifact.sourceMap.some((source) => source.sourceId === 'analysis:integrationMaxOrder' && source.role === 'generated'))
+  project.simulation.integrationMaxOrder = undefined
   project.simulation.integrationMethod = 'trap'
   artifact = createNetlistArtifact(project)
   assert.match(artifact.text, /^\.options method=trap$/mi)
@@ -484,6 +490,9 @@ test('transient integration method defaults to ngspice and can opt into trapezoi
   project.simulation.integrationMethod = 'other'
   assert.throws(() => validateProject(project), /invalid transient integration method/i)
   assert.ok(createNetlistArtifact(project).diagnostics.some((diagnostic) => diagnostic.sourceId === 'analysis:integrationMethod'))
+  project.simulation.integrationMethod = 'gear'
+  project.simulation.integrationMaxOrder = 7
+  assert.throws(() => validateProject(project), /Gear integration order must be an integer from 2 to 6/i)
 })
 
 test('NOOPAC is opt-in and only emitted for AC analysis', () => {
