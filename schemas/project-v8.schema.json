@@ -1231,8 +1231,24 @@
         "valueRanges": {
           "$ref": "#/$defs/plotAnalysisValueRanges"
         },
+        "componentVoltageProbes": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": { "$ref": "#/$defs/componentVoltageProbe" }
+        },
+        "traceReferences": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": { "$ref": "#/$defs/plotTraceReference" }
+        },
+        "traceColors": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+        },
         "secondCursorValues": {
           "type": "object",
+          "maxProperties": 4,
           "additionalProperties": false,
           "properties": {
             "tran": { "type": "number" },
@@ -1242,6 +1258,71 @@
           }
         }
       }
+    },
+    "componentVoltageProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["partId", "positivePin", "negativePin", "positiveNet", "negativeNet", "positiveVector", "negativeVector", "ref", "vectorRef"],
+      "properties": {
+        "partId": { "type": "string" },
+        "positivePin": { "type": "integer", "minimum": 0 },
+        "negativePin": { "type": "integer", "minimum": -1 },
+        "positiveNet": { "type": "string" },
+        "negativeNet": { "type": "string" },
+        "positiveVector": { "type": "string" },
+        "negativeVector": { "type": "string" },
+        "ref": { "type": "string" },
+        "vectorRef": { "type": "string" },
+        "sheetId": { "type": "string" },
+        "scopeSheetId": { "type": "string" },
+        "instancePath": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
+      }
+    },
+    "plotTraceReference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "sheetId", "scopeSheetId", "instancePath"],
+          "properties": {
+            "kind": { "const": "node" },
+            "name": { "type": "string" },
+            "sheetId": { "type": "string" },
+            "scopeSheetId": { "type": "string" },
+            "instancePath": { "type": "array", "maxItems": 32, "items": { "type": "string" } },
+            "wireId": { "type": "string" },
+            "labelId": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "partId", "sheetId", "scopeSheetId", "instancePath"],
+          "properties": {
+            "kind": { "const": "part-current" },
+            "partId": { "type": "string" },
+            "sheetId": { "type": "string" },
+            "scopeSheetId": { "type": "string" },
+            "instancePath": { "type": "array", "maxItems": 32, "items": { "type": "string" } },
+            "winding": { "enum": ["P", "S"] },
+            "port": { "enum": [1, 2] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "partId", "positivePin", "negativePin", "sheetId", "scopeSheetId", "instancePath"],
+          "properties": {
+            "kind": { "const": "component-voltage" },
+            "partId": { "type": "string" },
+            "positivePin": { "type": "integer", "minimum": 0 },
+            "negativePin": { "type": "integer", "minimum": -1 },
+            "sheetId": { "type": "string" },
+            "scopeSheetId": { "type": "string" },
+            "instancePath": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
+          }
+        }
+      ]
     },
     "plotWindowBounds": {
       "type": "object",

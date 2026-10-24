@@ -51,7 +51,7 @@ test('project ZIP archive is deterministic and round-trips the complete v8 proje
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'keep-me' } } }
   project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n', sourceUrl: 'https://example.invalid/source', licenseReference: 'Vendor terms', rightsNotes: 'User supplied; redistribution not checked.' }
   project.importedChildSchematicSources = [{ format: 'ltspice-asc', filename: 'child.asc', originalText: 'Version 4\nIOPIN 0 0 In\nFLAG 0 0 INPUT\n', sourceUrl: 'https://example.invalid/child', licenseReference: 'MIT?', rightsNotes: 'Need to verify.' }]
-  project.plotSettings.panels = [{ id: 'plot-cursor', bounds: { x: 12, y: 24, width: 640, height: 360 }, selectedTraceIds: ['V(vin)'], ranges: { tran: { start: 0.1, end: 0.9 } }, secondCursorValues: { tran: 0.004, ac: 1200, dc: -2.5, noise: 50 } }]
+  project.plotSettings.panels = [{ id: 'plot-cursor', bounds: { x: 12, y: 24, width: 640, height: 360 }, selectedTraceIds: ['V(vin)'], ranges: { tran: { start: 0.1, end: 0.9 } }, secondCursorValues: { tran: 0.004, ac: 1200, dc: -2.5, noise: 50 }, componentVoltageProbes: { 'V(R1)': { partId: 'p-r1', positivePin: 0, negativePin: 1, positiveNet: 'vin', negativeNet: 'vout', positiveVector: 'v(vin)', negativeVector: 'v(vout)', ref: 'R1', vectorRef: 'v(r1)', sheetId: 'sheet-main', scopeSheetId: 'sheet-main', instancePath: [] } }, traceReferences: { 'V(vin)': { kind: 'node', name: 'vin', sheetId: 'sheet-main', scopeSheetId: 'sheet-main', instancePath: [], wireId: 'w-input', labelId: 'label-input' }, 'I(R1)': { kind: 'part-current', partId: 'p-r1', sheetId: 'sheet-main', scopeSheetId: 'sheet-main', instancePath: [] }, 'V(R1)': { kind: 'component-voltage', partId: 'p-r1', positivePin: 0, negativePin: 1, sheetId: 'sheet-main', scopeSheetId: 'sheet-main', instancePath: [] } }, traceColors: { 'V(vin)': '#8fe0af' } }]
   const first = await createProjectArchive(project)
   const second = await createProjectArchive(project)
   assert.deepEqual(first, second)
@@ -73,6 +73,9 @@ test('project ZIP archive is deterministic and round-trips the complete v8 proje
   project.sheets[0].parts = project.parts
   assert.deepEqual(restored, project)
   assert.deepEqual(restored.plotSettings.panels[0].secondCursorValues, { tran: 0.004, ac: 1200, dc: -2.5, noise: 50 })
+  assert.deepEqual(restored.plotSettings.panels[0].componentVoltageProbes, project.plotSettings.panels[0].componentVoltageProbes)
+  assert.deepEqual(restored.plotSettings.panels[0].traceReferences, project.plotSettings.panels[0].traceReferences)
+  assert.deepEqual(restored.plotSettings.panels[0].traceColors, project.plotSettings.panels[0].traceColors)
   assert.deepEqual(restored.parts[1].extensions, project.parts[1].extensions)
   assert.match(restored.importedSchematicSource.originalText, /UNKNOWN_VENDOR_RECORD keep-me/)
   assert.match(restored.importedChildSchematicSources[0].originalText, /IOPIN 0 0 In/)
@@ -288,6 +291,9 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   const malformedCursor = structuredClone(restored)
   malformedCursor.plotSettings.panels = [{ id: 'plot-invalid-cursor', bounds: { x: 0, y: 0, width: 640, height: 360 }, selectedTraceIds: [], ranges: {}, secondCursorValues: { tran: Number.NaN } }]
   assert.throws(() => validateProject(malformedCursor), /Plot panel cursor settings are malformed/)
+  const malformedNoiseRange = structuredClone(restored)
+  malformedNoiseRange.plotSettings.panels = [{ id: 'plot-invalid-noise-range', bounds: { x: 0, y: 0, width: 640, height: 360 }, selectedTraceIds: [], ranges: { noise: { start: 0.8, end: 0.2 } } }]
+  assert.throws(() => validateProject(malformedNoiseRange), /Plot panel view range is malformed/)
   const schema = JSON.parse(require('node:fs').readFileSync(path.join(__dirname, '../schemas/project-v8.schema.json'), 'utf8'))
   const modelPinPattern = new RegExp(schema.$defs.part.properties.modelPins.items.pattern, 'u')
   for (const pin of ['OUT#1', 'IN!', 'IN:1', 'IN^1', 'IN*1', 'IN@1', 'IN/P', 'IN$+', 'GND']) assert.equal(modelPinPattern.test(pin), true, pin)
@@ -382,7 +388,12 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.equal(schema.$defs.plotPanel.required.includes('selectedTraceIds'), true)
   assert.equal(schema.$defs.plotPanel.properties.valueRanges.$ref, '#/$defs/plotAnalysisValueRanges')
   assert.equal(schema.$defs.plotPanel.properties.secondCursorValues.additionalProperties, false)
+  assert.equal(schema.$defs.plotPanel.properties.secondCursorValues.maxProperties, 4)
   assert.deepEqual(Object.keys(schema.$defs.plotPanel.properties.secondCursorValues.properties), ['tran', 'ac', 'dc', 'noise'])
+  assert.equal(schema.$defs.plotPanel.properties.componentVoltageProbes.additionalProperties.$ref, '#/$defs/componentVoltageProbe')
+  assert.equal(schema.$defs.plotPanel.properties.traceReferences.additionalProperties.$ref, '#/$defs/plotTraceReference')
+  assert.equal(schema.$defs.plotPanel.properties.traceColors.additionalProperties.pattern, '^#[0-9a-fA-F]{6}$')
+  assert.deepEqual(schema.$defs.plotTraceReference.oneOf.map((variant) => variant.properties.kind.const), ['node', 'part-current', 'component-voltage'])
   assert.equal(schema.$defs.plotUnitValueRanges.maxProperties, 16)
   const initialConditions = schema.$defs.simulation.properties.initialConditions.items.oneOf
   assert.ok(initialConditions.some((condition) => condition.required.includes('element') && condition.required.includes('voltage') && condition.properties.element.pattern.startsWith('^C')))

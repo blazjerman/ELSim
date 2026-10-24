@@ -927,7 +927,7 @@ export function validateProject(input: unknown): Project {
   const plotSettings = data.plotSettings as PlotSettings | undefined
   if (plotSettings !== undefined) {
     if (!plotSettings || !Array.isArray(plotSettings.selectedTraceIds) || plotSettings.selectedTraceIds.some((id) => typeof id !== 'string') || !plotSettings.ranges || typeof plotSettings.ranges !== 'object' || Array.isArray(plotSettings.ranges)) throw new Error('Plot settings are malformed.')
-    for (const analysis of ['tran', 'ac', 'dc'] as const) {
+    for (const analysis of ['tran', 'ac', 'dc', 'noise'] as const) {
       const range = plotSettings.ranges[analysis]
       if (range !== undefined && (!range || !Number.isFinite(range.start) || !Number.isFinite(range.end) || range.start < 0 || range.end > 1 || range.end - range.start < 0.03)) throw new Error('Plot view range is malformed.')
     }
@@ -958,7 +958,7 @@ export function validateProject(input: unknown): Project {
           }
         }
         if (panel.traceColors !== undefined && (!panel.traceColors || typeof panel.traceColors !== 'object' || Array.isArray(panel.traceColors) || Object.keys(panel.traceColors).length > 256 || Object.values(panel.traceColors).some((color) => typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)))) throw new Error('Plot trace colors are malformed.')
-        for (const analysis of ['tran', 'ac', 'dc'] as const) {
+        for (const analysis of ['tran', 'ac', 'dc', 'noise'] as const) {
           const range = panel.ranges[analysis]
           if (range !== undefined && (!range || !Number.isFinite(range.start) || !Number.isFinite(range.end) || range.start < 0 || range.end > 1 || range.end - range.start < 0.03)) throw new Error('Plot panel view range is malformed.')
         }
