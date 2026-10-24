@@ -83,6 +83,15 @@ export function SwitchPathPrediction() {
   />
 }
 
+export function CommonSourcePhasePrediction() {
+  return <BinaryChoicePrediction
+    id="common-source-phase-prediction"
+    prompt="Before running, will the common-source amplifier output be inverted (about 180° out of phase)?"
+    expected="yes"
+    explanation="Yes. A rising gate voltage increases NMOS drain current, which increases the voltage drop across RD and pulls the drain voltage down. That makes VOUT move opposite to VIN in the amplifier’s midband."
+  />
+}
+
 export function DiodePolarityPrediction({ supplyValue }: { supplyValue: string }) {
   const supply = componentMagnitude(supplyValue, 'source')
   const polarity = supply === null ? null : supply > 0 ? 'forward' : supply < 0 ? 'reverse' : 'zero'
@@ -731,7 +740,7 @@ export function SeriesVoltageDropPrediction({ supplyValue }: { supplyValue: stri
 }
 
 type BeginnerPredictionProps = {
-  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'lamp-power' | 'transformer-voltage' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors'
+  kind: 'rc' | 'rl-time-constant' | 'supply-droop' | 'zener-current' | 'switch-lamp' | 'ohms-law' | 'current-source' | 'diode-polarity' | 'rectifier-peak' | 'bridge-ripple' | 'npn-switch' | 'pnp-switch' | 'nmos-switch' | 'pmos-switch' | 'voltage-divider' | 'potentiometer' | 'loaded-voltage-divider' | 'superposition' | 'thevenin-norton' | 'lc-energy' | 'wheatstone-bridge' | 'ac-cutoff' | 'sine-wave' | 'rlc-resonance' | 'resistor-power' | 'lamp-power' | 'transformer-voltage' | 'parallel-resistors' | 'capacitor-discharge' | 'led-current-limiter' | 'parallel-led-current' | 'series-resistors' | 'common-source-phase'
   resistanceValue?: string
   driveValue?: string
   betaValue?: string
@@ -770,6 +779,7 @@ export function BeginnerPrediction(props: BeginnerPredictionProps) {
     case 'supply-droop': return <SupplyDroopPrediction supplyValue={props.supplyValue ?? ''} sourceResistanceValue={props.seriesResistanceValue ?? ''} loadResistanceValue={props.loadResistanceValue ?? ''}/>
     case 'zener-current': return <ZenerCurrentPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'switch-lamp': return <SwitchPathPrediction/>
+    case 'common-source-phase': return <CommonSourcePhasePrediction/>
     case 'ohms-law': return <OhmsLawPrediction supplyValue={props.supplyValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'current-source': return <CurrentSourcePrediction currentValue={props.currentValue ?? ''} resistanceValue={props.resistanceValue ?? ''}/>
     case 'diode-polarity': return <DiodePolarityPrediction supplyValue={props.supplyValue ?? ''}/>
