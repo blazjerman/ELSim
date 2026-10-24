@@ -811,7 +811,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const traceVisibility = useTraceVisibility(selectedIds, onToggle)
   const shown = useMemo(() => traces.filter((trace) => traceVisibility.visibleIdSet.has(trace.id)), [traces, traceVisibility.visibleIdSet])
   const visibleTraceUnits = [...new Set(shown.map((trace) => trace.unit))]
-  const primaryTraceUnit = visibleTraceUnits.length === 1 ? visibleTraceUnits[0] : visibleTraceUnits.length > 1 ? 'mixed units' : traces[0]?.unit ?? ''
+  const primaryValueUnit = visibleTraceUnits[0] ?? traces[0]?.unit ?? ''
   const visibleNoiseUnits = useMemo(() => isNoise ? [...new Set(shown.map((trace) => trace.unit))] : [], [isNoise, shown])
   const noiseAxisUnit = visibleNoiseUnits.length === 1 ? visibleNoiseUnits[0] : visibleNoiseUnits.length > 1 ? 'mixed units' : 'noise density'
   const traceIndexById = useTraceIndexById(traces)
@@ -827,7 +827,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
   const colors = useMemo(() => colorsForTraces(traces, savedColors), [traces, savedColors])
   const colorFor = useCallback((index: number) => colors[index % colors.length], [colors])
   const plotSize = useResponsivePlotSize()
-  const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = Math.round((width - (isNoise && visibleNoiseUnits.length > 1 ? 96 : 12)) * 100) / 100, top = 12, bottom = Math.round((height - 30) * 100) / 100
+  const width = plotSize.size.width, height = plotSize.size.height, left = 52, right = Math.round((width - ((isNoise && visibleNoiseUnits.length > 1 || mode === 'sensitivity' && visibleTraceUnits.length > 1) ? 96 : 12)) * 100) / 100, top = 12, bottom = Math.round((height - 30) * 100) / 100
   const frequencies = traces[0]?.axis ?? Float64Array.of(1, 10)
   const first = Math.floor(navigation.window.start * Math.max(0, frequencies.length - 1))
   const last = Math.max(first + 1, Math.ceil(navigation.window.end * Math.max(1, frequencies.length - 1)))
@@ -901,16 +901,43 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     return ranges
   }, [isNoise, shown, sampledTraceById])
   const noiseWindows = useUnitValueWindows(noiseAutoRanges, valueRanges, onValueRangeChange)
+  const quantityAutoRanges = useMemo(() => {
+    const ranges = new Map<string, [number, number]>()
+    if (mode !== 'sensitivity') return ranges
+    for (const trace of shown) {
+      const rawRange = sampledTraceById.get(trace.id)?.dataRange
+      if (!rawRange) continue
+      const current = ranges.get(trace.unit)
+      ranges.set(trace.unit, [Math.min(current?.[0] ?? 0, rawRange[0], 0), Math.max(current?.[1] ?? 0, rawRange[1], 0)])
+    }
+    return ranges
+  }, [mode, shown, sampledTraceById])
+  const quantityRangePrefix = 'linear-unit:'
+  const quantitySavedRanges = useMemo(() => Object.fromEntries([...quantityAutoRanges.keys()].flatMap((unit) => {
+    const stored = valueRanges?.[`${quantityRangePrefix}${unit}`] ?? valueRanges?.[mode]
+    return stored ? [[unit, stored]] : []
+  })), [quantityAutoRanges, valueRanges, mode])
+  const saveQuantityRanges = useCallback((ranges: Record<string, PlotValueRange> | undefined) => {
+    const next = { ...valueRanges }
+    const updatedKeys = new Set(Object.keys(ranges ?? {}).map((unit) => `${quantityRangePrefix}${unit}`))
+    for (const key of Object.keys(next)) if (key === mode || key.startsWith(quantityRangePrefix) && (ranges === undefined || updatedKeys.has(key))) delete next[key]
+    for (const [unit, savedRange] of Object.entries(ranges ?? {})) next[`${quantityRangePrefix}${unit}`] = savedRange
+    onValueRangeChange(Object.keys(next).length ? next : undefined)
+  }, [valueRanges, onValueRangeChange, mode])
+  const quantityWindows = useUnitValueWindows(quantityAutoRanges, quantitySavedRanges, saveQuantityRanges)
   const updateValueRange = useCallback((next: PlotValueRange | undefined) => onValueRangeChange(next ? { ...valueRanges, [mode]: next } : undefined), [onValueRangeChange, valueRanges, mode])
   const valueAxis = useValueWindow([dataMin, dataMax], valueRanges?.[mode], updateValueRange)
   const primaryNoiseUnit = visibleNoiseUnits[0] ?? ''
+  const primaryAxisUnit = isNoise ? primaryNoiseUnit : mode === 'sensitivity' ? primaryValueUnit : ''
+  const secondaryAxisUnits = isNoise ? visibleNoiseUnits : mode === 'sensitivity' ? visibleTraceUnits : []
   const noiseAxisRange = noiseWindows.ranges.get(primaryNoiseUnit)
-  const minValue = isNoise ? noiseAxisRange?.min ?? 0 : valueAxis.range.min
-  const maxValue = isNoise ? noiseAxisRange?.max ?? 1 : valueAxis.range.max
-  const rangeForTrace = (trace: Trace) => isNoise ? noiseWindows.ranges.get(trace.unit) ?? { min: 0, max: 1 } : valueAxis.range
-  const resetView = () => { navigation.reset(); valueAxis.reset(); noiseWindows.reset() }
-  const verticalZoom = (factor: number) => isNoise ? noiseWindows.zoom(factor) : valueAxis.zoom(factor)
-  const verticalPan = (direction: -1 | 1) => isNoise ? noiseWindows.pan(direction) : valueAxis.pan(direction)
+  const primaryQuantityRange = quantityWindows.ranges.get(primaryValueUnit)
+  const minValue = isNoise ? noiseAxisRange?.min ?? 0 : mode === 'sensitivity' ? primaryQuantityRange?.min ?? 0 : valueAxis.range.min
+  const maxValue = isNoise ? noiseAxisRange?.max ?? 1 : mode === 'sensitivity' ? primaryQuantityRange?.max ?? 1 : valueAxis.range.max
+  const rangeForTrace = (trace: Trace) => isNoise ? noiseWindows.ranges.get(trace.unit) ?? { min: 0, max: 1 } : mode === 'sensitivity' ? quantityWindows.ranges.get(trace.unit) ?? { min: 0, max: 1 } : valueAxis.range
+  const resetView = () => { navigation.reset(); if (mode === 'sensitivity') quantityWindows.reset(); else valueAxis.reset(); noiseWindows.reset() }
+  const verticalZoom = (factor: number) => isNoise ? noiseWindows.zoom(factor) : mode === 'sensitivity' ? quantityWindows.zoom(factor) : valueAxis.zoom(factor)
+  const verticalPan = (direction: -1 | 1) => isNoise ? noiseWindows.pan(direction) : mode === 'sensitivity' ? quantityWindows.pan(direction) : valueAxis.pan(direction)
   const plotDrag = usePlotDragPan((delta) => navigation.panBy(delta), navigation.getRange, navigation.restore)
   const wheelZoom = (event: ReactWheelEvent<SVGSVGElement>) => {
     event.preventDefault()
@@ -938,7 +965,7 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
     if (next !== null) setKeyboardAnnouncement(`Cursor ${moveB ? 'B' : 'A'} · Frequency ${frequencies[next].toPrecision(5)} hertz`)
   }
   const yFor = (value: number, unit = '') => {
-    const range = isNoise ? noiseWindows.ranges.get(unit) ?? { min: minValue, max: maxValue } : valueAxis.range
+    const range = isNoise ? noiseWindows.ranges.get(unit) ?? { min: minValue, max: maxValue } : mode === 'sensitivity' ? quantityWindows.ranges.get(unit) ?? { min: minValue, max: maxValue } : valueAxis.range
     return bottom - (value - range.min) / (range.max - range.min || 1) * (bottom - top)
   }
   const plotPaths = useMemo(() => shown.map((trace) => {
@@ -952,21 +979,21 @@ function AcPlot({ result, traces, selectedIds, onToggle, onExport, range, onRang
       ? `${trace.label}, noise density in ${trace.unit}`
       : mode === 'sensitivity' ? `${trace.label}, ${isIntermodulation ? 'intermodulation product magnitude' : isDistortion ? 'harmonic distortion magnitude' : 'AC sensitivity magnitude'} in ${trace.unit}` : `${trace.label}, ${isIntermodulation ? 'intermodulation product' : isDistortion ? 'harmonic distortion' : 'AC'} ${mode === 'magnitude' ? 'magnitude in decibels' : 'phase in degrees'}`
     return { id: trace.id, points, color: colors[(traceIndexById.get(trace.id) ?? 0) % colors.length], accessibleName }
-  }), [traces, shown, first, last, minFrequency, maxFrequency, right, bottom, minValue, maxValue, mode, unwrapPhase, phaseSamplesById, colors, traceIndexById, sampledIndicesById, noiseWindows.ranges])
+  }), [traces, shown, first, last, minFrequency, maxFrequency, right, bottom, minValue, maxValue, mode, unwrapPhase, phaseSamplesById, colors, traceIndexById, sampledIndicesById, noiseWindows.ranges, quantityWindows.ranges])
   return <div className="waveform-view ac-view">
     <div className="waveform-title"><strong>{isNoise ? 'Noise spectral density' : isDistortion ? distortionTitle : isSensitivity ? 'AC sensitivity response' : 'AC frequency response'}</strong><span>{frequencies.length.toLocaleString()} frequency points · {traces.length} vectors</span><AcCursorTime result={result} frequencies={frequencies}/><PlotNavigation zoom={navigation.zoom} reset={resetView} valueZoom={verticalZoom} valuePan={verticalPan} disabled={frequencies.length < 3}/><button className="plot-export" onClick={onExport} disabled={!shown.length}>Export CSV</button></div>
     <MeasurementCursorControls label={isNoise ? 'Noise measurement cursors' : isDistortion ? 'Distortion measurement cursors' : 'AC measurement cursors'} active={activeCursor} hasSecond={secondCursorIndex !== null} onSelect={setActiveCursor} onAdd={() => { const existing = getAnalysisCursor(result); const current = existing ?? minFrequency; if (existing === null) setAnalysisCursor(result, current); const currentIndex = Math.max(first, Math.min(last, nearestAxisIndex(frequencies, current, 0, Math.max(0, frequencies.length - 1)))); const quarter = Math.max(1, Math.floor((last - first) / 4)); const nextIndex = currentIndex <= first + (last - first) / 2 ? Math.min(last, currentIndex + quarter) : Math.max(first, currentIndex - quarter); onSecondCursorChange(frequencies[nextIndex] ?? maxFrequency); setActiveCursor('B') }} onRemove={() => { onSecondCursorChange(null); setActiveCursor('A') }}/>
     <div className="ac-mode">{isNoise ? <span>Noise density · {noiseAxisUnit}</span> : <><button className={mode === 'magnitude' || mode === 'sensitivity' ? 'active' : ''} onClick={() => setAcMode('magnitude')}>{isSensitivity ? 'Magnitude (linear)' : isDistortion ? 'Magnitude (linear)' : 'Magnitude (dB)'}</button><button className={mode === 'phase' ? 'active' : ''} onClick={() => setAcMode('phase')}>Phase (°)</button>{mode === 'phase' && <button type="button" className={unwrapPhase ? 'active' : ''} aria-pressed={unwrapPhase} onClick={() => { setUnwrapPhase((value) => !value); updateValueRange(undefined) }}>Unwrap phase</button>}</>}</div>
     {isNoise && result.noiseSummaries?.length ? <div className="noise-summary" aria-label="Integrated noise results">{result.noiseSummaries.map((summary) => <span key={summary.sweep?.index ?? 'single'}>{summary.sweep ? `${summary.sweep.label}: ` : ''}Output RMS {formatEngineeringTick(summary.outputRms, 'V')} · Input-referred RMS {formatEngineeringTick(summary.inputRms, summary.inputUnit)}</span>)}</div> : null}
     <svg ref={plotSize.ref} className="waveform-chart ac-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-roledescription="interactive waveform plot" aria-label={`${isNoise ? 'Noise density' : isIntermodulation ? `Intermodulation ${mode === 'phase' ? 'phase' : 'magnitude'}` : isDistortion ? `Harmonic distortion ${mode === 'phase' ? 'phase' : 'magnitude'}` : `AC ${mode}${mode === 'phase' && unwrapPhase ? ', unwrapped' : ''}`} from ${minFrequency.toPrecision(3)} Hz to ${maxFrequency.toPrecision(3)} Hz. Cursor ${activeCursor} is selected. Use Left and Right arrows to move it, Home or End to jump to the visible range edges.`} aria-keyshortcuts="ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={handleAcCursorKeys} onWheel={wheelZoom} onPointerDown={plotDrag.start} onClick={handleAcCursorClick}>
-      {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value, primaryNoiseUnit)} y2={yFor(value, primaryNoiseUnit)} className="plot-grid"/><text data-value-unit={isNoise ? primaryNoiseUnit : mode === 'sensitivity' ? primaryTraceUnit : mode === 'magnitude' ? 'dB' : '°'} x={left - 6} y={yFor(value, primaryNoiseUnit) + 3} textAnchor="end" className="plot-tick">{isNoise || mode === 'sensitivity' ? formatEngineeringTick(value, mode === 'sensitivity' ? primaryTraceUnit : primaryNoiseUnit) : `${value.toPrecision(3)} ${mode === 'magnitude' ? 'dB' : '°'}`}</text></g> })}
-      {isNoise && visibleNoiseUnits.filter((unit) => unit !== primaryNoiseUnit).flatMap((unit) => {
-        const axisRange = noiseWindows.ranges.get(unit)
+      {[0, 1, 2, 3].map((line) => { const value = maxValue - line / 3 * (maxValue - minValue); return <g key={line}><line x1={left} x2={right} y1={yFor(value, primaryAxisUnit)} y2={yFor(value, primaryAxisUnit)} className="plot-grid"/><text data-value-unit={isNoise ? primaryNoiseUnit : mode === 'sensitivity' ? primaryValueUnit : mode === 'magnitude' ? 'dB' : '°'} x={left - 6} y={yFor(value, primaryAxisUnit) + 3} textAnchor="end" className="plot-tick">{isNoise || mode === 'sensitivity' ? formatEngineeringTick(value, mode === 'sensitivity' ? primaryValueUnit : primaryNoiseUnit) : `${value.toPrecision(3)} ${mode === 'magnitude' ? 'dB' : '°'}`}</text></g> })}
+      {secondaryAxisUnits.filter((unit) => unit !== primaryAxisUnit).flatMap((unit) => {
+        const axisRange = isNoise ? noiseWindows.ranges.get(unit) : quantityWindows.ranges.get(unit)
         if (!axisRange) return []
         const step = niceTickStep(axisRange.max - axisRange.min, 3)
-        return ticksInRange(axisRange.min, axisRange.max, step).filter((value) => Math.abs(value) > step * 1e-8).map((value) => <g key={`noise-${unit}-${value}`} className="plot-value-tick-current"><line x1={right - 3} x2={right} y1={yFor(value, unit)} y2={yFor(value, unit)} className="plot-axis"/><text data-value-unit={unit} x={right + 4} y={yFor(value, unit) + 3} className="plot-tick">{formatEngineeringTick(value, unit)}</text></g>)
+        return ticksInRange(axisRange.min, axisRange.max, step).filter((value) => Math.abs(value) > step * 1e-8).map((value) => <g key={`unit-${unit}-${value}`} className="plot-value-tick-current"><line x1={right - 3} x2={right} y1={yFor(value, unit)} y2={yFor(value, unit)} className="plot-axis"/><text data-value-unit={unit} x={right + 4} y={yFor(value, unit) + 3} className="plot-tick">{formatEngineeringTick(value, unit)}</text></g>)
       })}
-      <g className="plot-zero-reference">{(isNoise ? visibleNoiseUnits : ['']).map((unit, index) => <g key={`zero-${unit}`}><line x1={left} x2={right} y1={yFor(0, unit)} y2={yFor(0, unit)}/><text data-value-unit={isNoise ? unit : mode === 'sensitivity' ? traces[0]?.unit ?? '' : mode === 'magnitude' ? 'dB' : '°'} x={index === 0 ? left - 6 : right + 4} y={yFor(0, unit) + 3} textAnchor={index === 0 ? 'end' : undefined}>{isNoise || mode === 'sensitivity' ? formatEngineeringTick(0, mode === 'sensitivity' ? traces[0]?.unit ?? '' : unit) : mode === 'magnitude' ? '0 dB' : '0 °'}</text></g>)}</g>
+      <g className="plot-zero-reference">{(isNoise || mode === 'sensitivity' ? secondaryAxisUnits : ['']).map((unit, index) => <g key={`zero-${unit}`}><line x1={left} x2={right} y1={yFor(0, unit)} y2={yFor(0, unit)}/><text data-value-unit={isNoise || mode === 'sensitivity' ? unit : mode === 'magnitude' ? 'dB' : '°'} x={index === 0 ? left - 6 : right + 4} y={yFor(0, unit) + 3} textAnchor={index === 0 ? 'end' : undefined}>{isNoise || mode === 'sensitivity' ? formatEngineeringTick(0, unit) : mode === 'magnitude' ? '0 dB' : '0 °'}</text></g>)}</g>
       <line x1={left} x2={right} y1={bottom} y2={bottom} className="plot-axis"/>
       <PlotPolylineSet plots={plotPaths}/>
       <AcCursorMarker result={result} frequencies={frequencies} first={first} last={last} minFrequency={minFrequency} maxFrequency={maxFrequency} left={left} right={right} top={top} bottom={bottom} secondCursorIndex={secondCursorIndex}/>
