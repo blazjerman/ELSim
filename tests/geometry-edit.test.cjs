@@ -164,9 +164,9 @@ test('connection-dot cache reuses unchanged wire geometry and refreshes changed 
   assert.notDeepEqual(cachedDots(movedProject), original, 'moving a part recomputes pin joins while reusing the unchanged wire index')
   assert.deepEqual(cachedDots(movedProject), [{ x: 50, y: 0 }, { x: 0, y: 0 }])
 
-  const movedWireProject = { ...movedProject, wires: [{ ...project.wires[0], points: [[-60, 0], [0, 0]] }, project.wires[1]] }
+  const movedWireProject = { ...movedProject, wires: [{ ...project.wires[0], points: [[-60, 0], [150, 0]] }, project.wires[1]] }
   assert.deepEqual(cachedDots(movedWireProject), wireConnectionDotPoints(movedWireProject))
-  assert.deepEqual(cachedDots(movedWireProject), [{ x: 50, y: 0 }, { x: 0, y: 0 }], 'a new immutable wire array rebuilds its index before recomputing joins')
+  assert.deepEqual(cachedDots(movedWireProject), [{ x: 50, y: 0 }, { x: 150, y: 0 }, { x: 0, y: 0 }], 'a new immutable wire array rebuilds its index and pin-to-wire results')
 })
 
 test('wire-connection dot spatial cells support large positive and negative coordinates', () => {

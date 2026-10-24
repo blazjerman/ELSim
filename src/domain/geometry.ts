@@ -412,7 +412,7 @@ function createWirePointLookup(wires: readonly Wire[]): (point: Point, excludedW
   }
 }
 
-function connectionDotPoints(project: Pick<Project, 'parts' | 'wires'>, pins: readonly PinLocation[], hasWireAt: (point: Point, excludedWireId?: string) => boolean): Point[] {
+function connectionDotPoints(project: Pick<Project, 'parts' | 'wires'>, pins: readonly PinLocation[], hasWireAt: (point: Point, excludedWireId?: string) => boolean, hasWireAtPin: (pin: PinLocation) => boolean = hasWireAt): Point[] {
   const cellSize = CONNECTION_DOT_CELL_SIZE
   const pinCells = new Map<number, Map<number, PinLocation[]>>()
   for (const pin of pins) {
@@ -438,7 +438,7 @@ function connectionDotPoints(project: Pick<Project, 'parts' | 'wires'>, pins: re
   const pointKey = (point: Point) => `${Math.round(point.x * 1000)},${Math.round(point.y * 1000)}`
   const add = (point: Point) => dots.set(pointKey(point), point)
   for (const pin of pins) {
-    if (hasWireAt(pin)) add({ x: pin.x, y: pin.y })
+    if (hasWireAtPin(pin)) add({ x: pin.x, y: pin.y })
   }
   for (const wire of project.wires) for (const [x, y] of wire.points) {
     const point = { x, y }
@@ -460,14 +460,24 @@ export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'
  * key follows the editor's immutable wire-array updates and releases old
  * indexes when their project revisions are no longer reachable. */
 export function createWireConnectionDotCache(): (project: Pick<Project, 'parts' | 'wires'>, cachedPins?: readonly PinLocation[]) => Point[] {
-  const lookups = new WeakMap<readonly Wire[], (point: Point, excludedWireId?: string) => boolean>()
+  const lookups = new WeakMap<readonly Wire[], {
+    hasWireAt: (point: Point, excludedWireId?: string) => boolean
+    pinsOnWire: WeakMap<PinLocation, boolean>
+  }>()
   return (project, cachedPins) => {
-    let hasWireAt = lookups.get(project.wires)
-    if (!hasWireAt) {
-      hasWireAt = createWirePointLookup(project.wires)
-      lookups.set(project.wires, hasWireAt)
+    let lookup = lookups.get(project.wires)
+    if (!lookup) {
+      lookup = { hasWireAt: createWirePointLookup(project.wires), pinsOnWire: new WeakMap() }
+      lookups.set(project.wires, lookup)
     }
-    return connectionDotPoints(project, cachedPins ?? projectPinLocations(project), hasWireAt)
+    const hasWireAtPin = (pin: PinLocation) => {
+      const cached = lookup!.pinsOnWire.get(pin)
+      if (cached !== undefined) return cached
+      const connected = lookup!.hasWireAt(pin)
+      lookup!.pinsOnWire.set(pin, connected)
+      return connected
+    }
+    return connectionDotPoints(project, cachedPins ?? projectPinLocations(project), lookup.hasWireAt, hasWireAtPin)
   }
 }
 
