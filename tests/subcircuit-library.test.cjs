@@ -1481,6 +1481,23 @@ test('standalone R C L model cards keep their imported libraries required', () =
   }
 })
 
+test('selected AKO device models retain their cross-library base chain', () => {
+  const assets = [
+    { id: 'base', filename: 'base.lib', content: '.MODEL BASE D(IS=1n)' },
+    { id: 'middle', filename: 'middle.lib', content: '.MODEL MIDDLE AKO:BASE D(N=2)' },
+    { id: 'child', filename: 'child.lib', content: '.MODEL CHILD AKO:MIDDLE D(IS=2n)' },
+  ]
+  const report = analyzeModelDependencies(assets)
+  assert.deepEqual(report.missing, [])
+  assert.deepEqual([...requiredModelAssetIds(report, [{ kind: 'diode', deviceModel: 'CHILD' }])].sort(), ['base', 'child', 'middle'])
+
+  const withoutBase = analyzeModelDependencies(assets.slice(1))
+  assert.deepEqual(withoutBase.missing.map(({ assetId, owner, reference, modelName, sourceLine }) => ({ assetId, owner, reference, modelName, sourceLine })), [
+    { assetId: 'middle', owner: 'MIDDLE', reference: 'MIDDLE', modelName: 'BASE', sourceLine: 1 },
+  ])
+  assert.throws(() => validateModelLibraryReplacement(assets, assets.slice(1), [{ kind: 'diode', deviceModel: 'CHILD' }]), /Replacement would break MIDDLE: MIDDLE needs device BASE/)
+})
+
 test('reports duplicate model names across imported files with both source locations', () => {
   const report = analyzeModelDependencies([
     { id: 'amp-a', filename: 'amp-a.lib', content: '.SUBCKT AMP IN OUT\nR1 IN OUT 1k\n.ENDS AMP\n.MODEL DFAST D(Is=1n)' },

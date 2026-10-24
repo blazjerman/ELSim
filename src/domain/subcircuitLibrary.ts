@@ -12,9 +12,10 @@ export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt
 export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string; targetModelType?: string }
 export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number; section?: string }
+export type ModelBaseTarget = { assetId: string; modelName: string }
 export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device' | 'measurement' | 'function'; analysis?: 'tran' | 'ac' | 'dc'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
 export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; section?: string; reason: 'missing' | 'ambiguous' | 'unsafe' | 'section' }
-export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string>; deviceModelBinAssets: Map<string, string[]> }
+export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string>; deviceModelBinAssets: Map<string, string[]>; modelBaseAssets: Map<string, ModelBaseTarget[]> }
 export type NgspiceBsim3BinFamily<T extends SpiceModelDefinition = SpiceModelDefinition> = { name: string; displayName: string; type: string; binCount: number; models: T[] }
 export type ModelLibraryInput = { id: string; filename: string; content: string; selectedSections?: string[] }
 export type AnalyzedModelLibraries<T extends ModelLibraryInput = ModelLibraryInput> = { assets: { asset: T; parsed: ParsedSubcircuitLibrary }[]; dependencies: ModelDependencyAnalysis }
@@ -1455,6 +1456,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   const subcircuitAssets = new Map<string, string>()
   const deviceModelAssets = new Map<string, string>()
   const globalDeviceModels = new Map<string, SpiceModelDefinition>()
+  const globalDeviceModelCandidates = new Map<string, { assetId: string; model: SpiceModelDefinition }[]>()
   const globalBsim3Bins = new Map<string, { assetId: string; model: SpiceModelDefinition }[]>()
   const scopedDeviceModelAssets = new Map<string, string>()
   const scopedDeviceModels = new Map<string, SpiceModelDefinition>()
@@ -1491,6 +1493,9 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       definitionLocations.set(key, conflict)
       deviceModelAssets.set(model.name.toLowerCase(), asset.id)
       globalDeviceModels.set(model.name.toLowerCase(), model)
+      const namedModels = globalDeviceModelCandidates.get(model.name.toLowerCase()) ?? []
+      namedModels.push({ assetId: asset.id, model })
+      globalDeviceModelCandidates.set(model.name.toLowerCase(), namedModels)
       const binBase = ngspiceBsim3BinBase(model)
       if (binBase) {
         const bins = globalBsim3Bins.get(binBase) ?? []
@@ -1527,6 +1532,14 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
   }
   const missing: ModelDependencyIssue[] = [], resolved: ResolvedModelDependency[] = []
   const missingIncludes: ModelIncludeIssue[] = [], resolvedIncludes: ResolvedModelInclude[] = []
+  const modelBaseAssets = new Map<string, ModelBaseTarget[]>()
+  for (const { asset, parsed } of parsedAssets) for (const model of parsed.models) {
+    if (!model.akoBaseName || model.scope) continue
+    const key = `${asset.id}:${model.name.toLowerCase()}`
+    const bases = (globalDeviceModelCandidates.get(model.akoBaseName.toLowerCase()) ?? []).map(({ assetId, model: base }) => ({ assetId, modelName: base.name }))
+    if (bases.length) modelBaseAssets.set(key, bases)
+    else missing.push({ assetId: asset.id, filename: asset.filename, owner: model.name, reference: model.name, modelName: model.akoBaseName, kind: 'device', sourceLine: model.startLine })
+  }
   for (const { asset, parsed } of parsedAssets) for (const include of parsed.includes) {
     if (!include.filename) {
       missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: 'unsafe' })
@@ -1647,7 +1660,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     const assetIds = [...new Set(allBsim3BinCards.filter(({ model }) => ngspiceBsim3BinBase(model) === family.name).map(({ assetId }) => assetId))]
     if (assetIds.length) deviceModelBinAssets.set(family.name, assetIds)
   }
-  return { missing, missingIncludes, recursiveChains, resolved, resolvedIncludes, conflicts, subcircuitAssets, deviceModelAssets, deviceModelBinAssets }
+  return { missing, missingIncludes, recursiveChains, resolved, resolvedIncludes, conflicts, subcircuitAssets, deviceModelAssets, deviceModelBinAssets, modelBaseAssets }
 }
 
 /** Resolve references between imported libraries and report missing cards and recursive .SUBCKT chains. */
@@ -1657,7 +1670,7 @@ export function analyzeModelDependencies(assets: ModelLibraryInput[]): ModelDepe
 
 /** Return the imported libraries required by schematic instances, including transitive dependencies. */
 export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: { kind: string; modelName?: string; deviceModel?: string }[]): Set<string> {
-  const required = new Set<string>(), pending: string[] = [], pendingAssets: string[] = []
+  const required = new Set<string>(), pending: string[] = [], pendingAssets: string[] = [], pendingModels: ModelBaseTarget[] = []
   const addAsset = (assetId: string | undefined) => {
     if (!assetId || required.has(assetId)) return
     required.add(assetId)
@@ -1671,14 +1684,29 @@ export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: 
       const modelName = part.deviceModel.toLowerCase()
       const binAssets = analysis.deviceModelBinAssets.get(modelName)
       if (binAssets?.length) for (const assetId of binAssets) addAsset(assetId)
-      else addAsset(analysis.deviceModelAssets.get(modelName))
+      else {
+        const assetId = analysis.deviceModelAssets.get(modelName)
+        addAsset(assetId)
+        if (assetId) pendingModels.push({ assetId, modelName })
+      }
     }
   }
-  const visited = new Set<string>()
-  while (pending.length || pendingAssets.length) {
+  const visited = new Set<string>(), visitedModels = new Set<string>()
+  while (pending.length || pendingAssets.length || pendingModels.length) {
     const assetId = pendingAssets.pop()
     if (assetId) {
       for (const include of analysis.resolvedIncludes) if (include.assetId === assetId) addAsset(include.targetAssetId)
+      continue
+    }
+    const model = pendingModels.pop()
+    if (model) {
+      const key = `${model.assetId}:${model.modelName.toLowerCase()}`
+      if (visitedModels.has(key)) continue
+      visitedModels.add(key)
+      for (const base of analysis.modelBaseAssets.get(key) ?? []) {
+        addAsset(base.assetId)
+        pendingModels.push(base)
+      }
       continue
     }
     const owner = pending.pop()!
@@ -1687,6 +1715,7 @@ export function requiredModelAssetIds(analysis: ModelDependencyAnalysis, parts: 
     for (const dependency of analysis.resolved) if (dependency.owner.toLowerCase() === owner) {
       addAsset(dependency.targetAssetId)
       if (dependency.kind === 'subcircuit') pending.push(dependency.modelName.toLowerCase())
+      else pendingModels.push({ assetId: dependency.targetAssetId, modelName: dependency.modelName })
     }
   }
   return required

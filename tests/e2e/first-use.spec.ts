@@ -2234,7 +2234,7 @@ test('large imported-model dependency reports are navigable regions, not live st
   await expect(importedModel.getByRole('button', { name: 'Remove model library amp.lib' })).toBeDisabled()
 })
 
-test('model library provenance can remove unused shared files and protects included dependencies', { tag: '@ui-smoke' }, async ({ page }) => {
+test('model library provenance protects included and AKO base dependencies but removes unused files', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
   const projectJson = await page.evaluate(async (fallbackProjectJson) => {
@@ -2243,6 +2243,8 @@ test('model library provenance can remove unused shared files and protects inclu
     const assets = [
       { id: 'amplifier-library', filename: 'amplifier.lib', content: '.include "shared.lib"\n.SUBCKT AMP IN OUT\nR1 IN OUT {RLOAD}\n.ENDS AMP' },
       { id: 'shared-library', filename: 'shared.lib', content: '.PARAM RLOAD=10k' },
+      { id: 'base-model-library', filename: 'base-model.lib', content: '.MODEL BASE_D D(IS=1n)' },
+      { id: 'child-model-library', filename: 'child-model.lib', content: '.MODEL CHILD_D AKO:BASE_D D(N=2)' },
       { id: 'unused-library', filename: 'unused.lib', content: '.MODEL D_UNUSED D(IS=1n)' },
     ]
     project.modelAssets = await Promise.all(assets.map(async (asset) => {
@@ -2251,6 +2253,7 @@ test('model library provenance can remove unused shared files and protects inclu
       return { ...asset, sha256, licenseStatus: 'unknown', importedAt: new Date().toISOString() }
     }))
     project.parts.push({ id: 'amplifier-instance', kind: 'subcircuit', ref: 'XAMP1', value: 'AMP', modelName: 'AMP', modelPins: ['IN', 'OUT'], x: 760, y: 600, rotation: 0 })
+    project.parts.push({ id: 'ako-diode-instance', kind: 'diode', ref: 'DTEST', value: '1', deviceModel: 'CHILD_D', x: 1000, y: 600, rotation: 0 })
     project.sheets[0] = { ...project.sheets[0], parts: project.parts }
     return JSON.stringify(project)
   }, JSON.stringify(createStarterProject()))
@@ -2263,6 +2266,8 @@ test('model library provenance can remove unused shared files and protects inclu
 
   await expect(page.getByRole('button', { name: 'Remove library file amplifier.lib' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Remove library file shared.lib' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Remove library file child-model.lib' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Remove library file base-model.lib' })).toBeDisabled()
   const unusedFile = page.getByRole('button', { name: 'Remove library file unused.lib' })
   await expect(unusedFile).toBeEnabled()
   await unusedFile.click()
