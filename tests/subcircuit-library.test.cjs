@@ -1519,7 +1519,7 @@ test('diagnoses unsupported imported B-source functions hidden inside reachable 
   ].join('\n')
   const warnings = analyzeLtspiceModelDialect(source)
   assert.deepEqual(warnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
-    [1, 'Imported .FUNC uses an unavailable or incompatible B-source function'],
+    [1, 'Imported .FUNC uses unavailable or incompatible B-source flat()'],
   ])
   assert.match(warnings[0].impact, /incompatible signature/)
   assert.match(warnings[0].suggestion, /tested ngspice-compatible expression/)

@@ -4169,7 +4169,7 @@ test('imported model B-source and helper compatibility warnings link to their so
   await expect(warning).toContainText('shared-functions.lib:4')
   await expect(warning).toContainText('Imported .FUNC uses LTspice if()')
   await expect(warning).toContainText('shared-functions.lib:5')
-  await expect(warning).toContainText('Imported .FUNC uses an unavailable or incompatible B-source function')
+  await expect(warning).toContainText('Imported .FUNC uses unavailable or incompatible B-source flat()')
   await expect(warning).toContainText('shared-functions.lib:6')
   await expect(warning).not.toContainText('shared-functions.lib:9')
 })

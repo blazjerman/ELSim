@@ -216,9 +216,12 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
           if (!match) continue
           const calledName = match[1]?.toLowerCase()
           if (rule.feature === 'Imported .FUNC uses an unavailable or incompatible B-source function' && calledName && (helpersByScope.get(candidate.scope)?.has(calledName) || globalHelpers.has(calledName))) continue
-          const warningKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${rule.feature}`
+          const feature = rule.feature === 'Imported .FUNC uses an unavailable or incompatible B-source function' && match[1]
+            ? `Imported .FUNC uses unavailable or incompatible B-source ${match[1]}()`
+            : rule.feature
+          const warningKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${feature}`
           if (helperWarnings.has(warningKey)) continue
-          helperWarnings.set(warningKey, { sourceLine: candidate.sourceLine, sourceAssetId: candidate.assetId, feature: rule.feature, excerpt: candidate.excerpt, impact: rule.impact, suggestion: rule.suggestion })
+          helperWarnings.set(warningKey, { sourceLine: candidate.sourceLine, sourceAssetId: candidate.assetId, feature, excerpt: candidate.excerpt, impact: rule.impact, suggestion: rule.suggestion })
         }
       }
     }
