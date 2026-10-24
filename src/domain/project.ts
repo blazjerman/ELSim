@@ -172,7 +172,7 @@ export type Project = {
   symbolAssets?: SymbolAsset[]
   importedSchematicSource?: LtspiceSchematicSource
   importedChildSchematicSources?: LtspiceSchematicSource[]
-  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; stopTime: string; maxStep: string; startSavingTime?: string; temperature?: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
+  simulation: { analysis: 'tran' | 'op' | 'ac' | 'dc' | 'noise'; stopTime: string; maxStep: string; startSavingTime?: string; temperature?: string; shuntResistance?: string; acSweep?: { scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; noiseSweep?: { outputNode: string; inputSource: string; scale: 'dec' | 'oct' | 'lin'; points: number; startFrequency: string; stopFrequency: string }; sourceAcMagnitude?: string; dcSweep?: { source: string; start: string; stop: string; step: string }; parameterSweeps?: ParameterSweep[]; transientMeasurements?: TransientMeasurement[]; initialConditions?: InitialCondition[]; skipInitialOperatingPoint?: boolean }
   rootSheetId: string
   activeSheetId: string
   sheets: ProjectSheet[]
@@ -701,6 +701,10 @@ export function validateProject(input: unknown): Project {
   if (simulation.noiseSweep && (typeof simulation.noiseSweep.outputNode !== 'string' || typeof simulation.noiseSweep.inputSource !== 'string' || !['dec', 'oct', 'lin'].includes(simulation.noiseSweep.scale) || !Number.isInteger(simulation.noiseSweep.points) || simulation.noiseSweep.points < 1 || simulation.noiseSweep.points > 10000 || typeof simulation.noiseSweep.startFrequency !== 'string' || typeof simulation.noiseSweep.stopFrequency !== 'string')) throw new Error('Noise sweep settings are malformed.')
   if (simulation.temperature === undefined) simulation.temperature = '27'
   if (typeof simulation.temperature !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(simulation.temperature.trim()) || !Number.isFinite(Number(simulation.temperature)) || Number(simulation.temperature) < -273.15 || Number(simulation.temperature) > 10000) throw new Error('Simulation temperature must be a number from −273.15 °C to 10000 °C.')
+  if (simulation.shuntResistance !== undefined) {
+    const shuntResistance = typeof simulation.shuntResistance === 'string' && simulation.shuntResistance.length <= 64 ? componentMagnitude(simulation.shuntResistance, 'resistor') : null
+    if (shuntResistance === null || shuntResistance <= 0) throw new Error('Invalid simulation shunt resistance.')
+  }
   const deviceInstanceOptionParts = [
     ...(data.parts as Part[]),
     ...(Array.isArray(data.sheets) ? (data.sheets as Project['sheets']).flatMap((sheet) => Array.isArray(sheet?.parts) ? sheet.parts : []) : []),

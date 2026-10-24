@@ -913,3 +913,7 @@ The focused 501-component / 1,001-vector animation benchmark was run five times 
 ### Startup transfer rebaseline (2026-10-24)
 
 After the October 23 native component and transient-analysis additions, the production build measured **233.9 KiB startup JavaScript** and **247.5 KiB combined JavaScript/CSS gzip**, compared with 229.6/243.2 KiB at the previous rebaseline. The size guard now caps those at 235 KiB JS and 250 KiB combined; CSS measured 13.6 KiB against its 15 KiB cap. This records the measured feature growth while retaining 1.1 KiB JS and 2.5 KiB combined headroom. No browser startup-time comparison was made, so the byte totals should not be read as a measured latency change. The frontend build reuses the local runtime and does not run Pages or compile WASM.
+
+### Startup budget reallocation (2026-10-24)
+
+The ngspice `RSHUNT` simulation setting adds a small amount of eager project validation and toolbar UI. The build measured 235.2 KiB startup JavaScript, 13.7 KiB CSS, and 248.9 KiB combined gzip. To keep the same 250 KiB total transfer cap, the JavaScript sub-budget is reallocated from 235 KiB to 236 KiB using unused CSS headroom; the CSS cap remains 15 KiB. This records artifact size only and does not claim a browser startup-latency change. No WASM rebuild or Pages workflow ran.

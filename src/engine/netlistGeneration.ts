@@ -1116,6 +1116,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
   // project temperature afterward so the user's non-default setting wins.
   const temperature = Number(project.simulation.temperature ?? '27')
   if (includeHierarchyProbes && Number.isFinite(temperature) && temperature !== 27) append(`.temp ${temperature}`, 'simulation:temperature', 'generated')
+  if (includeHierarchyProbes && project.simulation.shuntResistance?.trim()) {
+    const shuntResistance = componentMagnitude(project.simulation.shuntResistance, 'resistor')
+    if (shuntResistance === null || shuntResistance <= 0) {
+      const message = 'Node shunt resistance must be a positive numeric resistance.'
+      append(`* ERROR: ${cleanComment(message)}`, 'analysis:shuntResistance', 'analysis')
+      diagnostics.push({ severity: 'error', message, sourceId: 'analysis:shuntResistance', line: rows.length })
+    } else append(`.options rshunt=${shuntResistance}`, 'analysis:shuntResistance', 'generated')
+  }
   if (includeHierarchyProbes) for (const directive of hierarchicalSaveVectors(project)) append(directive, 'hierarchy:probe', 'generated')
   if (usesDiode) append('.model DDEFAULT D', 'model:DDEFAULT', 'model')
   if (usesZener) append('.model DZENER D(BV=5.1 IBV=1m)', 'model:DZENER', 'model')
