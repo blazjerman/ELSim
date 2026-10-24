@@ -1401,6 +1401,15 @@ test('warns about the different u(0) boundary in preserved imported model librar
   assert.equal(source.includes('u(V(IN))'), true)
 })
 
+test('warns at source when an imported B-source uses sqr() unsupported by the pinned runtime', () => {
+  const source = '.SUBCKT squared IN OUT\nB1 OUT 0 V=sqr(V(IN) - 2)\n.ENDS squared'
+  const [warning] = analyzeLtspiceModelDialect(source)
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'sqr'])
+  assert.match(warning.impact, /Unsupported/)
+  assert.match(warning.suggestion, /x\*x/)
+  assert.equal(source.includes('sqr(V(IN) - 2)'), true)
+})
+
 test('flags LTspice idt() behavioral functions rejected by the pinned browser ngspice engine', () => {
   const source = '.SUBCKT integrator IN OUT\nB1 OUT 0 V=idt(V(IN))\n.ENDS integrator'
   const [warning] = analyzeLtspiceModelDialect(source)
