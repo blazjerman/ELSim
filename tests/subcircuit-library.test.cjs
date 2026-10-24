@@ -1454,6 +1454,26 @@ test('follows global imported .FUNC helpers across library files and attributes 
   ])
 })
 
+test('diagnoses reached LTspice helper limit() and if() constructs at their definition lines', () => {
+  const source = [
+    '.FUNC clamp_value(x) {limit(x, 0, 1)}',
+    '.FUNC choose_value(x) {if(x > 0, 1, 0)}',
+    '.FUNC wrapper(x) {choose_value(x)}',
+    '.SUBCKT helpers IN OUT',
+    'B1 OUT 0 V=clamp_value(V(IN))',
+    'B2 OUT 0 V=wrapper(V(IN))',
+    '.ENDS helpers',
+  ].join('\n')
+  const warnings = analyzeLtspiceModelDialect(source)
+  const helperWarnings = warnings.filter(({ feature }) => feature.startsWith('Imported .FUNC'))
+  assert.deepEqual(helperWarnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [1, 'Imported .FUNC uses LTspice limit()'],
+    [2, 'Imported .FUNC uses LTspice if()'],
+  ])
+  assert.match(helperWarnings[0].suggestion, /min\(max\(x, low\), high\)/)
+  assert.match(helperWarnings[1].suggestion, /ngspice ternary/)
+})
+
 test('limits compatibility diagnostics and cross-library helpers to selected .LIB sections', () => {
   const source = '.LIB used\n.SUBCKT used_model IN OUT\nB1 OUT 0 V=active_helper(V(IN))\n.ENDS used_model\n.ENDL used\n.LIB unused\n.SUBCKT unused_model IN OUT\nB2 OUT 0 V=int(V(IN))\n.ENDS unused_model\n.ENDL unused'
   const warnings = analyzeLtspiceModelDialect(source, {

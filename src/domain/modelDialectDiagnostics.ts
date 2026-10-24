@@ -79,6 +79,18 @@ function behavioralFunctionCalls(expression: string): string[] {
   return [...expression.matchAll(/\b([A-Za-z_][A-Za-z0-9_.$]*)\s*\(/g)].map((match) => match[1].toLowerCase())
 }
 
+const helperCompatibilityRules = [
+  { pattern: /\bsqr\s*\(/i, feature: 'Imported .FUNC uses B-source sqr()', impact: 'Browser ngspice rejects sqr() in imported behavioral expressions, including calls expanded through .FUNC helpers.', suggestion: 'Replace sqr(x) with x*x in the helper after checking its behavior. ELSim preserves imported model source unchanged.' },
+  { pattern: /\bint\s*\(/i, feature: 'Imported .FUNC uses B-source int()', impact: 'Browser ngspice rejects int() in imported behavioral expressions, including calls expanded through .FUNC helpers.', suggestion: 'Replace int(x) with sgn(x)*floor(abs(x)) in the helper. ELSim preserves imported model source unchanged.' },
+  { pattern: /\blimit\s*\(/i, feature: 'Imported .FUNC uses LTspice limit()', impact: 'The pinned browser ngspice engine returns 0 instead of 3 for limit(4,0,3), including in lta mode. A helper call can therefore produce a different result or fail.', suggestion: 'For ordered bounds, replace limit(x, low, high) with min(max(x, low), high) after checking the model author’s intended behavior.' },
+  { pattern: /\bif\s*\(/i, feature: 'Imported .FUNC uses LTspice if()', impact: 'The pinned browser ngspice engine reports “no such function” for LTspice if() in an imported behavioral expression.', suggestion: 'Rewrite if(condition, yes, no) as the ngspice ternary condition ? yes : no. ELSim preserves imported model source unchanged.' },
+  { pattern: /\btable\s*\(/i, feature: 'Imported .FUNC uses LTspice table()', impact: 'The pinned browser ngspice engine reports “no such function” for LTspice table() in an imported behavioral expression.', suggestion: 'Rewrite the lookup as an ngspice-compatible PWL expression or equivalent subcircuit. ELSim preserves imported model source unchanged.' },
+  { pattern: /\b(?:idt|idtmod|sdt)\s*\(/i, feature: 'Imported .FUNC uses LTspice behavioral integration', impact: 'The pinned browser ngspice engine does not implement LTspice idt()/idtmod()/sdt() as behavioral expression functions; idt() fails with “no such function”.', suggestion: 'Replace the behavioral integrator with an explicit capacitor-based circuit or a tested ngspice-compatible subcircuit.' },
+  { pattern: /\bu\s*\(/i, feature: 'Imported .FUNC uses LTspice u() step function', impact: 'LTspice u(x) returns 0 when x is zero, while ngspice u(0) returns 0.5. The helper’s result can differ at the zero boundary.', suggestion: 'If the zero boundary matters, replace u(x) with (x > 0) ? 1 : 0 after checking the model author’s intent.' },
+  { pattern: /\^/, feature: 'Imported .FUNC uses LTspice boolean ^', impact: 'LTspice uses ^ for Boolean XOR in B-source expressions, while ngspice interprets it as exponentiation.', suggestion: 'Use pow(a,b) for exponentiation or rewrite intended Boolean XOR explicitly for the target simulator.' },
+  { pattern: /~/, feature: 'Imported .FUNC uses LTspice ~ inversion', impact: 'LTspice accepts ~ as Boolean inversion, but the pinned browser ngspice engine rejects this syntax in behavioral expressions.', suggestion: 'Rewrite using an explicit comparison that preserves LTspice Boolean threshold semantics; do not replace ~ with ngspice ! blindly.' },
+]
+
 export function analyzeLtspiceModelDialect(source: string, options: { sourceAssetId?: string; selectedSections?: string[]; supportingLibraries?: readonly ModelDialectLibrarySource[] } = {}): ModelDialectWarning[] {
   const features = [
     { pattern: /^\s*\.title\s+\S/i, name: 'ngspice .TITLE overrides the generated circuit heading', impact: 'This imported card replaces the generated project title in ngspice output. It does not change the circuit’s electrical behavior.', suggestion: 'Keep the card if its title is useful in solver output, or remove it to retain the ELSim project title.' },
@@ -190,13 +202,11 @@ export function analyzeLtspiceModelDialect(source: string, options: { sourceAsse
         if (visited.has(visitedKey)) continue
         visited.add(visitedKey)
         pending.push(...behavioralFunctionCalls(candidate.body).map((called) => ({ name: called, scope: candidate.scope })))
-        for (const feature of ['sqr', 'int'] as const) {
-          if (!new RegExp(`\\b${feature}\\s*\\(`, 'i').test(candidate.body)) continue
-          const warningKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${feature}`
+        for (const rule of helperCompatibilityRules) {
+          if (!rule.pattern.test(candidate.body)) continue
+          const warningKey = `${candidate.assetId ?? ''}:${candidate.sourceLine}:${rule.feature}`
           if (helperWarnings.has(warningKey)) continue
-          helperWarnings.set(warningKey, feature === 'sqr'
-            ? { sourceLine: candidate.sourceLine, sourceAssetId: candidate.assetId, feature: 'Imported .FUNC uses B-source sqr()', excerpt: candidate.excerpt, impact: 'Browser ngspice rejects sqr() in imported behavioral expressions, including calls expanded through .FUNC helpers.', suggestion: 'Replace sqr(x) with x*x in the helper after checking its behavior. ELSim preserves imported model source unchanged.' }
-            : { sourceLine: candidate.sourceLine, sourceAssetId: candidate.assetId, feature: 'Imported .FUNC uses B-source int()', excerpt: candidate.excerpt, impact: 'Browser ngspice rejects int() in imported behavioral expressions, including calls expanded through .FUNC helpers.', suggestion: 'Replace int(x) with sgn(x)*floor(abs(x)) in the helper. ELSim preserves imported model source unchanged.' })
+          helperWarnings.set(warningKey, { sourceLine: candidate.sourceLine, sourceAssetId: candidate.assetId, feature: rule.feature, excerpt: candidate.excerpt, impact: rule.impact, suggestion: rule.suggestion })
         }
       }
     }
