@@ -3066,6 +3066,7 @@ export default function App() {
           'transfer-function': examples.createTransferFunctionExampleProject,
           'current-transresistance': examples.createCurrentTransresistanceExampleProject,
           'pole-zero': examples.createPoleZeroExampleProject,
+          intermodulation: examples.createIntermodulationExampleProject,
           led: examples.createLedExampleProject, 'led-current-limiter': examples.createLedCurrentLimiterExampleProject,
           'led-parallel': examples.createParallelLedExampleProject,
           'capacitor-discharge': examples.createCapacitorDischargeExampleProject,

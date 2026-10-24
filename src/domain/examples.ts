@@ -1601,6 +1601,50 @@ export function createPoleZeroExampleProject(): Project {
   return project
 }
 
+/** A forward-biased diode example for comparing native two-tone intermodulation products. */
+export function createIntermodulationExampleProject(): Project {
+  const project = createStarterProject()
+  const source: Part = { id: 'intermod-v1', kind: 'source', ref: 'V1', value: '1.7 V', sourceMode: 'dc', acMagnitude: '1 mV', acPhase: '0', x: 300, y: 360, rotation: 0 }
+  const resistor: Part = { id: 'intermod-r1', kind: 'resistor', ref: 'R1', value: '1 kΩ', x: 500, y: 360, rotation: 0 }
+  const diode: Part = { id: 'intermod-d1', kind: 'diode', ref: 'D1', value: 'Default diode', x: 720, y: 360, rotation: 0 }
+  const labelAt = (id: string, name: string, part: Part, pin: number) => {
+    const location = componentPins(part)[pin]
+    return { id, name, x: location.x, y: location.y, visible: true }
+  }
+  project.name = 'Diode two-tone intermodulation'
+  project.parts = [source, resistor, diode]
+  project.wires = [
+    { id: 'intermod-source-rise', points: [[300, 310], [300, 260]] },
+    { id: 'intermod-source-top', points: [[300, 260], [475, 260]] },
+    { id: 'intermod-source-drop', points: [[475, 260], [475, 360]] },
+    { id: 'intermod-resistor-diode', points: [[525, 360], [695, 360]] },
+    { id: 'intermod-diode-return-rise', points: [[745, 360], [820, 360]] },
+    { id: 'intermod-return-drop', points: [[820, 360], [820, 460]] },
+    { id: 'intermod-return-bottom', points: [[820, 460], [300, 460]] },
+    { id: 'intermod-return-source', points: [[300, 460], [300, 410]] },
+  ]
+  project.junctions = []
+  project.netLabels = [
+    labelAt('intermod-vin-source', 'VIN', source, 0),
+    labelAt('intermod-vin-resistor', 'VIN', resistor, 0),
+    labelAt('intermod-vout-resistor', 'VOUT', resistor, 1),
+    labelAt('intermod-vout-diode', 'VOUT', diode, 0),
+    labelAt('intermod-ground-source', '0', source, 1),
+    labelAt('intermod-ground-diode', '0', diode, 1),
+  ]
+  project.sheets = [{ ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: [], netLabels: project.netLabels }]
+  project.simulation = {
+    ...project.simulation,
+    analysis: 'disto',
+    acSweep: { scale: 'dec', points: 10, startFrequency: '100 Hz', stopFrequency: '100 kHz' },
+    distortion: { outputNode: 'VOUT', inputSource: 'V1', harmonic: 3, mode: 'intermodulation', intermodProduct: 'third-order', secondToneRatio: '0.49' },
+  }
+  project.plotSettings = { selectedTraceIds: [], ranges: {} }
+  project.view = { zoom: 0.9, panX: -10, panY: 0 }
+  project.sheets[0].view = project.view
+  return project
+}
+
 /** A charged series LC loop shows stored electric energy becoming magnetic energy and back. */
 export function createLcEnergyExampleProject(): Project {
   const project = createStarterProject()
