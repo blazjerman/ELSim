@@ -7859,6 +7859,13 @@ test('browser-incompatible imported subcircuit formal names fail before engine s
   const notice = page.locator('.toast[role="status"]')
   await expect(notice).toContainText('bundled browser ngspice 47 runtime cannot parse')
   await expect(notice).toContainText('punctuation.lib')
+  const diagnostic = page.getByRole('region', { name: 'ngspice model compatibility diagnostic' })
+  await expect(diagnostic).toContainText('Imported model is incompatible with browser ngspice')
+  await expect(diagnostic).toContainText('punctuation.lib · source line 1')
+  await diagnostic.getByRole('button', { name: 'Review source line 1' }).click()
+  const sourceLine = page.locator('#model-source-formal-punctuation-line-1')
+  await expect(sourceLine).toHaveClass(/active-source-line/)
+  await expect(sourceLine).toBeFocused()
 })
 
 test('show source-line guidance for a known unsupported LTspice model construct', { tag: '@ltspice' }, async ({ page }) => {
