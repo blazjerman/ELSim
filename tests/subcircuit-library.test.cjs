@@ -122,7 +122,8 @@ test('parses top-level .FUNC signatures for forward-referenced subcircuit defaul
 test('parses native punctuation in .FUNC names and arguments and accepts their calls in defaults', () => {
   const parsed = parseSubcircuitLibrary([
     '.PARAM BASE$=2',
-    '.FUNC twice!(x$) {x$ * 2}',
+    '.FUNC twice!(x$) =',
+    '+ {x$ * 2}',
     '.SUBCKT USER_GAIN IN OUT PARAMS: GAIN={twice!(BASE$)}',
     'R1 IN OUT {GAIN}',
     '.ENDS USER_GAIN',
