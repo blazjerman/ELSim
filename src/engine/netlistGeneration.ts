@@ -1639,12 +1639,14 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
     ['absoluteCurrentTolerance', 'abstol'],
     ['absoluteVoltageTolerance', 'vntol'],
     ['minimumConductance', 'gmin'],
+    ['pivotRelativeTolerance', 'pivrel'],
+    ['pivotAbsoluteTolerance', 'pivtol'],
   ] as const
   if (includeHierarchyProbes) for (const [field, option] of convergenceSettings) {
     const value = project.simulation[field]
     if (value === undefined) continue
     if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) || !Number.isFinite(Number(value)) || Number(value) <= 0) {
-      const message = `Ngspice ${field === 'relativeTolerance' ? 'relative tolerance' : field === 'absoluteCurrentTolerance' ? 'absolute current tolerance' : field === 'absoluteVoltageTolerance' ? 'absolute voltage tolerance' : 'minimum conductance'} must be a positive finite number.`
+      const message = `Ngspice ${field === 'relativeTolerance' ? 'relative tolerance' : field === 'absoluteCurrentTolerance' ? 'absolute current tolerance' : field === 'absoluteVoltageTolerance' ? 'absolute voltage tolerance' : field === 'minimumConductance' ? 'minimum conductance' : field === 'pivotRelativeTolerance' ? 'relative pivot tolerance' : 'absolute pivot tolerance'} must be a positive finite number.`
       append(`* ERROR: ${cleanComment(message)}`, `analysis:${field}`, 'analysis')
       diagnostics.push({ severity: 'error', message, sourceId: `analysis:${field}`, line: rows.length })
     } else append(`.options ${option}=${Number(value)}`, `analysis:${field}`, 'generated')

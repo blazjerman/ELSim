@@ -829,6 +829,8 @@ test('optional ngspice convergence controls validate and emit independent solver
     ['absoluteCurrentTolerance', 'abstol', '1e-12'],
     ['absoluteVoltageTolerance', 'vntol', '1e-6'],
     ['minimumConductance', 'gmin', '1e-12'],
+    ['pivotRelativeTolerance', 'pivrel', '1e-3'],
+    ['pivotAbsoluteTolerance', 'pivtol', '1e-13'],
   ]
   for (const [field, option] of settings) assert.doesNotMatch(createNetlistArtifact(project).text, new RegExp(`^\\.options ${option}=`, 'mi'))
   for (const [field, , value] of settings) project.simulation[field] = value

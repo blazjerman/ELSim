@@ -48,6 +48,8 @@ An inductor may set `mutualCouplings: [{ "partnerId": "...", "coefficient": "0.9
 
 `simulation.dcSkipInitialNewtonIteration` optionally emits ngspice `.options noopiter` when `true`, telling the solver to skip its first ordinary Newton iteration and proceed directly to GMIN stepping. It is off by default; omission or `false` preserves ngspice behavior.
 
+`simulation.pivotRelativeTolerance` and `simulation.pivotAbsoluteTolerance` optionally set ngspice's matrix pivot thresholds with `.options pivrel=...` and `.options pivtol=...`. Both values must be positive finite numbers. `PIVREL` controls the relative ratio to the largest entry in the current matrix column (default `1e-3`); `PIVTOL` is the absolute minimum pivot value (default `1e-13`). Leave them blank unless diagnosing matrix conditioning.
+
 `simulation.skipAcOperatingPoint` optionally enables ngspice's `NOOPAC` behavior before AC analysis. This can help linear circuits with ideal LC loops that fail during an unnecessary DC operating-point solve. Ngspice still performs an operating-point solve when it detects nonlinear devices. The option is off by default and is emitted only for AC analysis.
 
 `simulation.startSavingTime` is an optional transient time string. It maps to ngspice's `.tran` `tstart` argument: the solver still integrates from time zero, but waveform samples before this time are not retained. The value must be nonnegative and earlier than `stopTime`; omitting it or leaving it blank saves data from time zero.

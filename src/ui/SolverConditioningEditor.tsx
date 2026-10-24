@@ -39,6 +39,8 @@ export default function SolverConditioningEditor({
   absoluteCurrentTolerance,
   absoluteVoltageTolerance,
   minimumConductance,
+  pivotRelativeTolerance,
+  pivotAbsoluteTolerance,
   dcIterationLimit,
   dcTransferIterationLimit,
   dcSourceSteppingSteps,
@@ -60,6 +62,8 @@ export default function SolverConditioningEditor({
   onAbsoluteCurrentToleranceChange,
   onAbsoluteVoltageToleranceChange,
   onMinimumConductanceChange,
+  onPivotRelativeToleranceChange,
+  onPivotAbsoluteToleranceChange,
   onDcIterationLimitChange,
   onDcTransferIterationLimitChange,
   onDcSourceSteppingStepsChange,
@@ -81,6 +85,8 @@ export default function SolverConditioningEditor({
   absoluteCurrentTolerance?: string
   absoluteVoltageTolerance?: string
   minimumConductance?: string
+  pivotRelativeTolerance?: string
+  pivotAbsoluteTolerance?: string
   dcIterationLimit?: string
   dcTransferIterationLimit?: string
   dcSourceSteppingSteps?: string
@@ -102,6 +108,8 @@ export default function SolverConditioningEditor({
   onAbsoluteCurrentToleranceChange: (value?: string) => void
   onAbsoluteVoltageToleranceChange: (value?: string) => void
   onMinimumConductanceChange: (value?: string) => void
+  onPivotRelativeToleranceChange: (value?: string) => void
+  onPivotAbsoluteToleranceChange: (value?: string) => void
   onDcIterationLimitChange: (value?: string) => void
   onDcTransferIterationLimitChange: (value?: string) => void
   onDcSourceSteppingStepsChange: (value?: string) => void
@@ -158,6 +166,8 @@ export default function SolverConditioningEditor({
       <NumericSetting label="Absolute current tolerance (ABSTOL)" ariaLabel="Absolute current convergence tolerance" dataSetting="absoluteCurrentTolerance" value={absoluteCurrentTolerance} example="1e-12" hint="Absolute error limit for nonlinear device currents, in amperes. Ngspice default: 1e-12 A." onChange={onAbsoluteCurrentToleranceChange} />
       <NumericSetting label="Absolute voltage tolerance (VNTOL)" ariaLabel="Absolute voltage convergence tolerance" dataSetting="absoluteVoltageTolerance" value={absoluteVoltageTolerance} example="1e-6" hint="Absolute error limit for node voltages, in volts. Ngspice default: 1e-6 V." onChange={onAbsoluteVoltageToleranceChange} />
       <NumericSetting label="Minimum conductance (GMIN)" ariaLabel="Minimum conductance" dataSetting="minimumConductance" value={minimumConductance} example="1e-12" hint="Minimum conductance used by ngspice to help nonlinear devices converge, in siemens. Ngspice default: 1e-12 S." onChange={onMinimumConductanceChange} />
+      <NumericSetting label="Relative matrix pivot tolerance (PIVREL)" ariaLabel="Relative matrix pivot tolerance" dataSetting="pivotRelativeTolerance" value={pivotRelativeTolerance} example="1e-3" hint="Sets the relative threshold used when ngspice chooses matrix pivots. Default: 1e-3. Leave blank unless you are diagnosing matrix conditioning." onChange={onPivotRelativeToleranceChange} />
+      <NumericSetting label="Absolute matrix pivot tolerance (PIVTOL)" ariaLabel="Absolute matrix pivot tolerance" dataSetting="pivotAbsoluteTolerance" value={pivotAbsoluteTolerance} example="1e-13" hint="Sets the minimum absolute matrix entry accepted as a pivot. Default: 1e-13. Leave blank unless you are diagnosing matrix conditioning." onChange={onPivotAbsoluteToleranceChange} />
     </details>
     <details className="solver-iteration-settings"><summary>Iteration limits (advanced)</summary>
       <p className="field-hint">Raising a limit can let a difficult circuit continue iterating longer, but may increase run time. Blank keeps ngspice defaults.</p>

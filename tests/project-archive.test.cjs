@@ -384,7 +384,7 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
   assert.match(schema.$defs.simulation.properties.temperature.pattern, /0-9/)
   assert.equal(schema.$defs.simulation.properties.shuntResistance.maxLength, 64)
   assert.equal(schema.$defs.simulation.properties.nominalTemperature.maxLength, 64)
-  for (const name of ['relativeTolerance', 'absoluteCurrentTolerance', 'absoluteVoltageTolerance', 'minimumConductance']) assert.equal(schema.$defs.simulation.properties[name].maxLength, 64)
+  for (const name of ['relativeTolerance', 'absoluteCurrentTolerance', 'absoluteVoltageTolerance', 'minimumConductance', 'pivotRelativeTolerance', 'pivotAbsoluteTolerance']) assert.equal(schema.$defs.simulation.properties[name].maxLength, 64)
   assert.equal(schema.$defs.simulation.properties.transientErrorTolerance.maxLength, 64)
   assert.equal(schema.$defs.simulation.properties.trapezoidalDampingFactor.maxLength, 64)
   for (const name of ['dcIterationLimit', 'dcTransferIterationLimit', 'transientLowerIterationLimit', 'transientIterationLimit']) assert.equal(schema.$defs.simulation.properties[name].pattern, '^\\s*[0-9]+\\s*$')
@@ -439,6 +439,15 @@ test('transient solver tolerance survives project archive round-trip', async () 
   project.simulation.transientErrorTolerance = '5'
   const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
   assert.equal(restored.simulation.transientErrorTolerance, '5')
+})
+
+test('matrix pivot tolerances survive project archive round-trip', async () => {
+  const project = createStarterProject()
+  project.simulation.pivotRelativeTolerance = '1e-3'
+  project.simulation.pivotAbsoluteTolerance = '1e-13'
+  const restored = validateProject(await readProjectArchive(await createProjectArchive(project)))
+  assert.equal(restored.simulation.pivotRelativeTolerance, '1e-3')
+  assert.equal(restored.simulation.pivotAbsoluteTolerance, '1e-13')
 })
 
 test('trapezoidal damping factor survives project archive round-trip', async () => {
