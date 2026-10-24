@@ -4145,9 +4145,9 @@ test('imported model B-source sqr() warning links to its original source line', 
     buffer: Buffer.from('.SUBCKT SQUARED IN OUT\nB1 OUT 0 V=sqr(V(IN) - 2)\n.ENDS SQUARED\n'),
   })
   const warning = page.getByRole('status', { name: 'Imported model compatibility warnings' })
-  await expect(warning).toContainText('sqr')
+  await expect(warning).toContainText('Imported B-source sqr()')
   await expect(warning).toContainText('squared-model.lib:2')
-  await expect(warning).toContainText('x*x')
+  await expect(warning).toContainText('Replace sqr(x) with x*x')
 })
 
 test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', { tag: '@ui-smoke' }, async ({ page }) => {

@@ -1404,9 +1404,9 @@ test('warns about the different u(0) boundary in preserved imported model librar
 test('warns at source when an imported B-source uses sqr() unsupported by the pinned runtime', () => {
   const source = '.SUBCKT squared IN OUT\nB1 OUT 0 V=sqr(V(IN) - 2)\n.ENDS squared'
   const [warning] = analyzeLtspiceModelDialect(source)
-  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'sqr'])
-  assert.match(warning.impact, /Unsupported/)
-  assert.match(warning.suggestion, /x\*x/)
+  assert.deepEqual([warning.sourceLine, warning.feature], [2, 'Imported B-source sqr()'])
+  assert.match(warning.impact, /Browser ngspice rejects sqr\(\)/)
+  assert.match(warning.suggestion, /Replace sqr\(x\) with x\*x/)
   assert.equal(source.includes('sqr(V(IN) - 2)'), true)
 })
 
