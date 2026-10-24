@@ -1780,6 +1780,26 @@ test('rejects malformed ngspice .PARAM identifiers instead of deferring failure 
   }
 })
 
+test('detects duplicate global .PARAM assignments continued onto later physical lines', () => {
+  const report = analyzeModelDependencies([
+    { id: 'continued-parameters', filename: 'continued.lib', content: '.param BASE=1\n.PARAM GAIN=2\n+ SHARED=3' },
+    { id: 'continued-duplicate', filename: 'duplicate.lib', content: '.param shared=4' },
+  ])
+  assert.deepEqual(report.conflicts, [
+    { name: 'SHARED', kind: 'parameter', definitions: [
+      { assetId: 'continued-parameters', filename: 'continued.lib', sourceLine: 2 },
+      { assetId: 'continued-duplicate', filename: 'duplicate.lib', sourceLine: 1 },
+    ] },
+  ])
+})
+
+test('validates reserved .PARAM names on continuation lines against the logical card start', () => {
+  assert.throws(
+    () => parseSubcircuitLibrary('.param GOOD=1\n+ sqrt=2'),
+    /Line 1: \.PARAM name sqrt is reserved by ngspice/,
+  )
+})
+
 test('rejects ngspice directives that are not supported in conditional blocks', () => {
   for (const directive of ['.FUNC SCALE(x) {x}', '.MEAS TRAN RESULT MAX V(out)', '.GLOBAL 0', '.OPTIONS reltol=.01']) {
     assert.throws(() => parseSubcircuitLibrary(`.IF (MODE == 1)\n${directive}\n.ENDIF`), /Line 2: .* is not supported inside an ngspice \.IF block/, directive)

@@ -8,7 +8,7 @@ export type ModelDependency = { owner: string; reference: string; modelName: str
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
 export type SpiceModelDefinition = { name: string; type: string; channel?: 'n' | 'p'; channelExplicit?: boolean; parameters: SubcircuitParameter[]; akoBaseName?: string; akoSafeToExpand?: boolean; expansionPayloadSafe?: boolean; conditionalDefinition?: boolean; conditionalPath?: ModelConditionFrame[]; conditionalVariants?: ConditionalModelVariant[]; scope?: string; conditional?: boolean; startLine: number; endLine: number }
 export type ModelIncludeReference = { reference: string; filename: string | null; sourceLine: number; section?: string }
-export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[] }
+export type ParsedSubcircuitLibrary = { subcircuits: SubcircuitDefinition[]; models: SpiceModelDefinition[]; functions: ModelFunction[]; dependencies: ModelDependency[]; includes: ModelIncludeReference[]; modelText: string; modelRecords: { sourceLine: number; text: string }[]; topLevelParameterRecords: { sourceLine: number; text: string }[] }
 export type ModelDependencyIssue = { assetId: string; filename: string; owner: string; reference: string; modelName: string; kind: ModelDependency['kind']; sourceLine: number }
 export type ModelDialectWarning = { sourceLine: number; feature: string; excerpt: string; impact: string; suggestion: string }
 export type SchematicCompatibilityWarning = ModelDialectWarning
@@ -1120,6 +1120,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   const seenNames = new Set<string>()
   const seenModelNames = new Map<string, SeenModelCard>()
   const modelLines: LogicalLine[] = []
+  const topLevelParameterRecords: { sourceLine: number; text: string }[] = []
   const activeSubcircuits: { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; start: number }[] = []
   const conditionalBlocks: { id: number; branch: number; sawElse: boolean; conditions: string[] }[] = []
   let nextConditionalId = 0
@@ -1235,6 +1236,10 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       continue
     }
 
+    if (directive === '.param' && !activeSubcircuits.length) {
+      topLevelParameterRecords.push({ sourceLine: line.start, text: line.text })
+    }
+
     if (activeSubcircuits.length) {
       if (directive === '.lib' || directive === '.endl') throw new Error(`Line ${line.start}: .LIB/.ENDL section wrappers cannot appear inside a .SUBCKT.`)
       if (directive === '.option' || directive === '.options') throw new Error(`Line ${line.start}: ${tokens[0]} sets circuit-wide solver options and cannot appear inside a .SUBCKT.`)
@@ -1311,7 +1316,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
   for (const [start, end] of ranges) for (let line = start; line <= end; line += 1) retained.add(line)
   const modelRecords = [...retained].sort((a, b) => a - b).map((sourceLine) => ({ sourceLine, text: physical[sourceLine - 1] }))
   const modelText = modelRecords.map(({ text }) => text).join('\n')
-  return { subcircuits, models, functions, dependencies, includes, modelText, modelRecords }
+  return { subcircuits, models, functions, dependencies, includes, modelText, modelRecords, topLevelParameterRecords }
 }
 
 /** Check the packed upper-triangle matrix sizes for imported CPL models used by P devices. */
@@ -1589,6 +1594,20 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
         globalBsim3Bins.set(binBase, bins)
       }
     }
+    for (const record of parsed.topLevelParameterRecords) {
+      for (const name of topLevelParameterNames(record.text)) {
+        const key = `parameter:${name.toLowerCase()}`
+        const conflict = definitionLocations.get(key) ?? { name, kind: 'parameter' as const, definitions: [] }
+        const sameSourceDeclaration = conflict.definitions.some((definition) => definition.assetId === asset.id && definition.sourceLine === record.sourceLine)
+        if (sameSourceDeclaration) {
+          conflict.declarationCount = (conflict.declarationCount ?? 1) + 1
+        } else {
+          conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: record.sourceLine })
+        }
+        definitionLocations.set(key, conflict)
+      }
+    }
+
     let conditionalDepth = 0
     let subcircuitDepth = 0
     for (const record of parsed.modelRecords) {
@@ -1598,20 +1617,6 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       if (directive === '.subckt') { subcircuitDepth += 1; continue }
       if (directive === '.ends') { subcircuitDepth = Math.max(0, subcircuitDepth - 1); continue }
       if (conditionalDepth > 0 || subcircuitDepth > 0) continue
-      if (/^\s*\.param\b/i.test(record.text)) {
-        for (const name of topLevelParameterNames(record.text)) {
-          const key = `parameter:${name.toLowerCase()}`
-          const conflict = definitionLocations.get(key) ?? { name, kind: 'parameter' as const, definitions: [] }
-          const sameSourceDeclaration = conflict.definitions.some((definition) => definition.assetId === asset.id && definition.sourceLine === record.sourceLine)
-          if (sameSourceDeclaration) {
-            conflict.declarationCount = (conflict.declarationCount ?? 1) + 1
-          } else {
-            conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: record.sourceLine })
-          }
-          definitionLocations.set(key, conflict)
-        }
-        continue
-      }
       if (/^\s*\.func\s+/i.test(record.text)) {
         const definition = parseFunctionDefinition(record.text.trim(), record.sourceLine)
         const key = `function:${definition.name.toLowerCase()}`
