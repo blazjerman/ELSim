@@ -6458,13 +6458,20 @@ test('new voltage-controlled switches use their component definition defaults', 
 
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
-    name: 'voltage-switch.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL USER_SW SW(RON=10 ROFF=1Meg VT=3 VH=1)\n'),
+    name: 'voltage-switch.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL USER_SW SW(RON=10 ROFF=1Meg VT=3 VH=1)\n.MODEL SWONLY SW(FOO={vendor_shape(9)})\n'),
   })
   await page.getByLabel('Device model for S1').selectOption('USER_SW')
   const modelDetails = page.getByText('USER_SW · 4 model parameters', { exact: true })
   await expect(modelDetails).toBeVisible()
   await modelDetails.click()
   await expect(page.getByText('VT = 3', { exact: true })).toBeVisible()
+  await page.getByLabel('Device model for S1').selectOption('SWONLY')
+  const sourceOnlySwitch = page.getByText('SWONLY · 0 model parameters · 1 unparsed', { exact: true })
+  await expect(sourceOnlySwitch).toBeVisible()
+  await sourceOnlySwitch.click()
+  await expect(page.getByLabel('Unparsed model assignments')).toContainText('FOO = {vendor_shape(9)}')
+  await page.getByLabel('Device model for S1').selectOption('USER_SW')
+  await modelDetails.click()
   await page.getByRole('button', { name: 'Review voltage-switch.lib:1' }).click()
   await expect(page.locator('.model-source-viewer li.active-source-line')).toContainText('.MODEL USER_SW SW')
 })
