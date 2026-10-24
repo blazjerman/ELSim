@@ -1004,6 +1004,17 @@ test('imports .MODEL-only libraries, including numeric-leading model names and c
   assert.match(parsed.modelText, /\+ Rs=1/)
 })
 
+test('continues parsing .MODEL fields after an inline comment on a continuation line', () => {
+  const source = '.MODEL DCOMMENT D(IS=1n\n+ RS=2 ; resistor series value\n+ N=1.2)'
+  const parsed = parseSubcircuitLibrary(source)
+  assert.deepEqual(parsed.models[0].parameters, [
+    { name: 'IS', defaultValue: '1n' },
+    { name: 'RS', defaultValue: '2' },
+    { name: 'N', defaultValue: '1.2' },
+  ])
+  assert.equal(parsed.modelText, source, 'preserve the original commented source for ngspice')
+})
+
 test('keeps the last duplicate .MODEL parameter value, matching ngspice', () => {
   const source = '.MODEL DM D(IS=1n is=2n)'
   const parsed = parseSubcircuitLibrary(source)

@@ -209,7 +209,10 @@ function logicalLines(source: string): LogicalLine[] {
     if (plusContinuation || backslashContinuation) {
       const previous = result.at(-1)
       if (!previous) throw new Error(`Line ${index + 1}: continuation has no preceding line.`)
-      const continuation = hasBackslashContinuation ? continuedText.slice(0, -2) : text
+      // Strip comments from each physical line before joining it. If an inline
+      // comment on a `+` line is joined first, it can hide all later continued
+      // fields when the completed logical line is parsed.
+      const continuation = hasBackslashContinuation ? continuedText.slice(0, -2) : continuedText
       previous.text += ` ${continuation.replace(/^\s*\+\s?/, '').trim()}`
       previous.end = index + 1
     } else {
