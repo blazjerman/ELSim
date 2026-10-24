@@ -39,6 +39,7 @@ const ltspiceOnlyFunctions = new Map<string, { min: number; max: number }>([
 // These are native ngspice B-source built-ins, not LTspice expression helpers.
 const ngspiceOnlyFunctions = new Map<string, { min: number; max: number }>([
   ['int', { min: 1, max: 1 }],
+  ['sqr', { min: 1, max: 1 }],
   ['nint', { min: 1, max: 1 }],
   ['sgn', { min: 1, max: 1 }],
   ['ternary_fcn', { min: 3, max: 3 }],
@@ -367,10 +368,10 @@ export function parseBehavioralExpression(expression: string, dialect: Behaviora
 
 /** Translate ELSim-supported B-source helpers to equivalent ngspice expressions. */
 export function translateBehavioralExpression(expression: string, dialect: BehavioralDialect = 'ngspice'): string {
-  // Native B-source syntax is already ngspice syntax except `int()`: ngspice
-  // documents truncation toward zero, but the pinned runtime lacks that
-  // function. Translate it to supported floor/ceil primitives below.
-  if (dialect === 'ngspice' && !/\bint\s*\(/i.test(expression)) return expression
+  // Native B-source syntax is already ngspice syntax except `int()` and the
+  // ELSim `sqr()` compatibility alias: the manual defines int() but the pinned
+  // runtime lacks it, and it rejects sqr(). Translate both to supported math.
+  if (dialect === 'ngspice' && !/\b(?:int|sqr)\s*\(/i.test(expression)) return expression
   const translatedBoolean = dialect === 'ltspice' ? translateBooleanBinaryOperators(expression, dialect) : null
   if (translatedBoolean !== null) return translatedBoolean
   expression = translateRemainderOperators(expression)
@@ -378,7 +379,7 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
   let output = ''
   let cursor = 0
   const translatableFunctionPattern = dialect === 'ngspice'
-    ? /\b(int)\s*\(/ig
+    ? /\b(int|sqr)\s*\(/ig
     : /\b(table|if|limit|mod|pwrs|xor|int|square|buf|inv|arccos|arcsin|arctan|atan2|cbrt|hypot|u)\s*\(/ig
   while (cursor < expression.length) {
     translatableFunctionPattern.lastIndex = cursor
@@ -402,24 +403,25 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
       else if (body[index] === ',' && nested === 0) { args.push(body.slice(start, index).trim()); start = index + 1 }
     }
     args.push(body.slice(start).trim())
+    const functionName = found[1].toLowerCase()
     // Recurse into the input expression so nested table calls are supported.
     const input = translateBehavioralExpression(args[0] ?? '', dialect)
-    if (found[1].toLowerCase() === 'if') {
+    if (functionName === 'if') {
       if (args.length !== 3) throw new Error('if() expects a condition, a true value, and a false value.')
       output += `(${ltspiceBooleanCondition(input)} ? ${translateBehavioralExpression(args[1], dialect)} : ${translateBehavioralExpression(args[2], dialect)})`
       cursor = close
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'buf' || found[1].toLowerCase() === 'inv') {
+    if (functionName === 'buf' || functionName === 'inv') {
       if (args.length !== 1) throw new Error(`${found[1]}() expects one argument.`)
       const value = translateBehavioralExpression(args[0], dialect)
-      output += found[1].toLowerCase() === 'buf' ? `(${ltspiceBooleanCondition(value)} ? 1 : 0)` : `(${ltspiceBooleanCondition(value)} ? 0 : 1)`
+      output += functionName === 'buf' ? `(${ltspiceBooleanCondition(value)} ? 1 : 0)` : `(${ltspiceBooleanCondition(value)} ? 0 : 1)`
       cursor = close
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'u') {
+    if (functionName === 'u') {
       if (args.length !== 1) throw new Error('u() expects one argument.')
       const value = translateBehavioralExpression(args[0], dialect)
       output += dialect === 'ltspice' ? `((${value}) > 0 ? 1 : 0)` : `u(${value})`
@@ -427,7 +429,7 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'limit') {
+    if (functionName === 'limit') {
       if (args.length !== 3) throw new Error('limit() expects a value, lower bound, and upper bound.')
       const [value, low, high] = args.map((argument) => translateBehavioralExpression(argument, dialect))
       output += `min(max(${value}, ${low}), ${high})`
@@ -435,7 +437,7 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'mod') {
+    if (functionName === 'mod') {
       if (args.length !== 2) throw new Error('mod() expects a value and divisor.')
       const value = translateBehavioralExpression(args[0], dialect)
       const divisor = translateBehavioralExpression(args[1], dialect)
@@ -444,7 +446,7 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'pwrs') {
+    if (functionName === 'pwrs') {
       if (args.length !== 2) throw new Error('pwrs() expects a value and exponent.')
       const value = translateBehavioralExpression(args[0], dialect)
       const exponent = translateBehavioralExpression(args[1], dialect)
@@ -453,7 +455,7 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'xor') {
+    if (functionName === 'xor') {
       if (args.length !== 2) throw new Error('xor() expects two Boolean values.')
       const left = ltspiceBooleanCondition(translateBehavioralExpression(args[0], dialect))
       const right = ltspiceBooleanCondition(translateBehavioralExpression(args[1], dialect))
@@ -462,15 +464,15 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'int') {
-      if (args.length !== 1) throw new Error('int() expects one argument.')
+    if (functionName === 'int' || functionName === 'sqr') {
+      if (args.length !== 1) throw new Error(`${found[1]}() expects one argument.`)
       const value = translateBehavioralExpression(args[0], dialect)
-      output += `(sgn(${value}) * floor(abs(${value})))`
+      output += functionName === 'int' ? `(sgn(${value}) * floor(abs(${value})))` : `((${value}) * (${value}))`
       cursor = close
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'square') {
+    if (functionName === 'square') {
       if (args.length !== 1) throw new Error('square() expects one argument.')
       const value = translateBehavioralExpression(args[0], dialect)
       output += `((${value}) * (${value}))`
@@ -479,14 +481,14 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
       continue
     }
     const inverseAlias: Record<string, string> = { arccos: 'acos', arcsin: 'asin', arctan: 'atan' }
-    if (inverseAlias[found[1].toLowerCase()]) {
+    if (inverseAlias[functionName]) {
       if (args.length !== 1) throw new Error(`${found[1]}() expects one argument.`)
-      output += `${inverseAlias[found[1].toLowerCase()]}(${translateBehavioralExpression(args[0], dialect)})`
+      output += `${inverseAlias[functionName]}(${translateBehavioralExpression(args[0], dialect)})`
       cursor = close
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'cbrt') {
+    if (functionName === 'cbrt') {
       if (args.length !== 1) throw new Error('cbrt() expects one argument.')
       const value = `(${translateBehavioralExpression(args[0], dialect)})`
       output += `((${value} < 0) ? -pow(-${value}, 1/3) : pow(${value}, 1/3))`
@@ -494,7 +496,7 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'atan2') {
+    if (functionName === 'atan2') {
       if (args.length !== 2) throw new Error('atan2() expects y and x arguments.')
       const y = `(${translateBehavioralExpression(args[0], dialect)})`
       const x = `(${translateBehavioralExpression(args[1], dialect)})`
@@ -504,7 +506,7 @@ export function translateBehavioralExpression(expression: string, dialect: Behav
       if (output.length > 4096) throw new Error('Translated behavioral expression exceeds 4,096 characters.')
       continue
     }
-    if (found[1].toLowerCase() === 'hypot') {
+    if (functionName === 'hypot') {
       if (args.length !== 2) throw new Error('hypot() expects two arguments.')
       const x = `(${translateBehavioralExpression(args[0], dialect)})`
       const y = `(${translateBehavioralExpression(args[1], dialect)})`

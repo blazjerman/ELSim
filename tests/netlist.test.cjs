@@ -2401,6 +2401,14 @@ test('native ngspice int() is emitted as truncation toward zero with supported r
   assert.match(artifact.text, /^BINT n\d+ n\d+ V=\{\(sgn\(V\(vin\)\) \* floor\(abs\(V\(vin\)\)\)\)\}$/m)
 })
 
+test('native ngspice sqr() is emitted as multiplication for the browser runtime', () => {
+  const project = createStarterProject()
+  project.parts.push({ id: 'native-bsource-sqr', kind: 'behavioral', ref: 'BSQR', value: 'sqr(V(vin) / 3)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })
+  const artifact = createNetlistArtifact(validateProject(JSON.parse(JSON.stringify(project))))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^BSQR n\d+ n\d+ V=\{\(\(V\(vin\) \/ 3\) \* \(V\(vin\) \/ 3\)\)\}$/m)
+})
+
 test('native B-source expressions reject unsupported LTspice function names instead of rewriting them', () => {
   const project = createStarterProject()
   project.parts.push({ id: 'native-bsource-if', kind: 'behavioral', ref: 'B1', value: 'if(V(vin), 5, 0)', behavioralOutput: 'voltage', x: 700, y: 300, rotation: 0 })

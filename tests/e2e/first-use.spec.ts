@@ -4116,6 +4116,26 @@ test('native behavioral int() truncates toward zero through the browser ngspice 
   await expect(page.locator('.netlist-modal pre')).toContainText('sgn(V(vin) / 3) * floor(abs(V(vin) / 3))')
 })
 
+test('native behavioral sqr() compatibility alias simulates through the browser ngspice engine', { tag: '@ngspice' }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])
+  const project = createStarterProject()
+  project.parts.push({ id: 'native-sqr-source', kind: 'behavioral', ref: 'B1', value: 'sqr(V(vin) / 3)', behavioralOutput: 'voltage', x: 360, y: 290, rotation: 0 })
+  project.simulation = { ...project.simulation, analysis: 'op' }
+  project.plotSettings = { ...project.plotSettings, selectedTraceIds: ['v(vout)'] }
+  project.sheets[0] = { ...project.sheets[0], parts: project.parts, wires: project.wires, junctions: project.junctions, netLabels: project.netLabels }
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Analysis complete ·/)).toBeVisible({ timeout: 60_000 })
+  await expectAvailableTrace(page, 'V(vout)')
+  const operatingPoint = page.locator('.plot-window').last().locator('.op-table')
+  await expect(operatingPoint.getByRole('row', { name: /V\(vout\)/i })).toContainText('2.222222')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('(V(vin) / 3) * (V(vin) / 3)')
+})
+
 test('Ctrl+A selects components and wires; drag boxes use window and crossing selection', { tag: '@ui-smoke' }, async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.project-recovery-overlay')).toHaveCount(0)
