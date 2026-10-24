@@ -526,6 +526,7 @@ export default function App() {
   const componentSearchRef = useRef<HTMLInputElement>(null)
   const copiedParts = useRef<PartClipboard | null>(null)
   const activeWorkerRef = useRef<Worker | null>(null)
+  const desktopProjectPathRef = useRef<string | null>(null)
   const pendingViewRef = useRef<{ rootSheetId: string; sheetId: string; view: Project['view'] } | null>(null)
   const projectRef = useRef(project)
   const pendingPlotPanelsRootRef = useRef(project.rootSheetId)
@@ -1601,9 +1602,13 @@ export default function App() {
       const bytes = await createProjectArchive(projectRef.current)
       const filename = projectArchiveFilename(projectRef.current.name)
       const { saveDesktopProject } = await import('./desktopProjectFiles')
-      const desktopSave = await saveDesktopProject(bytes, filename)
-      if (desktopSave === 'saved') { setNotice(`Saved ${filename}`); return }
-      if (desktopSave === 'cancelled') return
+      const desktopSave = await saveDesktopProject(bytes, filename, desktopProjectPathRef.current)
+      if (desktopSave.status === 'saved') {
+        desktopProjectPathRef.current = desktopSave.path
+        setNotice(`Saved ${filename}`)
+        return
+      }
+      if (desktopSave.status === 'cancelled') return
       const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/vnd.elsim.project+zip' })
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
@@ -1640,13 +1645,14 @@ export default function App() {
     if (exportProvenanceFiles().length) { setSaveWarningOpen(true); return }
     downloadProjectArchive()
   }
-  const applyProjectBytes = async (bytes: Uint8Array) => {
+  const applyProjectBytes = async (bytes: Uint8Array, desktopPath: string | null = null) => {
     assertProjectFileWithinLimit(bytes.byteLength)
     const { isProjectArchive, readProjectArchive } = await import('../domain/projectArchive')
     const projectData = isProjectArchive(bytes) ? await readProjectArchive(bytes) : JSON.parse(new TextDecoder().decode(bytes))
     const parsed = validateProject(projectData)
     await verifyModelAssetHashes([...(parsed.modelAssets ?? []), ...(parsed.symbolAssets ?? [])])
     if (!window.confirm(`Open “${parsed.name}”? This will replace the circuit in this tab. Save your current circuit first if you want to keep it.`)) return
+    desktopProjectPathRef.current = desktopPath
     setSheetInstancePath(findSheetInstancePath(parsed.activeSheetId, parsed.rootSheetId, [], new Set(), parsed) ?? [])
     pendingViewRef.current = null
     setProjectState(parsed)
@@ -1667,7 +1673,7 @@ export default function App() {
     try {
       const { openDesktopProject } = await import('./desktopProjectFiles')
       const result = await openDesktopProject()
-      if (result.status === 'file') await applyProjectBytes(result.bytes)
+      if (result.status === 'file') await applyProjectBytes(result.bytes, result.path)
       else if (result.status === 'unavailable') fileInput.current?.click()
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not open this project') }
   }
@@ -3085,6 +3091,7 @@ export default function App() {
   const resetProject = () => {
     if (!window.confirm('Start a new circuit? Unsaved changes in this tab will be lost.')) return
     const starter = createStarterProject()
+    desktopProjectPathRef.current = null
     setSheetInstancePath([])
     pendingViewRef.current = null
     setProjectState(starter)
@@ -3168,6 +3175,7 @@ export default function App() {
     setSimulationResult(null)
     setPlaybackRunning(false)
     setSimulationCursor(null)
+    desktopProjectPathRef.current = null
     setSheetInstancePath([])
     pendingViewRef.current = null
     setProjectState(next)

@@ -3,22 +3,28 @@ import { assertProjectFileWithinLimit } from '../domain/projectFileLimits'
 
 export type DesktopProjectFileResult =
   | { status: 'unavailable' | 'cancelled' }
-  | { status: 'file'; bytes: Uint8Array }
+  | { status: 'file'; bytes: Uint8Array; path: string }
 
-export async function saveDesktopProject(bytes: Uint8Array, filename: string): Promise<'unavailable' | 'cancelled' | 'saved'> {
-  if (!isTauri()) return 'unavailable'
-  const [{ save }, { writeFile }] = await Promise.all([
-    import('@tauri-apps/plugin-dialog'),
-    import('@tauri-apps/plugin-fs'),
-  ])
+export type DesktopProjectSaveResult =
+  | { status: 'unavailable' | 'cancelled' }
+  | { status: 'saved'; path: string }
+
+export async function saveDesktopProject(bytes: Uint8Array, filename: string, existingPath?: string | null): Promise<DesktopProjectSaveResult> {
+  if (!isTauri()) return { status: 'unavailable' }
+  const { writeFile } = await import('@tauri-apps/plugin-fs')
+  if (existingPath) {
+    await writeFile(existingPath, bytes)
+    return { status: 'saved', path: existingPath }
+  }
+  const { save } = await import('@tauri-apps/plugin-dialog')
   const path = await save({
     title: 'Save ELSim project',
     defaultPath: filename,
     filters: [{ name: 'ELSim project', extensions: ['elsim'] }],
   })
-  if (!path) return 'cancelled'
+  if (!path) return { status: 'cancelled' }
   await writeFile(path, bytes)
-  return 'saved'
+  return { status: 'saved', path }
 }
 
 export async function openDesktopProject(): Promise<DesktopProjectFileResult> {
@@ -38,5 +44,5 @@ export async function openDesktopProject(): Promise<DesktopProjectFileResult> {
   assertProjectFileWithinLimit(file.size)
   const bytes = await readFile(path)
   assertProjectFileWithinLimit(bytes.byteLength)
-  return { status: 'file', bytes }
+  return { status: 'file', bytes, path }
 }

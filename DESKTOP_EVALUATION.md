@@ -1,6 +1,6 @@
 # Desktop packaging evaluation
 
-Status: Tauri 2 desktop-shell prototype under `src-tauri/`. It loads the existing Vite UI and provides native `.elsim` Open/Save dialogs through the official Tauri dialog and filesystem plugins. The capability grants only dialog open/save and single-file read/stat/write operations; dialog-selected paths enter the temporary filesystem scope, and ELSim does not expose arbitrary directory access, shell commands, native ngspice, or installer bundling. The checked-in Cargo lockfile pins Tauri 2.12.5 and its plugins; the desktop shell requires Rust 1.90 or newer. `npm run build:offline` verifies the production frontend and copies the already-built local ngspice WASM into `dist`. This is a development prototype, not a verified desktop release. M4.2 remains open until the shell launches and the required workflows/builds are exercised on Windows, macOS, and Linux and packaging/signing are reviewed.
+Status: Tauri 2 desktop-shell prototype under `src-tauri/`. It loads the existing Vite UI and provides native `.elsim` Open/Save dialogs through the official Tauri dialog and filesystem plugins. The app remembers a project’s dialog-selected path during the current session, so later Save commands overwrite that project file; the first Save opens the native save dialog. Starting a new/example project or opening a project through the browser picker clears that remembered path. The capability grants only dialog open/save and single-file read/stat/write operations; dialog-selected paths enter the temporary filesystem scope, and ELSim does not expose arbitrary directory access, shell commands, native ngspice, or installer bundling. The checked-in Cargo lockfile pins Tauri 2.12.5 and its plugins; the desktop shell requires Rust 1.90 or newer. `npm run build:offline` verifies the production frontend and copies the already-built local ngspice WASM into `dist`. This is a development prototype, not a verified desktop release. M4.2 remains open until the shell launches and the required workflows/builds are exercised on Windows, macOS, and Linux and packaging/signing are reviewed.
 
 ## Recommendation
 
@@ -45,7 +45,7 @@ The Windows preflight checks the documented WebView2 Evergreen Runtime registry 
 - [ ] Verify desktop dev and production binaries on Linux with the required WebKitGTK packages installed.
 - [ ] Verify the same shell on Windows and macOS.
 - [ ] Validate service-worker, ngspice worker/WASM loading, and `.elsim` save/open behavior in each OS webview.
-- [ ] Verify native `.elsim` open/save dialogs on each OS, including cancellation, overwrite confirmation, 50 MiB rejection, and archive/hash validation.
+- [ ] Verify native `.elsim` open/save dialogs on each OS, including first-save destination selection, saving back to an opened project path, cancellation, overwrite confirmation, 50 MiB rejection, and archive/hash validation.
 - [x] Generate original platform icons from the existing ELSim PWA icon and configure them for desktop bundling.
 - [ ] Enable target installers only after these checks.
 
