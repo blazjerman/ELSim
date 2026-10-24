@@ -6637,6 +6637,18 @@ test('ngspice .GLOBAL inside an imported subcircuit is preserved and warns about
   await expect(page.getByRole('dialog', { name: 'Generated SPICE netlist' })).toContainText('.GLOBAL VCC')
 })
 
+test('comma-separated .GLOBAL nodes explain the ngspice connectivity hazard', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'comma-global.lib',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('.GLOBAL VCC, VSS\n.MODEL DTEST D(IS=1n)\n'),
+  })
+  await expect(page.locator('.toast[role="status"]')).toContainText('Line 1: .GLOBAL needs one or more valid node names separated by spaces. Do not use commas')
+  await expect(page.getByRole('button', { name: 'Remove library file comma-global.lib' })).toHaveCount(0)
+})
+
 test('imported ngspice .OPTION, .IC, and .NODESET cards are preserved and simulate with circuit-wide guidance', { tag: ['@ui-smoke', '@ngspice'] }, async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
