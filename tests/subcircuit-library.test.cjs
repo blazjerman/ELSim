@@ -748,6 +748,28 @@ test('parses ordered subcircuit pins, parameters, continuations, shared models, 
   ])
 })
 
+test('resolves many case-insensitive section references through one large imported library', () => {
+  const sectionCount = 300
+  const referenceCount = 120
+  const sectionNames = Array.from({ length: sectionCount }, (_, index) => `DEVICE_${index}`)
+  const sharedContent = sectionNames.flatMap((name, index) => [
+    `.LIB ${name}`,
+    `.MODEL D${index} D(IS=1n)`,
+    `.ENDL ${name}`,
+  ]).join('\n')
+  const references = Array.from({ length: referenceCount }, (_, index) => ({
+    id: `section-wrapper-${index}`,
+    filename: `section-wrapper-${index}.lib`,
+    content: `.LIB "shared-sections.lib" ${sectionNames[sectionNames.length - 1].toLowerCase()}\n.SUBCKT WRAPPER_${index} IN OUT\nR1 IN OUT 1k\n.ENDS WRAPPER_${index}`,
+  }))
+  const report = analyzeModelLibraries([
+    ...references,
+    { id: 'shared-sections', filename: 'shared-sections.lib', content: sharedContent, selectedSections: sectionNames },
+  ]).dependencies
+  assert.equal(report.resolvedIncludes.length, referenceCount)
+  assert.deepEqual(report.missingIncludes, [])
+})
+
 test('parses ngspice double-backslash continuations and retains their physical source records', () => {
   const source = String.raw`.MODEL DFAST D(IS=1n \\
 + BV=50)

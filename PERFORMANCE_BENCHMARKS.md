@@ -907,6 +907,8 @@ The visible-wire current-flow comparison now uses 31 timed samples after three w
 
 The same version-14 run now includes 2,000 separate imported libraries, each declaring the same global `.PARAM`. Analysis returned all 2,000 conflict locations and measured 20.478 ms median / 21.662 ms p95. This includes parsing and is a local scaling baseline, not a before/after performance claim.
 
+A second importer scaling case resolves 1,000 file-form `.LIB` references to one selected section in a shared 2,000-section model library. It resolved all references and measured 244.7 ms median / 297.5 ms p95, including parsing and dependency analysis. This is a local baseline, not an isolated section-lookup timing or before/after performance claim.
+
 ### Domain benchmark recheck (2026-10-23)
 
 `npm run benchmark:performance:quick` completed with benchmark version 13 on the documented i7-12700F host. It skips all ngspice work and reports seven-run medians and nearest-rank p95. The 5,000-part resistor chain measured 37.350/43.019 ms for connectivity and 47.754/62.234 ms for netlisting; the 5,000-part/4,900-wire fixture measured 32.599/45.785 ms and 44.092/58.058 ms respectively. The 5,000-instance hierarchy measured 76.293/89.138 ms for connectivity and 110.059/122.209 ms for netlisting. The million-sample plot reducer measured 1.044/1.064 ms, and cached lookup remained below 0.001 ms median/p95. All remained within the existing 500 ms domain budget.

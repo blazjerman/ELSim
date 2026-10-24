@@ -1554,7 +1554,7 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     if (matches) matches.push(entry)
     else assetsByBasename.set(basename, [entry])
   }
-  const sectionCache = new Map<string, string[]>()
+  const sectionCache = new Map<string, { available: Set<string>; selected: Set<string> }>()
   const subcircuits = new Map<string, string>()
   const subcircuitAssets = new Map<string, string>()
   const deviceModelAssets = new Map<string, string>()
@@ -1677,13 +1677,18 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
     }
     const target = matches[0].asset
     if (include.section) {
-      let availableSections = sectionCache.get(target.id)
-      if (!availableSections) {
-        availableSections = listModelLibrarySections(target.content)
-        sectionCache.set(target.id, availableSections)
+      let sections = sectionCache.get(target.id)
+      if (!sections) {
+        const availableSections = listModelLibrarySections(target.content)
+        const selectedSections = target.selectedSections ?? (availableSections.length === 1 ? availableSections : [])
+        sections = {
+          available: new Set(availableSections.map((section) => section.toLowerCase())),
+          selected: new Set(selectedSections.map((section) => section.toLowerCase())),
+        }
+        sectionCache.set(target.id, sections)
       }
-      const selectedSections = target.selectedSections ?? (availableSections.length === 1 ? availableSections : [])
-      if (!availableSections.some((section) => section.toLowerCase() === include.section!.toLowerCase()) || !selectedSections.some((section) => section.toLowerCase() === include.section!.toLowerCase())) {
+      const sectionName = include.section.toLowerCase()
+      if (!sections.available.has(sectionName) || !sections.selected.has(sectionName)) {
         missingIncludes.push({ assetId: asset.id, assetFilename: asset.filename, ...include, reason: 'section' })
         continue
       }

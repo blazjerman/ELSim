@@ -395,6 +395,25 @@ try {
     duplicateDefinitions: parameterConflictAnalysis.value.dependencies.conflicts[0]?.definitions.length ?? 0,
     analysis: { medianMs: parameterConflictAnalysis.medianMs, p95Ms: parameterConflictAnalysis.p95Ms },
   }
+  const sectionNames = Array.from({ length: 2000 }, (_, index) => `DEVICE_${String(index).padStart(4, '0')}`)
+  const sharedSectionLibrary = {
+    id: 'bench-many-sections',
+    filename: 'bench-many-sections.lib',
+    content: sectionNames.flatMap((name, index) => [`.LIB ${name}`, `.MODEL D${index} D(IS=1n)`, `.ENDL ${name}`]).join('\n'),
+    selectedSections: sectionNames,
+  }
+  const sectionReferenceLibraries = Array.from({ length: 1000 }, (_, index) => ({
+    id: `bench-section-reference-${index}`,
+    filename: `bench-section-reference-${index}.lib`,
+    content: `.LIB "bench-many-sections.lib" ${sectionNames.at(-1).toLowerCase()}\n.SUBCKT BENCH_SECTION_${index} IN OUT\nR1 IN OUT 1k\n.ENDS BENCH_SECTION_${index}`,
+  }))
+  const sectionReferenceAnalysis = measure(() => analyzeModelLibraries([...sectionReferenceLibraries, sharedSectionLibrary]))
+  const importedSectionReferenceResults = {
+    libraries: sectionReferenceLibraries.length + 1,
+    sectionCount: sectionNames.length,
+    resolvedIncludes: sectionReferenceAnalysis.value.dependencies.resolvedIncludes.length,
+    analysis: { medianMs: sectionReferenceAnalysis.medianMs, p95Ms: sectionReferenceAnalysis.p95Ms },
+  }
   const importedDeviceProject = makeImportedDeviceModelProject(createStarterProject, 400, 600)
   const importedDeviceNetlist = measure(() => createNetlistArtifact(importedDeviceProject))
   const importedDeviceArtifact = importedDeviceNetlist.value
@@ -721,6 +740,7 @@ try {
     importedModelResults,
     importedLibraryAnalysisResults,
     importedParameterConflictResults,
+    importedSectionReferenceResults,
     importedDeviceResults,
     plotResults,
     rawRetentionResults,
