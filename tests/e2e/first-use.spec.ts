@@ -14219,32 +14219,42 @@ test('AKO model inspector shows conditional defaults inherited from each matchin
   await waitForProjectAutosave(page)
   await page.locator('.circuit-part[data-part-id="diode-polarity-d1"]').click()
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
-  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
-    name: 'conditional-ako.lib', mimeType: 'text/plain', buffer: Buffer.from([
-      '.PARAM branch=0',
-      '.IF (branch == 0)',
+  const libraryInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await libraryInput.setInputFiles({
+    name: 'conditional-base.lib', mimeType: 'text/plain', buffer: Buffer.from([
+      '.IF (1)',
       '.MODEL BASECOND D(IS=1n N=2 ONLY=7)',
-      '.MODEL CHILD AKO:BASECOND D(IS=2n)',
       '.ELSE',
       '.MODEL BASECOND D(IS=1n N=5)',
+      '.ENDIF',
+    ].join('\n')),
+  })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from conditional-base\.lib/)).toBeVisible()
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await libraryInput.setInputFiles({
+    name: 'conditional-child.lib', mimeType: 'text/plain', buffer: Buffer.from([
+      '.IF (1)',
+      '.MODEL CHILD AKO:BASECOND D(IS=2n)',
+      '.ELSE',
       '.MODEL CHILD AKO:BASECOND D(IS=3n)',
       '.ENDIF',
     ].join('\n')),
   })
+  await expect(page.getByText(/Imported 0 subcircuits and 1 device model from conditional-child\.lib/)).toBeVisible()
   await page.getByLabel('Device model for D1').selectOption('CHILD')
   const modelDetails = page.getByText('CHILD · AKO:BASECOND · 2 model parameters · 1 branch-only', { exact: true })
   await expect(modelDetails).toBeVisible()
   await modelDetails.click()
   const inheritedDefaults = page.getByLabel('N conditional defaults')
-  await expect(inheritedDefaults).toContainText('Conditional default at line 4: 2')
-  await expect(inheritedDefaults).toContainText('Conditional default at line 7: 5')
+  await expect(inheritedDefaults).toContainText('Conditional default at line 2: 2')
+  await expect(inheritedDefaults).toContainText('Conditional default at line 4: 5')
   const inheritedBranchOnly = page.getByLabel('Branch-only model parameters')
   await expect(inheritedBranchOnly).toContainText('ONLY · inherited')
-  await expect(inheritedBranchOnly).toContainText('line 3: 7')
+  await expect(inheritedBranchOnly).toContainText('line 2: 7')
   await page.getByRole('searchbox', { name: 'Search parameters for CHILD' }).fill('7')
-  await expect(inheritedBranchOnly).toContainText('line 3: 7')
+  await expect(inheritedBranchOnly).toContainText('line 2: 7')
   await page.getByRole('searchbox', { name: 'Search parameters for CHILD' }).fill('5')
-  await expect(inheritedDefaults).toContainText('Conditional default at line 7: 5')
+  await expect(inheritedDefaults).toContainText('Conditional default at line 4: 5')
 })
 
 test('imported .MODEL defaults that call .FUNC helpers stay in the generated netlist', { tag: '@ui-smoke' }, async ({ page }) => {
