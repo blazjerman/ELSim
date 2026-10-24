@@ -1757,6 +1757,14 @@ export function createTransientNoiseExampleProject(): Project {
   return project
 }
 
+/** Compare three transient-noise levels without changing the circuit topology. */
+export function createTransientNoiseSweepExampleProject(): Project {
+  const project = createTransientNoiseExampleProject()
+  project.name = 'Compare transient-noise levels'
+  project.simulation.parameterSweeps = [{ component: 'V1', sourceParameter: 'trnoise.gaussianRms', start: '5 mV', stop: '20 mV', points: 3 }]
+  return project
+}
+
 /** A pulse-driven voltage-controlled amplifier with an explicit load. */
 /** A parallel LC tank with a damped AC response peak near its calculated resonance. */
 export function createRlcResonanceExampleProject(): Project {

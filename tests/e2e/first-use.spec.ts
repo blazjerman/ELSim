@@ -10029,6 +10029,24 @@ test('transient-noise example teaches and runs the built-in noisy source', { tag
   await expect(page.locator('.netlist-modal pre')).toContainText(/V1 VIN 0 DC 0 TRNOISE\(20m 10u 0 0 0 1m 1m\)/)
 })
 
+test('transient-noise comparison example explains and runs three RMS levels', { tag: '@ngspice' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await dialog.getByRole('button', { name: 'Advanced' }).click()
+  await dialog.locator('article[data-example-id="transient-noise-sweep"]').getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.locator('.project-title')).toHaveText('Compare transient-noise levels')
+  await expect(page.getByLabel('Guided example')).toContainText('about 68% of samples fall within ±1 RMS')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/Parameter sweep complete · 3 cases/)).toBeVisible({ timeout: 60_000 })
+  await openComponentVoltagePlot(page)
+  const labels = await page.locator('.trace-toggles button').allTextContents()
+  expect(labels.some((label) => label.includes('V1.trnoise.gaussianRms=0.005 V'))).toBe(true)
+  expect(labels.some((label) => label.includes('V1.trnoise.gaussianRms=0.0125 V'))).toBe(true)
+  expect(labels.some((label) => label.includes('V1.trnoise.gaussianRms=0.02 V'))).toBe(true)
+})
+
 test('PWL waveform example opens with editable points and solves the RC response', { tag: '@ngspice' }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running the browser smoke test').toEqual([])
