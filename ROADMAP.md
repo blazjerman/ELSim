@@ -2,6 +2,8 @@
 
 Status: active implementation roadmap, 2026-10-10. The application foundation is being built in this repository.
 
+M4.3 connectivity pin-cache optimization (2026-10-24): Connectivity now reuses the component pin positions already calculated during graph construction when assembling pin-to-net results, avoiding a second geometry transform pass. `npm test` passes all 39 groups and TypeScript passes. The local quick performance benchmark's 5,000-instance hierarchy sample changed from 77.7 ms to 69.0 ms median connectivity and from 123.3 ms to 114.9 ms median netlisting; these are local observations, not a cross-device guarantee. No WASM rebuild or browser test was needed.
+
 M2.4 imported model-library directive guidance (2026-10-24): Import errors now explain why `.CONTROL`/`.ENDC` scripts, `.END` inside a subcircuit, external-command `.EXEC`/`.SHELL`, and `.CM` compiled XSPICE module records cannot be used as model-library content, with a direct recovery suggestion for each. A final `.END` after the library remains accepted. Parser regressions verify line-specific guidance. No WASM rebuild or browser test was needed.
 
 M2.4 escaped-string model-reference scanning (2026-10-24): Preflight analysis now ignores global `.PARAM` and `.FUNC` names inside quoted instance values even when the string contains backslash-escaped quote characters. This prevents harmless text such as `"label \" BASE SCALE(2) \""` from being reported as ambiguous references. The existing imported-string/duplicate-name netlist regression covers the case; all 39 unit-test groups and TypeScript pass. No WASM rebuild or browser test was needed.

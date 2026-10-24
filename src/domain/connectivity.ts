@@ -41,6 +41,7 @@ class DisjointSet {
 }
 
 type Segment = { index: number; wireId: string; a: [number, number]; b: [number, number]; token: string }
+type PinEntry = { part: Part; pin: ReturnType<typeof componentPins>[number] }
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number }
 
 /** A broadphase only: callers still apply the existing exact geometry predicates. */
@@ -107,7 +108,7 @@ function belongsToSegment(point: { x: number; y: number }, segment: Segment) {
   return pointOnSegment(point, { x: segment.a[0], y: segment.a[1] }, { x: segment.b[0], y: segment.b[1] }, 1e-4)
 }
 
-function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: string } {
+function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: string; pins: PinEntry[] } {
   const dsu = new DisjointSet()
   const groundToken = 'global:ground'
   dsu.add(groundToken)
@@ -128,7 +129,7 @@ function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: str
 
   const segmentGrid = new SpatialGrid<Segment>()
   for (const segment of segments) segmentGrid.add(segment, segmentBounds(segment))
-  const pinGrid = new SpatialGrid<{ part: Part; pin: ReturnType<typeof componentPins>[number] }>()
+  const pinGrid = new SpatialGrid<PinEntry>()
   for (const entry of pins) pinGrid.add(entry, pointBounds(entry.pin.x, entry.pin.y))
   const junctionGrid = new SpatialGrid<{ x: number; y: number }>()
   for (const junction of project.junctions) junctionGrid.add(junction, pointBounds(junction.x, junction.y))
@@ -181,11 +182,11 @@ function connectedTokens(project: Project): { dsu: DisjointSet; groundToken: str
     else labelsByName.set(key, token)
   }
 
-  return { dsu, groundToken }
+  return { dsu, groundToken, pins }
 }
 
 export function analyzeConnectivity(project: Project): Connectivity {
-  const { dsu, groundToken } = connectedTokens(project)
+  const { dsu, groundToken, pins } = connectedTokens(project)
   const tokens = dsu.values()
   const groups = new Map<string, { minimumToken: string }>()
   for (const token of tokens) {
@@ -228,14 +229,15 @@ export function analyzeConnectivity(project: Project): Connectivity {
 
   const pinNets = new Map<string, string>()
   const pinLabels = new Map<string, string[]>()
-  for (const part of project.parts) {
-    for (const pin of componentPins(part)) {
-      const token = pinToken(part.id, pin.index)
-      const root = dsu.find(token)
-      const key = `${part.id}:${pin.index}`
-      pinNets.set(key, nameByRoot.get(root) ?? `n${autoIndex++}`)
-      pinLabels.set(key, labelsByRoot.get(root) ?? [])
-    }
+  // Reuse the pin geometry gathered for graph construction. Component pin
+  // transforms are pure, but recalculating them for every part adds avoidable
+  // work on large schematics and repeated hierarchy instances.
+  for (const { part, pin } of pins) {
+    const token = pinToken(part.id, pin.index)
+    const root = dsu.find(token)
+    const key = `${part.id}:${pin.index}`
+    pinNets.set(key, nameByRoot.get(root) ?? `n${autoIndex++}`)
+    pinLabels.set(key, labelsByRoot.get(root) ?? [])
   }
   const wireNets = new Map<string, string>()
   for (const wire of project.wires) {
