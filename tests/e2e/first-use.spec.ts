@@ -10312,6 +10312,13 @@ test('NMOS common-source lesson measures amplified, inverted AC output', { tag: 
   await page.locator('[data-part-setting="common-source-rd:value"]').fill('150k')
   await expect(lessonNextStep).toContainText('RD is now 150 kΩ')
   await expect(lessonNextStep).toContainText('the old result is stale')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect.poll(async () => (await lessonNextStep.innerText()).includes('With RD = 150 kΩ, ngspice measured VOUT/VIN ='), { timeout: 45_000 }).toBe(true)
+  const rerunMeasurement = await lessonNextStep.innerText()
+  const rerunGainDb = Number(rerunMeasurement.match(/VOUT\/VIN = ([+-]?[\d.]+) dB/)?.[1])
+  expect(Number.isFinite(rerunGainDb)).toBe(true)
+  expect(Math.abs(rerunGainDb - gainDb)).toBeGreaterThan(0.1)
+  await expect(lessonNextStep).toContainText('restoring RD to 100 kΩ should lower the gain')
 })
 
 test('parallel RLC lesson peaks near the calculated tank resonance', { tag: '@ngspice' }, async ({ page }) => {
