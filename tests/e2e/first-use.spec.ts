@@ -427,6 +427,7 @@ test('Ctrl/Meta+S saves the current project from the editor', { tag: '@ui-smoke'
   await page.goto('/')
   await expect(page.locator('svg.schematic')).toBeVisible()
   for (const modifier of ['Control', 'Meta']) {
+    await page.getByRole('textbox', { name: 'Find a component' }).focus()
     const downloadPromise = page.waitForEvent('download')
     await page.keyboard.press(`${modifier}+s`)
     const download = await downloadPromise
@@ -456,6 +457,7 @@ test('Ctrl/Meta+O opens a project through the normal validated file flow', { tag
   })
   const file = { name: 'shortcut-open.elsim.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(project)) }
   for (const modifier of ['Control', 'Meta']) {
+    await page.getByRole('textbox', { name: 'Find a component' }).focus()
     const chooserPromise = page.waitForEvent('filechooser')
     await page.keyboard.press(`${modifier}+o`)
     const chooser = await chooserPromise

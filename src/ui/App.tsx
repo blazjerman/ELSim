@@ -2210,12 +2210,12 @@ export default function App() {
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
       if (event.key === 'Escape' && saveWarningOpen) { closeSaveWarning(); return }
       const modalOpen = engineSetupOpen || pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || pendingModelImportBatch !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady || corruptLocalProjectCopies.length > 0
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o' && !editingText) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o') {
         event.preventDefault()
         if (!event.repeat && !modalOpen) openProject()
         return
       }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !editingText) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
         if (!event.repeat && !modalOpen) saveProject()
         return
