@@ -114,6 +114,9 @@ test('parses top-level .FUNC signatures for forward-referenced subcircuit defaul
   assert.throws(() => parseSubcircuitLibrary('.FUNC sqrt(x) {x}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /name sqrt is reserved/)
   assert.throws(() => parseSubcircuitLibrary('.FUNC log10(x) {x}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /name log10 is reserved/)
   assert.throws(() => parseSubcircuitLibrary('.FUNC F(x) {x}\n.FUNC f(x, y) {x+y}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /conflicting argument counts/)
+  assert.throws(() => parseSubcircuitLibrary('.FUNC _PRIVATE(x) {x}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /\.FUNC name _PRIVATE is not a valid ngspice identifier/)
+  assert.throws(() => parseSubcircuitLibrary('.FUNC CUSTOM(defined) {defined}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /unique argument names/)
+  assert.throws(() => parseSubcircuitLibrary('.FUNC defined(x) {x}\n.SUBCKT USER_GAIN IN OUT\n.ENDS USER_GAIN'), /\.FUNC name defined is reserved/)
 })
 
 test('parses native punctuation in .FUNC names and arguments and accepts their calls in defaults', () => {

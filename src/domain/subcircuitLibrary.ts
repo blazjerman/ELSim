@@ -430,13 +430,14 @@ const builtinFunctionArities: Readonly<Record<string, number>> = {
 }
 
 function parseFunctionDefinition(text: string, sourceLine: number): ModelFunction {
-  const match = text.match(/^\.func\s+([A-Za-z_][A-Za-z0-9!#$%_\[\]]*)\s*(?:\(([^()]*)\))?\s*=?\s*\{[\s\S]*\}\s*$/i)
+  const match = text.match(/^\.func\s+([^\s()=]+)\s*(?:\(([^()]*)\))?\s*=?\s*\{[\s\S]*\}\s*$/i)
   if (!match) throw new Error(`Line ${sourceLine}: malformed .FUNC declaration.`)
   const name = match[1]
   const key = name.toLowerCase()
-  if (['__proto__', 'constructor', 'prototype'].includes(key) || Object.hasOwn(builtinFunctionArities, key)) throw new Error(`Line ${sourceLine}: .FUNC name ${name} is reserved.`)
+  if (!isValidNgspiceParameterName(name)) throw new Error(`Line ${sourceLine}: .FUNC name ${name} is not a valid ngspice identifier.`)
+  if (['__proto__', 'constructor', 'prototype'].includes(key) || reservedNgspiceParameterNames.has(key)) throw new Error(`Line ${sourceLine}: .FUNC name ${name} is reserved.`)
   const args = match[2]?.trim() ? match[2].split(/\s*,\s*/) : []
-  if (args.length > 16 || args.some((argument) => !/^[A-Za-z_][A-Za-z0-9!#$%_\[\]]*$/.test(argument)) || new Set(args.map((argument) => argument.toLowerCase())).size !== args.length) {
+  if (args.length > 16 || args.some((argument) => !isValidNgspiceParameterName(argument) || reservedNgspiceParameterNames.has(argument.toLowerCase())) || new Set(args.map((argument) => argument.toLowerCase())).size !== args.length) {
     throw new Error(`Line ${sourceLine}: .FUNC ${name} must declare up to 16 unique argument names.`)
   }
   return { name, arity: args.length, sourceLine }
