@@ -1,4 +1,4 @@
-export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }
+export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; conditionalDefaultValues?: { sourceLine: number; defaultValue: string }[]; defaultIsExpression?: boolean }
 export type ConditionalModelParameterValue = { sourceLine: number; sourceValue: string; parsed: boolean }
 export type UnparsedModelParameter = { name: string; sourceValue: string; conditionalValues?: ConditionalModelParameterValue[] }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
@@ -727,6 +727,20 @@ function registerModelCard(model: SpiceModelDefinition, conditionPath: ModelCond
       ? priorValue === nextValue
       : parameter.defaultValue.trim().toLowerCase() === candidate.defaultValue.trim().toLowerCase()
     if (!sameDefault) parameter.defaultVariesByCondition = true
+    const conditionalValues = previous.assignmentVariants.flatMap(({ model: variant, parameters }) => {
+      const value = parameters.find((item) => item.name.toLowerCase() === parameter.name.toLowerCase())
+      return value ? [{ sourceLine: variant.startLine, defaultValue: value.defaultValue }] : []
+    })
+    const firstConditionalValue = conditionalValues[0]?.defaultValue ?? ''
+    const firstScalar = compatibilityScalar(firstConditionalValue)
+    const valuesDiffer = conditionalValues.some(({ defaultValue }) => {
+      const nextScalar = compatibilityScalar(defaultValue)
+      return firstScalar !== null && nextScalar !== null
+        ? firstScalar !== nextScalar
+        : defaultValue.trim().toLowerCase() !== firstConditionalValue.trim().toLowerCase()
+    })
+    if (valuesDiffer) parameter.conditionalDefaultValues = conditionalValues
+    else delete parameter.conditionalDefaultValues
     return true
   })
 }

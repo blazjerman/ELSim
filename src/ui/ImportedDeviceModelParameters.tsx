@@ -50,7 +50,7 @@ export default function ImportedDeviceModelParameters({ model, parsedAssets, onR
   const localUnparsedNames = useMemo(() => new Set((model.unparsedParameters ?? []).map(({ name }) => name.toLowerCase())), [model.unparsedParameters])
   const filtered = useMemo(() => {
     const search = query.trim().toLocaleLowerCase()
-    return search ? parameters.filter(({ name, defaultValue }) => `${name} ${defaultValue}`.toLocaleLowerCase().includes(search)) : parameters
+    return search ? parameters.filter(({ name, defaultValue, conditionalDefaultValues }) => `${name} ${defaultValue} ${conditionalDefaultValues?.map(({ defaultValue: value }) => value).join(' ') ?? ''}`.toLocaleLowerCase().includes(search)) : parameters
   }, [parameters, query])
   const filteredUnparsed = useMemo(() => {
     const search = query.trim().toLocaleLowerCase()
@@ -60,7 +60,7 @@ export default function ImportedDeviceModelParameters({ model, parsedAssets, onR
   return <details className="field-hint">
     <summary>{model.name}{model.akoBaseName ? ` · AKO:${model.akoBaseName}` : ''} · {parameters.length} model parameters{unparsedParameters.length ? ` · ${unparsedParameters.length} unparsed` : ''}</summary>
     <label className="field-label">Find a model parameter<input aria-label={`Search parameters for ${model.name}`} type="search" value={query} placeholder="Search names or default values" onChange={(event) => { setQuery(event.target.value); setVisibleCount(16) }}/></label>
-    {visible.length ? <ul>{visible.map((parameter) => <li key={parameter.name}>{parameter.name} = {parameter.defaultValue}{!localNames.has(parameter.name.toLowerCase()) ? ' · inherited' : ''}</li>)}</ul> : filteredUnparsed.length ? null : <p role="status">No model parameters match “{query}”.</p>}
+    {visible.length ? <ul>{visible.map((parameter) => <li key={parameter.name}>{parameter.name} = {parameter.defaultValue}{!localNames.has(parameter.name.toLowerCase()) ? ' · inherited' : ''}{parameter.conditionalDefaultValues && <ul aria-label={`${parameter.name} conditional defaults`}>{parameter.conditionalDefaultValues.map(({ sourceLine, defaultValue }) => <li key={sourceLine}>Conditional default at line {sourceLine}: {defaultValue}</li>)}</ul>}</li>)}</ul> : filteredUnparsed.length ? null : <p role="status">No model parameters match “{query}”.</p>}
     {unparsedParameters.length > 0 && <div className="field-hint" role="note"><strong>Some assignments are shown as source text.</strong> ELSim could not classify these values for the inspector or parameter sweeps. The original model card is preserved and passed to ngspice.</div>}
     {filteredUnparsed.length > 0 && <ul aria-label="Unparsed model assignments">{filteredUnparsed.map((parameter) => <li key={parameter.name}><code>{parameter.name} = {parameter.sourceValue}</code> {parameter.conditionalValues
       ? <span>(conditional branch values; not sweepable: {parameter.conditionalValues.map(({ sourceLine, sourceValue, parsed }) => `line ${sourceLine}: ${sourceValue}${parsed ? '' : ' (source-only)'}`).join('; ')})</span>

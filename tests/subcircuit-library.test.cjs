@@ -656,7 +656,11 @@ test('preserves ngspice conditional model variants as one selectable device mode
   assert.equal(parsed.models.length, 1)
   assert.deepEqual(parsed.models[0], {
     name: 'DSELECT', type: 'D', parameters: [
-      { name: 'Is', defaultValue: '1n', defaultVariesByCondition: true },
+      { name: 'Is', defaultValue: '1n', defaultVariesByCondition: true, conditionalDefaultValues: [
+        { sourceLine: 4, defaultValue: '1n' },
+        { sourceLine: 6, defaultValue: '10n' },
+        { sourceLine: 8, defaultValue: '100n' },
+      ] },
       { name: 'N', defaultValue: '1' },
     ], startLine: 4, endLine: 4,
   })
@@ -701,7 +705,11 @@ test('preserves ngspice conditional model variants as one selectable device mode
   assert.equal(nested.models.length, 1)
   assert.equal(nested.models[0].scope, 'NESTED_STAGE')
   assert.deepEqual(nested.models[0].parameters, [
-    { name: 'IS', defaultValue: '1e-12', defaultVariesByCondition: true },
+    { name: 'IS', defaultValue: '1e-12', defaultVariesByCondition: true, conditionalDefaultValues: [
+      { sourceLine: 8, defaultValue: '1e-12' },
+      { sourceLine: 10, defaultValue: '1e-9' },
+      { sourceLine: 13, defaultValue: '1e-14' },
+    ] },
     { name: 'N', defaultValue: '1' },
   ])
 
@@ -732,6 +740,24 @@ test('retains conditional model assignments when only some branches have unparse
       { sourceLine: 4, sourceValue: '{vendor_shape(3)}', parsed: false },
     ],
   }])
+})
+
+test('exposes source lines and values for parsed conditional model defaults', () => {
+  const parsed = parseSubcircuitLibrary([
+    '.IF (branch == 0)',
+    '.MODEL DCOND D(IS=1n N=2)',
+    '.ELSE',
+    '.MODEL DCOND D(IS=10n N=2)',
+    '.ENDIF',
+  ].join('\n'))
+  assert.deepEqual(parsed.models[0].parameters.find(({ name }) => name === 'IS'), {
+    name: 'IS', defaultValue: '1n', defaultVariesByCondition: true,
+    conditionalDefaultValues: [
+      { sourceLine: 2, defaultValue: '1n' },
+      { sourceLine: 4, defaultValue: '10n' },
+    ],
+  })
+  assert.equal(parsed.models[0].parameters.find(({ name }) => name === 'N').conditionalDefaultValues, undefined)
 })
 
 test('accepts equivalent R and RES aliases across conditional resistor model variants', () => {

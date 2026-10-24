@@ -6485,7 +6485,7 @@ test('imported device model inspector shows and searches unparsed source assignm
       '.IF (branch == 0)',
       '.MODEL DCOND D(IS=1n N=2)',
       '.ELSE',
-      '.MODEL DCOND D(IS=1n N={vendor_shape(3)})',
+      '.MODEL DCOND D(IS=10n N={vendor_shape(3)})',
       '.ENDIF',
     ].join('\n')),
   })
@@ -6512,12 +6512,17 @@ test('imported device model inspector shows and searches unparsed source assignm
   await expect(conditionalDetails).toBeVisible()
   const conditionalDisclosure = conditionalDetails.locator('xpath=..')
   if (!(await conditionalDisclosure.evaluate((element) => (element as HTMLDetailsElement).open))) await conditionalDetails.click()
+  await expect(page.getByLabel('IS conditional defaults')).toContainText('Conditional default at line 6: 1n')
+  await expect(page.getByLabel('IS conditional defaults')).toContainText('Conditional default at line 8: 10n')
+  const conditionalSearch = page.getByRole('searchbox', { name: 'Search parameters for DCOND' })
+  await conditionalSearch.fill('vendor_shape')
   const conditionalAssignment = page.getByLabel('Unparsed model assignments')
   await expect(conditionalAssignment).toContainText('conditional branch values; not sweepable')
   await expect(conditionalAssignment).toContainText('line 6: 2')
   await expect(conditionalAssignment).toContainText('line 8: {vendor_shape(3)} (source-only)')
-  await page.getByRole('searchbox', { name: 'Search parameters for DCOND' }).fill('vendor_shape')
   await expect(conditionalAssignment).toBeVisible()
+  await conditionalSearch.fill('10n')
+  await expect(page.getByLabel('IS conditional defaults')).toContainText('Conditional default at line 8: 10n')
   await page.getByRole('button', { name: 'Open generated netlist' }).click()
   await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DBASE D(N={vendor_shape(2)})')
   await expect(page.locator('.netlist-modal pre')).toContainText('.MODEL DUSER AKO:DBASE D(IS=1n)')
