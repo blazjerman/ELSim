@@ -21,7 +21,7 @@ export const RESULT_ANIMATED_PART_KINDS = new Set<PartKind>([
 
 export const EDITOR_SHORTCUTS = [
   ['m', 'Select and move'], ['w', 'Draw a wire by dragging'], [';', 'Place or edit a net label'], ['?', 'Probe a wire or component'], ['=', 'Toggle a wire-crossing junction'],
-  ['Ctrl/⌘ + Enter', 'Run simulation'], ['Ctrl/⌘ + A', 'Select all components, wires, and labels'], ['Ctrl/⌘ + C / V', 'Copy and paste selected objects'], ['Ctrl/⌘ + Z', 'Undo'], ['Ctrl/⌘ + Shift + Z or Y', 'Redo'],
+  ['Ctrl/⌘ + S', 'Save project'], ['Ctrl/⌘ + Enter', 'Run simulation'], ['Ctrl/⌘ + A', 'Select all components, wires, and labels'], ['Ctrl/⌘ + C / V', 'Copy and paste selected objects'], ['Ctrl/⌘ + Z', 'Undo'], ['Ctrl/⌘ + Shift + Z or Y', 'Redo'],
   ['Arrow keys', 'Move keyboard focus between schematic components'], ['Enter / Space', 'Activate the focused item; toggles switches in Select mode'], ['Arrow keys on endpoint', 'Move a focused wire endpoint one grid step'], ['Context Menu / Shift + F10', 'Open options for the focused schematic object'],
   ['Delete / Backspace', 'Delete selected objects'], ['r or .', 'Rotate a pending or selected part; r places a resistor when none is selected'], ['y', 'Flip the selected component'], ['Space + drag', 'Pan the schematic'], ['Mouse wheel', 'Zoom at the pointer'],
   ['/', 'Focus component search'], ['Escape', 'Cancel placement or clear selection'],

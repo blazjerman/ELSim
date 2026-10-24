@@ -409,6 +409,7 @@ test('keyboard shortcut reference matches editor controls and restores focus', {
   const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
   await expect(dialog).toBeVisible()
   await expect(dialog.getByText('Draw a wire by dragging')).toBeVisible()
+  await expect(dialog.getByText('Ctrl/⌘ + S', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Ctrl/⌘ + Enter')).toBeVisible()
   await expect(dialog.getByText('Resistor', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Polarized capacitor', { exact: true })).toBeVisible()
@@ -418,6 +419,16 @@ test('keyboard shortcut reference matches editor controls and restores focus', {
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(trigger).toBeFocused()
+})
+
+test('Ctrl+S saves the current project from the editor', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/')
+  await expect(page.locator('svg.schematic')).toBeVisible()
+  const downloadPromise = page.waitForEvent('download')
+  await page.keyboard.press('Control+s')
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/\.elsim$/)
 })
 
 test('project inspector reports the current project format version', { tag: '@ui-smoke' }, async ({ page }) => {

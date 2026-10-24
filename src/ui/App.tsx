@@ -2205,6 +2205,11 @@ export default function App() {
       const editingText = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
       if (event.key === 'Escape' && saveWarningOpen) { closeSaveWarning(); return }
       const modalOpen = engineSetupOpen || pendingWaveformTrace !== null || tourStep !== null || shortcutsOpen || electricalCheckOpen || examplesOpen || sheetSettingsOpen || netlistOpen || saveWarningOpen || pendingModelImport !== null || pendingModelImportBatch !== null || Boolean(ltspiceExport) || ltspiceExportBusy || !projectRecoveryReady || corruptLocalProjectCopies.length > 0
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !editingText) {
+        event.preventDefault()
+        if (!modalOpen) saveProject()
+        return
+      }
       if (event.key === '/' && !modalOpen && !editingText) { event.preventDefault(); componentSearchRef.current?.focus(); return }
       if (editingText) return
       if (modalOpen) return
@@ -2298,7 +2303,7 @@ export default function App() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => { window.removeEventListener('keydown', onSpaceKeyDown, true); window.removeEventListener('keyup', onSpaceKeyUp, true); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur) }
-  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, corruptLocalProjectCopies.length, modelAssetsVerified, engineAssetAvailable, simulationResult, sheetInstancePath, engineSetupOpen, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingWaveformTrace, pendingModelImport, pendingModelImportBatch, ltspiceExport, ltspiceExportBusy, pendingComponentKind, hasHoveredSchematicObject])
+  }, [tool, selection, selected, selectedLabel, selectedParts, selectedPartIds, selectedWireId, selectedWireIds, selectedNetLabelIds, project, projectRecoveryReady, corruptLocalProjectCopies.length, modelAssetsVerified, engineAssetAvailable, simulationResult, sheetInstancePath, engineSetupOpen, tourStep, shortcutsOpen, electricalCheckOpen, examplesOpen, sheetSettingsOpen, netlistOpen, saveWarningOpen, pendingWaveformTrace, pendingModelImport, pendingModelImportBatch, ltspiceExport, ltspiceExportBusy, pendingComponentKind, hasHoveredSchematicObject, saveProject])
   const openGeneratedNetlist = () => {
     netlistReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setNetlistText(null)
