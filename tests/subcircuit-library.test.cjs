@@ -1474,6 +1474,36 @@ test('diagnoses reached LTspice helper limit() and if() constructs at their defi
   assert.match(helperWarnings[1].suggestion, /ngspice ternary/)
 })
 
+test('diagnoses reached imported helpers with table, integrator, step, and Boolean syntax', () => {
+  const source = [
+    '.FUNC lookup_value(x) {table(x, 0, 0, 1, 1)}',
+    '.FUNC integrated_value(x) {idt(x)}',
+    '.FUNC step_value(x) {u(x)}',
+    '.FUNC xor_value(x) {x ^ 1}',
+    '.FUNC invert_value(x) {~x}',
+    '.SUBCKT helper_calls IN OUT',
+    'B1 OUT 0 V=lookup_value(V(IN))',
+    'B2 OUT 0 V=integrated_value(V(IN))',
+    'B3 OUT 0 V=step_value(V(IN))',
+    'B4 OUT 0 V=xor_value(V(IN))',
+    'B5 OUT 0 V=invert_value(V(IN))',
+    '.ENDS helper_calls',
+  ].join('\n')
+  const helperWarnings = analyzeLtspiceModelDialect(source).filter(({ feature }) => feature.startsWith('Imported .FUNC'))
+  assert.deepEqual(helperWarnings.map(({ sourceLine, feature }) => [sourceLine, feature]), [
+    [1, 'Imported .FUNC uses LTspice table()'],
+    [2, 'Imported .FUNC uses LTspice behavioral integration'],
+    [3, 'Imported .FUNC uses LTspice u() step function'],
+    [4, 'Imported .FUNC uses LTspice boolean ^'],
+    [5, 'Imported .FUNC uses LTspice ~ inversion'],
+  ])
+  assert.match(helperWarnings[0].suggestion, /PWL expression/)
+  assert.match(helperWarnings[1].suggestion, /capacitor-based circuit/)
+  assert.match(helperWarnings[2].impact, /u\(0\) returns 0\.5/)
+  assert.match(helperWarnings[3].impact, /interprets it as exponentiation/)
+  assert.match(helperWarnings[4].suggestion, /do not replace ~ with ngspice ! blindly/i)
+})
+
 test('limits compatibility diagnostics and cross-library helpers to selected .LIB sections', () => {
   const source = '.LIB used\n.SUBCKT used_model IN OUT\nB1 OUT 0 V=active_helper(V(IN))\n.ENDS used_model\n.ENDL used\n.LIB unused\n.SUBCKT unused_model IN OUT\nB2 OUT 0 V=int(V(IN))\n.ENDS unused_model\n.ENDL unused'
   const warnings = analyzeLtspiceModelDialect(source, {
