@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { FolderOpen, X } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import type { ModelDefinitionConflict, ModelDependencyAnalysis } from '../domain/subcircuitLibrary'
 
@@ -41,6 +42,23 @@ export function ModelConflictReport({ conflicts, onReview }: {
       Show {Math.min(PAGE_SIZE, conflicts.length - visibleConflicts.length)} more imported conflict{conflicts.length - visibleConflicts.length === 1 ? '' : 's'}
     </button>}
   </div>
+}
+
+export function UnlocatedModelDiagnostic({ assets, message, hint, onClose, onReplace }: {
+  assets: { id: string; filename: string }[]
+  message: string
+  hint?: string
+  onClose: () => void
+  onReplace: (event: MouseEvent<HTMLButtonElement>, assetId: string) => void
+}) {
+  if (!assets.length) return null
+  return <section className="import-diagnostics engine-model-diagnostic" aria-label="ngspice model compatibility diagnostic">
+    <div><strong>ngspice could not locate the model parse error</strong><button onClick={onClose} aria-label="Dismiss model diagnostic"><X size={13}/></button></div>
+    <code>{message}</code>
+    <p>{hint ?? 'Review the listed model libraries; ngspice did not identify which file contains the unsupported value.'}</p>
+    <p>Possible model libraries:</p>
+    <ul>{assets.map((asset) => <li key={asset.id}><span>{asset.filename}</span> <button className="replace-model" onClick={(event) => onReplace(event, asset.id)}><FolderOpen size={13}/> Replace this library</button></li>)}</ul>
+  </section>
 }
 
 export function ModelDependencyReport({ analysis, onImport, onChooseSection }: {

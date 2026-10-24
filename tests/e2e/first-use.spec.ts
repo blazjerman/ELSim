@@ -11822,6 +11822,35 @@ test('ngspice parser failure without a source line identifies its only imported 
   await expect(diagnostic.getByRole('button', { name: 'Replace model library' })).toBeVisible()
 })
 
+test('ngspice parser failure without a source line lists all plausible imported libraries', { tag: '@ngspice' }, async ({ page }) => {
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
+  await page.goto('/')
+  await page.evaluate(async (fallbackProjectJson) => {
+    const project = JSON.parse(localStorage.getItem('elsim:project:v7') ?? 'null') ?? JSON.parse(fallbackProjectJson)
+    const assets = [
+      { id: 'bad-model-library', filename: 'bad-diode.lib', content: '.model BAD_D D(BADPARAM=1)\n' },
+      { id: 'other-model-library', filename: 'other-devices.lib', content: '.model OTHER_D D(Is=1n)\n' },
+    ]
+    project.modelAssets = await Promise.all(assets.map(async (asset) => {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(asset.content))
+      const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+      return { ...asset, sha256, licenseStatus: 'unknown', importedAt: new Date().toISOString() }
+    }))
+    project.parts.push({ id: 'bad-diode-instance', kind: 'diode', ref: 'D99', value: 'Default diode', deviceModel: 'BAD_D', x: 760, y: 600, rotation: 0 })
+    project.sheets[0] = { ...project.sheets[0], parts: project.parts }
+    localStorage.setItem('elsim:project:v7', JSON.stringify(project))
+  }, JSON.stringify(createStarterProject()))
+  await page.reload()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  const diagnostic = page.getByRole('region', { name: 'ngspice model compatibility diagnostic' })
+  await expect(diagnostic).toBeVisible({ timeout: 60_000 })
+  await expect(diagnostic).toContainText('did not report a source line')
+  await expect(diagnostic).toContainText('bad-diode.lib')
+  await expect(diagnostic).toContainText('other-devices.lib')
+  await expect(diagnostic.getByRole('button', { name: 'Replace this library' })).toHaveCount(2)
+})
+
 test('inductors expose mutual coupling, mark pin-one polarity, and emit a native K card', { tag: '@ui-smoke' }, async ({ page }) => {
   const project = createStarterProject()
   const originalPartIds = project.parts.map((part) => part.id)

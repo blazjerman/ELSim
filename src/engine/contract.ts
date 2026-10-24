@@ -13,6 +13,7 @@ export type SimulationDiagnostic = {
   line?: number
   assetId?: string
   assetLine?: number
+  candidateAssetIds?: string[]
 }
 
 export type NetlistSource = {
@@ -126,6 +127,7 @@ function isDiagnostic(value: unknown): value is SimulationDiagnostic {
     && (value.line === undefined || (Number.isInteger(value.line) && Number(value.line) >= 1))
     && (value.assetId === undefined || (typeof value.assetId === 'string' && value.assetId.length > 0))
     && (value.assetLine === undefined || (Number.isInteger(value.assetLine) && Number(value.assetLine) >= 1))
+    && (value.candidateAssetIds === undefined || (Array.isArray(value.candidateAssetIds) && value.candidateAssetIds.length > 1 && value.candidateAssetIds.length <= 128 && value.candidateAssetIds.every((id) => typeof id === 'string' && id.length > 0)))
 }
 
 function isSource(value: unknown): value is NetlistSource {

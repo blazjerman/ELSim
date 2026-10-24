@@ -160,6 +160,7 @@ test('unlocated ngspice numeric parse failures do not guess between imported lib
   ] }
   const diagnostic = diagnosticForNgspice('strtod: Invalid argument', modelArtifact)
   assert.equal(diagnostic.assetId, undefined)
+  assert.deepEqual(diagnostic.candidateAssetIds, ['asset-7', 'asset-8'])
   assert.equal(diagnostic.assetLine, undefined)
   assert.match(diagnostic.hint, /did not report a source line.*exact file and card could not be identified/i)
 })

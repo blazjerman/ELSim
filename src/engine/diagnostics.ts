@@ -35,6 +35,9 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
   const unlocatedModelAssetId = unlocatedNumericParseError && importedModelAssetIds.length === 1
     ? importedModelAssetIds[0]
     : undefined
+  const candidateModelAssetIds = unlocatedNumericParseError && importedModelAssetIds.length > 1
+    ? importedModelAssetIds
+    : undefined
   let hint: string | undefined
   const missingFunction = message.match(/no such function\s+['"]?([A-Za-z_][A-Za-z0-9_]*)/i)?.[1]
   if (missingFunction && source?.assetId) {
@@ -90,6 +93,7 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
     ...(source ? { sourceId: source.sourceId } : {}),
     ...(source?.assetId ? { assetId: source.assetId, ...(source.assetLine !== undefined ? { assetLine: source.assetLine } : {}) } : {}),
     ...(!source?.assetId && unlocatedModelAssetId ? { assetId: unlocatedModelAssetId } : {}),
+    ...(candidateModelAssetIds ? { candidateAssetIds: candidateModelAssetIds } : {}),
     ...(hint ? { hint } : {}),
   }
 }

@@ -95,6 +95,7 @@ const ExamplesDialog = lazy(() => import('./ExamplesDialog').then((module) => ({
 const BeginnerPrediction = lazy(() => import('./BeginnerPredictions').then((module) => ({ default: module.BeginnerPrediction })))
 const ModelDependencyReport = lazy(() => import('./ModelDependencyReport').then((module) => ({ default: module.ModelDependencyReport })))
 const ModelConflictReport = lazy(() => import('./ModelDependencyReport').then((module) => ({ default: module.ModelConflictReport })))
+const UnlocatedModelDiagnostic = lazy(() => import('./ModelDependencyReport').then((module) => ({ default: module.UnlocatedModelDiagnostic })))
 const EngineSetupDialog = lazy(() => import('./EngineSetupDialog').then((module) => ({ default: module.EngineSetupDialog })))
 const HierarchyWalkthrough = lazy(() => import('./HierarchyWalkthrough').then((module) => ({ default: module.HierarchyWalkthrough })))
 const SheetSettingsDialog = lazy(() => import('./SheetSettingsDialog').then((module) => ({ default: module.SheetSettingsDialog })))
@@ -2730,7 +2731,7 @@ export default function App() {
         setRunState('error')
         const message = typeof response.error?.message === 'string' ? response.error.message : 'ngspice returned an invalid error response.'
         const sourceId = response.error?.sourceId
-        if (response.error?.assetId) setCompatibilityDiagnostic(response.error)
+        if (response.error?.assetId || response.error?.candidateAssetIds?.length) setCompatibilityDiagnostic(response.error)
         selectReportedComponent(sourceId)
         setNotice(response.error?.hint ? `${message} Tip: ${response.error.hint}` : message)
         worker.terminate()
@@ -3342,6 +3343,7 @@ export default function App() {
       <aside aria-label="Properties inspector" className={`inspector-panel${mobilePane === 'properties' ? ' mobile-active' : ''}`}>
         <div className="inspector-heading"><div><span className="eyebrow">PROPERTIES</span><h2>{selected ? selected.ref : 'Circuit settings'}</h2></div></div>
         {compatibilityDiagnostic?.assetId && project.modelAssets?.some((asset) => asset.id === compatibilityDiagnostic.assetId) && (() => { const asset = project.modelAssets.find((item) => item.id === compatibilityDiagnostic.assetId)!; const hasSourceLocation = compatibilityDiagnostic.assetLine !== undefined; return <section className="import-diagnostics engine-model-diagnostic" aria-label="ngspice model compatibility diagnostic"><div><strong>{hasSourceLocation ? 'ngspice rejected an imported model card' : 'ngspice could not locate the model parse error'}</strong><button onClick={() => setCompatibilityDiagnostic(null)} aria-label="Dismiss model diagnostic"><X size={13}/></button></div><p>{asset.filename}{hasSourceLocation ? ` · source line ${compatibilityDiagnostic.assetLine}` : ''}</p><code>{compatibilityDiagnostic.message}</code><p>{compatibilityDiagnostic.hint ?? 'Check the model against ngspice syntax and replace it with a compatible version if needed.'}</p>{compatibilityDiagnostic.assetLine !== undefined && <button className="place-model" onClick={() => setModelSourceReview({ assetId: asset.id, line: compatibilityDiagnostic.assetLine! })}>Review source line {compatibilityDiagnostic.assetLine}</button>}<button className="replace-model" onClick={(event) => openModelLibraryPicker(event, asset.id)}><FolderOpen size={13}/> Replace model library</button></section> })()}
+        {compatibilityDiagnostic && !compatibilityDiagnostic.assetId && (compatibilityDiagnostic.candidateAssetIds?.length ?? 0) > 0 && <Suspense fallback={null}><UnlocatedModelDiagnostic assets={(project.modelAssets ?? []).filter((asset) => compatibilityDiagnostic.candidateAssetIds?.includes(asset.id))} message={compatibilityDiagnostic.message} hint={compatibilityDiagnostic.hint} onClose={() => setCompatibilityDiagnostic(null)} onReplace={openModelLibraryPicker}/></Suspense>}
         {importWarnings.length > 0 && <section className="import-diagnostics" aria-label="LTspice import diagnostics"><div><strong>Import needs review</strong><button onClick={() => setImportWarnings([])} aria-label="Dismiss import diagnostics"><X size={13}/></button></div><p>{importWarnings.length} item{importWarnings.length === 1 ? '' : 's'} could not be fully translated.</p><ul>{importWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul></section>}
         {selected ? <>
           <div className="selected-part-card"><span className={`selected-part-icon icon-${selected.kind}`}>{selected.kind === 'resistor' ? <Minus size={19}/> : selected.kind === 'lamp' ? <Lightbulb size={18}/> : selected.kind === 'capacitor' ? <Activity size={18}/> : selected.kind === 'zener' ? <Waypoints size={18}/> : selected.kind === 'source' ? <Zap size={18}/> : <Grid2X2 size={18}/>}</span><div><strong>{kindNames[selected.kind]}</strong><span>{componentPins(selected).length} pins · SPICE {kindPrefix[selected.kind]}</span></div></div>
