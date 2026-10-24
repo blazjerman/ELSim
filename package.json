@@ -9,8 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "desktop:dev": "cargo tauri dev",
-    "desktop:build": "cargo tauri build",
+    "desktop:dev": "node tools/desktop-preflight.mjs dev && tauri dev",
+    "desktop:build": "node tools/desktop-preflight.mjs build && tauri build",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build && node tools/check-web-build.mjs",
     "build:offline": "npm run typecheck && vite build --mode offline",
@@ -44,16 +44,17 @@
     "build:ngspice:native": "./tools/build-ngspice-native.sh"
   },
   "dependencies": {
+    "lucide-react": "0.468.0",
     "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "lucide-react": "0.468.0"
+    "react-dom": "19.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.55.1",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/react": "19.1.0",
     "@types/react-dom": "19.1.0",
     "@vitejs/plugin-react": "4.7.0",
     "typescript": "5.8.3",
-    "@playwright/test": "1.55.1",
     "vite": "6.4.4"
   }
 }

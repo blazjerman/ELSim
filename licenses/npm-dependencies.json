@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11",
+  "generatedAt": "2026-10-25",
   "source": "package-lock.json and installed node_modules",
   "auditTool": "license-checker",
   "packages": [
@@ -243,6 +243,103 @@
       "repository": "https://github.com/rollup/rollup",
       "licenseFile": "node_modules/@rollup/rollup-linux-x64-musl/README.md",
       "licenseFileSha256": "2328664c1b9ecddacf91567b9dc1e4667ba68d39d8e76836ec91576984c6861c"
+    },
+    {
+      "name": "@tauri-apps/cli",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/package.json",
+      "licenseFileSha256": "59cd2a8f64f2ff245b8479706462ad25c66c4f3eb31013bb2046019577af9b66",
+      "licenseEvidence": "package-metadata"
+    },
+    {
+      "name": "@tauri-apps/cli-darwin-arm64",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-darwin-x64",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-linux-arm-gnueabihf",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-linux-arm64-gnu",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-linux-arm64-musl",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-linux-riscv64-gnu",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-linux-x64-gnu",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-linux-x64-musl",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-win32-arm64-msvc",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-win32-ia32-msvc",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "name": "@tauri-apps/cli-win32-x64-msvc",
+      "version": "2.12.4",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/tauri",
+      "licenseFile": "node_modules/@tauri-apps/cli/LICENSE-MIT",
+      "licenseFileSha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
     },
     {
       "name": "@types/babel__core",
