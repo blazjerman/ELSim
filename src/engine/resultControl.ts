@@ -30,6 +30,30 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
   const sourceFieldParameters = new Map(sourceFieldTargets.map(({ component, sourceParameter }) => [`${component.toLowerCase()}.${sourceParameter}`, `ELSIM_SWEEP_SOURCE_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_${sourceParameter.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}`]))
   const instanceParameterTargets = parameterSweep.flatMap((run) => run.values.filter((value) => value.instanceParameter && value.parameter).map((value) => ({ component: value.component, parameter: value.parameter! })))
   const instanceParameters = new Map(instanceParameterTargets.map(({ component, parameter }) => [`${component.toLowerCase()}.${parameter.toLowerCase()}`, { component, parameter, generated: /^[A-Za-z0-9_]+$/.test(parameter) ? `ELSIM_SWEEP_IC_${component.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}_${parameter.toUpperCase()}` : `ELSIM_SWEEP_IC_${encodeNgspiceIdentifierPart(component)}_${encodeNgspiceIdentifierPart(parameter)}` }]))
+  const allBinFamilyParameterTargets = parameterSweep.flatMap((run) => run.values.filter((value) => value.modelTargets && value.model && value.parameter).map((value) => ({ component: value.component, parameter: value.parameter!, model: value.model!, modelTargets: value.modelTargets! })))
+  const binFamilyParameterTargets = [...new Map(allBinFamilyParameterTargets.map((target) => [`${target.component.toLowerCase()}.${target.parameter.toLowerCase()}`, target])).values()]
+  const generatedBinParameters = new Set<string>()
+  const binFamilyParameters = new Map(binFamilyParameterTargets.map(({ component, parameter, model, modelTargets }) => {
+    let suffix = 1
+    let generated = `ELSIM_SWEEP_BIN_${suffix}`
+    while (generatedBinParameters.has(generated.toLowerCase()) || new RegExp(`\\b${generated}\\b`, 'i').test(rows.join('\n'))) generated = `ELSIM_SWEEP_BIN_${++suffix}`
+    generatedBinParameters.add(generated.toLowerCase())
+    return [`${component.toLowerCase()}.${parameter.toLowerCase()}`, { component, parameter, model, modelTargets, generated }] as const
+  }))
+  const binFamilyParameterRows = [...binFamilyParameters.values()].map(({ component, parameter, model, modelTargets, generated }) => {
+    const initial = parameterSweep.flatMap((run) => run.values).find((value) => value.component.toLowerCase() === component.toLowerCase() && value.parameter?.toLowerCase() === parameter.toLowerCase() && value.modelTargets)?.value
+    if (!initial) throw new Error(`BSIM3 family ${model} ${parameter} has no initial stepped value.`)
+    for (const target of modelTargets) {
+      const modelLine = rows.findIndex((row) => row.trim().match(new RegExp(`^\\.model\\s+${escapeRegExp(target)}(?:\\s|$)`, 'i')))
+      if (modelLine < 0) throw new Error(`BSIM3 bin model ${target} is missing from the generated netlist.`)
+      const cardEnd = (() => { let end = modelLine; while (end + 1 < rows.length && /^\s*\+/.test(rows[end + 1])) end += 1; return end })()
+      const parameterPattern = new RegExp(`(^|[\\s(])${escapeRegExp(parameter)}\\s*=\\s*(?:\\{[^}]*\\}|'[^']*'|[^\\s)]+)`, 'i')
+      let replaced = false
+      for (let index = modelLine; index <= cardEnd; index += 1) rows[index] = rows[index].replace(parameterPattern, (_match, prefix: string) => { replaced = true; return `${prefix}${parameter}={${generated}}` })
+      if (!replaced) throw new Error(`BSIM3 bin model ${target} does not define the shared ${parameter} parameter.`)
+    }
+    return `.param ${generated}=${initial}`
+  })
   const waveformParameterRows = [...pulseParameters].map(([component, parameter]) => {
     const line = rows.findIndex((row) => row.trim().match(new RegExp(`^${component}\\s`, 'i')))
     if (line < 0) throw new Error(`Pulse source ${component} is missing from the generated netlist.`)
@@ -152,16 +176,16 @@ export function addResultControl(netlist: string, parameterSweep: ParameterSweep
     parameterSweep.forEach((run, index) => {
       run.values.forEach(({ component, value, parameter, model, modelTargets, instanceParameter, sourceParameter, globalParameter, pulseHigh, pwlScale, waveformAmplitude, altermodParameters }) => {
         if (altermodParameters) return
-        if (parameter && modelTargets) commands.push(...modelTargets.map((target) => `altermod ${target} ${parameter}=${value}`))
+        if (parameter && modelTargets) commands.push(`alterparam ${binFamilyParameters.get(`${component.toLowerCase()}.${parameter.toLowerCase()}`)?.generated}=${value}`)
         else commands.push(globalParameter ? `alterparam ${globalParameter}=${value}` : parameter && instanceParameter ? `alterparam ${instanceParameters.get(`${component.toLowerCase()}.${parameter.toLowerCase()}`)?.generated}=${value}` : parameter ? `altermod ${model} ${parameter}=${value}` : sourceParameter ? `alterparam ${sourceFieldParameters.get(`${component.toLowerCase()}.${sourceParameter}`)}=${value}` : pulseHigh ? `alterparam ${pulseParameters.get(component.toLowerCase())}=${value}` : pwlScale ? `alterparam ${pwlParameters.get(component.toLowerCase())}=${value}` : waveformAmplitude ? `alterparam ${amplitudeParameters.get(component.toLowerCase())}=${value}` : `alter ${component} ${value}`)
       })
       run.values.filter((value) => value.altermodParameters && value.model).forEach(({ model, altermodParameters }) => commands.push(`altermod ${model} RON=${altermodParameters!.RON} ROFF=${altermodParameters!.ROFF} VT=${altermodParameters!.VT} VH=${altermodParameters!.VH}`))
-      if (run.values.some((value) => value.globalParameter || value.instanceParameter || value.sourceParameter || value.pulseHigh || value.pwlScale || value.waveformAmplitude)) commands.push('reset')
+      if (run.values.some((value) => value.globalParameter || value.instanceParameter || value.modelTargets || value.sourceParameter || value.pulseHigh || value.pwlScale || value.waveformAmplitude)) commands.push('reset')
       commands.push('run', ...measurements.flatMap((measurement) => measurementCommand(measurement, `_${index}`)), ...(ngspiceFourier ? [`fourier ${ngspiceFourier.fundamentalFrequency} ${ngspiceFourier.vector}`] : []), ...(analysisType === 'noise' ? [`setplot noise${index * 2 + 2}`, 'print onoise_total', 'print inoise_total', `setplot noise${index * 2 + 1}`] : []), `write /result-${index}.raw all`)
     })
   } else commands.push(analysisCommand, ...(/^(?:tran)\b/i.test(analysisCommand) ? measurements.flatMap((measurement) => measurementCommand(measurement)) : []), ...(ngspiceFourier ? [`fourier ${ngspiceFourier.fundamentalFrequency} ${ngspiceFourier.vector}`] : []), ...(analysisType === 'noise' ? ['setplot noise2', 'print onoise_total', 'print inoise_total', 'setplot noise1'] : []), 'write /result.raw all')
   commands.push('quit', '.endc', '.end')
-  rows.splice(endLine, 1, ...waveformParameterRows, ...measurementRows, ...save, ...commands)
+  rows.splice(endLine, 1, ...binFamilyParameterRows, ...waveformParameterRows, ...measurementRows, ...save, ...commands)
   if (analysisType === 'ac' || analysisType === 'noise') {
     const currentSave = /^\s*\.save\s+(?:i\(|@[A-Za-z0-9_.]+\[(?:i|current|id|ic|ib|ie|ig|is)\])/i
     for (let index = rows.length - 1; index >= 0; index -= 1) if (currentSave.test(rows[index])) rows.splice(index, 1)

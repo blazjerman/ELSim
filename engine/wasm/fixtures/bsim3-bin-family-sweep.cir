@@ -1,0 +1,25 @@
+ELSim native ngspice BSIM3 bin-family parameter sweep
+.param ELSIM_SWEEP_BIN_1=0.7
+VDD vdd 0 5
+RLOAD vdd d 10k
+VGS g 0 1.2
+M1 d g 0 0 NCH L=1u W=10u
+.MODEL NCH.1 NMOS LEVEL=8 VERSION=3.3.0 LMIN=0.5u LMAX=2u WMIN=0.5u WMAX=20u VTH0={ELSIM_SWEEP_BIN_1} U0=500
+.MODEL NCH.2 NMOS LEVEL=49 VERSION=3.3.0 LMIN=2u LMAX=10u WMIN=0.5u WMAX=20u VTH0={ELSIM_SWEEP_BIN_1} U0=500
+.op
+.control
+set filetype=ascii
+set filetype=binary
+alterparam ELSIM_SWEEP_BIN_1=0.7
+reset
+run
+print v(d)
+write /result-0.raw all
+alterparam ELSIM_SWEEP_BIN_1=1.5
+reset
+run
+print v(d)
+write /result-1.raw all
+quit
+.endc
+.end

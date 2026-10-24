@@ -462,8 +462,12 @@ test('BSIM3 bin-family parameter sweeps update every bin in each case', () => {
   assert.deepEqual(runs[0].values[0].modelTargets, ['NCH.1', 'NCH.2'])
   assert.match(runs[0].label, /M1\.VTH0=0\.7/)
   const control = addResultControl(createNetlistArtifact(validated).text, runs)
-  assert.match(control, /altermod NCH\.1 VTH0=7\.00000000e-1\naltermod NCH\.2 VTH0=7\.00000000e-1\nrun/)
-  assert.match(control, /altermod NCH\.1 VTH0=1\.50000000e\+0\naltermod NCH\.2 VTH0=1\.50000000e\+0\nrun/)
+  const generated = 'ELSIM_SWEEP_BIN_1'
+  assert.match(control, new RegExp(`^\\.param ${generated}=7\\.00000000e-1$`, 'm'))
+  assert.match(control, new RegExp(`^\\.MODEL NCH\\.1 .*VTH0=\\{${generated}\\}`, 'm'))
+  assert.match(control, new RegExp(`^\\.MODEL NCH\\.2 .*VTH0=\\{${generated}\\}`, 'm'))
+  assert.match(control, new RegExp(`alterparam ${generated}=7\\.00000000e-1\\nreset\\nrun`))
+  assert.match(control, new RegExp(`alterparam ${generated}=1\\.50000000e\\+0\\nreset\\nrun`))
 })
 
 test('PSpice VSWITCH model sweeps map threshold fields to native SW parameters', () => {
