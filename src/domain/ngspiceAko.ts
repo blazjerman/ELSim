@@ -25,36 +25,54 @@ export function expandNgspiceAkoModels<T extends ModelLibraryInput>(assets: read
     byName.set(model.name.toLowerCase(), matches)
   }
   const cache = new Map<string, SubcircuitParameter[]>()
-  const visiting = new Set<string>()
   const report = (asset: T, model: SpiceModelDefinition, message: string) => issues.push({ assetId: asset.id, modelName: model.name, sourceLine: model.startLine, message })
   const resolve = (asset: T, model: SpiceModelDefinition): SubcircuitParameter[] | null => {
-    const key = `${asset.id}:${model.name.toLowerCase()}`
-    const cached = cache.get(key)
+    const keyFor = (candidateAsset: T, candidate: SpiceModelDefinition) => `${candidateAsset.id}:${candidate.name.toLowerCase()}`
+    const cached = cache.get(keyFor(asset, model))
     if (cached) return cached
-    const baseName = model.akoBaseName
-    if (!baseName) return model.parameters
-    if (model.scope || model.conditionalDefinition) { report(asset, model, `AKO model ${model.name} is scoped or conditional and cannot be expanded safely.`); return null }
-    if (!model.akoSafeToExpand) { report(asset, model, `AKO model ${model.name} contains parameters or flags outside the supported assignment-only expansion form.`); return null }
-    if (visiting.has(key)) { report(asset, model, `AKO inheritance cycle detected while resolving ${model.name}.`); return null }
-    const bases = byName.get(baseName.toLowerCase()) ?? []
-    if (bases.length !== 1) { report(asset, model, bases.length ? `AKO base model ${baseName} is ambiguous across imported libraries.` : `AKO base model ${baseName} was not found in the imported model libraries.`); return null }
-    const base = bases[0]
-    if (base.model.scope || base.model.conditionalDefinition) { report(asset, model, `AKO base model ${baseName} is scoped or conditional and cannot be expanded safely.`); return null }
-    if (!base.model.expansionPayloadSafe) { report(asset, model, `AKO base model ${baseName} uses parameters outside the supported assignment-only expansion form.`); return null }
-    if (canonicalType(base.model.type) !== canonicalType(model.type) || base.model.channel !== model.channel) { report(asset, model, `AKO base model ${baseName} has device type ${base.model.type}, but ${model.name} declares ${model.type}.`); return null }
-    visiting.add(key)
-    const inherited = resolve(base.asset, base.model)
-    visiting.delete(key)
-    if (!inherited) return null
-    const merged = inherited.map((parameter) => ({ ...parameter }))
-    const positions = new Map(merged.map((parameter, index) => [parameter.name.toLowerCase(), index]))
-    for (const parameter of model.parameters) {
-      const index = positions.get(parameter.name.toLowerCase())
-      if (index === undefined) { positions.set(parameter.name.toLowerCase(), merged.length); merged.push({ ...parameter }) }
-      else merged[index] = { ...parameter }
+
+    // Follow the base chain iteratively. Libraries are user-provided data, so
+    // inheritance depth must not become JavaScript call-stack depth.
+    const chain: { asset: T; model: SpiceModelDefinition; key: string }[] = []
+    const visiting = new Set<string>()
+    let currentAsset = asset
+    let currentModel = model
+    let inherited: SubcircuitParameter[]
+    while (true) {
+      const key = keyFor(currentAsset, currentModel)
+      const resolved = cache.get(key)
+      if (resolved) { inherited = resolved; break }
+      const baseName = currentModel.akoBaseName
+      if (!baseName) { inherited = currentModel.parameters; break }
+      if (currentModel.scope || currentModel.conditionalDefinition) { report(currentAsset, currentModel, `AKO model ${currentModel.name} is scoped or conditional and cannot be expanded safely.`); return null }
+      if (!currentModel.akoSafeToExpand) { report(currentAsset, currentModel, `AKO model ${currentModel.name} contains parameters or flags outside the supported assignment-only expansion form.`); return null }
+      if (visiting.has(key)) { report(currentAsset, currentModel, `AKO inheritance cycle detected while resolving ${currentModel.name}.`); return null }
+      visiting.add(key)
+      chain.push({ asset: currentAsset, model: currentModel, key })
+
+      const bases = byName.get(baseName.toLowerCase()) ?? []
+      if (bases.length !== 1) { report(currentAsset, currentModel, `AKO base model ${baseName} ${bases.length ? 'is ambiguous across imported libraries' : 'was not found in the imported model libraries'}.`); return null }
+      const base = bases[0]
+      if (base.model.scope || base.model.conditionalDefinition) { report(currentAsset, currentModel, `AKO base model ${baseName} is scoped or conditional and cannot be expanded safely.`); return null }
+      if (!base.model.expansionPayloadSafe) { report(currentAsset, currentModel, `AKO base model ${baseName} uses parameters outside the supported assignment-only expansion form.`); return null }
+      if (canonicalType(base.model.type) !== canonicalType(currentModel.type) || base.model.channel !== currentModel.channel) { report(currentAsset, currentModel, `AKO base model ${baseName} has device type ${base.model.type}, but ${currentModel.name} declares ${currentModel.type}.`); return null }
+      currentAsset = base.asset
+      currentModel = base.model
     }
-    cache.set(key, merged)
-    return merged
+
+    for (let index = chain.length - 1; index >= 0; index--) {
+      const { model: child, key } = chain[index]
+      const merged = inherited.map((parameter) => ({ ...parameter }))
+      const positions = new Map(merged.map((parameter, parameterIndex) => [parameter.name.toLowerCase(), parameterIndex]))
+      for (const parameter of child.parameters) {
+        const position = positions.get(parameter.name.toLowerCase())
+        if (position === undefined) { positions.set(parameter.name.toLowerCase(), merged.length); merged.push({ ...parameter }) }
+        else merged[position] = { ...parameter }
+      }
+      cache.set(key, merged)
+      inherited = merged
+    }
+    return inherited
   }
   for (const { asset, model } of all) {
     const parameters = resolve(asset, model)

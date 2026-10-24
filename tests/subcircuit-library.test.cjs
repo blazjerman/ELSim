@@ -932,6 +932,24 @@ test('expands native AKO model chains across imported libraries without changing
   assert.equal(child.content, '.MODEL CHILD AKO:BASE D(IS=2n)\n.MODEL GRANDCHILD AKO:CHILD D(N=2)\n')
 })
 
+test('expands deeply chained native AKO models without recursion limits', () => {
+  const depth = 12_000
+  const lines = []
+  for (let index = depth - 1; index > 0; index--) {
+    const name = `M${String(index).padStart(5, '0')}`
+    const base = `M${String(index - 1).padStart(5, '0')}`
+    lines.push(`.MODEL ${name} AKO:${base} D(N=${index})`)
+  }
+  lines.push('.MODEL M00000 D(IS=1n)')
+  const content = lines.join('\n')
+  const asset = { id: 'deep-chain', filename: 'deep-chain.lib', content }
+  const result = expandNgspiceAkoModels([{ asset, parsed: parseSubcircuitLibrary(content) }])
+
+  assert.deepEqual(result.issues, [])
+  assert.equal(result.cards.size, depth - 1)
+  assert.equal(result.cards.get('deep-chain:1'), '.model M11999 D(IS=1n N=11999)')
+})
+
 test('reports missing, ambiguous, cyclic, mismatched, conditional, and unsafe AKO inheritance', () => {
   const makeEntries = (assets) => assets.map((asset) => ({ asset, parsed: parseSubcircuitLibrary(asset.content) }))
   const cases = [
