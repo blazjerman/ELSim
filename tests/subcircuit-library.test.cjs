@@ -1040,14 +1040,14 @@ test('matches conditional AKO bases across imported libraries by normalized nume
 
 test('matches cross-library numeric AKO branches with equivalent ngspice comparison operators', () => {
   const baseContent = [
-    '.IF (1 == 1)',
+    '.IF (1k == 1000)',
     '.MODEL BASE D(IS=1n)',
     '.ELSE',
     '.MODEL BASE D(IS=2n)',
     '.ENDIF',
   ].join('\n')
   const childContent = [
-    '.IF (1 = 1)',
+    '.IF (1k = 1000)',
     '.MODEL CHILD AKO:BASE D(N=2)',
     '.ELSE',
     '.MODEL CHILD AKO:BASE D(N=3)',
