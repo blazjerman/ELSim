@@ -41,6 +41,8 @@ export function diagnosticForNgspice(message: string, artifact: NetlistArtifact,
     hint = `The imported model calls ${missingFunction}(), which this ngspice build does not provide. Check for simulator-specific syntax or ask the model supplier for an ngspice-compatible library (source line ${source.assetLine ?? '?'}).`
   } else if (missingFunction) {
     hint = `${missingFunction}() is not available in this ngspice build. Replace the expression with a supported ngspice function or an equivalent circuit/model.`
+  } else if (/parameter mismatch for function call/i.test(message)) {
+    hint = 'ngspice could not match this function call to its definition. Check imported libraries for duplicate .FUNC names; ngspice does not overload a function name by argument count, so rename one definition and rerun.'
   } else if (source?.assetId && /strtod:\s*invalid argument/i.test(message)) {
     hint = 'ngspice could not interpret part of this imported model card as a supported number or parameter. Check parameter names and values for misspellings, missing values, or simulator-specific syntax.'
   } else if (unlocatedModelAssetId) {

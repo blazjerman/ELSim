@@ -13617,7 +13617,10 @@ test('a punctuation-named subcircuit-local .FUNC drives its local .MODEL through
   await expect(page.locator('.plot-window').last().getByRole('button', { name: 'Disable V(X1)' })).toBeVisible()
 })
 
-test('different-arity imported .FUNC conflicts show source locations before a model is run', { tag: '@ui-smoke' }, async ({ page }) => {
+test('different-arity imported .FUNC conflicts give actionable guidance when ngspice rejects the model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  test.setTimeout(90_000)
+  const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
+  expect(missingEngineFiles, 'Build the pinned ngspice WASM runtime before running this browser test').toEqual([])
   await page.goto('/')
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   const modelInput = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
@@ -13645,6 +13648,8 @@ test('different-arity imported .FUNC conflicts show source locations before a mo
   await expect(conflicts).toContainText('helpers.lib:1')
   await expect(conflicts).toContainText('unrelated.lib:1')
   await expect(page.locator('.imported-model').filter({ hasText: 'DLOCAL' })).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText(/ngspice does not overload a function name by argument count/i)).toBeVisible({ timeout: 30_000 })
 })
 
 test('nested native ngspice .IF model branches import and select the active diode model', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {

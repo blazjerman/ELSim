@@ -126,6 +126,13 @@ test('imported model failures explain common card, type, parameter, and dependen
   }
 })
 
+test('ngspice function arity mismatches explain global duplicate .FUNC names', () => {
+  const diagnostic = diagnosticForNgspice('ERROR: parameter mismatch for function call in string .model dlocal d(is={scale!(1)*1e-14} n=1)', artifact)
+  assert.match(diagnostic.hint, /duplicate \.FUNC names/i)
+  assert.match(diagnostic.hint, /does not overload a function name by argument count/i)
+  assert.match(diagnostic.hint, /rename one definition and rerun/i)
+})
+
 test('strtod fatal output keeps its parameter detail and gives guidance without a source line', () => {
   const message = firstNgspiceError('', 'strtod: Invalid argument\nERROR: fatal error in ngspice, exit(1)', 1)
   assert.match(message, /strtod: Invalid argument.*fatal error/i)
