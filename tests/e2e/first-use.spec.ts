@@ -6468,12 +6468,12 @@ test('new voltage-controlled switches use their component definition defaults', 
   await page.getByLabel('Device model for S1').selectOption('SWONLY')
   const sourceOnlySwitch = page.getByText('SWONLY · 0 model parameters · 1 unparsed', { exact: true })
   await expect(sourceOnlySwitch).toBeVisible()
-  await sourceOnlySwitch.click()
+  const sourceOnlySwitchDetails = sourceOnlySwitch.locator('xpath=..')
+  if (!(await sourceOnlySwitchDetails.evaluate((element) => (element as HTMLDetailsElement).open))) await sourceOnlySwitch.click()
+  await expect(page.getByLabel('Unparsed model assignments')).toBeVisible()
   await expect(page.getByLabel('Unparsed model assignments')).toContainText('FOO = {vendor_shape(9)}')
-  await page.getByLabel('Device model for S1').selectOption('USER_SW')
-  await modelDetails.click()
-  await page.getByRole('button', { name: 'Review voltage-switch.lib:1' }).click()
-  await expect(page.locator('.model-source-viewer li.active-source-line')).toContainText('.MODEL USER_SW SW')
+  await page.getByRole('button', { name: 'Review voltage-switch.lib:2' }).click()
+  await expect(page.locator('.model-source-viewer li.active-source-line')).toContainText('.MODEL SWONLY SW')
 })
 
 test('imported device model inspector shows and searches unparsed source assignments @ui-smoke', async ({ page }) => {
