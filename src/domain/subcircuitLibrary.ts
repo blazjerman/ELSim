@@ -117,6 +117,13 @@ function hasValidGlobalNodeNames(tokens: string[]): boolean {
   return tokens.length > 1 && tokens.slice(1).every(isValidSpiceNodeName)
 }
 
+function globalNodeNamesError(sourceLine: number, tokens: string[]): string {
+  const commaWarning = tokens.slice(1).some((token) => token.includes(','))
+    ? ' Do not use commas: ngspice can treat the comma as part of a node name and fail to connect that global node.'
+    : ''
+  return `Line ${sourceLine}: .GLOBAL needs one or more valid node names separated by spaces.${commaWarning}`
+}
+
 function includedAssetBasename(reference: string): string | null {
   const normalized = reference.replace(/\\/g, '/')
   if (!normalized || normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized) || /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(normalized)) return null
@@ -1250,7 +1257,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
       if (directive === '.option' || directive === '.options') throw new Error(`Line ${line.start}: ${tokens[0]} sets circuit-wide solver options and cannot appear inside a .SUBCKT.`)
       if (directive === '.csparam') throw new Error(`Line ${line.start}: .CSPARAM creates a circuit-wide constant vector and cannot appear inside a .SUBCKT.`)
       if (directive === '.title') throw new Error(`Line ${line.start}: .TITLE changes the title of the whole circuit and cannot appear inside a .SUBCKT.`)
-      if (directive === '.global' && !hasValidGlobalNodeNames(tokens)) throw new Error(`Line ${line.start}: .GLOBAL needs one or more valid node names.`)
+      if (directive === '.global' && !hasValidGlobalNodeNames(tokens)) throw new Error(globalNodeNamesError(line.start, tokens))
       if (directive === '.temp') throw new Error(`Line ${line.start}: .TEMP sets the global circuit temperature and cannot appear inside a .SUBCKT.`)
       if (directive === '.ic' || directive === '.nodeset') throw new Error(`Line ${line.start}: ${tokens[0]} applies to the whole circuit and cannot appear inside a .SUBCKT.`)
       if (directive === '.probe') throw new Error(`Line ${line.start}: .PROBE can instrument only top-level circuit devices and cannot appear inside a .SUBCKT.`)
@@ -1288,7 +1295,7 @@ export function parseSubcircuitLibrary(source: string, selectedSections?: string
     if (directive.startsWith('.')) {
       if (!safeTopLevel.has(directive)) throw new Error(`Line ${line.start}: top-level directive ${tokens[0]} is unsupported in imported model libraries.`)
       if (directive === '.title' && !text.slice(tokens[0].length).trim()) throw new Error(`Line ${line.start}: .TITLE needs title text.`)
-      if (directive === '.global' && !hasValidGlobalNodeNames(tokens)) throw new Error(`Line ${line.start}: .GLOBAL needs one or more valid node names.`)
+      if (directive === '.global' && !hasValidGlobalNodeNames(tokens)) throw new Error(globalNodeNamesError(line.start, tokens))
       if (directive === '.temp' && (tokens.length !== 2 || !isSafeSubcircuitParameterValue(tokens[1]))) {
         throw new Error(`Line ${line.start}: .TEMP needs exactly one numeric value or safe parameter expression.`)
       }

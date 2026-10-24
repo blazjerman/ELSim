@@ -368,6 +368,8 @@ Native lossy transmission-line dependencies (2026-10-14): Imported-IC dependency
 
 Imported `.GLOBAL` numeric coverage (2026-10-24): The existing import workflow checked that a subcircuit-scoped `.GLOBAL` card survived netlist generation, but did not verify its electrical effect. Added an existing-runtime ngspice fixture where an imported subcircuit connects an internal resistor to a top-level 5 V global rail; its 1 kΩ load divider must solve to 2.5 V. The focused fixture passes without rebuilding WASM. This closes the numeric solver check for this supported global-node path; broader M2.4 library compatibility remains active.
 
+M2.4 `.GLOBAL` comma guidance (2026-10-24): A direct probe against the existing ngspice runtime showed `.GLOBAL VCC, VSS` can parse while leaving `VCC,` as a different hierarchical node (`x1.vcc`); it does not behave like the whitespace-separated global names. The importer continues to reject this unsafe spelling and now explains that names must be space-separated. A parser regression protects the actionable error; no engine rebuild is needed.
+
 ### M3 — LTspice interoperability (deferred by owner)
 
 **Status: paused for a separate future goal.** Do not count M3 items as active development work or resume LTspice-specific import/export changes during the current app goal. Preserve the existing compatibility notes, fixtures, and matrix for the later goal. Continue general native ngspice support under M2.4 when it benefits ELSim independently of LTspice compatibility.

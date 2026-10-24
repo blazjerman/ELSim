@@ -503,8 +503,9 @@ test('preserves ngspice .GLOBAL nodes in subcircuit scope and explains hierarchy
   assert.equal(warning.sourceLine, 2)
   assert.equal(warning.feature, 'ngspice .GLOBAL connects nodes across circuit hierarchy')
   assert.match(warning.impact, /shared by the root circuit and all subcircuits/)
-  assert.throws(() => parseSubcircuitLibrary('.GLOBAL\n.MODEL DFAST D(Is=1n)'), /Line 1: \.GLOBAL needs one or more valid node names/)
-  assert.throws(() => parseSubcircuitLibrary('.GLOBAL V(CC)\n.MODEL DFAST D(Is=1n)'), /Line 1: \.GLOBAL needs one or more valid node names/)
+  assert.throws(() => parseSubcircuitLibrary('.GLOBAL\n.MODEL DFAST D(Is=1n)'), /Line 1: \.GLOBAL needs one or more valid node names separated by spaces/)
+  assert.throws(() => parseSubcircuitLibrary('.GLOBAL V(CC)\n.MODEL DFAST D(Is=1n)'), /Line 1: \.GLOBAL needs one or more valid node names separated by spaces/)
+  assert.throws(() => parseSubcircuitLibrary('.GLOBAL VCC, VSS\n.MODEL DFAST D(Is=1n)'), /Do not use commas: ngspice can treat the comma as part of a node name/)
 })
 
 test('preserves ngspice .SAVE vectors from imported model libraries and warns about global effect', () => {
