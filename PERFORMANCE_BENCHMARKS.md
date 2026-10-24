@@ -911,6 +911,8 @@ A second importer scaling case resolves 1,000 file-form `.LIB` references to one
 
 A third importer case contains 2,000 diode instances in one subcircuit, all referencing the same global D model. Dependency analysis resolves all 2,000 references at 12.759 ms median / 12.993 ms p95 including parsing. The repeated lookup cache is scoped by asset, subcircuit owner, and model name; this aggregate timing is a local baseline, not a before/after claim.
 
+Importing the 2,000-section shared library used by the section-reference case validates all 2,000 selected section names. That aggregate case changed from 242.182 ms median / 280.706 ms p95 to 223.372 / 228.416 ms after replacing nested membership scans with prebuilt sets. These are one version-14 run on each side on the same machine, including parsing and all dependency checks; interpret them as an observed comparison, not a stable performance guarantee.
+
 ### Domain benchmark recheck (2026-10-23)
 
 `npm run benchmark:performance:quick` completed with benchmark version 13 on the documented i7-12700F host. It skips all ngspice work and reports seven-run medians and nearest-rank p95. The 5,000-part resistor chain measured 37.350/43.019 ms for connectivity and 47.754/62.234 ms for netlisting; the 5,000-part/4,900-wire fixture measured 32.599/45.785 ms and 44.092/58.058 ms respectively. The 5,000-instance hierarchy measured 76.293/89.138 ms for connectivity and 110.059/122.209 ms for netlisting. The million-sample plot reducer measured 1.044/1.064 ms, and cached lookup remained below 0.001 ms median/p95. All remained within the existing 500 ms domain budget.

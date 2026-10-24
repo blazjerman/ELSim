@@ -522,8 +522,9 @@ export function parseModelFunctionSignatures(source: string, selectedSections?: 
   if (inspected.sections.length > 1 && !selected) throw new Error('This model library contains multiple .LIB sections. Select the section or sections referenced by your schematic before importing it.')
   if (inspected.sections.length === 1 && !selected) selected = inspected.sections
   if (inspected.sections.length === 0 && selected?.length) throw new Error('This model library has no .LIB sections to select.')
-  if (selected && (!selected.length || selected.length > inspected.sections.length || new Set(selected.map((section) => section.toLowerCase())).size !== selected.length || selected.some((section) => !inspected.sections.some((available) => available.toLowerCase() === section.toLowerCase())))) throw new Error('Choose one or more section names that exist in this model library.')
+  const availableSectionNames = new Set(inspected.sections.map((section) => section.toLowerCase()))
   const selectedNames = new Set(selected?.map((section) => section.toLowerCase()) ?? [])
+  if (selected && (!selected.length || selectedNames.size !== selected.length || [...selectedNames].some((section) => !availableSectionNames.has(section)))) throw new Error('Choose one or more section names that exist in this model library.')
   const lines = inspected.sections.length
     ? inspected.lines.filter(({ section }) => section === null || section !== null && selectedNames.has(section.toLowerCase())).map(({ line }) => line)
     : inspected.lines.map(({ line }) => line)
