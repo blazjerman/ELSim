@@ -2771,6 +2771,26 @@ test('pole-zero analysis locates the RC pole in the complex plane', { tag: ['@ng
   await expect(page.getByRole('status').filter({ hasText: /no finite roots for this selection/ })).toBeVisible({ timeout: 60_000 })
 })
 
+test('pole-zero example teaches the complex conjugate poles of an underdamped RLC circuit', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Examples' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await examples.locator('.example-list article').filter({ hasText: 'RLC poles and damping' }).getByRole('button', { name: 'Open example' }).click()
+  await page.getByRole('button', { name: 'Replace and open' }).click()
+  await expect(page.getByLabel('Analysis type').first()).toHaveValue('pz')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  const plot = page.locator('.plot-window').first()
+  await expect(plot).toBeVisible({ timeout: 60_000 })
+  const roots = plot.locator('.op-table tbody tr')
+  await expect(roots).toHaveCount(2)
+  await expect(roots.nth(0)).toContainText(/-250/)
+  await expect(roots.nth(1)).toContainText(/-250/)
+  await expect(roots.nth(0)).toContainText(/968/)
+  await expect(roots.nth(1)).toContainText(/-968/)
+  await expect(roots.nth(0)).toContainText('Stable')
+  await expect(roots.nth(1)).toContainText('Stable')
+})
+
 test('DC and AC sensitivity analyses plot ngspice parameter derivatives', { tag: ['@ngspice', '@engine-smoke'] }, async ({ page }) => {
   const missingEngineFiles = ['ngspice.mjs', 'ngspice.wasm'].filter((file) => !existsSync(path.resolve('public/engine', file)))
   expect(missingEngineFiles, 'Build the local ngspice WASM runtime before running this browser test').toEqual([])

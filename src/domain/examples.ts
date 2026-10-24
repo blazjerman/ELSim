@@ -1591,6 +1591,16 @@ export function createRlcExampleProject(): Project {
   return project
 }
 
+/** Pole-zero lesson with an underdamped series RLC circuit and conjugate poles. */
+export function createPoleZeroExampleProject(): Project {
+  const project = createRlcExampleProject()
+  project.name = 'RLC poles and damping'
+  project.simulation = { ...project.simulation, analysis: 'pz', poleZero: { outputNode: 'L_C', inputSource: 'V1', roots: 'both' } }
+  project.plotSettings = { selectedTraceIds: [], ranges: {} }
+  project.sheets = project.sheets.map((sheet) => ({ ...sheet, name: project.name }))
+  return project
+}
+
 /** A charged series LC loop shows stored electric energy becoming magnetic energy and back. */
 export function createLcEnergyExampleProject(): Project {
   const project = createStarterProject()
