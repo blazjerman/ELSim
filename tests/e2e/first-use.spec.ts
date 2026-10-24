@@ -11685,6 +11685,17 @@ test('voltage source inspector edits DC, pulse, and validated PWL transient beha
   await expect(page.locator('.netlist-modal pre')).toContainText('V1 vin 0 PWL(0 0 2m 3.3)')
 })
 
+test('passive temperature coefficients are editable as advanced properties and appear in the netlist', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.circuit-part[data-part-id="p-r1"]').click()
+  await page.getByText('Temperature coefficients (advanced)').click()
+  await page.getByLabel('TC1 temperature coefficient for R1').fill('0.01')
+  await page.getByLabel('TC2 temperature coefficient for R1').fill('-2e-5')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { ref: string }) => part.ref === 'R1'))).toMatchObject({ tc1: '0.01', tc2: '-2e-5' })
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  await expect(page.locator('.netlist-modal pre')).toContainText('R1 vin vout 1k TC1=0.01 TC2=-2e-5')
+})
+
 test('transient measurements offer labeled nodes and common component currents', async ({ page }) => {
   await page.goto('/')
   await waitForProjectAutosave(page)

@@ -1,0 +1,11 @@
+* Verify native resistor instance temperature coefficients in the browser ngspice build.
+V1 in 0 10
+R1 in out 1k TC1=0.01
+R2 out 0 1k
+.temp 127
+.control
+op
+let tc1_divider = v(out)
+print tc1_divider
+.endc
+.end

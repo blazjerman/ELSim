@@ -4,7 +4,7 @@ import { createModelFunctionResolver, isSafeSubcircuitParameterValue, isValidSpi
 import { parseSymbolAsset } from './symbolAsset'
 import { behavioralCurrentReferenceError, ngspiceVoltageBranchReferences, parseBehavioralExpression, unsupportedBehavioralCurrentReference, validateBehavioralReferences } from './behavioralExpression'
 import { componentDefinitionByKind, deviceModelTypeMatches, importedSubcircuitComponentDefinition, isLegacyImportedSubcircuitDefinitionId, supportsDeviceTemperatureDelta, supportsInitialOff } from './componentDefinitions'
-import { componentMagnitude, timeMagnitude } from './componentValue'
+import { componentMagnitude, spiceSignedScalarMagnitude, timeMagnitude } from './componentValue'
 import { isValidMeasurementCrossingCount, measurementThresholdMagnitude } from './measurementSettings'
 import { MAX_SOURCE_PWL_POINTS } from './sourcePwl'
 
@@ -24,6 +24,10 @@ export type Part = {
   value: string
   /** Optional resistor-only value used during AC small-signal analysis. */
   acResistance?: string
+  /** Optional native ngspice passive temperature coefficient (fraction per degree). */
+  tc1?: string
+  /** Optional native ngspice second-order passive temperature coefficient. */
+  tc2?: string
   /** Resistor-based parts generate noise by default; false emits ngspice's NOISY=0 option. */
   noiseEnabled?: boolean
   x: number
@@ -428,6 +432,10 @@ export function validateProject(input: unknown): Project {
     if (candidate.seriesResistance !== undefined && (componentMagnitude(candidate.seriesResistance, 'resistor') === null || componentMagnitude(candidate.seriesResistance, 'resistor')! < 0)) throw new Error(`${candidate.ref} series resistance must be a nonnegative numeric resistance.`)
     if (candidate.mutualCouplings !== undefined && (candidate.kind !== 'inductor' || !Array.isArray(candidate.mutualCouplings) || candidate.mutualCouplings.length > 64 || candidate.mutualCouplings.some((coupling) => !coupling || typeof coupling !== 'object' || Array.isArray(coupling) || Object.keys(coupling).some((key) => !['partnerId', 'coefficient'].includes(key)) || typeof coupling.partnerId !== 'string' || !coupling.partnerId || coupling.partnerId.length > 128 || typeof coupling.coefficient !== 'string' || coupling.coefficient.length > 64))) throw new Error(`${candidate.ref} has malformed mutual-inductor coupling settings.`)
     if (candidate.acResistance !== undefined && (candidate.kind !== 'resistor' || typeof candidate.acResistance !== 'string' || candidate.acResistance.length > 64 || componentMagnitude(candidate.acResistance, 'resistor') === null || componentMagnitude(candidate.acResistance, 'resistor')! <= 0)) throw new Error(`${candidate.ref} AC resistance must be a positive numeric resistance and is available only for resistors.`)
+    for (const key of ['tc1', 'tc2'] as const) {
+      const coefficient = candidate[key]
+      if (coefficient !== undefined && (!['resistor', 'lamp', 'potentiometer', 'capacitor', 'inductor'].includes(candidate.kind) || typeof coefficient !== 'string' || coefficient.length > 64 || spiceSignedScalarMagnitude(coefficient) === null)) throw new Error(`${candidate.ref} ${key.toUpperCase()} must be a finite numeric temperature coefficient and is available only for resistors, lamps, potentiometers, capacitors, and inductors.`)
+    }
     if (candidate.noiseEnabled !== undefined && (!['resistor', 'potentiometer', 'lamp'].includes(candidate.kind) || typeof candidate.noiseEnabled !== 'boolean')) throw new Error(`${candidate.ref} noise setting is available only for resistor-based components.`)
     if (candidate.mosfetGeometry !== undefined) {
       const geometry = candidate.mosfetGeometry

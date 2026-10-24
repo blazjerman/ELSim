@@ -200,6 +200,18 @@
           "maxLength": 64,
           "description": "Optional positive resistor value used only in AC analysis; when omitted, the ordinary resistance applies."
         },
+        "tc1": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional signed ngspice first-order passive temperature coefficient (TC1)."
+        },
+        "tc2": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
+          "description": "Optional signed ngspice second-order passive temperature coefficient (TC2)."
+        },
         "noiseEnabled": {
           "type": "boolean",
           "description": "Whether this resistor-based component contributes thermal and flicker noise; omitted means enabled."
