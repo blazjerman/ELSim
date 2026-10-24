@@ -68,6 +68,22 @@ function attachTranslatedVoltageSwitchParameters(runs: ParameterSweepRun[]): Par
   })
 }
 
+function validateSharedModelParameterSweeps(runs: ParameterSweepRun[]): ParameterSweepRun[] {
+  for (const run of runs) {
+    const targets = new Map<string, string>()
+    for (const value of run.values) {
+      if (!value.parameter || !value.model || value.instanceParameter) continue
+      for (const modelName of new Set(value.modelTargets ?? [value.model])) {
+        const key = `${modelName.toLowerCase()}:${value.parameter.toLowerCase()}`
+        const previous = targets.get(key)
+        if (previous) throw new Error(`${value.component}.${value.parameter} and ${previous}.${value.parameter} change the same imported model parameter. Add this model-level sweep only once; it affects every instance using that model.`)
+        targets.set(key, value.component)
+      }
+    }
+  }
+  return runs
+}
+
 function componentUnit(kind: string): string {
   return kind === 'source' ? 'V' : kind === 'currentSource' ? 'A' : kind === 'resistor' || kind === 'lamp' ? 'Ω' : kind === 'capacitor' ? 'F' : 'H'
 }
@@ -245,5 +261,5 @@ export function prepareParameterSweep(project: Project): ParameterSweepRun[] {
     }))
   }
   if (combinations.length > 10) throw new Error('Parameter stepping is limited to 10 total combinations.')
-  return attachTranslatedVoltageSwitchParameters(combinations)
+  return validateSharedModelParameterSweeps(attachTranslatedVoltageSwitchParameters(combinations))
 }

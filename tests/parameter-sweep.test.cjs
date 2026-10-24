@@ -481,6 +481,7 @@ test('BSIM3 bin-family parameter sweeps update every bin in each case', () => {
     { component: 'M2', parameter: 'VTH0', start: '0.8', stop: '1.6', points: 2 },
   ]
   assert.throws(() => validateProject(sameModelParameter), /M2\.VTH0 and M1\.VTH0 change the same imported model parameter/)
+  assert.throws(() => prepareParameterSweep(sameModelParameter), /M2\.VTH0 and M1\.VTH0 change the same imported model parameter/)
 
   const familyAndBinParameter = structuredClone(project)
   familyAndBinParameter.parts.find((part) => part.ref === 'M2').deviceModel = 'NCH.1'
