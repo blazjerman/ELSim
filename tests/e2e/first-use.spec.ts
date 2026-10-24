@@ -6423,6 +6423,18 @@ test('new voltage-controlled switches use their component definition defaults', 
   await page.getByLabel('S1 initial state').selectOption('on')
   await waitForProjectAutosave(page)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'voltageSwitch')?.switchInitialState)).toBe('on')
+
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'voltage-switch.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL USER_SW SW(RON=10 ROFF=1Meg VT=3 VH=1)\n'),
+  })
+  await page.getByLabel('Device model for S1').selectOption('USER_SW')
+  const modelDetails = page.getByText('USER_SW · 4 model parameters', { exact: true })
+  await expect(modelDetails).toBeVisible()
+  await modelDetails.click()
+  await expect(page.getByText('VT = 3', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Review voltage-switch.lib:1' }).click()
+  await expect(page.locator('.model-source-viewer li.active-source-line')).toContainText('.MODEL USER_SW SW')
 })
 
 test('resistor AC value is editable, saved, and generated as an AC-only override @ui-smoke', async ({ page }) => {
@@ -6475,6 +6487,19 @@ test('new current-controlled switches expose their controller and CSW settings @
   await page.getByLabel('W1 initial state').selectOption('on')
   await waitForProjectAutosave(page)
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('elsim:project:v7')!).parts.find((part: { kind: string }) => part.kind === 'currentSwitch')?.switchInitialState)).toBe('on')
+
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
+    name: 'switch-model.lib', mimeType: 'text/plain', buffer: Buffer.from('.MODEL USER_CSW CSW (IT=6mA IH=0.2mA RON=1 ROFF=1Meg)\n'),
+  })
+  await page.getByLabel('Device model for W1').selectOption('USER_CSW')
+  const modelDetails = page.getByText('USER_CSW · 4 model parameters', { exact: true })
+  await expect(modelDetails).toBeVisible()
+  await modelDetails.click()
+  await expect(page.getByText('IT = 6mA', { exact: true })).toBeVisible()
+  await expect(page.getByText('IH = 0.2mA', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Review switch-model.lib:1' }).click()
+  await expect(page.locator('.model-source-viewer li.active-source-line')).toContainText('.MODEL USER_CSW CSW')
 })
 
 test('current-controlled switch example teaches and exposes its sensing circuit @ui-smoke', async ({ page }) => {

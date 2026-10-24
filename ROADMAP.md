@@ -6,6 +6,8 @@ M2.4 bracketed ngspice parameter identifiers (2026-10-24): Imported subcircuits 
 
 M2.4 imported-device model inspector cache reuse (2026-10-24): The inspector now consumes parsed library records from the project’s model-library revision cache instead of reparsing every imported file when model details open. This keeps parsing shared with the component picker and dependency analysis, including AKO inheritance resolution. TypeScript and the focused Firefox imported-model parameter workflow pass; no solver or WASM change.
 
+M2.4 imported switch model inspection (2026-10-24): Voltage-controlled `SW`/numeric `VSWITCH` and current-controlled `CSW` instances now show the selected imported model’s parameter list and link to its original library card, alongside the existing concise behavior guidance. Firefox verifies parameter values and source navigation for both switch families. No solver or WASM change.
+
 ## 1. Product goal
 
 Build an original, open-source circuit simulator that runs in modern browsers and can later be packaged for Windows, macOS, and Linux. The first experience should be as quick to learn as CircuitJS/Falstad: place parts, connect wires, press Run, see current flow, interact with switches, and probe voltages. It should grow toward LTspice-style schematic capture, hierarchical sheets, imported IC macromodels, and serious waveform analysis.
