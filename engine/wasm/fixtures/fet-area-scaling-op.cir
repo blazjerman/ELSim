@@ -1,0 +1,24 @@
+ELSim browser JFET and MESFET area-factor operating-point fixture
+VDDJ vddj 0 DC 5
+RJ1 vddj jd1 100
+RJ2 vddj jd2 100
+J1 jd1 0 0 JNTEST 1
+J2 jd2 0 0 JNTEST 2
+.MODEL JNTEST NJF(VTO=-2 BETA=1m)
+VDDZ vddz 0 DC 5
+RZ1 vddz zd1 100
+RZ2 vddz zd2 100
+V__ELSIM_Z1_D zd1 __ELSIM_Z1_D 0
+V__ELSIM_Z2_D zd2 __ELSIM_Z2_D 0
+Z1 __ELSIM_Z1_D 0 0 NMTEST 1
+Z2 __ELSIM_Z2_D 0 0 NMTEST 2
+.MODEL NMTEST NMF(VTO=-2 BETA=1m)
+.op
+.save all @J1[id] @J2[id] i(V__ELSIM_Z1_D) i(V__ELSIM_Z2_D)
+.control
+set filetype=ascii
+op
+write /result.raw all
+quit
+.endc
+.end

@@ -47,6 +47,7 @@ test('project ZIP archive is deterministic and round-trips the complete v8 proje
     { id: 'archive-l2', kind: 'inductor', ref: 'L2', value: '5m', x: 1000, y: 500, rotation: 0, componentDefinitionId: 'elsim.inductor' },
     { id: 'archive-l3', kind: 'inductor', ref: 'L3', value: '8m', x: 1100, y: 500, rotation: 0, componentDefinitionId: 'elsim.inductor', mutualCouplings: [{ partnerId: 'archive-l2', coefficient: '0.9' }] },
   )
+  project.parts.push({ id: 'archive-jfet', kind: 'njfet', ref: 'J1', value: '', x: 1200, y: 500, rotation: 0, componentDefinitionId: 'elsim.njfet', fetAreaFactor: '1.75' })
   project.sheets[0].parts = project.parts
   project.parts[1].extensions = { ltspice: { attributes: { SPICELINE: 'temp=40', VENDORTAG: 'keep-me' } } }
   project.importedSchematicSource = { format: 'ltspice-asc', filename: 'preserved.asc', originalText: 'Version 4\nSHEET 1 800 600\nUNKNOWN_VENDOR_RECORD keep-me\n', sourceUrl: 'https://example.invalid/source', licenseReference: 'Vendor terms', rightsNotes: 'User supplied; redistribution not checked.' }
@@ -77,6 +78,7 @@ test('project ZIP archive is deterministic and round-trips the complete v8 proje
   assert.deepEqual(restored.plotSettings.panels[0].traceReferences, project.plotSettings.panels[0].traceReferences)
   assert.deepEqual(restored.plotSettings.panels[0].traceColors, project.plotSettings.panels[0].traceColors)
   assert.deepEqual(restored.parts[1].extensions, project.parts[1].extensions)
+  assert.equal(restored.parts.find((part) => part.id === 'archive-jfet').fetAreaFactor, '1.75')
   assert.match(restored.importedSchematicSource.originalText, /UNKNOWN_VENDOR_RECORD keep-me/)
   assert.match(restored.importedChildSchematicSources[0].originalText, /IOPIN 0 0 In/)
   assert.equal(restored.importedSchematicSource.licenseReference, 'Vendor terms')
@@ -329,6 +331,11 @@ test('imported .asy symbol source, provenance, and SpiceOrder pin coordinates ro
     for (const value of ['1', '2.5', '1e-3', '2u', '1MEG']) assert.equal(scalePattern.test(value), true, `v8 ${field} ${value}`)
     for (const value of ['-1', '1 Ω', '1e', 'NaN']) assert.equal(scalePattern.test(value), false, `v8 ${field} ${value}`)
   }
+  const fetAreaFactor = schema.$defs.part.properties.fetAreaFactor
+  assert.equal(fetAreaFactor.maxLength, 64)
+  const fetAreaPattern = new RegExp(fetAreaFactor.pattern, 'u')
+  for (const value of ['1', '2.5', '1e-3']) assert.equal(fetAreaPattern.test(value), true, `v8 FET area ${value}`)
+  for (const value of ['-1', '1u', '1 Ω', 'NaN']) assert.equal(fetAreaPattern.test(value), false, `v8 FET area rejects ${value}`)
   const tce = schema.$defs.part.properties.tce
   assert.equal(tce.maxLength, 64)
   const tcePattern = new RegExp(tce.pattern, 'u')

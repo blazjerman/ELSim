@@ -14367,3 +14367,31 @@ test('LTspice export preview gates unknown-license model ZIPs and reports blocke
   await expect(blockedPreview).toContainText('LTspice treats as boolean XOR')
   await expect(blockedPreview.getByRole('button', { name: 'Download ZIP' })).toBeDisabled()
 })
+
+test('JFET and MESFET area factors edit and appear in generated netlist', { tag: '@ui-smoke' }, async ({ page }) => {
+  const project = createStarterProject()
+  const modelContent = '.MODEL NTEST NMF(BETA=1m VTO=-1)\n'
+  project.modelAssets = [{ id: 'mesfet-area-test', filename: 'mesfet-area.lib', content: modelContent, sha256: createHash('sha256').update(modelContent).digest('hex'), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.parts.push(
+    { id: 'j-area-test', kind: 'njfet', ref: 'J1', value: '', x: 700, y: 300, rotation: 0 },
+    { id: 'z-area-test', kind: 'nmesfet', ref: 'Z1', value: '', deviceModel: 'NTEST', x: 850, y: 300, rotation: 0 },
+  )
+  project.sheets[0].parts = project.parts
+  await page.addInitScript((serialized) => localStorage.setItem('elsim:project:v7', serialized), JSON.stringify(validateProject(project)))
+  await page.goto('/')
+  await waitForProjectAutosave(page)
+
+  await page.locator('.circuit-part[aria-label^="J1,"]').click()
+  await page.getByText('Device area factor (advanced)').click()
+  await page.getByLabel('FET area factor for J1').fill('2')
+  const mesfet = page.locator('.circuit-part[aria-label^="Z1,"]')
+  await mesfet.focus()
+  await page.keyboard.press('Enter')
+  const mesfetArea = page.getByLabel('FET area factor for Z1')
+  if (!await mesfetArea.isVisible()) await page.locator('.bjt-advanced-area summary').click()
+  await mesfetArea.fill('3')
+  await page.getByRole('button', { name: 'Open generated netlist' }).click()
+  const netlist = page.getByRole('dialog', { name: 'Generated SPICE netlist' }).locator('pre')
+  await expect(netlist).toContainText(/^J1 \S+ \S+ \S+ ELSIM_MODEL_J1 2$/m)
+  await expect(netlist).toContainText(/^Z1 __ELSIM_z_area_test_D \S+ \S+ NTEST 3$/m)
+})

@@ -3015,6 +3015,29 @@ test('N- and P-channel JFETs generate J devices in D-G-S order and matching teac
   assert.equal(nextRef(project.parts, 'njfet'), 'J3')
 })
 
+test('JFET and MESFET area factors precede multiplier options and validate as positive dimensionless values', () => {
+  const project = createStarterProject()
+  project.modelAssets = [{ id: 'mesfet-area-models', filename: 'mesfets.lib', content: '.MODEL NMESH NMF(BETA=1m VTO=-1)\n.MODEL PMESH PMF(BETA=1m VTO=1)\n', sha256: 'b'.repeat(64), licenseStatus: 'unknown', importedAt: new Date(0).toISOString() }]
+  project.parts.push(
+    { id: 'j-area', kind: 'njfet', ref: 'J1', value: '', fetAreaFactor: '2', instanceMultiplier: '3', x: 700, y: 300, rotation: 0 },
+    { id: 'z-area', kind: 'nmesfet', ref: 'Z1', value: '', deviceModel: 'NMESH', fetAreaFactor: '2.5', instanceMultiplier: '4', x: 820, y: 300, rotation: 0 },
+  )
+  project.sheets[0].parts = project.parts
+  const artifact = createNetlistArtifact(validateProject(project))
+  assert.deepEqual(artifact.diagnostics, [], artifact.text)
+  assert.match(artifact.text, /^J1 .* ELSIM_MODEL_J1 2 M=3$/m)
+  assert.match(artifact.text, /^Z1 __ELSIM_z_area_D n\d+ n\d+ NMESH 2\.5 M=4$/m)
+  const invalid = structuredClone(project)
+  invalid.parts.find((part) => part.ref === 'J1').fetAreaFactor = '0'
+  assert.throws(() => validateProject(invalid), /FET area factor must be a positive number/i)
+  const invalidPart = invalid.parts.find((part) => part.ref === 'J1')
+  invalidPart.fetAreaFactor = '2'
+  invalidPart.kind = 'resistor'
+  invalidPart.ref = 'R2'
+  invalidPart.componentDefinitionId = undefined
+  assert.throws(() => validateProject(invalid), /FET area factor must be a positive number/i)
+})
+
 test('imported subcircuits preserve declared .FUNC expressions in validated parameter overrides', () => {
   const project = createStarterProject()
   const content = '.FUNC DOUBLE(x) {2*x}\n.SUBCKT gain IN OUT VCC VEE PARAMS: GAIN={DOUBLE(2)} DATAFILE="default table.txt"\nE1 OUT 0 IN 0 {GAIN}\n.ENDS gain\n'

@@ -52,6 +52,8 @@ export type Part = {
   diodeArea?: string
   /** Optional ngspice diode junction-perimeter scale; combines with M for sidewall parameters. */
   diodePerimeter?: string
+  /** Optional dimensionless ngspice JFET/MESFET instance area factor. */
+  fetAreaFactor?: string
   /** Initial state for a controlled SW/CSW device when its control starts inside hysteresis. */
   switchInitialState?: 'on' | 'off'
   /** Optional ngspice device-temperature offset from the circuit temperature. */
@@ -477,6 +479,7 @@ export function validateProject(input: unknown): Project {
       const scale = candidate[key]
       if (scale !== undefined && (!['diode', 'zener', 'led'].includes(candidate.kind) || typeof scale !== 'string' || scale.length > 64 || !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:(?:meg)|[tgkmunpfµμ])?$/i.test(scale) || componentMagnitude(scale, 'resistor') === null || componentMagnitude(scale, 'resistor')! <= 0)) throw new Error(`${candidate.ref} ${key === 'diodeArea' ? 'junction area' : 'junction perimeter'} scale must be a positive numeric value and is available only for diodes.`)
     }
+    if (candidate.fetAreaFactor !== undefined && (!['njfet', 'pjfet', 'nmesfet', 'pmesfet'].includes(candidate.kind) || typeof candidate.fetAreaFactor !== 'string' || candidate.fetAreaFactor.length > 64 || !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(candidate.fetAreaFactor) || !Number.isFinite(Number(candidate.fetAreaFactor)) || Number(candidate.fetAreaFactor) <= 0)) throw new Error(`${candidate.ref} FET area factor must be a positive number and is available only for JFETs and MESFETs.`)
     for (const key of ['primaryWindingResistance', 'secondaryWindingResistance'] as const) {
       const resistance = candidate[key]
       if (resistance !== undefined && (candidate.kind !== 'transformer' || typeof resistance !== 'string' || resistance.length > 64)) throw new Error(`${candidate.ref} has invalid ${key} metadata.`)

@@ -320,6 +320,12 @@
           "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?:(?:[mM][eE][gG])|[tTgGkKmMuUµμnNpPfF])?$",
           "description": "Optional positive ngspice diode junction-perimeter scale; combines multiplicatively with M."
         },
+        "fetAreaFactor": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "Optional positive dimensionless ngspice JFET/MESFET instance area factor."
+        },
         "deviceTemperatureDelta": {
           "type": "string",
           "maxLength": 64,

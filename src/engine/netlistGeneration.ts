@@ -1320,7 +1320,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
         continue
       }
       const model = importedModel?.name ?? `ELSIM_MODEL_${part.ref}`
-      append(`${part.ref} ${positive} ${gate} ${source} ${model}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}${fetInitialConditionSuffix(project, part.ref, false)}`, part.id, 'component')
+      append(`${part.ref} ${positive} ${gate} ${source} ${model}${part.fetAreaFactor ? ` ${part.fetAreaFactor}` : ''}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}${fetInitialConditionSuffix(project, part.ref, false)}`, part.id, 'component')
       if (!part.deviceModel) jfetModels.push({ part, name: model })
     }
     else if (part.kind === 'nmesfet' || part.kind === 'pmesfet') {
@@ -1344,7 +1344,7 @@ function createBaseNetlistArtifact(project: Project, generatedSheetLibrary = '',
       usedReferences.add(senseReference.toLowerCase())
       const drainNode = reserveUniqueName(`__ELSIM_${part.id.slice(0, 24).replace(/[^A-Za-z0-9_]/g, '_')}_D`, usedNodes)
       append(`${senseReference} ${positive} ${drainNode} 0`, part.id, 'generated')
-      append(`${part.ref} ${drainNode} ${gate} ${source} ${importedModel.name}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}${fetInitialConditionSuffix(project, part.ref, false)}`, part.id, 'component')
+      append(`${part.ref} ${drainNode} ${gate} ${source} ${importedModel.name}${part.fetAreaFactor ? ` ${part.fetAreaFactor}` : ''}${part.instanceMultiplier ? ` M=${part.instanceMultiplier}` : ''}${deviceTemperatureSuffix}${initialOffSuffix}${fetInitialConditionSuffix(project, part.ref, false)}`, part.id, 'component')
     }
     else if (part.kind === 'nmos' || part.kind === 'pmos') {
       const gate = pinNet(connectivity, part, 1), source = pinNet(connectivity, part, 2), bulk = pinNet(connectivity, part, 3)
