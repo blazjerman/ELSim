@@ -30,8 +30,8 @@ test('the sweep editor and Add action share eligible source, model, IC, and reus
   assert.ok(targets.some((part) => part.ref === 'V1'))
   assert.deepEqual(unusedSweepTargets(targets, [{ component: 'X1', start: '1k', stop: '2k', points: 2 }]).filter((part) => part.kind === 'subcircuit').map((part) => part.ref), ['X2'])
   const diode = { id: 'd1', kind: 'diode', ref: 'D1', value: 'Default diode', deviceModel: 'USER_D', x: 0, y: 0, rotation: 0 }
-  const model = { name: 'USER_D', parameters: [{ name: 'IS', defaultValue: '1e-14' }, { name: 'TNOM', defaultValue: '{temperature}' }] }
-  assert.deepEqual(importedModelSweepParameters(diode, [model]).map((parameter) => parameter.name), ['IS'])
+  const model = { name: 'USER_D', parameters: [{ name: 'IS', defaultValue: '1e-14' }, { name: 'TNOM', defaultValue: 'temperature' }, { name: 'N', defaultValue: 'BASE*2', defaultIsExpression: true }] }
+  assert.deepEqual(importedModelSweepParameters(diode, [model]).map((parameter) => parameter.name), ['IS', 'N'])
   assert.ok(eligibleParameterSweepParts({ parts: [diode], analysis: 'tran', models: [model], subcircuits, sheets: project.sheets }).some((part) => part.id === 'd1'))
 })
 

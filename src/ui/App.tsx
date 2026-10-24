@@ -2877,8 +2877,8 @@ export default function App() {
     }
     const modelParameter = importedModelSweepParameters(part, importedDeviceModels)[0]
     if (modelParameter) {
-      const magnitude = componentMagnitude(modelParameter.defaultValue, 'resistor')!
-      const sweep: ParameterSweep = { component: part.ref, parameter: modelParameter.name, start: modelParameter.defaultValue, stop: `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}`, points: 3 }
+      const magnitude = componentMagnitude(modelParameter.defaultValue, 'resistor')
+      const sweep: ParameterSweep = { component: part.ref, parameter: modelParameter.name, start: magnitude === null ? '' : modelParameter.defaultValue, stop: magnitude === null ? '' : `${(magnitude === 0 ? 1 : magnitude * 2).toExponential(5)}`, points: 3 }
       setProject((current) => ({ ...current, simulation: { ...current.simulation, parameterSweeps: [...(current.simulation.parameterSweeps ?? []), sweep] } }))
       return
     }

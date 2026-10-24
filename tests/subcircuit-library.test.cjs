@@ -92,7 +92,7 @@ test('parses documented single-quoted ngspice parameter expressions', () => {
     { name: 'GAIN', defaultValue: "'BASE_GAIN + 3'" },
     { name: 'FACTOR', defaultValue: "'sqrt(BASE_GAIN) + 1'" },
   ])
-  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'BASE_GAIN + 1n' }])
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'BASE_GAIN + 1n', defaultIsExpression: true }])
 })
 
 test('parses ngspice mil and atto suffixes in imported subcircuit parameters', () => {
@@ -183,20 +183,20 @@ test('scoped .FUNC declarations validate .MODEL expressions inside their subcirc
   ].join('\n')
   const parsed = parseSubcircuitLibrary(source)
   assert.equal(parsed.models[0].scope, 'AMP')
-  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'DOUBLE(2)' }])
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'DOUBLE(2)', defaultIsExpression: true }])
   assert.equal(modelFunctionsForSubcircuit([{ asset: { id: 'amp', filename: 'amp.lib', content: source }, parsed }], 'amp', 'AMP').get('double'), 1)
 })
 
 test('parses .MODEL parameters that call forward-declared library functions', () => {
   const parsed = parseSubcircuitLibrary('.MODEL DFAST D(IS={SCALE(2)})\n.FUNC SCALE(x) {1n*x}\n')
-  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'SCALE(2)' }])
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: 'SCALE(2)', defaultIsExpression: true }])
   assert.deepEqual(parsed.functions.map(({ name, arity }) => ({ name, arity })), [{ name: 'SCALE', arity: 1 }])
 })
 
 test('retains ngspice interpreter functions in imported .MODEL parameters', () => {
   const expression = 'vec(pi)*1p+var(foo)*1p'
   const parsed = parseSubcircuitLibrary(`.MODEL DFAST D(IS={${expression}})\n`)
-  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: expression }])
+  assert.deepEqual(parsed.models[0].parameters, [{ name: 'IS', defaultValue: expression, defaultIsExpression: true }])
   assert.throws(() => parseSubcircuitLibrary('.MODEL DFAST D(IS={vec("pi")*1p})\n'), /Line 1: quoted vec\("name"\) references are not supported in \.MODEL values/)
 })
 

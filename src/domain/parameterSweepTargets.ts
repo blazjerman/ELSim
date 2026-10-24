@@ -1,7 +1,7 @@
 import { spiceModelParameterMagnitude } from './componentValue'
 import type { ParameterSweep, Part, Project } from './project'
 
-type SweepParameter = { name: string; defaultValue: string }
+type SweepParameter = { name: string; defaultValue: string; defaultIsExpression?: boolean }
 type SweepDefinition = { name: string; parameters: SweepParameter[] }
 
 function parameterValue(part: Part, parameter: SweepParameter): string {
@@ -19,7 +19,7 @@ export function subcircuitSweepParameters(part: Part | undefined, subcircuits: S
 
 export function importedModelSweepParameters(part: Part | undefined, models: SweepDefinition[]): SweepParameter[] {
   if (!part?.deviceModel) return []
-  return models.find((model) => model.name.toLowerCase() === part.deviceModel!.toLowerCase())?.parameters.filter((parameter) => spiceModelParameterMagnitude(parameter.defaultValue) !== null) ?? []
+  return models.find((model) => model.name.toLowerCase() === part.deviceModel!.toLowerCase())?.parameters.filter((parameter) => spiceModelParameterMagnitude(parameter.defaultValue) !== null || parameter.defaultIsExpression === true) ?? []
 }
 
 export function sweepParameterValue(part: Part, parameter: SweepParameter): string {

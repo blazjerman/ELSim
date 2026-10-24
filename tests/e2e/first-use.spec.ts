@@ -12766,7 +12766,7 @@ test('imported device model parameters can be stepped through the browser ngspic
   await dialog.locator('.example-list article').filter({ hasText: 'NPN low-side switch' }).getByRole('button', { name: 'Open example' }).click()
   await page.getByRole('button', { name: 'Replace and open' }).click()
 
-  const modelLibrary = '.MODEL USER_NPN NPN (IS=1e-14 BF=10 VAF=100)\n'
+  const modelLibrary = '.MODEL USER_NPN NPN (IS=1e-14 BF={5+5} VAF=100)\n'
   await page.getByRole('button', { name: 'Import SPICE model library' }).click()
   await page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]').setInputFiles({
     name: 'user-npn.lib', mimeType: 'text/plain', buffer: Buffer.from(modelLibrary),
@@ -12780,7 +12780,10 @@ test('imported device model parameters can be stepped through the browser ngspic
   const component = page.getByRole('combobox', { name: 'Parameter 1 component' })
   await expect(component).toHaveValue('Q1')
   const modelParameter = page.getByRole('combobox', { name: 'Parameter 1 model parameter' })
+  await expect(modelParameter.locator('option')).toContainText(['BF · default 5+5'])
   await modelParameter.selectOption('BF')
+  await expect(page.getByText('This model parameter has an expression default. Enter numeric start and stop values for the sweep.')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Parameter 1 start value' })).toHaveValue('')
   await page.getByRole('textbox', { name: 'Parameter 1 start value' }).fill('10')
   await page.getByRole('textbox', { name: 'Parameter 1 stop value' }).fill('200')
   await page.getByRole('spinbutton', { name: 'Parameter 1 number of values' }).fill('2')

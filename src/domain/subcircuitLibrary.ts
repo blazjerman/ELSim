@@ -1,4 +1,4 @@
-export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean }
+export type SubcircuitParameter = { name: string; defaultValue: string; defaultVariesByCondition?: boolean; defaultIsExpression?: boolean }
 export type ModelFunction = { name: string; arity: number; sourceLine: number }
 export type ModelDependency = { owner: string; reference: string; modelName: string; kind: 'subcircuit' | 'device'; sourceLine: number }
 export type SubcircuitDefinition = { name: string; pins: string[]; parameters: SubcircuitParameter[]; dependencies: ModelDependency[]; parentName?: string; functions?: ModelFunction[]; startLine: number; endLine: number }
@@ -548,7 +548,7 @@ function parseModelCard(text: string, line: LogicalLine, scope?: string, functio
     }
     const value = match[2].replace(/^\{([\s\S]*)\}$|^'([\s\S]*)'$/, (_whole, braced: string | undefined, quoted: string | undefined) => braced ?? quoted ?? _whole)
     if (!isSafeSubcircuitParameterValue(match[2], functions)) continue
-    const parameter = { name: match[1], defaultValue: value }
+    const parameter = { name: match[1], defaultValue: value, ...(match[2].startsWith('{') || match[2].startsWith("'") ? { defaultIsExpression: true } : {}) }
     const key = parameter.name.toLowerCase()
     const existing = parameterIndex.get(key)
     if (existing === undefined) {
