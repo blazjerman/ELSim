@@ -1717,6 +1717,19 @@ test('reports duplicate top-level imported function names with both source locat
   ])
 })
 
+test('reports duplicate imported global .PARAM names but ignores subcircuit-local parameters', () => {
+  const report = analyzeModelDependencies([
+    { id: 'parameter-a', filename: 'parameter-a.lib', content: '.PARAM GAIN = {2 + 1} RLOAD=10k ; shared defaults\n.SUBCKT LOCAL_A IN OUT\n.PARAM local_gain=2\n.ENDS LOCAL_A' },
+    { id: 'parameter-b', filename: 'parameter-b.lib', content: '.param gain={4} CLOAD = 2p\n.SUBCKT LOCAL_B IN OUT\n.PARAM GAIN=8\n.ENDS LOCAL_B' },
+  ])
+  assert.deepEqual(report.conflicts, [
+    { name: 'GAIN', kind: 'parameter', definitions: [
+      { assetId: 'parameter-a', filename: 'parameter-a.lib', sourceLine: 1 },
+      { assetId: 'parameter-b', filename: 'parameter-b.lib', sourceLine: 1 },
+    ] },
+  ])
+})
+
 test('rejects ngspice directives that are not supported in conditional blocks', () => {
   for (const directive of ['.FUNC SCALE(x) {x}', '.MEAS TRAN RESULT MAX V(out)', '.GLOBAL 0', '.OPTIONS reltol=.01']) {
     assert.throws(() => parseSubcircuitLibrary(`.IF (MODE == 1)\n${directive}\n.ENDIF`), /Line 2: .* is not supported inside an ngspice \.IF block/, directive)

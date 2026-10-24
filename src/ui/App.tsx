@@ -72,13 +72,15 @@ function modelConflictLabel(conflict: ModelDefinitionConflict): string {
   if (conflict.kind === 'subcircuit') return `.SUBCKT ${conflict.name}`
   if (conflict.kind === 'measurement') return `.MEAS ${conflict.analysis?.toUpperCase() ?? ''} ${conflict.name}`.trim()
   if (conflict.kind === 'function') return `.FUNC ${conflict.name}`
+  if (conflict.kind === 'parameter') return `.PARAM ${conflict.name}`
   return `.MODEL ${conflict.name}`
 }
 
 function modelConflictDescription(conflict: ModelDefinitionConflict): string {
   if (conflict.kind === 'measurement') return `More than one imported library defines the ${conflict.analysis?.toUpperCase() ?? ''} measurement name ${conflict.name}. ngspice prints multiple values with this same name, so ELSim omits the ambiguous result. Rename one card before relying on it.`
   if (conflict.kind === 'function') return `The imported sources define the function ${conflict.name} more than once. The function bodies may differ, and ngspice resolution can depend on library order. Review the source definitions and rename or remove an unintended duplicate.`
-  return `More than one imported library defines ${conflict.name}. ngspice may resolve the duplicate according to library order. Review the definitions and remove or rename one if they are not intentional.`
+  if (conflict.kind === 'parameter') return `Global .PARAM ${conflict.name} is declared more than once; rename it if the values should be independent.`
+  return `More than one imported library defines ${conflict.name}. Review the source lines and rename entries that should be independent.`
 }
 
 const MODEL_DIAGNOSTIC_PAGE_SIZE = 20
@@ -3220,7 +3222,7 @@ export default function App() {
         {(modelDependencyAnalysis.missing.length > 0 || modelDependencyAnalysis.missingIncludes.length > 0 || modelDependencyAnalysis.recursiveChains.length > 0) && <Suspense fallback={<div className="field-hint">Loading model dependency details…</div>}><ModelDependencyReport analysis={modelDependencyAnalysis} onImport={openModelLibraryPicker} onChooseSection={chooseSectionForImportedLibrary}/></Suspense>}
         {modelDependencyAnalysis.conflicts.length > 0 && <div className="import-diagnostics model-dependency-diagnostic" role="region" aria-label="Conflicting model definitions">
           <strong>CONFLICTING IMPORTED NAMES</strong>
-          <p>Imported libraries contain duplicate model, function, or measurement names. ELSim preserves the source and identifies each original line so you can resolve conflicts deliberately.</p>
+          <p>Duplicate imported names may conflict. Review the original source lines and rename unintended duplicates.</p>
           <ul>{visibleModelConflicts.map((conflict) => <li key={`${conflict.kind}:${conflict.analysis ?? ''}:${conflict.name}`}>
             <code>{modelConflictLabel(conflict)}</code>
             <p>{modelConflictDescription(conflict)}</p>

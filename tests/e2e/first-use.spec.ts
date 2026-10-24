@@ -3920,6 +3920,23 @@ test('duplicate imported .FUNC names show both source lines and allow review', {
   await expect(page.locator('.model-source-viewer').filter({ has: page.locator('.active-source-line') })).toContainText('.FUNC GAIN(value) {value * 3}')
 })
 
+test('duplicate imported global .PARAM names show both source lines and allow review', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  const picker = page.locator('input[accept=".lib,.sub,.model,.mod,.cir,.spice,.txt,text/plain"]')
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await picker.setInputFiles({ name: 'parameters-a.lib', mimeType: 'text/plain', buffer: Buffer.from('.PARAM GAIN = {2 + 1}\n.SUBCKT LOCAL_A IN OUT\n.PARAM local_gain=2\n.ENDS LOCAL_A') })
+  await page.getByRole('button', { name: 'Import SPICE model library' }).click()
+  await picker.setInputFiles({ name: 'parameters-b.lib', mimeType: 'text/plain', buffer: Buffer.from('.param gain={4}\n.SUBCKT LOCAL_B IN OUT\n.PARAM GAIN=8\n.ENDS LOCAL_B') })
+
+  const conflicts = page.getByRole('region', { name: 'Conflicting model definitions' })
+  const conflict = conflicts.locator(':scope > ul > li').filter({ hasText: '.PARAM GAIN' })
+  await expect(conflict).toContainText('.PARAM GAIN is declared more than once')
+  await expect(conflict).toContainText('parameters-a.lib:1')
+  await expect(conflict).toContainText('parameters-b.lib:1')
+  await conflict.getByRole('button', { name: 'Review definition' }).nth(1).click()
+  await expect(page.locator('.model-source-viewer').filter({ has: page.locator('.active-source-line') })).toContainText('.param gain={4}')
+})
+
 test('LTspice schematic import preserves and reports duplicate model library files', { tag: '@ltspice' }, async ({ page }) => {
   await page.goto('/')
   const schematic = ['Version 4', 'SHEET 1 640 240', 'TEXT 0 40 Left 2 !.include amp-a.lib', 'TEXT 0 60 Left 2 !.include amp-b.lib'].join('\n')

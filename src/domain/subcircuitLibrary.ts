@@ -15,7 +15,7 @@ export type SchematicCompatibilityWarning = ModelDialectWarning
 export type ResolvedModelDependency = ModelDependencyIssue & { targetAssetId: string; targetModelType?: string }
 export type ResolvedModelInclude = { assetId: string; targetAssetId: string; reference: string; sourceLine: number; section?: string }
 export type ModelBaseTarget = { assetId: string; modelName: string }
-export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device' | 'measurement' | 'function'; analysis?: 'tran' | 'ac' | 'dc'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
+export type ModelDefinitionConflict = { name: string; kind: 'subcircuit' | 'device' | 'measurement' | 'function' | 'parameter'; analysis?: 'tran' | 'ac' | 'dc'; definitions: { assetId: string; filename: string; sourceLine: number }[] }
 export type ModelIncludeIssue = { assetId: string; assetFilename: string; reference: string; sourceLine: number; section?: string; reason: 'missing' | 'ambiguous' | 'unsafe' | 'section'; matches?: { assetId: string; filename: string }[] }
 export type ModelDependencyAnalysis = { missing: ModelDependencyIssue[]; missingIncludes: ModelIncludeIssue[]; recursiveChains: string[][]; resolved: ResolvedModelDependency[]; resolvedIncludes: ResolvedModelInclude[]; conflicts: ModelDefinitionConflict[]; subcircuitAssets: Map<string, string>; deviceModelAssets: Map<string, string>; deviceModelBinAssets: Map<string, string[]>; modelBaseAssets: Map<string, ModelBaseTarget[]> }
 export type NgspiceBsim3BinFamily<T extends SpiceModelDefinition = SpiceModelDefinition> = { name: string; displayName: string; type: string; binCount: number; models: T[] }
@@ -712,6 +712,25 @@ function spiceFields(text: string): string[] {
   }
   if (start >= 0) fields.push(text.slice(start))
   return fields
+}
+
+function topLevelParameterNames(text: string): string[] {
+  const card = withoutInlineComment(text).replace(/^\s*\.param\b/i, '')
+  const fields = spiceFields(card)
+  const names: string[] = []
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index]
+    const inline = field.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)/)
+    if (inline) {
+      names.push(inline[1])
+      continue
+    }
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(field) && /^=(?!=)/.test(fields[index + 1] ?? '')) {
+      names.push(field)
+      index += 1
+    }
+  }
+  return names
 }
 
 function dependencyOnLine(text: string, owner: string, sourceLine: number): ModelDependency | null {
@@ -1560,6 +1579,17 @@ function analyzeParsedModelDependencies(parsedAssets: AnalyzedModelLibraries['as
       if (directive === '.subckt') { subcircuitDepth += 1; continue }
       if (directive === '.ends') { subcircuitDepth = Math.max(0, subcircuitDepth - 1); continue }
       if (conditionalDepth > 0 || subcircuitDepth > 0) continue
+      if (/^\s*\.param\b/i.test(record.text)) {
+        for (const name of topLevelParameterNames(record.text)) {
+          const key = `parameter:${name.toLowerCase()}`
+          const conflict = definitionLocations.get(key) ?? { name, kind: 'parameter' as const, definitions: [] }
+          if (!conflict.definitions.some((definition) => definition.assetId === asset.id && definition.sourceLine === record.sourceLine)) {
+            conflict.definitions.push({ assetId: asset.id, filename: asset.filename, sourceLine: record.sourceLine })
+          }
+          definitionLocations.set(key, conflict)
+        }
+        continue
+      }
       if (/^\s*\.func\s+/i.test(record.text)) {
         const definition = parseFunctionDefinition(record.text.trim(), record.sourceLine)
         const key = `function:${definition.name.toLowerCase()}`
