@@ -313,7 +313,11 @@ test('quick tour explains the current workspace and project save flow', { tag: '
   await page.keyboard.press('Shift+Tab')
   await expect(dialog.getByRole('button', { name: 'Skip tour' })).toBeFocused()
   await page.keyboard.press('Shift+Tab')
+  await expect(dialog.getByRole('button', { name: 'Browse example circuits' })).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
   await expect(close).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(dialog.getByRole('button', { name: 'Browse example circuits' })).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(dialog.getByRole('button', { name: 'Skip tour' })).toBeFocused()
   await page.keyboard.press('Tab')
@@ -333,6 +337,19 @@ test('quick tour explains the current workspace and project save flow', { tag: '
   await expect(dialog).toContainText('.elsim project file')
   await dialog.getByRole('button', { name: 'Finish' }).click()
   await expect(dialog).toHaveCount(0)
+})
+
+test('quick tour opens the searchable example library directly', { tag: '@ui-smoke' }, async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Open quick tour' }).click()
+  const tour = page.locator('.tour-dialog[role="dialog"]')
+  await tour.getByRole('button', { name: 'Browse example circuits' }).click()
+  const examples = page.getByRole('dialog', { name: 'Open a working circuit' })
+  await expect(tour).toHaveCount(0)
+  await expect(examples.getByRole('button', { name: 'Open example: RC step response' })).toBeVisible()
+  await expect(examples).toContainText(/local ngspice runtime/)
+  await examples.getByRole('button', { name: 'Close examples' }).click()
+  await expect(examples).toHaveCount(0)
 })
 
 test('native distributed RC line can be placed, configured, and netlisted', { tag: '@ui-smoke' }, async ({ page }) => {
