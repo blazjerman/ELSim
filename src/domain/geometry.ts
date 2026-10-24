@@ -369,9 +369,10 @@ export function createProjectPinLocationCache(): (parts: readonly Part[]) => Pin
 /** Find schematic dots at pin/wire joins and wire-to-wire endpoint joins.
  * The spatial broadphase avoids testing every pin against every wire on edits;
  * pointOnSegment remains the exact geometry check. */
-export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'>, cachedPins?: readonly PinLocation[]): Point[] {
-  const pins = cachedPins ?? projectPinLocations(project)
-  const cellSize = 64
+const CONNECTION_DOT_CELL_SIZE = 64
+
+function createWirePointLookup(wires: readonly Wire[]): (point: Point, excludedWireId?: string) => boolean {
+  const cellSize = CONNECTION_DOT_CELL_SIZE
   const segmentCells = new Map<number, Map<number, Wire[]>>()
   const addSegmentCell = (x: number, y: number, wire: Wire) => {
     let row = segmentCells.get(x)
@@ -381,7 +382,7 @@ export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'
     else row.set(y, [wire])
   }
   const longSegments: Wire[] = []
-  for (const wire of project.wires) {
+  for (const wire of wires) {
     const [[x1, y1], [x2, y2]] = wire.points
     const minX = Math.floor(Math.min(x1, x2) / cellSize), maxX = Math.floor(Math.max(x1, x2) / cellSize)
     const minY = Math.floor(Math.min(y1, y2) / cellSize), maxY = Math.floor(Math.max(y1, y2) / cellSize)
@@ -403,12 +404,16 @@ export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'
     }
     return pointOnSegment(point, { x: x1, y: y1 }, { x: x2, y: y2 })
   }
-  const hasWireAt = (point: Point, excludedWireId?: string) => {
+  return (point, excludedWireId) => {
     const matches = (wire: Wire) => wire.id !== excludedWireId && onWire(point, wire)
     for (const wire of longSegments) if (matches(wire)) return true
     for (const wire of segmentCells.get(Math.floor(point.x / cellSize))?.get(Math.floor(point.y / cellSize)) ?? []) if (matches(wire)) return true
     return false
   }
+}
+
+function connectionDotPoints(project: Pick<Project, 'parts' | 'wires'>, pins: readonly PinLocation[], hasWireAt: (point: Point, excludedWireId?: string) => boolean): Point[] {
+  const cellSize = CONNECTION_DOT_CELL_SIZE
   const pinCells = new Map<number, Map<number, PinLocation[]>>()
   for (const pin of pins) {
     const x = Math.floor(pin.x / cellSize), y = Math.floor(pin.y / cellSize)
@@ -444,6 +449,26 @@ export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'
     if (hasPinAt(point) || connectedToWire) add(point)
   }
   return [...dots.values()]
+}
+
+/** Find connection dots using a per-call wire index. */
+export function wireConnectionDotPoints(project: Pick<Project, 'parts' | 'wires'>, cachedPins?: readonly PinLocation[]): Point[] {
+  return connectionDotPoints(project, cachedPins ?? projectPinLocations(project), createWirePointLookup(project.wires))
+}
+
+/** Reuse the wire spatial index while only component pins change. The weak
+ * key follows the editor's immutable wire-array updates and releases old
+ * indexes when their project revisions are no longer reachable. */
+export function createWireConnectionDotCache(): (project: Pick<Project, 'parts' | 'wires'>, cachedPins?: readonly PinLocation[]) => Point[] {
+  const lookups = new WeakMap<readonly Wire[], (point: Point, excludedWireId?: string) => boolean>()
+  return (project, cachedPins) => {
+    let hasWireAt = lookups.get(project.wires)
+    if (!hasWireAt) {
+      hasWireAt = createWirePointLookup(project.wires)
+      lookups.set(project.wires, hasWireAt)
+    }
+    return connectionDotPoints(project, cachedPins ?? projectPinLocations(project), hasWireAt)
+  }
 }
 
 export function closestPoint(point: Point, a: Point, b: Point): Point & { distance: number; t: number } {

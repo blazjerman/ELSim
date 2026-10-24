@@ -7,7 +7,7 @@ import { moveSelectedSceneObjects } from '../domain/sceneEdit'
 import type { SpiceModelDefinition } from '../domain/subcircuitLibrary'
 import type { ImportedSymbol } from '../domain/ltspiceSymbol'
 import { importedSymbolBounds } from '../domain/symbolAsset'
-import { componentPins, createPartNavigationIndex, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireNetAt } from '../domain/geometry'
+import { componentPins, createPartNavigationIndex, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireConnectionDotCache, createWireViewportIndex, EDITOR_GRID_SIZE, snapToEditorGrid, subcircuitPinOffsets, subcircuitPortDirectionPath, wireCrossingAt, wireNetAt } from '../domain/geometry'
 import { componentCurrentVector, resolveProbeTarget, transformerWindingCurrentVector, transmissionLinePortCurrentVector, urcLineCurrentSenseReference } from '../domain/probe'
 import { createWireCurrentFlowSampler, type WireCurrentFlowSegment } from '../domain/wireFlow'
 import { registerWireAnimation, updateWireAnimation } from './wireAnimation'
@@ -556,6 +556,7 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
   }, [project.parts])
   const pinLocationCache = useMemo(createProjectPinLocationCache, [])
   const pinLocations = useMemo(() => pinLocationCache(project.parts), [pinLocationCache, project.parts])
+  const wireConnectionDotCache = useMemo(createWireConnectionDotCache, [])
   const pinsNear = useMemo(() => createPointViewportIndex(pinLocations, 0, 64), [pinLocations])
   const wiresNear = useMemo(() => createWireViewportIndex(project.wires), [project.wires])
   const [view, setViewState] = useState(project.view)
@@ -1573,7 +1574,7 @@ function Schematic({ project, documentSessionId, partsById, labelsById, symbolsB
   }
   const hoveredWire = (selectedWireIds.length ? wiresById.get(selectedWireIds[selectedWireIds.length - 1]) : undefined)
     ?? (hoveredWireId ? wiresById.get(hoveredWireId) : undefined)
-  const wireConnectionDots = useMemo(() => wireConnectionDotPoints(project, pinLocations), [pinLocations, project.wires])
+  const wireConnectionDots = useMemo(() => wireConnectionDotCache(project, pinLocations), [pinLocations, project.wires, wireConnectionDotCache])
   return <div className="canvas-wrap">
     <div className="canvas-toolbar">
       <div className="canvas-toolset"><IconButton title="Select and move (M)" active={tool === 'select'} onClick={() => { onClearPendingComponent(); setTool('select') }}><MousePointer2 size={16}/></IconButton><IconButton title="Draw wire (W)" active={tool === 'wire'} onClick={() => { onClearPendingComponent(); setSelectedWireId(null); setTool('wire'); setNotice('Wire selected. Drag anywhere on the grid to place one segment.') }}><Cable size={16}/></IconButton><IconButton title="Place or edit net label on the schematic toolbar (;)" active={tool === 'label'} onClick={() => { onClearPendingComponent(); setTool('label') }}><Bookmark size={15}/></IconButton><IconButton title="Probe voltage or current (?)" active={tool === 'probe'} onClick={() => { onClearPendingComponent(); setTool('probe') }}><Activity size={15}/></IconButton><IconButton title="Toggle a wire crossing junction (=)" active={tool === 'junction'} onClick={() => { onClearPendingComponent(); setTool('junction') }}><CircleDot size={15}/></IconButton><span className="tool-divider"/><IconButton title="Zoom out" onClick={() => setView((view) => ({ ...view, zoom: Math.max(.1, view.zoom - .1) }))}><Minus size={15}/></IconButton><button className="zoom-label" title="Reset zoom and center the schematic" onClick={() => setView((view) => ({ ...view, zoom: 1, panX: 0, panY: 0 }))}>{Math.round(view.zoom * 100)}%</button><IconButton title="Zoom in" onClick={() => setView((view) => ({ ...view, zoom: Math.min(2.5, view.zoom + .1) }))}><Plus size={15}/></IconButton><IconButton title="Fit all circuit content in view" onClick={() => setView(() => fitEditorView(project, viewportSize, 100, symbolsById))}><Scan size={15}/></IconButton></div>

@@ -291,7 +291,7 @@ try {
   const { createStarterProject } = build(path.join(output, 'domain/project.js'))
   const { analyzeModelLibraries } = build(path.join(output, 'domain/subcircuitLibrary.js'))
   const { createHierarchicalExampleProject } = build(path.join(output, 'domain/examples.js'))
-  const { componentPins, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireViewportIndex, projectPinLocations, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
+  const { componentPins, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireConnectionDotCache, createWireViewportIndex, projectPinLocations, wireConnectionDotPoints, wireSegmentOverlapsBounds } = build(path.join(output, 'domain/geometry.js'))
   const { moveSelectedSceneObjects } = build(path.join(output, 'domain/sceneEdit.js'))
   const { analyzeConnectivity } = build(path.join(output, 'domain/connectivity.js'))
   const { createWireCurrentFlowSampler } = build(path.join(output, 'domain/wireFlow.js'))
@@ -458,17 +458,33 @@ try {
       const cachedPinDots = measure(() => wireConnectionDotPoints(project, cachedPins))
       const pinLocationCache = createProjectPinLocationCache()
       pinLocationCache(project.parts)
+      const wireDotCache = createWireConnectionDotCache()
+      wireDotCache(project, pinLocationCache(project.parts))
       const moveOnePartImmutably = () => project.parts.map((part, index) => index === Math.floor(project.parts.length / 2) ? { ...part, x: part.x + 10 } : part)
       const fullPinRecompute = measure(() => projectPinLocations({ parts: moveOnePartImmutably() }), 1, 7)
       const incrementalPinUpdate = measure(() => pinLocationCache(moveOnePartImmutably()), 1, 7)
       if (JSON.stringify(fullPinRecompute.value) !== JSON.stringify(incrementalPinUpdate.value)) throw new Error('Incremental pin-location caching changed pin coordinates or order.')
+      const pinCacheProject = () => ({ ...project, parts: moveOnePartImmutably() })
+      const dotUpdateWithRebuiltWireIndex = measure(() => {
+        const changed = pinCacheProject()
+        return wireConnectionDotPoints(changed, pinLocationCache(changed.parts))
+      }, 3, 31)
+      const dotUpdateWithCachedWireIndex = measure(() => {
+        const changed = pinCacheProject()
+        return wireDotCache(changed, pinLocationCache(changed.parts))
+      }, 3, 31)
+      const dotCoordinates = (items) => items.map(({ x, y }) => [x, y])
+      if (JSON.stringify(dotCoordinates(dotUpdateWithRebuiltWireIndex.value)) !== JSON.stringify(dotCoordinates(dotUpdateWithCachedWireIndex.value))) throw new Error('Reusing the immutable wire spatial index changed connection-dot membership or order after a component edit.')
       pinLocationUpdate = {
         parts: project.parts.length,
         changedParts: 1,
         fullRecompute: { medianMs: fullPinRecompute.medianMs, p95Ms: fullPinRecompute.p95Ms },
         incremental: { medianMs: incrementalPinUpdate.medianMs, p95Ms: incrementalPinUpdate.p95Ms },
+        connectionDots: {
+          rebuiltWireIndex: { medianMs: dotUpdateWithRebuiltWireIndex.medianMs, p95Ms: dotUpdateWithRebuiltWireIndex.p95Ms },
+          cachedWireIndex: { medianMs: dotUpdateWithCachedWireIndex.medianMs, p95Ms: dotUpdateWithCachedWireIndex.p95Ms },
+        },
       }
-      const dotCoordinates = (items) => items.map(({ x, y }) => [x, y])
       if (JSON.stringify(dotCoordinates(cachedPinDots.value)) !== JSON.stringify(dotCoordinates(dots.value))) throw new Error('Reusing editor pin locations changed connection-dot membership or order.')
       if (dots.value.length !== wireSegments * 2) throw new Error(`Wire-grid fixture expected ${wireSegments * 2} pin-connection dots; got ${dots.value.length}.`)
       const indexedDots = dots.value.map((dot) => ({ ...dot, id: `${Math.round(dot.x * 1000)}:${Math.round(dot.y * 1000)}` }))

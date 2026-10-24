@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const build = process.env.ELSIM_TEST_BUILD
 if (!build) throw new Error('Run this suite through `npm test`.')
 const { analyzeConnectivity, hasSameElectricalConnectivity } = require(path.join(build, 'domain/connectivity.js'))
-const { componentPins, createPartNavigationIndex, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
+const { componentPins, createPartNavigationIndex, createPointViewportIndex, createProjectPinLocationCache, createViewportIndex, createWireConnectionDotCache, createWireViewportIndex, EDITOR_GRID_SIZE, projectPinLocations, snapToEditorGrid, subcircuitPortDirectionPath, wireConnectionDotPoints, wireCrossingAt, wireSegmentOverlapsBounds, wireNetAt, pointOnSegment, retainConnectedJunctions } = require(path.join(build, 'domain/geometry.js'))
 const { createStarterProject, validateProject } = require(path.join(build, 'domain/project.js'))
 const { createHierarchicalExampleProject } = require(path.join(build, 'domain/examples.js'))
 const { fitEditorView } = require(path.join(build, 'domain/editorView.js'))
@@ -148,6 +148,25 @@ test('incremental pin-location cache refreshes edited parts and reuses unchanged
   assert.notStrictEqual(updated[1], original[1])
   assert.strictEqual(updated[2], original[2])
   assert.strictEqual(updated[3], original[3])
+})
+
+test('connection-dot cache reuses unchanged wire geometry and refreshes changed wire arrays', () => {
+  const project = createStarterProject()
+  project.parts = [{ id: 'dot-cache-r1', kind: 'resistor', ref: 'R1', value: '1k', x: 0, y: 0, rotation: 0 }]
+  project.wires = [
+    { id: 'dot-cache-a', points: [[-50, 0], [0, 0]] },
+    { id: 'dot-cache-b', points: [[0, 0], [50, 0]] },
+  ]
+  const cachedDots = createWireConnectionDotCache()
+  const original = cachedDots(project)
+  const movedProject = { ...project, parts: [{ ...project.parts[0], x: 100 }] }
+  assert.deepEqual(cachedDots(movedProject), wireConnectionDotPoints(movedProject))
+  assert.notDeepEqual(cachedDots(movedProject), original, 'moving a part recomputes pin joins while reusing the unchanged wire index')
+  assert.deepEqual(cachedDots(movedProject), [{ x: 50, y: 0 }, { x: 0, y: 0 }])
+
+  const movedWireProject = { ...movedProject, wires: [{ ...project.wires[0], points: [[-60, 0], [0, 0]] }, project.wires[1]] }
+  assert.deepEqual(cachedDots(movedWireProject), wireConnectionDotPoints(movedWireProject))
+  assert.deepEqual(cachedDots(movedWireProject), [{ x: 50, y: 0 }, { x: 0, y: 0 }], 'a new immutable wire array rebuilds its index before recomputing joins')
 })
 
 test('wire-connection dot spatial cells support large positive and negative coordinates', () => {
